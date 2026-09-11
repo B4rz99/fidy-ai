@@ -1,7 +1,7 @@
 import { Crypto, Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Money } from "~/core/_shared/money";
-import { decideEffectiveAccess } from "~/core/identity/rules";
 import { decideForwardedEmailAdmission, emailAllowancePeriod } from "~/core/ingestion/rules";
 import {
   EmailForwardingAddressId,
@@ -23,6 +23,7 @@ import {
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUserInScope } from "~/shell/identity/repo";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import {
   findPendingReviewItemInScope,
@@ -83,7 +84,7 @@ export type AdmitForwardedEmailInput = Readonly<{
 
 type BuildReceiptAdmission = (
   status: "queued" | "deferred",
-  access: "free" | "pro",
+  access: AccessTier,
   resumeAt: DateTime.Utc
 ) => Readonly<{
   status: "accepted" | "deferred";
@@ -114,12 +115,17 @@ export const admitForwardedEmail = Effect.fn("admitForwardedEmail")(function* (
         Effect.flatMap(Effect.fromOption),
         Effect.orDie
       );
-      const access = yield* decideEffectiveAccess(user, input.receivedAt);
+      const access = yield* resolveAccessTierInScope(input.userId, input.receivedAt);
       const period = emailAllowancePeriod(input.receivedAt);
       const consumed = yield* countForwardedEmailsInPeriodInScope(input.userId, period);
       const deferred = yield* countDeferredEmailsInScope(input.userId);
       const outstanding = yield* countOutstandingEmailsInScope(input.userId);
-      const decision = decideForwardedEmailAdmission({ access, consumed, deferred, outstanding });
+      const decision = decideForwardedEmailAdmission({
+        access,
+        consumed,
+        deferred,
+        outstanding,
+      });
       if (decision.status === "backlog-full") return "backlog-full" as const;
       if (!(yield* admitKnownForwardedEmailInScope(input.userId))) {
         return "rate-exceeded" as const;
@@ -202,7 +208,12 @@ const tooManyOutstandingStatements = (): ValidationFailed =>
     error: {
       code: "validation_failed",
       message: "Finish existing statement extraction work before uploading another file.",
-      fields: [{ path: "file", message: "Too many statement files are already pending" }],
+      fields: [
+        {
+          path: "file",
+          message: "Too many statement files are already pending",
+        },
+      ],
     },
     next: [],
   });
@@ -255,7 +266,7 @@ export const submitForExtractionInScope = Effect.fn("submitForExtractionInScope"
       Effect.orDie
     );
     const now = yield* DateTime.now;
-    const access = yield* decideEffectiveAccess(user, now);
+    const access = yield* resolveAccessTierInScope(input.userId, now);
     if (access === "free" && freeGrantConsumed) return yield* paywall(input.caller);
 
     const sourceFormat = statementSourceFormat(bytes);

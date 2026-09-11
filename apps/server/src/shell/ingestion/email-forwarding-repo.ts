@@ -23,9 +23,7 @@ import {
   ResendReceivedEmailId,
   ResendWebhookDeliveryId,
 } from "~/core/ingestion/reference";
-import { PaidTier, TrialPeriod } from "~/core/identity/model";
 import { UserId } from "~/core/identity/reference";
-import { decideEffectiveAccess } from "~/core/identity/rules";
 import {
   decideDeferredForwardedEmailActivation,
   emailAllowancePeriod,
@@ -33,6 +31,7 @@ import {
 import { TransactionExtraction, type TransactionId } from "~/core/transactions/model";
 import { NotificationEmailInterpretationEvidence } from "~/shell/ingestion/email-interpretation/interpret";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 
 const AddressRow = Schema.Struct({
   id: EmailForwardingAddressId,
@@ -413,9 +412,6 @@ const DeferredActivationRequest = Schema.Struct({
   receivedEmailId: ResendReceivedEmailId,
 });
 const DeferredActivationSnapshot = Schema.Struct({
-  paidTier: PaidTier,
-  trialStartedAt: Schema.DateTimeUtcFromDate,
-  trialEndsAt: Schema.DateTimeUtcFromDate,
   consumed: Schema.Finite,
   resumeAt: Schema.DateTimeUtcFromDate,
 });
@@ -435,7 +431,7 @@ const lockDeferredActivationSnapshotInScope = Effect.fn("lockDeferredActivationS
         WHERE user_id = ${request.userId}
         FOR UPDATE
       ), subject AS MATERIALIZED (
-        SELECT users.id, users.paid_tier, users.trial_started_at, users.trial_ends_at
+        SELECT users.id
         FROM users, admission_lock
         WHERE users.id = ${request.userId}
       ), receipt AS MATERIALIZED (
@@ -445,10 +441,7 @@ const lockDeferredActivationSnapshotInScope = Effect.fn("lockDeferredActivationS
           AND status = 'deferred'
         FOR UPDATE
       )
-      SELECT subject.paid_tier AS "paidTier",
-        subject.trial_started_at AS "trialStartedAt",
-        subject.trial_ends_at AS "trialEndsAt",
-        (SELECT count(*)::int FROM forwarded_email_receipts
+      SELECT (SELECT count(*)::int FROM forwarded_email_receipts
           WHERE user_id = subject.id
             AND consumes_free_allowance
             AND status <> 'deferred'
@@ -474,16 +467,7 @@ export const activateDeferredForwardedEmail = Effect.fn("activateDeferredForward
           period
         );
         if (Option.isNone(snapshot)) return;
-        const access = yield* decideEffectiveAccess(
-          {
-            paidTier: snapshot.value.paidTier,
-            trialPeriod: TrialPeriod.make({
-              startedAt: snapshot.value.trialStartedAt,
-              endsAt: snapshot.value.trialEndsAt,
-            }),
-          },
-          now
-        );
+        const access = yield* resolveAccessTierInScope(context.userId, now);
         const decision = decideDeferredForwardedEmailActivation({
           access,
           consumed: snapshot.value.consumed,

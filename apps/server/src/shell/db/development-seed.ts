@@ -41,6 +41,7 @@ import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consen
 import { associateWhatsAppIdentity, upsertDevelopmentUser } from "~/shell/identity/repo";
 import { installVerifiedEmailCredentialInScope } from "~/shell/email-authentication/repo";
 import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
+import { upsertDevelopmentSubscriptionInScope } from "~/shell/subscription/access-repo";
 import { type TokenHash, upsertPAT } from "~/shell/tokens/repo";
 import { withUserTransaction } from "./user-transaction";
 import { MigrationPgLive, MigratorLive } from "./client";
@@ -201,9 +202,9 @@ export const seedConsentedPatIdentity = (
         const revokedAt = overrides.revokedAt ?? Option.none();
         const user = yield* makeColombianUser(userId, {
           createdAt: defaultCreatedAt,
-          paidTier: "pro",
         });
         yield* upsertDevelopmentUser(userId, user);
+        yield* upsertDevelopmentSubscriptionInScope(userId, true);
         if (!(yield* hasCurrentOnboardingConsent(userId))) yield* seedOnboardingConsent(userId);
         yield* installDevelopmentIdentityState(userId);
 

@@ -29,7 +29,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* upsertStableUserFixture(
             id,
             yield* makeColombianUser(id, {
-              paidTier: "pro",
               createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
             })
           );

@@ -64,7 +64,7 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
     })
       .annotate(
         OpenApi.Description,
-        "Idempotently queue one bounded CSV or XLSX statement. Free includes one lifetime backfill; effective Trial or Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion."
+        "Idempotently queue one bounded CSV or XLSX statement. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion."
       )
       .annotateMerge(write)
   )

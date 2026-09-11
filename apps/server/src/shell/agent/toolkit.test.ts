@@ -48,12 +48,12 @@ it("derives exactly one hosted tool for every hosted-visible canonical operation
 
 it("omits authority-inaccessible operations from hosted discovery", () => {
   expect(
-    hostedBindings("verified-whatsapp").some(
+    hostedBindings({ authorityRoot: "verified-whatsapp", accessTier: "free" }).some(
       ({ operation }) => operation === "browserLogin.approvePairing"
     )
   ).toBe(true);
   expect(
-    hostedBindings("no-verified-whatsapp-authority").some(
+    hostedBindings({ authorityRoot: "no-verified-whatsapp-authority", accessTier: "free" }).some(
       ({ operation }) => operation === "browserLogin.approvePairing"
     )
   ).toBe(false);

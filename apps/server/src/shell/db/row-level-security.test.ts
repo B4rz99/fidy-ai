@@ -60,7 +60,6 @@ const seedStableUsers = Effect.fn("Testing.seedStableUsers")(function* (
       Effect.gen(function* () {
         const user = yield* makeColombianUser(userId, {
           createdAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
-          paidTier: "free",
         });
         yield* upsertStableUserFixture(userId, user);
       }),
@@ -73,15 +72,15 @@ const seedRows = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   yield* admin`
     INSERT INTO users (
-      id, service_market, locale, time_zone, paid_tier,
+      id, service_market, locale, time_zone,
       trial_started_at, trial_ends_at, created_at
     ) VALUES
       (
-        ${owner}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${owner}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       ),
       (
-        ${stranger}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${stranger}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       )
     ON CONFLICT (id) DO NOTHING
@@ -110,23 +109,23 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   yield* admin`
     INSERT INTO users (
-      id, service_market, locale, time_zone, paid_tier,
+      id, service_market, locale, time_zone,
       trial_started_at, trial_ends_at, created_at
     ) VALUES
       (
-        ${policyOwner}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${policyOwner}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       ),
       (
-        ${policyStranger}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${policyStranger}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       ),
       (
-        ${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       ),
       (
-        ${policyContinuityVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${policyContinuityVictim}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       )
     ON CONFLICT (id) DO NOTHING
@@ -594,10 +593,10 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       tableName: "users",
       insert: sql`
       INSERT INTO users (
-        id, service_market, locale, time_zone, paid_tier,
+        id, service_market, locale, time_zone,
         trial_started_at, trial_ends_at, created_at
       ) VALUES (
-        ${policyForgedUser}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        ${policyForgedUser}, 'CO', 'es-CO', 'America/Bogota',
         '2026-01-02T00:00:00Z', '2026-01-09T00:00:00Z', '2026-01-02T00:00:00Z'
       )
     `,

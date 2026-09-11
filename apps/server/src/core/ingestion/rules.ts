@@ -1,4 +1,5 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import { type Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   forwardedEmailOutstandingCap,
@@ -42,7 +43,7 @@ export const describeForwardedEmailProviderFailure = (
 });
 
 type DecideDeferredForwardedEmailActivation = (input: {
-  readonly access: "free" | "pro";
+  readonly access: AccessTier;
   readonly consumed: number;
   readonly now: DateTime.Utc;
   readonly resumeAt: DateTime.Utc;
@@ -67,7 +68,7 @@ export const decideDeferredForwardedEmailActivation: DecideDeferredForwardedEmai
 
 /** Reports how many additional emails the User may admit in the current month. */
 export const forwardedEmailAllowanceRemaining = (input: {
-  readonly access: "free" | "pro";
+  readonly access: AccessTier;
   readonly consumed: number;
 }): Option.Option<number> =>
   input.access === "pro"
@@ -75,7 +76,7 @@ export const forwardedEmailAllowanceRemaining = (input: {
     : Option.some(Math.max(0, freeForwardedEmailCap - input.consumed));
 
 type DecideForwardedEmailAdmission = (input: {
-  readonly access: "free" | "pro";
+  readonly access: AccessTier;
   readonly consumed: number;
   readonly deferred: number;
   readonly outstanding: number;
@@ -294,7 +295,10 @@ const decodeExtraction: DecodeExtraction = (decodeCandidate) => (row, mapping, f
       Option.liftPredicate((value: string) => value.length > 0)((row.fields[index] ?? "").trim())
     );
     const encoded = {
-      money: { amount: encodeMoneyAmount(money.amount), currency: money.currency },
+      money: {
+        amount: encodeMoneyAmount(money.amount),
+        currency: money.currency,
+      },
       direction: direction.value,
       occurredAt: facts.occurredAt,
       ...(Option.isSome(counterparty) ? { counterparty: counterparty.value } : {}),
@@ -360,7 +364,10 @@ const decodeKnownMoney = Effect.fn(function* (
 type InterpretRow = <Extraction>(
   row: ParsedStatementRow,
   mapping: StatementColumnMapping,
-  context: Readonly<{ timeZone: string; decodeCandidate: ExtractionDecoder<Extraction> }>
+  context: Readonly<{
+    timeZone: string;
+    decodeCandidate: ExtractionDecoder<Extraction>;
+  }>
 ) => Effect.Effect<InterpretedStatementRow<Extraction>>;
 
 const interpretRow: InterpretRow = (row, mapping, context) =>
@@ -410,7 +417,10 @@ export const interpretStatementRows = Effect.fn(function* <Extraction>(
   decodeCandidate: ExtractionDecoder<Extraction>
 ) {
   const outcomes = yield* Effect.forEach(input.rows, (row: Readonly<ParsedStatementRow>) =>
-    interpretRow(row, input.mapping, { timeZone: input.timeZone, decodeCandidate })
+    interpretRow(row, input.mapping, {
+      timeZone: input.timeZone,
+      decodeCandidate,
+    })
   );
   const counts: Record<InterpretedStatementRow<Extraction>["outcome"], number> = {
     accepted: 0,

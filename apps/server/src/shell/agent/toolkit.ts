@@ -4,8 +4,10 @@ import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { type AgentConfirmation, isHostedVisible } from "~/shell/_shared/operation-policy";
+import { grantsRequiredTier } from "~/shell/_shared/suggested-operations";
 import { operationCatalog } from "~/shell/api";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import { Telemetry } from "~/shell/observability/telemetry";
 import {
   CanonicalCallRejected,
@@ -61,11 +63,16 @@ if (bindingsByWireName.size !== agentOperationBindings.length) {
   throw new Error("Canonical operation aliases must remain unique for OpenAI");
 }
 
-/** Filters provider-visible bindings using the current hosted caller's authority. */
-export const hostedBindings = (
-  authorityRoot: CanonicalCaller["authorityRoot"]
-): ReadonlyArray<AgentOperationBinding> =>
-  agentOperationBindings.filter(({ policy }) => isHostedVisible(policy.access, authorityRoot));
+/** Filters provider-visible bindings using the current hosted authority and AccessTier. */
+export const hostedBindings = (input: {
+  readonly authorityRoot: CanonicalCaller["authorityRoot"];
+  readonly accessTier: AccessTier;
+}): ReadonlyArray<AgentOperationBinding> =>
+  agentOperationBindings.filter(
+    ({ policy }) =>
+      isHostedVisible(policy.access, input.authorityRoot) &&
+      grantsRequiredTier({ requiredTier: policy.requiredTier, callerTier: input.accessTier })
+  );
 
 /** Finds the canonical binding for one provider-safe tool name. */
 export const findAgentOperationBinding = (

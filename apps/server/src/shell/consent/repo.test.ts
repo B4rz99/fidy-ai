@@ -299,7 +299,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               yield* sql`DELETE FROM users WHERE id = ${otherUserId}`;
             })
           );
-          const otherUser = yield* makeColombianUser(otherUserId, { createdAt, paidTier: "free" });
+          const otherUser = yield* makeColombianUser(otherUserId, { createdAt });
           yield* upsertStableUserFixture(otherUserId, otherUser);
           const disclosure = yield* currentDisclosure;
 

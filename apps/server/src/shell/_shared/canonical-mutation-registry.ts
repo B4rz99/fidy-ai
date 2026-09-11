@@ -1,9 +1,5 @@
 import { Effect } from "effect";
-import { toAccessCaller } from "./authz";
-import {
-  type SuggestedOperationCaller,
-  makeFreeSuggestedOperationCaller,
-} from "./suggested-operations";
+import { type SuggestedOperationCaller, toSuggestedOperationCaller } from "./suggested-operations";
 import { createBudget, deleteBudget, updateBudget } from "~/shell/budgets/mutations";
 import { approveBrowserLoginPairing } from "~/shell/browser-login/mutations";
 import {
@@ -42,8 +38,11 @@ import type { OperationCatalog } from "./operation-catalog";
 /** Caller facts supplied to every registered canonical mutation adapter. */
 export type CanonicalMutationCaller = CanonicalImplementationCaller;
 
-const suggestedCaller = ({ resolved }: CanonicalMutationCaller): SuggestedOperationCaller =>
-  makeFreeSuggestedOperationCaller(toAccessCaller(resolved));
+const suggestedCaller = ({
+  resolved,
+  accessTier,
+}: CanonicalMutationCaller): SuggestedOperationCaller =>
+  toSuggestedOperationCaller({ resolved, accessTier });
 
 /**
  * Reusable transaction-aware adapters behind atomic dispatch. This is an implementation registry,

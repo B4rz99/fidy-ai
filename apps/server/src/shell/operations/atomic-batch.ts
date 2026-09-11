@@ -7,6 +7,7 @@ import {
   toAccessCaller,
 } from "~/shell/_shared/authz";
 import { type OperationPolicyValue, decideOperationAccess } from "~/shell/_shared/operation-policy";
+import { grantsRequiredTier } from "~/shell/_shared/suggested-operations";
 import {
   type CanonicalMutationCall,
   CanonicalMutationEffects,
@@ -107,6 +108,7 @@ type ExecuteChild = Readonly<{
   call: AtomicBatchInput["calls"][number];
   index: number;
   caller: CanonicalCaller;
+  accessTier: CanonicalImplementationCaller["accessTier"];
   confirmationEvidence: CanonicalImplementationCaller["confirmationEvidence"];
   childAudit: ChildOperationAuditService;
 }>;
@@ -123,6 +125,11 @@ const decodeCanonicalMutationCall = (
 const hasChildAccess = (operation: OperationPolicyValue, caller: CanonicalCaller): boolean =>
   decideOperationAccess(operation.access, toAccessCaller(caller))._tag === "Allowed";
 
+const hasChildTier = (
+  operation: OperationPolicyValue,
+  accessTier: CanonicalImplementationCaller["accessTier"]
+): boolean => grantsRequiredTier({ requiredTier: operation.requiredTier, callerTier: accessTier });
+
 // The catalog-derived HTTP decoder establishes the operation/input correlation before this
 // implementation registry's exact dispatch interface.
 const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
@@ -130,6 +137,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
   childAudit,
   index,
   caller,
+  accessTier,
   confirmationEvidence,
 }: ExecuteChild) {
   const catalogOperation = operationById.get(CanonicalOperationId.make(call.operation));
@@ -151,7 +159,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "The caller does not grant the access declared by this child mutation. Correct authority before retrying the whole batch.",
     });
   }
-  if (catalogOperation.policy.requiredTier !== "free") {
+  if (!hasChildTier(catalogOperation.policy, accessTier)) {
     return yield* rejectChild(childAudit, {
       index,
       operation: call.operation,
@@ -160,10 +168,10 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "The User's Subscription tier does not grant this child mutation. Upgrade before retrying the whole batch.",
     });
   }
-
   const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
   const output = yield* dispatchCanonicalMutation(mutationCall, {
     resolved: caller,
+    accessTier,
     confirmationEvidence,
   }).pipe(
     Effect.tap(() => recordChild(childAudit, call.operation, "succeeded")),
@@ -189,12 +197,14 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
 export type AtomicBatchExecutionInput = Readonly<{
   payload: AtomicBatchInput;
   caller: CanonicalCaller;
+  accessTier: CanonicalImplementationCaller["accessTier"];
   confirmationEvidence: CanonicalImplementationCaller["confirmationEvidence"];
 }>;
 
 const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
   payload,
   caller,
+  accessTier,
   confirmationEvidence,
 }: AtomicBatchExecutionInput) {
   const preparedStates: Array<Schema.Json> = [];
@@ -203,19 +213,21 @@ const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
     if (
       catalogOperation?.policy.kind !== "mutation" ||
       !hasChildAccess(catalogOperation.policy, caller) ||
-      catalogOperation.policy.requiredTier !== "free"
+      !hasChildTier(catalogOperation.policy, accessTier)
     ) {
       continue;
     }
     const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
-    const preparation = CanonicalPreTransactions.find(
-      CanonicalMutationEffects.make(mutationCall, {
+    const preparation = CanonicalPreTransactions.find({
+      effect: CanonicalMutationEffects.make(mutationCall, {
         resolved: caller,
+        accessTier,
         confirmationEvidence,
       }),
       caller,
-      catalogOperation.id
-    );
+      operation: catalogOperation.id,
+      accessTier,
+    });
     if (Option.isSome(preparation)) preparedStates.push(...(yield* preparation.value));
   }
   return preparedStates;
@@ -243,6 +255,7 @@ export const executeAtomicBatch = (
           childAudit,
           index,
           caller: input.caller,
+          accessTier: input.accessTier,
           confirmationEvidence: input.confirmationEvidence,
         })
       );

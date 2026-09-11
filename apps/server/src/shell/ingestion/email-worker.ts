@@ -28,7 +28,7 @@ import {
   type TransactionExtraction as TransactionExtractionType,
 } from "~/core/transactions/model";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
-import { freePatCaller } from "~/shell/_shared/suggested-operations";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import {
   hasCurrentOnboardingConsent,
   onboardingConsentStandingInScope,
@@ -391,10 +391,11 @@ const settleExtraction = Effect.fn(function* (input: SettlementExtraction) {
     });
     return;
   }
+  const tier = yield* resolveAccessTierInScope(context.userId, yield* DateTime.now);
   const captured = yield* Effect.result(
     captureNotificationEmailTransactionInScope({
       userId: context.userId,
-      caller: freePatCaller(["write"]),
+      caller: { accessCaller: { _tag: "PAT", capabilities: ["write"] }, tier },
       extraction,
       context: {
         serviceMarket: context.serviceMarket,

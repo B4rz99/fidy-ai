@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { Price, SubscriptionOffers } from "./model";
+import { Price, SubscriptionOffers, SubscriptionStanding } from "./model";
 
 const price = (
   id: string,
@@ -24,6 +24,19 @@ const price = (
 const weekly = price("22700000-0000-4000-8000-000000000001", "weekly", "9900");
 const monthly = price("22700000-0000-4000-8000-000000000002", "monthly", "28900");
 const yearly = price("22700000-0000-4000-8000-000000000003", "yearly", "289900");
+
+it("keeps paid Pro standing as one private boolean fact", () => {
+  expect(Schema.decodeResult(SubscriptionStanding)({ paidProActive: true })).toEqual(
+    Result.succeed({ paidProActive: true })
+  );
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(SubscriptionStanding)({
+        paidProActive: "pro",
+      })
+    )
+  ).toBe(true);
+});
 
 it("accepts the exact ordered launch Subscription offers", () => {
   const decoded = Schema.decodeResult(SubscriptionOffers)([weekly, monthly, yearly]);

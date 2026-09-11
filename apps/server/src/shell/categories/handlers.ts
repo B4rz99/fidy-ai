@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { createKeywordRule, deleteKeywordRule, updateKeywordRule } from "./mutations";
 import { listCategories, listKeywordRules } from "./queries";
@@ -23,19 +23,19 @@ export const CategoriesLive = HttpApiBuilder.group(FidyApi, "categories", (handl
     )
     .handle("createKeywordRule", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* createKeywordRule({ userId, caller, payload });
       })
     )
     .handle("updateKeywordRule", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* updateKeywordRule({ userId, caller, keywordRuleId: params.id, payload });
       })
     )
     .handle("deleteKeywordRule", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* deleteKeywordRule({ userId, caller, keywordRuleId: params.id });
       })
     )

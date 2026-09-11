@@ -26,6 +26,7 @@ import {
 import { createVerifiedOnboardingIdentityInScope } from "~/shell/identity/repo";
 import { installBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
 import { generateBackupRecoveryMaterial } from "~/shell/recovery/service";
+import { createInitialSubscriptionInScope } from "~/shell/subscription/access-repo";
 
 export class EmailVerificationInvalid extends Data.TaggedError("EmailVerificationInvalid")<{}> {}
 export class EmailAlreadyEnrolled extends Data.TaggedError("EmailAlreadyEnrolled")<{}> {}
@@ -108,6 +109,7 @@ const createStableState = Effect.fn(function* (
     caller: WhatsAppCaller.make(enrollment.caller),
     createdAt: verifiedAt,
   });
+  yield* createInitialSubscriptionInScope(material.userId);
   yield* appendVerifiedOnboardingConsentInScope({
     recordId: material.consentRecordId,
     subjectUserId: material.userId,

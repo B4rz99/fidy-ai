@@ -27,7 +27,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* clearFixture;
         const user = yield* makeColombianUser(userId, {
           createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
-          paidTier: "free",
         });
 
         yield* upsertStableUserFixture(userId, user);
@@ -36,6 +35,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* sql`
             SELECT
               (SELECT count(*)::int FROM users WHERE id = ${userId}) AS users,
+              (SELECT count(*)::int FROM subscriptions WHERE user_id = ${userId}) AS subscriptions,
               (SELECT count(*)::int FROM whatsapp_identities WHERE user_id = ${userId}) AS identities,
               (SELECT count(*)::int FROM consent_records
                 WHERE subject_user_id = ${userId} AND event_type = 'granted'
@@ -45,7 +45,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               (SELECT count(*)::int FROM backup_recovery_credentials
                 WHERE user_id = ${userId}) AS recovery
           `
-        ).toEqual([{ users: 1, identities: 1, consent: 1, email: 1, recovery: 1 }]);
+        ).toEqual([
+          { users: 1, subscriptions: 1, identities: 1, consent: 1, email: 1, recovery: 1 },
+        ]);
       }).pipe(Effect.ensuring(clearFixture.pipe(Effect.orDie)))
     );
   }

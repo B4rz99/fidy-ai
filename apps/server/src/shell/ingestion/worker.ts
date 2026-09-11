@@ -11,7 +11,7 @@ import { interpretStatementRows } from "~/core/ingestion/rules";
 import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
 import { UserId } from "~/core/identity/reference";
 import { TransactionExtraction } from "~/core/transactions/model";
-import { freePatCaller } from "~/shell/_shared/suggested-operations";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
@@ -147,10 +147,11 @@ const finalizeOutcome = Effect.fn(function* (
     yield* insertReview(statement, outcome);
     return false;
   }
+  const tier = yield* resolveAccessTierInScope(statement.userId, yield* DateTime.now);
   const captured = yield* Effect.result(
     captureStatementTransactionInScope({
       userId: statement.userId,
-      caller: freePatCaller(["write"]),
+      caller: { accessCaller: { _tag: "PAT", capabilities: ["write"] }, tier },
       extraction: outcome.extraction,
       context: {
         serviceMarket: statement.serviceMarket,

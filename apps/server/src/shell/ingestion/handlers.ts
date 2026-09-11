@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { resolveNeedsReviewItemMutation, submitForExtractionInScope } from "./mutations";
 import { forwardedEmailIngestion } from "./forwarded-email-ingestion";
@@ -11,37 +11,37 @@ export const IngestionLive = HttpApiBuilder.group(FidyApi, "ingestion", (handler
   handlers
     .handle("enableEmailForwarding", () =>
       Effect.gen(function* () {
-        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId } = yield* resolveSuggestedOperationCaller;
         return yield* forwardedEmailIngestion.enable(userId);
       })
     )
     .handle("getEmailForwarding", () =>
       Effect.gen(function* () {
-        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId } = yield* resolveSuggestedOperationCaller;
         return yield* forwardedEmailIngestion.getStatus(userId);
       })
     )
     .handle("submitForExtraction", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* submitForExtractionInScope({ userId, caller, payload });
       })
     )
     .handle("getStatementSubmission", ({ params }) =>
       Effect.gen(function* () {
-        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId } = yield* resolveSuggestedOperationCaller;
         return yield* getStatementSubmission({ userId, submissionId: params.id });
       })
     )
     .handle("listNeedsReviewItems", ({ query }) =>
       Effect.gen(function* () {
-        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId } = yield* resolveSuggestedOperationCaller;
         return yield* listNeedsReviewItems({ userId, page: query });
       })
     )
     .handle("resolveNeedsReviewItem", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* resolveNeedsReviewItemMutation({
           userId,
           caller,

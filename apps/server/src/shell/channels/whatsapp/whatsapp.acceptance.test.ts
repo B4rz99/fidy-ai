@@ -2,7 +2,6 @@ import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import { Crypto, DateTime, Effect, Option, Ref, Schedule, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { decideEffectiveAccess } from "~/core/identity/rules";
 import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
@@ -17,6 +16,7 @@ import { TelemetrySpanId, TelemetryTraceId } from "~/shell/observability/protoco
 import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppProviderMessageId } from "./model";
+import { MigrationSqlClient } from "~/shell/db/client";
 import {
   WhatsAppAcceptanceApiClient,
   WhatsAppAcceptanceCallerControl,
@@ -491,14 +491,11 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(upgrade.data.url).toEqual(new URL("https://fidyapp.com/upgrade"));
         const currentUser = yield* api.identity.getCurrentUser();
         expect(currentUser.data).toMatchObject({
-          paidTier: "pro",
           trialPeriod: {
             startedAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
             endsAt: DateTime.makeUnsafe("2026-01-08T00:00:00Z"),
           },
         });
-        expect(yield* decideEffectiveAccess(currentUser.data, yield* DateTime.now)).toBe("pro");
-
         const kapso = yield* WhatsAppAcceptanceKapsoControl;
         yield* kapso.reset;
         yield* kapso.setDeliveryMode("sandbox-phone");
@@ -613,6 +610,14 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         );
         const current = yield* probe.api.identity.getCurrentUser({});
         expect(current.data.id).toBe(probe.userId);
+        const sql = yield* MigrationSqlClient;
+        expect(
+          yield* sql`
+            SELECT paid_pro_active AS "paidProActive"
+            FROM subscriptions
+            WHERE user_id = ${probe.userId}
+          `
+        ).toEqual([{ paidProActive: false }]);
         const records = yield* probe.consentRecords;
         expect(records).toHaveLength(1);
         expect(records[0]).toMatchObject({

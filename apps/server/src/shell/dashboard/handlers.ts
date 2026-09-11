@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { applyDashboardEdit, getDashboard } from "./mutations";
 import { listDashboardCatalog } from "./queries";
@@ -30,7 +30,7 @@ export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handler
     )
     .handle("applyDashboardEdit", ({ payload: edit }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* applyDashboardEdit({
           userId,
           edit,

@@ -531,11 +531,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* upsertStableUserFixture(
           tierTransitionUserId,
           yield* makeColombianUser(tierTransitionUserId, {
-            paidTier: "pro",
             createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
           })
         );
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${tierTransitionUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${tierTransitionUserId}`;
         yield* grantCurrentOnboardingConsentForTesting({
           sourceUserId: defaultUserId,
           subjectUserId: tierTransitionUserId,
@@ -551,7 +550,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           (number) => makeDelivery(`email_pro_${number}`, tierTransitionAddress),
           { concurrency: 1, discard: true }
         );
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${tierTransitionUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${tierTransitionUserId}`;
         const transitionedStatus = yield* forwardedEmailIngestion.getStatus(tierTransitionUserId);
         expect(Option.getOrThrow(transitionedStatus.data.remainingThisMonth)).toBe(50);
         yield* sql`
@@ -567,7 +566,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* upsertStableUserFixture(
           freeUserId,
           yield* makeColombianUser(freeUserId, {
-            paidTier: "free",
             createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
           })
         );
@@ -633,7 +631,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           DELETE FROM forwarded_email_receipts
           WHERE user_id = ${freeUserId} AND status = 'accepted'
         `;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${freeUserId}`;
         let promotedReceivedEmailId = "";
         yield* processWith(
           ResendReceivingClient.of({
@@ -644,7 +642,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           })
         );
         expect(promotedReceivedEmailId).toMatch(/^email_quota_\d+$/u);
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${freeUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${freeUserId}`;
         yield* sql`
           UPDATE forwarded_email_user_admission_windows
           SET window_start = date_trunc('hour', clock_timestamp()) + interval '1 hour',
@@ -806,7 +804,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* upsertStableUserFixture(
               input.userId,
               yield* makeColombianUser(input.userId, {
-                paidTier: "free",
                 createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
               })
             );
@@ -1013,7 +1010,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* upsertStableUserFixture(
             userId,
             yield* makeColombianUser(userId, {
-              paidTier: "pro",
               createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
             })
           );

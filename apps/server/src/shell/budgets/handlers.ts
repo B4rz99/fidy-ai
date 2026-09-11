@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { createBudget, deleteBudget, updateBudget } from "./mutations";
 import { getBudget, getBudgetStatus, listBudgets } from "./queries";
@@ -11,7 +11,7 @@ export const BudgetsLive = HttpApiBuilder.group(FidyApi, "budgets", (handlers) =
   handlers
     .handle("createBudget", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* createBudget({ userId, caller, payload });
       })
     )
@@ -23,19 +23,19 @@ export const BudgetsLive = HttpApiBuilder.group(FidyApi, "budgets", (handlers) =
     )
     .handle("getBudget", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* getBudget({ userId, budgetId: params.id, caller });
       })
     )
     .handle("updateBudget", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* updateBudget({ userId, caller, budgetId: params.id, payload });
       })
     )
     .handle("deleteBudget", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* deleteBudget({ userId, caller, budgetId: params.id });
       })
     )

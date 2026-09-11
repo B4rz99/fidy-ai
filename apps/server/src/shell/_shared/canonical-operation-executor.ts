@@ -1,5 +1,6 @@
 import { Cause, Data, DateTime, Effect, Exit, Option, Ref, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import type { CanonicalOperationId } from "~/core/audit/model";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
@@ -28,6 +29,8 @@ import { canonicalTransactionIsolation, retryCanonicalSnapshot } from "./canonic
 import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
 import { type OperationPolicyValue, decideOperationAccess } from "./operation-policy";
+import { resolveAccessTierInScope } from "./access-tier";
+import { grantsRequiredTier } from "./suggested-operations";
 
 export class CanonicalCallRejected extends Data.TaggedError("CanonicalCallRejected")<{
   readonly reason:
@@ -35,6 +38,7 @@ export class CanonicalCallRejected extends Data.TaggedError("CanonicalCallReject
     | "pat_scope_missing"
     | "fresh_web_session_required"
     | "caller_ineligible"
+    | "tier_missing"
     | "confirmation_rejected"
     | "input_rejected";
 }> {}
@@ -109,9 +113,10 @@ const runPreTransactionCheckpoint = (input: {
   readonly operation: CanonicalOperationId;
   readonly occurredAt: DateTime.Utc;
   readonly effect: object;
+  readonly accessTier: AccessTier;
 }): Effect.Effect<ReadonlyArray<Schema.Json>, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
-    const checkpoint = CanonicalPreTransactions.find(input.effect, input.caller, input.operation);
+    const checkpoint = CanonicalPreTransactions.find(input);
     if (Option.isNone(checkpoint)) return [];
     const exit = yield* Effect.exit(checkpoint.value);
     if (Exit.isSuccess(exit)) return exit.value;
@@ -119,49 +124,67 @@ const runPreTransactionCheckpoint = (input: {
     return yield* exit;
   }).pipe(Effect.withSpan("runCanonicalPreTransactionCheckpoint"));
 
-/**
- * Shared transaction and audit checkpoint used after either PAT or hosted authorization resolves
- * one credential-neutral caller. Successful state and evidence commit together; failure evidence
- * is appended only after rollback.
- */
-export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(function* <
-  A,
-  E,
-  R,
->(input: {
+const authorizeCanonicalCall = Effect.fn("authorizeCanonicalCall")(function* (input: {
   readonly caller: CanonicalCaller;
   readonly operation: CanonicalOperationId;
   readonly policy: OperationPolicyValue;
-  readonly effect: Effect.Effect<A, E, R>;
-  readonly executionCheckpoint: Effect.Effect<void, CanonicalCallRejected, R>;
   readonly occurredAt: DateTime.Utc;
 }) {
-  const { caller, effect, executionCheckpoint, occurredAt, operation, policy } = input;
-  const access = decideOperationAccess(policy.access, toAccessCaller(caller));
+  const access = decideOperationAccess(input.policy.access, toAccessCaller(input.caller));
   if (access._tag === "Denied") {
-    yield* appendOutcome({ caller, operation, outcome: "rejected", occurredAt });
+    yield* appendOutcome({ ...input, outcome: "rejected" });
     return yield* new CanonicalCallRejected({ reason: access.reason });
   }
 
-  const preparedStates = yield* runPreTransactionCheckpoint({
-    caller,
-    operation,
-    occurredAt,
-    effect,
-  });
-  const preTransactionStates = yield* Ref.make(preparedStates);
-  const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);
-  const childAudit = ChildOperationAudit.of({
-    record: (evidence) => Ref.update(childEvidence, (entries) => [...entries, evidence]),
-  });
-  const execution = provideCaller(
-    executionCheckpoint.pipe(
-      Effect.andThen(effect),
-      Effect.provideService(CanonicalPreTransactionStates, Option.some(preTransactionStates))
-    ),
-    caller,
-    childAudit
+  const accessTier = yield* withUserTransaction(
+    input.caller.subjectUserId,
+    resolveAccessTierInScope(input.caller.subjectUserId, input.occurredAt)
   );
+  if (
+    !grantsRequiredTier({
+      requiredTier: input.policy.requiredTier,
+      callerTier: accessTier,
+    })
+  ) {
+    yield* appendOutcome({ ...input, outcome: "rejected" });
+    return yield* new CanonicalCallRejected({ reason: "tier_missing" });
+  }
+  return accessTier;
+});
+
+type ExecuteCanonicalEffectInput<A, E, R> = Readonly<{
+  caller: CanonicalCaller;
+  operation: CanonicalOperationId;
+  policy: OperationPolicyValue;
+  effect: (accessTier: AccessTier) => Effect.Effect<A, E, R>;
+  executionCheckpoint: Effect.Effect<void, CanonicalCallRejected, R>;
+  occurredAt: DateTime.Utc;
+}>;
+
+const runCanonicalOperationTransaction = Effect.fn("runCanonicalOperationTransaction")(function* <
+  A,
+  E,
+  R,
+>(
+  input: ExecuteCanonicalEffectInput<A, E, R>,
+  preTransactionStates: Ref.Ref<ReadonlyArray<Schema.Json>>,
+  childAudit: ChildOperationAuditService
+) {
+  const { caller, effect, executionCheckpoint, occurredAt, operation, policy } = input;
+  const execution = Effect.gen(function* () {
+    const currentTier = yield* resolveAccessTierInScope(caller.subjectUserId, occurredAt);
+    if (!grantsRequiredTier({ requiredTier: policy.requiredTier, callerTier: currentTier })) {
+      return yield* new CanonicalCallRejected({ reason: "tier_missing" });
+    }
+    return yield* provideCaller(
+      executionCheckpoint.pipe(
+        Effect.andThen(effect(currentTier)),
+        Effect.provideService(CanonicalPreTransactionStates, Option.some(preTransactionStates))
+      ),
+      caller,
+      childAudit
+    );
+  });
   const operationTransaction = withUserTransaction(
     caller.subjectUserId,
     execution.pipe(
@@ -169,8 +192,33 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
     ),
     canonicalTransactionIsolation(operation)
   );
+  return yield* retryCanonicalSnapshot({ operation, effect: operationTransaction });
+});
+
+/**
+ * Shared transaction and audit checkpoint used after either PAT or hosted authorization resolves
+ * one credential-neutral caller. Successful state and evidence commit together; failure evidence
+ * is appended only after rollback.
+ */
+export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(function* <A, E, R>(
+  input: ExecuteCanonicalEffectInput<A, E, R>
+) {
+  const { caller, effect, occurredAt, operation, policy } = input;
+  const accessTier = yield* authorizeCanonicalCall({ caller, operation, policy, occurredAt });
+  const preparedStates = yield* runPreTransactionCheckpoint({
+    caller,
+    operation,
+    occurredAt,
+    effect: effect(accessTier),
+    accessTier,
+  });
+  const preTransactionStates = yield* Ref.make(preparedStates);
+  const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);
+  const childAudit = ChildOperationAudit.of({
+    record: (evidence) => Ref.update(childEvidence, (entries) => [...entries, evidence]),
+  });
   const exit = yield* Effect.exit(
-    retryCanonicalSnapshot({ operation, effect: operationTransaction })
+    runCanonicalOperationTransaction(input, preTransactionStates, childAudit)
   );
 
   if (Exit.isFailure(exit)) {
@@ -279,7 +327,12 @@ export const executeHostedCanonicalOperation = Effect.fn("executeHostedCanonical
         reason: "authority_closed",
       });
     }
-    const call = yield* resolveHostedCall({ caller, binding, untrustedInput, occurredAt });
+    const call = yield* resolveHostedCall({
+      caller,
+      binding,
+      untrustedInput,
+      occurredAt,
+    });
     let confirmationEvidence = Option.none<ProviderQualifiedMessages>();
     // In-process hosted execution reuses the canonical operation span the HTTP middleware emits, so
     // a hosted call stays as observable as the same operation invoked by the User's own agent.
@@ -293,10 +346,12 @@ export const executeHostedCanonicalOperation = Effect.fn("executeHostedCanonical
         caller,
         operation: binding.operation,
         policy: call.policy,
-        effect: call.execute(call.canonicalInput, {
-          resolved: caller,
-          confirmationEvidence: () => confirmationEvidence,
-        }),
+        effect: (accessTier) =>
+          call.execute(call.canonicalInput, {
+            resolved: caller,
+            accessTier,
+            confirmationEvidence: () => confirmationEvidence,
+          }),
         executionCheckpoint: hostedExecutionCheckpoint({
           confirmationPermit,
           binding,

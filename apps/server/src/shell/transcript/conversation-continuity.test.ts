@@ -487,7 +487,7 @@ const resetIsolatedUser = Effect.gen(function* () {
       yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${isolatedUserId}`;
       yield* sql`DELETE FROM users WHERE id = ${isolatedUserId}`;
       const createdAt = DateTime.makeUnsafe("2026-08-11T00:00:00Z");
-      const user = yield* makeColombianUser(isolatedUserId, { createdAt, paidTier: "free" });
+      const user = yield* makeColombianUser(isolatedUserId, { createdAt });
       yield* upsertStableUserFixture(isolatedUserId, user);
     })
   );

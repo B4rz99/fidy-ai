@@ -79,7 +79,7 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const sql = yield* MigrationSqlClient;
         yield* sql`DELETE FROM email_forwarding_addresses WHERE user_id = ${freeUserId}`;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${freeUserId}`;
 
         const result = yield* withUserTransaction(
           freeUserId,
@@ -134,7 +134,7 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           scopes: ["read", "write"],
         });
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${freeUserId}`;
         const client = yield* FreeApiClient;
         const burst = yield* Effect.all(
           Array.from({ length: 6 }, (_, index) =>
@@ -167,9 +167,12 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const sql = yield* MigrationSqlClient;
         yield* sql`
-          UPDATE users SET paid_tier = 'free', trial_started_at = '2020-01-01T00:00:00Z',
+          UPDATE users SET trial_started_at = '2020-01-01T00:00:00Z',
             trial_ends_at = '2020-01-08T00:00:00Z'
           WHERE id = ${freeUserId}
+        `;
+        yield* sql`
+          UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${freeUserId}
         `;
         const client = yield* FreeApiClient;
         const payload = statementPayload("f1d1a000-0000-4000-8000-00000000c181");
@@ -237,7 +240,7 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         expect(visible.data.status).toBe("queued");
 
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${freeUserId}`;
         const rollbackKey = "f1d1a000-0000-4000-8000-00000000c189";
         yield* withUserTransaction(
           freeUserId,

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import {
   correctTransaction,
@@ -16,37 +16,37 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
   handlers
     .handle("createTransaction", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* createTransaction({ userId, payload, caller });
       })
     )
     .handle("listTransactions", ({ query: filters }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* listTransactions({ userId, filters, caller });
       })
     )
     .handle("getTransaction", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* getTransaction({ userId, transactionId: params.id, caller });
       })
     )
     .handle("linkTransactions", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* linkTransactions({ userId, payload, caller });
       })
     )
     .handle("unlinkTransactions", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* unlinkTransactions({ userId, payload, caller });
       })
     )
     .handle("updateTransaction", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* correctTransaction({
           userId,
           transactionId: params.id,
@@ -57,7 +57,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
     )
     .handle("deleteTransaction", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* deleteTransaction({
           userId,
           transactionId: params.id,
@@ -67,7 +67,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
     )
     .handle("listSourceAttestations", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* listSourceAttestations({ userId, transactionId: params.id, caller });
       })
     )

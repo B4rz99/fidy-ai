@@ -1,10 +1,7 @@
 import { Context, Function, Option, Schema, SchemaTransformation } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { CanonicalCapability } from "~/core/_shared/canonical-capability";
-
-/** The Subscription tier a caller currently has or an operation requires. */
-export const OperationTier = Schema.Literals(["free", "pro"]);
-export type OperationTier = typeof OperationTier.Type;
+import type { AccessTier } from "~/core/_shared/access-tier";
 
 /** Whether a hosted agent must obtain exact User confirmation before execution. */
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
@@ -257,7 +254,7 @@ export const isHostedVisible: {
 /** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
   readonly access: OperationAccess;
-  readonly requiredTier: OperationTier;
+  readonly requiredTier: AccessTier;
   readonly agentConfirmation: AgentConfirmation;
   readonly kind: CanonicalOperationKind;
 };

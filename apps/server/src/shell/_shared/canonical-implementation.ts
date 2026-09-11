@@ -1,5 +1,6 @@
 import type { Crypto, Effect, Option } from "effect";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
 import type { PersistedQueue } from "effect/unstable/persistence";
 import type { SqlClient } from "effect/unstable/sql";
@@ -13,6 +14,7 @@ import type { CanonicalSuccess } from "./canonical-success";
 /** Caller facts supplied to every canonical implementation once the executor has resolved one. */
 export type CanonicalImplementationCaller = Readonly<{
   resolved: CanonicalCaller;
+  accessTier: AccessTier;
   /** Exact provider evidence exposed lazily only after the hosted confirmation permit is consumed. */
   confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
 }>;

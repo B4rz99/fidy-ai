@@ -69,7 +69,6 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
       Effect.gen(function* () {
         const user = yield* makeColombianUser(unconsentedUserId, {
           createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
-          paidTier: "free",
         });
         yield* upsertStableUserFixture(unconsentedUserId, user);
         const sql = yield* MigrationSqlClient;
@@ -107,7 +106,6 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const occurredAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
         const user = yield* makeColombianUser(concurrentlyRevokedUserId, {
           createdAt: occurredAt,
-          paidTier: "free",
         });
         yield* upsertStableUserFixture(concurrentlyRevokedUserId, user);
         yield* revokeCurrentOnboardingConsentForTesting(

@@ -3,8 +3,9 @@ import { expect, layer } from "@effect/vitest";
 import { Config, DateTime, Effect, Layer, Option } from "effect";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
-import { findUser } from "~/shell/identity/repo";
+import { hasPaidProInScope } from "~/shell/subscription/access-repo";
 import { PgLive } from "./client";
+import { withUserTransaction } from "./user-transaction";
 import { defaultUserId } from "./development-seed";
 
 const localDatabaseUrl = Config.string("DATABASE_URL");
@@ -64,7 +65,9 @@ layer(Layer.merge(PgLive, BunServices.layer), {
       expect(second.stderr).not.toContain("fin_");
       expect(Option.isNone(firstResolution)).toBe(true);
       expect(Option.isSome(secondResolution)).toBe(true);
-      expect(Option.getOrThrow(yield* findUser(defaultUserId)).paidTier).toBe("pro");
+      expect(yield* withUserTransaction(defaultUserId, hasPaidProInScope(defaultUserId))).toBe(
+        true
+      );
     })
   );
 

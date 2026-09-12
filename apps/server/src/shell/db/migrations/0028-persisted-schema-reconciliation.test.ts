@@ -1,11 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Cause, Data, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { RollbackMigrationFixture } from "~/shell/testing/rollback-migration-fixture";
 import { persistedSchemaReconciliation } from "./0028-persisted-schema-reconciliation";
-
-class RollbackMigrationFixture extends Data.TaggedError("RollbackMigrationFixture")<{}> {}
 
 const legacyUserId = "f1d1a000-0000-4000-8000-0000000008a1";
 const legacyTokenId = "f1d1a000-0000-4000-8000-0000000008a2";

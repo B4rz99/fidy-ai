@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Deferred, Effect, Fiber, Redacted, Schema } from "effect";
+import { Crypto, DateTime, Deferred, Effect, Encoding, Fiber, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
@@ -7,6 +7,7 @@ import { ClaimedPATPairing, PATPairingReview, StartedPATPairing } from "~/core/t
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
+import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { OperationResponse } from "~/shell/_shared/response";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
@@ -629,6 +630,53 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           rejectedReviews.map(({ status }) => status).sort((left, right) => left - right)
         ).toEqual([400, 400, 400, 400, 400, 429]);
+      })
+    );
+
+    it.effect("keeps purpose-separated keyed identifiers and deletes them after retention", () =>
+      Effect.gen(function* () {
+        yield* seedFreshWebSession;
+        const started = yield* startPairing;
+        const sql = yield* MigrationSqlClient;
+        const [startRow] = yield* sql`
+          SELECT encode(source_digest, 'hex') AS digest FROM pat_pairing_start_attempts
+        `;
+        const expectedStart = Encoding.encodeHex(
+          yield* anonymousSourceIdentifier("pat-pairing-start", testSourceAddress)
+        );
+        expect(startRow?.digest).toBe(expectedStart);
+
+        yield* sql`
+          UPDATE pat_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
+          WHERE id = ${started.pairingId}
+        `;
+        const claim = yield* postJson("/pat-pairings/claim", {
+          pairingId: started.pairingId,
+          privateDeviceCode: Redacted.value(started.privateDeviceCode),
+        });
+        expect(claim.status).toBe(202);
+        const [claimRow] = yield* sql`
+          SELECT encode(source_digest, 'hex') AS digest FROM pat_pairing_claim_attempts
+        `;
+        const expectedClaim = Encoding.encodeHex(
+          yield* anonymousSourceIdentifier("pat-pairing-claim", testSourceAddress)
+        );
+        expect(claimRow?.digest).toBe(expectedClaim);
+        expect(expectedStart).not.toBe(expectedClaim);
+
+        yield* sql`
+          UPDATE pat_pairing_start_attempts
+          SET attempted_at = attempted_at - interval '11 minutes';
+          UPDATE pat_pairing_claim_attempts
+          SET attempted_at = attempted_at - interval '11 minutes'
+        `;
+        yield* expireDuePATPairings();
+        expect(yield* sql`SELECT count(*)::int AS count FROM pat_pairing_start_attempts`).toEqual([
+          { count: 0 },
+        ]);
+        expect(yield* sql`SELECT count(*)::int AS count FROM pat_pairing_claim_attempts`).toEqual([
+          { count: 0 },
+        ]);
       })
     );
 

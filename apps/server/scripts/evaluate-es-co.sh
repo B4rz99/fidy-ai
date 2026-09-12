@@ -39,6 +39,7 @@ export DATABASE_URL="postgresql://fidy_runtime:$password@127.0.0.1:$port/fidy_ev
 export MIGRATION_DATABASE_URL="postgresql://postgres:$password@127.0.0.1:$port/fidy_evaluation"
 export EMAIL_ADMISSION_HMAC_KEY="$(openssl rand -hex 32)"
 export EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY="$(openssl rand -hex 32)"
+export SOURCE_ADMISSION_HMAC_KEY="$(openssl rand -hex 32)"
 export OPENAI_API_URL=https://api.openai.com/v1
 export FIDY_EVALUATION_SOURCE_COMMIT="$(git rev-parse HEAD)"
 if ! bun scripts/provision-runtime-role.ts >/dev/null 2>&1; then

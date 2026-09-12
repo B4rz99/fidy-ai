@@ -21,6 +21,7 @@ import {
 } from "~/core/browser-login/rules";
 import { WebSessionBearer, WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
+import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { redeemPairingToWebSession } from "~/shell/web-auth/repo";
 import {
   type BrowserLoginCapacityExceeded,
@@ -101,11 +102,11 @@ export const purgeBrowserLoginAnonymousEvidence = Effect.fn("BrowserLogin.purgeA
 );
 
 /**
- * Creates one browser-owned proof and persists only its digest and safe pairing metadata.
- * `sourceAddress` is transport-observed abuse evidence: it is digested before persistence and is
- * never identity or authorization authority. Callers handle rate-limit and live-capacity failures.
- * HTTP span telemetry already records latency and status; no custom values are emitted here so a
- * verifier or source address cannot enter logs or diagnostics.
+ * Creates one browser-owned proof and persists only its digest, a keyed admission identifier, and
+ * safe pairing metadata. `sourceAddress` is transport-observed abuse evidence: it is keyed before
+ * persistence and is never identity or authorization authority. Callers handle rate-limit and
+ * live-capacity failures. HTTP span telemetry already records latency and status; no custom values
+ * are emitted here so a verifier or source address cannot enter logs or diagnostics.
  */
 export const startBrowserLoginPairing = Effect.fn("BrowserLogin.startPairing")(function* (
   sourceAddress: string
@@ -117,7 +118,9 @@ export const startBrowserLoginPairing = Effect.fn("BrowserLogin.startPairing")(f
   const privateVerifier = BrowserLoginPrivateVerifier.make(Encoding.encodeBase64Url(verifierBytes));
   const redactedVerifier = Redacted.make(privateVerifier);
   const verifierDigest = yield* sha256(new TextEncoder().encode(Redacted.value(redactedVerifier)));
-  const sourceDigest = yield* sha256(new TextEncoder().encode(sourceAddress));
+  const sourceDigest = yield* anonymousSourceIdentifier("browser-login-start", sourceAddress).pipe(
+    Effect.orDie
+  );
   const { pairingId, publicCode } = yield* insertWithUniquePublicCode({
     verifierDigest,
     sourceDigest,

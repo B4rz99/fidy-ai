@@ -1,0 +1,24 @@
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  h_c6d49c804e0ad2 76,82,330,346
+apps/server/src/shell/testing/durable-execution-compatibility/declaration-coverage.compatibility.test.ts
+  h_c6d49c804e0ad2 35,156,164,234,245,320,332-353,362,365,368-375,378,385-386,392,404-424,434,455
+apps/server/src/shell/testing/durable-execution-compatibility/fixture-registry.compatibility.test.ts
+  h_c6d49c804e0ad2 1-2,10-11,23-39
+apps/server/src/shell/testing/durable-execution-compatibility/whatsapp-consent-disclosure-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 11,14,45-46,50
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 12-17,127,247-252,255-267,377-378,383,389,393,396,399-401,419-424,426-428,431,436-438,503-585,598,627-631,634,637,662,664-669,671-676,683,699-704,770-779,785-786,788-790,796,963-965,985-987,992-997,1144-1147
+tsconfig.base.json
+  h_c6d49c804e0ad2 203-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b2cdbafeb3830d85d58cbec69a0a41a827161a3f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

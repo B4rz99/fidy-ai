@@ -1,0 +1,14 @@
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 32-37,46,65,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c91cf770d0079304c37a14a7039a651b6e6c992e",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

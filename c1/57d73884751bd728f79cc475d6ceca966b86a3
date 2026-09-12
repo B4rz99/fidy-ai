@@ -1,0 +1,48 @@
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16,48
+apps/server/src/shell/_shared/sanitized-http-client-error.ts
+  h_c6d49c804e0ad2 1-75
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 163-169,172-174,179-181
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19,22-25,57-62,67-70,86-95
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,24-32,39-55,57-59,64,76,78,88-92,94-96,109-124,134-135,141-144,147-150,157,164-165
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-489
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-240
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,18-45,54-69,90-94,99-109
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c157d73884751bd728f79cc475d6ceca966b86a3",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

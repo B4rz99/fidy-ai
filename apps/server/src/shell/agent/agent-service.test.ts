@@ -79,7 +79,6 @@ import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inferen
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import {
-  AgentLimits,
   AgentService,
   CurrentAgentLimits,
   DeliveryFailed,
@@ -92,6 +91,7 @@ import {
   durableClientSettlement,
   turnFailureOutcome,
 } from "./agent-service";
+import { AgentLimits } from "./hosted-turns";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { ImmediateDelivery } from "./immediate-delivery";
 import type { AgentReply } from "./message";

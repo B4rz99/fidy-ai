@@ -14,8 +14,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { ClusterSchema, Entity, RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
-import { Rpc } from "effect/unstable/rpc";
+import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
 import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
@@ -35,13 +34,13 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
-  AgentLimits,
-  AgentReply,
+  type AgentReply,
   AgentService,
   type AgentTurnError,
   CurrentAgentLimits,
   InboundMessage,
 } from "./agent-service";
+import { HostedTurns } from "./hosted-turns";
 import { HostedInference, type HostedTextContext, makeHostedInference } from "./hosted-inference";
 import { ImmediateDelivery } from "./immediate-delivery";
 import { WhatsAppReplyDeliveryLive } from "./whatsapp-delivery";
@@ -59,29 +58,6 @@ import { truncateWhatsAppChannel } from "~/shell/channels/whatsapp/fixtures";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-
-/** Independent wire client: exercise malformed addresses and replay without exposing lifecycle APIs. */
-const HostedWire = Entity.make("HostedTurns", [
-  Rpc.make("Handle", {
-    payload: {
-      userId: UserId,
-      turnId: TranscriptTurnId,
-      message: InboundMessage,
-      limits: AgentLimits,
-      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
-    },
-    success: AgentReply,
-    error: Schema.String,
-  }),
-  Rpc.make("Recover", {
-    payload: { userId: UserId, turnId: TranscriptTurnId },
-    primaryKey: ({ turnId }) => turnId,
-  }).annotate(ClusterSchema.Persisted, true),
-  Rpc.make("ProcessWhatsApp", {
-    payload: WhatsAppInboundWork.fields,
-    primaryKey: ({ inboundJobId }) => inboundJobId,
-  }).annotate(ClusterSchema.Persisted, true),
-]);
 
 const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
   Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))
@@ -103,7 +79,7 @@ const mailbox = Effect.gen(function* () {
   return yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ processed: Schema.Boolean }))
   )(
-    yield* sql`SELECT processed FROM fidy_durable.cluster_messages WHERE entity_type = 'HostedTurns' AND kind = 0`
+    yield* sql`SELECT processed FROM fidy_durable.cluster_messages WHERE entity_type = ${HostedTurns.type} AND kind = 0`
   );
 });
 const inference = (execute: (text: string) => Effect.Effect<void>): HostedInference["Service"] =>
@@ -527,7 +503,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           ).toEqual(before);
           expect(
             yield* sql`SELECT request_id FROM fidy_durable.cluster_messages
-              WHERE entity_type = 'HostedTurns' AND tag = 'ProcessWhatsApp'
+              WHERE entity_type = ${HostedTurns.type}
               AND payload::text LIKE ${`%${work.inboundJobId}%`}`
           ).toEqual([]);
           expect(yield* states(defaultUserId)).toEqual([]);
@@ -557,7 +533,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             runtimeLayer({ crypto, http, port: 24660, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-          const client = yield* Effect.promise(() => runtime.runPromise(HostedWire.client));
+          const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
           yield* waitForAssignments([
             yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
           ]);
@@ -745,7 +721,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           ]);
           const sql = yield* MigrationSqlClient;
           const messages =
-            yield* sql`SELECT payload, headers FROM fidy_durable.cluster_messages WHERE entity_type = 'HostedTurns'`;
+            yield* sql`SELECT payload, headers FROM fidy_durable.cluster_messages WHERE entity_type = ${HostedTurns.type}`;
           const retained = yield* Schema.encodeEffect(UnknownJsonString)(messages);
           expect(retained).not.toContain("queued-whatsapp");
           expect(retained).not.toContain("holds-user");
@@ -765,6 +741,128 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* pruneCompletedHostedTurnMessages(DateTime.add(yield* DateTime.now, { days: 2 }));
           expect(yield* mailbox).toEqual([]);
         })
+    );
+
+    it.effect("runs an immediate Handle to completion after its caller disconnects", () =>
+      Effect.gen(function* () {
+        yield* reset;
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        const crypto = yield* Crypto.Crypto;
+        const http = yield* HttpClient.HttpClient;
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const calls = yield* Ref.make(0);
+        const sends = yield* Ref.make(0);
+        const generate = (text: string): Effect.Effect<void> =>
+          Ref.update(calls, (count) => count + 1).pipe(
+            Effect.andThen(
+              text === "caller-disconnect"
+                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                : Effect.void
+            )
+          );
+        const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
+        const runtime = ManagedRuntime.make(
+          runtimeLayer({ crypto, http, port: 24663, generate, deliver })
+        );
+        yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+        const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
+        yield* waitForAssignments([
+          yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
+        ]);
+        const request = {
+          userId: defaultUserId,
+          turnId: TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+          limits: yield* CurrentAgentLimits,
+          message: InboundMessage.make({ text: TranscriptText.make("caller-disconnect") }),
+          authorityRoot: "no-verified-whatsapp-authority" as const,
+        };
+        const caller = runtime.runFork(client(defaultUserId).Handle(request));
+        yield* Effect.raceFirst(
+          Deferred.await(entered),
+          Fiber.join(caller).pipe(
+            Effect.andThen(Effect.die("Request completed before model barrier"))
+          )
+        );
+        expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
+        // The client-annotated operation must outlive its caller and finish the admitted Turn.
+        yield* Fiber.interrupt(caller);
+        yield* Deferred.succeed(release, undefined);
+        const completed = yield* states(defaultUserId).pipe(
+          Effect.repeat({
+            until: (rows) => rows[0]?.state === "Completed",
+            schedule: Schedule.spaced("20 millis"),
+          }),
+          Effect.timeout("10 seconds")
+        );
+        expect(completed).toEqual([{ state: "Completed" }]);
+        expect(yield* Ref.get(calls)).toBe(1);
+        expect(yield* Ref.get(sends)).toBe(1);
+      })
+    );
+
+    it.effect("keeps a persisted ProcessWhatsApp running after its caller disconnects", () =>
+      Effect.gen(function* () {
+        yield* reset;
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        yield* truncateWhatsAppChannel;
+        const crypto = yield* Crypto.Crypto;
+        const http = yield* HttpClient.HttpClient;
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const generated = yield* Ref.make<ReadonlyArray<string>>([]);
+        const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
+        const generate = (text: string): Effect.Effect<void> =>
+          Ref.update(generated, (items) => [...items, text]).pipe(
+            Effect.andThen(
+              text === "persisted-disconnect"
+                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                : Effect.void
+            )
+          );
+        const deliver = (text: string): Effect.Effect<void> =>
+          Ref.update(delivered, (items) => [...items, text]);
+        const runtime = ManagedRuntime.make(
+          runtimeLayer({ crypto, http, port: 24664, generate, deliver })
+        );
+        yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+        const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
+        yield* waitForAssignments([
+          yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
+        ]);
+        const work = yield* enqueue("persisted-disconnect");
+        const caller = runtime.runFork(client(defaultUserId).ProcessWhatsApp(work));
+        yield* Effect.raceFirst(
+          Deferred.await(entered),
+          Fiber.join(caller).pipe(
+            Effect.andThen(Effect.die("Request completed before model barrier"))
+          )
+        );
+        // A durable client-annotated operation settles its accepted inbound work exactly once
+        // even when the caller that submitted it is gone.
+        yield* Fiber.interrupt(caller);
+        // Give a forwarded interrupt time to arrive while the handler is still parked. Without
+        // the client annotation the durable run would be cancelled here instead of settling.
+        yield* Effect.sleep("1 second");
+        yield* Deferred.succeed(release, undefined);
+        const settled = yield* inboundState.pipe(
+          Effect.repeat({
+            until: (rows) => rows[0]?.terminalOutcome === "delivered",
+            schedule: Schedule.spaced("20 millis"),
+          }),
+          Effect.timeout("10 seconds")
+        );
+        expect(settled).toEqual([{ assigned: true, terminalOutcome: "delivered" }]);
+        expect(yield* Ref.get(generated)).toEqual(["persisted-disconnect"]);
+        expect(yield* Ref.get(delivered)).toEqual(["persisted-disconnect"]);
+        expect(yield* states(defaultUserId)).toEqual([{ state: "Completed" }]);
+        // Replaying the same durable identity after the disconnect must not repeat effects.
+        yield* Effect.promise(() =>
+          runtime.runPromise(client(defaultUserId).ProcessWhatsApp(work))
+        );
+        expect(yield* Ref.get(generated)).toEqual(["persisted-disconnect"]);
+        expect(yield* Ref.get(delivered)).toEqual(["persisted-disconnect"]);
+      })
     );
 
     it.effect(

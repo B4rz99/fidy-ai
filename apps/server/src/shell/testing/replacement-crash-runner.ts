@@ -45,7 +45,8 @@ const run = Effect.gen(function* () {
   const deliveryLive = ReplacementDeliveryWorkflow.toLayer(
     Effect.fn(function* (input) {
       const result = yield* Activity.make({
-        name: "DeliverReplacementEmail/1",
+        // Mirrors production's first database attempt of provider attempt 1.
+        name: "DeliverReplacementEmail",
         success: ReplacementAttemptResult,
         execute: performReplacementAttempt(input, 1).pipe(
           Effect.tap(() => (options.phase === "after-settlement" ? park : Effect.void))

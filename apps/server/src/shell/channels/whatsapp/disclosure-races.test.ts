@@ -37,7 +37,7 @@ import {
   requestConsentDisclosureDelivery,
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
-import { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
+import { DisclosureDeliveryAttemptNumber, disclosureActivityAttempt } from "./disclosure-model";
 import {
   armConsentDisclosureAttempt,
   findConsentDisclosureDeliveryState,
@@ -170,19 +170,25 @@ const primeRegistration = (
         Effect.orDie
       );
       expect(previous.state).toBe("reconciliation-required");
-      // Both calls use the real arming gateway, which must decline ordinal two while acceptance
-      // is ambiguous. Prime the buggy ordinal-only identity and the revision-scoped identity;
-      // production must use neither cached success after newer failure evidence arrives.
-      for (const name of ["Send/2", `Send/2/AfterEvidence/${previous.evidenceRevision}`]) {
+      // Both calls use the real arming gateway, which must decline ordinal two while acceptance is
+      // ambiguous. Recording acceptance advanced the revision, so the stale-revision identity
+      // differs from the ordinal-only identity; newer failure evidence must make production derive
+      // a third, fresh identity and use neither cached no-op.
+      const ordinalOnlyIdentity = 2;
+      const staleRevisionIdentity = disclosureActivityAttempt(previous.evidenceRevision)(
+        DisclosureDeliveryAttemptNumber.make(2)
+      );
+      expect(staleRevisionIdentity).not.toBe(ordinalOnlyIdentity);
+      for (const primedIdentity of [ordinalOnlyIdentity, staleRevisionIdentity]) {
         yield* Activity.make({
-          name,
+          name: "Send",
           success: Schema.Void,
           execute: performConsentDisclosureAttempt(
             payload.exchangeId,
             DisclosureDeliveryAttemptNumber.make(2),
             Option.some(previous.evidenceRevision)
           ),
-        });
+        }).pipe(Effect.provideService(Activity.CurrentAttempt, primedIdentity));
       }
       yield* Deferred.succeed(primed, previous.evidenceRevision);
       yield* DurableDeferred.await(DurableDeferred.make("PrimedNoop"));

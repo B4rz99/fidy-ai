@@ -20,6 +20,7 @@ import {
   type DisclosureDeliveryAttemptCapability,
   DisclosureDeliveryAttemptNumber,
   type DisclosureDeliveryEvidence,
+  disclosureActivityAttempt,
 } from "./disclosure-model";
 import {
   armConsentDisclosureAttempt,
@@ -278,19 +279,27 @@ const sleepUntil = Effect.fn(function* (name: string, at: DateTime.Utc) {
   );
 });
 
+/** No prior evidence authorizes the first delivery attempt, so its identity uses revision zero. */
+const initialDisclosureEvidenceRevision = 0;
+
 const sendAttempt = Effect.fn(function* (
   exchangeId: PendingConsentExchangeId,
   attemptNumber: DisclosureDeliveryAttemptNumber,
-  evidenceRevision = 0
+  evidenceRevision: number
 ) {
   return yield* Activity.make({
-    name: `Send/${attemptNumber}/AfterEvidence/${evidenceRevision}`,
+    name: "Send",
     execute: performConsentDisclosureAttempt(
       exchangeId,
       attemptNumber,
       attemptNumber === 1 ? Option.none() : Option.some(evidenceRevision)
     ),
-  });
+  }).pipe(
+    Effect.provideService(
+      Activity.CurrentAttempt,
+      disclosureActivityAttempt(attemptNumber, evidenceRevision)
+    )
+  );
 });
 
 const millisecondsPerSecond = 1_000;
@@ -300,7 +309,7 @@ const retryDisclosure = Effect.fn(function* (
   expiresAt: DateTime.Utc
 ) {
   const resumeAt = yield* Activity.make({
-    name: `Retry/${attempt.attemptNumber}/${attempt.evidenceRevision}`,
+    name: "Retry",
     success: Schema.DateTimeUtc,
     execute: Effect.gen(function* () {
       const failedAt = yield* Effect.fromOption(attempt.failureOccurredAt).pipe(Effect.orDie);
@@ -308,7 +317,12 @@ const retryDisclosure = Effect.fn(function* (
       const jitter = yield* Random.nextIntBetween(0, base + 1);
       return DateTime.add(failedAt, { milliseconds: base + jitter });
     }),
-  });
+  }).pipe(
+    Effect.provideService(
+      Activity.CurrentAttempt,
+      disclosureActivityAttempt(attempt.attemptNumber, attempt.evidenceRevision)
+    )
+  );
   yield* DurableDeferred.raceAll({
     name: `RetryWake/${attempt.attemptId}/${attempt.evidenceRevision}`,
     success: Schema.Void,
@@ -390,7 +404,11 @@ const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
     }
     if (Option.isNone(work)) return { outcome: "not-current" as const };
     if (Option.isNone(work.value.latestAttempt)) {
-      yield* sendAttempt(exchangeId, DisclosureDeliveryAttemptNumber.make(1));
+      yield* sendAttempt(
+        exchangeId,
+        DisclosureDeliveryAttemptNumber.make(1),
+        initialDisclosureEvidenceRevision
+      );
       continue;
     }
     yield* continueDisclosure(exchangeId, work.value.latestAttempt.value, work.value.expiresAt);

@@ -135,6 +135,41 @@ const delivered = (
   responseStatus: TelemetryHttpStatus.make(200),
 });
 
+/** Records delivery attempts, failing retryably before `successOrdinal` and signalling the delivered evidence. */
+const failingDeliveryProvider = Effect.fn(function* (successOrdinal: number, wamid: string) {
+  const calls = yield* Ref.make(0);
+  const times = yield* Ref.make<ReadonlyArray<number>>([]);
+  const sent = yield* Deferred.make<Parameters<typeof applyConsentDisclosureLifecycle>[0]>();
+  const provider: KapsoClientService = {
+    sendText: (input) =>
+      Effect.gen(function* () {
+        const ordinal = yield* Ref.updateAndGet(calls, (count) => count + 1);
+        const now = yield* DateTime.now;
+        yield* Ref.update(times, (values) => [...values, DateTime.toEpochMillis(now)]);
+        if (ordinal < successOrdinal) {
+          return yield* new KapsoSendFailed({
+            deliveryCertainty: "rejected",
+            safeReason: "provider_unavailable",
+            automaticRetry: true,
+            responseStatus: Option.none(),
+          });
+        }
+        const result = delivered(wamid, now);
+        const correlationToken = yield* Effect.fromOption(input.opaqueCallbackData).pipe(
+          Effect.orDie
+        );
+        yield* Deferred.succeed(sent, {
+          outcome: "accepted",
+          correlationToken,
+          messageEvidence: result.messageEvidence,
+          occurredAt: now,
+        });
+        return result;
+      }),
+  };
+  return { provider, calls, times, sent };
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster Consent disclosure delivery",
   (it) => {
@@ -281,36 +316,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.fn(function* () {
         expect.assertions(3);
         const payload = yield* admit("+573007774673");
-        const calls = yield* Ref.make(0);
-        const sent = yield* Deferred.make<Parameters<typeof applyConsentDisclosureLifecycle>[0]>();
-        const times = yield* Ref.make<ReadonlyArray<number>>([]);
-        const provider: KapsoClientService = {
-          sendText: (input) =>
-            Effect.gen(function* () {
-              const ordinal = yield* Ref.updateAndGet(calls, (count) => count + 1);
-              const now = yield* DateTime.now;
-              yield* Ref.update(times, (values) => [...values, DateTime.toEpochMillis(now)]);
-              if (ordinal === 1) {
-                return yield* new KapsoSendFailed({
-                  deliveryCertainty: "rejected",
-                  safeReason: "provider_unavailable",
-                  automaticRetry: true,
-                  responseStatus: Option.none(),
-                });
-              }
-              const result = delivered("wamid.cluster-retry-466", now);
-              const correlationToken = yield* Effect.fromOption(input.opaqueCallbackData).pipe(
-                Effect.orDie
-              );
-              yield* Deferred.succeed(sent, {
-                outcome: "accepted",
-                correlationToken,
-                messageEvidence: result.messageEvidence,
-                occurredAt: now,
-              });
-              return result;
-            }),
-        };
+        const { provider, calls, times, sent } = yield* failingDeliveryProvider(
+          2,
+          "wamid.cluster-retry-466"
+        );
         const first = yield* acquireRuntime(24665, provider);
         yield* Effect.tryPromise(() =>
           first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
@@ -344,6 +353,36 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(yield* Ref.get(calls)).toBe(2);
         const timestamps = yield* Ref.get(times);
         expect((timestamps[1] ?? 0) - (timestamps[0] ?? 0)).toBeGreaterThanOrEqual(1_000);
+      }),
+      30_000
+    );
+
+    it.effect(
+      "advances each retryable rejection to one fresh retry attempt before verified delivery",
+      Effect.fn(function* () {
+        expect.assertions(4);
+        const payload = yield* admit("+573007774677");
+        const { provider, calls, times, sent } = yield* failingDeliveryProvider(
+          3,
+          "wamid.cluster-retry-twice-466"
+        );
+        const runtime = yield* acquireRuntime(24692, provider);
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
+        );
+        const evidence = yield* Deferred.await(sent).pipe(Effect.timeout("15 seconds"));
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(applyConsentDisclosureLifecycle(evidence))
+        );
+        expect(
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(ConsentDisclosureWorkflow.execute(payload))
+          )
+        ).toEqual({ outcome: "delivered" });
+        expect(yield* Ref.get(calls)).toBe(3);
+        const timestamps = yield* Ref.get(times);
+        expect((timestamps[1] ?? 0) - (timestamps[0] ?? 0)).toBeGreaterThanOrEqual(1_000);
+        expect((timestamps[2] ?? 0) - (timestamps[1] ?? 0)).toBeGreaterThanOrEqual(2_000);
       }),
       30_000
     );

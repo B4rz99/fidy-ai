@@ -31,17 +31,29 @@ const sanitizeDatabaseFailure = Effect.catchCause((cause: Cause.Cause<never>) =>
     : Effect.failCause(cause)
 );
 
+/** Bounded provider attempt ordinals, and the stride that keeps re-entered attempts distinct. */
+const replacementDeliveryAttempts = [1, 2, 3] as const;
+const maximumReplacementDeliveryAttempts = replacementDeliveryAttempts.length;
+type ReplacementDeliveryAttempt = (typeof replacementDeliveryAttempts)[number];
+
 const deliverAttempt = Effect.fn("EmailReplacementDelivery.attempt")(function* (
   payload: ReplacementDeliveryPayload,
-  attempt: 1 | 2 | 3,
+  attempt: ReplacementDeliveryAttempt,
   databaseRetryDuration: Duration.Input
 ) {
   for (let databaseAttempt = 1; ; databaseAttempt++) {
+    // The stable name carries no ordinal; interleaving the bounded provider attempt with the
+    // unbounded database retry keeps every re-entry a distinct durable request.
     const result = yield* Activity.make({
-      name: `DeliverReplacementEmail/${attempt}`,
+      name: "DeliverReplacementEmail",
       success: Schema.Union([ReplacementAttemptResult, DatabaseUnavailable]),
       execute: performReplacementAttempt(payload, attempt).pipe(sanitizeDatabaseFailure),
-    }).pipe(Effect.provideService(Activity.CurrentAttempt, databaseAttempt));
+    }).pipe(
+      Effect.provideService(
+        Activity.CurrentAttempt,
+        (databaseAttempt - 1) * maximumReplacementDeliveryAttempts + attempt
+      )
+    );
     if (typeof result === "string") return result;
     // Re-enter the SAME logical provider attempt. Armed evidence reconciles to uncertain, not resend.
     yield* DurableClock.sleep({
@@ -62,14 +74,12 @@ export const replacementDeliveryWorkflowLayer = (
 > =>
   ReplacementDeliveryWorkflow.toLayer(
     Effect.fn("EmailReplacementDelivery.run")(function* (payload) {
-      for (const attempt of [1, 2, 3] as const) {
+      for (const attempt of replacementDeliveryAttempts) {
         const result = yield* deliverAttempt(payload, attempt, databaseRetryDuration);
         if (result !== "retry") return result;
-        yield* DurableClock.sleep({
-          name: `ReplacementRetry/${attempt}`,
-          duration: attempt === 1 ? "250 millis" : "500 millis",
-          inMemoryThreshold: "0 millis",
-        });
+        // Fixed sub-second provider pacing uses ordinary Effect time; only the database retry and
+        // the expiry deadline need restart survival.
+        yield* Effect.sleep(attempt === 1 ? "250 millis" : "500 millis");
       }
       return "rejected" as const;
     })
@@ -105,10 +115,10 @@ export const replacementExpiryWorkflowLayer = (
     Effect.fn("EmailReplacementExpiry.run")(function* (payload) {
       for (let attempt = 1; ; attempt++) {
         const result = yield* Activity.make({
-          name: `CheckReplacementExpiry/${attempt}`,
+          name: "CheckReplacementExpiry",
           success: ExpiryCheck,
           execute: checkExpiry(payload),
-        });
+        }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
         if (result._tag === "Done") return;
         const now = yield* DateTime.now;
         yield* DurableClock.sleep({

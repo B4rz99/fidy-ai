@@ -1,0 +1,29 @@
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 137-171,318-321,359-388
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 39,172-181,183,190
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  h_c6d49c804e0ad2 34-36,38,45-46,48,51-56,77,80-82,118,121
+  h_c6d49c804e0ad2 37,41
+.patterns/workflows.md
+  h_c6d49c804e0ad2 29
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  h_c6d49c804e0ad2 23,282-284,288,291,297-302,312,320-325,407-411
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  h_c6d49c804e0ad2 6,358-366,380-382,384,387-388,392,394,594-598,607,613-615
+apps/server/src/shell/testing/replacement-crash-runner.ts
+  h_c6d49c804e0ad2 48-49
+apps/server/src/shell/channels/whatsapp/disclosure-model.ts
+  h_c6d49c804e0ad2 1,13-19,22,59-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0aca2109a4b4d4b4eb58f864d37409cdde8e7100",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

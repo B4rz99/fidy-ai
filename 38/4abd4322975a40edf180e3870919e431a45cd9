@@ -1,0 +1,74 @@
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 171-175
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  h_c6d49c804e0ad2 21,39,43,65-87,115-119,312,315,331-334,344-347,352-359,391-394,399,516-519
+apps/server/src/shell/channels/whatsapp/disclosure-retention.ts
+  h_c6d49c804e0ad2 20-25,78,86,100
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  h_c6d49c804e0ad2 27-30,33,37-40,42-48,50-51,66-71,77
+apps/server/src/shell/durable-execution-compatibility/browser-pairing-email-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 1-68
+apps/server/src/shell/durable-execution-compatibility/browser-pairing-email-expiry.compatibility.test.ts
+  h_c6d49c804e0ad2 1-53
+apps/server/src/shell/durable-execution-compatibility/email-replacement-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 1-64
+apps/server/src/shell/durable-execution-compatibility/email-replacement-expiry.compatibility.test.ts
+  h_c6d49c804e0ad2 1-54
+apps/server/src/shell/durable-execution-compatibility/fixture-registry.compatibility.test.ts
+  h_c6d49c804e0ad2 1-19
+apps/server/src/shell/durable-execution-compatibility/forwarded-email-ingestion.compatibility.test.ts
+  h_c6d49c804e0ad2 1-94
+apps/server/src/shell/durable-execution-compatibility/onboarding-email-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 1-48
+apps/server/src/shell/durable-execution-compatibility/whatsapp-consent-disclosure-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 1-110
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  h_c6d49c804e0ad2 33,38-50,252,260,293,313,318-321
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  h_c6d49c804e0ad2 17-19,26-28,38,40,44,52,101
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  h_c6d49c804e0ad2 13-17,24,54,70,74-79,97,128-132,141,145
+apps/server/src/shell/email-authentication/replacement-protocol.ts
+  h_c6d49c804e0ad2 68-73,85,99
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  h_c6d49c804e0ad2 27,34-65,73,79,100,133,139
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  h_c6d49c804e0ad2 56,62,67,80,83,87-136,192,195-198,205,213,217,228-232,234,237,244,248,268,289,293-294,309-311,322,326-327,342-344,347,362-364,367-369
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  h_c6d49c804e0ad2 31,51-52,57,61-71,122,143-148,182-183,192,218
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 1-619
+apps/server/src/shell/testing/fixtures/durable-workflows/browser-pairing-email-delivery.json
+  h_c6d49c804e0ad2 1-500
+apps/server/src/shell/testing/fixtures/durable-workflows/browser-pairing-email-expiry.json
+  h_c6d49c804e0ad2 1-206
+apps/server/src/shell/testing/fixtures/durable-workflows/email-replacement-delivery.json
+  h_c6d49c804e0ad2 1-482
+apps/server/src/shell/testing/fixtures/durable-workflows/email-replacement-expiry.json
+  h_c6d49c804e0ad2 1-264
+apps/server/src/shell/testing/fixtures/durable-workflows/forwarded-email-ingestion.json
+  h_c6d49c804e0ad2 1-2181
+apps/server/src/shell/testing/fixtures/durable-workflows/onboarding-email-delivery.json
+  h_c6d49c804e0ad2 1-362
+apps/server/src/shell/testing/fixtures/durable-workflows/whatsapp-consent-disclosure-delivery.json
+  h_c6d49c804e0ad2 1-330
+docs/adr/0024-effect-durable-execution.md
+  h_c6d49c804e0ad2 165-167
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 1-97
+docs/operations/production-releases.md
+  h_c6d49c804e0ad2 70-75
+tsconfig.base.json
+  h_c6d49c804e0ad2 201-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "384abd4322975a40edf180e3870919e431a45cd9",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

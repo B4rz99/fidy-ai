@@ -1,0 +1,22 @@
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 197-210,370,456,700,781,830,897
+apps/server/src/shell/agent/hosted-turns.test.ts
+  h_c6d49c804e0ad2 12-21,24-352,360,362-364,366,368-369,371-372,401,408,410,420,423,425,435,438,440,451-453,471,494,506
+apps/server/src/shell/agent/hosted-turns.ts
+  h_c6d49c804e0ad2 33-36
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 6,59
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 39,127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "07ee4a4a386e9a195a2084ca9bf7b1796acc45c4",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { Crypto, DateTime, Effect, Option, Schema } from "effect";
+import { Crypto, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
@@ -19,7 +19,6 @@ import { canonicalJsonString } from "./canonical-json";
 import { consumeConfirmation } from "./tool-confirmation-repo";
 import type { AgentOperationBinding } from "./agent-operation-binding";
 
-const hexadecimalRadix = 16;
 const confirmationNonceBytes = 32;
 const confirmationLifetimeMinutes = 10;
 
@@ -157,14 +156,10 @@ const confirmationBinding = Effect.fn(function* (pending: Readonly<ConfirmationS
   const crypto = yield* Crypto.Crypto;
   const serializedInput = canonicalJsonString(pending.input);
   const nonce = yield* crypto.randomBytes(confirmationNonceBytes).pipe(Effect.orDie);
-  const nonceHex = Array.from(nonce, (byte) =>
-    byte.toString(hexadecimalRadix).padStart(2, "0")
-  ).join("");
+  const nonceHex = Encoding.encodeHex(nonce);
   const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}\n${nonceHex}`);
   const bytes = yield* crypto.digest("SHA-256", payload).pipe(Effect.orDie);
-  const digest = ConfirmationDigest.make(
-    Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join("")
-  );
+  const digest = ConfirmationDigest.make(Encoding.encodeHex(bytes));
   return { digest, serializedInput };
 });
 

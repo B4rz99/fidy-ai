@@ -20,8 +20,14 @@ const deriveIdentifier = (
     Effect.map(Encoding.encodeHex)
   );
 
+// A configured key is lowercase hexadecimal for exactly 32 key bytes; the expected identifier
+// must HMAC with those decoded bytes, never the 64-character text.
 const expectedIdentifierHex = (key: string, purpose: string, sourceAddress: string): string =>
-  Encoding.encodeHex(createHmac("sha256", key).update(`${purpose}\u0000${sourceAddress}`).digest());
+  Encoding.encodeHex(
+    createHmac("sha256", Buffer.from(key, "hex"))
+      .update(`${purpose}\u0000${sourceAddress}`)
+      .digest()
+  );
 
 const plainSha256Hex = (sourceAddress: string): string =>
   Encoding.encodeHex(createHash("sha256").update(sourceAddress).digest());

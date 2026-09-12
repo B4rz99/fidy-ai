@@ -9,40 +9,6 @@ import { AgentReply, InboundMessage } from "./message";
 
 type HostedTurnTag = HostedTurnRpc["_tag"];
 
-/** Property names and required keys of a codec's JSON object schema. */
-type DeclaredShape = Readonly<{
-  readonly properties: ReadonlyArray<string>;
-  readonly required: ReadonlyArray<string>;
-}>;
-
-/**
- * The tested HostedTurns wire contract. Schemas, tags, and generated clients come from the one
- * production entity definition; the expectations below are the reviewed oracle, deliberately
- * independent of it, so a protocol change that the tests do not reflect fails this suite before
- * it can reach a runner.
- */
-type HostedTurnContract = Readonly<{
-  readonly persisted: boolean;
-  readonly clientUninterruptible: boolean;
-  readonly serverUninterruptible: boolean;
-  /** Payload fixture the generated client must accept. */
-  readonly payload: unknown;
-  /** Payloads the generated client must reject, one per declared input constraint. */
-  readonly rejectedPayloads: ReadonlyArray<unknown>;
-  readonly payloadShape: DeclaredShape;
-  /** Nested payload constraints pinned without restating the whole schema. */
-  readonly payloadConstraints: Readonly<Record<string, unknown>>;
-  readonly result: unknown;
-  /** Results the generated client must reject, one per declared output constraint. */
-  readonly rejectedResults: ReadonlyArray<unknown>;
-  readonly successShape: DeclaredShape;
-  readonly successConstraints: Readonly<Record<string, unknown>>;
-  readonly failure: Option.Option<unknown>;
-  /** Exact JSON Schema root of the operation's declared error codec. */
-  readonly errorSchema: unknown;
-  readonly primaryKey: Option.Option<string>;
-}>;
-
 /** The reviewed closed failure vocabulary: a runner may only return these literals. */
 const declaredTurnFailures = [
   "UnknownUser",
@@ -54,6 +20,359 @@ const declaredTurnFailures = [
   "HostedTurnUnavailable",
   "delivery_failed",
 ] as const satisfies ReadonlyArray<TurnFailure>;
+
+/**
+ * Complete JSON Schema documents for the HostedTurns wire contract. Every reference is inlined
+ * (`wireDocument` below), so the pinned structure does not depend on Effect's generated definition
+ * names. These expectations are the reviewed oracle: the codecs themselves come from the one
+ * production entity definition, and any change to a payload, result, error, or referenced codec
+ * fails this suite until the wire contract is deliberately re-reviewed.
+ */
+const handlePayloadDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "object",
+    properties: {
+      userId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+      turnId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+      message: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            minLength: 1,
+            maxLength: 16000,
+            pattern: "\\S",
+          },
+          confirmationEvidence: {
+            type: "object",
+            properties: {
+              _tag: {
+                type: "string",
+                enum: ["ProviderQualifiedMessages"],
+              },
+              disclosureMessage: {
+                type: "object",
+                properties: {
+                  channel: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 32,
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 64,
+                  },
+                  providerMessageId: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 256,
+                  },
+                },
+                required: ["channel", "provider", "providerMessageId"],
+                additionalProperties: false,
+              },
+              decisionMessage: {
+                type: "object",
+                properties: {
+                  channel: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 32,
+                  },
+                  provider: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 64,
+                  },
+                  providerMessageId: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    maxLength: 256,
+                  },
+                },
+                required: ["channel", "provider", "providerMessageId"],
+                additionalProperties: false,
+              },
+            },
+            required: ["_tag", "disclosureMessage", "decisionMessage"],
+            additionalProperties: false,
+          },
+        },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      limits: {
+        type: "object",
+        properties: {
+          maxIterations: {
+            type: "integer",
+            minimum: 1,
+            maximum: 32,
+          },
+          maxToolCallsPerTurn: {
+            type: "integer",
+            minimum: 1,
+            maximum: 64,
+          },
+          maxToolResultCharacters: {
+            type: "integer",
+            minimum: 1000,
+            maximum: 1000000,
+          },
+          maxModelRoundMillis: {
+            type: "integer",
+            minimum: 1,
+            maximum: 120000,
+          },
+        },
+        required: [
+          "maxIterations",
+          "maxToolCallsPerTurn",
+          "maxToolResultCharacters",
+          "maxModelRoundMillis",
+        ],
+        additionalProperties: false,
+      },
+      authorityRoot: {
+        type: "string",
+        enum: ["no-verified-whatsapp-authority", "verified-whatsapp"],
+      },
+    },
+    required: ["userId", "turnId", "message", "limits", "authorityRoot"],
+    additionalProperties: false,
+  },
+  definitions: {},
+};
+
+const handleSuccessDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        minLength: 1,
+        maxLength: 16000,
+        pattern: "\\S",
+      },
+      attachments: {
+        type: "array",
+        prefixItems: [
+          {
+            type: "object",
+            properties: {
+              mediaType: {
+                type: "string",
+                minLength: 1,
+              },
+              url: {
+                type: "string",
+              },
+            },
+            required: ["mediaType", "url"],
+            additionalProperties: false,
+          },
+        ],
+        minItems: 1,
+        items: {
+          type: "object",
+          properties: {
+            mediaType: {
+              type: "string",
+              minLength: 1,
+            },
+            url: {
+              type: "string",
+            },
+          },
+          required: ["mediaType", "url"],
+          additionalProperties: false,
+        },
+      },
+      choices: {
+        type: "array",
+        prefixItems: [
+          {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                minLength: 1,
+              },
+              message: {
+                type: "string",
+                minLength: 1,
+                maxLength: 16000,
+                pattern: "\\S",
+              },
+            },
+            required: ["label", "message"],
+            additionalProperties: false,
+          },
+        ],
+        minItems: 1,
+        items: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              minLength: 1,
+            },
+            message: {
+              type: "string",
+              minLength: 1,
+              maxLength: 16000,
+              pattern: "\\S",
+            },
+          },
+          required: ["label", "message"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["text"],
+    additionalProperties: false,
+  },
+  definitions: {},
+};
+
+const handleErrorDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "string",
+    enum: declaredTurnFailures,
+  },
+  definitions: {},
+};
+
+const whatsAppPayloadDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "object",
+    properties: {
+      version: {
+        type: "number",
+        enum: [1],
+      },
+      userId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+      inboundJobId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+    },
+    required: ["version", "userId", "inboundJobId"],
+    additionalProperties: false,
+  },
+  definitions: {},
+};
+
+const whatsAppSuccessDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "null",
+  },
+  definitions: {},
+};
+
+const whatsAppErrorDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    not: {},
+  },
+  definitions: {},
+};
+
+const recoverPayloadDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "object",
+    properties: {
+      userId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+      turnId: {
+        type: "string",
+        pattern:
+          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        format: "uuid",
+      },
+    },
+    required: ["userId", "turnId"],
+    additionalProperties: false,
+  },
+  definitions: {},
+};
+
+const recoverSuccessDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "null",
+  },
+  definitions: {},
+};
+
+const recoverErrorDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    not: {},
+  },
+  definitions: {},
+};
+
+/**
+ * The tested HostedTurns wire contract: one reviewed expectation per operation, derived from the
+ * one production entity definition. Fixtures exercise the generated client; the pinned JSON Schema
+ * documents, annotations, and primary keys catch protocol changes the fixtures would not reach.
+ */
+type HostedTurnContract = Readonly<{
+  readonly persisted: boolean;
+  readonly clientUninterruptible: boolean;
+  readonly serverUninterruptible: boolean;
+  /** Payload fixture the generated client must accept. */
+  readonly payload: unknown;
+  /** Payloads the generated client must reject, one per reviewed input constraint. */
+  readonly rejectedPayloads: ReadonlyArray<unknown>;
+  /** Complete inlined JSON Schema document of the operation's payload codec. */
+  readonly payloadDocument: unknown;
+  /** Result fixture the generated client must accept. */
+  readonly result: unknown;
+  /** Results the generated client must reject, one per reviewed output constraint. */
+  readonly rejectedResults: ReadonlyArray<unknown>;
+  /** Complete inlined JSON Schema document of the operation's success codec. */
+  readonly successDocument: unknown;
+  readonly failure: Option.Option<unknown>;
+  /** Complete inlined JSON Schema document of the operation's error codec. */
+  readonly errorDocument: unknown;
+  readonly primaryKey: Option.Option<string>;
+}>;
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000507");
 const turnId = TranscriptTurnId.make("018f0f5e-0000-7000-8000-000000000507");
@@ -80,33 +399,16 @@ const handleContract: HostedTurnContract = {
     // Widening the authority vocabulary would admit this value.
     { ...handlePayload, authorityRoot: "trusted-internal" },
   ],
-  payloadShape: {
-    properties: ["authorityRoot", "limits", "message", "turnId", "userId"],
-    required: ["authorityRoot", "limits", "message", "turnId", "userId"],
-  },
-  payloadConstraints: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      authorityRoot: {
-        type: "string",
-        enum: ["no-verified-whatsapp-authority", "verified-whatsapp"],
-      },
-    },
-  },
+  payloadDocument: handlePayloadDocument,
   result: AgentReply.make({
     text: TranscriptText.make("Contrato verificado"),
     attachments: Option.none(),
     choices: Option.none(),
   }),
-  successShape: {
-    properties: ["attachments", "choices", "text"],
-    required: ["text"],
-  },
   rejectedResults: [{ text: "" }, { text: "present", attachments: [] }],
-  successConstraints: { type: "object", additionalProperties: false },
+  successDocument: handleSuccessDocument,
   failure: Option.some(TurnFailure.make("UnknownUser")),
-  errorSchema: { type: "string", enum: declaredTurnFailures },
+  errorDocument: handleErrorDocument,
   primaryKey: Option.none(),
 };
 
@@ -116,21 +418,12 @@ const whatsAppContract: HostedTurnContract = {
   serverUninterruptible: false,
   payload: { version: 1, userId, inboundJobId },
   rejectedPayloads: [{ version: 2, userId, inboundJobId }],
-  payloadShape: {
-    properties: ["inboundJobId", "userId", "version"],
-    required: ["inboundJobId", "userId", "version"],
-  },
-  payloadConstraints: {
-    type: "object",
-    additionalProperties: false,
-    properties: { version: { type: "number", enum: [1] } },
-  },
+  payloadDocument: whatsAppPayloadDocument,
   result: undefined,
   rejectedResults: [],
-  successShape: { properties: [], required: [] },
-  successConstraints: { type: "null" },
+  successDocument: whatsAppSuccessDocument,
   failure: Option.none(),
-  errorSchema: { not: {} },
+  errorDocument: whatsAppErrorDocument,
   primaryKey: Option.some(inboundJobId),
 };
 
@@ -140,17 +433,12 @@ const recoverContract: HostedTurnContract = {
   serverUninterruptible: false,
   payload: { userId, turnId },
   rejectedPayloads: [{ userId: "not-a-uuid", turnId }],
-  payloadShape: {
-    properties: ["turnId", "userId"],
-    required: ["turnId", "userId"],
-  },
-  payloadConstraints: { type: "object", additionalProperties: false },
+  payloadDocument: recoverPayloadDocument,
   result: undefined,
   rejectedResults: [],
-  successShape: { properties: [], required: [] },
-  successConstraints: { type: "null" },
+  successDocument: recoverSuccessDocument,
   failure: Option.none(),
-  errorSchema: { not: {} },
+  errorDocument: recoverErrorDocument,
   primaryKey: Option.some(turnId),
 };
 
@@ -161,30 +449,9 @@ const contract: Record<HostedTurnTag, HostedTurnContract> = {
   Recover: recoverContract,
 };
 
-/** Follows the single `$ref` an operation codec emits, so shape assertions see its object codec. */
-const resolveRoot = (schema: Schema.Top): Readonly<Record<string, unknown>> => {
-  const document = Schema.toJsonSchemaDocument(schema);
-  const root = document.schema;
-  const ref = root["$ref"];
-  if (typeof ref !== "string") return root;
-  const name = ref
-    .slice(ref.lastIndexOf("/") + 1)
-    .replaceAll("~1", "/")
-    .replaceAll("~0", "~");
-  const resolved = document.definitions[name];
-  if (resolved === undefined) throw new Error(`missing JSON Schema definition ${ref}`);
-  return resolved;
-};
-
-const declaredShape = (root: Readonly<Record<string, unknown>>): DeclaredShape => {
-  const properties = root["properties"];
-  const required = root["required"];
-  return {
-    properties:
-      typeof properties === "object" && properties !== null ? Object.keys(properties).sort() : [],
-    required: Array.isArray(required) ? required.map(String).sort() : [],
-  };
-};
+/** The codec's complete JSON Schema document with every reference inlined into the pinned shape. */
+const wireDocument = (schema: Schema.Top): unknown =>
+  Schema.toJsonSchemaDocument(schema, { referencePolicy: () => undefined });
 
 const checkContract = (
   tag: HostedTurnTag,
@@ -202,9 +469,7 @@ const checkContract = (
       expected.serverUninterruptible
     );
 
-    const payloadRoot = resolveRoot(request.payloadSchema);
-    expect(declaredShape(payloadRoot)).toEqual(expected.payloadShape);
-    expect(payloadRoot).toMatchObject(expected.payloadConstraints);
+    expect(wireDocument(request.payloadSchema)).toEqual(expected.payloadDocument);
 
     // Ops with a primary key carry a payload class, so decode first and round-trip through its codec.
     const decodedPayload = yield* Schema.decodeUnknownEffect(request.payloadSchema)(
@@ -227,9 +492,7 @@ const checkContract = (
       expect(PrimaryKey.isPrimaryKey(decodedPayload)).toBe(false);
     }
 
-    const successRoot = resolveRoot(request.successSchema);
-    expect(declaredShape(successRoot)).toEqual(expected.successShape);
-    expect(successRoot).toMatchObject(expected.successConstraints);
+    expect(wireDocument(request.successSchema)).toEqual(expected.successDocument);
     const encodedResult = yield* Schema.encodeUnknownEffect(request.successSchema)(expected.result);
     expect(yield* Schema.decodeEffect(request.successSchema)(encodedResult)).toEqual(
       expected.result
@@ -241,8 +504,7 @@ const checkContract = (
       expect(Exit.isFailure(decoded)).toBe(true);
     }
 
-    // NoError ops emit `{ not: {} }`, so this also proves the operation cannot declare a failure.
-    expect(Schema.toJsonSchemaDocument(request.errorSchema).schema).toEqual(expected.errorSchema);
+    expect(wireDocument(request.errorSchema)).toEqual(expected.errorDocument);
     if (Option.isSome(expected.failure)) {
       const encodedFailure = yield* Schema.encodeUnknownEffect(request.errorSchema)(
         expected.failure.value
@@ -257,39 +519,8 @@ it.effect("pins the complete HostedTurns operation set", () =>
   Effect.sync(() => {
     expect(HostedTurns.type).toBe("HostedTurns");
     expect(Object.keys(contract).sort()).toEqual([...HostedTurns.protocol.requests.keys()].sort());
-    expect([...HostedTurns.protocol.requests.keys()].sort()).toEqual([
-      "Handle",
-      "ProcessWhatsApp",
-      "Recover",
-    ]);
   })
 );
-
-it("pins the closed TurnFailure vocabulary", () => {
-  expect(Schema.toJsonSchemaDocument(TurnFailure).schema).toEqual({
-    type: "string",
-    enum: declaredTurnFailures,
-  });
-});
-
-it("pins every declared AgentLimits bound", () => {
-  expect(Schema.toJsonSchemaDocument(AgentLimits).schema).toEqual({
-    type: "object",
-    properties: {
-      maxIterations: { type: "integer", minimum: 1, maximum: 32 },
-      maxToolCallsPerTurn: { type: "integer", minimum: 1, maximum: 64 },
-      maxToolResultCharacters: { type: "integer", minimum: 1000, maximum: 1000000 },
-      maxModelRoundMillis: { type: "integer", minimum: 1, maximum: 120000 },
-    },
-    required: [
-      "maxIterations",
-      "maxToolCallsPerTurn",
-      "maxToolResultCharacters",
-      "maxModelRoundMillis",
-    ],
-    additionalProperties: false,
-  });
-});
 
 it.effect("pins the Handle wire contract", () => checkContract("Handle", handleContract));
 

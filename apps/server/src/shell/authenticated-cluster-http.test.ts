@@ -4,8 +4,8 @@ import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization } from "effect/unstable/rpc";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
 import {
+  ClusterRunnerSerializationLive,
   authenticatedRunnerMiddleware,
-  clusterRunnerSerialization,
   maximumClusterMessageBufferBytes,
 } from "./authenticated-cluster-http";
 
@@ -58,7 +58,7 @@ const declaredOversizeFrame = (bytes: number): Uint8Array => {
   return frame;
 };
 
-layer(clusterRunnerSerialization)("Cluster runner MessagePack framing", (it) => {
+layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it) => {
   it("pins the configured retained-frame bound", () => {
     // The reviewed 64 KiB bound; changing it must be a deliberate, reviewed protocol decision.
     expect(maximumClusterMessageBufferBytes).toBe(64 * 1024);

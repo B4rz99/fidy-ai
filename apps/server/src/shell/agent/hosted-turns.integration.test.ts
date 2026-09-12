@@ -195,6 +195,20 @@ const disposeRuntimes = (
     Effect.asVoid
   );
 
+/**
+ * Waits until an operation reaches the named test barrier. A caller that finishes first means the
+ * scenario never blocked, which is a broken test rather than a passing one.
+ */
+const awaitBarrier = <A, E, Barrier>(
+  label: string,
+  barrier: Deferred.Deferred<Barrier>,
+  caller: Fiber.Fiber<A, E>
+): Effect.Effect<Barrier, E> =>
+  Effect.raceFirst(
+    Deferred.await(barrier),
+    Fiber.join(caller).pipe(Effect.andThen(Effect.die(`Request completed before ${label}`)))
+  );
+
 const handle = (
   userId: UserId,
   text: string
@@ -354,12 +368,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             )
           );
           const first = firstRuntime.runFork(handle(defaultUserId, "held"));
-          yield* Effect.raceFirst(
-            Deferred.await(modelEntered),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before model barrier"))
-            )
-          );
+          yield* awaitBarrier("model barrier", modelEntered, first);
           const blockedAt = yield* DateTime.now;
           const admin = yield* MigrationSqlClient;
           const backends = yield* Effect.promise(() =>
@@ -445,12 +454,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             )
           );
           const first = firstRuntime.runFork(handle(defaultUserId, "abandoned"));
-          const running = yield* Effect.raceFirst(
-            Deferred.await(owner),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before owner barrier"))
-            )
-          );
+          const running = yield* awaitBarrier("owner barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24653 ? firstRuntime : secondRuntime).dispose());
           const recovered = yield* states(defaultUserId).pipe(
@@ -694,10 +698,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             )
           );
           const first = firstRuntime.runFork(handle(defaultUserId, "holds-user"));
-          yield* Effect.raceFirst(
-            Deferred.await(entered),
-            Fiber.join(first).pipe(Effect.andThen(Effect.die("Request completed before barrier")))
-          );
+          yield* awaitBarrier("model barrier", entered, first);
           yield* enqueue("queued-whatsapp");
           yield* Effect.sleep("2100 millis");
           expect(yield* inboundState).toEqual([{ assigned: false, terminalOutcome: null }]);
@@ -778,12 +779,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           authorityRoot: "no-verified-whatsapp-authority" as const,
         };
         const caller = runtime.runFork(client(defaultUserId).Handle(request));
-        yield* Effect.raceFirst(
-          Deferred.await(entered),
-          Fiber.join(caller).pipe(
-            Effect.andThen(Effect.die("Request completed before model barrier"))
-          )
-        );
+        yield* awaitBarrier("model barrier", entered, caller);
         expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
         // The client-annotated operation must outlive its caller and finish the admitted Turn.
         yield* Fiber.interrupt(caller);
@@ -832,12 +828,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         ]);
         const work = yield* enqueue("persisted-disconnect");
         const caller = runtime.runFork(client(defaultUserId).ProcessWhatsApp(work));
-        yield* Effect.raceFirst(
-          Deferred.await(entered),
-          Fiber.join(caller).pipe(
-            Effect.andThen(Effect.die("Request completed before model barrier"))
-          )
-        );
+        yield* awaitBarrier("model barrier", entered, caller);
         // A durable client-annotated operation settles its accepted inbound work exactly once
         // even when the caller that submitted it is gone.
         yield* Fiber.interrupt(caller);
@@ -904,12 +895,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           );
           yield* enqueue("ambiguous-whatsapp");
           const first = firstRuntime.runFork(processNextWhatsAppTurn());
-          const running = yield* Effect.raceFirst(
-            Deferred.await(owner),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before delivery barrier"))
-            )
-          );
+          const running = yield* awaitBarrier("delivery barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24657 ? firstRuntime : secondRuntime).dispose());
           const replacementRuntime = running === 24657 ? secondRuntime : firstRuntime;

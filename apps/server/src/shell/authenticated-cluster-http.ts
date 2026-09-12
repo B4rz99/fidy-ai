@@ -40,7 +40,7 @@ const bearer = (token: ClusterToken): string => `Bearer ${Redacted.value(token)}
  * incomplete frame retained across chunks, so a malformed or oversized peer cannot grow parser
  * memory without limit.
  */
-export const clusterRunnerSerialization: Layer.Layer<RpcSerialization.RpcSerialization> =
+export const ClusterRunnerSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
   RpcSerialization.layerMsgPackWith({ maxBufferSize: maximumClusterMessageBufferBytes });
 
 const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
@@ -128,7 +128,7 @@ const layerAuthenticatedSqlCluster = (
     Layer.provideMerge(Layer.orDie(SqlMessageStorage.layer).pipe(Layer.provide(BunCrypto.layer))),
     Layer.provide(Layer.orDie(SqlRunnerStorage.layer)),
     Layer.provide(ShardingConfig.layerFromEnv(shardingConfig)),
-    Layer.provide(clusterRunnerSerialization)
+    Layer.provide(ClusterRunnerSerializationLive)
   );
 };
 

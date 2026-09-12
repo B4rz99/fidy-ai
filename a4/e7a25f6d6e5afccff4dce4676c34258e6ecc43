@@ -1,0 +1,26 @@
+apps/server/src/shell/_shared/anonymous-source-identifier.test.ts
+  h_c6d49c804e0ad2 55-72
+apps/server/src/shell/_shared/anonymous-source-identifier.ts
+  h_c6d49c804e0ad2 2-3,26-29
+apps/server/src/shell/_shared/configured-hmac-key.ts
+  h_c6d49c804e0ad2 1-30
+apps/server/src/shell/browser-login/handlers.test.ts
+  h_c6d49c804e0ad2 446-449
+apps/server/src/shell/email-authentication/admission.ts
+  h_c6d49c804e0ad2 2,13,18-21,28-31
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  h_c6d49c804e0ad2 636,666-679
+scripts/check-credential-evidence.ts
+  h_c6d49c804e0ad2 10-13,301-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a4e7a25f6d6e5afccff4dce4676c34258e6ecc43",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

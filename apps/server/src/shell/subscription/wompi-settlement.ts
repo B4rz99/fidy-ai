@@ -34,6 +34,7 @@ import {
   failBillingAttemptInScope,
   findBillingAttemptByReferenceInScope,
   hasWompiObservationInScope,
+  recordCreatedWompiTransactionInScope,
   resolveWompiBillingUser,
   resolveWompiBillingUserByTransaction,
 } from "./billing-repo";
@@ -179,6 +180,16 @@ const applySettlementInScope = Effect.fn("Subscription.applyWompiSettlementInSco
       finalizedAt: Option.fromNullOr(transaction.finalized_at),
       observedAt: input.observedAt,
     });
+    // An authenticated observation that reveals the provider transaction id also satisfies the
+    // awaiting-reference condition, so the operational marker clears with the retained identity.
+    if (attempt.wompiTransactionId === null) {
+      yield* recordCreatedWompiTransactionInScope({
+        userId: input.userId,
+        billingAttemptId: attempt.id,
+        transactionId: transaction.id,
+        reference: transaction.reference,
+      });
+    }
     const outcome = yield* decideBillingAttemptOutcome({
       current: attempt.status,
       observed: transaction.status,

@@ -11,6 +11,7 @@ import {
 import { StatementIngestionRetentionLive } from "~/shell/ingestion/worker";
 import { OnboardingRetentionLive } from "~/shell/onboarding/retention";
 import { SupportRecoveryRetentionLive } from "~/shell/recovery/retention";
+import { BillingReconciliationMaintenanceLive } from "~/shell/subscription/billing-reconciliation-maintenance";
 import { PATPairingMaintenanceLive } from "~/shell/tokens/pairing-maintenance";
 
 /**
@@ -19,6 +20,7 @@ import { PATPairingMaintenanceLive } from "~/shell/tokens/pairing-maintenance";
  * authorize otherwise-invalid behavior.
  */
 export const MaintenanceLive = Layer.mergeAll(
+  BillingReconciliationMaintenanceLive,
   BrowserLoginEvidenceRetentionLive,
   BrowserPairingEmailRetentionLive,
   EmailReplacementRetentionLive,

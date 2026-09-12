@@ -22,7 +22,12 @@ import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+<<<<<<< HEAD
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+=======
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 import { emailCredentialLookupKey } from "./admission";
 import { BrowserPairingEmailWorkflowLive } from "./authentication-delivery-worker";
 import { processBrowserPairingEmailStartRequest } from "./browser-pairing-authentication";
@@ -88,6 +93,7 @@ const admit = Effect.fn(function* () {
 
 const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPortService) {
   const crypto = yield* Crypto.Crypto;
+<<<<<<< HEAD
   const cluster = authenticatedClusterHttp.layerSql(
     Redacted.make("c".repeat(64)),
     {
@@ -105,6 +111,17 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
     },
     loopbackClusterRunnerHttpPolicy([port])
   );
+=======
+  const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
+    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+    ...clusterTestSharedOptions,
+    runnerHealthCheckInterval: 100,
+    refreshAssignmentsInterval: 100,
+    shardLockRefreshInterval: 250,
+    shardLockExpiration: "2 seconds",
+  });
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
   return yield* Effect.acquireRelease(
     Effect.sync(() =>
       ManagedRuntime.make(
@@ -166,6 +183,8 @@ const killAtBoundary = Effect.fn(function* (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL browser-pairing email workflows",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect.each(["before-send", "after-send"] as const)(
       "recovers abrupt process death at %s without another provider effect",
       (mode) =>

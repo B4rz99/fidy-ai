@@ -22,7 +22,12 @@ import { findPendingConsentExchange, removePendingConsentExchange } from "~/shel
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
+<<<<<<< HEAD
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+=======
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -94,6 +99,7 @@ const acquireRuntime = Effect.fn(function* (
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
+<<<<<<< HEAD
           authenticatedClusterHttp.layerSql(
             Redacted.make("c".repeat(64)),
             {
@@ -108,6 +114,14 @@ const acquireRuntime = Effect.fn(function* (
             },
             loopbackClusterRunnerHttpPolicy([port])
           )
+=======
+          authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
+            runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+            runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+            ...clusterTestSharedOptions,
+            entityTerminationTimeout: 100,
+          })
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
         )
       )
     ),
@@ -178,6 +192,8 @@ const failingDeliveryProvider = Effect.fn(function* (successOrdinal: number, wam
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster Consent disclosure delivery",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect(
       "coordinates duplicate execution across two runtimes and accepts delivery before send settlement",
       Effect.fn(function* () {

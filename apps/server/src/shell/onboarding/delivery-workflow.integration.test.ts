@@ -22,13 +22,15 @@ import {
   type Runners,
   type Sharding,
 } from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import { SqlClient, type SqlError } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
   EmailDeliveryPort,
@@ -36,7 +38,12 @@ import {
   EmailSendFailed,
 } from "~/shell/email-authentication/delivery";
 import { ApiHarness } from "~/shell/testing/api-harness";
+<<<<<<< HEAD
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+=======
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
@@ -167,9 +174,11 @@ const makeRuntimeLayer = (
   | MessageStorage.MessageStorage
   | Runners.Runners
   | Sharding.Sharding
-  | WorkflowEngine.WorkflowEngine,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | WorkflowEngine.WorkflowEngine
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > => {
+<<<<<<< HEAD
   const cluster = authenticatedClusterHttp.layerSql(
     token,
     {
@@ -183,6 +192,15 @@ const makeRuntimeLayer = (
     },
     loopbackClusterRunnerHttpPolicy([port])
   );
+=======
+  const cluster = authenticatedClusterHttp.layerSql(token, {
+    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+    ...clusterTestSharedOptions,
+    entityMessagePollInterval: 100,
+    sendRetryInterval: 100,
+  });
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
   return OnboardingEmailDeliveryWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),
     Layer.provide(Layer.succeed(EmailDeliveryPort, deliveryPort)),
@@ -194,6 +212,8 @@ const makeRuntimeLayer = (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster onboarding delivery",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect(
       "coordinates one Activity across two independent runtimes",
       () =>

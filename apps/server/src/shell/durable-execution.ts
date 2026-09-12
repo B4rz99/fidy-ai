@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option, Schema } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress, TestRunner } from "effect/unstable/cluster";
+=======
+import { Config, Effect, Layer, Schema } from "effect";
+import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { configuredSecret } from "~/shell/_shared/configured-secret";
@@ -14,7 +19,15 @@ import {
   durableQueuePollInterval,
   durableQueueTableName,
 } from "./durable-queue-policy";
+<<<<<<< HEAD
 import type { ClusterRunnerHttpPolicy } from "./cluster-runner-http";
+=======
+import { authenticatedClusterHttp } from "./authenticated-cluster-http";
+import { ClusterObservationLive } from "./cluster-observation";
+import { ClusterReadinessVolatile } from "./cluster-readiness";
+import { clientClusterTopology, productionRunnerTopology } from "./cluster-topology";
+import { durableQueueTable } from "./durable-tables";
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 
 const ClusterAuthenticationToken = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const clusterAuthenticationToken = configuredSecret({
@@ -154,6 +167,7 @@ const ProductionClusterLive = Layer.unwrap(
     const authenticationToken = yield* clusterAuthenticationToken;
     return authenticatedClusterHttp.layerSql(
       authenticationToken,
+<<<<<<< HEAD
       {
         runnerAddress: Option.some(RunnerAddress.make(advertisedHost, port)),
         runnerListenAddress: Option.some(RunnerAddress.make(listenHost, port)),
@@ -167,6 +181,9 @@ const ProductionClusterLive = Layer.unwrap(
         shardLockExpiration: "35 seconds",
       },
       productionClusterRunnerHttpPolicy(Array.prepend(peerHosts, advertisedHost), port)
+=======
+      productionRunnerTopology({ advertisedHost, listenHost, port }).sharding
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
     );
   })
 );
@@ -188,14 +205,17 @@ const SqlPersistedQueueLive = PersistedQueue.layer.pipe(
 );
 
 /**
- * SQL-backed production substrate for native queues and workflows. The runner listener must
- * remain private; every runner request additionally requires the shared Cluster bearer token.
+ * SQL-backed production substrate for native queues, workflows, and runner observation. The runner
+ * listener must remain private; every runner request additionally requires the shared Cluster bearer
+ * token and the deployment must have published a matching topology compatibility identity.
  */
 const ProductionWorkflowLive = ClusterWorkflowEngine.layer.pipe(
   Layer.provideMerge(ProductionClusterLive)
 );
 
-export const DurableExecutionLive = Layer.mergeAll(SqlPersistedQueueLive, ProductionWorkflowLive);
+export const DurableExecutionLive = ClusterObservationLive.pipe(
+  Layer.provideMerge(Layer.mergeAll(SqlPersistedQueueLive, ProductionWorkflowLive))
+);
 
 /** CLI routes through production owners without acquiring shards or creating another local mailbox. */
 export const DurableExecutionClientLive = Layer.unwrap(
@@ -207,6 +227,7 @@ export const DurableExecutionClientLive = Layer.unwrap(
       SqlPersistedQueueLive,
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
+<<<<<<< HEAD
           authenticatedClusterHttp.layerSql(
             token,
             {
@@ -218,6 +239,9 @@ export const DurableExecutionClientLive = Layer.unwrap(
             },
             productionClusterRunnerHttpPolicy(runnerHosts, port)
           )
+=======
+          authenticatedClusterHttp.layerSql(token, clientClusterTopology().sharding)
+>>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
         )
       )
     );
@@ -228,12 +252,14 @@ export const DurableExecutionClientLive = Layer.unwrap(
 export const DurableExecutionMemory = Layer.mergeAll(
   PersistedQueue.layer.pipe(Layer.provideMerge(PersistedQueue.layerStoreMemory)),
   WorkflowEngine.layerMemory,
-  TestRunner.layer
+  TestRunner.layer,
+  ClusterReadinessVolatile
 );
 
 /** SQL queue plus volatile workflow history for PostgreSQL integration seams without a runner port. */
 export const DurableExecutionSqlQueueMemoryWorkflow = Layer.mergeAll(
   SqlPersistedQueueLive,
   WorkflowEngine.layerMemory,
-  TestRunner.layer
+  TestRunner.layer,
+  ClusterReadinessVolatile
 );

@@ -21,6 +21,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import { requestEmailReplacement } from "./replacement-transition";
 import {
@@ -170,6 +171,8 @@ const acquireRuntime = Effect.fn(function* (port: number, provider: EmailDeliver
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster replacement delivery",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect("rolls back replacement state and native queue publication together", () =>
       Effect.gen(function* () {
         yield* seedConsentedPatIdentity({ userId, bearer });

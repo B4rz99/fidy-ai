@@ -170,6 +170,16 @@ only own restart-safe resource bounds. Best-effort maintenance may delay cleanup
 expired work. Correctness-critical continuation uses durable execution. No Fidy queue, lease,
 workflow, or runner framework should be layered over the Effect substrate.
 
+Production Cluster topology is explicit and fail-closed: one module owns every Sharding setting that
+affects ownership, polling, capacity, shutdown, lock recovery, and retry, and every runner and
+client publishes or validates a bounded compatibility identity (shard count and groups,
+serialization, storage namespace, protocol generation) before accepting ownership. A disagreement
+refuses startup with a bounded `Cluster topology incompatible` diagnostic naming the differing fields
+instead of splitting the hash ring or mailbox. `GET /ready` distinguishes a bound listener from a
+runner able to refresh runner state, route over the private transport, and use durable message
+storage, and each runner logs bounded, dimension-free Cluster telemetry. See
+[cluster-topology.md](../../docs/operations/cluster-topology.md).
+
 Subscription atomically persists and publishes an immutable pending `BillingAttempt` before arming
 a provider mutation once. An ambiguous armed mutation is never resent. Reconciliation uses retained
 Wompi transaction identity because Wompi does not document merchant-reference lookup. Only bounded,

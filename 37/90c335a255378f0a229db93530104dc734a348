@@ -1,0 +1,16 @@
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 14-15,21-23
+docs/operations/production-releases.md
+  h_c6d49c804e0ad2 72-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3790c335a255378f0a229db93530104dc734a348",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

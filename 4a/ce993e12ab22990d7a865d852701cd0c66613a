@@ -1,0 +1,16 @@
+apps/server/src/shell/channels/whatsapp/disclosure-retention.ts
+  h_c6d49c804e0ad2 24,70-75,81-82,102
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  h_c6d49c804e0ad2 41,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4ace993e12ab22990d7a865d852701cd0c66613a",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

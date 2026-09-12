@@ -1,6 +1,6 @@
 /** Subprocess fixture: the parent kills this runner without running any finalizers. */
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
@@ -15,7 +15,7 @@ import {
 
 const testSecretLength = 64;
 const crashRunnerPort = 24643;
-const cluster = authenticatedClusterHttp.layerSql("c".repeat(testSecretLength), {
+const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(testSecretLength)), {
   runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
   runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
   availableShardGroups: ["default"],

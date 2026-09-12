@@ -27,6 +27,7 @@ import {
   type ExternalHttpFailure,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
+import { wompiCredentialPrefixes, wompiPrivateKey } from "./wompi-credentials";
 
 const maximumProviderResponseBytes = 16_384;
 const sandboxOrigin = "https://sandbox.wompi.co";
@@ -38,7 +39,6 @@ const maximumAcceptanceTokenCharacters = 4096;
 
 const WompiEnvironment = Schema.Literals(["sandbox", "production"]);
 const PublicKey = Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
-const PrivateKey = Schema.String.check(Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
 const AcceptanceToken = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(maximumAcceptanceTokenCharacters)
@@ -381,20 +381,12 @@ export class WompiEnrollmentClient extends Context.Service<
       );
       const crypto = yield* Crypto.Crypto;
       const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-      const publicKey = yield* Config.schema(PublicKey, "WOMPI_PUBLIC_KEY");
-      const privateKey = yield* Config.redacted("WOMPI_PRIVATE_KEY");
-      const privateKeyValue = Redacted.value(privateKey);
-      if (!Schema.is(PrivateKey)(privateKeyValue)) {
-        return yield* Effect.die("WOMPI_PRIVATE_KEY has an invalid shape");
-      }
-      const expectedPublicPrefix = environment === "sandbox" ? "pub_test_" : "pub_prod_";
-      const expectedPrivatePrefix = environment === "sandbox" ? "prv_test_" : "prv_prod_";
-      if (
-        !publicKey.startsWith(expectedPublicPrefix) ||
-        !privateKeyValue.startsWith(expectedPrivatePrefix)
-      ) {
-        return yield* Effect.die("Wompi key prefixes do not match WOMPI_ENVIRONMENT");
-      }
+      const prefixes = wompiCredentialPrefixes(environment);
+      const publicKey = yield* Config.schema(
+        PublicKey.check(Schema.isStartsWith(prefixes.publicKey)),
+        "WOMPI_PUBLIC_KEY"
+      );
+      const privateKey = yield* wompiPrivateKey(environment);
       const origin = environment === "sandbox" ? sandboxOrigin : productionOrigin;
       return WompiEnrollmentClient.of({
         publicKey,

@@ -1,6 +1,17 @@
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { expect, layer } from "@effect/vitest";
-import { ConfigProvider, Crypto, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Crypto,
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  Option,
+  Schema,
+} from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { ConsentRecordId } from "~/core/consent/model";
@@ -14,6 +25,7 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
+import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import {
   BillingAttemptId,
   PaymentRequestId,
@@ -37,7 +49,11 @@ import {
 import { reconcileCardEnrollment } from "./card-enrollment";
 import type { WompiTransaction } from "./wompi-billing-client";
 import { findPrice } from "./repo";
-import { receiveWompiSettlement, reconcileWompiSettlement } from "./wompi-settlement";
+import {
+  InvalidWompiEvent,
+  receiveWompiSettlement,
+  reconcileWompiSettlement,
+} from "./wompi-settlement";
 
 const userId = UserId.make("22800000-0000-4000-8000-000000000001");
 const sessionId = WebSessionId.make("22800000-0000-4000-8000-000000000002");
@@ -505,7 +521,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig))
         );
         expect(failure).toMatchObject({ _tag: "InvalidWompiEvent" });
-        expect(String(failure)).not.toContain(testWompiEventSecret);
+        expect(yield* renderedFailure(failure)).not.toContain(testWompiEventSecret);
 
         const unsupportedProperty = signedWompiEvent(
           {
@@ -529,10 +545,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(unsupportedFailure._tag).toBe("InvalidWompiEvent");
 
-        for (const [environment, eventSecret] of [
-          ["production", "prod_events_examplekey"],
-          ["sandbox", "invalid"],
-          ["sandbox", "prod_events_examplekey"],
+        for (const [environment, eventSecret, expectedTag] of [
+          ["production", `prod_events_${"f1d7c0de".repeat(3)}`, "InvalidWompiEvent"],
+          ["sandbox", `CANARY-wompi-event-${"f1d7c0de".repeat(2)}`, "ConfigError"],
+          ["sandbox", `prod_events_${"f1d7c0de".repeat(3)}`, "ConfigError"],
         ] as const) {
           const provider = ConfigProvider.fromUnknown({
             WOMPI_ENVIRONMENT: environment,
@@ -542,7 +558,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             payload: signed,
             observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
           }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
-          expect((yield* Effect.exit(authenticated))._tag).toBe("Failure");
+          const exit = yield* Effect.exit(authenticated);
+          const expected =
+            expectedTag === "InvalidWompiEvent"
+              ? new InvalidWompiEvent()
+              : new Config.ConfigError(
+                  new ConfigProvider.SourceError({
+                    message: `WOMPI_EVENT_SECRET must be a ${environment} Wompi event secret`,
+                  })
+                );
+          const failure = yield* exitFailure(exit);
+          // The Exit also carries runtime stack annotations from the traced boundary; deep-comparing
+          // the typed failure keeps the class-identity proof without pinning that metadata.
+          assert.deepStrictEqual(failure, expected);
+          const rendered = yield* renderedFailure(failure);
+          expect(rendered).not.toContain(eventSecret);
+          if (expectedTag === "ConfigError") {
+            expect(rendered).toContain("WOMPI_EVENT_SECRET");
+          }
         }
       })
     );

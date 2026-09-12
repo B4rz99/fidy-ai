@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
 
 import { parse } from "@babel/parser";
-import traverse from "@babel/traverse";
+import traverse, { type NodePath } from "@babel/traverse";
 import * as Babel from "@babel/types";
 import { Effect, Option } from "effect";
 
 /**
- * Every production `Config.redacted` credential must have one focused test proving its adapter path
- * keeps the secret out of failures, logs, and model context. Direct reads and the shared
- * `configuredHmacKey` loader carry the same obligation, and the pairing is stated here rather than
- * inferred, so adding a credential without that evidence fails the gate instead of shipping
- * unproven.
+ * Every production redacted credential must have one focused test proving its adapter path keeps the
+ * secret out of failures, logs, and model context. Direct reads and the shared credential loaders
+ * (`configuredSecret`, `configuredHmacKey`) carry the same obligation, and the pairing is stated
+ * here rather than inferred, so adding a credential without that evidence fails the gate instead of
+ * shipping unproven. The scan rejects any non-literal loader use rather than skipping it.
  */
 type CredentialEvidence = Readonly<{
   configuration: string;
@@ -297,15 +297,388 @@ const runStaticSkipRegression = (): void => {
   process.stdout.write("Credential evidence static-skip regression passed.\n");
 };
 
-const configuredSecretNames = (source: string): ReadonlyArray<string> =>
+const expectConfiguredSecretNames = (source: string, expected: ReadonlyArray<string>): void => {
+  const actual = configuredSecretNames(source);
+  if (actual.join(",") !== expected.join(",")) {
+    throw new Error(
+      `Expected configuredSecret enumeration ${expected.join(",")}, got ${actual.join(",")}`
+    );
+  }
+};
+
+const expectConfiguredSecretRejection = (source: string, label: string): void => {
+  let rejected = false;
+  try {
+    configuredSecretNames(source);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error(`Expected ${label} to be rejected`);
+};
+
+const loaderImport = (loader: CredentialLoader): string =>
+  `import { ${loader.call} } from "~/${loader.moduleSuffix}";`;
+
+const loaderAliasImport = (loader: CredentialLoader, local: string): string =>
+  `import { ${loader.call} as ${local} } from "~/${loader.moduleSuffix}";`;
+
+const loaderNamespaceImport = (loader: CredentialLoader): string =>
+  `import * as credentials from "~/${loader.moduleSuffix}";`;
+
+const loaderDeclaration = (loader: CredentialLoader, value: string): string =>
+  `{ ${loader.nameProperty}: "${value}", other: true }`;
+
+const runCredentialLoaderEnumerationRegression = (): void => {
+  for (const loader of credentialLoaders) {
+    expectConfiguredSecretNames(
+      `
+        ${loaderImport(loader)}
+        ${loader.call}(${loaderDeclaration(loader, "FIRST_SECRET")});
+        ${loader.call}({ other: true, ${loader.nameProperty}: "REORDERED_SECRET" });
+        ${loader.call}({ other: true, ${loader.nameProperty}: "TRAILING_SECRET", tail: 1 });
+        ${loader.call}(${loaderDeclaration(loader, "CONST_SECRET")} as const);
+      `,
+      ["FIRST_SECRET", "REORDERED_SECRET", "TRAILING_SECRET", "CONST_SECRET"]
+    );
+    expectConfiguredSecretNames(
+      `
+        ${loaderAliasImport(loader, "readCredential")}
+        readCredential(${loaderDeclaration(loader, "ALIASED_SECRET")});
+      `,
+      ["ALIASED_SECRET"]
+    );
+    expectConfiguredSecretNames(
+      `
+        ${loaderNamespaceImport(loader)}
+        credentials.${loader.call}(${loaderDeclaration(loader, "NAMESPACED_SECRET")});
+      `,
+      ["NAMESPACED_SECRET"]
+    );
+  }
+  process.stdout.write("Credential evidence loader enumeration regression passed.\n");
+};
+
+const loaderRejections = (loader: CredentialLoader): ReadonlyArray<readonly [string, string]> => [
   [
-    ...source.matchAll(/Config\.redacted\("([A-Z0-9_]+)"\)/gu),
-    // The shared loader centralizes validation and redaction; its call sites still name each
-    // credential literally and keep the same evidence obligation as a direct Config.redacted read.
-    ...source.matchAll(/configuredHmacKey\(\{\s*variable:\s*"([A-Z0-9_]+)"/gu),
-  ]
-    .map(([, name]) => name)
-    .filter((name): name is string => name !== undefined);
+    `${loader.call}({ other: true, ${loader.nameProperty}: dynamicName });`,
+    `a non-literal ${loader.call} ${loader.nameProperty}`,
+  ],
+  [
+    `${loader.call}({ ...base, ${loader.nameProperty}: "SPREAD_SECRET" });`,
+    `a spread ${loader.call} declaration`,
+  ],
+  [
+    `${loader.call}({ ["${loader.nameProperty}"]: "COMPUTED_SECRET", other: true });`,
+    `a computed ${loader.call} ${loader.nameProperty}`,
+  ],
+  [
+    `${loader.call}({ other: true });`,
+    `a ${loader.call} declaration without a ${loader.nameProperty}`,
+  ],
+  [`${loader.call}(declaration);`, `a non-literal ${loader.call} declaration`],
+  [`const readCredential = ${loader.call};`, `an aliased ${loader.call} binding`],
+  [
+    `${loader.call}?.(${loaderDeclaration(loader, "OPTIONAL_SECRET")});`,
+    `an optional ${loader.call} call`,
+  ],
+  [
+    `(0, ${loader.call})(${loaderDeclaration(loader, "SEQUENCE_SECRET")});`,
+    `a sequenced ${loader.call} call`,
+  ],
+  [
+    `${loader.call}.call(null, ${loaderDeclaration(loader, "CALL_SECRET")});`,
+    `a ${loader.call} .call invocation`,
+  ],
+];
+
+const runCredentialLoaderRejectionRegression = (): void => {
+  for (const loader of credentialLoaders) {
+    for (const [statement, label] of loaderRejections(loader)) {
+      expectConfiguredSecretRejection(
+        `
+          ${loaderImport(loader)}
+          ${statement}
+        `,
+        label
+      );
+    }
+    expectConfiguredSecretRejection(
+      `
+        import { ${loader.call} } from "~/shell/_shared/secret-barrel";
+        ${loader.call}(${loaderDeclaration(loader, "BARREL_SECRET")});
+      `,
+      `a ${loader.call} imported through a barrel`
+    );
+  }
+  process.stdout.write("Credential evidence loader rejection regression passed.\n");
+};
+
+const propertyKeyName = (property: Babel.ObjectProperty): Option.Option<string> => {
+  if (property.computed) return Option.none();
+  if (Babel.isIdentifier(property.key)) return Option.some(property.key.name);
+  if (Babel.isStringLiteral(property.key)) return Option.some(property.key.value);
+  return Option.none();
+};
+
+/** One loader whose call sites name a configured credential literally enough to enumerate. */
+type CredentialLoader = Readonly<{
+  readonly call: string;
+  readonly moduleSuffix: string;
+  readonly nameProperty: string;
+}>;
+
+const credentialLoaders = [
+  { call: "configuredSecret", moduleSuffix: "configured-secret", nameProperty: "name" },
+  { call: "configuredHmacKey", moduleSuffix: "hmac", nameProperty: "variable" },
+] as const satisfies ReadonlyArray<CredentialLoader>;
+
+const credentialLoaderCalls: ReadonlySet<string> = new Set(
+  credentialLoaders.map((loader) => loader.call)
+);
+
+/** The loaders' local import bindings, so an aliased import cannot hide a configured Secret. */
+type CredentialLoaderBindings = Readonly<{
+  readonly names: ReadonlyMap<string, CredentialLoader>;
+  readonly namespaces: ReadonlyMap<string, CredentialLoader>;
+}>;
+
+/** The binding maps while an import declaration is recorded, before they become read-only. */
+type MutableCredentialLoaderBindings = Readonly<{
+  readonly names: Map<string, CredentialLoader>;
+  readonly namespaces: Map<string, CredentialLoader>;
+}>;
+
+/** Records the local import bindings of a loader, so an aliased import cannot hide a Secret. */
+const recordCredentialImport = (
+  specifier: Babel.ImportDeclaration["specifiers"][number],
+  loader: CredentialLoader,
+  bindings: MutableCredentialLoaderBindings
+): void => {
+  if (Babel.isImportSpecifier(specifier)) {
+    const imported = Babel.isIdentifier(specifier.imported)
+      ? specifier.imported.name
+      : specifier.imported.value;
+    if (imported === loader.call) bindings.names.set(specifier.local.name, loader);
+    return;
+  }
+  if (Babel.isImportNamespaceSpecifier(specifier)) {
+    bindings.namespaces.set(specifier.local.name, loader);
+  }
+};
+
+const credentialLoaderBindings = (syntax: Babel.File): CredentialLoaderBindings => {
+  const bindings: MutableCredentialLoaderBindings = { names: new Map(), namespaces: new Map() };
+  for (const node of syntax.program.body) {
+    if (!Babel.isImportDeclaration(node)) continue;
+    for (const loader of credentialLoaders) {
+      if (!node.source.value.endsWith(loader.moduleSuffix)) continue;
+      for (const specifier of node.specifiers) {
+        recordCredentialImport(specifier, loader, bindings);
+      }
+    }
+  }
+  return bindings;
+};
+
+const loaderForCallee = (
+  callee: Babel.Node,
+  bindings: CredentialLoaderBindings
+): Option.Option<CredentialLoader> => {
+  const segments = calleeSegments(callee);
+  const [head, tail] = segments;
+  if (head === undefined) return Option.none();
+  if (segments.length === 1) return Option.fromUndefinedOr(bindings.names.get(head));
+  if (segments.length !== 2 || tail === undefined) return Option.none();
+  const loader = bindings.namespaces.get(head);
+  if (loader === undefined) return Option.none();
+  return loader.call === tail ? Option.some(loader) : Option.none();
+};
+
+/** Unwraps the literal argument wrappers the gate can see through (`as const`, parentheses). */
+const configurationObject = (
+  node: Option.Option<Babel.Node>
+): Option.Option<Babel.ObjectExpression> => {
+  if (Option.isNone(node)) return Option.none();
+  if (Babel.isObjectExpression(node.value)) return Option.some(node.value);
+  if (
+    Babel.isTSAsExpression(node.value) ||
+    Babel.isTSSatisfiesExpression(node.value) ||
+    Babel.isParenthesizedExpression(node.value)
+  ) {
+    return configurationObject(Option.some(node.value.expression));
+  }
+  return Option.none();
+};
+
+const configurationObjectNames = (
+  declaration: Babel.ObjectExpression,
+  loader: CredentialLoader
+): ReadonlyArray<string> => {
+  const names: Array<string> = [];
+  for (const property of declaration.properties) {
+    if (!Babel.isObjectProperty(property)) {
+      throw new Error(
+        `${loader.call} must list its configuration properties literally so the credential-evidence gate can enumerate it`
+      );
+    }
+    const keyName = propertyKeyName(property);
+    if (Option.isNone(keyName)) {
+      throw new Error(
+        `${loader.call} must not compute its configuration keys so the credential-evidence gate can enumerate it`
+      );
+    }
+    if (keyName.value !== loader.nameProperty) continue;
+    if (!Babel.isStringLiteral(property.value)) {
+      throw new Error(
+        `${loader.call} must name its configuration with a string literal so the credential-evidence gate can enumerate it`
+      );
+    }
+    names.push(property.value.value);
+  }
+  if (names.length === 0) {
+    throw new Error(
+      `${loader.call} must declare a literal ${loader.nameProperty} so the credential-evidence gate can enumerate it`
+    );
+  }
+  return names;
+};
+
+const configuredSecretNamesFromCall = (
+  node: Babel.CallExpression,
+  bindings: CredentialLoaderBindings
+): ReadonlyArray<string> => {
+  const loader = loaderForCallee(node.callee, bindings);
+  if (Option.isNone(loader)) return [];
+  const declaration = configurationObject(Option.fromUndefinedOr(node.arguments[0]));
+  if (Option.isNone(declaration)) {
+    throw new Error(
+      `${loader.value.call} must receive an object literal so the credential-evidence gate can enumerate it`
+    );
+  }
+  return configurationObjectNames(declaration.value, loader.value);
+};
+
+/** True when the identifier is a local binding imported from one of the loader modules. */
+const isLoaderImport = (path: NodePath<Babel.Identifier>): boolean => {
+  const specifier = path.parentPath;
+  const declaration = specifier.parentPath;
+  if (!declaration.isImportDeclaration()) return false;
+  const source = declaration.node.source.value;
+  if (!credentialLoaders.some((loader) => source.endsWith(loader.moduleSuffix))) return false;
+  return (
+    specifier.isImportSpecifier() ||
+    specifier.isImportNamespaceSpecifier() ||
+    specifier.isImportDefaultSpecifier()
+  );
+};
+
+/** A declaration site names the binding; only its uses must satisfy the call-shape rules. */
+const isBindingDeclaration = (path: NodePath<Babel.Identifier>): boolean => {
+  const declarator = path.parentPath;
+  return declarator.isVariableDeclarator() && declarator.node.id === path.node;
+};
+
+const isDirectCallCallee = (path: NodePath<Babel.Identifier>): boolean => {
+  const call = path.parentPath;
+  return call.isCallExpression() && call.node.callee === path.node;
+};
+
+const isLoaderMember = (member: Babel.MemberExpression, call: string): boolean => {
+  if (member.computed) return false;
+  if (!Babel.isIdentifier(member.property)) return false;
+  return member.property.name === call;
+};
+
+/** The `x.loader(…)` member call a namespace import is allowed to use. */
+const loaderMemberCall = (
+  path: NodePath<Babel.Identifier>,
+  call: string
+): Option.Option<Babel.MemberExpression> => {
+  const member = path.parentPath;
+  if (!member.isMemberExpression()) return Option.none();
+  if (!isLoaderMember(member.node, call)) return Option.none();
+  const callPath = member.parentPath;
+  if (!callPath.isCallExpression()) return Option.none();
+  if (callPath.node.callee !== member.node) return Option.none();
+  return Option.some(member.node);
+};
+
+const isNamespacedCallObject = (
+  path: NodePath<Babel.Identifier>,
+  bindings: CredentialLoaderBindings
+): boolean => {
+  const loader = bindings.namespaces.get(path.node.name);
+  if (loader === undefined) return false;
+  return Option.match(loaderMemberCall(path, loader.call), {
+    onNone: () => false,
+    onSome: (member) => member.object === path.node,
+  });
+};
+
+const isNamespacedCallProperty = (
+  path: NodePath<Babel.Identifier>,
+  bindings: CredentialLoaderBindings
+): boolean =>
+  Option.match(loaderMemberCall(path, path.node.name), {
+    onNone: () => false,
+    onSome: (member) => {
+      if (!Babel.isIdentifier(member.object)) return false;
+      return bindings.namespaces.get(member.object.name)?.call === path.node.name;
+    },
+  });
+
+const isAllowedCredentialLoaderUse = (
+  path: NodePath<Babel.Identifier>,
+  bindings: CredentialLoaderBindings
+): boolean => {
+  if (isLoaderImport(path)) return true;
+  if (isBindingDeclaration(path)) return true;
+  if (bindings.names.has(path.node.name)) return isDirectCallCallee(path);
+  if (bindings.namespaces.has(path.node.name)) return isNamespacedCallObject(path, bindings);
+  return isNamespacedCallProperty(path, bindings);
+};
+
+/**
+ * Fails closed on every other use of a loader binding: only a direct call (or a namespaced call of
+ * a namespace import) can be enumerated, so aliasing, `.call`, optional calls, and barrel imports
+ * are rejected instead of silently skipping their credential.
+ */
+const assertCredentialLoaderUse = (
+  path: NodePath<Babel.Identifier>,
+  bindings: CredentialLoaderBindings
+): void => {
+  const name = path.node.name;
+  if (
+    !credentialLoaderCalls.has(name) &&
+    !bindings.names.has(name) &&
+    !bindings.namespaces.has(name)
+  ) {
+    return;
+  }
+  if (isAllowedCredentialLoaderUse(path, bindings)) return;
+  throw new Error(
+    `${name} must be called directly, or through a namespace import, so the credential-evidence gate can enumerate it`
+  );
+};
+
+const configuredSecretNames = (source: string): ReadonlyArray<string> => {
+  const direct = Array.from(
+    source.matchAll(/Config\.redacted\("([A-Z0-9_]+)"\)/gu),
+    ([, name]) => name
+  );
+  const syntax = parse(source, { sourceType: "module", plugins: ["typescript"] });
+  const bindings = credentialLoaderBindings(syntax);
+  const configured: Array<string> = [];
+  traverse(syntax, {
+    CallExpression: (path) => {
+      configured.push(...configuredSecretNamesFromCall(path.node, bindings));
+    },
+    Identifier: (path) => {
+      assertCredentialLoaderUse(path, bindings);
+    },
+  });
+  return [...direct, ...configured].filter((name): name is string => name !== undefined);
+};
 
 const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSecrets")(
   function* () {
@@ -353,7 +726,7 @@ const mappingProblems = (configured: ReadonlySet<string>): ReadonlyArray<string>
   ...credentialEvidence.flatMap((credential) =>
     configured.has(credential.configuration)
       ? []
-      : [`${credential.configuration} is no longer an implemented Config.redacted credential`]
+      : [`${credential.configuration} is no longer an implemented redacted credential`]
   ),
 ];
 
@@ -377,6 +750,8 @@ const program = Effect.gen(function* () {
 if (import.meta.main) {
   if (Bun.argv.includes("--self-test")) {
     runStaticSkipRegression();
+    runCredentialLoaderEnumerationRegression();
+    runCredentialLoaderRejectionRegression();
   } else {
     await Effect.runPromise(program);
   }

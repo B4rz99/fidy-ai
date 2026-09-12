@@ -25,6 +25,8 @@ import {
 import { WompiSourceId } from "~/core/subscription/enrollment-model";
 import type { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { configuredSecret } from "~/shell/_shared/configured-secret";
+import { wompiCredentialPrefixes } from "./wompi-credentials";
 import { activatePaidProInScope } from "./access-repo";
 import { WompiBillingClient, type WompiTransaction } from "./wompi-billing-client";
 import {
@@ -94,7 +96,7 @@ const propertyValue = (event: Event, property: string): Option.Option<string> =>
   }
 };
 
-const checksumMatches = Effect.fn(function* (event: Event, secret: string) {
+const checksumMatches = Effect.fn(function* (event: Event, secret: Redacted.Redacted<string>) {
   const values = Option.all(
     event.signature.properties.map((property) => propertyValue(event, property))
   );
@@ -103,7 +105,9 @@ const checksumMatches = Effect.fn(function* (event: Event, secret: string) {
   const expected = yield* crypto
     .digest(
       "SHA-256",
-      new TextEncoder().encode(`${values.value.join("")}${event.timestamp}${secret}`)
+      new TextEncoder().encode(
+        `${values.value.join("")}${event.timestamp}${Redacted.value(secret)}`
+      )
     )
     .pipe(Effect.orDie);
   const actual = Encoding.decodeHex(event.signature.checksum);
@@ -117,17 +121,14 @@ const checksumMatches = Effect.fn(function* (event: Event, secret: string) {
 const authenticateEvent = Effect.fn("Subscription.authenticateWompiEvent")(function* (
   event: Event
 ) {
-  const secret = yield* Config.redacted("WOMPI_EVENT_SECRET");
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-  const secretValue = Redacted.value(secret);
-  if (!Schema.is(EventSecret)(secretValue)) {
-    return yield* Effect.die("WOMPI_EVENT_SECRET has an invalid shape");
-  }
-  const expectedPrefix = environment === "sandbox" ? "test_events_" : "prod_events_";
-  if (!secretValue.startsWith(expectedPrefix)) {
-    return yield* Effect.die("WOMPI_EVENT_SECRET does not match WOMPI_ENVIRONMENT");
-  }
-  const checksumValid = yield* checksumMatches(event, secretValue);
+  const eventSecretPrefix = wompiCredentialPrefixes(environment).eventSecret;
+  const secret = yield* configuredSecret({
+    name: "WOMPI_EVENT_SECRET",
+    schema: EventSecret.check(Schema.isStartsWith(eventSecretPrefix)),
+    requirement: `must be a ${environment} Wompi event secret`,
+  });
+  const checksumValid = yield* checksumMatches(event, secret);
   const signedProperties = new Set(event.signature.properties);
   if (
     signedProperties.size !== settlementProperties.length ||

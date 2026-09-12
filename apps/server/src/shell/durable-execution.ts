@@ -1,11 +1,17 @@
-import { Config, ConfigProvider, Effect, Layer, Option, Redacted } from "effect";
+import { Config, Effect, Layer, Option, Schema } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress, TestRunner } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
+import { configuredSecret } from "./_shared/configured-secret";
 import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 
-const clusterAuthenticationTokenPattern = /^[0-9a-f]{64}$/u;
+const ClusterAuthenticationToken = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const durableQueueTable = "fidy_queue";
+const clusterAuthenticationToken = configuredSecret({
+  name: "FIDY_CLUSTER_AUTH_TOKEN",
+  schema: ClusterAuthenticationToken,
+  requirement: "must be a 32-byte lowercase hexadecimal key",
+});
 
 const ProductionClusterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -14,17 +20,8 @@ const ProductionClusterLive = Layer.unwrap(
       port: Config.port("FIDY_CLUSTER_RUNNER_PORT"),
       listenHost: Config.string("FIDY_CLUSTER_LISTEN_HOST").pipe(Config.withDefault("0.0.0.0")),
     });
-    const authenticationToken = yield* Config.redacted("FIDY_CLUSTER_AUTH_TOKEN");
-    if (!clusterAuthenticationTokenPattern.test(Redacted.value(authenticationToken))) {
-      return yield* Effect.fail(
-        new Config.ConfigError(
-          new ConfigProvider.SourceError({
-            message: "FIDY_CLUSTER_AUTH_TOKEN must be a 32-byte lowercase hexadecimal key",
-          })
-        )
-      );
-    }
-    return authenticatedClusterHttp.layerSql(Redacted.value(authenticationToken), {
+    const authenticationToken = yield* clusterAuthenticationToken;
+    return authenticatedClusterHttp.layerSql(authenticationToken, {
       runnerAddress: Option.some(RunnerAddress.make(advertisedHost, port)),
       runnerListenAddress: Option.some(RunnerAddress.make(listenHost, port)),
       availableShardGroups: ["default"],
@@ -56,21 +53,12 @@ export const DurableExecutionLive = Layer.mergeAll(SqlPersistedQueueLive, Produc
 /** CLI routes through production owners without acquiring shards or creating another local mailbox. */
 export const DurableExecutionClientLive = Layer.unwrap(
   Effect.gen(function* () {
-    const token = yield* Config.redacted("FIDY_CLUSTER_AUTH_TOKEN");
-    if (!clusterAuthenticationTokenPattern.test(Redacted.value(token))) {
-      return yield* Effect.fail(
-        new Config.ConfigError(
-          new ConfigProvider.SourceError({
-            message: "FIDY_CLUSTER_AUTH_TOKEN must be a 32-byte lowercase hexadecimal key",
-          })
-        )
-      );
-    }
+    const token = yield* clusterAuthenticationToken;
     return Layer.mergeAll(
       SqlPersistedQueueLive,
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSql(Redacted.value(token), {
+          authenticatedClusterHttp.layerSql(token, {
             runnerAddress: Option.none(),
             availableShardGroups: ["default"],
             assignedShardGroups: [],

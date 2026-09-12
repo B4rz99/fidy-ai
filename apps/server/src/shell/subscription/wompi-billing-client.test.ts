@@ -1,16 +1,27 @@
+import { createHash } from "node:crypto";
 import { BunServices } from "@effect/platform-bun";
 import { expect, it, layer } from "@effect/vitest";
-import { type Config, ConfigProvider, Effect, Layer } from "effect";
+import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
+import type { HttpClientRequest } from "effect/unstable/http";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { UnknownJsonString } from "~/schema-compatibility";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { WompiTransactionId, WompiTransactionReference } from "~/core/subscription/model";
+import {
+  buildLayerExit,
+  exitFailure,
+  expectNotInspected,
+  renderedFailure,
+} from "~/shell/testing/credential-failure";
 import { WompiBillingClient } from "./wompi-billing-client";
 
+const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
+const integritySecretFixture = `test_integrity_${"f1d7c0de".repeat(3)}`;
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     WOMPI_ENVIRONMENT: "sandbox",
-    WOMPI_PRIVATE_KEY: "prv_test_examplekey",
-    WOMPI_INTEGRITY_SECRET: "test_integrity_examplekey",
+    WOMPI_PRIVATE_KEY: privateKeyFixture,
+    WOMPI_INTEGRITY_SECRET: integritySecretFixture,
   })
 );
 
@@ -29,16 +40,18 @@ const successResponse = (method: string): Response =>
     : new Response(recordedCreatedTransaction, { status: 201 });
 const clientLayer = (
   response: (method: string) => Response,
-  configLayer: typeof config = config
+  configLayer: typeof config = config,
+  observeRequest?: (request: HttpClientRequest.HttpClientRequest) => void
 ): Layer.Layer<WompiBillingClient, Config.ConfigError> =>
   WompiBillingClient.layer.pipe(
     Layer.provide(
       Layer.merge(
         Layer.succeed(
           HttpClient.HttpClient,
-          HttpClient.make((request) =>
-            Effect.succeed(HttpClientResponse.fromWeb(request, response(request.method)))
-          )
+          HttpClient.make((request) => {
+            observeRequest?.(request);
+            return Effect.succeed(HttpClientResponse.fromWeb(request, response(request.method)));
+          })
         ),
         configLayer
       )
@@ -79,6 +92,48 @@ layer(TestLayer, { excludeTestServices: true })("Wompi billing adapter", (it) =>
   );
 });
 
+const recordedRequests: Array<HttpClientRequest.HttpClientRequest> = [];
+const credentialBoundaryLayer = clientLayer(successResponse, config, (request) =>
+  recordedRequests.push(request)
+);
+
+layer(credentialBoundaryLayer, { excludeTestServices: true })(
+  "Wompi credential boundaries",
+  (it) => {
+    it.effect(
+      "keeps credentials out of service inspection while using them only at signing and header boundaries",
+      () =>
+        Effect.gen(function* () {
+          recordedRequests.length = 0;
+          const wompi = yield* WompiBillingClient;
+
+          expectNotInspected(wompi, privateKeyFixture, integritySecretFixture);
+
+          yield* wompi.createTransaction(creationInput);
+          const created = recordedRequests.find((request) => request.method === "POST");
+          expect(created?.headers.authorization).toBe(`Bearer ${privateKeyFixture}`);
+          if (created?.body._tag !== "Uint8Array") {
+            return yield* Effect.die("missing create-transaction request body");
+          }
+          const body = yield* Schema.decodeEffect(UnknownJsonString)(
+            new TextDecoder().decode(created.body.body)
+          );
+          expect(body).toMatchObject({
+            signature: createHash("sha256")
+              .update(
+                `${creationInput.reference}${creationInput.amountInCents}${creationInput.currency}${integritySecretFixture}`
+              )
+              .digest("hex"),
+          });
+
+          yield* wompi.findTransaction(WompiTransactionId.make("transaction-123"));
+          const lookup = recordedRequests.find((request) => request.method === "GET");
+          expect(lookup?.headers.authorization).toBe(`Bearer ${privateKeyFixture}`);
+        })
+    );
+  }
+);
+
 layer(
   clientLayer(() => new Response(recordedDeclinedTransaction)),
   {
@@ -109,8 +164,10 @@ layer(
         _tag: "WompiTransactionCreationFailed",
         certainty: "rejected",
       });
-      expect(String(failure)).not.toContain("test_integrity_examplekey");
-      expect(String(failure)).not.toContain("provider response secret");
+      const rendered = yield* renderedFailure(failure);
+      expect(rendered).not.toContain(integritySecretFixture);
+      expect(rendered).not.toContain(privateKeyFixture);
+      expect(rendered).not.toContain("provider response secret");
     })
   );
 });
@@ -164,8 +221,8 @@ layer(
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     WOMPI_ENVIRONMENT: "production",
-    WOMPI_PRIVATE_KEY: "prv_prod_examplekey",
-    WOMPI_INTEGRITY_SECRET: "prod_integrity_examplekey",
+    WOMPI_PRIVATE_KEY: `prv_prod_${"f1d7c0de".repeat(3)}`,
+    WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 layer(clientLayer(successResponse, productionConfig), { excludeTestServices: true })(
@@ -189,18 +246,63 @@ const invalidConfiguration = (privateKey: string, integritySecret: string): type
     })
   );
 
-for (const [name, privateKey, integritySecret] of [
-  ["private-key shape", "invalid", "test_integrity_examplekey"],
-  ["integrity-secret shape", "prv_test_examplekey", "invalid"],
-  ["private-key prefix", "prv_prod_examplekey", "test_integrity_examplekey"],
-  ["integrity-secret prefix", "prv_test_examplekey", "prod_integrity_examplekey"],
+for (const [name, variable, privateKey, integritySecret] of [
+  [
+    "private-key shape",
+    "WOMPI_PRIVATE_KEY",
+    `CANARY-wompi-private-${"f1d7c0de".repeat(2)}`,
+    integritySecretFixture,
+  ],
+  [
+    "integrity-secret shape",
+    "WOMPI_INTEGRITY_SECRET",
+    privateKeyFixture,
+    `CANARY-wompi-integrity-${"f1d7c0de".repeat(2)}`,
+  ],
+  [
+    "private-key prefix",
+    "WOMPI_PRIVATE_KEY",
+    `prv_prod_${"f1d7c0de".repeat(3)}`,
+    integritySecretFixture,
+  ],
+  [
+    "integrity-secret prefix",
+    "WOMPI_INTEGRITY_SECRET",
+    privateKeyFixture,
+    `prod_integrity_${"f1d7c0de".repeat(3)}`,
+  ],
 ] as const) {
-  it.effect(`rejects invalid Wompi ${name}`, () =>
+  it.effect(`rejects invalid Wompi ${name} without echoing the candidate`, () =>
     Effect.gen(function* () {
-      const built = Effect.scoped(
-        Layer.build(clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret)))
+      const failure = yield* exitFailure(
+        yield* buildLayerExit(
+          clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret))
+        )
       );
-      expect((yield* Effect.exit(built))._tag).toBe("Failure");
+      const rendered = yield* renderedFailure(failure);
+      for (const candidate of [privateKey, integritySecret]) {
+        expect(rendered).not.toContain(candidate);
+      }
+      expect(rendered).toContain(variable);
     })
   );
 }
+
+it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
+  Effect.gen(function* () {
+    const failure = yield* exitFailure(
+      yield* buildLayerExit(
+        clientLayer(
+          successResponse,
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_INTEGRITY_SECRET: integritySecretFixture,
+            })
+          )
+        )
+      )
+    );
+    expect(String(failure)).toContain("WOMPI_PRIVATE_KEY");
+  })
+);

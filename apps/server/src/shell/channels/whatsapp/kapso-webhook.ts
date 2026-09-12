@@ -1,5 +1,5 @@
 import { UnknownJsonString } from "~/schema-compatibility";
-import { Data, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Array as EffectArray, Option, Redacted, Schema } from "effect";
 import { Model } from "effect/unstable/schema";
 import {
   E164PhoneNumber,
@@ -172,16 +172,17 @@ const normalizePhoneNumber = (
 
 const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
-  readonly secret: string;
+  readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
 }) {
   if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
     return yield* new KapsoPayloadTooLarge();
   }
-  if (input.secret.length < minimumWebhookSecretLength) {
+  const secret = Redacted.value(input.secret);
+  if (secret.length < minimumWebhookSecretLength) {
     return yield* new InvalidKapsoSignature();
   }
-  const expected = new Bun.CryptoHasher("sha256", input.secret).update(input.rawBody).digest("hex");
+  const expected = new Bun.CryptoHasher("sha256", secret).update(input.rawBody).digest("hex");
   if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
     return yield* new InvalidKapsoSignature();
   }
@@ -274,7 +275,7 @@ const projectEvent = Effect.fn(function* (
  */
 export const decodeKapsoWebhook = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
-  readonly secret: string;
+  readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
   readonly deliveryKey: string;
   readonly businessPortfolioId: string;
@@ -397,7 +398,7 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
  */
 export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
-  readonly secret: string;
+  readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
   readonly eventName: string;
   readonly receivedAt: DateTime.Utc;
@@ -482,7 +483,7 @@ const projectIdentityChange = Effect.fn(function* (
  */
 export const decodeKapsoIdentityWebhook = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
-  readonly secret: string;
+  readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
   readonly businessPortfolioId: string;
   readonly receivedAt: DateTime.Utc;

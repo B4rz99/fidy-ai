@@ -14,6 +14,7 @@ import {
   Layer,
   Logger,
   Option,
+  Redacted,
   Ref,
   Schedule,
   Schema,
@@ -339,7 +340,7 @@ const enqueueTraceFixture = Effect.fn("WhatsApp.enqueueTraceFixture")(function* 
 const recordedEvents = Effect.fn("WhatsApp.recordedEvents")(function* (receivedAt: DateTime.Utc) {
   const text = yield* decodeKapsoWebhook({
     rawBody: yield* fixtureBytes("kapso-text-v2.json"),
-    secret: "test-webhook-secret-32-characters",
+    secret: Redacted.make("test-webhook-secret-32-characters"),
     signature: "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571",
     deliveryKey,
     businessPortfolioId: "portfolio-test",
@@ -347,7 +348,7 @@ const recordedEvents = Effect.fn("WhatsApp.recordedEvents")(function* (receivedA
   });
   const voice = yield* decodeKapsoWebhook({
     rawBody: yield* fixtureBytes("kapso-voice-v2.json"),
-    secret: "test-webhook-secret-32-characters",
+    secret: Redacted.make("test-webhook-secret-32-characters"),
     signature: "c60d4e3e3daacd2911a21d7dbe4dfb488880893e5c8dbb12b8fe3479d17f8130",
     deliveryKey,
     businessPortfolioId: "portfolio-test",

@@ -22,6 +22,8 @@ import {
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
+import { configuredSecret } from "~/shell/_shared/configured-secret";
+import { wompiCredentialPrefixes, wompiPrivateKey } from "./wompi-credentials";
 
 const maximumProviderResponseBytes = 16_384;
 const successfulStatusMinimum = 200;
@@ -30,7 +32,6 @@ const serverErrorStatusMinimum = 500;
 const sandboxOrigin = "https://sandbox.wompi.co";
 const productionOrigin = "https://production.wompi.co";
 
-const PrivateKey = Schema.String.check(Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
 const IntegritySecret = Schema.String.check(
   Schema.isPattern(/^test_integrity_[A-Za-z0-9_-]{8,}$|^prod_integrity_[A-Za-z0-9_-]{8,}$/u)
 );
@@ -93,9 +94,9 @@ type BoundedHttpClient = ReturnType<ReturnType<typeof makeBoundedExternalHttpCli
 type BillingAdapterContext = Readonly<{
   http: BoundedHttpClient;
   crypto: Crypto.Crypto;
-  integrityValue: string;
+  integritySecret: Redacted.Redacted<string>;
   origin: string;
-  authorization: string;
+  privateKey: Redacted.Redacted<string>;
 }>;
 
 const parseTransaction = Effect.fn(function* (body: Uint8Array) {
@@ -123,11 +124,14 @@ const makeCreateTransaction = (
       const digest = yield* context.crypto.digest(
         "SHA-256",
         new TextEncoder().encode(
-          `${input.reference}${input.amountInCents}${input.currency}${context.integrityValue}`
+          `${input.reference}${input.amountInCents}${input.currency}${Redacted.value(context.integritySecret)}`
         )
       );
       const request = HttpClientRequest.post(`${context.origin}/v1/transactions`, {
-        headers: { authorization: context.authorization, "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${Redacted.value(context.privateKey)}`,
+          "content-type": "application/json",
+        },
         body: HttpBody.text(
           encodeCreateRequest({
             amount_in_cents: input.amountInCents,
@@ -172,7 +176,7 @@ const makeFindTransaction = (
     function* (transactionId) {
       const request = HttpClientRequest.get(
         `${context.origin}/v1/transactions/${encodeURIComponent(transactionId)}`,
-        { headers: { authorization: context.authorization } }
+        { headers: { authorization: `Bearer ${Redacted.value(context.privateKey)}` } }
       );
       const response = yield* context.http
         .execute(request, maximumProviderResponseBytes)
@@ -192,27 +196,19 @@ const loadBillingAdapter = Effect.gen(function* () {
   const http = makeBoundedExternalHttpClient("wompi")(yield* HttpClient.HttpClient);
   const crypto = yield* Crypto.Crypto;
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-  const privateKeyValue = Redacted.value(yield* Config.redacted("WOMPI_PRIVATE_KEY"));
-  const integrityValue = Redacted.value(yield* Config.redacted("WOMPI_INTEGRITY_SECRET"));
-  if (!Schema.is(PrivateKey)(privateKeyValue) || !Schema.is(IntegritySecret)(integrityValue)) {
-    return yield* Effect.die("Wompi billing credentials have an invalid shape");
-  }
-  const prefixes =
-    environment === "sandbox"
-      ? { privateKey: "prv_test_", integrity: "test_integrity_" }
-      : { privateKey: "prv_prod_", integrity: "prod_integrity_" };
-  if (
-    !privateKeyValue.startsWith(prefixes.privateKey) ||
-    !integrityValue.startsWith(prefixes.integrity)
-  ) {
-    return yield* Effect.die("Wompi billing credential prefixes do not match WOMPI_ENVIRONMENT");
-  }
+  const prefixes = wompiCredentialPrefixes(environment);
+  const privateKey = yield* wompiPrivateKey(environment);
+  const integritySecret = yield* configuredSecret({
+    name: "WOMPI_INTEGRITY_SECRET",
+    schema: IntegritySecret.check(Schema.isStartsWith(prefixes.integritySecret)),
+    requirement: `must be a ${environment} Wompi integrity secret`,
+  });
   const context = {
     http,
     crypto,
-    integrityValue,
+    integritySecret,
     origin: environment === "sandbox" ? sandboxOrigin : productionOrigin,
-    authorization: `Bearer ${privateKeyValue}`,
+    privateKey,
   };
   return WompiBillingClient.of({
     environment,

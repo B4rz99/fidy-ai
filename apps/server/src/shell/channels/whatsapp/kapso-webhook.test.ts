@@ -1,9 +1,10 @@
 import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Redacted, Schema } from "effect";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import { decodeKapsoDisclosureLifecycleWebhook, maxKapsoWebhookBytes } from "./kapso-webhook";
 
-const secret = "test-webhook-secret-32-characters";
+const secret = `kapso-webhook-secret-${"f1d7c0de".repeat(2)}`;
 const correlationToken = "11111111-1111-4111-8111-111111111111";
 const providerMessageId = "wamid.lifecycle-test";
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
@@ -49,7 +50,7 @@ const decode = (
       : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
   return decodeKapsoDisclosureLifecycleWebhook({
     rawBody: body,
-    secret: webhookSecret,
+    secret: Redacted.make(webhookSecret),
     signature,
     eventName,
     receivedAt,
@@ -158,6 +159,19 @@ it.effect("rejects lifecycle proof that does not identify one valid latest event
     ];
 
     for (const effect of invalid) expect((yield* Effect.flip(effect))._tag).toBeDefined();
+  })
+);
+
+it.effect("keeps the webhook secret out of authentication failures", () =>
+  Effect.gen(function* () {
+    const failure = yield* decode(
+      "whatsapp.message.delivered",
+      [status("delivered", "1775217900")],
+      { _tag: "Signature", value: "0".repeat(64) }
+    ).pipe(Effect.flip);
+
+    expect(failure._tag).toBe("InvalidKapsoSignature");
+    expectNotInspected(failure, secret);
   })
 );
 

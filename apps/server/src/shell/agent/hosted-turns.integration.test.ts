@@ -9,6 +9,7 @@ import {
   Layer,
   ManagedRuntime,
   Option,
+  Redacted,
   Ref,
   Schedule,
   Schema,
@@ -87,7 +88,7 @@ const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
 );
 
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000465");
-const token = "a".repeat(64);
+const token = Redacted.make("a".repeat(64));
 // Two owners need a few shards, not production cardinality within a 500ms test lease refresh.
 const testShardCount = 16;
 const TurnRows = Schema.Array(Schema.Struct({ state: Schema.String }));

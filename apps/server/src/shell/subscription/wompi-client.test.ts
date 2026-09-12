@@ -5,13 +5,13 @@ import {
   ConfigProvider,
   DateTime,
   Effect,
-  Exit,
   Layer,
   ManagedRuntime,
   Redacted,
 } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
+import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,
@@ -19,7 +19,7 @@ import {
 } from "./wompi-client";
 
 const exampleKey = (visibility: "pub" | "prv", environment: "prod" | "test"): string =>
-  [visibility, environment, "examplekey"].join("_");
+  [visibility, environment, "f1d7c0de".repeat(3)].join("_");
 const sandboxPublicKey = exampleKey("pub", "test");
 const sandboxPrivateKey = exampleKey("prv", "test");
 const productionPublicKey = exampleKey("pub", "prod");
@@ -53,11 +53,12 @@ const mismatchedPrivateConfig = ConfigProvider.layer(
     WOMPI_PRIVATE_KEY: productionPrivateKey,
   })
 );
+const invalidPrivateKeyCandidate = `CANARY-wompi-private-${"f1d7c0de".repeat(2)}`;
 const invalidPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
-    WOMPI_PRIVATE_KEY: "invalid",
+    WOMPI_PRIVATE_KEY: invalidPrivateKeyCandidate,
   })
 );
 const sha256HexCharacters = 64;
@@ -411,16 +412,19 @@ const layerWithConfig = (
     configLayer
   );
 
-for (const [name, configLayer] of [
-  ["public prefix", mismatchedPublicConfig],
-  ["private prefix", mismatchedPrivateConfig],
-  ["private shape", invalidPrivateConfig],
+for (const [name, configLayer, candidate] of [
+  ["public prefix", mismatchedPublicConfig, sandboxPublicKey],
+  ["private prefix", mismatchedPrivateConfig, productionPrivateKey],
+  ["private shape", invalidPrivateConfig, invalidPrivateKeyCandidate],
 ] as const) {
-  it.effect(`rejects an invalid ${name}`, () => {
+  it.effect(`rejects an invalid ${name} without echoing the candidate`, () => {
     const runtime = ManagedRuntime.make(layerWithConfig(configLayer));
     return Effect.gen(function* () {
-      const exit = yield* Effect.promise(() => runtime.runPromiseExit(loadContracts));
-      expect(Exit.isFailure(exit)).toBe(true);
+      const failure = yield* exitFailure(
+        yield* Effect.promise(() => runtime.runPromiseExit(loadContracts))
+      );
+      const rendered = yield* renderedFailure(failure);
+      expect(rendered).not.toContain(candidate);
     }).pipe(Effect.ensuring(Effect.promise(() => runtime.dispose())));
   });
 }

@@ -1,0 +1,26 @@
+apps/server/src/shell/_shared/anonymous-source-identifier.ts
+  h_c6d49c804e0ad2 1-2,29
+apps/server/src/shell/_shared/hmac.ts
+  h_c6d49c804e0ad2 1,6-14
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  h_c6d49c804e0ad2 2,6
+apps/server/src/shell/db/migrations/0041-subscription-price-vocabulary.test.ts
+  h_c6d49c804e0ad2 2,6
+apps/server/src/shell/db/migrations/0058-key-pairing-source-admission.test.ts
+  h_c6d49c804e0ad2 2,6
+apps/server/src/shell/email-authentication/admission.ts
+  h_c6d49c804e0ad2 1,12,21,29
+apps/server/src/shell/testing/rollback-migration-fixture.ts
+  h_c6d49c804e0ad2 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "652703f1cb3ed9abe2948529c66acff130478da0",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

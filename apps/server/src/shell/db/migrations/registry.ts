@@ -56,6 +56,7 @@ import { wompiBillingAttempts } from "./0056-wompi-billing-attempts";
 import { wompiBillingReconciliation } from "./0057-wompi-billing-reconciliation";
 import { keyPairingSourceAdmission } from "./0058-key-pairing-source-admission";
 import { wompiBillingTransactions } from "./0059-wompi-billing-transactions";
+import { hmacKeyByteSemantics } from "./0060-hmac-key-byte-semantics";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -124,4 +125,5 @@ export const migrations = {
   "0057_wompi_billing_reconciliation": wompiBillingReconciliation,
   "0058_key_pairing_source_admission": keyPairingSourceAdmission,
   "0059_wompi_billing_transactions": wompiBillingTransactions,
+  "0060_hmac_key_byte_semantics": hmacKeyByteSemantics,
 };

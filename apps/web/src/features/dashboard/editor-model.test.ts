@@ -6,6 +6,7 @@ import {
   type DashboardCatalogEntry,
   type DashboardGesture,
   compileDashboardGesture,
+  freshWidgetId,
 } from "./editor-model";
 
 const firstId = WidgetId.make("f1d1a000-0000-4000-8000-000000000801");
@@ -102,5 +103,14 @@ describe("Dashboard gesture compilation", () => {
       widgetIds: [firstId, secondId],
       size: { kind: "weight", weight: 1.375 },
     });
+  });
+});
+
+describe("Widget identity generation", () => {
+  it("generates distinct canonical UUIDv4 widget identities", () => {
+    const first = freshWidgetId();
+    const second = freshWidgetId();
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+    expect(second).not.toBe(first);
   });
 });

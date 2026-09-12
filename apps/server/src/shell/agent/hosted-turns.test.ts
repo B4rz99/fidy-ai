@@ -22,6 +22,32 @@ const declaredTurnFailures = [
   "delivery_failed",
 ] as const satisfies ReadonlyArray<TurnFailure>;
 
+/** The UUID codec every wire identifier shares, inlined as a fragment of the pinned documents. */
+const uuidSchema = {
+  type: "string",
+  pattern:
+    "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+  format: "uuid",
+};
+
+/** Success document of an operation that returns void. */
+const voidSuccessDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    type: "null",
+  },
+  definitions: {},
+};
+
+/** Error document of an operation that declares no failure. */
+const voidErrorDocument: unknown = {
+  dialect: "draft-2020-12",
+  schema: {
+    not: {},
+  },
+  definitions: {},
+};
+
 /**
  * Complete JSON Schema documents for the HostedTurns wire contract. Every reference is inlined
  * (`wireDocument` below), so the pinned structure does not depend on Effect's generated definition
@@ -34,18 +60,8 @@ const handlePayloadDocument: unknown = {
   schema: {
     type: "object",
     properties: {
-      userId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
-      turnId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
+      userId: uuidSchema,
+      turnId: uuidSchema,
       message: {
         type: "object",
         properties: {
@@ -273,37 +289,11 @@ const whatsAppPayloadDocument: unknown = {
         type: "number",
         enum: [1],
       },
-      userId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
-      inboundJobId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
+      userId: uuidSchema,
+      inboundJobId: uuidSchema,
     },
     required: ["version", "userId", "inboundJobId"],
     additionalProperties: false,
-  },
-  definitions: {},
-};
-
-const whatsAppSuccessDocument: unknown = {
-  dialect: "draft-2020-12",
-  schema: {
-    type: "null",
-  },
-  definitions: {},
-};
-
-const whatsAppErrorDocument: unknown = {
-  dialect: "draft-2020-12",
-  schema: {
-    not: {},
   },
   definitions: {},
 };
@@ -313,37 +303,11 @@ const recoverPayloadDocument: unknown = {
   schema: {
     type: "object",
     properties: {
-      userId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
-      turnId: {
-        type: "string",
-        pattern:
-          "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-        format: "uuid",
-      },
+      userId: uuidSchema,
+      turnId: uuidSchema,
     },
     required: ["userId", "turnId"],
     additionalProperties: false,
-  },
-  definitions: {},
-};
-
-const recoverSuccessDocument: unknown = {
-  dialect: "draft-2020-12",
-  schema: {
-    type: "null",
-  },
-  definitions: {},
-};
-
-const recoverErrorDocument: unknown = {
-  dialect: "draft-2020-12",
-  schema: {
-    not: {},
   },
   definitions: {},
 };
@@ -421,9 +385,9 @@ const whatsAppContract: HostedTurnContract = {
   payloadDocument: whatsAppPayloadDocument,
   result: undefined,
   rejectedResults: [],
-  successDocument: whatsAppSuccessDocument,
+  successDocument: voidSuccessDocument,
   failure: Option.none(),
-  errorDocument: whatsAppErrorDocument,
+  errorDocument: voidErrorDocument,
   primaryKey: Option.some(inboundJobId),
 };
 
@@ -436,9 +400,9 @@ const recoverContract: HostedTurnContract = {
   payloadDocument: recoverPayloadDocument,
   result: undefined,
   rejectedResults: [],
-  successDocument: recoverSuccessDocument,
+  successDocument: voidSuccessDocument,
   failure: Option.none(),
-  errorDocument: recoverErrorDocument,
+  errorDocument: voidErrorDocument,
   primaryKey: Option.some(turnId),
 };
 

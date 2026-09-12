@@ -31,14 +31,10 @@ class MessagePackDecodeFailure extends Data.TaggedError("MessagePackDecodeFailur
   readonly error: unknown;
 }> {}
 
-type ClusterRunnerSerialization = RpcSerialization.RpcSerialization["Service"];
-
-const parserFor = (serialization: ClusterRunnerSerialization): RpcSerialization.Parser =>
-  serialization.makeUnsafe();
 /** The production serialization's parser, resolved from the layer under test. */
 const parserUnderTest = Effect.gen(function* () {
   const serialization = yield* RpcSerialization.RpcSerialization;
-  return parserFor(serialization);
+  return serialization.makeUnsafe();
 });
 const encodedBytes = (parser: RpcSerialization.Parser, value: unknown): Effect.Effect<Uint8Array> =>
   Effect.suspend(() => {

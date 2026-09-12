@@ -295,12 +295,11 @@ const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRunt
 });
 
 /** Reads one started runtime, failing the test when the builder started none at that position. */
-const startedAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> => {
-  const value = started[index];
-  return value === undefined
-    ? Effect.die(`hosted runtime ${index} was not started`)
-    : Effect.succeed(value);
-};
+const startedAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> =>
+  Option.match(Option.fromUndefinedOr(started[index]), {
+    onNone: () => Effect.die(`hosted runtime ${index} was not started`),
+    onSome: Effect.succeed,
+  });
 
 /** Starts the single hosted-agent runtime a one-runner scenario needs. */
 const startHostedRuntime = Effect.fn(function* (spec: HostedRuntimeSpec) {

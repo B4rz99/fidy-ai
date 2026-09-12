@@ -311,6 +311,8 @@ const handleContract: HostedTurnContract = {
     { ...handlePayload, authorityRoot: "trusted-internal" },
     // Dropping the canonical lowercase UUID filter would admit this value.
     { ...handlePayload, turnId: turnId.toUpperCase() },
+    // Dropping the canonical JSON-string filter would admit this value.
+    { ...handlePayload, message: { text: "nul\u0000text" } },
   ],
   payloadDocument: handlePayloadDocument,
   result: AgentReply.make({
@@ -318,7 +320,12 @@ const handleContract: HostedTurnContract = {
     attachments: Option.none(),
     choices: Option.none(),
   }),
-  rejectedResults: [{ text: "" }, { text: "present", attachments: [] }],
+  rejectedResults: [
+    { text: "" },
+    { text: "present", attachments: [] },
+    // Dropping URL validation would admit this value.
+    { text: "present", attachments: [{ mediaType: "image/png", url: "not a url" }] },
+  ],
   successDocument: handleSuccessDocument,
   failure: Option.some(TurnFailure.make("UnknownUser")),
   errorDocument: handleErrorDocument,

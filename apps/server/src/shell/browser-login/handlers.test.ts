@@ -3,9 +3,10 @@ import { Crypto, DateTime, Effect, Encoding, Fiber, Redacted, Schema } from "eff
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
-import { purgeBrowserLoginAnonymousEvidence } from "./service";
+import { purgeBrowserLoginAnonymousEvidence, startBrowserLoginPairing } from "./service";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
@@ -436,6 +437,27 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })(privateVerifier);
 
         expect(stored).toEqual({ digest: expectedDigest, verifierOccurrences: 0 });
+      })
+    );
+
+    it.effect("stores only the keyed admission identifier for an observed source address", () =>
+      Effect.gen(function* () {
+        yield* resetBrowserLogin;
+        yield* startBrowserLoginPairing("203.0.113.9");
+        const sql = yield* MigrationSqlClient;
+        const [row] = yield* sql`
+          SELECT encode(source_digest, 'hex') AS digest FROM browser_login_start_attempts
+        `;
+        const crypto = yield* Crypto.Crypto;
+        const unkeyed = Encoding.encodeHex(
+          yield* crypto.digest("SHA-256", new TextEncoder().encode("203.0.113.9"))
+        );
+        const keyed = Encoding.encodeHex(
+          yield* anonymousSourceIdentifier("browser-login-start", "203.0.113.9")
+        );
+
+        expect(row?.digest).toBe(keyed);
+        expect(row?.digest).not.toBe(unkeyed);
       })
     );
   }

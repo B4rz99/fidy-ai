@@ -38,6 +38,11 @@ const credentialEvidence = [
     testName: "keeps the credential lookup HMAC key out of persistence and outcomes",
   },
   {
+    configuration: "SOURCE_ADMISSION_HMAC_KEY",
+    testFile: "apps/server/src/shell/_shared/anonymous-source-identifier.test.ts",
+    testName: "keeps the source admission HMAC key out of identifiers and failures",
+  },
+  {
     configuration: "FIDY_CLUSTER_AUTH_TOKEN",
     testFile: "apps/server/src/shell/authenticated-cluster-http.test.ts",
     testName: "keeps Cluster credentials out of authentication failures",

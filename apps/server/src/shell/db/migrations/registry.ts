@@ -54,6 +54,7 @@ import { effectWhatsAppInbound } from "./0054-effect-whatsapp-inbound";
 import { subscriptionStanding } from "./0055-subscription-standing";
 import { wompiBillingAttempts } from "./0056-wompi-billing-attempts";
 import { wompiBillingReconciliation } from "./0057-wompi-billing-reconciliation";
+import { keyPairingSourceAdmission } from "./0058-key-pairing-source-admission";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -120,4 +121,5 @@ export const migrations = {
   "0055_subscription_standing": subscriptionStanding,
   "0056_wompi_billing_attempts": wompiBillingAttempts,
   "0057_wompi_billing_reconciliation": wompiBillingReconciliation,
+  "0058_key_pairing_source_admission": keyPairingSourceAdmission,
 };

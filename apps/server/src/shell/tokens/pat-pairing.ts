@@ -47,6 +47,7 @@ import { PATId } from "~/core/tokens/reference";
 import { computePATExpiration } from "~/core/tokens/rules";
 import type { WebSessionId } from "~/core/web-session/reference";
 import type { ClaimPATPairingPayload } from "~/pat-pairing-api";
+import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import {
@@ -147,7 +148,7 @@ const insertWithUniqueCode = (
     });
   });
 
-/** Starts one immutable request while persisting only digests of both private proof and source. */
+/** Starts one immutable request while persisting only the proof digest and a keyed source identifier. */
 export const startPATPairing = Effect.fn("PATPairing.start")(function* (
   payload: StartPATPairingPayload,
   sourceAddress: string
@@ -165,7 +166,9 @@ export const startPATPairing = Effect.fn("PATPairing.start")(function* (
   const deviceCodeDigest = yield* sha256(
     new TextEncoder().encode(Redacted.value(redactedDeviceCode))
   );
-  const sourceDigest = yield* sha256(new TextEncoder().encode(sourceAddress));
+  const sourceDigest = yield* anonymousSourceIdentifier("pat-pairing-start", sourceAddress).pipe(
+    Effect.orDie
+  );
   const { pairingId, publicCode } = yield* insertWithUniqueCode({
     deviceCodeDigest,
     sourceDigest,
@@ -319,7 +322,9 @@ export const claimPATPairing = Effect.fn("PATPairing.claim")(function* (
   const attemptedDigest = yield* sha256(
     new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(payload.privateDeviceCode)))
   );
-  const sourceDigest = yield* sha256(new TextEncoder().encode(sourceAddress));
+  const sourceDigest = yield* anonymousSourceIdentifier("pat-pairing-claim", sourceAddress).pipe(
+    Effect.orDie
+  );
   const outcome = yield* sql
     .withTransaction(
       Effect.gen(function* () {

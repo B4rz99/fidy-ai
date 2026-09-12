@@ -30,6 +30,71 @@ const uuidSchema = {
   format: "uuid",
 };
 
+/** The transcript text codec shared by inbound messages, replies, and reply choices. */
+const transcriptTextSchema = {
+  type: "string",
+  minLength: 1,
+  maxLength: 16000,
+  pattern: "\\S",
+};
+
+/** One provider message reference inside confirmation evidence. */
+const providerMessageEvidenceSchema = {
+  type: "object",
+  properties: {
+    channel: {
+      type: "string",
+      minLength: 1,
+      pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+      maxLength: 32,
+    },
+    provider: {
+      type: "string",
+      minLength: 1,
+      pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+      maxLength: 64,
+    },
+    providerMessageId: {
+      type: "string",
+      minLength: 1,
+      pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+      maxLength: 256,
+    },
+  },
+  required: ["channel", "provider", "providerMessageId"],
+  additionalProperties: false,
+};
+
+/** One deliverable media reference in an agent reply. */
+const attachmentSchema = {
+  type: "object",
+  properties: {
+    mediaType: {
+      type: "string",
+      minLength: 1,
+    },
+    url: {
+      type: "string",
+    },
+  },
+  required: ["mediaType", "url"],
+  additionalProperties: false,
+};
+
+/** One follow-up action in an agent reply. */
+const choiceSchema = {
+  type: "object",
+  properties: {
+    label: {
+      type: "string",
+      minLength: 1,
+    },
+    message: transcriptTextSchema,
+  },
+  required: ["label", "message"],
+  additionalProperties: false,
+};
+
 /** Success document of an operation that returns void. */
 const voidSuccessDocument: unknown = {
   dialect: "draft-2020-12",
@@ -65,12 +130,7 @@ const handlePayloadDocument: unknown = {
       message: {
         type: "object",
         properties: {
-          text: {
-            type: "string",
-            minLength: 1,
-            maxLength: 16000,
-            pattern: "\\S",
-          },
+          text: transcriptTextSchema,
           confirmationEvidence: {
             type: "object",
             properties: {
@@ -78,56 +138,8 @@ const handlePayloadDocument: unknown = {
                 type: "string",
                 enum: ["ProviderQualifiedMessages"],
               },
-              disclosureMessage: {
-                type: "object",
-                properties: {
-                  channel: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 32,
-                  },
-                  provider: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 64,
-                  },
-                  providerMessageId: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 256,
-                  },
-                },
-                required: ["channel", "provider", "providerMessageId"],
-                additionalProperties: false,
-              },
-              decisionMessage: {
-                type: "object",
-                properties: {
-                  channel: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 32,
-                  },
-                  provider: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 64,
-                  },
-                  providerMessageId: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                    maxLength: 256,
-                  },
-                },
-                required: ["channel", "provider", "providerMessageId"],
-                additionalProperties: false,
-              },
+              disclosureMessage: providerMessageEvidenceSchema,
+              decisionMessage: providerMessageEvidenceSchema,
             },
             required: ["_tag", "disclosureMessage", "decisionMessage"],
             additionalProperties: false,
@@ -184,85 +196,18 @@ const handleSuccessDocument: unknown = {
   schema: {
     type: "object",
     properties: {
-      text: {
-        type: "string",
-        minLength: 1,
-        maxLength: 16000,
-        pattern: "\\S",
-      },
+      text: transcriptTextSchema,
       attachments: {
         type: "array",
-        prefixItems: [
-          {
-            type: "object",
-            properties: {
-              mediaType: {
-                type: "string",
-                minLength: 1,
-              },
-              url: {
-                type: "string",
-              },
-            },
-            required: ["mediaType", "url"],
-            additionalProperties: false,
-          },
-        ],
+        prefixItems: [attachmentSchema],
         minItems: 1,
-        items: {
-          type: "object",
-          properties: {
-            mediaType: {
-              type: "string",
-              minLength: 1,
-            },
-            url: {
-              type: "string",
-            },
-          },
-          required: ["mediaType", "url"],
-          additionalProperties: false,
-        },
+        items: attachmentSchema,
       },
       choices: {
         type: "array",
-        prefixItems: [
-          {
-            type: "object",
-            properties: {
-              label: {
-                type: "string",
-                minLength: 1,
-              },
-              message: {
-                type: "string",
-                minLength: 1,
-                maxLength: 16000,
-                pattern: "\\S",
-              },
-            },
-            required: ["label", "message"],
-            additionalProperties: false,
-          },
-        ],
+        prefixItems: [choiceSchema],
         minItems: 1,
-        items: {
-          type: "object",
-          properties: {
-            label: {
-              type: "string",
-              minLength: 1,
-            },
-            message: {
-              type: "string",
-              minLength: 1,
-              maxLength: 16000,
-              pattern: "\\S",
-            },
-          },
-          required: ["label", "message"],
-          additionalProperties: false,
-        },
+        items: choiceSchema,
       },
     },
     required: ["text"],

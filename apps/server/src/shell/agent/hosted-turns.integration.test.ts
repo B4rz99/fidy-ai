@@ -173,6 +173,28 @@ const runtimeLayer = (input: {
   );
   return SqlWhatsAppQueueLive.pipe(Layer.provideMerge(agentRuntime));
 };
+/** One poll policy: how long to keep observing, and how often to recheck. */
+type WaitPolicy = Readonly<{
+  readonly timeout: Duration.Input;
+  readonly interval: Duration.Input;
+}>;
+
+/** Poll cadence for operations that settle quickly. */
+const defaultWait: WaitPolicy = { timeout: "10 seconds", interval: "20 millis" };
+/** Poll cadence for recovery scenarios that can take longer to settle. */
+const recoveryWait: WaitPolicy = { timeout: "20 seconds", interval: "50 millis" };
+
+/** Polls an observation until it satisfies `until`, or fails the scenario after the policy's wait. */
+const waitUntil = <A, E, R>(
+  observation: Effect.Effect<A, E, R>,
+  until: (value: A) => boolean,
+  policy: WaitPolicy = defaultWait
+): Effect.Effect<A, E | Cause.TimeoutError, R> =>
+  observation.pipe(
+    Effect.repeat({ until, schedule: Schedule.spaced(policy.interval) }),
+    Effect.timeout(policy.timeout)
+  );
+
 /** Waits for the initial rebalance, so a serialization test does not accidentally test owner shutdown. */
 const waitForAssignments = Effect.fn(function* (
   runners: ReadonlyArray<{ readonly hasShardId: (id: ShardId.ShardId) => boolean }>
@@ -180,13 +202,13 @@ const waitForAssignments = Effect.fn(function* (
   const shards = Array.from({ length: testShardCount }, (_, index) =>
     ShardId.make("default", index + 1)
   );
-  return yield* Effect.sync(
-    () =>
-      runners.every((runner) => shards.some(runner.hasShardId)) &&
-      shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
-  ).pipe(
-    Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("20 millis") }),
-    Effect.timeout("10 seconds")
+  return yield* waitUntil(
+    Effect.sync(
+      () =>
+        runners.every((runner) => shards.some(runner.hasShardId)) &&
+        shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
+    ),
+    (ready) => ready
   );
 });
 
@@ -238,27 +260,23 @@ const gatedRecorder =
       )
     );
 
-/** One poll policy: how long to keep observing, and how often to recheck. */
-type WaitPolicy = Readonly<{
-  readonly timeout: Duration.Input;
-  readonly interval: Duration.Input;
-}>;
-
-/** Poll cadence for operations that settle quickly. */
-const defaultWait: WaitPolicy = { timeout: "10 seconds", interval: "20 millis" };
-/** Poll cadence for recovery scenarios that can take longer to settle. */
-const recoveryWait: WaitPolicy = { timeout: "20 seconds", interval: "50 millis" };
-
-/** Polls an observation until it satisfies `until`, or fails the scenario after the policy's wait. */
-const waitUntil = <A, E, R>(
-  observation: Effect.Effect<A, E, R>,
-  until: (value: A) => boolean,
-  policy: WaitPolicy = defaultWait
-): Effect.Effect<A, E | Cause.TimeoutError, R> =>
-  observation.pipe(
-    Effect.repeat({ until, schedule: Schedule.spaced(policy.interval) }),
-    Effect.timeout(policy.timeout)
-  );
+/**
+ * Starts one hosted-agent test runtime for `port` and returns it with its generated HostedTurns
+ * client, disposing the runtime when the enclosing test scope closes.
+ */
+const startHostedRuntime = Effect.fn(function* (
+  port: number,
+  generate: (text: string) => Effect.Effect<void>,
+  deliver: (text: string) => Effect.Effect<void>
+) {
+  const crypto = yield* Crypto.Crypto;
+  const http = yield* HttpClient.HttpClient;
+  const runtime = ManagedRuntime.make(runtimeLayer({ crypto, http, port, generate, deliver }));
+  yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+  const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
+  yield* waitForAssignments([yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding))]);
+  return { runtime, client };
+});
 
 /** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
 const everyMailboxEntryProcessed = (
@@ -776,7 +794,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         yield* reset;
         yield* seedDevelopmentIdentity(defaultPatBearer);
         const crypto = yield* Crypto.Crypto;
-        const http = yield* HttpClient.HttpClient;
         const entered = yield* Deferred.make<void>();
         const release = yield* Deferred.make<void>();
         const calls = yield* Ref.make(0);
@@ -784,14 +801,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         const recordCall = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
         const generate = gatedRecorder(recordCall, "caller-disconnect", { entered, release });
         const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-        const runtime = ManagedRuntime.make(
-          runtimeLayer({ crypto, http, port: 24663, generate, deliver })
-        );
-        yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-        const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
-        yield* waitForAssignments([
-          yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-        ]);
+        const { runtime, client } = yield* startHostedRuntime(24663, generate, deliver);
         const request = {
           userId: defaultUserId,
           turnId: TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
@@ -820,8 +830,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         yield* reset;
         yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
-        const crypto = yield* Crypto.Crypto;
-        const http = yield* HttpClient.HttpClient;
         const entered = yield* Deferred.make<void>();
         const release = yield* Deferred.make<void>();
         const generated = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -834,14 +842,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         });
         const deliver = (text: string): Effect.Effect<void> =>
           Ref.update(delivered, (items) => [...items, text]);
-        const runtime = ManagedRuntime.make(
-          runtimeLayer({ crypto, http, port: 24664, generate, deliver })
-        );
-        yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-        const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
-        yield* waitForAssignments([
-          yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-        ]);
+        const { runtime, client } = yield* startHostedRuntime(24664, generate, deliver);
         const work = yield* enqueue("persisted-disconnect");
         const caller = runtime.runFork(client(defaultUserId).ProcessWhatsApp(work));
         yield* awaitBarrier("model barrier", entered, caller);

@@ -1,0 +1,20 @@
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  h_c6d49c804e0ad2 74-88,330,346
+apps/server/src/shell/testing/durable-execution-compatibility/declaration-coverage.compatibility.test.ts
+  h_c6d49c804e0ad2 162,171,340,357-359,409,425-428
+apps/server/src/shell/testing/durable-execution-compatibility/whatsapp-consent-disclosure-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 11,14,45-50
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 4,256-261,263-267,274-291,294-353,356-358,360-382,389,391-394,396,401,403,406,425-427,429-430,432-449,451-452,455-456,458-469,472,475-479,482-483,485-494,497-529,531-559,561-568,570,574-585,587-594,597-616,618-632,641-642,649,660-671,673,745-750,964-969
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4a9edeea52cf7df637c6ea9cc6144bcb8ede6d43",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

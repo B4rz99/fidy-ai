@@ -59,26 +59,17 @@ const BillingAttemptRow = Schema.Struct({
 });
 export type BillingAttemptRecord = typeof BillingAttemptRow.Type;
 
+/** The retained provider facts aggregation reads, decoded as facts rather than raw storage. */
 const BillingTransactionRow = Schema.Struct({
   transactionId: WompiTransactionId,
   status: WompiBillingStatus,
-  amountInCents: Schema.FiniteFromString,
-  currency: Schema.String,
-  wompiSourceId: WompiSourceIdFromDb,
-  wompiEnvironment: WompiEnvironment,
-  finalizedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  finalizedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   firstObservedAt: Schema.DateTimeUtcFromDate,
-  lastObservedAt: Schema.DateTimeUtcFromDate,
 });
-export type BillingTransactionRecord = typeof BillingTransactionRow.Type;
 
 const billingTransactionColumns = `transaction.wompi_transaction_id AS "transactionId",
-  transaction.status, transaction.amount_in_cents AS "amountInCents",
-  transaction.currency, transaction.wompi_source_id AS "wompiSourceId",
-  transaction.wompi_environment AS "wompiEnvironment",
-  transaction.finalized_at AS "finalizedAt",
-  transaction.first_observed_at AS "firstObservedAt",
-  transaction.last_observed_at AS "lastObservedAt"`;
+  transaction.status, transaction.finalized_at AS "finalizedAt",
+  transaction.first_observed_at AS "firstObservedAt"`;
 
 const billingAttemptColumns = `attempt.id, attempt.subscription_id AS "subscriptionId",
   attempt.payment_request_id AS "paymentRequestId",
@@ -369,7 +360,11 @@ const upsertBillingTransaction = Effect.fn("Subscription.upsertBillingTransactio
     `.pipe(Effect.orDie);
 });
 
-/** Retains one provider transaction's absorbing current state under its owning BillingAttempt. */
+/**
+ * Retains one provider transaction's absorbing current state under its owning BillingAttempt.
+ * Returns without writing unless the attempt is owned and, when a `reference` is asserted, still
+ * armed under that merchant reference. A retained fact clears `awaiting_reference_since`.
+ */
 export const recordBillingTransactionInScope = Effect.fn(
   "Subscription.recordBillingTransactionInScope"
 )(function* (input: BillingTransactionWrite) {

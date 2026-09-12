@@ -5,6 +5,7 @@ import type { WompiBillingStatus } from "./model";
 import {
   type BillingTransactionFact,
   amountInCentsForBilling,
+  approvingFinalizedAtFor,
   decideBillingAttemptOutcome,
   decideBillingTransactionStatus,
   paidPeriodFor,
@@ -16,10 +17,12 @@ const bogota = IanaTimeZone.make("America/Bogota");
 
 const fact = (
   status: WompiBillingStatus,
-  firstObservedAt: DateTime.Utc
+  firstObservedAt: DateTime.Utc,
+  finalizedAt: Option.Option<DateTime.Utc> = Option.none()
 ): BillingTransactionFact => ({
   status,
   firstObservedAt,
+  finalizedAt,
 });
 
 it.effect("keeps one provider transaction monotonic with absorbing approval", () =>
@@ -152,6 +155,22 @@ it.effect("allows a late verified approval to recover aggregate failure", () =>
         observedAt,
       })
     ).toBe("succeeded");
+  })
+);
+
+it.effect("anchors the paid period on the first retained approval", () =>
+  Effect.gen(function* () {
+    const first = DateTime.makeUnsafe("2026-03-01T12:00:00.000Z");
+    const approval = DateTime.makeUnsafe("2026-03-01T12:00:30.000Z");
+    const later = DateTime.makeUnsafe("2026-03-01T12:04:00.000Z");
+    expect(
+      yield* approvingFinalizedAtFor([
+        fact("DECLINED", first),
+        fact("APPROVED", first, Option.some(approval)),
+        fact("APPROVED", later, Option.some(later)),
+      ])
+    ).toEqual(Option.some(approval));
+    expect(yield* approvingFinalizedAtFor([fact("DECLINED", first)])).toEqual(Option.none());
   })
 );
 

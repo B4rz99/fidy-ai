@@ -21,10 +21,28 @@ export const wompiRetryOpportunity = Duration.minutes(3);
 export type BillingTransactionFact = Readonly<{
   status: WompiBillingStatus;
   firstObservedAt: DateTime.Utc;
+  finalizedAt: Option.Option<DateTime.Utc>;
 }>;
 
-const isTerminalNegative = (status: WompiBillingStatus): boolean =>
-  status !== "PENDING" && status !== "APPROVED";
+/** Complete status classification, so a new provider status cannot silently read as a decline. */
+const terminalNegativeStatuses: Readonly<Record<WompiBillingStatus, boolean>> = {
+  PENDING: false,
+  APPROVED: false,
+  DECLINED: true,
+  VOIDED: true,
+  ERROR: true,
+};
+
+/**
+ * The first retained approval anchors the paid period. Settlement requires its finalization, so an
+ * approval without one is inconsistent evidence rather than an anchor.
+ */
+export const approvingFinalizedAtFor = (
+  transactions: ReadonlyArray<BillingTransactionFact>
+): Effect.Effect<Option.Option<DateTime.Utc>> => {
+  const approving = transactions.find((transaction) => transaction.status === "APPROVED");
+  return Effect.succeed(approving === undefined ? Option.none() : approving.finalizedAt);
+};
 
 /** Advances one provider transaction monotonically; approval absorbs and terminal states stay final. */
 export const decideBillingTransactionStatus = (
@@ -36,7 +54,7 @@ export const decideBillingTransactionStatus = (
   if (input.observed === "APPROVED") return Effect.succeed("APPROVED");
   if (Option.isSome(input.current)) {
     if (input.current.value === "APPROVED") return Effect.succeed("APPROVED");
-    if (isTerminalNegative(input.current.value)) return Effect.succeed(input.current.value);
+    if (terminalNegativeStatuses[input.current.value]) return Effect.succeed(input.current.value);
   }
   return Effect.succeed(input.observed);
 };
@@ -60,7 +78,7 @@ export const decideBillingAttemptOutcome = (
   }
   if (input.current === "failed") return Effect.succeed("failed");
   if (input.transactions.length === 0) return Effect.succeed("pending");
-  if (input.transactions.some((transaction) => transaction.status === "PENDING")) {
+  if (!input.transactions.every((transaction) => terminalNegativeStatuses[transaction.status])) {
     return Effect.succeed("pending");
   }
   const earliest = input.transactions

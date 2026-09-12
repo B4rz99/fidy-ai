@@ -149,6 +149,9 @@ const observeChargedAttempt = Effect.fn("Subscription.observeChargedBillingAttem
       )
     );
   }
+  // No supported writer leaves a pending attempt whose retained transactions are all APPROVED
+  // (settlement succeeds the attempt in the same transaction as the approval). Keep tracking so an
+  // inconsistency escalates to an operator rather than fabricating a paid period from stale rows.
   const settled = yield* withUserTransaction(
     userId,
     findBillingAttemptByIdInScope(userId, attempt.id)

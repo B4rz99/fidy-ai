@@ -5,6 +5,7 @@ import {
   DateTime,
   type Duration,
   Effect,
+  Exit,
   Layer,
   ManagedRuntime,
   Option,
@@ -650,6 +651,25 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           periods: 0,
           paid: false,
         });
+        // The expired link does not stop the later verified transaction that reveals the reference.
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            {
+              attempt,
+              transactionId: WompiTransactionId.make("txn-reconcile-3"),
+              status: "APPROVED",
+            },
+            Option.some(DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"))
+          ),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          awaitingReference: false,
+          periods: 1,
+          paid: true,
+        });
       })
     );
 
@@ -1033,7 +1053,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
-    it.effect("does not expose another User's BillingAttempt through User-scoped reads", () =>
+    it.effect("does not expose another User's BillingAttempt through User-scoped access", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
         const attempt = yield* seedAttempt({
@@ -1056,6 +1076,34 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
               WHERE billing_attempt_id = ${attempt.payload.billingAttemptId}`
         );
         expect(childRows).toEqual([]);
+        // The runtime role holds INSERT and column-scoped UPDATE here, so only the child table's
+        // WITH CHECK can stop a writer from attributing a transaction to another User.
+        const forgedInsert = yield* Effect.exit(
+          withUserTransaction(
+            userIdFor(6),
+            sql`INSERT INTO billing_attempt_transactions (
+                billing_attempt_id, user_id, wompi_transaction_id, status, amount_in_cents,
+                currency, wompi_source_id, wompi_environment, first_observed_at, last_observed_at
+              ) VALUES (
+                ${attempt.payload.billingAttemptId}, ${attempt.userId},
+                'txn-cross-user-forged', 'PENDING', ${attempt.amountInCents}, 'COP',
+                ${attempt.sourceId}, 'sandbox', ${now}, ${now}
+              )`
+          )
+        );
+        expect(Exit.isFailure(forgedInsert)).toBe(true);
+        const crossUserUpdate = yield* withUserTransaction(
+          userIdFor(6),
+          sql`UPDATE billing_attempt_transactions SET last_observed_at = ${now}
+              WHERE billing_attempt_id = ${attempt.payload.billingAttemptId} RETURNING 1 AS touched`
+        );
+        expect(crossUserUpdate).toEqual([]);
+        const forgedRows = yield* withUserTransaction(
+          attempt.userId,
+          sql`SELECT wompi_transaction_id FROM billing_attempt_transactions
+              WHERE wompi_transaction_id = 'txn-cross-user-forged'`
+        );
+        expect(forgedRows).toEqual([]);
         const crossUser = yield* withUserTransaction(
           userIdFor(6),
           findBillingAttemptByIdInScope(userIdFor(6), attempt.payload.billingAttemptId)

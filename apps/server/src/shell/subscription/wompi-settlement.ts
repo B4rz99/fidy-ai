@@ -19,6 +19,7 @@ import {
 } from "~/core/subscription/model";
 import {
   amountInCentsForBilling,
+  approvingFinalizedAtFor,
   decideBillingAttemptOutcome,
   paidPeriodFor,
 } from "~/core/subscription/billing-rules";
@@ -218,14 +219,14 @@ const applySettlementInScope = Effect.fn("Subscription.applyWompiSettlementInSco
     if (outcome === "failed") {
       return yield* failBillingAttemptInScope(input.userId, attempt.id, input.observedAt);
     }
-    const approving = transactions.find((candidate) => candidate.status === "APPROVED");
-    if (approving === undefined || approving.finalizedAt === null) {
+    const approvingFinalizedAt = yield* approvingFinalizedAtFor(transactions);
+    if (Option.isNone(approvingFinalizedAt)) {
       return yield* new MismatchedWompiEvidence();
     }
     const period = yield* paidPeriodFor(
       attempt.billingPeriod,
       attempt.timeZone,
-      approving.finalizedAt
+      approvingFinalizedAt.value
     );
     yield* activatePaidPeriodInScope({
       userId: input.userId,

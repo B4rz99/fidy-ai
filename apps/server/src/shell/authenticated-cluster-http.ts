@@ -28,12 +28,13 @@ const bytesPerKibibyte = 1024;
 const maximumMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
 const clusterRunnerPath = "/_fidy/cluster";
 const registerRoutes = HttpRouter.use;
-const bearer = (token: Redacted.Redacted<string>): string => `Bearer ${Redacted.value(token)}`;
 
-const credentialsMatch = (
-  actual: Option.Option<string>,
-  expected: Redacted.Redacted<string>
-): boolean => {
+/** Opaque Cluster bearer token; unwrapped only for the wire header and the constant-time comparison. */
+type ClusterToken = Redacted.Redacted<string>;
+
+const bearer = (token: ClusterToken): string => `Bearer ${Redacted.value(token)}`;
+
+const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
   if (Option.isNone(actual)) return false;
   const actualBytes = Buffer.from(actual.value);
   const expectedBytes = Buffer.from(bearer(expected));
@@ -42,7 +43,7 @@ const credentialsMatch = (
 
 /** Installs fail-closed bearer authentication over every private Cluster runner route. */
 export const authenticatedRunnerMiddleware = (
-  token: Redacted.Redacted<string>
+  token: ClusterToken
 ): Layer.Layer<never, never, HttpRouter.HttpRouter> =>
   registerRoutes((router) =>
     router.addGlobalMiddleware((next) =>
@@ -61,7 +62,7 @@ export const authenticatedRunnerMiddleware = (
   );
 
 const authenticatedClientProtocol = (
-  token: Redacted.Redacted<string>
+  token: ClusterToken
 ): Layer.Layer<
   Runners.RpcClientProtocol,
   never,
@@ -94,7 +95,7 @@ const authenticatedClientProtocol = (
 
 /** SQL-backed Bun Cluster transport with authenticated runner ingress and egress. */
 const layerAuthenticatedSqlCluster = (
-  token: Redacted.Redacted<string>,
+  token: ClusterToken,
   shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]>
 ): Layer.Layer<
   MessageStorage.MessageStorage | Runners.Runners | Sharding.Sharding,

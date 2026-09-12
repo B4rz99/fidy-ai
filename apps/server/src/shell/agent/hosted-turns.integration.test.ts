@@ -16,7 +16,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
+import { RunnerAddress, type ShardId, Sharding } from "effect/unstable/cluster";
 import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
@@ -33,6 +33,11 @@ import {
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import {
+  clusterTestShardIds,
+  clusterTestSharedOptions,
+} from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
@@ -67,8 +72,6 @@ const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
 
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000465");
 const token = Redacted.make("a".repeat(64));
-// Two owners need a few shards, not production cardinality within a 500ms test lease refresh.
-const testShardCount = 16;
 const TurnRows = Schema.Array(Schema.Struct({ state: Schema.String }));
 const backendPid = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -122,14 +125,9 @@ const runtimeLayer = (input: {
   const agentRuntime = AgentService.layer.pipe(
     Layer.provideMerge(
       authenticatedClusterHttp.layerSql(token, {
+        ...clusterTestSharedOptions,
         runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
         runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-        availableShardGroups: ["default"],
-        assignedShardGroups: ["default"],
-        shardsPerGroup: testShardCount,
-        entityMessagePollInterval: 50,
-        sendRetryInterval: 50,
-        shardLockDisableAdvisory: true,
         shardLockRefreshInterval: 500,
         entityTerminationTimeout: 1000,
         shardLockExpiration: 3000,
@@ -202,16 +200,14 @@ const waitUntil = <A, E, R>(
 const waitForAssignments = Effect.fn(function* (
   runners: ReadonlyArray<{ readonly hasShardId: (id: ShardId.ShardId) => boolean }>
 ) {
-  const shards = Array.from({ length: testShardCount }, (_, index) =>
-    ShardId.make("default", index + 1)
-  );
-  return yield* waitUntil(
-    Effect.sync(
-      () =>
-        runners.every((runner) => shards.some(runner.hasShardId)) &&
-        shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
-    ),
-    (ready) => ready
+  const shards = clusterTestShardIds;
+  return yield* Effect.sync(
+    () =>
+      runners.every((runner) => shards.some(runner.hasShardId)) &&
+      shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
+  ).pipe(
+    Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("20 millis") }),
+    Effect.timeout("10 seconds")
   );
 });
 
@@ -412,6 +408,8 @@ const states = Effect.fn(function* (userId: UserId) {
 layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
   "SQL hosted User entities",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect("rolls back accepted evidence and durable publication together", () =>
       Effect.gen(function* () {
         yield* reset;

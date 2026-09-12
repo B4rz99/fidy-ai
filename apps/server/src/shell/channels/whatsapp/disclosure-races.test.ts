@@ -29,6 +29,8 @@ import { findPendingConsentExchange, removePendingConsentExchange } from "~/shel
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -96,9 +98,7 @@ const acquireRuntime = Effect.fn(function* (
           authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
             runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
             runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            availableShardGroups: ["default"],
-            assignedShardGroups: ["default"],
-            shardsPerGroup: 300,
+            ...clusterTestSharedOptions,
             entityMessagePollInterval: 25,
             sendRetryInterval: 25,
             entityTerminationTimeout: 100,
@@ -260,6 +260,8 @@ const replaceFailureEvidence = Effect.fn(function* (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "disclosure evidence races",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect(
       "newer failure evidence reopens ordinal two despite an earlier cached no-op Activity",
       Effect.fn(function* () {

@@ -78,7 +78,7 @@ import {
   type TelemetryBreadcrumb,
   TelemetryCount,
   TelemetryDuration,
-  maximumTelemetryCount,
+  boundedTelemetryCount,
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import { atomicBatchOperation } from "~/shell/operations/operations";
@@ -761,9 +761,7 @@ type ModelAttemptState = {
 };
 
 const telemetryTokenCount = (value: Option.Option<number>): TelemetryCount =>
-  TelemetryCount.make(
-    Math.min(maximumTelemetryCount, Math.max(0, Math.trunc(Option.getOrElse(value, () => 0))))
-  );
+  boundedTelemetryCount(Option.getOrElse(value, () => 0));
 
 const recordModelUsage = (
   telemetry: TelemetryService,

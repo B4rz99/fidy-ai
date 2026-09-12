@@ -261,22 +261,23 @@ const recoverPayloadDocument: unknown = {
 
 /**
  * The tested HostedTurns wire contract: one reviewed expectation per operation, derived from the
- * one production entity definition. Fixtures exercise the generated client; the pinned JSON Schema
+ * one production entity definition. Fixtures run through the operation codecs the generated client
+ * is built from; the integration suite exercises the client itself. The pinned JSON Schema
  * documents, annotations, and primary keys catch protocol changes the fixtures would not reach.
  */
 type HostedTurnContract = Readonly<{
   readonly persisted: boolean;
   readonly clientUninterruptible: boolean;
   readonly serverUninterruptible: boolean;
-  /** Payload fixture the generated client must accept. */
+  /** Payload fixture the operation codec must accept. */
   readonly payload: unknown;
-  /** Payloads the generated client must reject, one per reviewed input constraint. */
+  /** Payloads the operation codec must reject, one per reviewed input constraint. */
   readonly rejectedPayloads: ReadonlyArray<unknown>;
   /** Complete inlined JSON Schema document of the operation's payload codec. */
   readonly payloadDocument: unknown;
-  /** Result fixture the generated client must accept. */
+  /** Result fixture the operation codec must accept. */
   readonly result: unknown;
-  /** Results the generated client must reject, one per reviewed output constraint. */
+  /** Results the operation codec must reject, one per reviewed output constraint. */
   readonly rejectedResults: ReadonlyArray<unknown>;
   /** Complete inlined JSON Schema document of the operation's success codec. */
   readonly successDocument: unknown;

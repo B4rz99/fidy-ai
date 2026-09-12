@@ -1,0 +1,82 @@
+apps/server/src/shell/durable-tables.ts
+  h_c6d49c804e0ad2 1-7
+apps/server/src/shell/cluster-topology.test.ts
+  h_c6d49c804e0ad2 1-90
+apps/server/src/shell/cluster-observation.ts
+  h_c6d49c804e0ad2 2-9,13-41,44-59,61-67,70-71,76-78,81-94,96-101,103-108,110-137,139-162,178-214,217-221,225-235,237-243,246,254-263,265-285,287-298
+  h_c6d49c804e0ad2 1,10-12,42-43,60,68-69,72-75,79-80,95,102,109,138,163-177,215-216,222-224,236,244-245,247-253,264,286
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 164-173
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  h_c6d49c804e0ad2 1-6,12-14,16-41
+  h_c6d49c804e0ad2 7-11,15
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1-2,6-9,30-33,42-44,50-52,71,82-83,90-91
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 7,9-13,19,25,40-56,59,64-66
+apps/server/src/shell/cluster-compatibility.test.ts
+  h_c6d49c804e0ad2 1-96
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 24,29-32,170-172
+apps/server/src/shell/cluster-observation.test.ts
+  h_c6d49c804e0ad2 1-28,30-50,57-71,73-80,82-100,102,104,107-125,128-129
+  h_c6d49c804e0ad2 29,51-56,72,81,101,103,105-106,126-127
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 20,29-32,139-141
+apps/server/src/shell/observability/protocol.ts
+  h_c6d49c804e0ad2 19-21,24
+apps/server/src/shell/cluster-topology.ts
+  h_c6d49c804e0ad2 1-148
+apps/server/src/shell/cluster-readiness.test.ts
+  h_c6d49c804e0ad2 1-129,163-175
+  h_c6d49c804e0ad2 130-162
+apps/server/src/shell/db/migrations/0057-cluster-topology-identity.ts
+  h_c6d49c804e0ad2 1-25
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 3-4,6-9,38-40
+apps/server/src/shell/cluster-compatibility.ts
+  h_c6d49c804e0ad2 1-83
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,8,24-32,34-35,48-54,104-115,117-120,133-135,142,145-148,167,169-178,180-183,185-191
+  h_c6d49c804e0ad2 7,10,23,33,116,121-132,136-141,154-155,159-163,179
+apps/server/src/shell/cluster-topology.integration.test.ts
+  h_c6d49c804e0ad2 1-23,25-32,40-143,145-349
+  h_c6d49c804e0ad2 24,33-39,144
+docs/operations/production-releases.md
+  h_c6d49c804e0ad2 75,79-85
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 56,122
+docs/operations/cluster-topology.md
+  h_c6d49c804e0ad2 1-11,14-110,113-132,134-148,151-172
+  h_c6d49c804e0ad2 12-13,111-112,133,149-150
+apps/server/src/shell/http.ts
+  h_c6d49c804e0ad2 20,175-196,279
+apps/server/src/shell/cluster-readiness.ts
+  h_c6d49c804e0ad2 1-29,36-39,41-100,102-113
+  h_c6d49c804e0ad2 30-35,40,101
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 16-22,40-43,154,204
+apps/server/src/shell/cluster-lock-telemetry.test.ts
+  h_c6d49c804e0ad2 1-80
+apps/server/src/shell/cluster-lock-telemetry.ts
+  h_c6d49c804e0ad2 1-101
+apps/server/src/shell/cluster-request-telemetry.test.ts
+  h_c6d49c804e0ad2 1-32
+apps/server/src/shell/cluster-request-telemetry.ts
+  h_c6d49c804e0ad2 1-99
+apps/server/src/shell/cluster-shard-coverage.ts
+  h_c6d49c804e0ad2 1-87
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  h_c6d49c804e0ad2 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3346f483acc3c5f57991a6ce63af355308009011",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

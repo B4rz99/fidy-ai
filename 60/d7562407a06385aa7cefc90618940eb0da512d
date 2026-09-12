@@ -1,0 +1,54 @@
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-546
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,18-39,41,57-59,61-67,70,72-74,76-91,113,119-129
+  h_c6d49c804e0ad2 40,42-56,60,71,114
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 163-169,171,174-176,183-185
+  h_c6d49c804e0ad2 170,177-179
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/_shared/sanitized-http-client-error.ts
+  h_c6d49c804e0ad2 1-79
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+apps/server/src/shell/_shared/protected-http-client.ts
+  h_c6d49c804e0ad2 1-10,12-19,24-47
+  h_c6d49c804e0ad2 11,20-23
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16,84-93
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-119,121-128,130-247
+  h_c6d49c804e0ad2 120,129
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,24-32,39-41,46,50-58,66-69,77-81,83-85,98-113,123-124,130-133,136-139,146,153-154
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19,60-79
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "60d7562407a06385aa7cefc90618940eb0da512d",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

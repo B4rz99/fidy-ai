@@ -14,7 +14,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Crypto, DateTime, Duration, Effect, PlatformError } from "effect";
+import { Crypto, DateTime, Duration, Effect, PlatformError, Redacted } from "effect";
 import { bearerRevealLifetime } from "./policy";
 import {
   type Dispatch,
@@ -35,6 +35,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/ui/components/toggle-group";
 
 type PATScopeValue = PATScope;
 type ReviewedManualPATGrant = ManualPATGrantInput & Readonly<{ reviewExpiresAt: DateTime.Utc }>;
+
+/**
+ * One-time disclosure bearer. It stays redacted in state and props, materializing only where the
+ * User must see or copy it.
+ */
+export type RedactedTokenBearer = Redacted.Redacted<TokenBearer>;
 
 /** One confirmed manual PAT request plus callbacks for its terminal server outcome. */
 export type IssueManualPATCommand = Readonly<{
@@ -286,14 +292,16 @@ const IssuedGrant = ({
   reset,
 }: Readonly<{
   issued: IssuedPAT;
-  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
+  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
   reset: () => void;
 }>): JSX.Element => {
   const [copied, setCopied] = useState(false);
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
-        <code className="break-all rounded-lg border bg-muted p-4 text-sm">{issued.bearer}</code>
+        <code className="break-all rounded-lg border bg-muted p-4 text-sm">
+          {Redacted.value(issued.bearer)}
+        </code>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button
             aria-live="polite"
@@ -316,7 +324,7 @@ type SetCreationState = Dispatch<SetStateAction<ManualPATCreationState>>;
 const revealIssuedPAT = (
   issued: IssuedPAT,
   setState: SetCreationState,
-  clearClipboard: (bearer: TokenBearer) => void
+  clearClipboard: (bearer: RedactedTokenBearer) => void
 ): void => {
   setState({ _tag: "Issued", issued });
   Effect.runFork(
@@ -373,7 +381,7 @@ const ReviewState = ({
   state: Extract<ManualPATCreationState, { _tag: "Reviewing" | "Issuing" }>;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  clearClipboard: (bearer: TokenBearer) => void;
+  clearClipboard: (bearer: RedactedTokenBearer) => void;
 }>): JSX.Element => (
   <GrantReview
     confirm={() => {
@@ -439,8 +447,8 @@ const CreationContent = ({
   state: ManualPATCreationState;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
-  clearClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
+  clearClipboard: (bearer: RedactedTokenBearer) => void;
 }>): JSX.Element => {
   if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
   if (state._tag === "Reviewing" || state._tag === "Issuing") {
@@ -478,8 +486,8 @@ export const ManualPATView = ({
   clearClipboard,
 }: Readonly<{
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
-  clearClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
+  clearClipboard: (bearer: RedactedTokenBearer) => void;
 }>): JSX.Element => {
   const [state, setState] = useState<ManualPATCreationState>(initialState);
   const lifecycleRef: RefCallback<HTMLElement> = useCallback(

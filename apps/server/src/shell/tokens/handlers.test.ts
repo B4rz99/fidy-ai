@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Schema } from "effect";
+import { Crypto, DateTime, Effect, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
@@ -8,10 +8,13 @@ import { TokenBearer, defaultPATLifetimeDays } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { computePATExpiration } from "~/core/tokens/rules";
+import { UnknownJsonString } from "~/schema-compatibility";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { appendConsentRecord, observeConsentRecords } from "~/shell/consent/repo";
+import { OperationResponse } from "~/shell/_shared/response";
 import { manualPATIssuanceLimit } from "./errors";
-import { ManualPATReviewExpired } from "./operations";
+import { bearerSecret } from "./fixtures";
+import { IssuedManualPATResponse, ManualPATReviewExpired } from "./operations";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
@@ -96,6 +99,7 @@ const persistedManualGrant = Schema.Struct({
   decisionOrigin: Schema.String,
   consentWebSessionId: WebSessionId,
   disclosureText: Schema.String,
+  tokenRowJson: Schema.String,
 });
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -122,20 +126,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           ),
         });
-        const body = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({
-              pat: Schema.Struct({
-                recipientLabel: Schema.String,
-                scopes: Schema.Array(Schema.String),
-                shortId: Schema.String,
-                expiresAt: Schema.String,
-              }),
-              bearer: TokenBearer,
-            }),
-            next: Schema.Array(Schema.Unknown),
-          })
-        )(yield* response.json);
+        const payload = yield* response.json;
+        const body = yield* Schema.decodeUnknownEffect(OperationResponse(IssuedManualPATResponse))(
+          payload
+        );
+        const issuedBearer = Redacted.value(body.data.bearer);
+        const wireDisclosure = yield* Schema.encodeEffect(UnknownJsonString)(payload);
+        expect(wireDisclosure).toContain(issuedBearer);
         const sql = yield* MigrationSqlClient;
         const [stored] = yield* SqlSchema.findAll({
           Request: Schema.Void,
@@ -146,7 +143,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               token.lifetime_days AS "lifetimeDays", token.expires_at AS "expiresAt",
               token.created_at AS "createdAt", consent.decision_origin AS "decisionOrigin",
               consent.web_session_id AS "consentWebSessionId",
-              consent.disclosure_text AS "disclosureText"
+              consent.disclosure_text AS "disclosureText",
+              to_jsonb(token)::text AS "tokenRowJson"
             FROM tokens AS token
             JOIN consent_records AS consent ON consent.pat_id = token.id
             WHERE token.user_id = ${userId}
@@ -155,7 +153,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })(undefined);
         if (stored === undefined) return yield* Effect.die("manual PAT was not persisted");
         const digest = yield* (yield* Crypto.Crypto)
-          .digest("SHA-256", new TextEncoder().encode(body.data.bearer))
+          .digest("SHA-256", new TextEncoder().encode(issuedBearer))
           .pipe(Effect.orDie);
         const digestHex = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
@@ -164,8 +162,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(body.next).toEqual([]);
         expect(body.data.pat.recipientLabel).toBe("Automatización casa");
         expect(body.data.pat.scopes).toEqual(["read", "dashboard"]);
-        expect(body.data.pat.expiresAt).toBe(DateTime.formatIso(reviewExpiresAt));
-        expect(body.data.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$/u);
+        expect(DateTime.formatIso(body.data.pat.expiresAt)).toBe(
+          DateTime.formatIso(reviewExpiresAt)
+        );
+        expect(issuedBearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$/u);
+        expect(Redacted.isRedacted(body.data.bearer)).toBe(true);
+        const serialized = yield* Schema.encodeEffect(UnknownJsonString)(body.data);
+        expect(serialized).not.toContain(issuedBearer);
         expect(stored).toMatchObject({
           userId,
           recipientLabel: "Automatización casa",
@@ -180,8 +183,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(stored.disclosureText).toContain("Duración fija: 90 días");
         expect(stored.disclosureText).toContain(DateTime.formatIso(stored.expiresAt));
         expect(DateTime.formatIso(stored.expiresAt)).toBe(DateTime.formatIso(reviewExpiresAt));
-        expect(stored.tokenHash).not.toBe(body.data.bearer);
-        expect(stored.disclosureText).not.toContain(body.data.bearer);
+        expect(stored.tokenHash).not.toBe(issuedBearer);
+        expect(stored.disclosureText).not.toContain(issuedBearer);
+        expect(stored.tokenRowJson).not.toContain(bearerSecret(issuedBearer));
+        expect(stored.tokenRowJson).not.toContain(issuedBearer);
       })
     );
 

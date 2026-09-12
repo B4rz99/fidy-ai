@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Encoding, Schema } from "effect";
+import { Crypto, DateTime, Effect, Encoding, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -224,7 +224,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("PAT man
         yield* revoked.json
       );
       const rejectedBearer = yield* HttpClient.get("/categories", {
-        headers: { authorization: `Bearer ${issued.data.bearer}` },
+        headers: { authorization: `Bearer ${Redacted.value(issued.data.bearer)}` },
       });
       const retry = yield* HttpClient.del(`/pats/${issued.data.pat.shortId}`, {
         headers: webHeaders,

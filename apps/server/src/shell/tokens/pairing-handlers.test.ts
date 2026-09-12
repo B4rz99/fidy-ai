@@ -7,11 +7,13 @@ import { ClaimedPATPairing, PATPairingReview, StartedPATPairing } from "~/core/t
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
+import { UnknownJsonString } from "~/schema-compatibility";
 import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { OperationResponse } from "~/shell/_shared/response";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
+import { bearerSecret } from "./fixtures";
 import { claimPATPairing, expireDuePATPairings } from "./pat-pairing";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000349");
@@ -131,6 +133,7 @@ const StoredPairing = Schema.Struct({
   lifecycle: Schema.String,
   tokenHash: Schema.NullOr(Schema.String),
   grantCount: Schema.Finite,
+  tokenRowJson: Schema.String,
 });
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -175,7 +178,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (claim === undefined) return yield* Effect.die("expected one successful claim");
         expect(claim.headers["cache-control"]).toContain("no-store");
         const issued = yield* HttpClientResponse.schemaBodyJson(ClaimedPATPairing)(claim);
-        expect(issued.bearer).toMatch(/^fin_/u);
+        const claimedBearer = Redacted.value(issued.bearer);
+        expect(claimedBearer).toMatch(/^fin_/u);
+        expect(Redacted.isRedacted(issued.bearer)).toBe(true);
+        const serialized = yield* Schema.encodeEffect(UnknownJsonString)(issued);
+        expect(serialized).not.toContain(claimedBearer);
 
         const [stored] = yield* SqlSchema.findAll({
           Request: Schema.Void,
@@ -183,13 +190,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           execute: () => sql`
             SELECT pairing.lifecycle, token.token_hash AS "tokenHash",
               (SELECT count(*)::int FROM consent_records consent
-                WHERE consent.pat_id = token.id) AS "grantCount"
+                WHERE consent.pat_id = token.id) AS "grantCount",
+              to_jsonb(token)::text AS "tokenRowJson"
             FROM pat_pairings pairing JOIN tokens token ON token.pat_pairing_id = pairing.id
             WHERE pairing.id = ${started.pairingId}
           `,
         })(undefined);
         expect(stored).toMatchObject({ lifecycle: "claimed", grantCount: 1 });
-        expect(stored?.tokenHash).not.toBe(issued.bearer);
+        expect(stored?.tokenHash).not.toBe(claimedBearer);
+        expect(stored?.tokenRowJson).not.toContain(bearerSecret(claimedBearer));
+        expect(stored?.tokenRowJson).not.toContain(claimedBearer);
 
         const repeated = yield* postJson("/pat-pairings/claim", {
           pairingId: started.pairingId,

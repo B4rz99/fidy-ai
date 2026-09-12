@@ -221,7 +221,7 @@ const completeClaim = Effect.fn("PATPairing.completeClaim")(function* (
         revokedAt: Option.none(),
         createdAt: authorization.createdAt,
       }),
-      bearer,
+      bearer: Redacted.make(bearer),
     },
   };
 });

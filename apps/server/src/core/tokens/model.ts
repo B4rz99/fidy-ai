@@ -272,10 +272,14 @@ export const RevokedPATCount = Schema.Struct({
 });
 export type RevokedPATCount = typeof RevokedPATCount.Type;
 
-/** One successful issuance; the bearer cannot be recovered after this immediate response. */
+/**
+ * One successful issuance; the bearer cannot be recovered after this immediate response. The
+ * bearer is a redacted value everywhere it is held as a value, and only its encoded JSON form is
+ * the raw opaque bearer that constitutes the one-time disclosure.
+ */
 export const IssuedPAT = Schema.Struct({
   pat: PAT,
-  bearer: TokenBearer,
+  bearer: Schema.RedactedFromValue(TokenBearer),
 }).annotate({ identifier: "IssuedPAT" });
 export type IssuedPAT = typeof IssuedPAT.Type;
 

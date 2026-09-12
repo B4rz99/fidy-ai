@@ -204,15 +204,32 @@ layer(
   );
 });
 
+for (const status of [404, 408, 429] as const) {
+  layer(
+    clientLayer(() => new Response("provider refusal", { status })),
+    {
+      excludeTestServices: true,
+    }
+  )(`retryable Wompi refusal ${status}`, (it) => {
+    it.effect(`treats a ${status} creation response as ambiguous`, () =>
+      Effect.gen(function* () {
+        const wompi = yield* WompiBillingClient;
+        const creation = yield* Effect.flip(wompi.createTransaction(creationInput));
+        expect(creation.certainty).toBe("ambiguous");
+      })
+    );
+  });
+}
+
 layer(
   clientLayer(() => Response.error()),
   { excludeTestServices: true }
 )("Wompi transport failure response", (it) => {
-  it.effect("rejects responses below the HTTP success range", () =>
+  it.effect("treats a response without an HTTP status as ambiguous", () =>
     Effect.gen(function* () {
       const wompi = yield* WompiBillingClient;
       const creation = yield* Effect.flip(wompi.createTransaction(creationInput));
-      expect(creation.certainty).toBe("rejected");
+      expect(creation.certainty).toBe("ambiguous");
       yield* Effect.flip(wompi.findTransaction(WompiTransactionId.make("transaction-123")));
     })
   );

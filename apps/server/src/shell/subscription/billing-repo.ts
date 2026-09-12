@@ -12,12 +12,15 @@ import {
   Price,
   SubscriptionId,
   TaxTreatment,
-  type WompiBillingStatus,
+  WompiBillingStatus,
   WompiEnvironment,
   WompiTransactionId,
   WompiTransactionReference,
 } from "~/core/subscription/model";
-import type { PaidPeriodWindow } from "~/core/subscription/billing-rules";
+import {
+  type PaidPeriodWindow,
+  decideBillingTransactionStatus,
+} from "~/core/subscription/billing-rules";
 import {
   CardEnrollmentId,
   CardPaymentSourceId,
@@ -43,7 +46,6 @@ const BillingAttemptRow = Schema.Struct({
   timeZone: IanaTimeZone,
   wompiEnvironment: WompiEnvironment,
   wompiTransactionReference: WompiTransactionReference,
-  wompiTransactionId: Schema.NullOr(WompiTransactionId),
   status: Schema.Literals(["pending", "failed", "succeeded"]),
   chargeState: Schema.Literals(["queued", "armed"]),
   createdAt: Schema.DateTimeUtcFromDate,
@@ -57,6 +59,18 @@ const BillingAttemptRow = Schema.Struct({
 });
 export type BillingAttemptRecord = typeof BillingAttemptRow.Type;
 
+/** The retained provider facts aggregation reads, decoded as facts rather than raw storage. */
+const BillingTransactionRow = Schema.Struct({
+  transactionId: WompiTransactionId,
+  status: WompiBillingStatus,
+  finalizedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+  firstObservedAt: Schema.DateTimeUtcFromDate,
+});
+
+const billingTransactionColumns = `transaction.wompi_transaction_id AS "transactionId",
+  transaction.status, transaction.finalized_at AS "finalizedAt",
+  transaction.first_observed_at AS "firstObservedAt"`;
+
 const billingAttemptColumns = `attempt.id, attempt.subscription_id AS "subscriptionId",
   attempt.payment_request_id AS "paymentRequestId",
   attempt.card_enrollment_id AS "cardEnrollmentId",
@@ -66,7 +80,7 @@ const billingAttemptColumns = `attempt.id, attempt.subscription_id AS "subscript
   attempt.service_market AS "serviceMarket", attempt.tax_treatment AS "taxTreatment",
   attempt.time_zone AS "timeZone", attempt.wompi_environment AS "wompiEnvironment",
   attempt.wompi_transaction_reference AS "wompiTransactionReference",
-  attempt.wompi_transaction_id AS "wompiTransactionId", attempt.status,
+  attempt.status,
   attempt.charge_state AS "chargeState", attempt.created_at AS "createdAt",
   attempt.armed_at AS "armedAt", attempt.failed_at AS "failedAt",
   attempt.finalized_at AS "finalizedAt", period.ends_at AS "paidPeriodEndsAt",
@@ -241,26 +255,144 @@ export const armBillingAttemptInScope = Effect.fn("Subscription.armBillingAttemp
   }
 );
 
-/** Retains a transaction identity only when the armed response matches its merchant reference. */
-export const recordCreatedWompiTransactionInScope = Effect.fn(
-  "Subscription.recordCreatedWompiTransactionInScope"
-)(function* (input: {
+/** Reads every provider transaction retained under one BillingAttempt in first-observed order. */
+export const findBillingTransactionsInScope = Effect.fn(
+  "Subscription.findBillingTransactionsInScope"
+)(function* (userId: UserId, billingAttemptId: BillingAttemptId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: BillingTransactionRow,
+    execute: () => sql`
+      SELECT ${sql.literal(billingTransactionColumns)}
+      FROM billing_attempt_transactions AS transaction
+      WHERE transaction.user_id = ${userId} AND transaction.billing_attempt_id = ${billingAttemptId}
+      ORDER BY transaction.first_observed_at, transaction.wompi_transaction_id
+    `,
+  })(undefined).pipe(Effect.orDie);
+});
+
+/** One provider transaction fact about to be folded into its owning BillingAttempt. */
+type BillingTransactionWrite = Readonly<{
   userId: UserId;
   billingAttemptId: BillingAttemptId;
   transactionId: WompiTransactionId;
-  reference: WompiTransactionReference;
-}) {
+  status: WompiBillingStatus;
+  amountInCents: number;
+  currency: string;
+  wompiSourceId: WompiSourceId;
+  wompiEnvironment: WompiEnvironment;
+  finalizedAt: Option.Option<DateTime.Utc>;
+  observedAt: DateTime.Utc;
+}>;
+
+/**
+ * Locks the owning BillingAttempt row so the webhook and workflow writers cannot interleave a
+ * read-modify-write of the same provider transaction. An asserted reference additionally requires
+ * the attempt to still be armed under that merchant reference.
+ */
+const lockBillingTransactionWrite = Effect.fn("Subscription.lockBillingTransactionWrite")(
+  function* (
+    userId: UserId,
+    billingAttemptId: BillingAttemptId,
+    assertedReference: Option.Option<WompiTransactionReference>
+  ) {
+    const sql = yield* SqlClient.SqlClient;
+    const locked = yield* Option.match(assertedReference, {
+      onNone: () => sql`
+        SELECT id FROM billing_attempts
+        WHERE id = ${billingAttemptId} AND user_id = ${userId}
+        FOR UPDATE
+      `,
+      onSome: (reference) => sql`
+        SELECT id FROM billing_attempts
+        WHERE id = ${billingAttemptId} AND user_id = ${userId}
+          AND charge_state = 'armed' AND wompi_transaction_reference = ${reference}
+        FOR UPDATE
+      `,
+    }).pipe(Effect.orDie);
+    return locked.length > 0;
+  }
+);
+
+const findStoredBillingTransaction = Effect.fn("Subscription.findStoredBillingTransaction")(
+  function* (billingAttemptId: BillingAttemptId, transactionId: WompiTransactionId) {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* SqlSchema.findOneOption({
+      Request: Schema.Void,
+      Result: Schema.Struct({
+        status: WompiBillingStatus,
+        finalizedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+      }),
+      execute: () => sql`
+        SELECT status, finalized_at AS "finalizedAt"
+        FROM billing_attempt_transactions
+        WHERE billing_attempt_id = ${billingAttemptId}
+          AND wompi_transaction_id = ${transactionId}
+      `,
+    })(undefined).pipe(Effect.orDie);
+  }
+);
+
+const upsertBillingTransaction = Effect.fn("Subscription.upsertBillingTransaction")(function* (
+  input: BillingTransactionWrite,
+  next: Readonly<{ status: WompiBillingStatus; finalizedAt: Option.Option<DateTime.Utc> }>
+) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    UPDATE billing_attempts SET wompi_transaction_id = ${input.transactionId},
-      awaiting_reference_since = NULL
-    WHERE id = ${input.billingAttemptId} AND user_id = ${input.userId} AND charge_state = 'armed'
-      AND wompi_transaction_reference = ${input.reference}
-      AND (wompi_transaction_id IS NULL OR wompi_transaction_id = ${input.transactionId})
-  `.pipe(Effect.orDie);
+      INSERT INTO billing_attempt_transactions (
+        billing_attempt_id, user_id, wompi_transaction_id, status, amount_in_cents, currency,
+        wompi_source_id, wompi_environment, finalized_at, first_observed_at, last_observed_at
+      ) VALUES (
+        ${input.billingAttemptId}, ${input.userId}, ${input.transactionId}, ${next.status},
+        ${input.amountInCents}, ${input.currency}, ${input.wompiSourceId},
+        ${input.wompiEnvironment}, ${Option.getOrNull(next.finalizedAt)},
+        ${input.observedAt}, ${input.observedAt}
+      )
+      ON CONFLICT (billing_attempt_id, wompi_transaction_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        finalized_at = EXCLUDED.finalized_at,
+        last_observed_at = GREATEST(
+          billing_attempt_transactions.last_observed_at, EXCLUDED.last_observed_at
+        )
+    `.pipe(Effect.orDie);
+  yield* sql`
+      UPDATE billing_attempts SET awaiting_reference_since = NULL
+      WHERE id = ${input.billingAttemptId} AND user_id = ${input.userId}
+        AND awaiting_reference_since IS NOT NULL
+    `.pipe(Effect.orDie);
 });
 
-/** Records that an armed charge never yielded a transaction id; the conclusion time is stable. */
+/**
+ * Retains one provider transaction's absorbing current state under its owning BillingAttempt.
+ * Returns without writing unless the attempt is owned and, when `assertedReference` is present,
+ * still armed under that merchant reference. A retained fact clears `awaiting_reference_since`.
+ */
+export const recordBillingTransactionInScope = Effect.fn(
+  "Subscription.recordBillingTransactionInScope"
+)(function* (
+  input: BillingTransactionWrite,
+  assertedReference: Option.Option<WompiTransactionReference> = Option.none()
+) {
+  if (
+    !(yield* lockBillingTransactionWrite(input.userId, input.billingAttemptId, assertedReference))
+  ) {
+    return;
+  }
+  const current = yield* findStoredBillingTransaction(input.billingAttemptId, input.transactionId);
+  const nextStatus = yield* decideBillingTransactionStatus({
+    current: Option.map(current, (row) => row.status),
+    observed: input.status,
+  });
+  const existingFinalizedAt = Option.flatMap(current, (row) => row.finalizedAt);
+  const nextFinalizedAt =
+    input.status === "APPROVED" && Option.isSome(input.finalizedAt)
+      ? input.finalizedAt
+      : existingFinalizedAt;
+  yield* upsertBillingTransaction(input, { status: nextStatus, finalizedAt: nextFinalizedAt });
+});
+
+/** Records that an armed charge never yielded a provider transaction; the conclusion time is stable. */
 export const markBillingAttemptAwaitingReferenceInScope = Effect.fn(
   "Subscription.markBillingAttemptAwaitingReferenceInScope"
 )(function* (userId: UserId, billingAttemptId: BillingAttemptId, observedAt: DateTime.Utc) {
@@ -269,7 +401,11 @@ export const markBillingAttemptAwaitingReferenceInScope = Effect.fn(
     UPDATE billing_attempts
       SET awaiting_reference_since = COALESCE(awaiting_reference_since, ${observedAt})
     WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
-      AND charge_state = 'armed' AND wompi_transaction_id IS NULL
+      AND charge_state = 'armed'
+      AND NOT EXISTS (
+        SELECT 1 FROM billing_attempt_transactions AS transaction
+        WHERE transaction.billing_attempt_id = billing_attempts.id
+      )
   `.pipe(Effect.orDie);
 });
 
@@ -358,12 +494,13 @@ export const appendWompiObservationInScope = Effect.fn(
   `.pipe(Effect.orDie);
 });
 
-/** Records a verified negative outcome without changing Subscription standing. */
+/** Records a verified aggregate negative outcome and clears every open operational marker. */
 export const failBillingAttemptInScope = Effect.fn("Subscription.failBillingAttemptInScope")(
   function* (userId: UserId, billingAttemptId: BillingAttemptId, failedAt: DateTime.Utc) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      UPDATE billing_attempts SET status = 'failed', failed_at = ${failedAt}, finalized_at = NULL
+      UPDATE billing_attempts SET status = 'failed', failed_at = ${failedAt}, finalized_at = NULL,
+        awaiting_reference_since = NULL, manual_reconciliation_since = NULL
       WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
     `.pipe(Effect.orDie);
   }
@@ -375,15 +512,13 @@ export const activatePaidPeriodInScope = Effect.fn("Subscription.activatePaidPer
     userId: UserId;
     attempt: BillingAttemptRecord;
     period: PaidPeriodWindow;
-    transactionId: WompiTransactionId;
     recordedAt: DateTime.Utc;
   }) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
       UPDATE billing_attempts SET status = 'succeeded', failed_at = NULL,
         finalized_at = ${input.period.startsAt},
-        wompi_transaction_id = COALESCE(wompi_transaction_id, ${input.transactionId}),
-        awaiting_reference_since = NULL
+        awaiting_reference_since = NULL, manual_reconciliation_since = NULL
       WHERE id = ${input.attempt.id} AND user_id = ${input.userId}
         AND status IN ('pending', 'failed')
     `.pipe(Effect.orDie);

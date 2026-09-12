@@ -28,7 +28,6 @@ import { wompiCredentialPrefixes, wompiPrivateKey } from "./wompi-credentials";
 const maximumProviderResponseBytes = 16_384;
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
-const serverErrorStatusMinimum = 500;
 const sandboxOrigin = "https://sandbox.wompi.co";
 const productionOrigin = "https://production.wompi.co";
 
@@ -58,6 +57,19 @@ const CreateTransactionRequest = Schema.Struct({
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const decodeTransaction = Schema.decodeUnknownResult(TransactionResponse);
 const encodeCreateRequest = Schema.encodeSync(jsonStringSchema(CreateTransactionRequest));
+
+const badRequestStatus = 400;
+const unauthorizedStatus = 401;
+const forbiddenStatus = 403;
+const unprocessableEntityStatus = 422;
+
+/** Wompi processed the request and refused it; no transaction was created under the reference. */
+const definitiveRefusalStatuses: ReadonlySet<number> = new Set([
+  badRequestStatus,
+  unauthorizedStatus,
+  forbiddenStatus,
+  unprocessableEntityStatus,
+]);
 
 export type WompiTransaction = Readonly<{
   transactionId: WompiTransactionId;
@@ -153,9 +165,9 @@ const makeCreateTransaction = (
         response.status >= successfulStatusMaximumExclusive
       ) {
         return yield* Effect.fail(
-          response.status >= serverErrorStatusMinimum
-            ? ("ambiguous" as const)
-            : ("rejected" as const)
+          definitiveRefusalStatuses.has(response.status)
+            ? ("rejected" as const)
+            : ("ambiguous" as const)
         );
       }
       return yield* parseTransaction(response.body);

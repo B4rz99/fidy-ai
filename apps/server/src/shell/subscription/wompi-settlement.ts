@@ -19,6 +19,7 @@ import {
 } from "~/core/subscription/model";
 import {
   amountInCentsForBilling,
+  approvingFinalizedAtFor,
   decideBillingAttemptOutcome,
   paidPeriodFor,
 } from "~/core/subscription/billing-rules";
@@ -35,8 +36,9 @@ import {
   appendWompiObservationInScope,
   failBillingAttemptInScope,
   findBillingAttemptByReferenceInScope,
+  findBillingTransactionsInScope,
   hasWompiObservationInScope,
-  recordCreatedWompiTransactionInScope,
+  recordBillingTransactionInScope,
   resolveWompiBillingUser,
   resolveWompiBillingUserByTransaction,
 } from "./billing-repo";
@@ -149,10 +151,41 @@ const evidenceMatches = Effect.fn(function* (
     attempt.wompiEnvironment === environment &&
     (yield* amountInCentsForBilling(attempt.amount)) === transaction.amount_in_cents &&
     attempt.currency === transaction.currency &&
-    attempt.wompiSourceId === transaction.payment_source_id &&
-    (attempt.wompiTransactionId === null || attempt.wompiTransactionId === transaction.id)
+    attempt.wompiSourceId === transaction.payment_source_id
   );
 });
+
+/**
+ * Retains the authenticated provider fact as append-only evidence and as its folded child state.
+ * The same authenticated evidence is the provider transaction's current state; retaining every
+ * transaction under the reference lets a Wompi retry succeed the attempt after a decline, and
+ * clears the awaiting-reference marker once any provider identity is known.
+ */
+const retainProviderTransactionFact = Effect.fn("Subscription.retainWompiProviderTransaction")(
+  function* (input: {
+    userId: UserId;
+    attempt: BillingAttemptRecord;
+    transaction: Transaction;
+    environment: WompiEnvironment;
+    checksum: string;
+    observedAt: DateTime.Utc;
+  }) {
+    const fact = {
+      userId: input.userId,
+      billingAttemptId: input.attempt.id,
+      transactionId: input.transaction.id,
+      status: input.transaction.status,
+      amountInCents: input.transaction.amount_in_cents,
+      currency: input.transaction.currency,
+      wompiSourceId: input.transaction.payment_source_id,
+      wompiEnvironment: input.environment,
+      finalizedAt: Option.fromNullOr(input.transaction.finalized_at),
+      observedAt: input.observedAt,
+    } as const;
+    yield* appendWompiObservationInScope({ ...fact, checksum: input.checksum });
+    yield* recordBillingTransactionInScope(fact);
+  }
+);
 
 const applySettlementInScope = Effect.fn("Subscription.applyWompiSettlementInScope")(
   function* (input: {
@@ -168,48 +201,37 @@ const applySettlementInScope = Effect.fn("Subscription.applyWompiSettlementInSco
     if (!(yield* evidenceMatches(attempt, transaction, input.environment))) {
       return yield* new MismatchedWompiEvidence();
     }
-    yield* appendWompiObservationInScope({
+    yield* retainProviderTransactionFact({
       userId: input.userId,
-      billingAttemptId: attempt.id,
+      attempt,
+      transaction,
+      environment: input.environment,
       checksum: input.event.signature.checksum,
-      transactionId: transaction.id,
-      status: transaction.status,
-      amountInCents: transaction.amount_in_cents,
-      currency: transaction.currency,
-      wompiSourceId: transaction.payment_source_id,
-      wompiEnvironment: input.environment,
-      finalizedAt: Option.fromNullOr(transaction.finalized_at),
       observedAt: input.observedAt,
     });
-    // An authenticated observation that reveals the provider transaction id also satisfies the
-    // awaiting-reference condition, so the operational marker clears with the retained identity.
-    if (attempt.wompiTransactionId === null) {
-      yield* recordCreatedWompiTransactionInScope({
-        userId: input.userId,
-        billingAttemptId: attempt.id,
-        transactionId: transaction.id,
-        reference: transaction.reference,
-      });
-    }
+    const transactions = yield* findBillingTransactionsInScope(input.userId, attempt.id);
     const outcome = yield* decideBillingAttemptOutcome({
       current: attempt.status,
-      observed: transaction.status,
+      transactions,
+      observedAt: input.observedAt,
     });
     if (outcome === attempt.status || outcome === "pending") return;
     if (outcome === "failed") {
       return yield* failBillingAttemptInScope(input.userId, attempt.id, input.observedAt);
     }
-    if (transaction.finalized_at === null) return yield* new MismatchedWompiEvidence();
+    const approvingFinalizedAt = yield* approvingFinalizedAtFor(transactions);
+    if (Option.isNone(approvingFinalizedAt)) {
+      return yield* new MismatchedWompiEvidence();
+    }
     const period = yield* paidPeriodFor(
       attempt.billingPeriod,
       attempt.timeZone,
-      transaction.finalized_at
+      approvingFinalizedAt.value
     );
     yield* activatePaidPeriodInScope({
       userId: input.userId,
       attempt,
       period,
-      transactionId: transaction.id,
       recordedAt: input.observedAt,
     });
     yield* activatePaidProInScope(input.userId);

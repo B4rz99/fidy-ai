@@ -237,13 +237,6 @@ const assertAuthoritativeEvidenceBoundaries = Effect.fn(function* (provider: Wom
     {
       provider: {
         ...provider,
-        transactionId: WompiTransactionId.make("mismatched-transaction"),
-      },
-      environment: "sandbox" as const,
-    },
-    {
-      provider: {
-        ...provider,
         reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000099"),
       },
       environment: "sandbox" as const,
@@ -270,6 +263,42 @@ const assertAuthoritativeEvidenceBoundaries = Effect.fn(function* (provider: Wom
     })
   );
   expect(missingFinalization._tag).toBe("MismatchedWompiEvidence");
+});
+
+/** Reads the created attempt's provider identity, waiting until the worker retains its transaction. */
+const waitForProviderTransaction = Effect.fn("Test.waitForProviderTransaction")(function* (
+  billingAttemptId: BillingAttemptId
+) {
+  const sql = yield* MigrationSqlClient;
+  const readProviderAttempt = SqlSchema.findOne({
+    Request: Schema.Struct({ id: Schema.String }),
+    Result: Schema.Struct({
+      reference: WompiTransactionReference,
+      transactionId: Schema.OptionFromNullOr(WompiTransactionId),
+      amount: Schema.String,
+      sourceId: Schema.String,
+    }),
+    execute: ({ id }) => sql`
+      SELECT attempt.wompi_transaction_reference AS reference,
+        (SELECT transaction.wompi_transaction_id
+         FROM billing_attempt_transactions AS transaction
+         WHERE transaction.billing_attempt_id = attempt.id
+         ORDER BY transaction.first_observed_at, transaction.wompi_transaction_id
+         LIMIT 1) AS "transactionId",
+        attempt.amount::text AS amount,
+        source.wompi_source_id::text AS "sourceId"
+      FROM billing_attempts AS attempt
+      INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
+      WHERE attempt.id = ${id}
+    `,
+  });
+  for (;;) {
+    const attempt = yield* readProviderAttempt({ id: billingAttemptId }).pipe(Effect.orDie);
+    if (Option.isSome(attempt.transactionId)) {
+      return { ...attempt, transactionId: attempt.transactionId.value };
+    }
+    yield* Effect.sleep("10 millis");
+  }
 });
 
 const assertBillingAttemptVisibilityBoundaries = Effect.fn(function* (
@@ -893,6 +922,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const fixtureSql = yield* MigrationSqlClient;
         yield* fixtureSql`DELETE FROM wompi_billing_observations WHERE user_id = ${userId}`;
         yield* fixtureSql`DELETE FROM paid_subscription_periods WHERE user_id = ${userId}`;
+        yield* fixtureSql`DELETE FROM billing_attempt_transactions WHERE user_id = ${userId}`;
         yield* fixtureSql`DELETE FROM billing_attempts WHERE user_id = ${userId}`;
         yield* fixtureSql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${userId}`;
         const preparedResponse = yield* HttpClient.execute(
@@ -989,48 +1019,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(Option.isNone(crossUserAttempt)).toBe(true);
         const sql = yield* MigrationSqlClient;
-        const providerAttempt = yield* SqlSchema.findOne({
-          Request: Schema.Struct({ id: Schema.String }),
-          Result: Schema.Struct({
-            reference: WompiTransactionReference,
-            transactionId: Schema.OptionFromNullOr(WompiTransactionId),
-            amount: Schema.String,
-            sourceId: Schema.String,
-          }),
-          execute: ({ id }) => sql`
-            SELECT attempt.wompi_transaction_reference AS reference,
-              attempt.wompi_transaction_id AS "transactionId", attempt.amount::text AS amount,
-              source.wompi_source_id::text AS "sourceId"
-            FROM billing_attempts AS attempt
-            INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
-            WHERE attempt.id = ${id}
-          `,
-        })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
-        let providerAttemptWithTransaction = providerAttempt;
-        while (Option.isNone(providerAttemptWithTransaction.transactionId)) {
-          yield* Effect.sleep("10 millis");
-          providerAttemptWithTransaction = yield* SqlSchema.findOne({
-            Request: Schema.Struct({ id: Schema.String }),
-            Result: Schema.Struct({
-              reference: WompiTransactionReference,
-              transactionId: Schema.OptionFromNullOr(WompiTransactionId),
-              amount: Schema.String,
-              sourceId: Schema.String,
-            }),
-            execute: ({ id }) => sql`
-              SELECT attempt.wompi_transaction_reference AS reference,
-                attempt.wompi_transaction_id AS "transactionId", attempt.amount::text AS amount,
-                source.wompi_source_id::text AS "sourceId"
-              FROM billing_attempts AS attempt
-              INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
-              WHERE attempt.id = ${id}
-            `,
-          })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
-        }
-        const provider = {
-          ...providerAttemptWithTransaction,
-          transactionId: providerAttemptWithTransaction.transactionId.value,
-        };
+        const provider = yield* waitForProviderTransaction(firstPayment.billingAttempt.id);
         const authoritativeProvider = {
           transactionId: provider.transactionId,
           reference: provider.reference,
@@ -1113,7 +1102,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           }),
           observedAt: DateTime.makeUnsafe("2026-03-01T12:00:00Z"),
         }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig));
-        const failedBeforeApproval = yield* SqlSchema.findOne({
+        const pendingBeforeApproval = yield* SqlSchema.findOne({
           Request: Schema.Struct({ id: Schema.String }),
           Result: Schema.Struct({ status: Schema.String, paid: Schema.Boolean }),
           execute: ({ id }) => sql`
@@ -1123,7 +1112,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             WHERE attempt.id = ${id}
           `,
         })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
-        expect(failedBeforeApproval).toEqual({ status: "failed", paid: false });
+        // The verified decline is inside Wompi's three-minute retry opportunity for the reference,
+        // so it waits for a possible retry transaction instead of failing the BillingAttempt.
+        expect(pendingBeforeApproval).toEqual({ status: "pending", paid: false });
         yield* receiveWompiSettlement({
           payload: approvedEvent,
           observedAt: DateTime.makeUnsafe("2026-03-01T12:00:01Z"),

@@ -1,0 +1,54 @@
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-568
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16,85-91,93-95
+  h_c6d49c804e0ad2 17,92,150-153,173,183-186,192
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/_shared/protected-http-client.ts
+  h_c6d49c804e0ad2 1-3,5-18,20-45,47-49
+  h_c6d49c804e0ad2 4,19,46
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19,60-79
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 164-172,175-180,184-186
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-11,13-22,32-131,133-248,250-267
+  h_c6d49c804e0ad2 12,23-31,132,249
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,18-101,104-108,110-125,147-148,153-163
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/_shared/sanitized-http-client-error.ts
+  h_c6d49c804e0ad2 8-32,49-50,53,61-63,68-69,71-90,96-101,107-112,118-121
+  h_c6d49c804e0ad2 1-7,33-48,51-52,54-60,64-67,70,91-95,102-106,113-117
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,7,25-32,39-41,46,50-58,66-69,77-81,83-85,98-113,123-124,130-133,136-139,146,153-154
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f66d1d4ce275cefc231ad104d1a42d847a707e2f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

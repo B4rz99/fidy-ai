@@ -44,19 +44,48 @@ export const approvingFinalizedAtFor = (
   return Effect.succeed(approving === undefined ? Option.none() : approving.finalizedAt);
 };
 
+type BillingTransactionStatusInput = Readonly<{
+  current: Option.Option<WompiBillingStatus>;
+  observed: WompiBillingStatus;
+}>;
+
+const nextTransactionStatus = (input: BillingTransactionStatusInput): WompiBillingStatus => {
+  if (input.observed === "APPROVED") return "APPROVED";
+  if (Option.isSome(input.current)) {
+    if (input.current.value === "APPROVED") return "APPROVED";
+    if (terminalNegativeStatuses[input.current.value]) return input.current.value;
+  }
+  return input.observed;
+};
+
 /** Advances one provider transaction monotonically; approval absorbs and terminal states stay final. */
 export const decideBillingTransactionStatus = (
-  input: Readonly<{
-    current: Option.Option<WompiBillingStatus>;
-    observed: WompiBillingStatus;
-  }>
-): Effect.Effect<WompiBillingStatus> => {
-  if (input.observed === "APPROVED") return Effect.succeed("APPROVED");
-  if (Option.isSome(input.current)) {
-    if (input.current.value === "APPROVED") return Effect.succeed("APPROVED");
-    if (terminalNegativeStatuses[input.current.value]) return Effect.succeed(input.current.value);
+  input: BillingTransactionStatusInput
+): Effect.Effect<WompiBillingStatus> => Effect.succeed(nextTransactionStatus(input));
+
+type BillingAttemptOutcomeInput = Readonly<{
+  current: BillingAttemptStatus;
+  transactions: ReadonlyArray<BillingTransactionFact>;
+  observedAt: DateTime.Utc;
+}>;
+
+const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAttemptStatus => {
+  if (input.current === "succeeded") return "succeeded";
+  if (input.transactions.some((transaction) => transaction.status === "APPROVED")) {
+    return "succeeded";
   }
-  return Effect.succeed(input.observed);
+  if (input.current === "failed") return "failed";
+  if (input.transactions.length === 0) return "pending";
+  if (!input.transactions.every((transaction) => terminalNegativeStatuses[transaction.status])) {
+    return "pending";
+  }
+  const earliest = input.transactions
+    .map((transaction) => transaction.firstObservedAt)
+    .reduce((candidate, observedAt) => DateTime.min(candidate, observedAt));
+  const elapsed = DateTime.distance(earliest, input.observedAt);
+  return Duration.toMillis(elapsed) >= Duration.toMillis(wompiRetryOpportunity)
+    ? "failed"
+    : "pending";
 };
 
 /**
@@ -66,29 +95,8 @@ export const decideBillingTransactionStatus = (
  * there is no failure evidence, and `failed` never returns to `pending`.
  */
 export const decideBillingAttemptOutcome = (
-  input: Readonly<{
-    current: BillingAttemptStatus;
-    transactions: ReadonlyArray<BillingTransactionFact>;
-    observedAt: DateTime.Utc;
-  }>
-): Effect.Effect<BillingAttemptStatus> => {
-  if (input.current === "succeeded") return Effect.succeed("succeeded");
-  if (input.transactions.some((transaction) => transaction.status === "APPROVED")) {
-    return Effect.succeed("succeeded");
-  }
-  if (input.current === "failed") return Effect.succeed("failed");
-  if (input.transactions.length === 0) return Effect.succeed("pending");
-  if (!input.transactions.every((transaction) => terminalNegativeStatuses[transaction.status])) {
-    return Effect.succeed("pending");
-  }
-  const earliest = input.transactions
-    .map((transaction) => transaction.firstObservedAt)
-    .reduce((candidate, observedAt) => DateTime.min(candidate, observedAt));
-  const elapsed = DateTime.distance(earliest, input.observedAt);
-  return Effect.succeed(
-    Duration.toMillis(elapsed) >= Duration.toMillis(wompiRetryOpportunity) ? "failed" : "pending"
-  );
-};
+  input: BillingAttemptOutcomeInput
+): Effect.Effect<BillingAttemptStatus> => Effect.succeed(nextBillingAttemptOutcome(input));
 
 /** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{

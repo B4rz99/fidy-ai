@@ -1,0 +1,18 @@
+.oxlintrc.json
+  h_c6d49c804e0ad2 462
+apps/server/package.json
+  h_c6d49c804e0ad2 40
+apps/server/vitest.durable-compatibility.config.ts
+  h_c6d49c804e0ad2 1-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "92822b5dbde6693cb122e6a9c6fed524087f3412",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

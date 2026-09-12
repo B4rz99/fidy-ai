@@ -1,0 +1,52 @@
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,24-32,39-41,46,66-67,77-81,83-85,98-113,123-124,130-133,136-139,146,153-154
+  h_c6d49c804e0ad2 50-58,68-69
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-28,38-63,65-178,180-248
+  h_c6d49c804e0ad2 29-37,64,179
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/_shared/sanitized-http-client-error.ts
+  h_c6d49c804e0ad2 1-75
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16,48
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19
+  h_c6d49c804e0ad2 60-79
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 163-170,173-175,180-182
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-33,35-490
+  h_c6d49c804e0ad2 34
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,18-46,55-70,91-95,100-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "408839c6df74cdd522ae66cb70f9427732cf0464",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

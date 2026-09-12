@@ -4,19 +4,26 @@ import type { SqlClient } from "effect/unstable/sql";
 import { Activity, DurableClock, Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { UserId } from "~/core/identity/reference";
 import { amountInCentsForBilling } from "~/core/subscription/billing-rules";
-import { BillingAttemptId } from "~/core/subscription/model";
+import { BillingAttemptId, type WompiEnvironment } from "~/core/subscription/model";
 import { BillingEmail } from "~/core/subscription/enrollment-model";
 import { onboardingConsentStandingInScope, withSubjectLockInScope } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
+  type ArmedCharge,
   type BillingAttemptRecord,
   armBillingAttemptInScope,
+  failBillingAttemptInScope,
   findBillingAttemptByIdInScope,
+  findBillingTransactionsInScope,
   markBillingAttemptAwaitingReferenceInScope,
   markBillingAttemptManualReconciliationInScope,
-  recordCreatedWompiTransactionInScope,
+  recordBillingTransactionInScope,
 } from "./billing-repo";
-import { WompiBillingClient, type WompiBillingClientService } from "./wompi-billing-client";
+import {
+  WompiBillingClient,
+  type WompiBillingClientService,
+  type WompiTransaction,
+} from "./wompi-billing-client";
 import { reconcileWompiSettlement } from "./wompi-settlement";
 
 /** Identifier-only durable Work for one pending BillingAttempt; the worker re-reads owner state. */
@@ -100,37 +107,51 @@ const warnOperationalEscalation = (
     Effect.annotateLogs({ work_kind: "billing-reconciliation", outcome })
   );
 
-/** Observes one already-armed attempt against its retained provider transaction identity. */
+/** Ends this wake awaiting a provider identity; an operator reconciles the armed charge. */
+const awaitProviderReference = Effect.fn("Subscription.awaitBillingProviderReference")(function* (
+  userId: UserId,
+  billingAttemptId: BillingAttemptId
+) {
+  yield* withUserTransaction(
+    userId,
+    markBillingAttemptAwaitingReferenceInScope(userId, billingAttemptId, yield* DateTime.now)
+  );
+  return { _tag: "AwaitingReference" } as const;
+});
+
+/** Observes every unresolved provider transaction retained under one already-armed attempt. */
 const observeChargedAttempt = Effect.fn("Subscription.observeChargedBillingAttempt")(function* (
   userId: UserId,
   billing: WompiBillingClientService,
   attempt: BillingAttemptRecord
 ) {
   const since = Option.getOrElse(Option.fromNullOr(attempt.armedAt), () => attempt.createdAt);
-  if (attempt.wompiTransactionId === null) {
-    yield* withUserTransaction(
-      userId,
-      markBillingAttemptAwaitingReferenceInScope(userId, attempt.id, yield* DateTime.now)
-    );
-    return { _tag: "AwaitingReference" } as const;
-  }
-  const lookup = yield* billing.findTransaction(attempt.wompiTransactionId).pipe(Effect.result);
-  if (Result.isFailure(lookup) || lookup.success.status === "PENDING") {
-    return { _tag: "Tracked", since } as const;
-  }
-  yield* reconcileWompiSettlement({
-    provider: lookup.success,
-    environment: billing.environment,
-    observedAt: yield* DateTime.now,
-  }).pipe(
-    // A retained transaction id is authoritative; a mismatch is a defect we surface and retry,
-    // never a reason to fabricate a terminal outcome.
-    Effect.catchTag("MismatchedWompiEvidence", () =>
-      Effect.logError("Wompi reconciliation evidence did not match its retained attempt").pipe(
-        Effect.annotateLogs({ work_kind: "billing-reconciliation" })
-      )
-    )
+  const transactions = yield* withUserTransaction(
+    userId,
+    findBillingTransactionsInScope(userId, attempt.id)
   );
+  if (transactions.length === 0) return yield* awaitProviderReference(userId, attempt.id);
+  const unresolved = transactions.filter((transaction) => transaction.status !== "APPROVED");
+  for (const transaction of unresolved) {
+    const lookup = yield* billing.findTransaction(transaction.transactionId).pipe(Effect.result);
+    if (Result.isFailure(lookup) || lookup.success.status === "PENDING") continue;
+    yield* reconcileWompiSettlement({
+      provider: lookup.success,
+      environment: billing.environment,
+      observedAt: yield* DateTime.now,
+    }).pipe(
+      // A retained transaction id is authoritative; a mismatch is a defect we surface and retry,
+      // never a reason to fabricate a terminal outcome.
+      Effect.catchTag("MismatchedWompiEvidence", () =>
+        Effect.logError("Wompi reconciliation evidence did not match its retained attempt").pipe(
+          Effect.annotateLogs({ work_kind: "billing-reconciliation" })
+        )
+      )
+    );
+  }
+  // No supported writer leaves a pending attempt whose retained transactions are all APPROVED
+  // (settlement succeeds the attempt in the same transaction as the approval). Keep tracking so an
+  // inconsistency escalates to an operator rather than fabricating a paid period from stale rows.
   const settled = yield* withUserTransaction(
     userId,
     findBillingAttemptByIdInScope(userId, attempt.id)
@@ -163,9 +184,39 @@ const armBillingAttemptWithConsent = Effect.fn("Subscription.armBillingAttemptWi
   }
 );
 
+/** Retains the provider's create response as the attempt's first observed transaction. */
+const recordCreatedBillingTransaction = Effect.fn("Subscription.recordCreatedBillingTransaction")(
+  function* (input: {
+    userId: UserId;
+    attempt: ArmedCharge;
+    transaction: WompiTransaction;
+    environment: WompiEnvironment;
+  }) {
+    yield* withUserTransaction(
+      input.userId,
+      recordBillingTransactionInScope(
+        {
+          userId: input.userId,
+          billingAttemptId: input.attempt.billingAttemptId,
+          transactionId: input.transaction.transactionId,
+          status: input.transaction.status,
+          amountInCents: input.transaction.amountInCents,
+          currency: input.transaction.currency,
+          wompiSourceId: input.transaction.sourceId,
+          wompiEnvironment: input.environment,
+          finalizedAt: input.transaction.finalizedAt,
+          observedAt: yield* DateTime.now,
+        },
+        Option.some(input.attempt.reference)
+      )
+    );
+  }
+);
+
 /**
- * Arms one provider mutation exactly once. An armed attempt whose provider answer is lost is
- * recorded as awaiting a provider reference and never re-sent.
+ * Arms one provider mutation exactly once. A definitive provider rejection fails the attempt; an
+ * armed attempt whose provider answer is lost or created under another reference is recorded as
+ * awaiting a provider reference and never re-sent.
  */
 const chargeBillingAttempt = Effect.fn("Subscription.chargeBillingAttempt")(function* (
   payload: BillingAttemptReconciliationPayload,
@@ -197,26 +248,27 @@ const chargeBillingAttempt = Effect.fn("Subscription.chargeBillingAttempt")(func
       sourceId: armed.value.wompiSourceId,
     })
     .pipe(Effect.result);
-  if (Result.isFailure(response) || response.success.reference !== armed.value.reference) {
-    yield* withUserTransaction(
-      payload.userId,
-      markBillingAttemptAwaitingReferenceInScope(
+  if (Result.isFailure(response)) {
+    if (response.failure.certainty === "rejected") {
+      // Wompi refused to create any transaction under this reference, so nothing is collectable.
+      yield* withUserTransaction(
         payload.userId,
-        payload.billingAttemptId,
-        yield* DateTime.now
-      )
-    );
-    return { _tag: "AwaitingReference" } as const;
+        failBillingAttemptInScope(payload.userId, payload.billingAttemptId, yield* DateTime.now)
+      );
+      return { _tag: "Settled", status: "failed" } as const;
+    }
+    return yield* awaitProviderReference(payload.userId, payload.billingAttemptId);
   }
-  yield* withUserTransaction(
-    payload.userId,
-    recordCreatedWompiTransactionInScope({
-      userId: payload.userId,
-      billingAttemptId: payload.billingAttemptId,
-      transactionId: response.success.transactionId,
-      reference: response.success.reference,
-    })
-  );
+  if (response.success.reference !== armed.value.reference) {
+    // A transaction created under another reference may exist; never re-send, ask an operator.
+    return yield* awaitProviderReference(payload.userId, payload.billingAttemptId);
+  }
+  yield* recordCreatedBillingTransaction({
+    userId: payload.userId,
+    attempt: armed.value,
+    transaction: response.success,
+    environment: billing.environment,
+  });
   // Wait before the first provider lookup; the next wake re-reads authoritative state.
   return { _tag: "Tracked", since: armedAt } as const;
 });

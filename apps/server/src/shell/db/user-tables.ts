@@ -3,6 +3,7 @@ export const userTableNames = [
   "agent_confirmation_consumptions",
   "audit_log_entries",
   "backup_recovery_credentials",
+  "billing_attempt_transactions",
   "billing_attempts",
   "browser_pairing_email_delivery_intents",
   "browser_pairing_email_workflows",

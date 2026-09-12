@@ -1,5 +1,15 @@
+import { timingSafeEqual } from "node:crypto";
 import { UnknownJsonString } from "~/schema-compatibility";
-import { Data, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
+import {
+  Data,
+  DateTime,
+  Effect,
+  Array as EffectArray,
+  Encoding,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { Model } from "effect/unstable/schema";
 import {
   E164PhoneNumber,
@@ -31,7 +41,7 @@ export const maxKapsoWebhookBytes = 1_048_576;
 /** Kapso's documented maximum number of events in one buffered delivery. */
 export const maxKapsoDeliveryEvents = 100;
 
-const hmacSha256HexLength = 64;
+const hmacSha256Bytes = 32;
 const minimumWebhookSecretLength = 16;
 const millisecondsPerSecond = 1_000;
 
@@ -154,13 +164,15 @@ const RawIdentityChangeMessage = Schema.Struct({
   }),
 });
 
-const constantTimeEqual = (left: string, right: string): boolean => {
-  if (left.length !== hmacSha256HexLength || right.length !== hmacSha256HexLength) return false;
-  let difference = 0;
-  for (let index = 0; index < hmacSha256HexLength; index += 1) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
+/**
+ * Strictly decodes the hexadecimal claim to the one digest length the contract promises, then
+ * compares it to the expected digest with the platform constant-time equality primitive.
+ */
+const authenticatesDigest = (signature: string, expected: Uint8Array): boolean => {
+  const decoded = Encoding.decodeHex(signature);
+  if (Result.isFailure(decoded)) return false;
+  const provided = decoded.success;
+  return provided.byteLength === hmacSha256Bytes && timingSafeEqual(provided, expected);
 };
 
 const normalizePhoneNumber = (
@@ -181,8 +193,8 @@ const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
   if (input.secret.length < minimumWebhookSecretLength) {
     return yield* new InvalidKapsoSignature();
   }
-  const expected = new Bun.CryptoHasher("sha256", input.secret).update(input.rawBody).digest("hex");
-  if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
+  const expected = new Bun.CryptoHasher("sha256", input.secret).update(input.rawBody).digest();
+  if (!authenticatesDigest(input.signature, expected)) {
     return yield* new InvalidKapsoSignature();
   }
   return yield* Schema.decodeEffect(UnknownJsonString)(
@@ -263,10 +275,11 @@ const projectEvent = Effect.fn(function* (
 });
 
 /**
- * Authenticates at most 1 MiB of exact raw bytes with a lowercase/uppercase hexadecimal
- * HMAC-SHA256 signature and a secret of at least 16 characters before parsing. `deliveryKey` is the
- * provider retry key; `businessPortfolioId` is trusted deployment context, must satisfy the
- * Business Portfolio schema, and is projected into every caller rather than read from the payload.
+ * Authenticates at most 1 MiB of exact raw bytes with a strictly decoded hexadecimal HMAC-SHA256
+ * signature compared in constant time and a secret of at least 16 characters before parsing.
+ * `deliveryKey` is the provider retry key; `businessPortfolioId` is trusted deployment context,
+ * must satisfy the Business Portfolio schema, and is projected into every caller rather than read
+ * from the payload.
  * `receivedAt` is Fidy's receipt clock used for the five-minute future-timestamp tolerance. Projects
  * at most 100 supported v2 events. Fails with InvalidKapsoSignature,
  * KapsoPayloadTooLarge, KapsoBatchTooLarge, or InvalidKapsoPayload and reveals no decoded content

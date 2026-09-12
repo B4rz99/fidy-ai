@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/bun";
-import { Cause, Clock, Effect, Exit, Option, Predicate, Schema } from "effect";
+import { Cause, Clock, Effect, Encoding, Exit, Option, Predicate, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   type ActiveTraceCoordinates,
@@ -33,7 +33,6 @@ import type { TelemetryAdapter, TelemetryResource, TelemetrySpan } from "./telem
 const recordingDsn = "https://public@example.invalid/1";
 const recordingRelease = "fidy@0000000000000000000000000000000000000000";
 const recordingEnvironment = "local";
-const hexRadix = 16;
 const traceIdByteLength = 16;
 const spanIdByteLength = 8;
 const millisecondsPerSecond = 1_000;
@@ -238,10 +237,8 @@ const safeTransactionEvent = (
   });
 };
 
-const randomHex = (bytes: number): string => {
-  const data = crypto.getRandomValues(new Uint8Array(bytes));
-  return Array.from(data, (value) => value.toString(hexRadix).padStart(2, "0")).join("");
-};
+const randomHex = (bytes: number): string =>
+  Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(bytes)));
 
 type ActiveState = {
   descriptor: unknown;

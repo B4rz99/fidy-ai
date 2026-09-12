@@ -1,4 +1,4 @@
-import { type Result, Schema } from "effect";
+import { Encoding, type Result, Schema } from "effect";
 import { DashboardEdit, WidgetId as WidgetIdSchema } from "@/transport/client";
 import type { CanonicalSuccess } from "@/transport/client";
 import type { DashboardDropTarget } from "./drag-data";
@@ -17,7 +17,6 @@ const lowNibbleMask = 0x0f;
 const lowSixBitsMask = 0x3f;
 const uuidVersionFourBits = 0x40;
 const uuidRfcVariantBits = 0x80;
-const hexadecimalRadix = 16;
 const firstGroupEnd = 8;
 const secondGroupEnd = 12;
 const thirdGroupEnd = 16;
@@ -30,9 +29,7 @@ export const freshWidgetId = (): WidgetId => {
   const variantOctet = Schema.decodeUnknownSync(Schema.Int)(bytes[uuidVariantOctet]);
   bytes[uuidVersionOctet] = (versionOctet & lowNibbleMask) | uuidVersionFourBits;
   bytes[uuidVariantOctet] = (variantOctet & lowSixBitsMask) | uuidRfcVariantBits;
-  const hex = Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join(
-    ""
-  );
+  const hex = Encoding.encodeHex(bytes);
   return Schema.decodeSync(WidgetIdSchema)(
     `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
   );

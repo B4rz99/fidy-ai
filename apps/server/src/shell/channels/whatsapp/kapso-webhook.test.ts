@@ -1,7 +1,12 @@
+import assert from "node:assert/strict";
 import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
-import { decodeKapsoDisclosureLifecycleWebhook, maxKapsoWebhookBytes } from "./kapso-webhook";
+import { Cause, DateTime, Effect, Exit, Schema } from "effect";
+import {
+  InvalidKapsoSignature,
+  decodeKapsoDisclosureLifecycleWebhook,
+  maxKapsoWebhookBytes,
+} from "./kapso-webhook";
 
 const secret = "test-webhook-secret-32-characters";
 const correlationToken = "11111111-1111-4111-8111-111111111111";
@@ -169,5 +174,64 @@ it.effect("rejects oversized lifecycle bytes before decoding", () =>
       value: body,
     }).pipe(Effect.flip);
     expect(failure._tag).toBe("KapsoPayloadTooLarge");
+  })
+);
+
+// OpenSSL dgst -sha256 -mac HMAC -macopt key:test-webhook-secret-32-characters of the exact bytes.
+const vectorBody = new TextEncoder().encode(
+  '{"message":{"id":"wamid.lifecycle-test","kapso":{"statuses":[{"id":"wamid.lifecycle-test","status":"delivered","timestamp":"1775217900","biz_opaque_callback_data":"11111111-1111-4111-8111-111111111111"}]}},"phone_number_id":"123456789"}'
+);
+const vectorSignature = "5b1babb145b0a2550a9788dceaf627582c55be37590c7f3c8e38e421339ded42";
+
+const decodeVector = (
+  signature: string,
+  rawBody: Uint8Array = vectorBody
+): ReturnType<typeof decodeKapsoDisclosureLifecycleWebhook> =>
+  decodeKapsoDisclosureLifecycleWebhook({
+    rawBody,
+    secret,
+    signature,
+    eventName: "whatsapp.message.delivered",
+    receivedAt,
+  });
+
+it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signatures", () =>
+  Effect.gen(function* () {
+    expect(yield* decodeVector(vectorSignature)).toMatchObject({
+      outcome: "accepted",
+      correlationToken,
+    });
+    expect((yield* decodeVector(vectorSignature.toUpperCase())).outcome).toBe("accepted");
+
+    const altered = `${vectorSignature.slice(0, -1)}${vectorSignature.endsWith("2") ? "3" : "2"}`;
+    const malformed = [
+      altered,
+      vectorSignature.slice(0, -1),
+      `${vectorSignature}00`,
+      "z".repeat(64),
+      "a".repeat(63),
+      "",
+    ];
+    for (const signature of malformed) {
+      assert.deepStrictEqual(
+        Exit.match(yield* decodeVector(signature).pipe(Effect.exit), {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }),
+        Exit.fail(new InvalidKapsoSignature())
+      );
+    }
+    assert.deepStrictEqual(
+      Exit.match(
+        yield* decodeVector("not-hexadecimal", new TextEncoder().encode("not-json")).pipe(
+          Effect.exit
+        ),
+        {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }
+      ),
+      Exit.fail(new InvalidKapsoSignature())
+    );
   })
 );

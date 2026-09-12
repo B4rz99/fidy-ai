@@ -20,6 +20,7 @@ import {
   type ReplacementDeliveryWorkflowLive,
   type ReplacementExpiryWorkflowLive,
 } from "~/shell/email-authentication/replacement-workflow";
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 
 /** Real SQL/HTTP Cluster configuration shared by in-process and hard-killed replacement test runners. */
 const testAuthenticationTokenBytes = 64;
@@ -62,7 +63,8 @@ export const replacementRuntimeLayer = ({
               runnerHealthCheckInterval: "1 second",
               shardLockRefreshInterval: "500 millis",
               shardLockExpiration: "2 seconds",
-            }
+            },
+            loopbackClusterRunnerHttpPolicy
           )
         )
       )

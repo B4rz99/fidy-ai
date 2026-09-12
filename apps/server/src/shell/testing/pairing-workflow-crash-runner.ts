@@ -12,22 +12,27 @@ import {
   PairingDeliveryPayload,
   PairingExpiryPayload,
 } from "~/shell/email-authentication/pairing-email-execution";
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 
 const testSecretLength = 64;
 const crashRunnerPort = 24643;
-const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(testSecretLength)), {
-  runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-  runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-  availableShardGroups: ["default"],
-  assignedShardGroups: ["default"],
-  shardsPerGroup: 300,
-  entityMessagePollInterval: 50,
-  sendRetryInterval: 50,
-  runnerHealthCheckInterval: 100,
-  refreshAssignmentsInterval: 100,
-  shardLockRefreshInterval: 250,
-  shardLockExpiration: "2 seconds",
-});
+const cluster = authenticatedClusterHttp.layerSql(
+  Redacted.make("c".repeat(testSecretLength)),
+  {
+    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
+    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
+    availableShardGroups: ["default"],
+    assignedShardGroups: ["default"],
+    shardsPerGroup: 300,
+    entityMessagePollInterval: 50,
+    sendRetryInterval: 50,
+    runnerHealthCheckInterval: 100,
+    refreshAssignmentsInterval: 100,
+    shardLockRefreshInterval: 250,
+    shardLockExpiration: "2 seconds",
+  },
+  loopbackClusterRunnerHttpPolicy
+);
 const mode = Schema.decodeUnknownSync(Schema.Literals(["before-send", "after-send", "expiry"]))(
   process.argv[2]
 );

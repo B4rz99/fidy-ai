@@ -1,6 +1,19 @@
 import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Context, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { LanguageModel } from "effect/unstable/ai";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
@@ -81,7 +94,8 @@ const makeTransport = Effect.fn("Test.makeTransport")(function* (
 
 const makeExecutionFailingTransport = (
   status: number,
-  body: string
+  body: string,
+  headers?: Readonly<Record<string, string>>
 ): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
     HttpClient.HttpClient,
@@ -94,7 +108,7 @@ const makeExecutionFailingTransport = (
                 status: 200,
                 headers: { "content-type": "application/json" },
               })
-            : new Response(body, { status })
+            : new Response(body, { status, headers })
         )
       )
     )
@@ -107,6 +121,20 @@ const makeFailingTransport = (status: number): Layer.Layer<HttpClient.HttpClient
       Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status })))
     )
   );
+
+/** Executes one structured turn against a transport that fails the execution request. */
+const retryAfterFailure = (
+  transport: Layer.Layer<HttpClient.HttpClient>
+): Effect.Effect<HostedInferenceError> =>
+  Effect.gen(function* () {
+    const inference = yield* buildInference(transport).pipe(Effect.orDie);
+    const prepared = yield* inference.prepareStructured(structuredRequest()).pipe(Effect.orDie);
+    const exit = yield* Effect.exit(prepared.execute);
+    if (Exit.isSuccess(exit)) {
+      return yield* Effect.die(new Error("Expected the structured execution request to fail"));
+    }
+    return Option.getOrThrow(Cause.findErrorOption(exit.cause));
+  });
 
 const amendResponse = (body: string, patch: Readonly<Record<string, unknown>>): string => {
   const decoded = Schema.decodeSync(UnknownJsonString)(body);
@@ -799,6 +827,69 @@ it.effect("classifies retryable and terminal OpenAI HTTP failures", () =>
       expect(failure.reason._tag).toBe("ProviderUnavailable");
       expect(failure.retryable).toBe(retryable);
     }
+  })
+);
+
+it.effect("accepts a bounded provider Retry-After delta-seconds hint", () =>
+  Effect.gen(function* () {
+    for (const [value, expectedMillis] of [
+      ["2", 2_000],
+      [" 2 ", 2_000],
+      ["120", 120_000],
+    ] as const) {
+      const failure = yield* retryAfterFailure(
+        makeExecutionFailingTransport(429, "", { "retry-after": value })
+      );
+      expect(failure.reason._tag).toBe("ProviderUnavailable");
+      expect(failure.retryable).toBe(true);
+      expect(Duration.toMillis(Option.getOrThrow(failure.retryAfter))).toBe(expectedMillis);
+    }
+  })
+);
+
+it.effect(
+  "falls back to local policy for malformed, zero, negative, or excessive Retry-After",
+  () =>
+    Effect.gen(function* () {
+      for (const value of ["0", "-5", "soon", "121", "99999999999999999999", "2 3"]) {
+        const failure = yield* retryAfterFailure(
+          makeExecutionFailingTransport(429, "", { "retry-after": value })
+        );
+        expect(failure.reason._tag).toBe("ProviderUnavailable");
+        expect(failure.retryable).toBe(true);
+        expect(Option.isNone(failure.retryAfter)).toBe(true);
+      }
+    })
+);
+
+it.effect("accepts only bounded future HTTP-date Retry-After values against the owning clock", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.UTC(2026, 0, 1, 0, 0, 0));
+    const accepted = yield* retryAfterFailure(
+      makeExecutionFailingTransport(429, "", { "retry-after": "Thu, 01 Jan 2026 00:00:30 GMT" })
+    );
+    expect(Duration.toMillis(Option.getOrThrow(accepted.retryAfter))).toBe(30_000);
+
+    for (const value of [
+      "Wed, 31 Dec 2025 23:59:59 GMT",
+      "Thu, 01 Jan 2026 00:02:01 GMT",
+      "Thu, 01 Foo 2026 00:00:30 GMT",
+      "Thu, 01 Jan 2026 00:00:30 UTC",
+    ]) {
+      const failure = yield* retryAfterFailure(
+        makeExecutionFailingTransport(429, "", { "retry-after": value })
+      );
+      expect(failure.retryable).toBe(true);
+      expect(Option.isNone(failure.retryAfter)).toBe(true);
+    }
+
+    // 2026 is not a leap year, so a normalizing calendar would silently read this hint as
+    // 1 March — inside the bound. An impossible calendar date must still fall back to policy.
+    yield* TestClock.setTime(Date.UTC(2026, 2, 1, 0, 0, 0));
+    const normalized = yield* retryAfterFailure(
+      makeExecutionFailingTransport(429, "", { "retry-after": "Sun, 29 Feb 2026 00:00:30 GMT" })
+    );
+    expect(Option.isNone(normalized.retryAfter)).toBe(true);
   })
 );
 

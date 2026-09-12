@@ -46,12 +46,20 @@ const sanitizedRequestUrl = "https://external.invalid";
 
 const sanitizedResponse = (
   request: HttpClientRequest.HttpClientRequest,
-  response: HttpClientResponse.HttpClientResponse
+  response: HttpClientResponse.HttpClientResponse,
+  retainedResponseHeaderNames: ReadonlyArray<string>
 ): HttpClientResponse.HttpClientResponse =>
-  HttpClientResponse.fromWeb(request, new Response(null, { status: response.status }));
+  HttpClientResponse.fromWeb(
+    request,
+    new Response(null, {
+      status: response.status,
+      headers: retainedHeaders(response, retainedResponseHeaderNames),
+    })
+  );
 
 const sanitizeHttpClientError = (
-  error: HttpClientError.HttpClientError
+  error: HttpClientError.HttpClientError,
+  retainedResponseHeaderNames: ReadonlyArray<string>
 ): HttpClientError.HttpClientError => {
   const request = HttpClientRequest.make(error.request.method)(sanitizedRequestUrl);
   const reason = error.reason;
@@ -72,21 +80,21 @@ const sanitizeHttpClientError = (
       return new HttpClientError.HttpClientError({
         reason: new HttpClientError.StatusCodeError({
           request,
-          response: sanitizedResponse(request, reason.response),
+          response: sanitizedResponse(request, reason.response, retainedResponseHeaderNames),
         }),
       });
     case "DecodeError":
       return new HttpClientError.HttpClientError({
         reason: new HttpClientError.DecodeError({
           request,
-          response: sanitizedResponse(request, reason.response),
+          response: sanitizedResponse(request, reason.response, retainedResponseHeaderNames),
         }),
       });
     case "EmptyBodyError":
       return new HttpClientError.HttpClientError({
         reason: new HttpClientError.EmptyBodyError({
           request,
-          response: sanitizedResponse(request, reason.response),
+          response: sanitizedResponse(request, reason.response, retainedResponseHeaderNames),
         }),
       });
   }
@@ -111,7 +119,7 @@ const externalHttpPolicies: Readonly<Record<ExternalHttpProvider, ExternalHttpPo
   openai: {
     propagateTrace: false,
     redactedHeaders: ["authorization", "openai-organization", "openai-project"],
-    retainedResponseHeaders: [],
+    retainedResponseHeaders: ["retry-after"],
   },
   resend: {
     propagateTrace: false,
@@ -145,7 +153,7 @@ const makeProtectedHttpClient =
           Effect.provideService(HttpClient.TracerHeaderFilter, excludeHttpHeaders),
           Effect.provideService(HttpClient.TracerPropagationEnabled, policy.propagateTrace),
           Effect.provideService(HttpClient.TracerDisabledWhen, suppressAutomaticHttpSpan),
-          Effect.mapError(sanitizeHttpClientError)
+          Effect.mapError((error) => sanitizeHttpClientError(error, policy.retainedResponseHeaders))
         );
       })
     );
@@ -174,6 +182,8 @@ type ExternalHttpFailureReason = "response-body-failed" | "response-too-large" |
 export class ExternalHttpFailure extends Data.TaggedError("ExternalHttpFailure")<{
   reason: ExternalHttpFailureReason;
   responseStatus: Option.Option<number>;
+  /** Only the owning provider's allowlisted protocol headers, never raw response headers. */
+  responseHeaders: Headers.Headers;
 }> {}
 
 /** Provider response whose body has already proved its configured byte bound. */
@@ -191,16 +201,23 @@ export type BoundedExternalHttpClient = Readonly<{
   ) => Effect.Effect<BoundedExternalHttpResponse, ExternalHttpFailure>;
 }>;
 
-const failureResponseStatus = (error: HttpClientError.HttpClientError): Option.Option<number> => {
+/** The closed response metadata one bounded transport failure reports, keyed by its client reason. */
+const failureResponseMetadata = (
+  error: HttpClientError.HttpClientError,
+  retainedResponseHeaderNames: ReadonlyArray<string>
+): Readonly<{ status: Option.Option<number>; headers: Headers.Headers }> => {
   switch (error.reason._tag) {
     case "StatusCodeError":
     case "DecodeError":
     case "EmptyBodyError":
-      return Option.some(error.reason.response.status);
+      return {
+        status: Option.some(error.reason.response.status),
+        headers: retainedHeaders(error.reason.response, retainedResponseHeaderNames),
+      };
     case "TransportError":
     case "EncodeError":
     case "InvalidUrlError":
-      return Option.none();
+      return { status: Option.none(), headers: Headers.empty };
   }
 };
 
@@ -225,6 +242,7 @@ const materializeBoundedResponse = (
         new ExternalHttpFailure({
           reason: "response-body-failed",
           responseStatus: Option.some(response.status),
+          responseHeaders: retainedHeaders(response, retainedResponseHeaderNames),
         })
     ),
     Effect.flatMap(
@@ -234,6 +252,7 @@ const materializeBoundedResponse = (
             new ExternalHttpFailure({
               reason: "response-too-large",
               responseStatus: Option.some(response.status),
+              responseHeaders: retainedHeaders(response, retainedResponseHeaderNames),
             })
           ),
         onSome: (body) =>
@@ -259,13 +278,17 @@ export const makeBoundedExternalHttpClient =
       execute: (request, maximumResponseBytes) => {
         const boundedRequest = protectedClient.execute(request).pipe(
           Effect.tap(annotateResponse),
-          Effect.mapError(
-            (error) =>
-              new ExternalHttpFailure({
-                reason: "transport-failed",
-                responseStatus: failureResponseStatus(error),
-              })
-          ),
+          Effect.mapError((error) => {
+            const { status, headers } = failureResponseMetadata(
+              error,
+              policy.retainedResponseHeaders
+            );
+            return new ExternalHttpFailure({
+              reason: "transport-failed",
+              responseStatus: status,
+              responseHeaders: headers,
+            });
+          }),
           Effect.flatMap((response) =>
             materializeBoundedResponse(
               response,

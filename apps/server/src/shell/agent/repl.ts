@@ -114,6 +114,9 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
     }).pipe(
       Effect.asSome,
       Effect.catchTags({
+        DeliveryFailed: () => unavailableOutcome,
+        HostedTurnProtocolFailed: () => unavailableOutcome,
+        HostedTurnUnavailable: () => unavailableOutcome,
         ModelUnavailable: () => unavailableOutcome,
         ModelResponseRejected: () => unavailableOutcome,
         OnboardingConsentRequired: () => unavailableOutcome,

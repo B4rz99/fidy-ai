@@ -1,25 +1,18 @@
 import { jsonStringSchema } from "~/schema-compatibility";
 import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-openai";
 import * as Generated from "@effect/ai-openai/Generated";
-import {
-  Config,
-  DateTime,
-  type Duration,
-  Effect,
-  type JsonSchema,
-  Layer,
-  Option,
-  Schema,
-} from "effect";
+import { Config, DateTime, Duration, Effect, type JsonSchema, Layer, Option, Schema } from "effect";
 import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { ConfigError } from "effect/Config";
 import { IanaTimeZone } from "~/core/_shared/context";
 import {
   type BoundedExternalHttpResponse,
+  type ExternalHttpFailure,
   boundedProviderLibraryHttpClientLayer,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
+import { isTransientHttpStatus } from "~/shell/_shared/http-status";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
   defaultCompactionMaximumTokens,
@@ -189,15 +182,6 @@ const providerUnavailable = (
 
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
-const requestTimeoutStatus = 408;
-const conflictStatus = 409;
-const rateLimitedStatus = 429;
-const minimumServerFailureStatus = 500;
-const retryableProviderStatuses = new Set([
-  requestTimeoutStatus,
-  conflictStatus,
-  rateLimitedStatus,
-]);
 
 const invalidProviderOutput = (description: HostedInvalidOutputDescription): HostedInferenceError =>
   new HostedInferenceError({
@@ -363,38 +347,172 @@ const makeExecutionRequest = (
     : { ...countedRequest, ...controls, max_tool_calls: maximumToolCalls };
 };
 
+const retryAfterHeader = "retry-after";
+/**
+ * Largest provider timing hint retained. It matches the largest hosted model-round budget, and the
+ * model-round scheduler additionally requires the delay to fit the owning round's remaining time.
+ */
+const maximumRetryAfterMillis = 120_000;
+
+const utcMonths = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+type UtcMonth = (typeof utcMonths)[number];
+
+const utcMonthNumbers: Readonly<Record<UtcMonth, string>> = {
+  Jan: "01",
+  Feb: "02",
+  Mar: "03",
+  Apr: "04",
+  May: "05",
+  Jun: "06",
+  Jul: "07",
+  Aug: "08",
+  Sep: "09",
+  Oct: "10",
+  Nov: "11",
+  Dec: "12",
+};
+
+const httpDatePattern =
+  /^[A-Z][a-z]{2}, (\d{2}) ([A-Z][a-z]{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+
+const millisecondsPerSecond = 1_000;
+
+const deltaSecondsPattern = /^\d+$/;
+
+/** Accepts only a positive, bounded delta-seconds hint; every other form stays absent. */
+const parseRetryAfterSeconds = (value: string): Option.Option<Duration.Duration> => {
+  if (!deltaSecondsPattern.test(value)) return Option.none();
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return Option.none();
+  return seconds * millisecondsPerSecond <= maximumRetryAfterMillis
+    ? Option.some(Duration.seconds(seconds))
+    : Option.none();
+};
+
+type HttpDateParts = Readonly<{
+  day: string;
+  monthNumber: string;
+  year: string;
+  hour: string;
+  minute: string;
+  second: string;
+}>;
+
+/** The IMF-fixdate capture groups, in pattern order; the month must be a real UTC abbreviation. */
+const httpDateFields = Schema.Tuple([
+  Schema.String,
+  Schema.Literals(utcMonths),
+  Schema.String,
+  Schema.String,
+  Schema.String,
+  Schema.String,
+]);
+
+const httpDateParts = (match: RegExpExecArray): Option.Option<HttpDateParts> => {
+  const fields = Schema.decodeUnknownOption(httpDateFields)(match.slice(1));
+  if (Option.isNone(fields)) return Option.none();
+  const [day, month, year, hour, minute, second] = fields.value;
+  return Option.some({ day, monthNumber: utcMonthNumbers[month], year, hour, minute, second });
+};
+
+/**
+ * `DateTime.make` normalizes impossible calendar dates (for example 30 February becomes
+ * 2 March), so only an instant that reproduces every field the provider sent is canonical.
+ */
+const httpDateIsCanonical = (parts: HttpDateParts, deadline: DateTime.DateTime): boolean => {
+  const parsed = DateTime.toParts(deadline);
+  return (
+    parsed.year === Number(parts.year) &&
+    parsed.month === Number(parts.monthNumber) &&
+    parsed.day === Number(parts.day) &&
+    parsed.hour === Number(parts.hour) &&
+    parsed.minute === Number(parts.minute) &&
+    parsed.second === Number(parts.second)
+  );
+};
+
+/** Accepts only a future, bounded IMF-fixdate hint; every other form stays absent. */
+const parseRetryAfterHttpDate = (value: string): Effect.Effect<Option.Option<Duration.Duration>> =>
+  Effect.gen(function* () {
+    const match = httpDatePattern.exec(value);
+    if (match === null) return Option.none();
+    const parts = httpDateParts(match);
+    if (Option.isNone(parts)) return Option.none();
+    const { day, monthNumber, year, hour, minute, second } = parts.value;
+    const deadline = DateTime.make(`${year}-${monthNumber}-${day}T${hour}:${minute}:${second}Z`);
+    if (Option.isNone(deadline) || !httpDateIsCanonical(parts.value, deadline.value)) {
+      return Option.none();
+    }
+    const now = yield* DateTime.now;
+    const delayMillis = DateTime.toEpochMillis(deadline.value) - DateTime.toEpochMillis(now);
+    return delayMillis > 0 && delayMillis <= maximumRetryAfterMillis
+      ? Option.some(Duration.millis(delayMillis))
+      : Option.none();
+  });
+
+/**
+ * Parses only the allowlisted provider timing hint. Delta-seconds and IMF-fixdate forms are
+ * accepted within bound; malformed, negative, past, or excessive values stay absent so the owning
+ * model round keeps its bounded local retry policy and no value enters errors or telemetry.
+ */
+const parseProviderRetryAfter = (
+  headers: BoundedExternalHttpResponse["headers"]
+): Effect.Effect<Option.Option<Duration.Duration>> =>
+  Effect.gen(function* () {
+    const value = headers[retryAfterHeader]?.trim();
+    if (value === undefined) return Option.none();
+    return deltaSecondsPattern.test(value)
+      ? parseRetryAfterSeconds(value)
+      : yield* parseRetryAfterHttpDate(value);
+  });
+
+/** Maps one sanitized bounded-exchange failure to its declared hosted inference failure. */
+const boundedOpenAiFailure = (
+  failure: ExternalHttpFailure,
+  overflowFailure: () => HostedInferenceError
+): Effect.Effect<never, HostedInferenceError> =>
+  Effect.gen(function* () {
+    if (failure.reason === "response-too-large") return yield* overflowFailure();
+    if (failure.reason === "response-body-failed") return yield* providerUnavailable();
+    return yield* providerUnavailable(
+      Option.exists(failure.responseStatus, (status) => isTransientHttpStatus(status)),
+      yield* parseProviderRetryAfter(failure.responseHeaders)
+    );
+  });
+
 const executeBoundedOpenAiRequest = (
   client: OpenAiClient.Service,
   request: HttpClientRequest.HttpClientRequest,
   overflowFailure: () => HostedInferenceError
 ): Effect.Effect<BoundedExternalHttpResponse, HostedInferenceError> =>
-  client.client
-    .pipe(makeBoundedExternalHttpClient("openai"))
-    .execute(request, maximumStructuredResponseBytes)
-    .pipe(
-      Effect.filterOrFail(
-        (response) =>
-          response.status >= successfulStatusMinimum &&
-          response.status < successfulStatusMaximumExclusive,
-        (response) =>
-          providerUnavailable(
-            retryableProviderStatuses.has(response.status) ||
-              response.status >= minimumServerFailureStatus
-          )
-      ),
-      Effect.mapError((failure) => {
-        if (failure instanceof HostedInferenceError) return failure;
-        if (failure.reason === "response-too-large") return overflowFailure();
-        if (failure.reason === "response-body-failed") return providerUnavailable();
-        return providerUnavailable(
-          Option.exists(
-            failure.responseStatus,
-            (status) =>
-              retryableProviderStatuses.has(status) || status >= minimumServerFailureStatus
-          )
-        );
-      })
-    );
+  Effect.gen(function* () {
+    const response = yield* client.client
+      .pipe(makeBoundedExternalHttpClient("openai"))
+      .execute(request, maximumStructuredResponseBytes)
+      .pipe(Effect.catch((failure) => boundedOpenAiFailure(failure, overflowFailure)));
+    if (
+      response.status >= successfulStatusMinimum &&
+      response.status < successfulStatusMaximumExclusive
+    ) {
+      return response;
+    }
+    const retryAfter = yield* parseProviderRetryAfter(response.headers);
+    return yield* providerUnavailable(isTransientHttpStatus(response.status), retryAfter);
+  });
 
 const requestInputTokenCount = (
   client: OpenAiClient.Service,

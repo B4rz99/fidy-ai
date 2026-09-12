@@ -170,7 +170,35 @@ const WhatsAppInboundIdentity = Schema.fromJsonString(
   Schema.Struct({ userId: UserId, inboundJobId: WhatsAppInboundJobId })
 );
 
-/** Terminally retires one bounded page of work whose native retry budget is exhausted. */
+/**
+ * Terminally retires the inbound burst behind one durable item with metadata-only failure
+ * evidence. The update settles only jobs that have not already completed, so a racing Turn
+ * settlement wins and no retained content survives.
+ */
+export const failWhatsAppInboundBurst = Effect.fn("WhatsApp.failInboundBurst")(function* (
+  work: Readonly<{ readonly userId: UserId; readonly inboundJobId: WhatsAppInboundJobId }>,
+  terminalOutcome: "agent_failed" | "ambiguous_crash",
+  failedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* withUserTransaction(
+    work.userId,
+    sql`UPDATE public.whatsapp_inbound_jobs AS job
+      SET turn_id = coalesce(job.turn_id, job.id), content = NULL, completed_at = ${failedAt},
+        terminal_outcome = ${terminalOutcome}
+      WHERE job.user_id = ${work.userId} AND job.completed_at IS NULL
+        AND (job.id = ${work.inboundJobId} OR job.turn_id = (
+          SELECT trigger.turn_id FROM public.whatsapp_inbound_jobs AS trigger
+          WHERE trigger.user_id = ${work.userId}
+            AND trigger.id = ${work.inboundJobId}
+        ))`.pipe(Effect.asVoid, Effect.catchTag("SqlError", Effect.die))
+  );
+});
+
+/**
+ * Terminally retires one bounded page of work whose native retry budget is exhausted and returns
+ * the identities it retired, so the caller can retain one metadata-only failure record each.
+ */
 export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWork")(function* (
   now: DateTime.Utc
 ) {
@@ -183,6 +211,9 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
         AND attempts >= ${maximumWhatsAppInboundAttempts}
       ORDER BY sequence LIMIT 256`,
   })(undefined).pipe(Effect.orDie);
+  const retired: Array<
+    Readonly<{ readonly userId: UserId; readonly inboundJobId: WhatsAppInboundJobId }>
+  > = [];
   for (const item of exhausted) {
     const identity = Schema.decodeOption(WhatsAppInboundIdentity)(item.element);
     if (Option.isNone(identity)) {
@@ -193,25 +224,16 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
       });
       continue;
     }
-    yield* withUserTransaction(
-      identity.value.userId,
-      sql`UPDATE public.whatsapp_inbound_jobs AS job
-        SET turn_id = coalesce(job.turn_id, job.id), content = NULL, completed_at = ${now},
-          terminal_outcome = 'agent_failed'
-        WHERE job.user_id = ${identity.value.userId} AND job.completed_at IS NULL
-          AND (job.id = ${identity.value.inboundJobId} OR job.turn_id = (
-            SELECT trigger.turn_id FROM public.whatsapp_inbound_jobs AS trigger
-            WHERE trigger.user_id = ${identity.value.userId}
-              AND trigger.id = ${identity.value.inboundJobId}
-          ))`.pipe(Effect.asVoid, Effect.catchTag("SqlError", Effect.die))
-    );
+    yield* failWhatsAppInboundBurst(identity.value, "agent_failed", now);
     yield* sql`UPDATE fidy_queue SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
       updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE
         AND attempts >= ${maximumWhatsAppInboundAttempts}`.pipe(Effect.asVoid, Effect.orDie);
+    retired.push(identity.value);
   }
-  if (exhausted.length > 0) {
-    yield* Effect.logWarning("Retired exhausted WhatsApp work", { count: exhausted.length });
+  if (retired.length > 0) {
+    yield* Effect.logWarning("Retired exhausted WhatsApp work", { count: retired.length });
   }
+  return retired;
 });
 
 const QueueHistoryCandidate = Schema.Struct({

@@ -16,6 +16,9 @@ export const forbiddenStatus = 403;
 /** The status a server returns when it gave up waiting for the request. */
 export const requestTimeoutStatus = 408;
 
+/** The status a server returns when the request conflicted with concurrent state. */
+export const conflictStatus = 409;
+
 /** The status a server returns when the caller exceeded a rate limit. */
 export const tooManyRequestsStatus = 429;
 
@@ -24,3 +27,13 @@ export const firstServerErrorStatus = 500;
 
 /** Highest status in the range that blames the server rather than the caller. */
 export const lastServerErrorStatus = 599;
+
+/**
+ * Whether a response status describes a briefly unavailable HTTP resource: a request timeout,
+ * conflict, rate limit, or any server failure. Callers keep their own retry bounds.
+ */
+export const isTransientHttpStatus = (status: number): boolean =>
+  status === requestTimeoutStatus ||
+  status === conflictStatus ||
+  status === tooManyRequestsStatus ||
+  status >= firstServerErrorStatus;

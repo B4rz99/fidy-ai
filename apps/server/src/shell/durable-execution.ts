@@ -2,7 +2,7 @@ import { Config, Effect, Layer, Option, Schema } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress, TestRunner } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import { configuredSecret } from "./_shared/configured-secret";
+import { configuredSecret } from "~/shell/_shared/configured-secret";
 import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 
 const ClusterAuthenticationToken = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));

@@ -22,7 +22,7 @@ const declaredTurnFailures = [
   "delivery_failed",
 ] as const satisfies ReadonlyArray<TurnFailure>;
 
-/** The UUID codec every wire identifier shares, inlined as a fragment of the pinned documents. */
+/** The UUID JSON Schema fragment shared by every wire identifier, inlined into the pinned documents. */
 const uuidSchema = {
   type: "string",
   pattern:
@@ -117,8 +117,10 @@ const voidErrorDocument: unknown = {
  * Complete JSON Schema documents for the HostedTurns wire contract. Every reference is inlined
  * (`wireDocument` below), so the pinned structure does not depend on Effect's generated definition
  * names. These expectations are the reviewed oracle: the codecs themselves come from the one
- * production entity definition, and any change to a payload, result, error, or referenced codec
- * fails this suite until the wire contract is deliberately re-reviewed.
+ * production entity definition, so any schema-representable change to a payload, result, error, or
+ * referenced codec fails this suite until the wire contract is deliberately re-reviewed. Codec
+ * refinements with no JSON Schema projection (for example canonical UUID casing) are pinned by the
+ * rejection fixtures instead.
  */
 const handlePayloadDocument: unknown = {
   dialect: "draft-2020-12",
@@ -307,6 +309,8 @@ const handleContract: HostedTurnContract = {
     { ...handlePayload, limits: { ...limits, maxIterations: 33 } },
     // Widening the authority vocabulary would admit this value.
     { ...handlePayload, authorityRoot: "trusted-internal" },
+    // Dropping the canonical lowercase UUID filter would admit this value.
+    { ...handlePayload, turnId: turnId.toUpperCase() },
   ],
   payloadDocument: handlePayloadDocument,
   result: AgentReply.make({
@@ -341,7 +345,11 @@ const recoverContract: HostedTurnContract = {
   clientUninterruptible: true,
   serverUninterruptible: false,
   payload: { userId, turnId },
-  rejectedPayloads: [{ userId: "not-a-uuid", turnId }],
+  rejectedPayloads: [
+    { userId: "not-a-uuid", turnId },
+    // Dropping the canonical lowercase UUID filter would admit this value.
+    { userId, turnId: turnId.toUpperCase() },
+  ],
   payloadDocument: recoverPayloadDocument,
   result: undefined,
   rejectedResults: [],

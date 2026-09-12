@@ -260,22 +260,51 @@ const gatedRecorder =
       )
     );
 
+/** One hosted-agent test runtime: its listen port plus the model and delivery probes it records. */
+type HostedRuntimeSpec = Readonly<{
+  readonly port: number;
+  readonly generate: (text: string) => Effect.Effect<void>;
+  readonly deliver: (text: string) => Effect.Effect<void>;
+}>;
+
 /**
- * Starts one hosted-agent test runtime for `port` and returns it with its generated HostedTurns
- * client, disposing the runtime when the enclosing test scope closes.
+ * Starts one test runtime per spec, waits until the runners have rebalanced across the configured
+ * shards, and disposes every runtime when the enclosing test scope closes. Returns each runtime
+ * with its generated HostedTurns client, in spec order.
  */
-const startHostedRuntime = Effect.fn(function* (
-  port: number,
-  generate: (text: string) => Effect.Effect<void>,
-  deliver: (text: string) => Effect.Effect<void>
-) {
+const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRuntimeSpec>) {
   const crypto = yield* Crypto.Crypto;
   const http = yield* HttpClient.HttpClient;
-  const runtime = ManagedRuntime.make(runtimeLayer({ crypto, http, port, generate, deliver }));
-  yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-  const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
-  yield* waitForAssignments([yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding))]);
-  return { runtime, client };
+  const runtimes = specs.map((spec) =>
+    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
+  );
+  yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
+  yield* Effect.promise(() =>
+    Promise.all(runtimes.map((runtime) => runtime.runPromise(Effect.void)))
+  );
+  yield* waitForAssignments(
+    yield* Effect.promise(() =>
+      Promise.all(runtimes.map((runtime) => runtime.runPromise(Sharding.Sharding)))
+    )
+  );
+  return yield* Effect.forEach(runtimes, (runtime) =>
+    Effect.promise(() => runtime.runPromise(HostedTurns.client)).pipe(
+      Effect.map((client) => ({ runtime, client }))
+    )
+  );
+});
+
+/** Reads one started runtime, failing the test when the builder started none at that position. */
+const startedAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> => {
+  const value = started[index];
+  return value === undefined
+    ? Effect.die(`hosted runtime ${index} was not started`)
+    : Effect.succeed(value);
+};
+
+/** Starts the single hosted-agent runtime a one-runner scenario needs. */
+const startHostedRuntime = Effect.fn(function* (spec: HostedRuntimeSpec) {
+  return yield* startedAt(yield* startHostedRuntimes([spec]), 0);
 });
 
 /** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
@@ -397,8 +426,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
       () =>
         Effect.gen(function* () {
           yield* reset;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const events = yield* Ref.make<ReadonlyArray<string>>([]);
           const modelEntered = yield* Deferred.make<void>();
           const modelRelease = yield* Deferred.make<void>();
@@ -416,23 +443,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             entered: deliveryEntered,
             release: deliveryRelease,
           });
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24651, generate, deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24652, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24651, generate, deliver },
+            { port: 24652, generate, deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "held"));
           yield* awaitBarrier("model barrier", modelEntered, first);
           const blockedAt = yield* DateTime.now;
@@ -489,8 +505,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
       () =>
         Effect.gen(function* () {
           yield* reset;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const owner = yield* Deferred.make<number>();
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
@@ -502,23 +516,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
                 Effect.andThen(Effect.never)
               );
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24653, generate: generate(24653), deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24654, generate: generate(24654), deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24653, generate: generate(24653), deliver },
+            { port: 24654, generate: generate(24654), deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "abandoned"));
           const running = yield* awaitBarrier("owner barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
@@ -541,24 +544,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
-          const runtime = ManagedRuntime.make(
-            runtimeLayer({
-              crypto,
-              http,
-              port: 24659,
-              generate: () => Ref.update(calls, (count) => count + 1),
-              deliver: () => Ref.update(sends, (count) => count + 1),
-            })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+          const { runtime } = yield* startHostedRuntime({
+            port: 24659,
+            generate: () => Ref.update(calls, (count) => count + 1),
+            deliver: () => Ref.update(sends, (count) => count + 1),
+          });
           const agent = yield* Effect.promise(() => runtime.runPromise(AgentService));
-          yield* waitForAssignments([
-            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-          ]);
           const work = yield* enqueue("owned-whatsapp-input");
           const sql = yield* MigrationSqlClient;
           const before =
@@ -593,18 +586,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Effect.void;
-          const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24660, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-          const client = yield* Effect.promise(() => runtime.runPromise(HostedTurns.client));
-          yield* waitForAssignments([
-            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-          ]);
+          const { runtime, client } = yield* startHostedRuntime({ port: 24660, generate, deliver });
           const turnId = TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
           const inboundJobId = WhatsAppInboundJobId.make(
             yield* crypto.randomUUIDv4.pipe(Effect.orDie)
@@ -675,26 +660,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-          const runtimes = [
-            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24661, generate, deliver })),
-            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24662, generate, deliver })),
-          ] as const;
-          yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
-          yield* Effect.promise(() => runtimes[0].runPromise(Effect.void));
-          yield* Effect.promise(() => runtimes[1].runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                runtimes[0].runPromise(Sharding.Sharding),
-                runtimes[1].runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24661, generate, deliver },
+            { port: 24662, generate, deliver },
+          ]);
           const workerLayer = Layer.build(WhatsAppWorkerLive).pipe(
             Effect.andThen(Effect.never),
             Effect.scoped,
@@ -704,7 +677,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
               sendText: () => Effect.die("Unexpected disclosure"),
             })
           );
-          const workers = runtimes.map((runtime) => runtime.runFork(workerLayer));
+          const workers = started.map(({ runtime }) => runtime.runFork(workerLayer));
           yield* enqueue("composed-worker");
           yield* waitUntil(
             states(defaultUserId),
@@ -723,8 +696,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const entered = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
           const generated = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -734,23 +705,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const generate = gatedRecorder(recordGenerated, "holds-user", { entered, release });
           const deliver = (text: string): Effect.Effect<void> =>
             Ref.update(delivered, (items) => [...items, text]);
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24655, generate, deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24656, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24655, generate, deliver },
+            { port: 24656, generate, deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedAt(started, 0);
           const first = firstRuntime.runFork(handle(defaultUserId, "holds-user"));
           yield* awaitBarrier("model barrier", entered, first);
           yield* enqueue("queued-whatsapp");
@@ -801,7 +760,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         const recordCall = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
         const generate = gatedRecorder(recordCall, "caller-disconnect", { entered, release });
         const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-        const { runtime, client } = yield* startHostedRuntime(24663, generate, deliver);
+        const { runtime, client } = yield* startHostedRuntime({
+          port: 24663,
+          generate,
+          deliver,
+        });
         const request = {
           userId: defaultUserId,
           turnId: TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
@@ -842,7 +805,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         });
         const deliver = (text: string): Effect.Effect<void> =>
           Ref.update(delivered, (items) => [...items, text]);
-        const { runtime, client } = yield* startHostedRuntime(24664, generate, deliver);
+        const { runtime, client } = yield* startHostedRuntime({
+          port: 24664,
+          generate,
+          deliver,
+        });
         const work = yield* enqueue("persisted-disconnect");
         const caller = runtime.runFork(client(defaultUserId).ProcessWhatsApp(work));
         yield* awaitBarrier("model barrier", entered, caller);
@@ -877,8 +844,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const owner = yield* Deferred.make<number>();
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
@@ -890,23 +855,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
                 Effect.andThen(Deferred.succeed(owner, port)),
                 Effect.andThen(Effect.never)
               );
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24657, generate, deliver: deliver(24657) })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24658, generate, deliver: deliver(24658) })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24657, generate, deliver: deliver(24657) },
+            { port: 24658, generate, deliver: deliver(24658) },
+          ]);
+          const { runtime: firstRuntime } = yield* startedAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedAt(started, 1);
           yield* enqueue("ambiguous-whatsapp");
           const first = firstRuntime.runFork(processNextWhatsAppTurn());
           const running = yield* awaitBarrier("delivery barrier", owner, first);

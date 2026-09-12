@@ -27,6 +27,20 @@ at every user-facing boundary or you report one field problem at a time.
 `onExcessProperty` defaults to `"ignore"` (strips unknown keys — silent, but lossless
 decode needs `"error"` if you care).
 
+## `unstable/schema/Model`: boundary variants, not a generic domain model
+
+`Model` builds one field declaration into database variants (`select`, `insert`, `update`) and JSON variants (`json`, `jsonCreate`, `jsonUpdate`). Its helpers encode policy such as database-generated fields, app-generated fields, sensitive fields, date defaults, and representation changes (`unstable/schema/Model.ts:1-44,46-174`). Use it only when one owned record genuinely needs those coordinated variants. Do not replace ordinary domain Structs/Classes with `Model.Class` merely because the module is named “Model”; explicit schemas remain clearer when boundaries do not share one record shape.
+
+Current repository usage is narrower: `Model.optionalOption(S)` models webhook fields where an encoded key may be missing **or** null and both decode to `Option.none`; `Option.some(value)` encodes as the present value (`unstable/schema/Model.ts:293-324`, `apps/server/src/shell/channels/whatsapp/kapso-webhook.ts`). This deliberately collapses “missing” and “null.” Use plain `optionalKey`, `NullOr`, or another transformation when that distinction has domain meaning.
+
+If adopting full Model variants:
+
+- inspect and test every generated schema instead of assuming insert/update optionality;
+- treat `GeneratedByDb`/`GeneratedByApp` as inclusion rules, not generation mechanisms;
+- treat `Sensitive` as JSON-shape omission only, not logging/storage encryption or authorization (`Model.ts:204-291`);
+- keep database rows, public JSON, and domain invariants separate where their evolution differs;
+- verify checks/annotations survive the variant field transformations you apply.
+
 ## One schema, many artifacts
 
 A canonical entity schema derives everything else; nothing is written twice:

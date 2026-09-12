@@ -12,6 +12,16 @@ A workflow body is ordinary Effect code registered with `Workflow.toLayer`. On s
 
 `execute` validates the payload and either waits for the result or, with `{ discard: true }`, submits without waiting. `executionId`, `poll`, `resume`, and `interrupt` use the same derived identity (`effect/src/unstable/workflow/Workflow.ts:327-405`). Production must provide the cluster engine described in `.patterns/cluster.md`; `WorkflowEngine.layerMemory` is only a volatile testing/development engine.
 
+### Starting a workflow is a publication boundary
+
+A domain transaction followed by `Workflow.execute` is a dual write unless both are proven to share one storage transaction. Do not assume Cluster persistence makes an earlier domain commit and later workflow submission atomic. Choose explicitly:
+
+1. execute first only when the workflow can safely observe “not committed yet” and retry;
+2. commit an outbox/`PersistedQueue.offer` in the domain SQL transaction, then let a worker start the idempotent workflow;
+3. use a reviewed `ClusterSchema.WithTransaction` activity only for short database work that truly shares the configured message-storage `SqlClient`—never for provider network calls.
+
+The workflow idempotency key makes repeated publication converge on one execution, but it cannot recover a workflow submission that was never published. Persist enough domain state for the publisher to retry, and test both crash gaps: before publication and after publication before acknowledgment. See `.patterns/persisted-queue.md` for the same-`SqlClient` transactional-offer constraint.
+
 ## Activities are the durable side-effect boundary
 
 Define external or otherwise retry-sensitive steps with `Activity.make({ name, success, error, execute })`. The activity executes through the current workflow engine; `Activity.idempotencyKey` derives a stable key from the current workflow execution and activity attempt (`effect/src/unstable/workflow/Activity.ts:123-178`, `:246-269`, `:300-324`). In the cluster engine, the persisted activity request primary key is `${activity.name}/${attempt}` (`effect/src/unstable/cluster/ClusterWorkflowEngine.ts:228-250`, `:661-680`, `:743-744`).

@@ -67,7 +67,7 @@
     "@oasdiff-js/oasdiff-js": "1.0.0",
     "@sentry/cli": "3.7.0",
     "@vitest/coverage-istanbul": "4.1.11",
-    "bun-types": "1.4.1",
+    "bun-types": "1.4.2",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
   }

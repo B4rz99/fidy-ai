@@ -38,6 +38,21 @@ Keyed fiber containers: `FiberMap` — one fiber per key, **setting a key interr
 previous fiber** unless `onlyIfMissing` (`FiberMap.ts:327-390`); `run(map, key, effect)` forks
 and tracks (`:738`). `FiberHandle` is the single-slot version (`FiberHandle.ts:556`).
 
+## `Ref`: atomic process-local state
+
+`Ref<A>` is fiber-safe mutable state. Create it inside the owning Effect/Layer with `Ref.make`; share that service/reference only for the scope whose fibers coordinate through it (`Ref.ts:28-45,142-173`). It is process-local and volatile: never use it for cross-replica locks, durable progress, idempotency, authorization truth, or anything that must survive runtime replacement.
+
+Use one atomic operation for read-modify-write:
+
+- `Ref.update` when no result is needed;
+- `Ref.updateAndGet` / `getAndUpdate` when the new/old value is needed;
+- `Ref.modify` when the returned result differs from the stored state;
+- `updateSome` variants for conditional pure transitions.
+
+Do not compose `Ref.get` then `Ref.set` for a decision under concurrency; another fiber can update between those effects. Ref update functions are synchronous and pure—do not start Effects, promises, logging, or provider work inside them. If a transition needs an effectful critical section, use `Semaphore.withPermits(1)` around that larger operation, while remembering the semaphore is also only process-local.
+
+`makeUnsafe`/`getUnsafe` are suitable only in tightly owned synchronous adapters or test scaffolding where effect suspension cannot interleave the access. Prefer the effectful API elsewhere. In tests, allocate a fresh Ref per test and assert through `Ref.get`; deterministic counters/captured calls are a good use, while replacing a real concurrency or persistence integration with a Ref is not.
+
 ## Structured concurrency
 
 - `Effect.all(arg, { concurrency?, discard?, mode? })` — `mode: "result"` collects

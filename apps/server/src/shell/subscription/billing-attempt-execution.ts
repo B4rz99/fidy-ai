@@ -194,19 +194,21 @@ const recordCreatedBillingTransaction = Effect.fn("Subscription.recordCreatedBil
   }) {
     yield* withUserTransaction(
       input.userId,
-      recordBillingTransactionInScope({
-        userId: input.userId,
-        billingAttemptId: input.attempt.billingAttemptId,
-        reference: Option.some(input.attempt.reference),
-        transactionId: input.transaction.transactionId,
-        status: input.transaction.status,
-        amountInCents: input.transaction.amountInCents,
-        currency: input.transaction.currency,
-        wompiSourceId: input.transaction.sourceId,
-        wompiEnvironment: input.environment,
-        finalizedAt: input.transaction.finalizedAt,
-        observedAt: yield* DateTime.now,
-      })
+      recordBillingTransactionInScope(
+        {
+          userId: input.userId,
+          billingAttemptId: input.attempt.billingAttemptId,
+          transactionId: input.transaction.transactionId,
+          status: input.transaction.status,
+          amountInCents: input.transaction.amountInCents,
+          currency: input.transaction.currency,
+          wompiSourceId: input.transaction.sourceId,
+          wompiEnvironment: input.environment,
+          finalizedAt: input.transaction.finalizedAt,
+          observedAt: yield* DateTime.now,
+        },
+        Option.some(input.attempt.reference)
+      )
     );
   }
 );

@@ -276,7 +276,6 @@ export const findBillingTransactionsInScope = Effect.fn(
 type BillingTransactionWrite = Readonly<{
   userId: UserId;
   billingAttemptId: BillingAttemptId;
-  reference: Option.Option<WompiTransactionReference>;
   transactionId: WompiTransactionId;
   status: WompiBillingStatus;
   amountInCents: number;
@@ -289,21 +288,25 @@ type BillingTransactionWrite = Readonly<{
 
 /**
  * Locks the owning BillingAttempt row so the webhook and workflow writers cannot interleave a
- * read-modify-write of the same provider transaction. A provided reference re-asserts the armed
- * merchant reference the create response must match before its transaction is retained.
+ * read-modify-write of the same provider transaction. An asserted reference additionally requires
+ * the attempt to still be armed under that merchant reference.
  */
 const lockBillingTransactionWrite = Effect.fn("Subscription.lockBillingTransactionWrite")(
-  function* (input: BillingTransactionWrite) {
+  function* (
+    userId: UserId,
+    billingAttemptId: BillingAttemptId,
+    assertedReference: Option.Option<WompiTransactionReference>
+  ) {
     const sql = yield* SqlClient.SqlClient;
-    const locked = yield* Option.match(input.reference, {
+    const locked = yield* Option.match(assertedReference, {
       onNone: () => sql`
         SELECT id FROM billing_attempts
-        WHERE id = ${input.billingAttemptId} AND user_id = ${input.userId}
+        WHERE id = ${billingAttemptId} AND user_id = ${userId}
         FOR UPDATE
       `,
       onSome: (reference) => sql`
         SELECT id FROM billing_attempts
-        WHERE id = ${input.billingAttemptId} AND user_id = ${input.userId}
+        WHERE id = ${billingAttemptId} AND user_id = ${userId}
           AND charge_state = 'armed' AND wompi_transaction_reference = ${reference}
         FOR UPDATE
       `,
@@ -319,7 +322,7 @@ const findStoredBillingTransaction = Effect.fn("Subscription.findStoredBillingTr
       Request: Schema.Void,
       Result: Schema.Struct({
         status: WompiBillingStatus,
-        finalizedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+        finalizedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
       }),
       execute: () => sql`
         SELECT status, finalized_at AS "finalizedAt"
@@ -362,19 +365,26 @@ const upsertBillingTransaction = Effect.fn("Subscription.upsertBillingTransactio
 
 /**
  * Retains one provider transaction's absorbing current state under its owning BillingAttempt.
- * Returns without writing unless the attempt is owned and, when a `reference` is asserted, still
- * armed under that merchant reference. A retained fact clears `awaiting_reference_since`.
+ * Returns without writing unless the attempt is owned and, when `assertedReference` is present,
+ * still armed under that merchant reference. A retained fact clears `awaiting_reference_since`.
  */
 export const recordBillingTransactionInScope = Effect.fn(
   "Subscription.recordBillingTransactionInScope"
-)(function* (input: BillingTransactionWrite) {
-  if (!(yield* lockBillingTransactionWrite(input))) return;
+)(function* (
+  input: BillingTransactionWrite,
+  assertedReference: Option.Option<WompiTransactionReference> = Option.none()
+) {
+  if (
+    !(yield* lockBillingTransactionWrite(input.userId, input.billingAttemptId, assertedReference))
+  ) {
+    return;
+  }
   const current = yield* findStoredBillingTransaction(input.billingAttemptId, input.transactionId);
   const nextStatus = yield* decideBillingTransactionStatus({
     current: Option.map(current, (row) => row.status),
     observed: input.status,
   });
-  const existingFinalizedAt = Option.flatMap(current, (row) => Option.fromNullOr(row.finalizedAt));
+  const existingFinalizedAt = Option.flatMap(current, (row) => row.finalizedAt);
   const nextFinalizedAt =
     input.status === "APPROVED" && Option.isSome(input.finalizedAt)
       ? input.finalizedAt

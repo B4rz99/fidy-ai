@@ -164,19 +164,21 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
     if (Option.isSome(input.transactionId)) {
       yield* withUserTransaction(
         userId,
-        recordBillingTransactionInScope({
-          userId,
-          billingAttemptId,
-          reference: Option.some(reference),
-          transactionId: input.transactionId.value,
-          status: "PENDING",
-          amountInCents,
-          currency: price.value.money.currency,
-          wompiSourceId: context.value.wompiSourceId,
-          wompiEnvironment: "sandbox",
-          finalizedAt: Option.none(),
-          observedAt,
-        })
+        recordBillingTransactionInScope(
+          {
+            userId,
+            billingAttemptId,
+            transactionId: input.transactionId.value,
+            status: "PENDING",
+            amountInCents,
+            currency: price.value.money.currency,
+            wompiSourceId: context.value.wompiSourceId,
+            wompiEnvironment: "sandbox",
+            finalizedAt: Option.none(),
+            observedAt,
+          },
+          Option.some(reference)
+        )
       );
     }
   }

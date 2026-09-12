@@ -172,7 +172,6 @@ const retainProviderTransactionFact = Effect.fn("Subscription.retainWompiProvide
     const fact = {
       userId: input.userId,
       billingAttemptId: input.attempt.id,
-      reference: Option.none(),
       transactionId: input.transaction.id,
       status: input.transaction.status,
       amountInCents: input.transaction.amount_in_cents,

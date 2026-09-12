@@ -52,6 +52,24 @@ it.effect("requires a validated production key and accepts the development fallb
     });
     expect(development).toHaveLength(64);
 
+    const absent = yield* Effect.exit(
+      deriveIdentifier("browser-login-start", address, { NODE_ENV: "production" })
+    );
+    const empty = yield* Effect.exit(
+      deriveIdentifier("browser-login-start", address, {
+        NODE_ENV: "production",
+        SOURCE_ADMISSION_HMAC_KEY: "",
+      })
+    );
+    for (const outcome of [absent, empty]) {
+      expect(Exit.isFailure(outcome)).toBe(true);
+      if (Exit.isFailure(outcome)) {
+        const rendered = Cause.pretty(outcome.cause);
+        expect(rendered).toContain("SOURCE_ADMISSION_HMAC_KEY");
+        expect(rendered).not.toContain(address);
+      }
+    }
+
     const malformedKeys = [
       "predictable",
       "a".repeat(63),

@@ -1,13 +1,6 @@
 import { createHmac } from "node:crypto";
-import { Config, ConfigProvider, Effect, Redacted } from "effect";
-
-const sourceAdmissionHmacKeyPattern = /^[0-9a-f]{64}$/u;
-const invalidSourceAdmissionHmacKey = (): Config.ConfigError =>
-  new Config.ConfigError(
-    new ConfigProvider.SourceError({
-      message: "SOURCE_ADMISSION_HMAC_KEY must be a 32-byte lowercase hexadecimal key",
-    })
-  );
+import { Effect, Redacted } from "effect";
+import { configuredHmacKey } from "~/shell/_shared/configured-hmac-key";
 
 /**
  * One anonymous admission purpose. Purposes are separate namespaces: an identifier derived for one
@@ -30,14 +23,10 @@ export const anonymousSourceIdentifier = Effect.fn(function* (
   purpose: AnonymousSourcePurpose,
   sourceAddress: string
 ) {
-  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-  let secret = Redacted.make("local-source-admission-key-not-for-production");
-  if (environment === "production") {
-    secret = yield* Config.redacted("SOURCE_ADMISSION_HMAC_KEY");
-    if (!sourceAdmissionHmacKeyPattern.test(Redacted.value(secret))) {
-      return yield* Effect.fail(invalidSourceAdmissionHmacKey());
-    }
-  }
+  const secret = yield* configuredHmacKey({
+    variable: "SOURCE_ADMISSION_HMAC_KEY",
+    developmentFallback: "local-source-admission-key-not-for-production",
+  });
   return createHmac("sha256", Redacted.value(secret))
     .update(`${purpose}\u0000${sourceAddress}`)
     .digest();

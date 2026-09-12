@@ -633,7 +633,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("persists purpose-separated keyed identifiers for start and claim admission", () =>
+    it.effect("keeps purpose-separated keyed identifiers and deletes them after retention", () =>
       Effect.gen(function* () {
         yield* seedFreshWebSession;
         const started = yield* startPairing;
@@ -663,6 +663,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(claimRow?.digest).toBe(expectedClaim);
         expect(expectedStart).not.toBe(expectedClaim);
+
+        yield* sql`
+          UPDATE pat_pairing_start_attempts
+          SET attempted_at = attempted_at - interval '11 minutes';
+          UPDATE pat_pairing_claim_attempts
+          SET attempted_at = attempted_at - interval '11 minutes'
+        `;
+        yield* expireDuePATPairings();
+        expect(yield* sql`SELECT count(*)::int AS count FROM pat_pairing_start_attempts`).toEqual([
+          { count: 0 },
+        ]);
+        expect(yield* sql`SELECT count(*)::int AS count FROM pat_pairing_claim_attempts`).toEqual([
+          { count: 0 },
+        ]);
       })
     );
 

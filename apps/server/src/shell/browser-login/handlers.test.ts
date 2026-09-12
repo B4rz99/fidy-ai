@@ -443,6 +443,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("stores only the keyed admission identifier for an observed source address", () =>
       Effect.gen(function* () {
         yield* resetBrowserLogin;
+        // BrowserLogin decides from the socket peer, never a trusted proxy header, and the harness
+        // client's peer is not a controllable fixture. The service entry point is where the
+        // observed address enters persistence, so pass it there while still exercising real
+        // PostgreSQL; HTTP-seam route behavior is covered by the rest of this suite.
         yield* startBrowserLoginPairing("203.0.113.9");
         const sql = yield* MigrationSqlClient;
         const [row] = yield* sql`

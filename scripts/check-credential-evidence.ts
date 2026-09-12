@@ -7,8 +7,10 @@ import { Effect, Option } from "effect";
 
 /**
  * Every production `Config.redacted` credential must have one focused test proving its adapter path
- * keeps the secret out of failures, logs, and model context. The pairing is stated here rather than
- * inferred, so adding a credential without that evidence fails the gate instead of shipping unproven.
+ * keeps the secret out of failures, logs, and model context. Direct reads and the shared
+ * `configuredHmacKey` loader carry the same obligation, and the pairing is stated here rather than
+ * inferred, so adding a credential without that evidence fails the gate instead of shipping
+ * unproven.
  */
 type CredentialEvidence = Readonly<{
   configuration: string;
@@ -296,9 +298,14 @@ const runStaticSkipRegression = (): void => {
 };
 
 const configuredSecretNames = (source: string): ReadonlyArray<string> =>
-  Array.from(source.matchAll(/Config\.redacted\("([A-Z0-9_]+)"\)/gu), ([, name]) => name).filter(
-    (name): name is string => name !== undefined
-  );
+  [
+    ...source.matchAll(/Config\.redacted\("([A-Z0-9_]+)"\)/gu),
+    // The shared loader centralizes validation and redaction; its call sites still name each
+    // credential literally and keep the same evidence obligation as a direct Config.redacted read.
+    ...source.matchAll(/configuredHmacKey\(\{\s*variable:\s*"([A-Z0-9_]+)"/gu),
+  ]
+    .map(([, name]) => name)
+    .filter((name): name is string => name !== undefined);
 
 const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSecrets")(
   function* () {

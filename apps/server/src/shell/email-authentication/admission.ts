@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { Config, ConfigProvider, DateTime, Effect, Redacted, Schema } from "effect";
+import { DateTime, Effect, Redacted, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   type EmailAddress,
@@ -10,47 +10,25 @@ import type {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
+import { configuredHmacKey } from "~/shell/_shared/configured-hmac-key";
 
-const emailAdmissionHmacKeyPattern = /^[0-9a-f]{64}$/u;
 const requiredAdmissionBudgetCount = 2;
-const invalidEmailAdmissionHmacKey = (): Config.ConfigError =>
-  new Config.ConfigError(
-    new ConfigProvider.SourceError({
-      message: "EMAIL_ADMISSION_HMAC_KEY must be a 32-byte lowercase hexadecimal key",
-    })
-  );
-
-const credentialLookupHmacKeyPattern = /^[0-9a-f]{64}$/u;
-const invalidCredentialLookupHmacKey = (): Config.ConfigError =>
-  new Config.ConfigError(
-    new ConfigProvider.SourceError({
-      message: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY must be a 32-byte lowercase hexadecimal key",
-    })
-  );
 
 export const emailCredentialLookupKey = Effect.fn(function* (email: EmailAddress) {
-  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-  let secret = Redacted.make("local-email-credential-lookup-key-not-for-production");
-  if (environment === "production") {
-    secret = yield* Config.redacted("EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY");
-    if (!credentialLookupHmacKeyPattern.test(Redacted.value(secret))) {
-      return yield* Effect.fail(invalidCredentialLookupHmacKey());
-    }
-  }
+  const secret = yield* configuredHmacKey({
+    variable: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY",
+    developmentFallback: "local-email-credential-lookup-key-not-for-production",
+  });
   return createHmac("sha256", Redacted.value(secret))
     .update(`verified-email-credential:${email}`)
     .digest("hex");
 });
 
 export const emailAuthenticationHmacKey = Effect.fn(function* (scope: string) {
-  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-  let secret = Redacted.make("local-email-admission-key-not-for-production");
-  if (environment === "production") {
-    secret = yield* Config.redacted("EMAIL_ADMISSION_HMAC_KEY");
-    if (!emailAdmissionHmacKeyPattern.test(Redacted.value(secret))) {
-      return yield* Effect.fail(invalidEmailAdmissionHmacKey());
-    }
-  }
+  const secret = yield* configuredHmacKey({
+    variable: "EMAIL_ADMISSION_HMAC_KEY",
+    developmentFallback: "local-email-admission-key-not-for-production",
+  });
   return createHmac("sha256", Redacted.value(secret)).update(scope).digest("hex");
 });
 

@@ -1,4 +1,13 @@
-import { Crypto, DateTime, Duration, Effect, Encoding, Option, type Schema } from "effect";
+import {
+  Crypto,
+  DateTime,
+  Duration,
+  Effect,
+  Encoding,
+  Option,
+  Redacted,
+  type Schema,
+} from "effect";
 import {
   type ConsentDecisionEvidence,
   ConsentRecord,
@@ -65,7 +74,7 @@ const manualPATResponse = (
 ): MutationResponse<typeof IssuedManualPATResponse> => ({
   data: IssuedManualPATResponse.make({
     pat: { ...pat, idleExpiresAt: pat.expiresAt },
-    bearer,
+    bearer: Redacted.make(bearer),
   }),
   next: [],
 });
@@ -101,7 +110,8 @@ export type CreateManualPATInput = Readonly<{
 
 /**
  * Creates one digest-only PAT and matching authenticated-web Consent grant inside the
- * caller-owned User transaction. The raw bearer exists only in the returned success value.
+ * caller-owned User transaction. No persisted row receives the bearer; it exists only as the
+ * redacted one-time disclosure in the returned success value.
  */
 const createManualPATInScope = Effect.fn("createManualPATInScope")(function* ({
   userId,

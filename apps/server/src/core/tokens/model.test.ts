@@ -1,7 +1,8 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { PATId } from "./reference";
 import {
+  IssuedPAT,
   ManualPATGrantInput,
   PATLifetimeDays,
   PATRecipientLabel,
@@ -148,6 +149,21 @@ it("carries bearer grant instants over the wire as date-time strings", () => {
   expect(
     Result.isSuccess(Schema.decodeUnknownResult(TokenGrant)(JSON.parse(JSON.stringify(encoded))))
   ).toBe(true);
+});
+
+it("keeps an issued PAT bearer raw only in its encoded wire representation", () => {
+  const rawBearer = TokenBearer.make("fin_default1_0123456789abcdefghijklmnopqrstuvwxyzABCD");
+  const issuedBearer = Redacted.make(rawBearer);
+  const bearerCodec = Schema.toCodecJson(IssuedPAT.fields.bearer);
+
+  const decoded = Schema.decodeSync(bearerCodec)(rawBearer);
+
+  expect(Schema.encodeSync(bearerCodec)(issuedBearer)).toBe(rawBearer);
+  expect(Redacted.isRedacted(decoded)).toBe(true);
+  expect(Redacted.value(decoded)).toBe(rawBearer);
+  expect(Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(decoded)).not.toContain(
+    rawBearer
+  );
 });
 
 it("keeps fixed PAT expiration independent from successful use", () => {

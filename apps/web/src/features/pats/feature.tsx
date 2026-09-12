@@ -1,13 +1,13 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import { AsyncResult, type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
 import { readClipboardText, writeClipboardText } from "@/browser/clipboard";
 import { useSession } from "@/session/session-context";
-import { type FidyClient, type TokenBearer } from "@/transport/client";
+import { type FidyClient } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
-import { type IssueManualPATCommand, ManualPATView } from "./view";
+import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
 import {
   type ActivePATManagementState,
   ActivePATManagementView,
@@ -101,11 +101,11 @@ const makeApprovePairingCommand = (
     { concurrent: false }
   );
 
-const clearClipboard = (bearer: TokenBearer): void => {
+const clearClipboard = (bearer: RedactedTokenBearer): void => {
   Effect.runFork(
     readClipboardText(Option.fromUndefinedOr(navigator.clipboard)).pipe(
       Effect.flatMap((current) =>
-        current === bearer
+        current === Redacted.value(bearer)
           ? writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), "")
           : Effect.void
       ),
@@ -114,9 +114,9 @@ const clearClipboard = (bearer: TokenBearer): void => {
   );
 };
 
-const copyToClipboard = (bearer: TokenBearer, onCopied: () => void): void => {
+const copyToClipboard = (bearer: RedactedTokenBearer, onCopied: () => void): void => {
   Effect.runFork(
-    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), bearer).pipe(
+    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), Redacted.value(bearer)).pipe(
       Effect.tap(() => Effect.sync(onCopied)),
       Effect.tap(() => Effect.sleep(bearerRevealLifetime)),
       Effect.tap(() => Effect.sync(() => clearClipboard(bearer))),

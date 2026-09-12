@@ -250,7 +250,7 @@ const issueDashboardPAT = async (page: Page): Promise<string> => {
   const body = Schema.decodeUnknownSync(Schema.Struct({ data: IssuedPAT }))(
     await (await issueResponse).json()
   );
-  return body.data.bearer;
+  return Redacted.value(body.data.bearer);
 };
 
 const SeededTransaction = Schema.Struct({ categoryLabel: Schema.String });
@@ -464,7 +464,7 @@ test("reviews in the fresh browser and delivers a paired PAT only to the initiat
     await page.evaluate(browserStorageValues),
   ];
   expect(browserEvidence.join("\n")).not.toContain(privateDeviceCode);
-  expect(browserEvidence.join("\n")).not.toContain(issued.bearer);
+  expect(browserEvidence.join("\n")).not.toContain(Redacted.value(issued.bearer));
 
   const replay = await request.post(`${apiOrigin}/pat-pairings/claim`, {
     headers: anonymousSourceHeaders,

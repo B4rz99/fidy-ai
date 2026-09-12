@@ -19,6 +19,7 @@ import {
   Layer,
   Option,
   Random,
+  Redacted,
   Ref,
   Schedule,
   Schema,
@@ -2322,7 +2323,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
       expect(listingTranscript).toContain(issued.data.pat.shortId);
       expect(listingTranscript).toContain("Hosted revocation robot");
-      expect(listingTranscript).not.toContain(issued.data.bearer);
+      expect(listingTranscript).not.toContain(Redacted.value(issued.data.bearer));
 
       const challenge = yield* service.handleMessage(
         defaultUserId,

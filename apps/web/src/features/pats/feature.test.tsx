@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DateTime, Duration, Option } from "effect";
+import { DateTime, Duration, Option, Redacted } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   type ActivePATMetadata,
@@ -14,7 +14,7 @@ import {
   recipientLabelLimit,
 } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
-import { type IssueManualPATCommand, ManualPATView } from "./view";
+import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
 import {
   ActivePATManagementView,
   type RevokeActivePATCommand,
@@ -22,6 +22,7 @@ import {
 } from "./management-view";
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const redactedBearer = Redacted.make(bearer);
 const createdAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
 const issued: IssuedPAT = {
   pat: {
@@ -36,7 +37,7 @@ const issued: IssuedPAT = {
     revokedAt: Option.none(),
     createdAt,
   },
-  bearer,
+  bearer: redactedBearer,
 };
 
 afterEach(() => {
@@ -53,15 +54,24 @@ const prepareGrantReview = (): void => {
   fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
 };
 
+const issueReviewedPAT = (): void => {
+  prepareGrantReview();
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
+};
+
+const expectRedactedBearer = (received: Option.Option<RedactedTokenBearer>): void => {
+  expect(Option.map(received, Redacted.value)).toEqual(Option.some(bearer));
+};
+
 it("defaults to 90 days, reviews exact expiration, and issues the selected fixed lifetime", () => {
   vi.useFakeTimers();
   vi.setSystemTime(DateTime.toEpochMillis(createdAt));
   const issue = vi.fn((command: IssueManualPATCommand) => {
     command.onIssued(issued);
   });
-  const copyToClipboard = vi.fn((_bearer: TokenBearer, onCopied: () => void) => onCopied());
+  const copyToClipboard = vi.fn((_bearer: RedactedTokenBearer, onCopied: () => void) => onCopied());
   const clearClipboard = vi.fn();
-  const { rerender } = render(
+  render(
     <ManualPATView
       key="signed-in"
       clearClipboard={clearClipboard}
@@ -98,19 +108,40 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   expect(screen.queryByText("Se muestra una sola vez")).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Copiar token" }));
-  expect(copyToClipboard).toHaveBeenCalledWith(bearer, expect.any(Function));
+  expect(copyToClipboard).toHaveBeenCalledTimes(1);
+  expectRedactedBearer(Option.fromUndefinedOr(copyToClipboard.mock.calls[0]?.[0]));
   expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
+});
+
+it("hides an issued bearer and clears the clipboard when its disclosure unmounts", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(DateTime.toEpochMillis(createdAt));
+  const issue = vi.fn((command: IssueManualPATCommand) => {
+    command.onIssued(issued);
+  });
+  const clearClipboard = vi.fn();
+  const { rerender } = render(
+    <ManualPATView
+      key="signed-in"
+      clearClipboard={clearClipboard}
+      copyToClipboard={vi.fn()}
+      issue={issue}
+    />
+  );
+
+  issueReviewedPAT();
+  expect(screen.getByText(bearer)).toBeVisible();
 
   rerender(
     <ManualPATView
-      key="expired"
+      key="navigated"
       clearClipboard={clearClipboard}
-      copyToClipboard={copyToClipboard}
+      copyToClipboard={vi.fn()}
       issue={issue}
     />
   );
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expect(clearClipboard).toHaveBeenCalledWith(bearer);
+  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls[0]?.[0]));
   vi.useRealTimers();
 });
 
@@ -290,18 +321,16 @@ it("clears an issued bearer on reset and page hide", async () => {
   const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
   render(<ManualPATView clearClipboard={clearClipboard} copyToClipboard={vi.fn()} issue={issue} />);
 
-  prepareGrantReview();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
+  issueReviewedPAT();
   fireEvent.click(screen.getByRole("button", { name: "Crear otro token" }));
-  expect(clearClipboard).toHaveBeenCalledWith(bearer);
+  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls[0]?.[0]));
   await vi.advanceTimersByTimeAsync(Duration.toMillis(bearerRevealLifetime));
 
-  prepareGrantReview();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
+  issueReviewedPAT();
   act(() => {
     window.dispatchEvent(new Event("pagehide"));
   });
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expect(clearClipboard).toHaveBeenLastCalledWith(bearer);
+  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls.at(-1)?.[0]));
   vi.useRealTimers();
 });

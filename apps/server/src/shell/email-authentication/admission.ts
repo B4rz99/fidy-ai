@@ -1,5 +1,4 @@
-import { createHmac } from "node:crypto";
-import { DateTime, Effect, Redacted, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   type EmailAddress,
@@ -10,7 +9,7 @@ import type {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
-import { configuredHmacKey } from "~/shell/_shared/configured-hmac-key";
+import { configuredHmacKey, hmacSha256 } from "~/shell/_shared/hmac";
 
 const requiredAdmissionBudgetCount = 2;
 
@@ -19,9 +18,7 @@ export const emailCredentialLookupKey = Effect.fn(function* (email: EmailAddress
     variable: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY",
     developmentFallback: "local-email-credential-lookup-key-not-for-production",
   });
-  return createHmac("sha256", Redacted.value(secret))
-    .update(`verified-email-credential:${email}`)
-    .digest("hex");
+  return hmacSha256({ secret, payload: `verified-email-credential:${email}` }).toString("hex");
 });
 
 export const emailAuthenticationHmacKey = Effect.fn(function* (scope: string) {
@@ -29,7 +26,7 @@ export const emailAuthenticationHmacKey = Effect.fn(function* (scope: string) {
     variable: "EMAIL_ADMISSION_HMAC_KEY",
     developmentFallback: "local-email-admission-key-not-for-production",
   });
-  return createHmac("sha256", Redacted.value(secret)).update(scope).digest("hex");
+  return hmacSha256({ secret, payload: scope }).toString("hex");
 });
 
 export type EmailDeliveryRequester =

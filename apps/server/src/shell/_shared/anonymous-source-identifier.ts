@@ -1,6 +1,5 @@
-import { createHmac } from "node:crypto";
-import { Effect, Redacted } from "effect";
-import { configuredHmacKey } from "~/shell/_shared/configured-hmac-key";
+import { Effect } from "effect";
+import { configuredHmacKey, hmacSha256 } from "./hmac";
 
 /**
  * One anonymous admission purpose. Purposes are separate namespaces: an identifier derived for one
@@ -27,7 +26,5 @@ export const anonymousSourceIdentifier = Effect.fn(function* (
     variable: "SOURCE_ADMISSION_HMAC_KEY",
     developmentFallback: "local-source-admission-key-not-for-production",
   });
-  return createHmac("sha256", Redacted.value(secret))
-    .update(`${purpose}\u0000${sourceAddress}`)
-    .digest();
+  return hmacSha256({ secret, payload: `${purpose}\u0000${sourceAddress}` });
 });

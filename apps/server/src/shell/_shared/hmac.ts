@@ -1,6 +1,16 @@
+import { createHmac } from "node:crypto";
 import { Config, ConfigProvider, Effect, Redacted } from "effect";
 
 const hmacKeyPattern = /^[0-9a-f]{64}$/u;
+
+/**
+ * Computes one HMAC-SHA-256 digest over the payload with a resolved key. Callers own the payload
+ * encoding and decide whether the digest is persisted as bytes or as hex.
+ */
+export const hmacSha256 = (input: {
+  readonly secret: Redacted.Redacted<string>;
+  readonly payload: string;
+}): Buffer => createHmac("sha256", Redacted.value(input.secret)).update(input.payload).digest();
 
 /**
  * Resolves one validated, redacted 32-byte HMAC key. Production requires the named variable to

@@ -1,0 +1,16 @@
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  h_c6d49c804e0ad2 33
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  h_c6d49c804e0ad2 27,34,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b0c1b374820ebb81ad81738e1bcc941ab4a3483f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

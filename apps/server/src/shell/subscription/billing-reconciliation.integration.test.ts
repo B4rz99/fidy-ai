@@ -48,12 +48,14 @@ import {
   getBillingReconciliationEscalations,
   insertPendingBillingAttemptInScope,
   markBillingAttemptAwaitingReferenceInScope,
-  recordCreatedWompiTransactionInScope,
+  markBillingAttemptManualReconciliationInScope,
+  recordBillingTransactionInScope,
 } from "./billing-repo";
 import { findPrice } from "./repo";
 import {
   WompiBillingClient,
   type WompiBillingClientService,
+  type WompiTransaction,
   WompiTransactionCreationFailed,
   WompiTransactionLookupFailed,
 } from "./wompi-billing-client";
@@ -77,7 +79,9 @@ type SeededAttempt = Readonly<{
 
 /**
  * Seeds one User-owned armed BillingAttempt with its own local CardPaymentSource so the durable test
- * controls provider facts directly instead of traversing the browser enrollment boundary again.
+ * controls provider facts directly instead of traversing the browser enrollment boundary again. The
+ * `observedAt` parameter lets a test place the first observed provider transaction in the past,
+ * which is what puts it beyond Wompi's three-minute retry opportunity.
  */
 const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
   input: {
@@ -86,7 +90,8 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
     armedAt: DateTime.Utc;
     createdAt: DateTime.Utc;
   },
-  arm: boolean = true
+  arm: boolean = true,
+  observedAt: DateTime.Utc = input.armedAt
 ) {
   const userId = userIdFor(input.index);
   yield* seedConsentedPatIdentity({ userId, bearer: bearerFor(input.index) });
@@ -133,6 +138,7 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
   if (Option.isNone(context) || Option.isNone(price)) {
     return yield* Effect.die("billing fixture context is missing");
   }
+  const amountInCents = yield* amountInCentsForBilling(price.value.money.amount);
   yield* withUserTransaction(
     userId,
     insertPendingBillingAttemptInScope({
@@ -157,11 +163,18 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
     if (Option.isSome(input.transactionId)) {
       yield* withUserTransaction(
         userId,
-        recordCreatedWompiTransactionInScope({
+        recordBillingTransactionInScope({
           userId,
           billingAttemptId,
+          reference: Option.some(reference),
           transactionId: input.transactionId.value,
-          reference,
+          status: "PENDING",
+          amountInCents,
+          currency: price.value.money.currency,
+          wompiSourceId: context.value.wompiSourceId,
+          wompiEnvironment: "sandbox",
+          finalizedAt: Option.none(),
+          observedAt,
         })
       );
     }
@@ -170,7 +183,7 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
     payload: { userId, billingAttemptId, revision: 1 },
     userId,
     reference,
-    amountInCents: yield* amountInCentsForBilling(price.value.money.amount),
+    amountInCents,
     sourceId: context.value.wompiSourceId,
   } satisfies SeededAttempt;
 });
@@ -240,6 +253,24 @@ const makeProvider = (input: {
   finalizedAt: DateTime.Utc;
 }): ReturnType<typeof buildProvider> => buildProvider({ ...input, fault: { _tag: "None" } });
 
+/** Builds one authenticated provider fact for one transaction under a seeded attempt. */
+const providerTransaction = (
+  input: Readonly<{
+    attempt: SeededAttempt;
+    transactionId: WompiTransactionId;
+    status: WompiBillingStatus;
+  }>,
+  finalizedAt: Option.Option<DateTime.Utc> = Option.none()
+): WompiTransaction => ({
+  transactionId: input.transactionId,
+  reference: input.attempt.reference,
+  status: input.status,
+  amountInCents: input.attempt.amountInCents,
+  currency: "COP",
+  sourceId: input.attempt.sourceId,
+  finalizedAt,
+});
+
 const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
   port: number,
   baseDelay: Duration.Input,
@@ -286,6 +317,7 @@ const attemptStatus = Effect.fn("Test.readBillingAttemptStatus")(function* (
       awaitingReference: Schema.Boolean,
       manualReconciliation: Schema.Boolean,
       hasTransaction: Schema.Boolean,
+      transactions: Schema.Int,
       periods: Schema.Int,
       paid: Schema.Boolean,
     }),
@@ -293,13 +325,34 @@ const attemptStatus = Effect.fn("Test.readBillingAttemptStatus")(function* (
       SELECT attempt.status,
         attempt.awaiting_reference_since IS NOT NULL AS "awaitingReference",
         attempt.manual_reconciliation_since IS NOT NULL AS "manualReconciliation",
-        attempt.wompi_transaction_id IS NOT NULL AS "hasTransaction",
+        EXISTS (
+          SELECT 1 FROM billing_attempt_transactions AS transaction
+          WHERE transaction.billing_attempt_id = attempt.id
+        ) AS "hasTransaction",
+        (SELECT COUNT(*)::int FROM billing_attempt_transactions AS transaction
+         WHERE transaction.billing_attempt_id = attempt.id) AS transactions,
         (SELECT COUNT(*)::int FROM paid_subscription_periods AS period
          WHERE period.billing_attempt_id = attempt.id) AS periods,
         subscription.paid_pro_active AS paid
       FROM billing_attempts AS attempt
       INNER JOIN subscriptions AS subscription ON subscription.id = attempt.subscription_id
       WHERE attempt.id = ${id}
+    `,
+  })({ id: attempt.payload.billingAttemptId }).pipe(Effect.orDie);
+});
+
+const attemptTransactions = Effect.fn("Test.readBillingTransactions")(function* (
+  attempt: SeededAttempt
+) {
+  const sql = yield* MigrationSqlClient;
+  return yield* SqlSchema.findAll({
+    Request: Schema.Struct({ id: BillingAttemptId }),
+    Result: Schema.Struct({ transactionId: Schema.String, status: Schema.String }),
+    execute: ({ id }) => sql`
+      SELECT wompi_transaction_id AS "transactionId", status
+      FROM billing_attempt_transactions
+      WHERE billing_attempt_id = ${id}
+      ORDER BY first_observed_at, wompi_transaction_id
     `,
   })({ id: attempt.payload.billingAttemptId }).pipe(Effect.orDie);
 });
@@ -314,7 +367,7 @@ const TestLayer = Layer.mergeAll(
 layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
   "durable BillingAttempt reconciliation",
   (it) => {
-    it.effect("maintenance probe stays quiet while nothing needs attention", () =>
+    it.effect("builds and runs the escalation maintenance loop", () =>
       Effect.scoped(
         Effect.gen(function* () {
           yield* Layer.build(
@@ -390,12 +443,16 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
     it.effect("settles a verified terminal decline as failed without activating paid Pro", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedAttempt({
-          index: 7,
-          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-7")),
-          armedAt: now,
-          createdAt: now,
-        });
+        const attempt = yield* seedAttempt(
+          {
+            index: 7,
+            transactionId: Option.some(WompiTransactionId.make("txn-reconcile-7")),
+            armedAt: now,
+            createdAt: now,
+          },
+          true,
+          DateTime.subtract(now, { minutes: 4 })
+        );
         const { provider } = yield* makeProvider({
           reference: attempt.reference,
           amountInCents: attempt.amountInCents,
@@ -410,6 +467,69 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         expect(result).toEqual({ outcome: "failed" });
         expect(yield* attemptStatus(attempt)).toMatchObject({
           status: "failed",
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("keeps a declined transaction pending inside the Wompi retry opportunity", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 20,
+          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-20")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({
+            attempt,
+            transactionId: WompiTransactionId.make("txn-reconcile-20"),
+            status: "DECLINED",
+          }),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          transactions: 1,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("settles a definitively rejected creation as failed", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt(
+          {
+            index: 16,
+            transactionId: Option.none(),
+            armedAt: now,
+            createdAt: now,
+          },
+          false
+        );
+        const { provider, creations } = yield* buildProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          fault: { _tag: "Create", certainty: "rejected" },
+        });
+        const runtime = yield* acquireRuntime(24720, "25 millis", provider);
+        const result = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "failed" });
+        expect(yield* Ref.get(creations)).toBe(1);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "failed",
+          awaitingReference: false,
+          hasTransaction: false,
           periods: 0,
           paid: false,
         });
@@ -501,14 +621,14 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
-    it.effect("surfaces an armed charge with no provider reference instead of charging again", () =>
+    it.effect("keeps a twenty-minute-old armed charge with no provider reference pending", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
         const attempt = yield* seedAttempt({
           index: 3,
           transactionId: Option.none(),
-          armedAt: now,
-          createdAt: now,
+          armedAt: DateTime.subtract(now, { minutes: 25 }),
+          createdAt: DateTime.subtract(now, { minutes: 25 }),
         });
         const { provider, lookups, creations } = yield* makeProvider({
           reference: attempt.reference,
@@ -651,15 +771,11 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
             hasTransaction: false,
           });
           yield* reconcileWompiSettlement({
-            provider: {
+            provider: providerTransaction({
+              attempt,
               transactionId: WompiTransactionId.make("txn-reconcile-8"),
-              reference: attempt.reference,
               status: "PENDING",
-              amountInCents: attempt.amountInCents,
-              currency: "COP",
-              sourceId: attempt.sourceId,
-              finalizedAt: Option.none(),
-            },
+            }),
             environment: "sandbox",
             observedAt: now,
           });
@@ -671,32 +787,249 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         })
     );
 
-    it.effect("maintenance probe reports once an attempt needs attention", () =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          yield* Layer.build(
-            BillingReconciliationMaintenanceLive.pipe(Layer.provide(TelemetryDisabled))
-          );
-          yield* Effect.sleep("500 millis");
-        })
-      )
+    it.effect("approves once after a retry transaction under the same reference", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const first = WompiTransactionId.make("txn-retry-a");
+        const retry = WompiTransactionId.make("txn-retry-b");
+        const attempt = yield* seedAttempt({
+          index: 21,
+          transactionId: Option.some(first),
+          armedAt: now,
+          createdAt: now,
+        });
+        const t0 = now;
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: first, status: "DECLINED" }),
+          environment: "sandbox",
+          observedAt: t0,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: retry, status: "PENDING" }),
+          environment: "sandbox",
+          observedAt: DateTime.add(t0, { seconds: 30 }),
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            { attempt, transactionId: retry, status: "APPROVED" },
+            Option.some(DateTime.add(t0, { seconds: 45 }))
+          ),
+          environment: "sandbox",
+          observedAt: DateTime.add(t0, { minutes: 1 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          transactions: 2,
+          periods: 1,
+          paid: true,
+        });
+        expect(yield* attemptTransactions(attempt)).toEqual([
+          { transactionId: first, status: "DECLINED" },
+          { transactionId: retry, status: "APPROVED" },
+        ]);
+      })
     );
 
-    it.effect("reports bounded cross-User escalation counts and maximum ages", () =>
+    it.effect("keeps a declined transaction pending while another transaction is unresolved", () =>
       Effect.gen(function* () {
-        const escalations = yield* getBillingReconciliationEscalations();
-        expect(Object.keys(escalations).sort()).toEqual([
-          "awaitingReferenceCount",
-          "awaitingReferenceMaxAgeSeconds",
-          "manualReconciliationCount",
-          "manualReconciliationMaxAgeSeconds",
-          "providerStalledCount",
-          "providerStalledMaxAgeSeconds",
+        const now = yield* DateTime.now;
+        const declined = WompiTransactionId.make("txn-unresolved-a");
+        const unresolved = WompiTransactionId.make("txn-unresolved-b");
+        const attempt = yield* seedAttempt({
+          index: 22,
+          transactionId: Option.some(declined),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: unresolved, status: "PENDING" }),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 4 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          transactions: 2,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("recovers a failed aggregate when a later transaction is approved", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const declined = WompiTransactionId.make("txn-late-a");
+        const recovered = WompiTransactionId.make("txn-late-b");
+        const attempt = yield* seedAttempt({
+          index: 23,
+          transactionId: Option.some(declined),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 4 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "failed",
+          periods: 0,
+          paid: false,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            { attempt, transactionId: recovered, status: "APPROVED" },
+            Option.some(DateTime.add(now, { minutes: 4, seconds: 30 }))
+          ),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 5 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          transactions: 2,
+          periods: 1,
+          paid: true,
+        });
+      })
+    );
+
+    it.effect("stays succeeded under duplicate and out-of-order retry evidence", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const declined = WompiTransactionId.make("txn-out-of-order-a");
+        const approved = WompiTransactionId.make("txn-out-of-order-b");
+        const attempt = yield* seedAttempt({
+          index: 24,
+          transactionId: Option.some(declined),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            { attempt, transactionId: approved, status: "APPROVED" },
+            Option.some(DateTime.add(now, { seconds: 45 }))
+          ),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 1 }),
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 2 }),
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            { attempt, transactionId: approved, status: "APPROVED" },
+            Option.some(DateTime.add(now, { seconds: 45 }))
+          ),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 3 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          transactions: 2,
+          periods: 1,
+          paid: true,
+        });
+        expect(yield* attemptTransactions(attempt)).toEqual([
+          { transactionId: declined, status: "DECLINED" },
+          { transactionId: approved, status: "APPROVED" },
         ]);
-        expect(escalations.awaitingReferenceCount).toBeGreaterThanOrEqual(1);
-        expect(escalations.manualReconciliationCount).toBeGreaterThanOrEqual(1);
-        expect(escalations.awaitingReferenceMaxAgeSeconds).toBeGreaterThanOrEqual(0);
-        expect(escalations.manualReconciliationMaxAgeSeconds).toBeGreaterThanOrEqual(0);
+      })
+    );
+
+    it.effect("rejects a retry transaction whose evidence does not match", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 25,
+          transactionId: Option.some(WompiTransactionId.make("txn-mismatch-a")),
+          armedAt: now,
+          createdAt: now,
+        });
+        const mismatched = {
+          ...providerTransaction(
+            {
+              attempt,
+              transactionId: WompiTransactionId.make("txn-mismatch-b"),
+              status: "APPROVED",
+            },
+            Option.some(now)
+          ),
+          amountInCents: attempt.amountInCents + 1,
+        };
+        const failure = yield* Effect.flip(
+          reconcileWompiSettlement({
+            provider: mismatched,
+            environment: "sandbox",
+            observedAt: now,
+          })
+        );
+        expect(failure._tag).toBe("MismatchedWompiEvidence");
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          transactions: 1,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("reports per-bucket escalation deltas and maximum ages", () =>
+      Effect.gen(function* () {
+        const before = yield* getBillingReconciliationEscalations();
+        const now = yield* DateTime.now;
+        const awaiting = yield* seedAttempt({
+          index: 13,
+          transactionId: Option.none(),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* withUserTransaction(
+          awaiting.userId,
+          markBillingAttemptAwaitingReferenceInScope(
+            awaiting.userId,
+            awaiting.payload.billingAttemptId,
+            DateTime.subtract(now, { hours: 26 })
+          )
+        );
+        yield* seedAttempt({
+          index: 14,
+          transactionId: Option.some(WompiTransactionId.make("txn-probe-stalled")),
+          armedAt: DateTime.subtract(now, { hours: 25 }),
+          createdAt: DateTime.subtract(now, { hours: 25 }),
+        });
+        const manual = yield* seedAttempt({
+          index: 15,
+          transactionId: Option.some(WompiTransactionId.make("txn-probe-manual")),
+          armedAt: DateTime.subtract(now, { hours: 25 }),
+          createdAt: DateTime.subtract(now, { hours: 25 }),
+        });
+        yield* withUserTransaction(
+          manual.userId,
+          markBillingAttemptManualReconciliationInScope(
+            manual.userId,
+            manual.payload.billingAttemptId,
+            DateTime.subtract(now, { hours: 1 })
+          )
+        );
+        const after = yield* getBillingReconciliationEscalations();
+        expect(after.awaitingReferenceCount - before.awaitingReferenceCount).toBe(1);
+        expect(after.awaitingReferenceMaxAgeSeconds).toBeGreaterThanOrEqual(26 * 60 * 60);
+        expect(after.providerStalledCount - before.providerStalledCount).toBe(1);
+        expect(after.providerStalledMaxAgeSeconds).toBeGreaterThanOrEqual(25 * 60 * 60);
+        expect(after.manualReconciliationCount - before.manualReconciliationCount).toBe(1);
+        expect(after.manualReconciliationMaxAgeSeconds).toBeGreaterThanOrEqual(60 * 60);
       })
     );
 
@@ -717,6 +1050,12 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           sql`SELECT id FROM billing_attempts WHERE id = ${attempt.payload.billingAttemptId}`
         );
         expect(rows).toEqual([]);
+        const childRows = yield* withUserTransaction(
+          userIdFor(6),
+          sql`SELECT wompi_transaction_id FROM billing_attempt_transactions
+              WHERE billing_attempt_id = ${attempt.payload.billingAttemptId}`
+        );
+        expect(childRows).toEqual([]);
         const crossUser = yield* withUserTransaction(
           userIdFor(6),
           findBillingAttemptByIdInScope(userIdFor(6), attempt.payload.billingAttemptId)

@@ -382,8 +382,10 @@ _Avoid_: Saved card (Fidy does not store a card), payment method token.
 
 **BillingAttempt**:
 One asynchronous attempt to collect a Subscription charge, retaining its Money, Price,
-provider references, and UTC instants. Starting one yields `pending`; only a verified provider
-outcome advances it to `succeeded` or `failed`.
+provider references, and UTC instants. It groups every Wompi transaction created under its one
+checkout reference. Starting one yields `pending`; any verified approval advances it to
+`succeeded`, and verified provider negatives advance it to `failed` only after Wompi's retry
+opportunity elapses. Success never regresses.
 _Avoid_: Charge (alone), synchronous payment, settlement promise.
 
 **Paywall**:

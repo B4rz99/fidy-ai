@@ -27,18 +27,20 @@ import {
 import {
   CardEnrollmentId,
   CardPaymentSourceId,
-  type WompiSourceId,
+  WompiSourceId,
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   BillingAttemptReconciliationWorkflow,
   billingAttemptReconciliationWorkflowLayer,
 } from "./billing-attempt-execution";
+import { BillingReconciliationMaintenanceLive } from "./billing-reconciliation-maintenance";
 import {
   armBillingAttemptInScope,
   findBillingAttemptByIdInScope,
@@ -49,7 +51,12 @@ import {
   recordCreatedWompiTransactionInScope,
 } from "./billing-repo";
 import { findPrice } from "./repo";
-import { WompiBillingClient, type WompiBillingClientService } from "./wompi-billing-client";
+import {
+  WompiBillingClient,
+  type WompiBillingClientService,
+  WompiTransactionCreationFailed,
+  WompiTransactionLookupFailed,
+} from "./wompi-billing-client";
 import { reconcileWompiSettlement } from "./wompi-settlement";
 
 const monthlyPriceId = PriceId.make("22700000-0000-4000-8000-000000000002");
@@ -72,12 +79,15 @@ type SeededAttempt = Readonly<{
  * Seeds one User-owned armed BillingAttempt with its own local CardPaymentSource so the durable test
  * controls provider facts directly instead of traversing the browser enrollment boundary again.
  */
-const seedArmedAttempt = Effect.fn("Test.seedArmedBillingAttempt")(function* (input: {
-  index: number;
-  transactionId: Option.Option<WompiTransactionId>;
-  armedAt: DateTime.Utc;
-  createdAt: DateTime.Utc;
-}) {
+const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
+  input: {
+    index: number;
+    transactionId: Option.Option<WompiTransactionId>;
+    armedAt: DateTime.Utc;
+    createdAt: DateTime.Utc;
+  },
+  arm: boolean = true
+) {
   const userId = userIdFor(input.index);
   yield* seedConsentedPatIdentity({ userId, bearer: bearerFor(input.index) });
   const sql = yield* MigrationSqlClient;
@@ -139,20 +149,22 @@ const seedArmedAttempt = Effect.fn("Test.seedArmedBillingAttempt")(function* (in
       createdAt: input.createdAt,
     })
   );
-  yield* withUserTransaction(
-    userId,
-    armBillingAttemptInScope(userId, billingAttemptId, input.armedAt)
-  );
-  if (Option.isSome(input.transactionId)) {
+  if (arm) {
     yield* withUserTransaction(
       userId,
-      recordCreatedWompiTransactionInScope({
-        userId,
-        billingAttemptId,
-        transactionId: input.transactionId.value,
-        reference,
-      })
+      armBillingAttemptInScope(userId, billingAttemptId, input.armedAt)
     );
+    if (Option.isSome(input.transactionId)) {
+      yield* withUserTransaction(
+        userId,
+        recordCreatedWompiTransactionInScope({
+          userId,
+          billingAttemptId,
+          transactionId: input.transactionId.value,
+          reference,
+        })
+      );
+    }
   }
   return {
     payload: { userId, billingAttemptId, revision: 1 },
@@ -163,12 +175,20 @@ const seedArmedAttempt = Effect.fn("Test.seedArmedBillingAttempt")(function* (in
   } satisfies SeededAttempt;
 });
 
-const makeProvider = Effect.fn("Test.makeWompiBillingProvider")(function* (input: {
+/** How a test provider departs from a healthy Wompi for the scenario under test. */
+type ProviderFault =
+  | Readonly<{ _tag: "None" }>
+  | Readonly<{ _tag: "Create"; certainty: "rejected" | "ambiguous" }>
+  | Readonly<{ _tag: "Lookup" }>
+  | Readonly<{ _tag: "Evidence" }>;
+
+const buildProvider = Effect.fn("Test.buildWompiBillingProvider")(function* (input: {
   reference: WompiTransactionReference;
   amountInCents: number;
   sourceId: WompiSourceId;
   statuses: ReadonlyArray<WompiBillingStatus>;
   finalizedAt: DateTime.Utc;
+  fault: ProviderFault;
 }) {
   const lookups = yield* Ref.make(0);
   const creations = yield* Ref.make(0);
@@ -176,26 +196,32 @@ const makeProvider = Effect.fn("Test.makeWompiBillingProvider")(function* (input
     environment: "sandbox",
     createTransaction: ({ reference, amountInCents, currency, sourceId }) =>
       Ref.update(creations, (count) => count + 1).pipe(
-        Effect.as({
-          transactionId: WompiTransactionId.make(`txn-${reference}`),
-          reference,
-          status: "PENDING" as const,
-          amountInCents,
-          currency,
-          sourceId,
-          finalizedAt: Option.none(),
-        })
+        Effect.andThen(
+          input.fault._tag === "Create"
+            ? Effect.fail(new WompiTransactionCreationFailed({ certainty: input.fault.certainty }))
+            : Effect.succeed({
+                transactionId: WompiTransactionId.make(`txn-${reference}`),
+                reference,
+                status: "PENDING" as const,
+                amountInCents,
+                currency,
+                sourceId,
+                finalizedAt: Option.none(),
+              })
+        )
       ),
     findTransaction: (transactionId) =>
       Effect.gen(function* () {
         const ordinal = yield* Ref.updateAndGet(lookups, (count) => count + 1);
+        if (input.fault._tag === "Lookup") return yield* new WompiTransactionLookupFailed();
         const status =
           input.statuses[Math.min(ordinal - 1, input.statuses.length - 1)] ?? "PENDING";
         return {
           transactionId,
           reference: input.reference,
           status,
-          amountInCents: input.amountInCents,
+          amountInCents:
+            input.fault._tag === "Evidence" ? input.amountInCents + 1 : input.amountInCents,
           currency: "COP",
           sourceId: input.sourceId,
           finalizedAt: status === "APPROVED" ? Option.some(input.finalizedAt) : Option.none(),
@@ -204,6 +230,15 @@ const makeProvider = Effect.fn("Test.makeWompiBillingProvider")(function* (input
   };
   return { provider, lookups, creations };
 });
+
+/** A healthy provider used by most scenarios; faulty scenarios call {@link buildProvider}. */
+const makeProvider = (input: {
+  reference: WompiTransactionReference;
+  amountInCents: number;
+  sourceId: WompiSourceId;
+  statuses: ReadonlyArray<WompiBillingStatus>;
+  finalizedAt: DateTime.Utc;
+}): ReturnType<typeof buildProvider> => buildProvider({ ...input, fault: { _tag: "None" } });
 
 const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
   port: number,
@@ -279,10 +314,52 @@ const TestLayer = Layer.mergeAll(
 layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
   "durable BillingAttempt reconciliation",
   (it) => {
+    it.effect("maintenance probe stays quiet while nothing needs attention", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* Layer.build(
+            BillingReconciliationMaintenanceLive.pipe(Layer.provide(TelemetryDisabled))
+          );
+          yield* Effect.sleep("500 millis");
+        })
+      )
+    );
+
+    it.effect(
+      "returns not-current for an unknown BillingAttempt without calling the provider",
+      () =>
+        Effect.gen(function* () {
+          const crypto = yield* Crypto.Crypto;
+          const billingAttemptId = BillingAttemptId.make(
+            yield* crypto.randomUUIDv7.pipe(Effect.orDie)
+          );
+          const { provider, lookups, creations } = yield* makeProvider({
+            reference: WompiTransactionReference.make("fidy-00000000-0000-4000-8000-000000000000"),
+            amountInCents: 100,
+            sourceId: WompiSourceId.make(1),
+            statuses: ["PENDING"],
+            finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          });
+          const runtime = yield* acquireRuntime(24716, "25 millis", provider);
+          const result = yield* Effect.tryPromise(() =>
+            runtime.runPromise(
+              BillingAttemptReconciliationWorkflow.execute({
+                userId: userIdFor(9),
+                billingAttemptId,
+                revision: 1,
+              })
+            )
+          );
+          expect(result).toEqual({ outcome: "not-current" });
+          expect(yield* Ref.get(lookups)).toBe(0);
+          expect(yield* Ref.get(creations)).toBe(0);
+        })
+    );
+
     it.effect("re-reads an unresolved transaction until verified approval settles it once", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 1,
           transactionId: Option.some(WompiTransactionId.make("txn-reconcile-1")),
           armedAt: now,
@@ -313,7 +390,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
     it.effect("settles a verified terminal decline as failed without activating paid Pro", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 7,
           transactionId: Option.some(WompiTransactionId.make("txn-reconcile-7")),
           armedAt: now,
@@ -339,10 +416,44 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
+    it.effect("records awaiting-reference when the first charge response is lost", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt(
+          {
+            index: 10,
+            transactionId: Option.none(),
+            armedAt: now,
+            createdAt: now,
+          },
+          false
+        );
+        const { provider, creations } = yield* buildProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          fault: { _tag: "Create", certainty: "ambiguous" },
+        });
+        const runtime = yield* acquireRuntime(24717, "25 millis", provider);
+        const result = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "awaiting-provider-reference" });
+        expect(yield* Ref.get(creations)).toBe(1);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          awaitingReference: true,
+          hasTransaction: false,
+        });
+      })
+    );
+
     it.effect("survives runtime loss while waiting and settles without a duplicate period", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 2,
           transactionId: Option.some(WompiTransactionId.make("txn-reconcile-2")),
           armedAt: now,
@@ -393,7 +504,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
     it.effect("surfaces an armed charge with no provider reference instead of charging again", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 3,
           transactionId: Option.none(),
           armedAt: now,
@@ -425,7 +536,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
     it.effect("escalates a provider outcome unresolved past the tracking age for manual work", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 4,
           transactionId: Option.some(WompiTransactionId.make("txn-reconcile-4")),
           armedAt: DateTime.subtract(now, { days: 8 }),
@@ -452,12 +563,75 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
+    it.effect("keeps tracking when a provider lookup fails instead of settling", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 11,
+          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-11")),
+          armedAt: DateTime.subtract(now, { days: 8 }),
+          createdAt: DateTime.subtract(now, { days: 8 }),
+        });
+        const { provider, lookups } = yield* buildProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          fault: { _tag: "Lookup" },
+        });
+        const runtime = yield* acquireRuntime(24718, "25 millis", provider);
+        const result = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "manual-reconciliation-required" });
+        expect(yield* Ref.get(lookups)).toBe(1);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          manualReconciliation: true,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("never settles from mismatched provider evidence", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 12,
+          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-12")),
+          armedAt: DateTime.subtract(now, { days: 8 }),
+          createdAt: DateTime.subtract(now, { days: 8 }),
+        });
+        const { provider } = yield* buildProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["APPROVED"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          fault: { _tag: "Evidence" },
+        });
+        const runtime = yield* acquireRuntime(24719, "25 millis", provider);
+        const result = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "manual-reconciliation-required" });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          manualReconciliation: true,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
     it.effect(
       "clears the awaiting-reference marker once an observation reveals the reference",
       () =>
         Effect.gen(function* () {
           const now = yield* DateTime.now;
-          const attempt = yield* seedArmedAttempt({
+          const attempt = yield* seedAttempt({
             index: 8,
             transactionId: Option.none(),
             armedAt: now,
@@ -497,6 +671,17 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         })
     );
 
+    it.effect("maintenance probe reports once an attempt needs attention", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* Layer.build(
+            BillingReconciliationMaintenanceLive.pipe(Layer.provide(TelemetryDisabled))
+          );
+          yield* Effect.sleep("500 millis");
+        })
+      )
+    );
+
     it.effect("reports bounded cross-User escalation counts and maximum ages", () =>
       Effect.gen(function* () {
         const escalations = yield* getBillingReconciliationEscalations();
@@ -518,7 +703,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
     it.effect("does not expose another User's BillingAttempt through User-scoped reads", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
-        const attempt = yield* seedArmedAttempt({
+        const attempt = yield* seedAttempt({
           index: 5,
           transactionId: Option.some(WompiTransactionId.make("txn-reconcile-5")),
           armedAt: now,

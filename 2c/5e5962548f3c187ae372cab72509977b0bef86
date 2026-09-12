@@ -1,0 +1,45 @@
+.patterns/effect-atom.md
+  s_e1f10896c22e8f::t_0ed5f83fdc7eec 9-17,121-128
+  s_e1f10896c22e8f::t_7b86c82914f36d 168
+  s_e1f10896c22e8f::t_5aa8f5ab65a3f2 1,3,5,7,19,21,23,25,27,29-33,35,37,39,41,43-46,48,50,52,54,56-61,63,65,67,69-74,76,78-82,84-120,129-167,169-182
+AGENTS.md
+  s_e1f10896c22e8f::t_8a93238f4ae2e9 42,46-48,52,56
+.patterns/persisted-queue.md
+  s_e1f10896c22e8f::t_2dc0a993703414 55-63
+.patterns/crypto-encoding.md
+  s_e1f10896c22e8f::t_0ed5f83fdc7eec 9-16,25
+  s_e1f10896c22e8f::t_ee0c086d435696 1-8,17-24,26-128
+.patterns/rpc.md
+  s_e1f10896c22e8f::t_8b8fa724e09f98 26,30,32,39,45
+  s_e1f10896c22e8f::t_a55030caf3da0a 1-8,15-25,27-29,31,33-38,40-44,46-122
+  s_e1f10896c22e8f::t_0ed5f83fdc7eec 9-14
+.patterns/concurrency-time.md
+  s_e1f10896c22e8f::t_8b76c43f80a59d 41-55
+.patterns/effect-v4-audit.md
+  s_e1f10896c22e8f::t_0ed5f83fdc7eec 155-156,158
+  s_e1f10896c22e8f::t_86365ae091bb5f 3-6,8-9,14-17,166-168
+.patterns/workflows.md
+  s_e1f10896c22e8f::t_757165b4932976 15-24
+.patterns/cluster.md
+  s_e1f10896c22e8f::t_0ed5f83fdc7eec 21-26
+  s_e1f10896c22e8f::t_b98712291c7df3 103
+  s_e1f10896c22e8f::t_0c2611f110d449 13-20,27-32,91-102
+.patterns/schema.md
+  s_e1f10896c22e8f::t_de95ecca2858c2 30-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2c5e5962548f3c187ae372cab72509977b0bef86",
+  "prompts": {},
+  "sessions": {
+    "s_e1f10896c22e8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09428-abba-70d3-aa68-ef54f9642da1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

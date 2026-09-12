@@ -35,6 +35,11 @@ type ClusterRunnerSerialization = RpcSerialization.RpcSerialization["Service"];
 
 const parserFor = (serialization: ClusterRunnerSerialization): RpcSerialization.Parser =>
   serialization.makeUnsafe();
+/** The production serialization's parser, resolved from the layer under test. */
+const parserUnderTest = Effect.gen(function* () {
+  const serialization = yield* RpcSerialization.RpcSerialization;
+  return parserFor(serialization);
+});
 const encodedBytes = (parser: RpcSerialization.Parser, value: unknown): Effect.Effect<Uint8Array> =>
   Effect.suspend(() => {
     const encoded = parser.encode(value);
@@ -66,8 +71,7 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
 
   it.effect("rejects malformed MessagePack frames without retaining a partial prefix", () =>
     Effect.gen(function* () {
-      const serialization = yield* RpcSerialization.RpcSerialization;
-      const parser = parserFor(serialization);
+      const parser = yield* parserUnderTest;
       // A fixext1 carrying an unregistered extension type: a well-formed header msgpackr cannot accept.
       const failure = yield* decodeFailure(parser, new Uint8Array([0xd4, 0x7f, 0x00]));
       expect(failure.error).toBeInstanceOf(Error);
@@ -79,8 +83,7 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
 
   it.effect("retains an incomplete MessagePack frame until it is completed", () =>
     Effect.gen(function* () {
-      const serialization = yield* RpcSerialization.RpcSerialization;
-      const parser = parserFor(serialization);
+      const parser = yield* parserUnderTest;
       const encoded = yield* encodedBytes(parser, { fragment: "complete" });
       expect(parser.decode(encoded.subarray(0, encoded.length - 1))).toEqual([]);
       expect(parser.decode(encoded.subarray(encoded.length - 1))).toEqual([
@@ -93,8 +96,7 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
     "fails an incomplete frame that grows beyond the configured MessagePack buffer bound",
     () =>
       Effect.gen(function* () {
-        const serialization = yield* RpcSerialization.RpcSerialization;
-        const parser = parserFor(serialization);
+        const parser = yield* parserUnderTest;
         expect(parser.decode(declaredOversizeFrame(maximumClusterMessageBufferBytes))).toEqual([]);
         const failure = yield* decodeFailure(parser, new Uint8Array([0x00]));
         if (!(failure.error instanceof RpcSerialization.MaxBufferSizeExceeded)) {
@@ -110,8 +112,7 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
     "fails a single incomplete chunk that exceeds the configured MessagePack buffer bound",
     () =>
       Effect.gen(function* () {
-        const serialization = yield* RpcSerialization.RpcSerialization;
-        const parser = parserFor(serialization);
+        const parser = yield* parserUnderTest;
         const failure = yield* decodeFailure(
           parser,
           declaredOversizeFrame(maximumClusterMessageBufferBytes + 1)

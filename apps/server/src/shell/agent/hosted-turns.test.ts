@@ -3,6 +3,7 @@ import { Context, Effect, Exit, Option, PrimaryKey, Schema } from "effect";
 import { ClusterSchema } from "effect/unstable/cluster";
 import { UserId } from "~/core/identity/reference";
 import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
+import type { CanonicalAuthorityRoot } from "~/shell/_shared/operation-policy";
 import { WhatsAppInboundJobId } from "~/shell/channels/whatsapp/model";
 import { AgentLimits, type HostedTurnRpc, HostedTurns, TurnFailure } from "./hosted-turns";
 import { AgentReply, InboundMessage } from "./message";
@@ -384,8 +385,7 @@ const limits = AgentLimits.make({
   maxModelRoundMillis: 30_000,
 });
 const message = InboundMessage.make({ text: TranscriptText.make("wire contract") });
-const authorityRoot: "no-verified-whatsapp-authority" | "verified-whatsapp" =
-  "no-verified-whatsapp-authority";
+const authorityRoot: CanonicalAuthorityRoot = "no-verified-whatsapp-authority";
 const handlePayload = { userId, turnId, message, limits, authorityRoot };
 
 const handleContract: HostedTurnContract = {
@@ -478,10 +478,10 @@ const checkContract = (
     const encodedPayload = yield* Schema.encodeUnknownEffect(request.payloadSchema)(decodedPayload);
     expect(encodedPayload).toEqual(expected.payload);
     for (const rejected of expected.rejectedPayloads) {
-      const decoded = yield* Schema.decodeUnknownEffect(request.payloadSchema)(rejected).pipe(
+      const attempt = yield* Schema.decodeUnknownEffect(request.payloadSchema)(rejected).pipe(
         Effect.exit
       );
-      expect(Exit.isFailure(decoded)).toBe(true);
+      expect(Exit.isFailure(attempt)).toBe(true);
     }
     if (Option.isSome(expected.primaryKey)) {
       if (!PrimaryKey.isPrimaryKey(decodedPayload)) {
@@ -498,10 +498,10 @@ const checkContract = (
       expected.result
     );
     for (const rejected of expected.rejectedResults) {
-      const decoded = yield* Schema.decodeUnknownEffect(request.successSchema)(rejected).pipe(
+      const attempt = yield* Schema.decodeUnknownEffect(request.successSchema)(rejected).pipe(
         Effect.exit
       );
-      expect(Exit.isFailure(decoded)).toBe(true);
+      expect(Exit.isFailure(attempt)).toBe(true);
     }
 
     expect(wireDocument(request.errorSchema)).toEqual(expected.errorDocument);

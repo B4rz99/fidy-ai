@@ -3,6 +3,7 @@ import { ClusterSchema, Entity } from "effect/unstable/cluster";
 import { Rpc, type RpcGroup } from "effect/unstable/rpc";
 import { UserId } from "~/core/identity/reference";
 import { TranscriptTurnId } from "~/core/transcript/model";
+import type { CanonicalAuthorityRoot } from "~/shell/_shared/operation-policy";
 import { WhatsAppInboundWork } from "~/shell/channels/whatsapp/inbound-execution";
 import { AgentReply, InboundMessage } from "./message";
 
@@ -43,7 +44,10 @@ export const HostedTurns = Entity.make("HostedTurns", [
       turnId: TranscriptTurnId,
       message: InboundMessage,
       limits: AgentLimits,
-      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
+      authorityRoot: Schema.Literals([
+        "no-verified-whatsapp-authority",
+        "verified-whatsapp",
+      ] satisfies ReadonlyArray<CanonicalAuthorityRoot>),
     },
     success: AgentReply,
     error: TurnFailure,

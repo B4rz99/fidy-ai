@@ -1,9 +1,11 @@
 import { expect, layer } from "@effect/vitest";
 import { UnknownJsonString } from "~/schema-compatibility";
 import {
+  type Cause,
   Crypto,
   DateTime,
   Deferred,
+  type Duration,
   Effect,
   Fiber,
   Layer,
@@ -209,6 +211,60 @@ const awaitBarrier = <A, E, Barrier>(
     Fiber.join(caller).pipe(Effect.andThen(Effect.die(`Request completed before ${label}`)))
   );
 
+/** One model or delivery gate: a held operation signals `entered`, then waits for `release`. */
+type TurnGate = Readonly<{
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+}>;
+
+/**
+ * Records one observed value and, when it matches `held`, signals the gate's `entered` barrier and
+ * waits for its release, so a test can park one operation while it drives others.
+ */
+const gatedRecorder =
+  (
+    record: (value: string) => Effect.Effect<void>,
+    held: string,
+    gate: TurnGate
+  ): ((value: string) => Effect.Effect<void>) =>
+  (value) =>
+    record(value).pipe(
+      Effect.andThen(
+        value === held
+          ? Deferred.succeed(gate.entered, undefined).pipe(
+              Effect.andThen(Deferred.await(gate.release))
+            )
+          : Effect.void
+      )
+    );
+
+/** One poll policy: how long to keep observing, and how often to recheck. */
+type WaitPolicy = Readonly<{
+  readonly timeout: Duration.Input;
+  readonly interval: Duration.Input;
+}>;
+
+/** Poll cadence for operations that settle quickly. */
+const defaultWait: WaitPolicy = { timeout: "10 seconds", interval: "20 millis" };
+/** Poll cadence for recovery scenarios that can take longer to settle. */
+const recoveryWait: WaitPolicy = { timeout: "20 seconds", interval: "50 millis" };
+
+/** Polls an observation until it satisfies `until`, or fails the scenario after the policy's wait. */
+const waitUntil = <A, E, R>(
+  observation: Effect.Effect<A, E, R>,
+  until: (value: A) => boolean,
+  policy: WaitPolicy = defaultWait
+): Effect.Effect<A, E | Cause.TimeoutError, R> =>
+  observation.pipe(
+    Effect.repeat({ until, schedule: Schedule.spaced(policy.interval) }),
+    Effect.timeout(policy.timeout)
+  );
+
+/** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
+const everyMailboxEntryProcessed = (
+  rows: ReadonlyArray<{ readonly processed: boolean }>
+): boolean => rows.every(({ processed }) => processed);
+
 const handle = (
   userId: UserId,
   text: string
@@ -330,26 +386,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const modelRelease = yield* Deferred.make<void>();
           const deliveryEntered = yield* Deferred.make<void>();
           const deliveryRelease = yield* Deferred.make<void>();
-          const generate = (text: string): Effect.Effect<void> =>
-            Ref.update(events, (items) => [...items, `model:${text}`]).pipe(
-              Effect.andThen(
-                text === "held"
-                  ? Deferred.succeed(modelEntered, undefined).pipe(
-                      Effect.andThen(Deferred.await(modelRelease))
-                    )
-                  : Effect.void
-              )
-            );
-          const deliver = (text: string): Effect.Effect<void> =>
-            Ref.update(events, (items) => [...items, `delivery:${text}`]).pipe(
-              Effect.andThen(
-                text === "held"
-                  ? Deferred.succeed(deliveryEntered, undefined).pipe(
-                      Effect.andThen(Deferred.await(deliveryRelease))
-                    )
-                  : Effect.void
-              )
-            );
+          const recordModel = (text: string): Effect.Effect<void> =>
+            Ref.update(events, (items) => [...items, `model:${text}`]);
+          const recordDelivery = (text: string): Effect.Effect<void> =>
+            Ref.update(events, (items) => [...items, `delivery:${text}`]);
+          const generate = gatedRecorder(recordModel, "held", {
+            entered: modelEntered,
+            release: modelRelease,
+          });
+          const deliver = gatedRecorder(recordDelivery, "held", {
+            entered: deliveryEntered,
+            release: deliveryRelease,
+          });
           const firstRuntime = ManagedRuntime.make(
             runtimeLayer({ crypto, http, port: 24651, generate, deliver })
           );
@@ -457,12 +505,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const running = yield* awaitBarrier("owner barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24653 ? firstRuntime : secondRuntime).dispose());
-          const recovered = yield* states(defaultUserId).pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.state === "Interrupted",
-              schedule: Schedule.spaced("50 millis"),
-            }),
-            Effect.timeout("20 seconds")
+          const recovered = yield* waitUntil(
+            states(defaultUserId),
+            (rows) => rows[0]?.state === "Interrupted",
+            recoveryWait
           );
           expect(recovered).toEqual([{ state: "Interrupted" }]);
           expect(yield* Ref.get(calls)).toBe(1);
@@ -642,12 +688,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           );
           const workers = runtimes.map((runtime) => runtime.runFork(workerLayer));
           yield* enqueue("composed-worker");
-          yield* states(defaultUserId).pipe(
-            Effect.repeat({
-              until: (rows) => rows.length === 1 && rows[0]?.state === "Completed",
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("10 seconds")
+          yield* waitUntil(
+            states(defaultUserId),
+            (rows) => rows.length === 1 && rows[0]?.state === "Completed"
           );
           yield* Effect.forEach(workers, Fiber.interrupt, { discard: true });
           expect(yield* Ref.get(calls)).toBe(1);
@@ -668,16 +711,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const release = yield* Deferred.make<void>();
           const generated = yield* Ref.make<ReadonlyArray<string>>([]);
           const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
-          const generate = (text: string): Effect.Effect<void> =>
-            Ref.update(generated, (items) => [...items, text]).pipe(
-              Effect.andThen(
-                text === "holds-user"
-                  ? Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(Deferred.await(release))
-                    )
-                  : Effect.void
-              )
-            );
+          const recordGenerated = (text: string): Effect.Effect<void> =>
+            Ref.update(generated, (items) => [...items, text]);
+          const generate = gatedRecorder(recordGenerated, "holds-user", { entered, release });
           const deliver = (text: string): Effect.Effect<void> =>
             Ref.update(delivered, (items) => [...items, text]);
           const firstRuntime = ManagedRuntime.make(
@@ -706,13 +742,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(first);
           const replacement = firstRuntime.runFork(processNextWhatsAppTurn());
-          yield* inboundState.pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.terminalOutcome === "delivered",
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("10 seconds")
-          );
+          yield* waitUntil(inboundState, (rows) => rows[0]?.terminalOutcome === "delivered");
           yield* Fiber.interrupt(replacement);
           expect(yield* Ref.get(generated)).toEqual(["holds-user", "queued-whatsapp"]);
           expect(yield* Ref.get(delivered)).toEqual(["holds-user", "queued-whatsapp"]);
@@ -729,13 +759,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(
             yield* sql`SELECT content FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
           ).toEqual([{ content: null }]);
-          const completed = yield* mailbox.pipe(
-            Effect.repeat({
-              until: (rows) => rows.every(({ processed }) => processed),
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("5 seconds")
-          );
+          const completed = yield* waitUntil(mailbox, everyMailboxEntryProcessed, {
+            timeout: "5 seconds",
+            interval: "20 millis",
+          });
           expect(completed.length).toBeGreaterThan(0);
           yield* pruneCompletedHostedTurnMessages(yield* DateTime.now);
           expect(yield* mailbox).toEqual(completed);
@@ -754,14 +781,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         const release = yield* Deferred.make<void>();
         const calls = yield* Ref.make(0);
         const sends = yield* Ref.make(0);
-        const generate = (text: string): Effect.Effect<void> =>
-          Ref.update(calls, (count) => count + 1).pipe(
-            Effect.andThen(
-              text === "caller-disconnect"
-                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
-                : Effect.void
-            )
-          );
+        const recordCall = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
+        const generate = gatedRecorder(recordCall, "caller-disconnect", { entered, release });
         const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
         const runtime = ManagedRuntime.make(
           runtimeLayer({ crypto, http, port: 24663, generate, deliver })
@@ -784,12 +805,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         // The client-annotated operation must outlive its caller and finish the admitted Turn.
         yield* Fiber.interrupt(caller);
         yield* Deferred.succeed(release, undefined);
-        const completed = yield* states(defaultUserId).pipe(
-          Effect.repeat({
-            until: (rows) => rows[0]?.state === "Completed",
-            schedule: Schedule.spaced("20 millis"),
-          }),
-          Effect.timeout("10 seconds")
+        const completed = yield* waitUntil(
+          states(defaultUserId),
+          (rows) => rows[0]?.state === "Completed"
         );
         expect(completed).toEqual([{ state: "Completed" }]);
         expect(yield* Ref.get(calls)).toBe(1);
@@ -808,14 +826,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         const release = yield* Deferred.make<void>();
         const generated = yield* Ref.make<ReadonlyArray<string>>([]);
         const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
-        const generate = (text: string): Effect.Effect<void> =>
-          Ref.update(generated, (items) => [...items, text]).pipe(
-            Effect.andThen(
-              text === "persisted-disconnect"
-                ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
-                : Effect.void
-            )
-          );
+        const recordGenerated = (text: string): Effect.Effect<void> =>
+          Ref.update(generated, (items) => [...items, text]);
+        const generate = gatedRecorder(recordGenerated, "persisted-disconnect", {
+          entered,
+          release,
+        });
         const deliver = (text: string): Effect.Effect<void> =>
           Ref.update(delivered, (items) => [...items, text]);
         const runtime = ManagedRuntime.make(
@@ -836,12 +852,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
         // the client annotation the durable run would be cancelled here instead of settling.
         yield* Effect.sleep("1 second");
         yield* Deferred.succeed(release, undefined);
-        const settled = yield* inboundState.pipe(
-          Effect.repeat({
-            until: (rows) => rows[0]?.terminalOutcome === "delivered",
-            schedule: Schedule.spaced("20 millis"),
-          }),
-          Effect.timeout("10 seconds")
+        const settled = yield* waitUntil(
+          inboundState,
+          (rows) => rows[0]?.terminalOutcome === "delivered"
         );
         expect(settled).toEqual([{ assigned: true, terminalOutcome: "delivered" }]);
         expect(yield* Ref.get(generated)).toEqual(["persisted-disconnect"]);
@@ -900,12 +913,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* Effect.promise(() => (running === 24657 ? firstRuntime : secondRuntime).dispose());
           const replacementRuntime = running === 24657 ? secondRuntime : firstRuntime;
           const replacement = replacementRuntime.runFork(processNextWhatsAppTurn());
-          const recovered = yield* inboundState.pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.terminalOutcome === "ambiguous_crash",
-              schedule: Schedule.spaced("50 millis"),
-            }),
-            Effect.timeout("20 seconds")
+          const recovered = yield* waitUntil(
+            inboundState,
+            (rows) => rows[0]?.terminalOutcome === "ambiguous_crash",
+            recoveryWait
           );
           expect(recovered).toEqual([{ assigned: true, terminalOutcome: "ambiguous_crash" }]);
           yield* Fiber.interrupt(replacement);

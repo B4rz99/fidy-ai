@@ -32,6 +32,7 @@ import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
@@ -138,15 +139,19 @@ const makeRuntimeLayer = (
   | WorkflowEngine.WorkflowEngine,
   Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
 > => {
-  const cluster = authenticatedClusterHttp.layerSql(clusterToken, {
-    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
-    entityMessagePollInterval: 100,
-    sendRetryInterval: 100,
-  });
+  const cluster = authenticatedClusterHttp.layerSql(
+    clusterToken,
+    {
+      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+      availableShardGroups: ["default"],
+      assignedShardGroups: ["default"],
+      shardsPerGroup: 300,
+      entityMessagePollInterval: 100,
+      sendRetryInterval: 100,
+    },
+    loopbackClusterRunnerHttpPolicy
+  );
   return ForwardedEmailWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),
     Layer.provide(Layer.succeed(ResendReceivingClient, input.provider)),

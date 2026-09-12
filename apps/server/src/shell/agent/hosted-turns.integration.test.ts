@@ -2,6 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { UnknownJsonString } from "~/schema-compatibility";
 import {
   type Cause,
+  Context,
   Crypto,
   DateTime,
   Deferred,
@@ -16,8 +17,8 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
-import { HttpClient } from "effect/unstable/http";
+import { EntityId, RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
+import { FetchHttpClient, HttpClient, type HttpClientError } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
@@ -25,6 +26,7 @@ import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { type ClusterRunnerHttpPolicy, clusterRunnerPath } from "~/shell/cluster-runner-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
   defaultUserId,
@@ -33,6 +35,7 @@ import {
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
@@ -106,13 +109,16 @@ const inference = (execute: (text: string) => Effect.Effect<void>): HostedInfere
     },
     structured: { prepare: () => Effect.die("Unexpected Compaction in bounded Turn fixture") },
   });
-const runtimeLayer = (input: {
-  port: number;
-  crypto: Crypto.Crypto;
-  http: HttpClient.HttpClient;
-  generate: (text: string) => Effect.Effect<void>;
-  deliver: (text: string) => Effect.Effect<void>;
-}): Layer.Layer<
+const runtimeLayer = (
+  input: {
+    port: number;
+    crypto: Crypto.Crypto;
+    http: HttpClient.HttpClient;
+    generate: (text: string) => Effect.Effect<void>;
+    deliver: (text: string) => Effect.Effect<void>;
+  },
+  policy: ClusterRunnerHttpPolicy = loopbackClusterRunnerHttpPolicy
+): Layer.Layer<
   | AgentService
   | PersistedQueue.PersistedQueueFactory
   | Layer.Success<typeof PgLive>
@@ -121,21 +127,25 @@ const runtimeLayer = (input: {
 > => {
   const agentRuntime = AgentService.layer.pipe(
     Layer.provideMerge(
-      authenticatedClusterHttp.layerSql(token, {
-        runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-        runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-        availableShardGroups: ["default"],
-        assignedShardGroups: ["default"],
-        shardsPerGroup: testShardCount,
-        entityMessagePollInterval: 50,
-        sendRetryInterval: 50,
-        shardLockDisableAdvisory: true,
-        shardLockRefreshInterval: 500,
-        entityTerminationTimeout: 1000,
-        shardLockExpiration: 3000,
-        runnerHealthCheckInterval: 250,
-        refreshAssignmentsInterval: 100,
-      })
+      authenticatedClusterHttp.layerSql(
+        token,
+        {
+          runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+          runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+          availableShardGroups: ["default"],
+          assignedShardGroups: ["default"],
+          shardsPerGroup: testShardCount,
+          entityMessagePollInterval: 50,
+          sendRetryInterval: 50,
+          shardLockDisableAdvisory: true,
+          shardLockRefreshInterval: 500,
+          entityTerminationTimeout: 1000,
+          shardLockExpiration: 3000,
+          runnerHealthCheckInterval: 250,
+          refreshAssignmentsInterval: 100,
+        },
+        policy
+      )
     ),
     Layer.provide(
       WhatsAppReplyDeliveryLive.pipe(
@@ -222,6 +232,20 @@ const disposeRuntimes = (
     Effect.asVoid
   );
 
+const runnerIngressPort = 24667;
+
+/** Raw wire client: the ingress guard must hold before any RPC decoding, without an RPC adapter. */
+const runnerIngressStatus = (
+  client: HttpClient.HttpClient,
+  path: string,
+  authorization?: string
+): Effect.Effect<number, HttpClientError.HttpClientError> =>
+  client
+    .post(`http://127.0.0.1:${runnerIngressPort}${path}`, {
+      headers: authorization === undefined ? undefined : { authorization },
+    })
+    .pipe(Effect.map((response) => response.status));
+
 /**
  * Waits until an operation reaches the named test barrier. A caller that finishes first means the
  * scenario never blocked, which is a broken test rather than a passing one.
@@ -275,11 +299,14 @@ type HostedRuntimeSpec = Readonly<{
  * shards, and disposes every runtime when the enclosing test scope closes. Returns each runtime
  * with its generated HostedTurns client, in spec order.
  */
-const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRuntimeSpec>) {
+const startHostedRuntimes = Effect.fn(function* (
+  specs: ReadonlyArray<HostedRuntimeSpec>,
+  policy: ClusterRunnerHttpPolicy = loopbackClusterRunnerHttpPolicy
+) {
   const crypto = yield* Crypto.Crypto;
   const http = yield* HttpClient.HttpClient;
   const runtimes = specs.map((spec) =>
-    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
+    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }, policy))
   );
   yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
   yield* Effect.forEach(
@@ -885,6 +912,97 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(
             yield* sql`SELECT content FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
           ).toEqual([{ content: null }]);
+        })
+    );
+
+    it.effect(
+      "keeps a hosted Work exchange over the private runner listener beyond the health deadline",
+      () =>
+        Effect.gen(function* () {
+          yield* reset;
+          yield* seedDevelopmentIdentity(defaultPatBearer);
+          const modelEntered = yield* Deferred.make<void>();
+          const modelRelease = yield* Deferred.make<void>();
+          const generated = yield* Ref.make<ReadonlyArray<string>>([]);
+          const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
+          const recordGenerated = (text: string): Effect.Effect<void> =>
+            Ref.update(generated, (items) => [...items, text]);
+          const generate = gatedRecorder(recordGenerated, "held-remote", {
+            entered: modelEntered,
+            release: modelRelease,
+          });
+          const deliver = (text: string): Effect.Effect<void> =>
+            Ref.update(delivered, (items) => [...items, text]);
+          // Only the health bound is shortened: a hosted Work exchange must not inherit it.
+          const policy: ClusterRunnerHttpPolicy = {
+            ...loopbackClusterRunnerHttpPolicy,
+            healthDeadline: "2 seconds",
+          };
+          const started = yield* startHostedRuntimes(
+            [
+              { port: 24665, generate, deliver },
+              { port: 24666, generate, deliver },
+            ],
+            policy
+          );
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
+          const [first] = yield* Effect.promise(() =>
+            Promise.all([
+              firstRuntime.runPromise(Sharding.Sharding),
+              secondRuntime.runPromise(Sharding.Sharding),
+            ])
+          );
+          // Dial from the runtime that does not own the entity, so the immediate Turn crosses the
+          // private runner listener instead of staying local.
+          const shard = first.getShardId(EntityId.make(defaultUserId), "default");
+          const caller = first.hasShardId(shard) ? secondRuntime : firstRuntime;
+          const call = caller.runFork(handle(defaultUserId, "held-remote"));
+          yield* awaitBarrier("model barrier", modelEntered, call);
+          yield* Effect.sleep("3100 millis");
+          yield* Deferred.succeed(modelRelease, undefined);
+          yield* Fiber.join(call);
+          expect(yield* Ref.get(generated)).toEqual(["held-remote"]);
+          expect(yield* Ref.get(delivered)).toEqual(["held-remote"]);
+          expect(yield* states(defaultUserId)).toEqual([{ state: "Completed" }]);
+        })
+    );
+
+    it.effect(
+      "refuses unauthenticated runner requests at the real listener, aliases included",
+      () =>
+        Effect.gen(function* () {
+          yield* startHostedRuntime({
+            port: runnerIngressPort,
+            generate: () => Effect.void,
+            deliver: () => Effect.void,
+          });
+          // The harness HttpClient is in-process; the ingress guard lives on a real socket.
+          const socket = yield* Effect.map(Layer.build(FetchHttpClient.layer), (context) =>
+            Context.get(context, HttpClient.HttpClient)
+          );
+          const listener = runnerIngressStatus(socket, clusterRunnerPath).pipe(
+            Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 40 })
+          );
+          expect(yield* listener).toBe(401);
+
+          // HttpRouter matches these aliases on the runner route, so the guard must wrap the route
+          // handler itself rather than compare the request path.
+          const aliases = [
+            "//_fidy//cluster",
+            "/_fidy/cluster/",
+            "/_FIDY/CLUSTER",
+            "/%5Ffidy/cluster",
+          ];
+          for (const path of aliases) {
+            expect(yield* runnerIngressStatus(socket, path)).toBe(401);
+          }
+          expect(
+            yield* runnerIngressStatus(socket, clusterRunnerPath, `Bearer ${"b".repeat(64)}`)
+          ).toBe(401);
+          expect(
+            yield* runnerIngressStatus(socket, clusterRunnerPath, `Bearer ${"a".repeat(64)}`)
+          ).not.toBe(401);
         })
     );
   }

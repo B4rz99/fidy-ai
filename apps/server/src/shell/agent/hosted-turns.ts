@@ -4,17 +4,28 @@ import { Rpc, type RpcGroup } from "effect/unstable/rpc";
 import { UserId } from "~/core/identity/reference";
 import { TranscriptTurnId } from "~/core/transcript/model";
 import type { CanonicalAuthorityRoot } from "~/shell/_shared/operation-policy";
+import {
+  maximumHostedTurnIterations,
+  maximumModelRoundMillis,
+  maximumToolCallsPerTurn,
+} from "~/shell/_shared/hosted-turn-bounds";
 import { WhatsAppInboundWork } from "~/shell/channels/whatsapp/inbound-execution";
 import { AgentReply, InboundMessage } from "./message";
 
 /** Resource and context bounds applied independently to every hosted turn. */
 export const AgentLimits = Schema.Struct({
-  maxIterations: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 32 })),
-  maxToolCallsPerTurn: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 64 })),
+  maxIterations: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: maximumHostedTurnIterations })
+  ),
+  maxToolCallsPerTurn: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: maximumToolCallsPerTurn })
+  ),
   maxToolResultCharacters: Schema.Int.check(
     Schema.isBetween({ minimum: 1_000, maximum: 1_000_000 })
   ),
-  maxModelRoundMillis: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120_000 })),
+  maxModelRoundMillis: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: maximumModelRoundMillis })
+  ),
 });
 export type AgentLimits = typeof AgentLimits.Type;
 

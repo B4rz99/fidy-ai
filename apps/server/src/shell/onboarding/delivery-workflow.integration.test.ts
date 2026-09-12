@@ -36,6 +36,7 @@ import {
   EmailSendFailed,
 } from "~/shell/email-authentication/delivery";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
@@ -169,15 +170,19 @@ const makeRuntimeLayer = (
   | WorkflowEngine.WorkflowEngine,
   Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
 > => {
-  const cluster = authenticatedClusterHttp.layerSql(token, {
-    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
-    entityMessagePollInterval: 100,
-    sendRetryInterval: 100,
-  });
+  const cluster = authenticatedClusterHttp.layerSql(
+    token,
+    {
+      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+      availableShardGroups: ["default"],
+      assignedShardGroups: ["default"],
+      shardsPerGroup: 300,
+      entityMessagePollInterval: 100,
+      sendRetryInterval: 100,
+    },
+    loopbackClusterRunnerHttpPolicy
+  );
   return OnboardingEmailDeliveryWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),
     Layer.provide(Layer.succeed(EmailDeliveryPort, deliveryPort)),

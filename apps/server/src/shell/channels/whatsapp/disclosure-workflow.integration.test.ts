@@ -22,6 +22,7 @@ import { findPendingConsentExchange, removePendingConsentExchange } from "~/shel
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -93,16 +94,20 @@ const acquireRuntime = Effect.fn(function* (
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
-            runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            availableShardGroups: ["default"],
-            assignedShardGroups: ["default"],
-            shardsPerGroup: 300,
-            entityMessagePollInterval: 50,
-            sendRetryInterval: 50,
-            entityTerminationTimeout: 100,
-          })
+          authenticatedClusterHttp.layerSql(
+            Redacted.make("c".repeat(64)),
+            {
+              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              availableShardGroups: ["default"],
+              assignedShardGroups: ["default"],
+              shardsPerGroup: 300,
+              entityMessagePollInterval: 50,
+              sendRetryInterval: 50,
+              entityTerminationTimeout: 100,
+            },
+            loopbackClusterRunnerHttpPolicy
+          )
         )
       )
     ),

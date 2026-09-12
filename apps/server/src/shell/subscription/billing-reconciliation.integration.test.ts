@@ -37,6 +37,7 @@ import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   BillingAttemptReconciliationPayload,
@@ -290,18 +291,22 @@ const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSql(Redacted.make("e".repeat(64)), {
-            runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            availableShardGroups: ["default"],
-            assignedShardGroups: ["default"],
-            shardsPerGroup: 300,
-            entityMessagePollInterval: 50,
-            sendRetryInterval: 50,
-            runnerHealthCheckInterval: "1 second",
-            shardLockRefreshInterval: "500 millis",
-            shardLockExpiration: "2 seconds",
-          })
+          authenticatedClusterHttp.layerSql(
+            Redacted.make("e".repeat(64)),
+            {
+              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              availableShardGroups: ["default"],
+              assignedShardGroups: ["default"],
+              shardsPerGroup: 300,
+              entityMessagePollInterval: 50,
+              sendRetryInterval: 50,
+              runnerHealthCheckInterval: "1 second",
+              shardLockRefreshInterval: "500 millis",
+              shardLockExpiration: "2 seconds",
+            },
+            loopbackClusterRunnerHttpPolicy
+          )
         )
       )
     ),

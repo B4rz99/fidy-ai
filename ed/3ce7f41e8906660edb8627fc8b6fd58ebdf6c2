@@ -1,0 +1,40 @@
+apps/server/src/shell/agent/tool-confirmation.ts
+  h_c6d49c804e0ad2 1,159,162
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  h_c6d49c804e0ad2 174-220
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  h_c6d49c804e0ad2 1,3-12,44,167-175,196-197,278-282
+apps/server/src/shell/db/migrations/0058-hmac-key-byte-semantics.test.ts
+  h_c6d49c804e0ad2 1-146
+apps/server/src/shell/db/migrations/0058-hmac-key-byte-semantics.ts
+  h_c6d49c804e0ad2 1-41
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 57,124
+apps/server/src/shell/email-authentication/admission.test.ts
+  h_c6d49c804e0ad2 1-67
+apps/server/src/shell/email-authentication/admission.ts
+  h_c6d49c804e0ad2 2-11,23-24,40-56,59,61-64,66,71,73-76,78
+apps/server/src/shell/ingestion/forwarded-email-execution.test.ts
+  h_c6d49c804e0ad2 1-17
+apps/server/src/shell/ingestion/forwarded-email-execution.ts
+  h_c6d49c804e0ad2 1,46
+apps/server/src/shell/observability/sentry-adapter.ts
+  h_c6d49c804e0ad2 2,240-241
+apps/web/src/features/dashboard/editor-model.test.ts
+  h_c6d49c804e0ad2 9,108-116
+apps/web/src/features/dashboard/editor-model.ts
+  h_c6d49c804e0ad2 1,32
+apps/web/src/features/subscription/enrollment-gateway.ts
+  h_c6d49c804e0ad2 1,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ed3ce7f41e8906660edb8627fc8b6fd58ebdf6c2",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

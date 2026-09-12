@@ -1,0 +1,14 @@
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 14,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "67b1029db956df82ecb812dd3fbc5139beaf2d38",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

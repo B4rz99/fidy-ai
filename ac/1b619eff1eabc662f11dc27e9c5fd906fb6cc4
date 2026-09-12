@@ -1,0 +1,14 @@
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 104-106,108-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ac1b619eff1eabc662f11dc27e9c5fd906fb6cc4",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

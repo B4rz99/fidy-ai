@@ -1,0 +1,24 @@
+apps/server/src/core/subscription/billing-rules.test.ts
+  h_c6d49c804e0ad2 8,20-21,25,161-176
+apps/server/src/core/subscription/billing-rules.ts
+  h_c6d49c804e0ad2 24,27-45,57,81
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  h_c6d49c804e0ad2 152-154
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 8,654-672,1056,1079-1106
+apps/server/src/shell/subscription/billing-repo.ts
+  h_c6d49c804e0ad2 62,66,71-72,363-367
+apps/server/src/shell/subscription/wompi-settlement.ts
+  h_c6d49c804e0ad2 22,222-223,229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "21fd5e8f25ef77418290c4d0a4d7fa9c48d5eae5",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

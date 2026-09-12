@@ -1,0 +1,18 @@
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  h_c6d49c804e0ad2 197-211
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 167-181
+apps/server/src/shell/subscription/billing-repo.ts
+  h_c6d49c804e0ad2 291-292,295-299,301,304,309,325,368-369,373-381,387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1c447584e7244e19fdaf695eecbae3589bec8603",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

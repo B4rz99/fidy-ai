@@ -1,0 +1,40 @@
+CONTEXT.md
+  h_c6d49c804e0ad2 385-388
+apps/server/src/core/subscription/billing-rules.test.ts
+  h_c6d49c804e0ad2 2,4,6,9,11,17-158,160-167
+apps/server/src/core/subscription/billing-rules.ts
+  h_c6d49c804e0ad2 1,17-41,44-49,53-54,56-73
+apps/server/src/shell/db/migrations/0058-wompi-billing-transactions.ts
+  h_c6d49c804e0ad2 1-197
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 57,124
+apps/server/src/shell/db/user-tables.ts
+  h_c6d49c804e0ad2 6
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  h_c6d49c804e0ad2 7,12,15,17,20,22-26,110-122,129-149,184-210,212-214,246-249,251-255,257-266
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 51-52,58,82-84,93-94,141,166,169,171-177,186,256-273,320,328-333,344-359,370,444-476,480-481,485-515,519,521,523,528,531-532,624,630-631,774-775,778,790-830,833,835-946,948-1032,1053-1058
+apps/server/src/shell/subscription/billing-repo.ts
+  h_c6d49c804e0ad2 15,20-23,62-82,92,267-285,288,290-346,349-387,390,399-403,492,497-498,516
+apps/server/src/shell/subscription/enrollment-handlers.test.ts
+  h_c6d49c804e0ad2 252-287,892,989,1072,1082-1084
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  h_c6d49c804e0ad2 150-166,171,175
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  h_c6d49c804e0ad2 60-72,164-166
+apps/server/src/shell/subscription/wompi-settlement.ts
+  h_c6d49c804e0ad2 36,38,152,156-188,203,205-207,211,214-215,221-224,228
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e28c54aad78204d9b5017fecf95e1eb9c2ad3f92",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

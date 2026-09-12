@@ -1,7 +1,7 @@
 import { UnknownJsonString } from "~/schema-compatibility";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { expect, layer } from "@effect/vitest";
+import { describe, expect, it, layer } from "@effect/vitest";
 import {
   Array as Arr,
   BigDecimal,
@@ -27,8 +27,12 @@ import {
   Terminal,
 } from "effect";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
-import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
+import { AiError, type Response as AiResponse, LanguageModel, Tool } from "effect/unstable/ai";
 import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
+import { ClusterError } from "effect/unstable/cluster";
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { RpcClientError } from "effect/unstable/rpc";
+import { WorkerError } from "effect/unstable/workers";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -55,6 +59,7 @@ import {
   EnvelopeRecorder,
   TelemetryEnvelopeRecording,
 } from "~/shell/observability/envelope-recorder";
+import type { ProjectedTransaction } from "~/shell/observability/projectors";
 import type { SpanDescriptor } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import {
@@ -77,9 +82,15 @@ import {
   AgentLimits,
   AgentService,
   CurrentAgentLimits,
+  DeliveryFailed,
   HostedCapacityExceeded,
+  HostedTurnProtocolFailed,
+  HostedTurnUnavailable,
   InboundMessage,
   ModelUnavailable,
+  classifyHostedTurnClientFailure,
+  durableClientSettlement,
+  turnFailureOutcome,
 } from "./agent-service";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { ImmediateDelivery } from "./immediate-delivery";
@@ -212,7 +223,7 @@ const createTransactionToolCall = ({
   counterparty = Option.some("Almuerzo"),
   categoryId = categoryIds.restaurantes,
   nullableAbsentFields = false,
-}: CreateTransactionToolCall): Response.ToolCallPartEncoded => ({
+}: CreateTransactionToolCall): AiResponse.ToolCallPartEncoded => ({
   type: "tool-call" as const,
   id,
   name: "transactions__createTransaction",
@@ -231,7 +242,7 @@ const createTransactionToolCall = ({
 const atomicBatchToolCall = (
   calls: ReadonlyArray<Schema.Json>,
   id = "hosted-atomic-batch"
-): Response.ToolCallPartEncoded => ({
+): AiResponse.ToolCallPartEncoded => ({
   type: "tool-call",
   id,
   name: "operations__executeAtomicBatch",
@@ -312,7 +323,7 @@ const failingAtomicBatchCall = atomicBatchToolCall(
   "hosted-atomic-batch-failure"
 );
 
-type ModelReply = Array<Response.PartEncoded>;
+type ModelReply = Array<AiResponse.PartEncoded>;
 
 class ModelPrompts extends Context.Service<ModelPrompts, Ref.Ref<ReadonlyArray<string>>>()(
   "@fidy/server/shell/agent/agent-service.test/ModelPrompts"
@@ -941,7 +952,7 @@ const independentMutationTargets = (serialized: string): ReadonlyArray<string> =
 const independentMutationCalls = (
   serialized: string,
   asBatch: boolean
-): ReadonlyArray<Response.ToolCallPartEncoded> => {
+): ReadonlyArray<AiResponse.ToolCallPartEncoded> => {
   const targets = independentMutationTargets(serialized);
   const calls = targets.map((id, index) => ({
     type: "tool-call" as const,
@@ -1499,6 +1510,28 @@ const prepareTelemetryTest = Effect.gen(function* () {
   return { service, telemetry, recorder } as const;
 });
 
+/** Waits for the owning turn transaction to reach the recording transport, then returns its tags. */
+const awaitTurnTags = (recorder: {
+  readonly serializedEnvelopes: Effect.Effect<ReadonlyArray<Uint8Array>>;
+}): Effect.Effect<Option.Option<ProjectedTransaction["tags"]>> =>
+  Effect.gen(function* () {
+    const envelopes = yield* recorder.serializedEnvelopes.pipe(
+      Effect.repeat({
+        until: (items) =>
+          transactionEnvelopePayloads(items).some(
+            ({ contexts }) => contexts.trace.op === "agent.turn"
+          ),
+        schedule: Schedule.spaced("10 millis"),
+      }),
+      Effect.timeout("5 seconds"),
+      Effect.orDie
+    );
+    const turn = transactionEnvelopePayloads(envelopes).find(
+      ({ contexts }) => contexts.trace.op === "agent.turn"
+    );
+    return Option.map(Option.fromUndefinedOr(turn), ({ tags }) => tags);
+  });
+
 const activeCallerDescriptor = {
   component: "api",
   operation: "http.canonicalRequest",
@@ -1819,7 +1852,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         expect(reply.text).toBe("Reintento completado.");
         expect(modelSpans).toHaveLength(2);
-        expect(modelSpans.map(({ tags }) => tags.outcome)).toEqual(["failed", "succeeded"]);
+        expect(modelSpans.map(({ tags }) => tags.outcome)).toEqual(["rejected", "succeeded"]);
         expect(errorEnvelopePayloads(envelopes)).toEqual([]);
       })
     );
@@ -1844,12 +1877,12 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         expect(reply.text).toContain("límite seguro");
         expect(modelSpans.length).toBeGreaterThan(1);
-        expect(modelSpans.every(({ tags }) => tags.outcome === "failed")).toBe(true);
+        expect(modelSpans.every(({ tags }) => tags.outcome === "rejected")).toBe(true);
         expect(errors).toHaveLength(1);
         expect(errors[0]?.tags).toMatchObject({
           component: "agent",
           operation: "agent.modelRound",
-          error: "model_unavailable",
+          error: "model_response_rejected",
           provider: "openai",
         });
       })
@@ -2034,21 +2067,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         yield* Deferred.await(started);
         yield* Fiber.interrupt(fiber);
         yield* Deferred.succeed(release, undefined);
-        const envelopes = yield* recorder.serializedEnvelopes.pipe(
-          Effect.repeat({
-            until: (items) =>
-              transactionEnvelopePayloads(items).some(
-                ({ contexts }) => contexts.trace.op === "agent.turn"
-              ),
-            schedule: Schedule.spaced("10 millis"),
-          }),
-          Effect.timeout("5 seconds")
-        );
-        const turn = transactionEnvelopePayloads(envelopes).find(
-          ({ contexts }) => contexts.trace.op === "agent.turn"
-        );
+        const tags = Option.getOrThrow(yield* awaitTurnTags(recorder));
+        const envelopes = yield* recorder.serializedEnvelopes;
 
-        expect(turn?.tags).toMatchObject({ outcome: "succeeded" });
+        expect(tags).toMatchObject({ outcome: "succeeded" });
         expect(errorEnvelopePayloads(envelopes)).toEqual([]);
       })
     );
@@ -2153,15 +2175,37 @@ layer(StaleContinuityAgentHarness, { excludeTestServices: true, timeout: "30 sec
       Effect.gen(function* () {
         yield* clearTranscript;
         const service = yield* AgentService;
+        const telemetry = yield* Telemetry;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
         const message = InboundMessage.make({
           text: TranscriptText.make("continuidad siempre desactualizada"),
         });
 
-        const first = yield* service
-          .handleMessage(defaultUserId, message, noVerifiedWhatsAppAuthority)
+        const first = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleMessage(defaultUserId, message, noVerifiedWhatsAppAuthority)
+          )
           .pipe(Effect.flip);
-        expect(first).toBeInstanceOf(ModelUnavailable);
+        expect(first).toBeInstanceOf(HostedTurnUnavailable);
         expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
+        const tags = Option.getOrThrow(yield* awaitTurnTags(recorder));
+        expect(tags).toMatchObject({
+          outcome: "failed",
+          error: "operational_failure",
+          retryable: "true",
+        });
+        const firstEnvelopes = yield* recorder.serializedEnvelopes;
+        const caller = transactionEnvelopePayloads(firstEnvelopes).find(
+          ({ contexts }) => contexts.trace.op === "http.server"
+        );
+        expect(caller?.tags).toMatchObject({
+          outcome: "failed",
+          error: "operational_failure",
+          retryable: "true",
+        });
+        expect(errorEnvelopePayloads(firstEnvelopes)).toEqual([]);
         const afterFirst = yield* continuityRevision;
 
         // A second message is the lock-and-connection assertion: each preparation advances the
@@ -2170,7 +2214,7 @@ layer(StaleContinuityAgentHarness, { excludeTestServices: true, timeout: "30 sec
         const second = yield* service
           .handleMessage(defaultUserId, message, noVerifiedWhatsAppAuthority)
           .pipe(Effect.flip);
-        expect(second).toBeInstanceOf(ModelUnavailable);
+        expect(second).toBeInstanceOf(HostedTurnUnavailable);
         expect((yield* continuityRevision) - afterFirst).toBe(3);
         expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
       })
@@ -2200,6 +2244,173 @@ const latestTerminalTurn = (
     })(userId)
   );
 
+const hostedTurnRpcRequest = HttpClientRequest.get("https://cluster.invalid/hosted-turns");
+
+const hostedTurnStatusFailure = (status: number): HttpClientError.HttpClientErrorSchema =>
+  HttpClientError.HttpClientErrorSchema.make({
+    _tag: "HttpError",
+    kind: "StatusCodeError",
+    cause: new HttpClientError.StatusCodeError({
+      request: hostedTurnRpcRequest,
+      response: HttpClientResponse.fromWeb(hostedTurnRpcRequest, new Response(null, { status })),
+    }),
+  });
+
+const hostedTurnRpcFailure = (
+  reason: RpcClientError.RpcClientError["reason"]
+): RpcClientError.RpcClientError => RpcClientError.RpcClientError.make({ reason });
+
+/** The complete Exit of classifying one HostedTurns client failure, for whole-Exit comparison. */
+const classifyHostedTurnExit = (
+  failure: unknown
+): Effect.Effect<Exit.Exit<never, HostedTurnUnavailable | HostedTurnProtocolFailed>> =>
+  classifyHostedTurnClientFailure(failure).pipe(Effect.exit);
+
+describe("hosted Turn RPC failure taxonomy", () => {
+  it.effect("classifies transport reasons as transient unavailability", () =>
+    Effect.gen(function* () {
+      const transport = HttpClientError.HttpClientErrorSchema.make({
+        _tag: "HttpError",
+        kind: "TransportError",
+      });
+      const transportFailure = hostedTurnRpcFailure(transport);
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(transportFailure),
+        Exit.fail(new HostedTurnUnavailable({ cause: transport }))
+      );
+      for (const status of [503, 429]) {
+        const transient = hostedTurnStatusFailure(status);
+        const transientFailure = hostedTurnRpcFailure(transient);
+        assert.deepStrictEqual(
+          yield* classifyHostedTurnExit(transientFailure),
+          Exit.fail(new HostedTurnUnavailable({ cause: transient }))
+        );
+      }
+      const persistence = ClusterError.PersistenceError.make({
+        cause: new Error("mailbox storage unavailable"),
+      });
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(persistence),
+        Exit.fail(new HostedTurnUnavailable({ cause: persistence }))
+      );
+      const worker = hostedTurnRpcFailure(
+        WorkerError.WorkerSpawnError.make({ message: "worker transport unavailable" })
+      );
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(worker),
+        Exit.fail(new HostedTurnUnavailable({ cause: worker }))
+      );
+    })
+  );
+
+  it.effect("classifies permanent and malformed protocol reasons without retry", () =>
+    Effect.gen(function* () {
+      const permanent = hostedTurnStatusFailure(400);
+      const permanentFailure = hostedTurnRpcFailure(permanent);
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(permanentFailure),
+        Exit.fail(new HostedTurnProtocolFailed({ cause: permanent }))
+      );
+      const malformed = HttpClientError.HttpClientErrorSchema.make({
+        _tag: "HttpError",
+        kind: "DecodeError",
+      });
+      const malformedFailure = hostedTurnRpcFailure(malformed);
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(malformedFailure),
+        Exit.fail(new HostedTurnProtocolFailed({ cause: malformed }))
+      );
+      for (const kind of ["EncodeError", "InvalidUrlError", "EmptyBodyError"] as const) {
+        const protocol = HttpClientError.HttpClientErrorSchema.make({ _tag: "HttpError", kind });
+        const protocolFailure = hostedTurnRpcFailure(protocol);
+        assert.deepStrictEqual(
+          yield* classifyHostedTurnExit(protocolFailure),
+          Exit.fail(new HostedTurnProtocolFailed({ cause: protocol }))
+        );
+      }
+      const defect = hostedTurnRpcFailure(
+        RpcClientError.RpcClientDefect.make({
+          message: "malformed HostedTurns frame",
+          cause: new Error("undeclared response"),
+        })
+      );
+      assert.deepStrictEqual(
+        yield* classifyHostedTurnExit(defect),
+        Exit.fail(new HostedTurnProtocolFailed({ cause: defect }))
+      );
+    })
+  );
+
+  it.effect("keeps an undeclared client failure a defect", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        classifyHostedTurnClientFailure(new Error("undeclared client fault"))
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (!Exit.isFailure(exit)) return;
+      expect(Cause.hasDies(exit.cause)).toBe(true);
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        message: "HostedTurns client returned an unrecognized failure",
+      });
+    })
+  );
+
+  it.effect("records classified client failures as metadata-only caller telemetry", () =>
+    Effect.gen(function* () {
+      const services = yield* Layer.build(TelemetryEnvelopeRecording);
+      const telemetry = Context.get(services, Telemetry);
+      const recorder = Context.get(services, EnvelopeRecorder);
+      const cases = [
+        {
+          failure: new HostedTurnUnavailable({ cause: "cluster transport unavailable" }),
+          expected: { outcome: "failed", error: "operational_failure", retryable: "true" },
+        },
+        {
+          failure: new HostedTurnProtocolFailed({ cause: "malformed HostedTurns frame" }),
+          expected: { outcome: "failed", error: "invalid_runtime_response", retryable: "false" },
+        },
+      ] as const;
+
+      for (const { failure, expected } of cases) {
+        yield* recorder.clear;
+        yield* telemetry.span(
+          activeCallerDescriptor,
+          telemetry.recordOutcome(turnFailureOutcome(failure))
+        );
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const caller = transactionEnvelopePayloads(envelopes).find(
+          ({ contexts }) => contexts.trace.op === "http.server"
+        );
+        expect(caller?.tags).toMatchObject(expected);
+        expect(errorEnvelopePayloads(envelopes)).toEqual([]);
+      }
+    })
+  );
+
+  it.effect("settles durable exchanges by their classified category", () =>
+    Effect.sync(() => {
+      const transport = HttpClientError.HttpClientErrorSchema.make({
+        _tag: "HttpError",
+        kind: "TransportError",
+      });
+      const transportFailure = hostedTurnRpcFailure(transport);
+      assert.deepStrictEqual(durableClientSettlement(transportFailure), {
+        _tag: "Retry",
+        classified: new HostedTurnUnavailable({ cause: transport }),
+      });
+      const permanent = hostedTurnStatusFailure(400);
+      const permanentFailure = hostedTurnRpcFailure(permanent);
+      assert.deepStrictEqual(durableClientSettlement(permanentFailure), {
+        _tag: "RetireProtocol",
+        classified: new HostedTurnProtocolFailed({ cause: permanent }),
+      });
+      const undeclared = new Error("undeclared client fault");
+      assert.deepStrictEqual(durableClientSettlement(undeclared), { _tag: "RetireDefect" });
+    })
+  );
+});
+
 layer(DefectiveAgentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "hosted generation defects",
   (it) => {
@@ -2216,9 +2427,10 @@ layer(DefectiveAgentHarness, { excludeTestServices: true, timeout: "30 seconds" 
         );
         const terminal = yield* latestTerminalTurn(defaultUserId);
 
-        // The runner records the failure locally; only a safe closed error crosses Cluster.
+        // An unexpected defect stays a defect across the Cluster boundary, so the caller observes
+        // the original cause instead of a synthesized model-availability failure.
         assert.ok(Exit.isFailure(exit));
-        expect(Cause.squash(exit.cause)).toBeInstanceOf(ModelUnavailable);
+        expect(Cause.squash(exit.cause)).toMatchObject({ message: "hosted generation defect" });
         expect(terminal[0]).toEqual({
           state: "Failed",
           failureReason: Option.some("HostedInferenceFailed"),
@@ -2406,10 +2618,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("marks a hosted Turn failed when delivery rejects the generated reply", () =>
+  it.effect("returns a declared delivery failure instead of model unavailability", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
+      const recorder = yield* EnvelopeRecorder;
+      yield* recorder.clear;
       const delivery = yield* DeliveryControl;
       yield* Ref.set(delivery, () => Effect.fail("delivery_failed"));
       yield* Effect.addFinalizer(() => Ref.set(delivery, successfulDelivery));
@@ -2421,8 +2635,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
       const terminal = yield* latestTerminalTurn(defaultUserId);
       const transcript = yield* selectTranscriptEntries(defaultUserId);
+      const tags = Option.getOrThrow(yield* awaitTurnTags(recorder));
+      const envelopes = yield* recorder.serializedEnvelopes;
 
-      expect(Exit.isFailure(exit)).toBe(true);
+      assert.deepStrictEqual(
+        Exit.match(exit, {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }),
+        Exit.fail(new DeliveryFailed())
+      );
       expect(terminal[0]).toEqual({
         state: "Failed",
         failureReason: Option.some("DeliveryFailed"),
@@ -2430,6 +2652,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(transcript.at(-1)?._tag).toBe("FailedTurnTranscriptEntry");
       expect(transcript.at(-1)).not.toHaveProperty("text");
       expect(transcript.at(-1)).not.toHaveProperty("providerMessageId");
+      expect(tags).toMatchObject({
+        outcome: "failed",
+        error: "operational_failure",
+        retryable: "false",
+      });
+      expect(errorEnvelopePayloads(envelopes)).toEqual([]);
     })
   );
 

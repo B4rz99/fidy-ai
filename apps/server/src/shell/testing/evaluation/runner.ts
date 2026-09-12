@@ -148,7 +148,10 @@ const failedResult = Effect.fn("Evaluation.failedResult")(function* (
   const providerUnavailable =
     Option.isSome(failure) &&
     (failure.value instanceof HostedInferenceError ||
-      Option.contains(failureTag(failure.value), "ModelUnavailable"));
+      Option.exists(
+        failureTag(failure.value),
+        (tag) => tag === "ModelUnavailable" || tag === "HostedTurnUnavailable"
+      ));
   const classification = failureClassification(failure);
   process.stderr.write(`Evaluation case unavailable: ${entry.id} (${classification}).\n`);
   return incompleteCase(

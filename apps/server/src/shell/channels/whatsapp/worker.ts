@@ -1,6 +1,6 @@
-import { Cause, DateTime, Effect, Layer } from "effect";
+import { Cause, DateTime, Effect, Layer, Option } from "effect";
 import { dual } from "effect/Function";
-import { AgentService } from "~/shell/agent/agent-service";
+import { AgentService, isDurableTransportRetryCause } from "~/shell/agent/agent-service";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { projectStack } from "~/shell/observability/projectors";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
@@ -55,6 +55,13 @@ export const runSupervisedWhatsAppLoop: {
           if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
             return Effect.interrupt;
           }
+          if (isDurableTransportRetryCause(cause)) {
+            // A classified transient exchange is expected to be re-delivered by the persisted
+            // queue and is never an unexpected defect, so the loop reports no failure event for it.
+            return Effect.logWarning("WhatsApp background iteration will retry", {
+              operation,
+            }).pipe(Effect.andThen(Effect.sleep("1 second")));
+          }
           return Effect.gen(function* () {
             yield* Effect.logError("WhatsApp background iteration failed", {
               cause: projectCauseForLog(cause),
@@ -91,7 +98,22 @@ export const runWhatsAppRetention = runScheduledWork({
   Effect.gen(function* () {
     yield* pruneWhatsAppOperationalData();
     const now = yield* DateTime.now;
-    yield* retireExhaustedWhatsAppWork(now);
+    const telemetry = yield* Telemetry;
+    const retired = yield* retireExhaustedWhatsAppWork(now);
+    yield* Effect.forEach(
+      retired,
+      () =>
+        telemetry.captureFailure({
+          _tag: "ExhaustedOperationalFailure",
+          component: "whatsapp",
+          operation: "whatsapp.processWork",
+          error: "operational_failure",
+          provider: Option.none(),
+          retryable: false,
+          cause: "Exhausted WhatsApp inbound work",
+        }),
+      { discard: true }
+    );
     yield* pruneWhatsAppQueueHistory(now);
     yield* pruneCompletedHostedTurnMessages(now);
     yield* Effect.logInfo("Applied WhatsApp operational retention");

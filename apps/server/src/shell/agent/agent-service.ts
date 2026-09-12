@@ -13,18 +13,17 @@ import {
   Option,
   Random,
   Result,
-  Schedule,
   Schema,
   Stream,
   Struct,
 } from "effect";
 import type { Tool } from "effect/unstable/ai";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient, HttpClientError } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import { ClusterSchema, Entity } from "effect/unstable/cluster";
-import { Rpc, type RpcGroup } from "effect/unstable/rpc";
+import { ClusterError, ClusterSchema, Entity } from "effect/unstable/cluster";
+import { Rpc, RpcClientError, type RpcGroup } from "effect/unstable/rpc";
 import { AgentReply, InboundMessage } from "./message";
 import { ImmediateDelivery } from "./immediate-delivery";
 import { OnboardingConsentRequired } from "./consent-error";
@@ -32,6 +31,7 @@ import { OnboardingConsentRequired } from "./consent-error";
 import { WhatsAppReplyDelivery } from "./whatsapp-delivery";
 import {
   completeWhatsAppTurn,
+  failWhatsAppInboundBurst,
   failWhatsAppTurn,
   ownsWhatsAppInboundWork,
   prepareWhatsAppTurn,
@@ -42,6 +42,7 @@ import {
 } from "~/shell/channels/whatsapp/inbound-execution";
 
 import type { CanonicalCaller } from "~/shell/_shared/authz";
+import { isTransientHttpStatus } from "~/shell/_shared/http-status";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
 import { UserId } from "~/core/identity/reference";
@@ -226,10 +227,44 @@ export type AgentTurnError =
   | HostedCapacityExceeded
   | ModelUnavailable
   | ModelResponseRejected
-  | HostedTurnAlreadyHandled;
+  | HostedTurnAlreadyHandled
+  | DeliveryFailed
+  | HostedTurnUnavailable
+  | HostedTurnProtocolFailed;
 
 /** A retried immediate call cannot repeat effects or promise an unretained original reply. */
 export class HostedTurnAlreadyHandled extends Data.TaggedError("HostedTurnAlreadyHandled")<{}> {}
+
+/** The caller could not deliver the prepared reply; the Turn is terminal, not model-unavailable. */
+export class DeliveryFailed extends Data.TaggedError("DeliveryFailed")<{}> {
+  override get message(): string {
+    return "The prepared reply could not be delivered on this channel";
+  }
+}
+
+/**
+ * The hosted Turn runtime could not serve this Turn — transport unavailability or sustained
+ * preparation contention. The condition is transient, so a later attempt is safe.
+ */
+export class HostedTurnUnavailable extends Data.TaggedError("HostedTurnUnavailable")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "The hosted Turn runtime is temporarily unable to serve the turn";
+  }
+}
+
+/**
+ * The HostedTurns RPC exchange violated its declared protocol — an unencodable request, or a
+ * response the client cannot decode or that no declared operation produced. No retry can succeed.
+ */
+export class HostedTurnProtocolFailed extends Data.TaggedError("HostedTurnProtocolFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "The hosted Turn runtime exchanged an undeclared protocol message";
+  }
+}
 
 const TurnFailure = Schema.Literals([
   "UnknownUser",
@@ -238,6 +273,7 @@ const TurnFailure = Schema.Literals([
   "ModelUnavailable",
   "ModelResponseRejected",
   "HostedTurnAlreadyHandled",
+  "HostedTurnUnavailable",
   "delivery_failed",
 ]);
 
@@ -869,6 +905,74 @@ const finishModelTimeout = (
     return Result.fail(failure);
   });
 
+/** The closed Agent-facing category each hosted inference failure reason actually represents. */
+type HostedInferenceFailureClass =
+  | "model_unavailable"
+  | "capacity_exceeded"
+  | "model_response_rejected"
+  | "invalid_authority";
+
+const hostedInferenceFailureClass = (
+  failure: HostedInferenceError
+): HostedInferenceFailureClass => {
+  switch (failure.reason._tag) {
+    case "ProviderUnavailable":
+    case "StructuredOutputTimedOut":
+      return "model_unavailable";
+    case "CapacityExceeded":
+    case "ActiveRequestCapacityExceeded":
+      return "capacity_exceeded";
+    case "InvalidOutput":
+    case "StructuredOutputExceeded":
+      return "model_response_rejected";
+    case "InvalidAuthority":
+      return "invalid_authority";
+  }
+};
+
+/**
+ * Telemetry classification of one failed provider attempt. Only an actual provider-availability
+ * failure is `model_unavailable`; capacity and rejected responses keep their own category, and an
+ * invalid authority is an implementation invariant that the Turn observes as a defect.
+ */
+const providerAttemptOutcome = (failure: HostedInferenceError): DeclaredOutcome => {
+  switch (hostedInferenceFailureClass(failure)) {
+    case "model_unavailable":
+      return {
+        outcome: "failed",
+        error: Option.some("model_unavailable"),
+        retryable: failure.retryable,
+      };
+    case "capacity_exceeded":
+      return { outcome: "rejected", error: Option.some("capacity_exceeded"), retryable: false };
+    case "model_response_rejected":
+      return {
+        outcome: "rejected",
+        error: Option.some("model_response_rejected"),
+        retryable: false,
+      };
+    case "invalid_authority":
+      return { outcome: "failed", error: Option.some("unexpected_defect"), retryable: false };
+  }
+};
+
+/** Records the one terminal model-availability failure a bounded model round exhausted. */
+const recordExhaustedProviderFailure = (
+  telemetry: TelemetryService,
+  failure: HostedInferenceError
+): Effect.Effect<void> =>
+  hostedInferenceFailureClass(failure) === "model_unavailable"
+    ? telemetry.captureFailure({
+        _tag: "ExhaustedOperationalFailure",
+        component: "agent",
+        operation: "agent.modelRound",
+        error: "model_unavailable",
+        provider: Option.some("openai"),
+        retryable: failure.retryable,
+        cause: failure,
+      })
+    : Effect.void;
+
 const finishProviderAttempts = (
   telemetry: TelemetryService,
   state: ModelAttemptState,
@@ -877,27 +981,18 @@ const finishProviderAttempts = (
   Effect.gen(function* () {
     const outcome: DeclaredOutcome = Result.isSuccess(result)
       ? { outcome: "succeeded", error: Option.none(), retryable: false }
-      : {
-          outcome: "failed",
-          error: Option.some("model_unavailable"),
-          retryable: result.failure.retryable,
-        };
+      : providerAttemptOutcome(result.failure);
     yield* recordModelCompletion(telemetry, state.attemptCount, outcome);
     yield* recordModelUsage(
       telemetry,
       state,
       Result.isSuccess(result) ? Option.some(result.success) : Option.none()
     );
-    if (Result.isFailure(result) && result.failure.reason._tag === "ProviderUnavailable") {
-      yield* telemetry.captureFailure({
-        _tag: "ExhaustedOperationalFailure",
-        component: "agent",
-        operation: "agent.modelRound",
-        error: "model_unavailable",
-        provider: Option.some("openai"),
-        retryable: result.failure.retryable,
-        cause: result.failure,
-      });
+    if (Result.isFailure(result)) {
+      if (result.failure.reason._tag === "InvalidAuthority") {
+        return yield* Effect.die(result.failure);
+      }
+      yield* recordExhaustedProviderFailure(telemetry, result.failure);
     }
     yield* Effect.annotateCurrentSpan({
       "agent.model.attempt_count": state.attemptCount,
@@ -1100,17 +1195,25 @@ const acceptRecoverableHostedOutput = (
     Option.some(failure.continuation)
   );
 
-const capacityFailureReasons = new Set<HostedInferenceError["reason"]["_tag"]>([
-  "CapacityExceeded",
-  "ActiveRequestCapacityExceeded",
-]);
-
+/**
+ * Classifies one hosted inference failure into the closed Agent outcome it actually represents.
+ * Only an actual provider availability failure is model-unavailable; capacity and rejected
+ * responses keep their own category, and an invalid authority is an invariant defect.
+ */
 const mapHostedInferenceFailure = (
   failure: HostedInferenceError
-): ModelUnavailable | HostedCapacityExceeded =>
-  capacityFailureReasons.has(failure.reason._tag)
-    ? new HostedCapacityExceeded()
-    : new ModelUnavailable({ cause: failure });
+): Effect.Effect<never, HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected> => {
+  switch (hostedInferenceFailureClass(failure)) {
+    case "model_unavailable":
+      return Effect.fail(new ModelUnavailable({ cause: failure }));
+    case "capacity_exceeded":
+      return Effect.fail(new HostedCapacityExceeded());
+    case "model_response_rejected":
+      return Effect.fail(new ModelResponseRejected({ cause: failure }));
+    case "invalid_authority":
+      return Effect.die(failure);
+  }
+};
 
 const acceptHostedInferenceFailure = Effect.fn(function* (
   failure: HostedInferenceError
@@ -1273,7 +1376,7 @@ const recordMalformedOutputExhaustion = (
           _tag: "ExhaustedOperationalFailure",
           component: "agent",
           operation: "agent.modelRound",
-          error: "model_unavailable",
+          error: "model_response_rejected",
           provider: Option.some("openai"),
           retryable: false,
           cause: new Error("Model output recovery exhausted"),
@@ -1304,11 +1407,7 @@ const runHostedTurn = (
           malformedOutputFeedback: feedback,
           remainingToolCalls: turn.limits.maxToolCallsPerTurn - toolCalls,
           preparedOverride: index === 1 ? Option.some(turn.initialPrepared) : Option.none(),
-        }).pipe(
-          Effect.catchTag("HostedInferenceError", (failure) =>
-            Effect.fail(mapHostedInferenceFailure(failure))
-          )
-        )
+        }).pipe(Effect.catchTag("HostedInferenceError", mapHostedInferenceFailure))
       );
       if (roundDecision._tag === "Retry") {
         feedback = Option.some(roundDecision.feedback);
@@ -1334,24 +1433,6 @@ const runHostedTurn = (
     return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);
   });
 
-const decodeAgentTurnFailureTag = Schema.decodeUnknownOption(
-  Schema.Literals([
-    "UnknownUser",
-    "OnboardingConsentRequired",
-    "HostedCapacityExceeded",
-    "ModelUnavailable",
-    "ModelResponseRejected",
-    "HostedTurnAlreadyHandled",
-  ])
-);
-
-const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]> => {
-  if (typeof failure !== "object" || failure === null || !("_tag" in failure)) {
-    return Option.none();
-  }
-  return decodeAgentTurnFailureTag(failure._tag);
-};
-
 const turnFailureOutcomes: Readonly<Record<AgentTurnError["_tag"], DeclaredOutcome>> = {
   HostedTurnAlreadyHandled: { outcome: "interrupted", error: Option.none(), retryable: false },
   UnknownUser: { outcome: "rejected", error: Option.some("unknown_user"), retryable: false },
@@ -1362,7 +1443,22 @@ const turnFailureOutcomes: Readonly<Record<AgentTurnError["_tag"], DeclaredOutco
   },
   HostedCapacityExceeded: {
     outcome: "rejected",
-    error: Option.some("model_unavailable"),
+    error: Option.some("capacity_exceeded"),
+    retryable: false,
+  },
+  DeliveryFailed: {
+    outcome: "failed",
+    error: Option.some("operational_failure"),
+    retryable: false,
+  },
+  HostedTurnUnavailable: {
+    outcome: "failed",
+    error: Option.some("operational_failure"),
+    retryable: true,
+  },
+  HostedTurnProtocolFailed: {
+    outcome: "failed",
+    error: Option.some("invalid_runtime_response"),
     retryable: false,
   },
   ModelResponseRejected: {
@@ -1375,6 +1471,17 @@ const turnFailureOutcomes: Readonly<Record<AgentTurnError["_tag"], DeclaredOutco
     error: Option.some("model_unavailable"),
     retryable: false,
   },
+};
+
+const decodeAgentTurnFailureTag = Schema.decodeUnknownOption(
+  Schema.Literals(Struct.keys(turnFailureOutcomes))
+);
+
+const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]> => {
+  if (typeof failure !== "object" || failure === null || !("_tag" in failure)) {
+    return Option.none();
+  }
+  return decodeAgentTurnFailureTag(failure._tag);
 };
 
 const recordTurnExit = (
@@ -1414,6 +1521,16 @@ const recordTurnExit = (
     onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomes[tag]),
   });
 };
+
+/**
+ * The declared outcome one caller-observed Turn failure owns on the active span. The entity-side
+ * `agent.turn` span records the same category before the wire; the caller records it again when it
+ * classified an RPC failure itself and no entity span exists.
+ *
+ * @internal
+ */
+export const turnFailureOutcome = (failure: AgentTurnError): DeclaredOutcome =>
+  turnFailureOutcomes[failure._tag];
 
 const maximumContinuityPreparations = 3;
 
@@ -1466,9 +1583,9 @@ const beginPreparedTurn = Effect.fn(function* (input: {
   if (Result.isSuccess(admission)) {
     return makeTurnExecution(continuity, userId, admission.success);
   }
-  yield* firstRound.discard.pipe(
-    Effect.catchTag("HostedInferenceError", (cause) => Effect.fail(new ModelUnavailable({ cause })))
-  );
+  // The prepared round can only be discarded before execution; a refusal here is an invariant
+  // violation, so it stays a defect instead of masquerading as model unavailability.
+  yield* firstRound.discard.pipe(Effect.orDie);
   return yield* admission.failure;
 });
 
@@ -1542,7 +1659,11 @@ const deliverAndComplete = Effect.fn(function* <E, R>(input: {
   const delivered = yield* Effect.exit(deliver(generated.reply));
   if (Exit.isFailure(delivered)) {
     yield* pending.fail("DeliveryFailed");
-    return yield* Effect.failCause(delivered.cause);
+    // Delivery defects and interruption keep their own cause; only a declared delivery failure
+    // becomes the closed Agent outcome, so the Turn records delivery, never model availability.
+    return Cause.hasDies(delivered.cause) || Cause.hasInterrupts(delivered.cause)
+      ? yield* Effect.failCause(delivered.cause)
+      : yield* new DeliveryFailed();
   }
   yield* Option.match(generated.assistantEntry, {
     onNone: () => pending.fail("HostedInferenceFailed"),
@@ -1577,7 +1698,7 @@ const runPreparedTurn = Effect.fn(function* <E, R>(input: {
     context,
     maximumToolCalls: limits.maxToolCallsPerTurn,
     availableOperations,
-  }).pipe(Effect.mapError(mapHostedInferenceFailure));
+  }).pipe(Effect.catchTag("HostedInferenceError", mapHostedInferenceFailure));
   const pending = yield* beginPreparedTurn({
     continuity: dependencies.continuity,
     userId,
@@ -1661,7 +1782,7 @@ const runBoundedPreparation = <E, R>(
     Effect.catchTag("ContinuityChanged", (changed) =>
       preparationNumber < maximumContinuityPreparations
         ? runBoundedPreparation({ ...input, preparationNumber: preparationNumber + 1 })
-        : Effect.fail(new ModelUnavailable({ cause: changed }))
+        : Effect.fail(new HostedTurnUnavailable({ cause: changed }))
     )
   );
 };
@@ -1737,6 +1858,13 @@ const executeMessage = <E, R>(
   return provideAgentDependencies(dependencies, traced);
 };
 
+/**
+ * Wire-indexed constructors for the declared immediate failures. The delivery service already
+ * fails with its own `"delivery_failed"` vocabulary, so that tag is carried through the wire and
+ * rehydrated here like any other. A protocol failure has no entry because only the RPC client
+ * classifies one: a handler deducing one would report its own invariant violation as a peer fault
+ * and dies instead.
+ */
 const turnFailureConstructors: Readonly<
   Record<typeof TurnFailure.Type, (userId: UserId) => AgentTurnError>
 > = {
@@ -1745,9 +1873,122 @@ const turnFailureConstructors: Readonly<
   HostedCapacityExceeded: () => new HostedCapacityExceeded(),
   ModelResponseRejected: () => new ModelResponseRejected({ cause: "Hosted output rejected" }),
   HostedTurnAlreadyHandled: () => new HostedTurnAlreadyHandled(),
-  delivery_failed: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
+  HostedTurnUnavailable: () =>
+    new HostedTurnUnavailable({ cause: "Hosted turn preparation was unavailable" }),
+  delivery_failed: () => new DeliveryFailed(),
   ModelUnavailable: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
 };
+
+type DeclaredTurnFailureTag = Exclude<AgentTurnError["_tag"], "HostedTurnProtocolFailed">;
+
+/**
+ * Only the delivery failure travels as a foreign tag; every other declared class travels as its
+ * own, so a class the wire does not declare fails the mapped return type.
+ */
+const declaredTurnWireTag = (tag: DeclaredTurnFailureTag): typeof TurnFailure.Type =>
+  tag === "DeliveryFailed" ? "delivery_failed" : tag;
+
+const mapDeclaredTurnFailure = (
+  failure: AgentTurnError
+): Effect.Effect<AgentReply, typeof TurnFailure.Type> =>
+  failure._tag === "HostedTurnProtocolFailed"
+    ? Effect.die(failure)
+    : Effect.fail(declaredTurnWireTag(failure._tag));
+
+type HostedTurnHttpFailure = Extract<
+  RpcClientError.RpcClientError["reason"],
+  { readonly _tag: "HttpError" }
+>;
+
+const hostedTurnTransportFailure = (cause: unknown): HostedTurnUnavailable =>
+  new HostedTurnUnavailable({ cause });
+
+const hostedTurnProtocolFailure = (cause: unknown): HostedTurnProtocolFailed =>
+  new HostedTurnProtocolFailed({ cause });
+
+/** A status-code failure is transient only when its underlying cause carries a retryable status. */
+const isTransientStatusCodeFailure = (failure: HostedTurnHttpFailure): boolean =>
+  failure.cause instanceof HttpClientError.StatusCodeError &&
+  isTransientHttpStatus(failure.cause.response.status);
+
+const classifyStatusCodeFailure = (
+  failure: HostedTurnHttpFailure
+): HostedTurnUnavailable | HostedTurnProtocolFailed =>
+  isTransientStatusCodeFailure(failure)
+    ? hostedTurnTransportFailure(failure)
+    : hostedTurnProtocolFailure(failure);
+
+const classifyHttpClientFailure = (
+  failure: HostedTurnHttpFailure
+): HostedTurnUnavailable | HostedTurnProtocolFailed => {
+  switch (failure.kind) {
+    case "TransportError":
+      return hostedTurnTransportFailure(failure);
+    case "StatusCodeError":
+      return classifyStatusCodeFailure(failure);
+    case "EncodeError":
+    case "InvalidUrlError":
+    case "DecodeError":
+    case "EmptyBodyError":
+      return hostedTurnProtocolFailure(failure);
+  }
+};
+
+/** HTTP reasons delegate to their own classifier; every other transport reason stays transient. */
+const classifyRpcReasonFailure = (
+  failure: RpcClientError.RpcClientError
+): HostedTurnUnavailable | HostedTurnProtocolFailed =>
+  failure.reason._tag === "HttpError"
+    ? classifyHttpClientFailure(failure.reason)
+    : hostedTurnTransportFailure(failure);
+
+const classifyRpcClientFailure = (
+  failure: RpcClientError.RpcClientError
+): HostedTurnUnavailable | HostedTurnProtocolFailed =>
+  failure.reason._tag === "RpcClientDefect"
+    ? hostedTurnProtocolFailure(failure)
+    : classifyRpcReasonFailure(failure);
+
+/**
+ * Classifies one RPC client failure into the declared class it represents, or none when it is
+ * outside the client taxonomy. Durable work settles the declared classes and treats an undeclared
+ * one as the invariant it is; the immediate caller turns the same absence into a defect.
+ */
+const classifyClientFailure = (
+  failure: unknown
+): Option.Option<HostedTurnUnavailable | HostedTurnProtocolFailed> => {
+  if (Schema.is(RpcClientError.RpcClientError)(failure)) {
+    return Option.some(classifyRpcClientFailure(failure));
+  }
+  if (
+    Schema.is(ClusterError.MailboxFull)(failure) ||
+    Schema.is(ClusterError.AlreadyProcessingMessage)(failure) ||
+    Schema.is(ClusterError.PersistenceError)(failure) ||
+    Schema.is(ClusterError.EntityNotAssignedToRunner)(failure)
+  ) {
+    return Option.some(hostedTurnTransportFailure(failure));
+  }
+  return Option.none();
+};
+
+/**
+ * Classifies one HostedTurns RPC client failure into the declared Agent-facing outcome it
+ * represents: a transient transport failure the caller may retry, or a malformed or undeclared
+ * protocol response it must not. Anything outside the declared client error taxonomy stays a
+ * defect.
+ *
+ * @internal
+ */
+export const classifyHostedTurnClientFailure = (
+  failure: unknown
+): Effect.Effect<never, HostedTurnUnavailable | HostedTurnProtocolFailed> =>
+  Option.match(classifyClientFailure(failure), {
+    onNone: () =>
+      Effect.die(
+        new Error("HostedTurns client returned an unrecognized failure", { cause: failure })
+      ),
+    onSome: (classified) => Effect.fail(classified),
+  });
 
 const makeHandleMessage =
   (dependencies: AgentServiceDependencies, client: HostedTurnsClient) =>
@@ -1764,35 +2005,42 @@ const makeHandleMessage =
       return yield* client(userId)
         .Handle({ userId, turnId, message, authorityRoot, limits })
         .pipe(
-          Effect.mapError((failure) =>
+          Effect.catch((failure) =>
             typeof failure === "string"
-              ? turnFailureConstructors[failure](userId)
-              : new ModelUnavailable({ cause: "Hosted execution unavailable" })
+              ? Effect.fail(turnFailureConstructors[failure](userId))
+              : classifyHostedTurnClientFailure(failure)
+          ),
+          Effect.tapError((failure) =>
+            dependencies.telemetry.recordOutcome(turnFailureOutcome(failure))
           )
         );
     });
 
-/** Durable RPCs never retain raw defect Causes. Brief outages retry; queue attempts own exhaustion. */
-const settleDurableHostedWork: <E>(
+/**
+ * A durable HostedTurn RPC declares no failure to the Cluster: domain operations either settle the
+ * Turn or die, so a typed failure here is an invariant rather than a declared outcome and any
+ * non-interrupt cause is unexpected. Such a cause is recorded once for the Work boundary and
+ * re-raised with its original cause; interruption propagates. The persisted queue's bounded
+ * attempts are the retry owner — the client boundary re-delivers only a classified transient RPC
+ * failure, made safe by durable preparation and replay guards.
+ */
+const settleDurableHostedWork = <E, R>(
   dependencies: AgentServiceDependencies,
-  work: Effect.Effect<void, E>
-) => Effect.Effect<void> = (dependencies, work) =>
+  work: Effect.Effect<void, E, R>
+): Effect.Effect<void, never, R> =>
   work.pipe(
-    Effect.catchCause((cause) =>
-      Cause.hasInterrupts(cause)
-        ? Effect.interrupt
-        : dependencies.telemetry
-            .captureFailure({
-              _tag: "Defect",
-              component: "agent",
-              operation: "agent.hostedTurn",
-              error: "unexpected_defect",
-              cause,
-            })
-            .pipe(Effect.andThen(Effect.fail("hosted_turn_retry")))
-    ),
-    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 2 }),
-    Effect.orDie
+    Effect.orDie,
+    Effect.catchCauseIf(Cause.hasDies, (cause) =>
+      dependencies.telemetry
+        .captureFailure({
+          _tag: "Defect",
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+          cause,
+        })
+        .pipe(Effect.andThen(Effect.failCause(cause)))
+    )
   );
 
 type HostedTurnRpc = RpcGroup.Rpcs<typeof HostedTurns.protocol>;
@@ -1807,34 +2055,34 @@ type HostedTurnContext = Readonly<{
   entityUserId: string;
 }>;
 
-const handleImmediateTurn = Effect.fn(
-  function* (
-    { dependencies, client, immediate, entityUserId }: HostedTurnContext,
-    { userId, turnId, message, limits, authorityRoot }: ImmediateTurnPayload
-  ) {
-    if (entityUserId !== userId) return yield* Effect.fail("UnknownUser" as const);
-    if (Option.isSome(yield* dependencies.continuity.recoverTurn(userId, turnId))) {
-      return yield* Effect.fail("HostedTurnAlreadyHandled" as const);
-    }
-    return yield* executeMessage({
-      dependencies,
-      userId,
-      turnId,
-      message,
-      authorityRoot,
-      deliver: immediate.deliver,
-      publishRecovery: client(userId)
-        .Recover({ userId, turnId }, { discard: true })
-        .pipe(Effect.orDie),
-    }).pipe(
-      Effect.provideService(CurrentAgentLimits, limits),
-      Effect.mapError((failure): typeof TurnFailure.Type =>
-        typeof failure === "string" ? failure : failure._tag
-      )
-    );
-  },
-  Effect.catchDefect(() => Effect.fail("ModelUnavailable" as const))
-);
+const handleImmediateTurn = Effect.fn(function* (
+  { dependencies, client, immediate, entityUserId }: HostedTurnContext,
+  { userId, turnId, message, limits, authorityRoot }: ImmediateTurnPayload
+) {
+  if (entityUserId !== userId) return yield* Effect.fail("UnknownUser" as const);
+  if (Option.isSome(yield* dependencies.continuity.recoverTurn(userId, turnId))) {
+    return yield* Effect.fail("HostedTurnAlreadyHandled" as const);
+  }
+  return yield* executeMessage({
+    dependencies,
+    userId,
+    turnId,
+    message,
+    authorityRoot,
+    deliver: immediate.deliver,
+    publishRecovery: client(userId)
+      .Recover({ userId, turnId }, { discard: true })
+      .pipe(Effect.orDie),
+  }).pipe(
+    Effect.provideService(CurrentAgentLimits, limits),
+    // Every declared failure maps to its wire tag. Defects are deliberately not caught: they
+    // propagate to the Work boundary, which observes them as defects.
+    Effect.catchIf(
+      (failure): failure is AgentTurnError => typeof failure !== "string",
+      (failure) => mapDeclaredTurnFailure(failure)
+    )
+  );
+});
 
 type PreparedWhatsAppTurn = Extract<
   Effect.Success<ReturnType<typeof prepareWhatsAppTurn>>,
@@ -1853,6 +2101,10 @@ const awaitPreparedWhatsAppTurn = Effect.fn(function* (work: WhatsAppInboundWork
     yield* Effect.sleep(Duration.millis(remaining));
   }
 });
+
+/** A terminalized delivery failure arrives tagged; the refusal path still fails with its wire tag. */
+const isDeliveryFailure = (failure: unknown): boolean =>
+  failure === "delivery_failed" || failure instanceof DeliveryFailed;
 
 const executeWhatsAppMessage = Effect.fn(function* (
   { dependencies, whatsapp }: HostedTurnContext,
@@ -1876,7 +2128,7 @@ const executeWhatsAppMessage = Effect.fn(function* (
   return yield* failWhatsAppTurn(
     turn,
     now,
-    Option.getOrUndefined(Cause.findErrorOption(outcome.cause)) === "delivery_failed"
+    Option.exists(Cause.findErrorOption(outcome.cause), isDeliveryFailure)
       ? "send_failed"
       : "agent_failed"
   );
@@ -1947,6 +2199,136 @@ const makeHostedTurnHandlers = Effect.fn(function* (
   };
 });
 
+/** How one failed HostedTurns client exchange is classified for durable settlement. */
+type DurableClientSettlement =
+  | Readonly<{ readonly _tag: "Retry"; readonly classified: HostedTurnUnavailable }>
+  | Readonly<{ readonly _tag: "RetireProtocol"; readonly classified: HostedTurnProtocolFailed }>
+  | Readonly<{ readonly _tag: "RetireDefect" }>;
+
+/**
+ * The durable settlement of one failed HostedTurns exchange. Only a classified transient condition
+ * may be re-delivered — the persisted queue's bounded attempts retry it under durable preparation
+ * and replay guards. Every other failure is terminal: another exchange cannot fix a malformed
+ * protocol response, an undeclared failure, or an invariant violation.
+ *
+ * @internal
+ */
+export const durableClientSettlement = (failure: unknown): DurableClientSettlement =>
+  Option.match(classifyClientFailure(failure), {
+    onNone: () => ({ _tag: "RetireDefect" }),
+    onSome: (classified) =>
+      classified._tag === "HostedTurnUnavailable"
+        ? { _tag: "Retry", classified }
+        : { _tag: "RetireProtocol", classified },
+  });
+
+/**
+ * Stable metadata-only cause retained by the persisted queue for one transient exchange. The raw
+ * transport failure never enters the queue's failure record, which persists `Cause.pretty` and
+ * would otherwise retain internal runtime endpoints and stacks.
+ *
+ * @internal
+ */
+export const durableTransportRetryCause = "hosted_turn_transport_unavailable";
+
+/**
+ * Whether one cause is exactly the stable retry signal a classified transient durable exchange
+ * re-raises for the persisted queue. A supervisor recognizes an expected re-delivery without
+ * reporting a defect; a cause that combines it with anything else stays on the defect path.
+ *
+ * @internal
+ */
+export const isDurableTransportRetryCause = (cause: Cause.Cause<unknown>): boolean =>
+  cause.reasons.length === 1 &&
+  Result.match(Cause.findDefect(cause), {
+    onFailure: () => false,
+    onSuccess: (defect) => defect === durableTransportRetryCause,
+  });
+
+/** The identifier-only durable work one WhatsApp exchange settlement observes. */
+type DurableWhatsAppWork = Readonly<{
+  readonly userId: UserId;
+  readonly inboundJobId: WhatsAppInboundWorkType["inboundJobId"];
+}>;
+
+/**
+ * Terminally retires the inbound burst behind one durable item with metadata-only evidence: the
+ * fixed category is captured once and the terminal settlement leaves no retained content. A racing
+ * Turn settlement wins because settlement only touches jobs that have not completed.
+ */
+const retireDurableWhatsAppFailure = (
+  telemetry: TelemetryService,
+  work: DurableWhatsAppWork,
+  classified: Readonly<{
+    readonly error: "invalid_runtime_response" | "unexpected_defect";
+    readonly cause: unknown;
+  }>
+): Effect.Effect<void, never, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    yield* telemetry.captureFailure({
+      _tag: "Defect",
+      component: "agent",
+      operation: "agent.hostedTurn",
+      error: classified.error,
+      cause: classified.cause,
+    });
+    yield* failWhatsAppInboundBurst(work, "ambiguous_crash", yield* DateTime.now);
+  });
+
+/**
+ * Settles one HostedTurns exchange observed by durable WhatsApp work. Success is done and
+ * interruption propagates; a classified transient condition re-raises only the stable retry cause
+ * for the persisted queue's bounded, domain-guarded retry; a protocol violation, an undeclared
+ * failure, or a raw client defect records metadata-only evidence and terminally retires the burst
+ * instead of exchanging again.
+ *
+ * @internal
+ */
+export const settleDurableWhatsAppExchange = (input: {
+  readonly telemetry: TelemetryService;
+  readonly work: DurableWhatsAppWork;
+  readonly exchange: Exit.Exit<void, unknown>;
+}): Effect.Effect<void, never, SqlClient.SqlClient> => {
+  const { telemetry, work, exchange } = input;
+  if (Exit.isSuccess(exchange)) return Effect.void;
+  if (Cause.hasInterruptsOnly(exchange.cause)) return Effect.interrupt;
+  const failure = Cause.findErrorOption(exchange.cause);
+  if (Option.isNone(failure)) {
+    return retireDurableWhatsAppFailure(telemetry, work, {
+      error: "unexpected_defect",
+      cause: exchange.cause,
+    });
+  }
+  const settlement = durableClientSettlement(failure.value);
+  switch (settlement._tag) {
+    case "Retry":
+      return telemetry
+        .recordOutcome(turnFailureOutcome(settlement.classified))
+        .pipe(Effect.andThen(Effect.die(durableTransportRetryCause)));
+    case "RetireProtocol":
+      return telemetry.recordOutcome(turnFailureOutcome(settlement.classified)).pipe(
+        Effect.andThen(
+          retireDurableWhatsAppFailure(telemetry, work, {
+            error: "invalid_runtime_response",
+            cause: failure.value,
+          })
+        )
+      );
+    case "RetireDefect":
+      return retireDurableWhatsAppFailure(telemetry, work, {
+        error: "unexpected_defect",
+        cause: failure.value,
+      });
+  }
+};
+
+/**
+ * Routes one durable identifier-only channel item through its User's serialized entity. A
+ * classified transient exchange failure re-raises only a stable cause for the persisted queue's
+ * bounded, domain-guarded retry; a protocol violation, an undeclared failure, or a raw client
+ * defect terminally retires the burst instead of exchanging again. Only local preconditions stay
+ * defects at this Work boundary.
+ */
 const makeHandleWhatsAppWork =
   (
     dependencies: AgentServiceDependencies,
@@ -1957,7 +2339,12 @@ const makeHandleWhatsAppWork =
       dependencies,
       Effect.gen(function* () {
         if (!(yield* ownsWhatsAppInboundWork(work))) return;
-        yield* client(work.userId).ProcessWhatsApp(work);
+        const exchange = yield* client(work.userId).ProcessWhatsApp(work).pipe(Effect.exit);
+        yield* settleDurableWhatsAppExchange({
+          telemetry: dependencies.telemetry,
+          work,
+          exchange,
+        });
       }).pipe(Effect.orDie)
     );
 

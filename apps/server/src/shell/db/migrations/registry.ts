@@ -53,6 +53,7 @@ import { notificationEmailInterpretation } from "./0053-notification-email-inter
 import { effectWhatsAppInbound } from "./0054-effect-whatsapp-inbound";
 import { subscriptionStanding } from "./0055-subscription-standing";
 import { wompiBillingAttempts } from "./0056-wompi-billing-attempts";
+import { wompiBillingReconciliation } from "./0057-wompi-billing-reconciliation";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -118,4 +119,5 @@ export const migrations = {
   "0054_effect_whatsapp_inbound": effectWhatsAppInbound,
   "0055_subscription_standing": subscriptionStanding,
   "0056_wompi_billing_attempts": wompiBillingAttempts,
+  "0057_wompi_billing_reconciliation": wompiBillingReconciliation,
 };

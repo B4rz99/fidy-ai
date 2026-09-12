@@ -52,6 +52,8 @@ const BillingAttemptRow = Schema.Struct({
   finalizedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   paidPeriodEndsAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   renewalAnchor: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  awaitingReferenceSince: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  manualReconciliationSince: Schema.NullOr(Schema.DateTimeUtcFromDate),
 });
 export type BillingAttemptRecord = typeof BillingAttemptRow.Type;
 
@@ -68,7 +70,9 @@ const billingAttemptColumns = `attempt.id, attempt.subscription_id AS "subscript
   attempt.charge_state AS "chargeState", attempt.created_at AS "createdAt",
   attempt.armed_at AS "armedAt", attempt.failed_at AS "failedAt",
   attempt.finalized_at AS "finalizedAt", period.ends_at AS "paidPeriodEndsAt",
-  period.renewal_anchor AS "renewalAnchor"`;
+  period.renewal_anchor AS "renewalAnchor",
+  attempt.awaiting_reference_since AS "awaitingReferenceSince",
+  attempt.manual_reconciliation_since AS "manualReconciliationSince"`;
 
 /** Finds a User-owned BillingAttempt by one browser payment request. */
 export const findBillingAttemptByRequestInScope = Effect.fn(
@@ -248,10 +252,36 @@ export const recordCreatedWompiTransactionInScope = Effect.fn(
 }) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    UPDATE billing_attempts SET wompi_transaction_id = ${input.transactionId}
+    UPDATE billing_attempts SET wompi_transaction_id = ${input.transactionId},
+      awaiting_reference_since = NULL
     WHERE id = ${input.billingAttemptId} AND user_id = ${input.userId} AND charge_state = 'armed'
       AND wompi_transaction_reference = ${input.reference}
       AND (wompi_transaction_id IS NULL OR wompi_transaction_id = ${input.transactionId})
+  `.pipe(Effect.orDie);
+});
+
+/** Records that an armed charge never yielded a transaction id; the conclusion time is stable. */
+export const markBillingAttemptAwaitingReferenceInScope = Effect.fn(
+  "Subscription.markBillingAttemptAwaitingReferenceInScope"
+)(function* (userId: UserId, billingAttemptId: BillingAttemptId, observedAt: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    UPDATE billing_attempts
+      SET awaiting_reference_since = COALESCE(awaiting_reference_since, ${observedAt})
+    WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
+      AND charge_state = 'armed' AND wompi_transaction_id IS NULL
+  `.pipe(Effect.orDie);
+});
+
+/** Escalates an unresolved known transaction to manual reconciliation without changing its status. */
+export const markBillingAttemptManualReconciliationInScope = Effect.fn(
+  "Subscription.markBillingAttemptManualReconciliationInScope"
+)(function* (userId: UserId, billingAttemptId: BillingAttemptId, observedAt: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    UPDATE billing_attempts
+      SET manual_reconciliation_since = COALESCE(manual_reconciliation_since, ${observedAt})
+    WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
   `.pipe(Effect.orDie);
 });
 
@@ -352,7 +382,8 @@ export const activatePaidPeriodInScope = Effect.fn("Subscription.activatePaidPer
     yield* sql`
       UPDATE billing_attempts SET status = 'succeeded', failed_at = NULL,
         finalized_at = ${input.period.startsAt},
-        wompi_transaction_id = COALESCE(wompi_transaction_id, ${input.transactionId})
+        wompi_transaction_id = COALESCE(wompi_transaction_id, ${input.transactionId}),
+        awaiting_reference_since = NULL
       WHERE id = ${input.attempt.id} AND user_id = ${input.userId}
         AND status IN ('pending', 'failed')
     `.pipe(Effect.orDie);
@@ -367,6 +398,36 @@ export const activatePaidPeriodInScope = Effect.fn("Subscription.activatePaidPer
     `.pipe(Effect.orDie);
   }
 );
+
+const BillingReconciliationEscalations = Schema.Struct({
+  awaitingReferenceCount: Schema.Int,
+  awaitingReferenceMaxAgeSeconds: Schema.Int,
+  providerStalledCount: Schema.Int,
+  providerStalledMaxAgeSeconds: Schema.Int,
+  manualReconciliationCount: Schema.Int,
+  manualReconciliationMaxAgeSeconds: Schema.Int,
+});
+type BillingReconciliationEscalations = typeof BillingReconciliationEscalations.Type;
+
+/**
+ * Reads bounded cross-User aggregate counts and maximum ages for work needing operator attention.
+ * The owner function returns no User, attempt, or provider identity and never mutates.
+ */
+export const getBillingReconciliationEscalations = Effect.fn(
+  "Subscription.getBillingReconciliationEscalations"
+)(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: BillingReconciliationEscalations,
+    execute: () => sql`
+      SELECT "awaitingReferenceCount", "awaitingReferenceMaxAgeSeconds",
+        "providerStalledCount", "providerStalledMaxAgeSeconds",
+        "manualReconciliationCount", "manualReconciliationMaxAgeSeconds"
+      FROM fidy_billing_reconciliation_escalations()
+    `,
+  })(undefined).pipe(Effect.orDie);
+});
 
 /** Projects one trusted relational BillingAttempt without any private provider references. */
 export const projectBillingAttempt = (record: BillingAttemptRecord): BillingAttemptType => {

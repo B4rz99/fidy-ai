@@ -1,0 +1,38 @@
+.env.example
+  h_c6d49c804e0ad2 12
+apps/server/scripts/evaluate-es-co.sh
+  h_c6d49c804e0ad2 42
+apps/server/src/shell/_shared/anonymous-source-identifier.test.ts
+  h_c6d49c804e0ad2 1-122
+apps/server/src/shell/_shared/anonymous-source-identifier.ts
+  h_c6d49c804e0ad2 1-44
+apps/server/src/shell/browser-login/handlers.test.ts
+  h_c6d49c804e0ad2 6,9,442-462
+apps/server/src/shell/browser-login/service.ts
+  h_c6d49c804e0ad2 24,105-109,121-123
+apps/server/src/shell/db/migrations/0058-key-pairing-source-admission.test.ts
+  h_c6d49c804e0ad2 1-62
+apps/server/src/shell/db/migrations/0058-key-pairing-source-admission.ts
+  h_c6d49c804e0ad2 1-26
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 57,124
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  h_c6d49c804e0ad2 2,10,636-668
+apps/server/src/shell/tokens/pat-pairing.ts
+  h_c6d49c804e0ad2 50,151,169-171,325-327
+docs/research/distributed-admission-rate-limiter.md
+  h_c6d49c804e0ad2 44,53-54
+scripts/check-credential-evidence.ts
+  h_c6d49c804e0ad2 40-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f8a9e0508e0e0df1111943737f7c6f579216e5e6",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

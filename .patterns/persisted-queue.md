@@ -52,6 +52,15 @@ This is at-least-once processing, not exactly-once external effects. A worker ca
 
 `attempts` is the count before the current handler execution (`effect/src/unstable/persistence/PersistedQueue.ts:153-179`, `:1067-1086`). Exhausted rows remain incomplete but become ineligible (`attempts < maxAttempts`); the built-in store has no dead-letter move or public requeue/admin API. Build a narrow, explicit operational policy if Fidy needs inspection, replay, or escalation. Do not update Effect's table casually from feature code.
 
+Classify failures before they leave the handler:
+
+- transient operational/provider failures: fail with a redacted typed error so the item retries;
+- permanent item/domain rejection: record the terminal domain outcome deliberately and let the handler succeed, or route to an explicit reviewed dead-letter capability;
+- defects: surface and alert; do not convert every defect into an endless generic retry;
+- shutdown/cancellation: preserve interruption so lease release does not consume an attempt.
+
+`maxAttempts` is a delivery ceiling, not a retry schedule: eligible failed rows can be reclaimed on the store's polling cadence. If a provider needs backoff or `Retry-After`, apply a bounded interruptible schedule inside the handler while maintaining the lease, or model scheduled delivery explicitly. Ensure lock expiry exceeds the longest backoff/handler pause while refresh remains healthy.
+
 ## Persistence and evolution traps
 
 - The schema is used to encode on offer and decode after acquisition. Decode failures fail the take and count as processing attempts; this is covered explicitly by the shared store tests (`effect/test/unstable/persistence/PersistedQueueTest.ts:189-213`). Use backward-readable codecs or drain/version a queue before incompatible changes.

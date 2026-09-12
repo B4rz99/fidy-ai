@@ -10,7 +10,26 @@ Effect Cluster maps a typed RPC **entity type + entity id** to a shard, assigns 
 
 Persistence is opt-in per RPC: `ClusterSchema.Persisted` defaults to false. `ClusterSchema.WithTransaction` also defaults to false and only has transactional meaning if the configured message storage implements it (`effect/src/unstable/cluster/ClusterSchema.ts:17-61`). Do not assume “entity” means durable or transactional. Annotate intentionally and test process loss.
 
-Cluster owns routing, mailbox deduplication, shard ownership, retries, and entity lifecycle. Fidy still owns User authorization/RLS activation, domain transaction boundaries, provider idempotency, payload bounds, and schema compatibility.
+Cluster owns routing, mailbox deduplication, shard ownership, retries, and entity lifecycle. Fidy still owns User authorization/RLS activation, domain transaction boundaries, provider idempotency, payload bounds, and schema compatibility. Read `.patterns/rpc.md` for the protocol beneath entities; cluster request ids are transport correlation, not domain idempotency.
+
+## Entity protocol and behavioral annotations
+
+`Entity.make(type, [rpc, ...])` groups RPC definitions into the typed protocol addressed by `(entity type, entity id)`. Duplicate RPC tags silently keep the later definition, so tags must be unique and stable (`effect/src/unstable/cluster/Entity.ts:430-467`). Use one entity type only when its id names the serialized aggregate/coordination owner; unrelated commands belong in different entities even if sharing one handler module is convenient.
+
+Annotations alter delivery semantics, not payload validation:
+
+| Annotation                      | Default     | Meaning                                                                 |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `ClusterSchema.Persisted`       | `false`     | durable mailbox request/reply and retry after runner loss               |
+| `ClusterSchema.WithTransaction` | `false`     | handle using message-storage transaction, if that storage implements it |
+| `ClusterSchema.Uninterruptible` | `false`     | suppress interruption on `true`, `"client"`, or `"server"` side         |
+| `ClusterSchema.ShardGroup`      | `"default"` | choose shard group from entity id                                       |
+
+(`effect/src/unstable/cluster/ClusterSchema.ts:17-121`)
+
+Persist commands that must survive caller/runner loss; do not persist high-volume reads by default. `Uninterruptible` is directional delivery behavior, not cancellation-proof business execution: `"client"` keeps the caller waiting, `"server"` keeps handling alive, and `true` does both. Use it only where abandoning that side would violate the protocol, and still make external mutations idempotent. Never add it merely to silence shutdown behavior.
+
+Generated entity clients are scoped resources. Build and share them through the application Layer; do not create a client per request. Use `Entity.makeTestClient` for fast protocol/handler tests, but it is in-memory, no-serialization sharding and cannot prove storage, framing, network, or failover (`effect/src/unstable/cluster/Entity.ts:557-696`).
 
 ## Production topology
 
@@ -68,6 +87,19 @@ The ready-made runner server exposes the cluster RPC protocol over its configure
 Cluster storage is service infrastructure and cannot infer Fidy User ownership from generic envelopes. Use a narrowly privileged service role for cluster tables, separate their policy review from User-owned domain tables, and keep explicit `UserId` in every workflow/entity payload. Before any domain query or mutation, authorize the operation and activate that User's RLS scope. A routable entity id or workflow execution id is not authorization.
 
 Persisted envelopes include payloads, headers, errors/results, and trace ids (`effect/src/unstable/cluster/SqlMessageStorage.ts:79-166`). Keep schemas bounded and secret-free, use an allowlist for propagated headers, and ensure typed errors are redacted before persistence. The SQL stores call `withoutTransforms`, so application row transforms are not a security boundary (`effect/src/unstable/cluster/SqlMessageStorage.ts:61-67`).
+
+The authenticated runner adapter must cap incomplete MessagePack frames explicitly with `RpcSerialization.layerMsgPackWith({ maxBufferSize })`, as Fidy does in `apps/server/src/shell/authenticated-cluster-http.ts`. This framing limit does not replace HTTP request limits, decoded payload checks, or bounded domain schemas. Client-only and runner processes must use the same serialization options.
+
+## Request ids, `Snowflake`, and retention
+
+Cluster request/reply identity uses a `Snowflake`: timestamp, 10-bit machine id, and 12-bit per-millisecond sequence (`effect/src/unstable/cluster/Snowflake.ts:47-57,142-209`). The sharding runtime replaces the generator's initial random machine id with the id assigned by shared `RunnerStorage` (`effect/src/unstable/cluster/Sharding.ts:1200-1212`). Therefore:
+
+- provide shared runner storage before relying on uniqueness across runners;
+- never configure independent production runners with manually colliding machine ids;
+- do not expose a Snowflake as authorization or assume it is unpredictable;
+- do not use transport Snowflakes as business idempotency keys.
+
+`Snowflake.timestamp` can support conservative retention cutoffs for terminal replies, which Fidy encapsulates in `apps/server/src/shell/durable-execution-retention.ts`. Retention must inspect terminality and the final reply/request relationship; a timestamp cutoff alone must never prune active, suspended, retriable, or deduplication-relevant state. Use `MachineId.make` only to construct/interpret infrastructure ids—it is a brand and the Snowflake encoding uses the value modulo 1024 (`effect/src/unstable/cluster/MachineId.ts:17-54`).
 
 ## Schema and deployment compatibility
 

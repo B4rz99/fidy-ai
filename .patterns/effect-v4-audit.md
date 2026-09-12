@@ -1,17 +1,20 @@
 # Effect v4 pattern audit — RC.112
 
+> Historical point-in-time audit. Later architecture work adopted Cluster, Workflow, PersistedQueue,
+> and internal RPC and remediated some review candidates below. The dedicated current pattern for
+> each API is authoritative where this report's original ownership snapshot differs.
+
 Source of truth: checked-in `.repos/effect` at the repository's installed `effect@4.0.0-rc.112`.
-This report compares the existing `.patterns/` set, current application usage,
-Effect's migration notes, ai-docs, implementation, and tests.
+This report compared the application usage that existed when the audit was performed with Effect's
+migration notes, ai-docs, implementation, and tests.
 
 ## Outcome
 
 The existing patterns were unusually strong in the hardest areas: Schema, HttpApi, SQL, AI,
-Layers/runtime, errors, concurrency/time, testing, and Effect Atom. I found no basis for replacing
-those designs with Cluster, Workflow, RPC, EventLog, STM, or persistence abstractions merely because
-v4 exports them. They do not fit the current single-process/Postgres/canonical-HttpApi architecture,
-and adopting an unstable subsystem without a concrete ownership problem would add a second system
-rather than deepen the existing one.
+Layers/runtime, errors, concurrency/time, testing, and Effect Atom. At that point I found no basis
+for adopting Cluster, Workflow, RPC, EventLog, STM, or persistence abstractions merely because v4
+exported them. Concrete durable-execution and internal-protocol requirements appeared later; see
+`.patterns/cluster.md`, `.patterns/workflows.md`, `.patterns/persisted-queue.md`, and `.patterns/rpc.md`.
 
 The material gaps were stable-core interop/resources, outbound HTTP policy, observability semantics,
 and incremental Streams. They are now captured in:
@@ -149,10 +152,10 @@ appears:
 
 | Primitive                       | Adoption trigger                                                                                | Current ownership decision                                                                                                                                                                                        |
 | ------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workflow                        | Work must durably suspend and resume across process restarts                                    | PostgreSQL queues, leases, and state transitions currently own durable coordination; adopting Workflow requires an explicit replacement or boundary rather than two retry/state authorities                       |
-| Cluster                         | execution ownership must route, shard, or fail over across processes                            | the deployment is single-process; distributed entity placement would add semantics without a current consumer                                                                                                     |
+| Workflow                        | Work must durably suspend and resume across process restarts                                    | Adopted for explicit durable orchestration; `.patterns/workflows.md` defines its boundary against PersistedQueue and domain transactions                                                                          |
+| Cluster                         | execution ownership must route, shard, or fail over across processes                            | Adopted as the production Workflow engine/routing substrate; `.patterns/cluster.md` owns topology and storage rules                                                                                               |
 | EventLog                        | append/replay and projection rebuilding are part of the source-of-truth model                   | relational state is canonical; selected audit evidence does not by itself require event sourcing                                                                                                                  |
-| RPC                             | a distinct Effect-to-Effect process boundary benefits from RPC transport or streaming semantics | HttpApi owns canonical public operation derivation; RPC is appropriate only for a separate boundary rather than a duplicate operation declaration                                                                 |
+| RPC                             | a distinct Effect-to-Effect process boundary benefits from RPC transport or streaming semantics | Adopted for internal Cluster/Effect protocols; HttpApi remains canonical for public operations and `.patterns/rpc.md` preserves that separation                                                                   |
 | RequestResolver                 | independent requests can be safely deduplicated, grouped, or batched by the backend             | SQL joins/bulk queries and `SqlResolver` own current SQL batching; use a generic resolver when a concrete external lookup exposes useful batch semantics (`packages/effect/src/RequestResolver.ts:1-52`)          |
 | `Effect.tx` + `Tx*` collections | multiple process-local references must preserve one atomic invariant                            | PostgreSQL transactions own durable invariants and Ref/Queue/Semaphore cover current local coordination; v4 removed the distinct STM type in favor of transactional Effects (`migration/v3-to-v4.md:12958-13016`) |
 | Cache                           | key isolation, freshness, failure caching, capacity, and invalidation are explicit              | no generic cache policy may infer User isolation or revocation; Effect supplies bounded TTL and shared in-flight lookup mechanics, not those product decisions (`packages/effect/src/Cache.ts:1-24`)              |
@@ -160,8 +163,9 @@ appears:
 | Resource                        | one scoped value requires manual or scheduled refresh                                           | adopt when refresh, stale-value, failed-refresh, and replacement-cleanup semantics are explicit (`packages/effect/src/Resource.ts:1-28`)                                                                          |
 
 Workflow, Cluster, and EventLog are not inherently incompatible with PostgreSQL or a single-process
-starting point. Their semantics overlap current ownership decisions, so adopting one requires a
-specific problem and a decision about which mechanism becomes authoritative.
+starting point. Their semantics overlap other coordination mechanisms, so adopting one requires a
+specific problem and a decision about which mechanism becomes authoritative. Later work made that
+decision for Workflow and Cluster; EventLog remains trigger-only.
 
 ## Verification performed
 

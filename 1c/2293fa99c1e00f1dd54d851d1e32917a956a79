@@ -1,0 +1,14 @@
+apps/server/src/core/subscription/billing-rules.ts
+  h_c6d49c804e0ad2 47-53,55-56,58,61-73,75,77-78,80,86-88,91-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1c2293fa99c1e00f1dd54d851d1e32917a956a79",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

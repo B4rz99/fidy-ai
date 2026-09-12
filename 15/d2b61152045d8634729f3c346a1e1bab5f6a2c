@@ -1,0 +1,53 @@
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 163-171,174-179,183-185
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-41,43-181,190-426,444-568
+  h_c6d49c804e0ad2 42,182-189,427-443
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-116,118-123,129-133,136,143-256
+  h_c6d49c804e0ad2 117,124-128,134-135,137-142
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,24-32,39-41,46,50-58,66-69,77-81,83-85,98-113,123-124,130-133,136-139,146,153-154
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16,84-93
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/_shared/protected-http-client.ts
+  h_c6d49c804e0ad2 1-47
+apps/server/src/shell/_shared/sanitized-http-client-error.ts
+  h_c6d49c804e0ad2 1-79
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19,60-79
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,18-21,24-33,40-55,84-89,91-93,95-101,104-108,110-125,147-148,153-163
+  h_c6d49c804e0ad2 22-23,34-39,56-83,90,94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "15d2b61152045d8634729f3c346a1e1bab5f6a2c",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

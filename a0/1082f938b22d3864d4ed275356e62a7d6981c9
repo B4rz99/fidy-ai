@@ -1,0 +1,32 @@
+apps/server/src/shell/db/migrations/0057-wompi-billing-reconciliation.ts
+  h_c6d49c804e0ad2 1-52
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 56,122
+apps/server/src/shell/maintenance.ts
+  h_c6d49c804e0ad2 14,23
+apps/server/src/shell/observability/registry.ts
+  h_c6d49c804e0ad2 79
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  h_c6d49c804e0ad2 1,3-4,7,15-16,22-47,50-54,56,58,60-65,69-76,78-119,121-158,160,162,165,172-178,180-227,230-236,238-343,345-348
+apps/server/src/shell/subscription/billing-reconciliation-maintenance.ts
+  h_c6d49c804e0ad2 1-54
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 1-543
+apps/server/src/shell/subscription/billing-repo.ts
+  h_c6d49c804e0ad2 55-56,73-75,255-256,263-287,385-386,402-431
+apps/server/src/shell/subscription/wompi-settlement.ts
+  h_c6d49c804e0ad2 37,183-192
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 29-41,104-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a01082f938b22d3864d4ed275356e62a7d6981c9",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

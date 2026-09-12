@@ -1,0 +1,40 @@
+apps/server/src/core/tokens/model.test.ts
+  h_c6d49c804e0ad2 2,5,154-169
+apps/server/src/core/tokens/model.ts
+  h_c6d49c804e0ad2 275-279,282
+apps/server/src/shell/agent/agent-service.test.ts
+  h_c6d49c804e0ad2 22,2326
+apps/server/src/shell/tokens/fixtures.ts
+  h_c6d49c804e0ad2 1-10
+apps/server/src/shell/tokens/handlers.test.ts
+  h_c6d49c804e0ad2 2,11,14,16-17,102,129-135,146-147,156,165-171,186-189
+apps/server/src/shell/tokens/management-handlers.test.ts
+  h_c6d49c804e0ad2 2,227
+apps/server/src/shell/tokens/mutations.ts
+  h_c6d49c804e0ad2 1-10,77,113-114
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  h_c6d49c804e0ad2 10,15,135,180-184,192-193,199-201
+apps/server/src/shell/tokens/pat-pairing.ts
+  h_c6d49c804e0ad2 221
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  h_c6d49c804e0ad2 253,467
+apps/web/src/features/pats/feature.test.tsx
+  h_c6d49c804e0ad2 2,17,25,40,57-65,72,74,111-112,114-133,137,139,144,324,326,329,334
+apps/web/src/features/pats/feature.tsx
+  h_c6d49c804e0ad2 3,8,10,104,108,117,119
+apps/web/src/features/pats/view.tsx
+  h_c6d49c804e0ad2 17,39-44,295,302-304,327,384,450-451,489-490
+apps/web/src/transport/client.test.ts
+  h_c6d49c804e0ad2 3,40-59,93-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "612d204d0465e6d950648d217ceb990252046847",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

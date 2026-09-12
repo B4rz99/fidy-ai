@@ -26,16 +26,11 @@ and lifecycle. Publicly accessible flows with independent product behavior, such
 or onboarding, remain separate features.
 
 Presentation shapes derive from the canonical server declaration or from web-owned view state. The
-web does not maintain copied canonical schemas, operation maps, or access policy. The Pro card flow
-is one browser action, **Activar Pro**: a fresh browser-generated `PaymentRequestId` accompanies the
-server-declared submission while card fields are tokenized directly with Wompi. The action disables
-immediately through response handling, and the view renders only browser-safe pending, verifying,
-refused, or settled BillingAttempt state; provider references never enter web state. Pending payment
-feedback polls the existing BillingAttempt through its read-only endpoint rather than replaying the
-submission; it pauses while hidden, resumes immediately on visibility, and stops at terminal state,
-screen disposal, or the bounded feedback window. While settlement is pending, the payment form remains visible and disabled with its
-in-progress action; terminal status replaces it. Offer selection remains locked after submission so
-one pending flow cannot be replaced by another plan collection.
+web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
+is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
+Wompi. The web submits through the server-owned payment boundary and observes only browser-safe
+`BillingAttempt` state through a canonical query; provider references are not part of web application
+state.
 
 ## 3. Browser authentication
 

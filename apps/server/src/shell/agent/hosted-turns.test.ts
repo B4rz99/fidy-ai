@@ -325,6 +325,9 @@ const handleContract: HostedTurnContract = {
     { text: "present", attachments: [] },
     // Dropping URL validation would admit this value.
     { text: "present", attachments: [{ mediaType: "image/png", url: "not a url" }] },
+    // Dropping the canonical JSON-string filter would admit these values.
+    { text: "nul\u0000text" },
+    { text: "present", choices: [{ label: "Continuar", message: "nul\u0000text" }] },
   ],
   successDocument: handleSuccessDocument,
   failure: Option.some(TurnFailure.make("UnknownUser")),

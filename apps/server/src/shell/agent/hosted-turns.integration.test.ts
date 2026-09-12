@@ -295,7 +295,7 @@ const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRunt
 });
 
 /** Reads one started runtime, failing the test when the builder started none at that position. */
-const startedAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> =>
+const startedRuntimeAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> =>
   Option.match(Option.fromUndefinedOr(started[index]), {
     onNone: () => Effect.die(`hosted runtime ${index} was not started`),
     onSome: Effect.succeed,
@@ -303,7 +303,7 @@ const startedAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A
 
 /** Starts the single hosted-agent runtime a one-runner scenario needs. */
 const startHostedRuntime = Effect.fn(function* (spec: HostedRuntimeSpec) {
-  return yield* startedAt(yield* startHostedRuntimes([spec]), 0);
+  return yield* startedRuntimeAt(yield* startHostedRuntimes([spec]), 0);
 });
 
 /** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
@@ -446,8 +446,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             { port: 24651, generate, deliver },
             { port: 24652, generate, deliver },
           ]);
-          const { runtime: firstRuntime } = yield* startedAt(started, 0);
-          const { runtime: secondRuntime } = yield* startedAt(started, 1);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "held"));
           yield* awaitBarrier("model barrier", modelEntered, first);
           const blockedAt = yield* DateTime.now;
@@ -519,8 +519,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             { port: 24653, generate: generate(24653), deliver },
             { port: 24654, generate: generate(24654), deliver },
           ]);
-          const { runtime: firstRuntime } = yield* startedAt(started, 0);
-          const { runtime: secondRuntime } = yield* startedAt(started, 1);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "abandoned"));
           const running = yield* awaitBarrier("owner barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
@@ -708,7 +708,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             { port: 24655, generate, deliver },
             { port: 24656, generate, deliver },
           ]);
-          const { runtime: firstRuntime } = yield* startedAt(started, 0);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
           const first = firstRuntime.runFork(handle(defaultUserId, "holds-user"));
           yield* awaitBarrier("model barrier", entered, first);
           yield* enqueue("queued-whatsapp");
@@ -858,8 +858,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             { port: 24657, generate, deliver: deliver(24657) },
             { port: 24658, generate, deliver: deliver(24658) },
           ]);
-          const { runtime: firstRuntime } = yield* startedAt(started, 0);
-          const { runtime: secondRuntime } = yield* startedAt(started, 1);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           yield* enqueue("ambiguous-whatsapp");
           const first = firstRuntime.runFork(processNextWhatsAppTurn());
           const running = yield* awaitBarrier("delivery barrier", owner, first);

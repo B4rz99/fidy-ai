@@ -1,0 +1,16 @@
+apps/server/src/shell/testing/durable-execution-compatibility/declaration-coverage.compatibility.test.ts
+  h_c6d49c804e0ad2 1-455
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 4,14-16,244-468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "763d2b59dd3b1c1b6c03689065aca8dacb90d1e1",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

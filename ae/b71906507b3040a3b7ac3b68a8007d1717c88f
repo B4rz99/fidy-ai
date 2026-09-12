@@ -1,0 +1,80 @@
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 10,96
+apps/server/src/shell/_shared/configured-secret.test.ts
+  h_c6d49c804e0ad2 1-69
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 11,254
+apps/server/src/shell/subscription/wompi-settlement.ts
+  h_c6d49c804e0ad2 28-29,99,108-110,125-131
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,31,33-36,39,45,54,64,97
+apps/server/src/shell/subscription/wompi-client.ts
+  h_c6d49c804e0ad2 30,384-389
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  h_c6d49c804e0ad2 1,4-5,7,10-15,18-19,23-24,43-44,51-54,95-136,167-170,224-225,249-273,275,277-280,282-286,290-308
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 2,4,7-8,46,59-64
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  h_c6d49c804e0ad2 3-4,7,53,165-177
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 10,96
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  h_c6d49c804e0ad2 25-26,97,99,127,131-134,179,199-205,209,211
+scripts/check-credential-evidence.ts
+  h_c6d49c804e0ad2 4,9-13,300-379,381-681,729,753-754
+apps/server/src/shell/subscription/wompi-client.test.ts
+  h_c6d49c804e0ad2 14,22,56,61,415-418,420,423-427
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  h_c6d49c804e0ad2 12,359
+apps/server/src/shell/testing/credential-failure.ts
+  h_c6d49c804e0ad2 1-38
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,5,8,10-14,23-24,56,61
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  h_c6d49c804e0ad2 17,343,351
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 12,91
+apps/server/src/shell/email-authentication/delivery.test.ts
+  h_c6d49c804e0ad2 9,291-303,310-320,322-333,336-347
+apps/server/src/shell/channels/whatsapp/routes.ts
+  h_c6d49c804e0ad2 9,253,295,349,414,436
+apps/server/src/shell/subscription/wompi-credentials.ts
+  h_c6d49c804e0ad2 1-49
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  h_c6d49c804e0ad2 2,175,181-182,185,278,401,486
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 14,160
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 3,18
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  h_c6d49c804e0ad2 60,67,69,198,204,214,244,261
+apps/server/src/shell/subscription/enrollment-handlers.test.ts
+  h_c6d49c804e0ad2 1,4-14,28,52-56,524,548-551,561-578
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 90
+apps/server/src/shell/ingestion/resend-receiving-client.test.ts
+  h_c6d49c804e0ad2 13,16-17,27,600,610-613,617,651,662,674-678
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 1,52-66
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  h_c6d49c804e0ad2 11,20,45,111-141,522
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  h_c6d49c804e0ad2 250,264,321
+apps/server/src/shell/email-authentication/delivery.ts
+  h_c6d49c804e0ad2 14,168-172
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 10,48
+apps/server/src/shell/_shared/configured-secret.ts
+  h_c6d49c804e0ad2 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aeb71906507b3040a3b7ac3b68a8007d1717c88f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -8,6 +8,7 @@ import {
   Exit,
   Fiber,
   Option,
+  Redacted,
   Schema,
   Stream,
   Tracer,
@@ -16,6 +17,7 @@ import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
@@ -40,7 +42,7 @@ const makeService = (
   httpClient: HttpClient.HttpClient,
   deliveryMode: "bsuid" | "sandbox-phone" = "bsuid"
 ): KapsoClientService =>
-  makeKapsoClientService({ apiKey: "test-api-key", deliveryMode, httpClient });
+  makeKapsoClientService({ apiKey: Redacted.make("test-api-key"), deliveryMode, httpClient });
 
 const responseWithStatusOutsideFetchRange = (): Response => {
   const response = Response.json({}, { status: 599 });
@@ -103,6 +105,37 @@ it.effect("uses recipient without forwarding trace propagation to Kapso", () =>
     expect(Array.from(requestHeaders.keys())).not.toEqual(
       expect.arrayContaining(["b3", "baggage", "sentry-trace", "traceparent", "tracestate"])
     );
+  })
+);
+
+it.effect("keeps the configured Kapso API key redacted while sending it only as a header", () =>
+  Effect.gen(function* () {
+    const apiKeyFixture = `kapso-api-key-${"f1d7c0de".repeat(3)}`;
+    const apiKey = Redacted.make(apiKeyFixture);
+    let sentApiKey: Option.Option<string> = Option.none();
+    const service = makeKapsoClientService({
+      apiKey,
+      deliveryMode: "bsuid",
+      httpClient: HttpClient.make((request) => {
+        sentApiKey = Option.fromNullishOr(new Headers(request.headers).get("x-api-key"));
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.redacted-outbound" }],
+            })
+          )
+        );
+      }),
+    });
+
+    expectNotInspected(apiKey, apiKeyFixture);
+    expectNotInspected(service, apiKeyFixture);
+
+    yield* service.sendText(sendInput());
+
+    expect(Option.getOrNull(sentApiKey)).toBe(apiKeyFixture);
   })
 );
 
@@ -486,7 +519,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
       response: "remote-private-body",
     };
     const service = makeKapsoClientService({
-      apiKey: sensitive.credential,
+      apiKey: Redacted.make(sensitive.credential),
       deliveryMode: "bsuid",
       httpClient: fakeHttpClient(() =>
         Response.json(

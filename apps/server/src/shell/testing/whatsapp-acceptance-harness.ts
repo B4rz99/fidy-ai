@@ -9,6 +9,7 @@ import {
   Layer,
   MutableRef,
   Option,
+  Redacted,
   Ref,
   Schema,
   Stream,
@@ -355,7 +356,7 @@ const AcceptanceKapsoTransport = Layer.effectContext(
         Ref.get(deliveryMode).pipe(
           Effect.flatMap((mode) =>
             makeKapsoClientService({
-              apiKey: "acceptance-test-api-key",
+              apiKey: Redacted.make("acceptance-test-api-key"),
               deliveryMode: mode,
               httpClient,
             }).sendText(input)

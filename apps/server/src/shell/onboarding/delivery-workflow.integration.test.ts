@@ -11,6 +11,7 @@ import {
   Layer,
   ManagedRuntime,
   Option,
+  Redacted,
   Ref,
   Schema,
 } from "effect";
@@ -156,7 +157,7 @@ const admitDelivery = Effect.fn("testAdmitClusterOnboardingDelivery")(function* 
   return EmailDeliveryIntentId.make(intent.id);
 });
 
-const token = "c".repeat(64);
+const token = Redacted.make("c".repeat(64));
 const makeRuntimeLayer = (
   crypto: Crypto.Crypto,
   port: number,

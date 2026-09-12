@@ -1,4 +1,4 @@
-import { type Config, Crypto, Layer, Option } from "effect";
+import { type Config, Crypto, Layer, Option, Redacted } from "effect";
 import type { PgClient } from "@effect/sql-pg/PgClient";
 import {
   ClusterWorkflowEngine,
@@ -49,18 +49,21 @@ export const replacementRuntimeLayer = ({
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSql("d".repeat(testAuthenticationTokenBytes), {
-            runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            availableShardGroups: ["default"],
-            assignedShardGroups: ["default"],
-            shardsPerGroup: 300,
-            entityMessagePollInterval: 50,
-            sendRetryInterval: 50,
-            runnerHealthCheckInterval: "1 second",
-            shardLockRefreshInterval: "500 millis",
-            shardLockExpiration: "2 seconds",
-          })
+          authenticatedClusterHttp.layerSql(
+            Redacted.make("d".repeat(testAuthenticationTokenBytes)),
+            {
+              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+              availableShardGroups: ["default"],
+              assignedShardGroups: ["default"],
+              shardsPerGroup: 300,
+              entityMessagePollInterval: 50,
+              sendRetryInterval: 50,
+              runnerHealthCheckInterval: "1 second",
+              shardLockRefreshInterval: "500 millis",
+              shardLockExpiration: "2 seconds",
+            }
+          )
         )
       )
     ),

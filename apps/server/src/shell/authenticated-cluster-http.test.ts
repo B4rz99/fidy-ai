@@ -1,9 +1,11 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Ref } from "effect";
+import { Effect, Layer, Redacted, Ref } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import { authenticatedRunnerMiddleware } from "./authenticated-cluster-http";
 
-const token = "a".repeat(64);
+const tokenFixture = "f1d7c0de".repeat(8);
+const token = Redacted.make(tokenFixture);
 type RunnerHandler = (request: Request) => Promise<Response>;
 const post = (
   handler: RunnerHandler,
@@ -41,7 +43,7 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
       ({ handler }) =>
         Effect.gen(function* () {
           const missing = yield* post(handler);
-          const malformed = yield* post(handler, { authorization: token });
+          const malformed = yield* post(handler, { authorization: Redacted.value(token) });
           const incorrect = yield* post(handler, {
             authorization: `Bearer ${"b".repeat(64)}`,
           });
@@ -54,7 +56,12 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
           expect(yield* responseText(incorrect)).toBe("");
           expect(yield* Ref.get(invocations)).toBe(0);
 
-          const accepted = yield* post(handler, { authorization: `Bearer ${token}` });
+          expectNotInspected(token, tokenFixture);
+          expectNotInspected(authenticatedRunnerMiddleware(token), tokenFixture);
+
+          const accepted = yield* post(handler, {
+            authorization: `Bearer ${Redacted.value(token)}`,
+          });
           expect(accepted.status).toBe(200);
           expect(yield* responseText(accepted)).toBe("accepted");
           expect(yield* Ref.get(invocations)).toBe(1);

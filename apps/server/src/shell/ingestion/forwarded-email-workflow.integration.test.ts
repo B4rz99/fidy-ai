@@ -7,6 +7,7 @@ import {
   Layer,
   ManagedRuntime,
   Option,
+  Redacted,
   Ref,
   Schema,
 } from "effect";
@@ -44,7 +45,7 @@ import {
   type ResendReceivingClientService,
 } from "./resend-receiving-client";
 
-const clusterToken = "f".repeat(64);
+const clusterToken = Redacted.make("f".repeat(64));
 const isolatedUserId = UserId.make("f1d1a000-0000-4000-8000-000000000462");
 
 const cleanupIsolatedUser = Effect.fn("test.cleanupForwardedEmailIsolatedUser")(function* () {

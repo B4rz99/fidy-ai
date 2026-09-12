@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
-import { Cause, DateTime, Effect, Exit, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Redacted, Schema } from "effect";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import {
   InvalidKapsoSignature,
   decodeKapsoDisclosureLifecycleWebhook,
   maxKapsoWebhookBytes,
 } from "./kapso-webhook";
 
-const secret = "test-webhook-secret-32-characters";
+const secret = `kapso-webhook-secret-${"f1d7c0de".repeat(2)}`;
 const correlationToken = "11111111-1111-4111-8111-111111111111";
 const providerMessageId = "wamid.lifecycle-test";
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
@@ -54,7 +55,7 @@ const decode = (
       : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
   return decodeKapsoDisclosureLifecycleWebhook({
     rawBody: body,
-    secret: webhookSecret,
+    secret: Redacted.make(webhookSecret),
     signature,
     eventName,
     receivedAt,
@@ -166,6 +167,19 @@ it.effect("rejects lifecycle proof that does not identify one valid latest event
   })
 );
 
+it.effect("keeps the webhook secret out of authentication failures", () =>
+  Effect.gen(function* () {
+    const failure = yield* decode(
+      "whatsapp.message.delivered",
+      [status("delivered", "1775217900")],
+      { _tag: "Signature", value: "0".repeat(64) }
+    ).pipe(Effect.flip);
+
+    expect(failure._tag).toBe("InvalidKapsoSignature");
+    expectNotInspected(failure, secret);
+  })
+);
+
 it.effect("rejects oversized lifecycle bytes before decoding", () =>
   Effect.gen(function* () {
     const body = new Uint8Array(maxKapsoWebhookBytes + 1);
@@ -178,6 +192,7 @@ it.effect("rejects oversized lifecycle bytes before decoding", () =>
 );
 
 // OpenSSL dgst -sha256 -mac HMAC -macopt key:test-webhook-secret-32-characters of the exact bytes.
+const vectorSecret = "test-webhook-secret-32-characters";
 const vectorBody = new TextEncoder().encode(
   '{"message":{"id":"wamid.lifecycle-test","kapso":{"statuses":[{"id":"wamid.lifecycle-test","status":"delivered","timestamp":"1775217900","biz_opaque_callback_data":"11111111-1111-4111-8111-111111111111"}]}},"phone_number_id":"123456789"}'
 );
@@ -189,7 +204,7 @@ const decodeVector = (
 ): ReturnType<typeof decodeKapsoDisclosureLifecycleWebhook> =>
   decodeKapsoDisclosureLifecycleWebhook({
     rawBody,
-    secret,
+    secret: Redacted.make(vectorSecret),
     signature,
     eventName: "whatsapp.message.delivered",
     receivedAt,

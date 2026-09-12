@@ -57,16 +57,16 @@ const providerHttpFailureReason = (status: number): ResendReceivingFailed["reaso
 const getProviderResponse = (input: {
   client: BoundedExternalHttpClient;
   url: string;
-  authorization: Option.Option<string>;
+  apiKey: Option.Option<Redacted.Redacted<string>>;
   maximumResponseBytes: number;
 }): Effect.Effect<BoundedExternalHttpResponse, ResendReceivingFailed> =>
   input.client
     .execute(
       HttpClientRequest.get(
         input.url,
-        Option.match(input.authorization, {
+        Option.match(input.apiKey, {
           onNone: () => undefined,
-          onSome: (value) => ({ headers: { authorization: value } }),
+          onSome: (value) => ({ headers: { authorization: `Bearer ${Redacted.value(value)}` } }),
         })
       ),
       input.maximumResponseBytes
@@ -195,13 +195,13 @@ const isSupportedInlineAttachment = (attachment: InlineAttachment): boolean =>
 const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (input: {
   client: BoundedExternalHttpClient;
   baseUrl: string;
-  authorization: string;
+  apiKey: Redacted.Redacted<string>;
   attachment: InlineAttachment;
 }) {
   const descriptorResponse = yield* getProviderResponse({
     client: input.client,
     url: `${input.baseUrl}/attachments/${encodeURIComponent(input.attachment.id)}`,
-    authorization: Option.some(input.authorization),
+    apiKey: Option.some(input.apiKey),
     maximumResponseBytes: maximumAttachmentDescriptorBytes,
   });
   const descriptor = yield* parseJsonResponse(
@@ -211,7 +211,7 @@ const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (i
   const imageResponse = yield* getProviderResponse({
     client: input.client,
     url: descriptor.download_url.href,
-    authorization: Option.none(),
+    apiKey: Option.none(),
     maximumResponseBytes: maximumEmailInlineImageBytes,
   });
   if (!successful(imageResponse.status)) {
@@ -237,12 +237,11 @@ const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function
   apiKey: Redacted.Redacted<string>;
   receivedEmailId: ResendReceivedEmailId;
 }) {
-  const authorization = `Bearer ${Redacted.value(input.apiKey)}`;
   const baseUrl = `https://api.resend.com/emails/receiving/${encodeURIComponent(input.receivedEmailId)}`;
   const response = yield* getProviderResponse({
     client: input.client,
     url: baseUrl,
-    authorization: Option.some(authorization),
+    apiKey: Option.some(input.apiKey),
     maximumResponseBytes: maximumMetadataBytes,
   });
   const email = yield* parseJsonResponse(
@@ -259,7 +258,7 @@ const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function
   const inlineImages = yield* Effect.forEach(
     inline,
     (attachment) =>
-      retrieveInlineImage({ client: input.client, baseUrl, authorization, attachment }),
+      retrieveInlineImage({ client: input.client, baseUrl, apiKey: input.apiKey, attachment }),
     { concurrency: inlineImageDownloadConcurrency }
   );
   return yield* Schema.decodeEffect(ReceivedEmailContent)({

@@ -6,6 +6,7 @@ import {
   type EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
+import { buildLayerExit, exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http";
 import {
@@ -287,33 +288,63 @@ it.effect("treats a successful status with a valid but unexpected body as ambigu
   })
 );
 
-it.effect("fails closed on a malformed production Resend API key", () =>
+const buildDeliveryLayerExit = (
+  client: HttpClient.HttpClient,
+  config: ConfigProvider.ConfigProvider
+): Effect.Effect<Exit.Exit<unknown, unknown>> =>
+  buildLayerExit(
+    EmailDeliveryPort.layer.pipe(
+      Layer.provide(
+        Layer.merge(Layer.succeed(HttpClient.HttpClient, client), ConfigProvider.layer(config))
+      )
+    )
+  );
+
+it.effect("fails closed with value-safe diagnostics on malformed production Resend API keys", () =>
   Effect.gen(function* () {
     const client = HttpClient.make((request) =>
       Effect.succeed(
         HttpClientResponse.fromWeb(request, new Response('{"id":"unused"}', { status: 200 }))
       )
     );
-    const malformedConfig = ConfigProvider.layer(
-      ConfigProvider.fromUnknown({
-        NODE_ENV: "production",
-        RESEND_API_KEY: "not-a-resend-key",
-        RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
-        RESEND_FROM_NAME: "Fidy",
-      })
-    );
-    const exit = yield* Effect.exit(
-      Effect.scoped(
-        Layer.build(
-          EmailDeliveryPort.layer.pipe(
-            Layer.provide(
-              Layer.merge(Layer.succeed(HttpClient.HttpClient, client), malformedConfig)
-            )
-          )
-        )
+    const malformedCandidate = `CANARY-resend-${"f1d7c0de".repeat(2)}`;
+    const failure = yield* exitFailure(
+      yield* buildDeliveryLayerExit(
+        client,
+        ConfigProvider.fromUnknown({
+          NODE_ENV: "production",
+          RESEND_API_KEY: malformedCandidate,
+          RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
+          RESEND_FROM_NAME: "Fidy",
+        })
       )
     );
-    expect(Exit.isFailure(exit)).toBe(true);
+
+    const rendered = yield* renderedFailure(failure);
+    expect(rendered).not.toContain(malformedCandidate);
+    expect(rendered).toContain("RESEND_API_KEY");
+  })
+);
+
+it.effect("fails closed with value-safe diagnostics on a missing production Resend API key", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(request, new Response('{"id":"unused"}', { status: 200 }))
+      )
+    );
+    const failure = yield* exitFailure(
+      yield* buildDeliveryLayerExit(
+        client,
+        ConfigProvider.fromUnknown({
+          NODE_ENV: "production",
+          RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
+          RESEND_FROM_NAME: "Fidy",
+        })
+      )
+    );
+
+    expect(String(failure)).toContain("RESEND_API_KEY");
   })
 );
 

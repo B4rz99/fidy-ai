@@ -87,7 +87,7 @@ const admit = Effect.fn(function* () {
 
 const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPortService) {
   const crypto = yield* Crypto.Crypto;
-  const cluster = authenticatedClusterHttp.layerSql("c".repeat(64), {
+  const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
     runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
     runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
     availableShardGroups: ["default"],

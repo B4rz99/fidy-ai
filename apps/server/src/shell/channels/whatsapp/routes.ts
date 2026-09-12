@@ -6,7 +6,7 @@ import {
   Effect,
   Layer,
   Option,
-  Redacted,
+  type Redacted,
   Schema,
   Semaphore,
   Stream,
@@ -250,7 +250,7 @@ const isDisclosureLifecycleEvent = Schema.is(DisclosureLifecycleEventName);
 
 const handleKapsoDisclosureLifecycleWebhook = Effect.fn(function* (
   request: HttpServerRequest.HttpServerRequest,
-  secret: string,
+  secret: Redacted.Redacted<string>,
   bodyReaders: Semaphore.Semaphore
 ) {
   const signature = request.headers["x-webhook-signature"] ?? "";
@@ -292,7 +292,7 @@ const processKapsoInboundReceipt = Effect.fn(function* (
 });
 
 const handleKapsoWebhook = (
-  secret: string,
+  secret: Redacted.Redacted<string>,
   businessPortfolioId: string,
   bodyReaders: Semaphore.Semaphore
 ): KapsoMessageWebhookHandler =>
@@ -346,7 +346,7 @@ const handleKapsoWebhook = (
   });
 
 const handleKapsoIdentityWebhook = (
-  secret: string,
+  secret: Redacted.Redacted<string>,
   businessPortfolioId: string,
   bodyReaders: Semaphore.Semaphore
 ): ((
@@ -411,7 +411,7 @@ export const KapsoWebhookLive = Layer.unwrap(
     const bodyReaders = yield* Semaphore.make(concurrentWebhookBodyReads);
     const messageRoute = HttpRouter.add("POST", "/webhooks/kapso", (request) =>
       handleKapsoWebhook(
-        Redacted.value(secret),
+        secret,
         businessPortfolioId,
         bodyReaders
       )(request).pipe(
@@ -433,7 +433,7 @@ export const KapsoWebhookLive = Layer.unwrap(
     );
     const identityRoute = HttpRouter.add("POST", "/webhooks/kapso/meta", (request) =>
       handleKapsoIdentityWebhook(
-        Redacted.value(secret),
+        secret,
         businessPortfolioId,
         bodyReaders
       )(request).pipe(

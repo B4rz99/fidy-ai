@@ -247,7 +247,7 @@ export const makeKapsoClientService = ({
   deliveryMode,
   httpClient,
 }: Readonly<{
-  apiKey: string;
+  apiKey: Redacted.Redacted<string>;
   deliveryMode: KapsoDeliveryMode;
   httpClient: HttpClient.HttpClient;
 }>): KapsoClientService => {
@@ -261,7 +261,7 @@ export const makeKapsoClientService = ({
         HttpClientRequest.post(
           `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
           {
-            headers: { "x-api-key": apiKey },
+            headers: { "x-api-key": Redacted.value(apiKey) },
             body: HttpBody.text(body, "application/json"),
           }
         ),
@@ -318,7 +318,7 @@ export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService
         "WHATSAPP_DELIVERY_MODE"
       ).pipe(Config.withDefault("bsuid"));
       return makeKapsoClientService({
-        apiKey: Redacted.value(apiKey),
+        apiKey,
         deliveryMode,
         httpClient,
       });

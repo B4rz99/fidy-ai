@@ -10,7 +10,10 @@ import {
 } from "effect/unstable/http";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { receivedEmailFixture } from "~/shell/ingestion/fixtures/resend-received-email";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import { ResendReceivingClient } from "./resend-receiving-client";
+
+const testResendApiKey = `re_${"f1d7c0de".repeat(3)}`;
 
 const testLayer = (
   http: HttpClient.HttpClient
@@ -21,7 +24,7 @@ const testLayer = (
         Layer.succeed(HttpClient.HttpClient, http),
         Layer.succeed(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ RESEND_API_KEY: "test-resend-api-key" })
+          ConfigProvider.fromUnknown({ RESEND_API_KEY: testResendApiKey })
         )
       )
     )
@@ -594,6 +597,7 @@ layer(testLayer(mediaTypeHttp))("Resend receiving supported media signatures", (
 const redirectRequests: Array<{
   readonly url: string;
   readonly redirect: Option.Option<"error" | "follow" | "manual">;
+  readonly authorization: Option.Option<string>;
 }> = [];
 const redirectFetchRequest = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -603,9 +607,14 @@ const redirectFetchRequest = (
   if (typeof input === "string") url = input;
   else if (input instanceof URL) url = input.href;
   else url = input.url;
+  const headers = new Headers(init?.headers);
+  if (input instanceof Request) {
+    input.headers.forEach((value, key) => headers.set(key, value));
+  }
   redirectRequests.push({
     url,
     redirect: Option.fromUndefinedOr(init?.redirect),
+    authorization: Option.fromNullishOr(headers.get("authorization")),
   });
   if (url.includes("inbound-cdn.resend.com")) {
     return Promise.resolve(
@@ -639,7 +648,7 @@ const redirectLayer = ResendReceivingClient.layer.pipe(
   Layer.provide(
     Layer.succeed(
       ConfigProvider.ConfigProvider,
-      ConfigProvider.fromUnknown({ RESEND_API_KEY: "test-resend-api-key" })
+      ConfigProvider.fromUnknown({ RESEND_API_KEY: testResendApiKey })
     )
   ),
   Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectObservingFetch))
@@ -650,6 +659,7 @@ layer(redirectLayer)("Resend receiving redirect policy", (it) => {
     Effect.gen(function* () {
       redirectRequests.length = 0;
       const client = yield* ResendReceivingClient;
+      expectNotInspected(client, testResendApiKey);
       expect(
         (yield* Effect.exit(
           client.retrieveEmail(ResendReceivedEmailId.make("email_fixture_redirect"))
@@ -661,6 +671,11 @@ layer(redirectLayer)("Resend receiving redirect policy", (it) => {
         "manual",
       ]);
       expect(redirectRequests.some((request) => request.url.includes("127.0.0.1"))).toBe(false);
+      expect(redirectRequests.map((request) => Option.getOrNull(request.authorization))).toEqual([
+        `Bearer ${testResendApiKey}`,
+        `Bearer ${testResendApiKey}`,
+        null,
+      ]);
     })
   );
 });

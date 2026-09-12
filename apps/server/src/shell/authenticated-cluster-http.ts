@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { BunClusterHttp, BunCrypto } from "@effect/platform-bun";
-import { type Config, Effect, Layer, Option } from "effect";
+import { type Config, Effect, Layer, Option, Redacted } from "effect";
 import {
   HttpRunner,
   type MessageStorage,
@@ -28,18 +28,22 @@ const bytesPerKibibyte = 1024;
 const maximumMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
 const clusterRunnerPath = "/_fidy/cluster";
 const registerRoutes = HttpRouter.use;
-const bearer = (token: string): string => `Bearer ${token}`;
 
-const credentialsMatch = (actual: Option.Option<string>, expected: string): boolean => {
+/** Opaque Cluster bearer token; unwrapped only for the wire header and the constant-time comparison. */
+type ClusterToken = Redacted.Redacted<string>;
+
+const bearer = (token: ClusterToken): string => `Bearer ${Redacted.value(token)}`;
+
+const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
   if (Option.isNone(actual)) return false;
   const actualBytes = Buffer.from(actual.value);
-  const expectedBytes = Buffer.from(expected);
+  const expectedBytes = Buffer.from(bearer(expected));
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 };
 
 /** Installs fail-closed bearer authentication over every private Cluster runner route. */
 export const authenticatedRunnerMiddleware = (
-  token: string
+  token: ClusterToken
 ): Layer.Layer<never, never, HttpRouter.HttpRouter> =>
   registerRoutes((router) =>
     router.addGlobalMiddleware((next) =>
@@ -48,7 +52,7 @@ export const authenticatedRunnerMiddleware = (
         const path = new URL(request.url, "http://runner").pathname;
         if (
           path === clusterRunnerPath &&
-          !credentialsMatch(Option.fromUndefinedOr(request.headers.authorization), bearer(token))
+          !credentialsMatch(Option.fromUndefinedOr(request.headers.authorization), token)
         ) {
           return HttpServerResponse.empty({ status: 401 });
         }
@@ -58,7 +62,7 @@ export const authenticatedRunnerMiddleware = (
   );
 
 const authenticatedClientProtocol = (
-  token: string
+  token: ClusterToken
 ): Layer.Layer<
   Runners.RpcClientProtocol,
   never,
@@ -91,7 +95,7 @@ const authenticatedClientProtocol = (
 
 /** SQL-backed Bun Cluster transport with authenticated runner ingress and egress. */
 const layerAuthenticatedSqlCluster = (
-  token: string,
+  token: ClusterToken,
   shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]>
 ): Layer.Layer<
   MessageStorage.MessageStorage | Runners.Runners | Sharding.Sharding,

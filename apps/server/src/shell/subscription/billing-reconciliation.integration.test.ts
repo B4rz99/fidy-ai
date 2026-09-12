@@ -9,6 +9,7 @@ import {
   Layer,
   ManagedRuntime,
   Option,
+  Redacted,
   Ref,
   Schedule,
   Schema,
@@ -284,7 +285,7 @@ const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSql("e".repeat(64), {
+          authenticatedClusterHttp.layerSql(Redacted.make("e".repeat(64)), {
             runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
             runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
             availableShardGroups: ["default"],

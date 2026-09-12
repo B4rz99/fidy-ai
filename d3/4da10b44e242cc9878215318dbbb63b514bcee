@@ -1,0 +1,62 @@
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 164-173
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 91-93
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 7,9-13,19,25,40-56,59,64-66
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,8,24-31,44-50,100-116,119-122,135,137-150,152-170
+apps/server/src/shell/cluster-compatibility.test.ts
+  h_c6d49c804e0ad2 1-99
+apps/server/src/shell/cluster-compatibility.ts
+  h_c6d49c804e0ad2 1-83
+apps/server/src/shell/cluster-observation.test.ts
+  h_c6d49c804e0ad2 1-185
+apps/server/src/shell/cluster-observation.ts
+  h_c6d49c804e0ad2 1-427
+apps/server/src/shell/cluster-readiness.test.ts
+  h_c6d49c804e0ad2 1-142
+apps/server/src/shell/cluster-readiness.ts
+  h_c6d49c804e0ad2 1-103
+apps/server/src/shell/cluster-topology.integration.test.ts
+  h_c6d49c804e0ad2 1-346
+apps/server/src/shell/cluster-topology.test.ts
+  h_c6d49c804e0ad2 1-90
+apps/server/src/shell/cluster-topology.ts
+  h_c6d49c804e0ad2 1-148
+apps/server/src/shell/db/migrations/0057-cluster-topology-identity.ts
+  h_c6d49c804e0ad2 1-25
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 56,122
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1-2,6-9,30-33,42-44,50-52,71,82-83,90-91
+apps/server/src/shell/durable-tables.ts
+  h_c6d49c804e0ad2 1-7
+apps/server/src/shell/http.ts
+  h_c6d49c804e0ad2 20,175-196,279
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 20,29-32,139-141
+apps/server/src/shell/observability/protocol.ts
+  h_c6d49c804e0ad2 19-21,24
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 24,29-32,170-172
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  h_c6d49c804e0ad2 1-44
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 3-4,6-9,38-40
+docs/operations/cluster-topology.md
+  h_c6d49c804e0ad2 1-164
+docs/operations/production-releases.md
+  h_c6d49c804e0ad2 75,79-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d34da10b44e242cc9878215318dbbb63b514bcee",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

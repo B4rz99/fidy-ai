@@ -95,6 +95,14 @@ const DurableFailureRow = Schema.Struct({
 const unexpectedDefectMarker =
   'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"unexpected-defect"}';
 
+const isolateDisclosureQueues = Effect.fn("Test.isolateDisclosureQueues")(function* () {
+  const sql = yield* MigrationSqlClient;
+  const clean = sql`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name IN (${consentDisclosureQueueName}, ${consentDisclosureEvidenceQueueName})`;
+  yield* clean;
+  yield* Effect.addFinalizer(() => clean.pipe(Effect.orDie));
+});
+
 const errorCount = (
   recorder: EnvelopeRecorderService,
   operation: "whatsapp.disclosureStart" | "whatsapp.disclosureEvidence"
@@ -114,6 +122,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
   (it) => {
     it.effect("completes stale start and already-settled evidence handoffs", () =>
       Effect.gen(function* () {
+        yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000550");
         const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000551");
         const startQueue = yield* consentDisclosureQueue;
@@ -155,6 +164,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
     it.effect("redacts unexpected start defects before PostgreSQL stores the retry", () =>
       Effect.gen(function* () {
+        yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000555");
         const queue = yield* consentDisclosureQueue;
         yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
@@ -205,6 +215,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
       "releases interrupted disclosure start without consuming an attempt or evidence",
       () =>
         Effect.gen(function* () {
+          yield* isolateDisclosureQueues();
           const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000556");
           const queue = yield* consentDisclosureQueue;
           yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
@@ -231,6 +242,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
     it.effect("redacts unexpected evidence defects before PostgreSQL stores the retry", () =>
       Effect.gen(function* () {
+        yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000557");
         const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000558");
         const queue = yield* consentDisclosureEvidenceQueue;

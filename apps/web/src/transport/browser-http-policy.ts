@@ -71,41 +71,37 @@ const sanitizeHttpClientError = (
 ): HttpClientError.HttpClientError => {
   const request = diagnosticsRequest(error.request);
   const reason = error.reason;
+  let sanitizedReason: HttpClientError.HttpClientError["reason"];
   switch (reason._tag) {
     case "TransportError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.TransportError({ request }),
-      });
+      sanitizedReason = new HttpClientError.TransportError({ request });
+      break;
     case "EncodeError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.EncodeError({ request }),
-      });
+      sanitizedReason = new HttpClientError.EncodeError({ request });
+      break;
     case "InvalidUrlError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.InvalidUrlError({ request }),
-      });
+      sanitizedReason = new HttpClientError.InvalidUrlError({ request });
+      break;
     case "StatusCodeError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.StatusCodeError({
-          request,
-          response: diagnosticsResponse(request, reason.response),
-        }),
+      sanitizedReason = new HttpClientError.StatusCodeError({
+        request,
+        response: diagnosticsResponse(request, reason.response),
       });
+      break;
     case "DecodeError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.DecodeError({
-          request,
-          response: diagnosticsResponse(request, reason.response),
-        }),
+      sanitizedReason = new HttpClientError.DecodeError({
+        request,
+        response: diagnosticsResponse(request, reason.response),
       });
+      break;
     case "EmptyBodyError":
-      return new HttpClientError.HttpClientError({
-        reason: new HttpClientError.EmptyBodyError({
-          request,
-          response: diagnosticsResponse(request, reason.response),
-        }),
+      sanitizedReason = new HttpClientError.EmptyBodyError({
+        request,
+        response: diagnosticsResponse(request, reason.response),
       });
+      break;
   }
+  return new HttpClientError.HttpClientError({ reason: sanitizedReason });
 };
 
 const requestFailure = (
@@ -262,9 +258,12 @@ const makePolicyClient = (
   });
 
 /**
- * Places the browser's destination, deadline, redirect, response-byte, retry, credential, and
- * diagnostic policy beneath one generated API client. Only GET and HEAD transport failures retry,
- * once; mutations and response/decode failures are never replayed.
+ * Places browser HTTP policy beneath one generated API client. `boundary` selects that API
+ * surface's deadline and response-byte budget. `apiOrigin` must be a validated URL origin and is
+ * the only destination the resulting client will send to. `httpClient` supplies the underlying
+ * browser or test transport. Requests include browser credentials, disable caching and automatic
+ * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
+ * retry, once.
  */
 export const browserHttpClientLayer = (
   boundary: BrowserHttpBoundary,

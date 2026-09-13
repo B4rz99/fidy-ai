@@ -8,6 +8,7 @@ import { ValidationGateLive } from "~/shell/_shared/errors-live";
 import { CanonicalRetryAfterBody } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { MaintenanceLive } from "./maintenance";
+import { DurableQueueReadinessLive } from "./durable-queue-health";
 import { AgentService } from "~/shell/agent/agent-service";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
@@ -253,6 +254,7 @@ export const HttpLive = HttpRouter.serve(
     SubscriptionEnrollmentDirectLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
+    DurableQueueReadinessLive,
     KapsoWebhookLive,
     SupportRecoveryPrivateRouteLive,
     ResendWebhookLive,

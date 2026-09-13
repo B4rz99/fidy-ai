@@ -2,6 +2,7 @@ import { DateTime, Duration, Effect, Schema } from "effect";
 import { MachineId, Snowflake } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { HostedTurns } from "~/shell/agent/hosted-turns";
+import { durableQueueTableName } from "./durable-queue-policy";
 
 /**
  * Version-local RC.112 mailbox cleanup: only completed HostedTurns requests and their unit replies.
@@ -53,7 +54,7 @@ export const durableQueueRetention = {
         ? yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
             yield* sql`SELECT count(*) FILTER (WHERE completed = FALSE)::int AS incomplete,
                 0::int AS "requiredCompleted"
-              FROM fidy_queue
+              FROM ${sql(durableQueueTableName)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
           ).pipe(Effect.orDie)
         : yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
@@ -62,7 +63,7 @@ export const durableQueueRetention = {
                 count(*) FILTER (
                   WHERE completed = TRUE AND id IN ${sql.in(requiredItemIds)}
                 )::int AS "requiredCompleted"
-              FROM fidy_queue
+              FROM ${sql(durableQueueTableName)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
           ).pipe(Effect.orDie);
     return state?.incomplete === 0 && state.requiredCompleted === requiredItemIds.length;
@@ -80,8 +81,8 @@ export const durableQueueRetention = {
   ) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      DELETE FROM fidy_queue WHERE sequence IN (
-        SELECT sequence FROM fidy_queue
+      DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
+        SELECT sequence FROM ${sql(durableQueueTableName)}
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
           AND completed = TRUE
         ORDER BY sequence LIMIT 100
@@ -91,7 +92,7 @@ export const durableQueueRetention = {
       Request: Schema.Void,
       Result: Schema.Struct({ empty: Schema.Boolean }),
       execute: () => sql`SELECT NOT EXISTS (
-        SELECT 1 FROM fidy_queue
+        SELECT 1 FROM ${sql(durableQueueTableName)}
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
       ) AS empty`,
     })(undefined).pipe(Effect.orDie)).empty;
@@ -104,7 +105,7 @@ export const durableQueueRetention = {
     if (itemIds.length === 0) return;
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      DELETE FROM fidy_queue
+      DELETE FROM ${sql(durableQueueTableName)}
       WHERE queue_name = ${queueName} AND completed = TRUE AND id IN ${sql.in(itemIds)}
     `;
   }),

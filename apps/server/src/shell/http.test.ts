@@ -1,7 +1,9 @@
 import { expect, it, layer } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { DurableQueueReadiness } from "./durable-queue-health";
+import { classifyDurableQueueAttention, durableQueueNames } from "./durable-queue-policy";
 import { ExactOriginCorsLive } from "./http";
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
@@ -51,6 +53,52 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(response.status).toBe(200);
         expect(response.headers["content-type"]).toBe("text/html");
         expect(yield* response.text).toContain("fidy-ai canonical API");
+      })
+    );
+
+    it.effect("exposes bounded durable-queue readiness to an Access-authenticated operator", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get("/internal/readiness/durable-queues", {
+          headers: { "cf-access-jwt-assertion": "test-support-access-token" },
+        });
+        const body = yield* Schema.decodeUnknownEffect(DurableQueueReadiness)(yield* response.json);
+        const expectedKeys = [
+          "queueName",
+          "pendingDepth",
+          "oldestPendingAgeSeconds",
+          "retainedCount",
+          "oldestRetainedAgeSeconds",
+          "activeLeaseCount",
+          "staleLeaseCount",
+          "stalledLeaseCount",
+          "redeliveryCount",
+          "failedCount",
+          "decodeFailureCount",
+          "exhaustedCount",
+          "attention",
+        ].sort();
+
+        expect(response.status).toBe(200);
+        expect(response.headers["cache-control"]).toBe("no-store");
+        expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
+          [...durableQueueNames].sort()
+        );
+        for (const queue of body.queues) {
+          expect(Object.keys(queue).sort()).toEqual(expectedKeys);
+          expect(Object.keys(queue.attention).sort()).toEqual(
+            ["backlog", "leaseChurn", "exhausted", "decodeFailure"].sort()
+          );
+          expect(queue.attention).toEqual(classifyDurableQueueAttention(queue));
+        }
+      })
+    );
+
+    it.effect("refuses detailed durable-queue readiness without Access authentication", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get("/internal/readiness/durable-queues");
+
+        expect(response.status).toBe(401);
+        expect(response.headers["cache-control"]).toBe("no-store");
       })
     );
 

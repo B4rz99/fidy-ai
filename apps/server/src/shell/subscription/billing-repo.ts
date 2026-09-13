@@ -28,6 +28,10 @@ import {
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  durableQueueSchemaIncompatibleMarker,
+  durableQueueTableName,
+} from "~/shell/durable-queue-policy";
 
 const WompiSourceIdFromDb = Schema.FiniteFromString.pipe(Schema.decodeTo(WompiSourceId));
 
@@ -611,7 +615,7 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
   const exhausted = yield* SqlSchema.findAll({
     Request: Schema.Void,
     Result: BillingAttemptQueueCandidate,
-    execute: () => sql`SELECT sequence, element FROM fidy_queue
+    execute: () => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
       WHERE queue_name = ${billingAttemptQueueName} AND completed = FALSE
         AND attempts >= ${maximumBillingAttemptQueueAttempts}
       ORDER BY sequence LIMIT ${exhaustedRetirementPage}`,
@@ -620,7 +624,7 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
   for (const item of exhausted) {
     const identity = Schema.decodeOption(BillingAttemptQueueIdentity)(item.element);
     if (Option.isNone(identity)) {
-      yield* sql`UPDATE fidy_queue SET last_failure = 'schema_incompatible', updated_at = ${now}
+      yield* sql`UPDATE ${sql(durableQueueTableName)} SET last_failure = ${durableQueueSchemaIncompatibleMarker}, updated_at = ${now}
         WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
       yield* Effect.logWarning("Retained malformed exhausted BillingAttempt work", {
         sequence: item.sequence,
@@ -642,7 +646,7 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
       );
     }
     const retiredRows =
-      yield* sql`UPDATE fidy_queue SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
+      yield* sql`UPDATE ${sql(durableQueueTableName)} SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
       last_failure = 'exhausted', updated_at = ${now}
       WHERE sequence = ${item.sequence} AND completed = FALSE
         AND attempts >= ${maximumBillingAttemptQueueAttempts}
@@ -674,7 +678,7 @@ export const pruneBillingAttemptQueueHistory = Effect.fn(
   const candidates = yield* SqlSchema.findAll({
     Request: Schema.DateTimeUtc,
     Result: BillingAttemptQueueCandidate,
-    execute: (before) => sql`SELECT sequence, element FROM fidy_queue
+    execute: (before) => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
       WHERE queue_name = ${billingAttemptQueueName} AND completed = TRUE AND updated_at < ${before}
       ORDER BY sequence LIMIT ${queueHistoryPage}`,
   })(cutoff).pipe(Effect.orDie);
@@ -692,7 +696,7 @@ export const pruneBillingAttemptQueueHistory = Effect.fn(
       findBillingAttemptByIdInScope(identity.value.userId, identity.value.billingAttemptId)
     );
     if (Option.isSome(attempt) && attempt.value.status === "pending") continue;
-    const prunedRows = yield* sql`DELETE FROM fidy_queue
+    const prunedRows = yield* sql`DELETE FROM ${sql(durableQueueTableName)}
       WHERE sequence = ${candidate.sequence} AND completed = TRUE
       RETURNING sequence`.pipe(Effect.orDie);
     pruned += prunedRows.length;

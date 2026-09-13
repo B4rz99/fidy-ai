@@ -26,6 +26,10 @@ import {
 } from "~/shell/agent/tool-confirmation-model";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import {
+  durableQueueSchemaIncompatibleMarker,
+  durableQueueTableName,
+} from "~/shell/durable-queue-policy";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   DurableTraceContext,
@@ -208,7 +212,7 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
   const exhausted = yield* SqlSchema.findAll({
     Request: Schema.Void,
     Result: ExhaustedWhatsAppQueueItem,
-    execute: () => sql`SELECT sequence, element FROM fidy_queue
+    execute: () => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
       WHERE queue_name = ${whatsappInboundQueueName} AND completed = FALSE
         AND attempts >= ${maximumWhatsAppInboundAttempts}
       ORDER BY sequence LIMIT 256`,
@@ -219,15 +223,18 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
   for (const item of exhausted) {
     const identity = Schema.decodeOption(WhatsAppInboundIdentity)(item.element);
     if (Option.isNone(identity)) {
-      yield* sql`UPDATE fidy_queue SET last_failure = 'schema_incompatible', updated_at = ${now}
-        WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
+      yield* sql`UPDATE ${sql(durableQueueTableName)} SET last_failure = ${durableQueueSchemaIncompatibleMarker},
+        updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(
+        Effect.asVoid,
+        Effect.orDie
+      );
       yield* Effect.logWarning("Retained malformed exhausted WhatsApp work", {
         sequence: item.sequence,
       });
       continue;
     }
     yield* failWhatsAppInboundBurst(identity.value, "agent_failed", now);
-    yield* sql`UPDATE fidy_queue SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
+    yield* sql`UPDATE ${sql(durableQueueTableName)} SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
       updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE
         AND attempts >= ${maximumWhatsAppInboundAttempts}`.pipe(Effect.asVoid, Effect.orDie);
     retired.push(identity.value);
@@ -254,7 +261,7 @@ export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")
   const candidates = yield* SqlSchema.findAll({
     Request: Schema.DateTimeUtc,
     Result: QueueHistoryCandidate,
-    execute: (before) => sql`SELECT sequence, element, id FROM fidy_queue
+    execute: (before) => sql`SELECT sequence, element, id FROM ${sql(durableQueueTableName)}
       WHERE queue_name = ${whatsappInboundQueueName} AND completed = TRUE AND updated_at < ${before}
       ORDER BY sequence LIMIT 256`,
   })(cutoff).pipe(Effect.orDie);
@@ -276,7 +283,7 @@ export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")
       })(candidate.id).pipe(Effect.orDie)
     );
     if (unfinished.length === 0) {
-      yield* sql`DELETE FROM fidy_queue WHERE sequence = ${candidate.sequence} AND completed = TRUE`.pipe(
+      yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE sequence = ${candidate.sequence} AND completed = TRUE`.pipe(
         Effect.asVoid,
         Effect.orDie
       );

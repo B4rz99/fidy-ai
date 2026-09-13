@@ -16,6 +16,9 @@ export const maximumWhatsAppInboundAttempts = 10;
 
 /** Stable persisted queue whose item identity is the accepted inbound job identity. */
 export const whatsappInboundQueueName = "whatsapp-inbound-turn";
+
+/** Concurrent inbound queue consumers started by each production runtime. */
+export const whatsappInboundConsumerCount = 8;
 export const whatsappInboundQueue = PersistedQueue.make({
   name: whatsappInboundQueueName,
   schema: WhatsAppInboundWork,

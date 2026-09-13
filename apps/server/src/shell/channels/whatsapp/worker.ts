@@ -6,7 +6,11 @@ import { projectStack } from "~/shell/observability/projectors";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
-import { maximumWhatsAppInboundAttempts, whatsappInboundQueue } from "./inbound-execution";
+import {
+  maximumWhatsAppInboundAttempts,
+  whatsappInboundConsumerCount,
+  whatsappInboundQueue,
+} from "./inbound-execution";
 import {
   pruneWhatsAppOperationalData,
   pruneWhatsAppQueueHistory,
@@ -132,7 +136,7 @@ export const WhatsAppRetentionLive = Layer.effectDiscard(
 /** Runs bounded native queue consumers; disclosure Workflows and retention run separately. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
   Effect.forEach(
-    Array.from({ length: 8 }, () => workerLoop),
+    Array.from({ length: whatsappInboundConsumerCount }, () => workerLoop),
     (loop) => Effect.forkScoped(loop),
     { concurrency: "unbounded", discard: true }
   )

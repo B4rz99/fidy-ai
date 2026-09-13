@@ -63,7 +63,7 @@ const discoverProductionQueues: Effect.Effect<
   const discovered: Array<Readonly<{ name: string; schema: string; file: string }>> = [];
   const paths = [...new Bun.Glob("**/*.ts").scanSync({ cwd: serverSourceRoot })];
   for (const path of paths) {
-    if (path.endsWith(".test.ts")) continue;
+    if (path.endsWith(".test.ts") || path.startsWith("shell/testing/")) continue;
     const source = yield* Effect.promise(() => Bun.file(`${serverSourceRoot}${path}`).text());
     for (const match of source.matchAll(/PersistedQueue\.make(?:<[^<>]*>)?\(\{([\s\S]*?)\}\)/gu)) {
       discovered.push({ ...nameSchemaPair(match[1] ?? "", path), file: path });

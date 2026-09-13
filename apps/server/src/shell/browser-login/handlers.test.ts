@@ -1,8 +1,10 @@
-import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Encoding, Fiber, Redacted, Schema } from "effect";
+import { expect, it, layer } from "@effect/vitest";
+import { Crypto, DateTime, Effect, Encoding, Fiber, Redacted, Result, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { HttpApiClient, OpenApi } from "effect/unstable/httpapi";
 import { SqlSchema } from "effect/unstable/sql";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+import { BrowserLoginUnavailableApi, WebAuthApi } from "~/web-auth-api";
 import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
@@ -19,6 +21,21 @@ const resetBrowserLogin = Effect.gen(function* () {
 const StoredPairingProof = Schema.Struct({
   digest: Schema.String,
   verifierOccurrences: Schema.Int,
+});
+
+it("publishes the unavailable response for browser-pairing redemption", () => {
+  const redemption = OpenApi.fromApi(WebAuthApi).paths["/web/pairings/redeem"]?.post;
+
+  expect(redemption?.responses["503"]).toEqual({
+    description: "BrowserLoginUnavailableApi",
+    content: {
+      "application/json": {
+        schema: {
+          $ref: "#/components/schemas/BrowserLoginUnavailableApiEncoded",
+        },
+      },
+    },
+  });
 });
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -46,6 +63,42 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           })(undefined);
           expect(count).toBeLessThanOrEqual(5);
         })
+    );
+
+    it.effect("decodes saturated redemption admission as the declared unavailable response", () =>
+      Effect.gen(function* () {
+        yield* resetBrowserLogin;
+        const client = yield* HttpApiClient.make(WebAuthApi);
+        const outcomes = yield* Effect.all(
+          Array.from({ length: 40 }, () =>
+            client.browserLogin
+              .redeemPairing({
+                payload: {
+                  pairingId: "00000000-0000-4000-8000-000000000001",
+                  privateVerifier: "A".repeat(43),
+                },
+              })
+              .pipe(Effect.result)
+          ),
+          { concurrency: "unbounded" }
+        );
+        const unavailable = outcomes.find(
+          (outcome) =>
+            Result.isFailure(outcome) && Schema.is(BrowserLoginUnavailableApi)(outcome.failure)
+        );
+
+        expect(unavailable).toEqual(
+          Result.fail(
+            BrowserLoginUnavailableApi.make({
+              error: {
+                code: "rate_limited",
+                message:
+                  "El inicio de sesión no está disponible temporalmente. Intenta de nuevo más tarde.",
+              },
+            })
+          )
+        );
+      })
     );
 
     it.effect("bounds unknown redemption floods without starving canonical database work", () =>

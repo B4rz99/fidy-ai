@@ -38,8 +38,10 @@ export class BrowserLoginUnavailableApi extends SchemaSerializableError<BrowserL
   "BrowserLoginUnavailableApi"
 )({ error: BrowserLoginUnavailableError }, { httpApiStatus: 503 }) {}
 
-/** Shared non-enumerating body encoded for both rate and capacity admission failures. */
-export const browserLoginUnavailableBody = { error: browserLoginUnavailableError } as const;
+/** Shared non-enumerating response body for temporarily unavailable browser login admission. */
+export const browserLoginUnavailableBody = Schema.encodeSync(
+  Schema.toCodecJson(BrowserLoginUnavailableApi)
+)(BrowserLoginUnavailableApi.make({ error: browserLoginUnavailableError }));
 
 const browserLoginPairingInvalidError = {
   code: "pairing_invalid",
@@ -112,7 +114,11 @@ export const BrowserLoginWebAuthGroup = HttpApiGroup.make("browserLogin")
     HttpApiEndpoint.post("redeemPairing", "/web/pairings/redeem", {
       payload: RedeemBrowserLoginPairingPayload,
       success: [PendingBrowserLoginPairing, AuthenticatedBrowserLoginPairing],
-      error: [BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi],
+      error: [
+        BrowserLoginPairingInvalidApi,
+        BrowserLoginPollingRateLimitedApi,
+        BrowserLoginUnavailableApi,
+      ],
     }).annotate(
       OpenApi.Description,
       "Poll one browser pairing and atomically redeem it after hosted approval."

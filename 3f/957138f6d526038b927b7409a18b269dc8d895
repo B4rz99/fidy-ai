@@ -1,0 +1,34 @@
+apps/server/src/shell/_shared/persisted-queue-handler.ts
+  s_80cef19f03db2e::t_1ab2a8a572663b 3-6,8-26,32-37,39-55,57-68,115-121
+  s_80cef19f03db2e::t_083fddc8714324 27-31,38,56
+  s_80cef19f03db2e::t_8f0ed87a36356c 1-2,69-114,131
+  s_80cef19f03db2e::t_be0750ace2695f 126,130
+  s_80cef19f03db2e::t_1998a13b8e9323 122-124,133
+  s_80cef19f03db2e::t_5efda7b437d682 7,125,127-129,132
+apps/server/src/shell/_shared/persisted-queue-handler.test.ts
+  s_80cef19f03db2e::t_cdf97f69d4238a 104,126
+  s_80cef19f03db2e::t_9c64065b0145fd 43
+  s_80cef19f03db2e::t_58c6a278b9a997 5
+  s_80cef19f03db2e::t_54411688a87190 50-57
+  s_80cef19f03db2e::t_e771222102d708 2,4,26-30,40,67-72,74-82,85-94,116-121,123-125,127-131,134-137,210-215,217-225,228-234
+  s_80cef19f03db2e::t_c5f538bc157b2c 83-84,132-133,226-227
+  s_80cef19f03db2e::t_68116a0c13e738 3,6-13,20-25,95-103,105-115,138-209,235-257
+  s_80cef19f03db2e::t_ce9fcb9798cb40 1,14-19,41-42,44-49,58-66,258-259
+  s_80cef19f03db2e::t_21523bb8faf462 31-39,73,122,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3f957138f6d526038b927b7409a18b269dc8d895",
+  "prompts": {},
+  "sessions": {
+    "s_80cef19f03db2e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bb9-1adb-7521-9efc-47d7efdeede8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

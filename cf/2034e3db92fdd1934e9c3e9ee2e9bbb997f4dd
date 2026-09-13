@@ -1,0 +1,19 @@
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  s_729685b01e566c::t_bdf933b951d61f 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cf2034e3db92fdd1934e9c3e9ee2e9bbb997f4dd",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

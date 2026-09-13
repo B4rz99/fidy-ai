@@ -1,0 +1,19 @@
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_729685b01e566c::t_3649986125128f 17,40,294-300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5df97a84fb8a6ec6ec1953cda7056b10f41ed69d",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

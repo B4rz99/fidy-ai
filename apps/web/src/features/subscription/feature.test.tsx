@@ -144,15 +144,43 @@ it("gives an unauthenticated User a path to browser login", () => {
   );
 });
 
-it("renders loading and load-failure states", () => {
+it("renders distinct idle, loading, and load-failure states", () => {
   const { rerender } = render(
-    <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Loading" }} />
+    <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Initial" }} />
   );
+  expect(screen.getByText("La consulta de ofertas aún no se ha iniciado.")).toBeVisible();
+
+  rerender(<SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Loading" }} />);
   expect(screen.getByRole("region", { name: "Cargando ofertas" })).toBeVisible();
 
-  rerender(<SubscriptionOffersView gateway={Option.none()} state={{ _tag: "LoadFailure" }} />);
+  rerender(
+    <SubscriptionOffersView
+      gateway={Option.none()}
+      state={{
+        _tag: "LoadFailure",
+        boundaryFailure: false,
+        onRetry: () => undefined,
+        waiting: false,
+      }}
+    />
+  );
   expect(screen.getByText("No pudimos cargar las ofertas")).toBeVisible();
   expect(screen.getByText("Intenta de nuevo en unos momentos.")).toBeVisible();
+});
+
+it("preserves Subscription offers through refresh failure and retries the query", () => {
+  const onRetry = vi.fn();
+  render(
+    <SubscriptionOffersView
+      gateway={Option.some(enrollmentGateway)}
+      state={{ _tag: "RefreshFailure", offers, onRetry, waiting: false }}
+    />
+  );
+
+  expect(screen.getByText("COP 28.900,00/mes")).toBeVisible();
+  expect(screen.getByText("Mostramos las últimas ofertas disponibles.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
+  expect(onRetry).toHaveBeenCalledOnce();
 });
 
 it("shows preparation failures without retaining a stale enrollment", async () => {

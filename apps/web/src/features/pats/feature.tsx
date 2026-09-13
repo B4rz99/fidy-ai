@@ -1,10 +1,11 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Redacted } from "effect";
-import { AsyncResult, type Atom, Reactivity } from "effect/unstable/reactivity";
+import { type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
 import { readClipboardText, writeClipboardText } from "@/browser/clipboard";
 import { useSession } from "@/session/session-context";
+import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
 import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
@@ -139,10 +140,27 @@ export const PATManagementFeature = (): JSX.Element => {
     })
   );
   const activePATResult = useAtomValue(activePATs);
-  let activePATState: ActivePATManagementState = { _tag: "Loading" };
-  if (AsyncResult.isFailure(activePATResult)) activePATState = { _tag: "LoadFailure" };
-  if (AsyncResult.isSuccess(activePATResult)) {
-    activePATState = { _tag: "Ready", result: activePATResult.value.data };
+  const refreshActivePATs = useAtomRefresh(activePATs);
+  const queryState = presentCanonicalQuery(activePATResult);
+  let activePATState: ActivePATManagementState = {
+    _tag: queryState._tag === "Initial" && !queryState.waiting ? "Initial" : "Loading",
+  };
+  if (queryState._tag === "Failure") {
+    activePATState = {
+      _tag: "LoadFailure",
+      boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+      onRetry: refreshActivePATs,
+      waiting: queryState.waiting,
+    };
+  }
+  if (queryState._tag === "Ready") {
+    activePATState = {
+      _tag: "Ready",
+      result: queryState.value.data,
+      onRetry: refreshActivePATs,
+      refreshing: queryState.waiting,
+      refreshFailed: Option.isSome(queryState.refreshFailure),
+    };
   }
   const [revokeAtom] = useState(() => makeRevokeActivePATCommand(router.options.context.apiClient));
   const [revokeAllAtom] = useState(() =>

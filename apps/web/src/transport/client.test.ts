@@ -8,8 +8,9 @@ import {
   UrlParams,
 } from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { AtomRegistry } from "effect/unstable/reactivity";
-import { describe, expect, it } from "vitest";
+import { AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
+import { describe, expect, it, vi } from "vitest";
+import { presentCanonicalQuery } from "./canonical-query";
 import {
   ManualPATRequestId,
   PATRecipientLabel,
@@ -207,6 +208,165 @@ describe("canonical browser transport", () => {
       unmount();
       registry.dispose();
     }
+  });
+
+  it("preserves query data through a real refresh failure and retries the same atom", async () => {
+    const refreshResponse = Promise.withResolvers<HttpClientResponse.HttpClientResponse>();
+    let requestCount = 0;
+    let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
+    const httpClient = makeHttpClient((request) => {
+      requestCount += 1;
+      if (requestCount === 1 || requestCount === 3) {
+        return Effect.succeed(responseJson(request, { data: [], next: [] }));
+      }
+      pendingRequest = Option.some(request);
+      return Effect.promise(() => refreshResponse.promise);
+    });
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const atom = client.query("transactions", "listTransactions", { query: {} });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(atom);
+
+    try {
+      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
+      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+        _tag: "Ready",
+        waiting: false,
+      });
+
+      registry.refresh(atom);
+      await vi.waitFor(() => expect(requestCount).toBe(2));
+      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+        _tag: "Ready",
+        waiting: true,
+      });
+      const failedRefresh = Effect.runPromise(
+        Effect.result(AtomRegistry.getResult(registry, atom))
+      );
+
+      refreshResponse.resolve(
+        responseJson(
+          Option.getOrThrow(pendingRequest),
+          {
+            error: {
+              code: "validation_failed",
+              message: "The query was rejected.",
+              fields: [],
+            },
+            next: [],
+          },
+          400
+        )
+      );
+      await failedRefresh;
+      await vi.waitFor(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
+      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+        _tag: "Ready",
+        waiting: false,
+        refreshFailure: { _tag: "Some", value: { _tag: "DeclaredFailure" } },
+      });
+
+      registry.refresh(atom);
+      await vi.waitFor(() => expect(requestCount).toBe(3));
+      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
+      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+        _tag: "Ready",
+        waiting: false,
+      });
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it("classifies a real initial declared failure without previous data", async () => {
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(
+        responseJson(
+          request,
+          {
+            error: { code: "validation_failed", message: "The query was rejected.", fields: [] },
+            next: [],
+          },
+          400
+        )
+      )
+    );
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const atom = client.query("transactions", "listTransactions", { query: {} });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(atom);
+
+    try {
+      await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom)));
+      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "DeclaredFailure" },
+      });
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    ["defect", Effect.die("private decoder defect"), "BoundaryFailure"],
+    ["interruption", Effect.interrupt, "Interrupted"],
+  ] as const)(
+    "classifies a real initial %s without exposing its Cause",
+    async (_label, request, tag) => {
+      const httpClient = makeHttpClient(() => request);
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const atom = client.query("transactions", "listTransactions", { query: {} });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
+
+      try {
+        await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom))).catch(
+          () => undefined
+        );
+        await vi.waitFor(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: tag },
+        });
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    }
+  );
+
+  it("starts the same canonical query without prior-principal success in a replacement registry", async () => {
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(responseJson(request, { data: [], next: [] }))
+    );
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const atom = client.query("transactions", "listTransactions", { query: {} });
+    const priorRegistry = AtomRegistry.make();
+    const priorUnmount = priorRegistry.mount(atom);
+    await Effect.runPromise(AtomRegistry.getResult(priorRegistry, atom));
+    expect(presentCanonicalQuery(priorRegistry.get(atom))._tag).toBe("Ready");
+    priorUnmount();
+    priorRegistry.dispose();
+
+    const replacementRegistry = AtomRegistry.make();
+    expect(presentCanonicalQuery(replacementRegistry.get(atom))).toMatchObject({
+      _tag: "Initial",
+    });
+    replacementRegistry.dispose();
   });
 
   it("notifies the authentication lifetime when the canonical API rejects the session", async () => {

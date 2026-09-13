@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
+import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 
 /** Terminal callbacks for revoking one PAT selected by its safe short id. */
 export type RevokeActivePATCommand = Readonly<{
@@ -26,9 +27,21 @@ export type RevokeAllActivePATsCommand = Readonly<{
 
 /** Query state derived by the owning typed HttpApi atom. */
 export type ActivePATManagementState =
+  | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
-  | Readonly<{ _tag: "LoadFailure" }>
-  | Readonly<{ _tag: "Ready"; result: ActivePATList }>;
+  | Readonly<{
+      _tag: "LoadFailure";
+      boundaryFailure: boolean;
+      onRetry: () => void;
+      waiting: boolean;
+    }>
+  | Readonly<{
+      _tag: "Ready";
+      result: ActivePATList;
+      onRetry: () => void;
+      refreshing: boolean;
+      refreshFailed: boolean;
+    }>;
 
 type Selection = TokenShortId | "all";
 
@@ -287,13 +300,43 @@ const PATQueryContent = ({
   state: ActivePATManagementState;
   controller: ReturnType<typeof useRevocationController>;
 }>): JSX.Element => {
+  if (state._tag === "Initial") {
+    return <p className="text-muted-foreground">La consulta de tokens aún no se ha iniciado.</p>;
+  }
   if (state._tag === "Loading") return <p aria-live="polite">Cargando tokens activos…</p>;
-  if (state._tag === "Ready") return <ReadyPATs controller={controller} pats={state.result.pats} />;
+  if (state._tag === "Ready") {
+    return (
+      <>
+        {state.refreshing ? (
+          <p aria-live="polite" className="text-sm text-muted-foreground">
+            Actualizando tokens activos…
+          </p>
+        ) : null}
+        {state.refreshFailed ? (
+          <CanonicalQueryRetry
+            description="Mostramos los últimos tokens disponibles."
+            onRetry={state.onRetry}
+            retryLabel="Reintentar actualización"
+            retryingLabel="Reintentando…"
+            title="No pudimos actualizar tus tokens"
+            waiting={state.refreshing}
+          />
+        ) : null}
+        <ReadyPATs controller={controller} pats={state.result.pats} />
+      </>
+    );
+  }
   return (
-    <Alert variant="destructive">
-      <AlertTitle>No pudimos cargar tus tokens</AlertTitle>
-      <AlertDescription>Vuelve a abrir esta página para intentarlo de nuevo.</AlertDescription>
-    </Alert>
+    <CanonicalQueryRetry
+      description="Intenta de nuevo en unos momentos."
+      onRetry={state.onRetry}
+      retryLabel="Reintentar carga"
+      retryingLabel="Reintentando…"
+      title={
+        state.boundaryFailure ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar tus tokens"
+      }
+      waiting={state.waiting}
+    />
   );
 };
 

@@ -16,10 +16,19 @@ import {
 import { bearerRevealLifetime } from "./policy";
 import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
 import {
+  type ActivePATManagementState,
   ActivePATManagementView,
   type RevokeActivePATCommand,
   type RevokeAllActivePATsCommand,
 } from "./management-view";
+
+const readyPATState = (pats: ReadonlyArray<ActivePATMetadata>): ActivePATManagementState => ({
+  _tag: "Ready",
+  result: { pats },
+  onRetry: () => undefined,
+  refreshing: false,
+  refreshFailed: false,
+});
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const redactedBearer = Redacted.make(bearer);
@@ -203,7 +212,7 @@ it("lists safe active metadata and confirms one revocation before refreshing", (
   const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
   const { rerender } = render(
     <ActivePATManagementView
-      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      state={readyPATState([activePat])}
       revokeAll={revokeAll}
       revokeOne={revokeOne}
     />
@@ -227,7 +236,7 @@ it("lists safe active metadata and confirms one revocation before refreshing", (
   expect(screen.getByText(/dejó de funcionar de inmediato/iu)).toBeVisible();
   rerender(
     <ActivePATManagementView
-      state={{ _tag: "Ready", result: { pats: [] } }}
+      state={readyPATState([])}
       revokeAll={revokeAll}
       revokeOne={revokeOne}
     />
@@ -248,7 +257,7 @@ it("confirms revoke-all and reports only the server's active PAT count", () => {
   const revokeAll = vi.fn((command: RevokeAllActivePATsCommand) => command.onRevoked(1));
   render(
     <ActivePATManagementView
-      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      state={readyPATState([activePat])}
       revokeAll={revokeAll}
       revokeOne={vi.fn()}
     />
@@ -263,20 +272,58 @@ it("confirms revoke-all and reports only the server's active PAT count", () => {
   expect(screen.getByText("Se desactivó 1 token activo.")).toBeVisible();
 });
 
-it("renders loading and load-failure states", () => {
+it("renders distinct idle, loading, and load-failure states", () => {
   const { rerender } = render(
+    <ActivePATManagementView state={{ _tag: "Initial" }} revokeAll={vi.fn()} revokeOne={vi.fn()} />
+  );
+  expect(screen.getByText("La consulta de tokens aún no se ha iniciado.")).toBeVisible();
+
+  rerender(
     <ActivePATManagementView state={{ _tag: "Loading" }} revokeAll={vi.fn()} revokeOne={vi.fn()} />
   );
-
   expect(screen.getByText("Cargando tokens activos…")).toBeVisible();
   rerender(
     <ActivePATManagementView
-      state={{ _tag: "LoadFailure" }}
+      state={{
+        _tag: "LoadFailure",
+        boundaryFailure: false,
+        onRetry: () => undefined,
+        waiting: false,
+      }}
       revokeAll={vi.fn()}
       revokeOne={vi.fn()}
     />
   );
   expect(screen.getByText("No pudimos cargar tus tokens")).toBeVisible();
+});
+
+it("preserves active PAT metadata through refresh failure and retries the query", () => {
+  const onRetry = vi.fn();
+  render(
+    <ActivePATManagementView
+      state={{
+        ...readyPATState([
+          {
+            shortId: TokenShortId.make("active04"),
+            recipientLabel: PATRecipientLabel.make("Robot visible"),
+            scopes: PATScopes.make(["read"]),
+            createdAt,
+            lastUsedAt: Option.none(),
+            expiresAt: DateTime.add(createdAt, { days: 90 }),
+          },
+        ]),
+        onRetry,
+        refreshFailed: true,
+      }}
+      revokeAll={vi.fn()}
+      revokeOne={vi.fn()}
+    />
+  );
+
+  expect(screen.getByText("Robot visible")).toBeVisible();
+  expect(screen.getByText("Mostramos los últimos tokens disponibles.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
+  expect(onRetry).toHaveBeenCalledOnce();
 });
 
 it("serializes revocation, allows cancellation, and reports failures and plural counts", () => {
@@ -292,7 +339,7 @@ it("serializes revocation, allows cancellation, and reports failures and plural 
   const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
   render(
     <ActivePATManagementView
-      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      state={readyPATState([activePat])}
       revokeAll={revokeAll}
       revokeOne={revokeOne}
     />

@@ -1,7 +1,7 @@
 import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BigDecimal, Option } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import type { AsyncResult } from "effect/unstable/reactivity";
 import {
   type FormEvent,
   Fragment,
@@ -23,8 +23,10 @@ import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
+import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
+import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   Table,
   TableBody,
@@ -934,6 +936,12 @@ export const DashboardViewComponent = ({
   );
 };
 
+const InitialDashboard = (): JSX.Element => (
+  <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <p className="text-muted-foreground">El tablero aún no se ha solicitado.</p>
+  </main>
+);
+
 const LoadingDashboard = (): JSX.Element => (
   <main
     className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 lg:px-8"
@@ -945,25 +953,48 @@ const LoadingDashboard = (): JSX.Element => (
   </main>
 );
 
-const DashboardError = (): JSX.Element => (
+const DashboardError = ({
+  boundaryFailure,
+  onRefresh,
+  waiting,
+}: Readonly<{
+  boundaryFailure: boolean;
+  onRefresh: () => void;
+  waiting: boolean;
+}>): JSX.Element => (
   <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-    <Alert variant="destructive">
-      <AlertTitle>No pudimos cargar tu tablero</AlertTitle>
-      <AlertDescription>Intenta de nuevo en unos momentos.</AlertDescription>
-    </Alert>
+    <CanonicalQueryRetry
+      description="Intenta de nuevo en unos momentos."
+      onRetry={onRefresh}
+      retryLabel="Reintentar carga del tablero"
+      retryingLabel="Reintentando…"
+      title={boundaryFailure ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar tu tablero"}
+      waiting={waiting}
+    />
   </main>
 );
 
 /** Dashboard chunk projection for the query started by the lightweight route interface. */
 export const DashboardRouteContent = ({
+  onRefresh,
   result,
 }: Readonly<{
+  onRefresh: () => void;
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
 }>): JSX.Element => {
-  if (AsyncResult.isFailure(result)) return <DashboardError />;
-  return AsyncResult.isSuccess(result) ? (
-    <DashboardViewComponent editor={Option.none()} view={result.value.data} />
-  ) : (
-    <LoadingDashboard />
-  );
+  const state = presentCanonicalQuery(result);
+  switch (state._tag) {
+    case "Initial":
+      return state.waiting ? <LoadingDashboard /> : <InitialDashboard />;
+    case "Failure":
+      return (
+        <DashboardError
+          boundaryFailure={state.failure._tag !== "DeclaredFailure"}
+          onRefresh={onRefresh}
+          waiting={state.waiting}
+        />
+      );
+    case "Ready":
+      return <DashboardViewComponent editor={Option.none()} view={state.value.data} />;
+  }
 };

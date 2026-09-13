@@ -1,8 +1,10 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Effect, Exit, Option, Result } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import type { AsyncResult } from "effect/unstable/reactivity";
 import { type JSX, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
+import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { DashboardEdit, FidyClient } from "@/transport/client";
 import { type DashboardGesture, compileDashboardGesture } from "./editor-model";
 import type { DashboardView } from "./presentation";
@@ -97,12 +99,94 @@ const useQueuedDashboardEdits = (
 const resolveEditorError = (
   editError: Option.Option<DashboardEditorError>,
   catalogFailed: boolean,
-  stale: boolean
+  dashboardFailed: boolean
 ): Option.Option<DashboardEditorError> => {
   if (Option.isSome(editError)) return editError;
   if (catalogFailed) return Option.some(unavailableCatalogError);
-  return stale ? Option.some(staleDashboardError) : Option.none();
+  return dashboardFailed ? Option.some(staleDashboardError) : Option.none();
 };
+
+const DashboardQueryNotice = ({
+  onRefresh,
+  state,
+}: Readonly<{
+  onRefresh: () => void;
+  state: CanonicalQueryState<Readonly<{ data: DashboardView }>>;
+}>): JSX.Element => (
+  <>
+    {state.waiting ? (
+      <p className="m-4 text-sm text-muted-foreground" aria-live="polite">
+        Actualizando tablero…
+      </p>
+    ) : null}
+    {state._tag === "Ready" && Option.isSome(state.refreshFailure) ? (
+      <div className="m-4">
+        <CanonicalQueryRetry
+          description="Mostramos el último tablero disponible."
+          onRetry={onRefresh}
+          retryLabel="Reintentar actualización del tablero"
+          retryingLabel="Reintentando…"
+          title="No pudimos actualizar el tablero"
+          waiting={state.waiting}
+        />
+      </div>
+    ) : null}
+  </>
+);
+
+const CatalogQueryNotice = ({
+  onRefresh,
+  state,
+}: Readonly<{
+  onRefresh: () => void;
+  state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>>;
+}>): JSX.Element => {
+  const failed =
+    state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+  return (
+    <>
+      {state._tag === "Initial" && !state.waiting ? (
+        <p className="m-4 text-sm text-muted-foreground">
+          El catálogo del tablero aún no se ha solicitado.
+        </p>
+      ) : null}
+      {state.waiting ? (
+        <p className="m-4 text-sm text-muted-foreground" aria-live="polite">
+          Cargando catálogo del tablero…
+        </p>
+      ) : null}
+      {failed ? (
+        <Button
+          className="m-4"
+          disabled={state.waiting}
+          onClick={onRefresh}
+          type="button"
+          variant="outline"
+        >
+          {state.waiting ? "Reintentando catálogo…" : "Reintentar carga del catálogo"}
+        </Button>
+      ) : null}
+    </>
+  );
+};
+
+/** Renders independent query feedback without decomposing canonical states into illegal booleans. */
+const DashboardQueryNotices = ({
+  catalog,
+  dashboard,
+  onRefresh,
+  refreshCatalog,
+}: Readonly<{
+  catalog: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>>;
+  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>>;
+  onRefresh: () => void;
+  refreshCatalog: () => void;
+}>): JSX.Element => (
+  <>
+    <DashboardQueryNotice onRefresh={onRefresh} state={dashboard} />
+    <CatalogQueryNotice onRefresh={refreshCatalog} state={catalog} />
+  </>
+);
 
 /** Coordinates canonical Dashboard queries and edits while preserving the last successful canvas. */
 export const DashboardRouteContent = ({
@@ -116,24 +200,29 @@ export const DashboardRouteContent = ({
 }>): JSX.Element => {
   const [catalogAtom] = useState(() => apiClient.query("dashboard", "listDashboardCatalog", {}));
   const catalogResult = useAtomValue(catalogAtom);
+  const refreshCatalog = useAtomRefresh(catalogAtom);
   const { editError, onGesture, submitting } = useQueuedDashboardEdits(apiClient);
-  const displayedView = Option.map(AsyncResult.value(result), ({ data }) => data);
-  if (Option.isNone(displayedView)) return <DashboardRoutePresentation result={result} />;
+  const dashboardState = presentCanonicalQuery(result);
+  if (dashboardState._tag !== "Ready") {
+    return <DashboardRoutePresentation onRefresh={onRefresh} result={result} />;
+  }
 
-  const catalog = Option.getOrElse(
-    AsyncResult.value(catalogResult),
-    (): Readonly<{ data: readonly [] }> => ({ data: [] })
-  );
-  const stale = !AsyncResult.isSuccess(result);
-  const error = resolveEditorError(editError, AsyncResult.isFailure(catalogResult), stale);
+  const catalogState = presentCanonicalQuery(catalogResult);
+  const catalog = catalogState._tag === "Ready" ? catalogState.value : { data: [] };
+  const dashboardFailed = Option.isSome(dashboardState.refreshFailure);
+  const catalogFailed =
+    catalogState._tag === "Failure" ||
+    (catalogState._tag === "Ready" && Option.isSome(catalogState.refreshFailure));
+  const error = resolveEditorError(editError, catalogFailed, dashboardFailed);
 
   return (
     <>
-      {stale ? (
-        <Button className="m-4" onClick={onRefresh} type="button" variant="outline">
-          Reintentar actualización del tablero
-        </Button>
-      ) : null}
+      <DashboardQueryNotices
+        catalog={catalogState}
+        dashboard={dashboardState}
+        onRefresh={onRefresh}
+        refreshCatalog={refreshCatalog}
+      />
       <DashboardViewComponent
         editor={Option.some({
           catalog: catalog.data,
@@ -141,7 +230,7 @@ export const DashboardRouteContent = ({
           onGesture,
           submitting,
         })}
-        view={displayedView.value}
+        view={dashboardState.value.data}
       />
     </>
   );

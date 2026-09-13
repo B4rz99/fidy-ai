@@ -179,6 +179,17 @@ const makeRuntimeLayer = (
   );
 };
 
+type Disposable = Readonly<{ dispose: () => Promise<void> }>;
+
+/**
+ * Disposes test Cluster runtimes from a finalizer. A test that times out must not leave a runner
+ * behind, because its shard ownership would keep attracting Work away from later runtimes.
+ */
+const disposeRuntimes = (runtimes: ReadonlyArray<Disposable>): Effect.Effect<void> =>
+  Effect.promise(() => Promise.all(runtimes.map((runtime) => runtime.dispose()))).pipe(
+    Effect.asVoid
+  );
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster forwarded-email workflow",
   (it) => {
@@ -201,6 +212,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24611, provider }));
           const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24612, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtimeA, runtimeB]));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           yield* Effect.tryPromise(() =>
@@ -313,6 +325,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24620, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
@@ -356,6 +369,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24617, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -387,6 +401,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24619, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -422,6 +437,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24615, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
@@ -483,6 +499,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24616, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(

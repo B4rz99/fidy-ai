@@ -2479,7 +2479,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(retained).toContain("Listo, completé la operación solicitada.");
       expect(retained).not.toContain("privateVerifier");
       expect(retained).not.toContain("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    })
+    }).pipe(
+      // The live pairing is committed to the shared database, and the migration vector test inserts
+      // the same public code, so release it even when an assertion above fails mid-test.
+      Effect.ensuring(
+        Effect.flatMap(
+          MigrationSqlClient,
+          (sql) => sql`DELETE FROM browser_login_pairings WHERE public_code = 'BCDF-GHJK'`
+        ).pipe(Effect.orDie)
+      )
+    )
   );
 
   it.effect("lists and exactly confirms PAT revocation with provider-qualified evidence", () =>

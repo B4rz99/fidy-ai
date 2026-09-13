@@ -4,6 +4,7 @@ import { expect, layer } from "@effect/vitest";
 import {
   type Cause,
   Clock,
+  type Duration,
   Effect,
   Exit,
   Layer,
@@ -184,12 +185,13 @@ const ownedShardCount: Effect.Effect<number, never, Sharding.Sharding> = Effect.
 );
 
 const waitForCondition = <E, R>(
-  ready: Effect.Effect<boolean, E, R>
+  ready: Effect.Effect<boolean, E, R>,
+  timeout: Duration.Input = "15 seconds"
 ): Effect.Effect<void, E | Cause.TimeoutError, R> =>
   ready.pipe(
     Effect.repeat({ until: (value) => value, schedule: Schedule.spaced("50 millis") }),
     Effect.asVoid,
-    Effect.timeout("15 seconds")
+    Effect.timeout(timeout)
   );
 
 const maximumCrashRunnerOutputBytes = 16_384;
@@ -342,10 +344,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
           const second = makeRuntime(gracefulSecondPort, productionCadence);
           yield* Effect.addFinalizer(() => disposeRuntimes([first, second]));
           yield* startRuntimes([first, second]);
+          // Production assignment sync is a 3-second tick per phase, so allow several ticks: a
+          // loaded runner may stall one while its storage operations time out and retry.
           yield* waitForCondition(
             Effect.promise(() =>
               Promise.all([first.runPromise(ownedShardCount), second.runPromise(ownedShardCount)])
-            ).pipe(Effect.map(([firstOwned, secondOwned]) => firstOwned > 0 && secondOwned > 0))
+            ).pipe(Effect.map(([firstOwned, secondOwned]) => firstOwned > 0 && secondOwned > 0)),
+            "30 seconds"
           );
 
           // Preemptive shutdown releases every lock and unregisters, so no lease must expire.
@@ -353,7 +358,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
           yield* waitForCondition(
             Effect.promise(() => second.runPromise(ownedShardCount)).pipe(
               Effect.map((owned) => owned === shardCount)
-            )
+            ),
+            "30 seconds"
           );
           const firstAddress = `127.0.0.1:${gracefulFirstPort}`;
           const sql = yield* MigrationSqlClient;

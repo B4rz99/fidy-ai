@@ -1,0 +1,42 @@
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 24,168-169
+apps/server/src/shell/ingestion/forwarded-email-recovery.test.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 23,123,147-170
+apps/server/src/shell/agent/agent-service.ts
+  s_a3a9964bbe46a4::t_6feabf0243f6c3 1856-1859
+  s_a3a9964bbe46a4::t_9d1937eeb31060 21,25,51,1853-1854,1871,1873-1875
+apps/server/src/shell/ingestion/forwarded-email-workflow.test.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 2-5,8-11,26,28-61
+  s_a3a9964bbe46a4::t_ee0683ecff531e 27
+  s_a3a9964bbe46a4::t_23229373c08059 62-63
+apps/server/src/shell/_shared/rpc-client-failure.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 1-9,15-41,43,52-71
+  s_a3a9964bbe46a4::t_2329d7b925e2c2 42
+  s_a3a9964bbe46a4::t_0fc32a59cdda21 10,13
+  s_a3a9964bbe46a4::t_874501d5dfa745 11-12,14,44-51
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 12,17,28,32,36-40,85-131,309-322,394,415-432,864,970-985,1048,1051,1053-1186,1193,1196-1197,1200-1246
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  s_a3a9964bbe46a4::t_1f875c10551d1a 522
+  s_a3a9964bbe46a4::t_9d1937eeb31060 4,21-23,27-33,36,511-521,523-568,570-616,618,621-642,647-655,659,692-701
+apps/server/src/shell/ingestion/email-interpretation.integration.test.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 11,88-89,162-163
+apps/server/src/shell/observability/registry.ts
+  s_a3a9964bbe46a4::t_9d1937eeb31060 73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdd6e10fbe6781343d02451eca274eacd7cc13de",
+  "prompts": {},
+  "sessions": {
+    "s_a3a9964bbe46a4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-ac98-7784-b4fc-29aefe2f0a96",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

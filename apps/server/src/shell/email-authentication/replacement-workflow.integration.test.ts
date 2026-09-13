@@ -1,19 +1,24 @@
 import { expect, layer } from "@effect/vitest";
 import {
+  Cause,
   Crypto,
   DateTime,
   Deferred,
   Duration,
   Effect,
+  Exit,
   FileSystem,
   type Layer,
+  Logger,
   ManagedRuntime,
   Option,
   Path,
+  Redacted,
   Ref,
   Schedule,
   Schema,
 } from "effect";
+import { SqlError } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { EmailAddress } from "~/core/email-authentication/model";
 import { TokenBearer } from "~/core/tokens/model";
@@ -21,7 +26,8 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { ApiHarness } from "~/shell/testing/api-harness";
+import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import { ApiHarness, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import { requestEmailReplacement } from "./replacement-transition";
 import {
@@ -32,10 +38,12 @@ import {
   replacementDeliveryQueue,
   replacementExpiryQueue,
 } from "./replacement-protocol";
-import { removeExpiredReplacementExecutions } from "./replacement-retention";
+import { performReplacementAttempt } from "./replacement-delivery-worker";
+import { expireReplacement, removeExpiredReplacementExecutions } from "./replacement-retention";
 import {
   replacementDeliveryWorkflowLayer,
   replacementExpiryWorkflowLayer,
+  runReplacementQueueHandler,
 } from "./replacement-workflow";
 import { replacementRuntimeLayer as runtimeLayer } from "~/shell/testing/replacement-runtime";
 
@@ -167,6 +175,186 @@ const acquireRuntime = Effect.fn(function* (port: number, provider: EmailDeliver
   yield* Effect.tryPromise(() => runtime.runPromise(Effect.void));
   return runtime;
 });
+
+layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "Email Replacement queue boundary",
+  (it) => {
+    it.effect(
+      "stores only stable retry and defect markers without changing replacement state",
+      () =>
+        Effect.gen(function* () {
+          const candidateEmail = "replacement-queue-private@example.com";
+          const { delivery } = yield* admit(candidateEmail);
+          const sql = yield* MigrationSqlClient;
+          yield* sql`DELETE FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
+          const recorder = yield* EnvelopeRecorder;
+          yield* recorder.clear;
+          const forbidden = [
+            candidateEmail,
+            userId,
+            `seed-${userId}@fidyapp.com`,
+            "replacement-proof-private",
+            "replacement-provider-diagnostic",
+            "replacement-sql-detail",
+            "replacement-secret",
+          ];
+          const logs: Array<string> = [];
+          const logger = Logger.make((options) => logs.push(String(options.message)));
+          const secret = Redacted.make("replacement-secret");
+          const databaseFailure = SqlError.SqlError.make({
+            reason: SqlError.ConnectionError.make({
+              cause: Object.assign(new Error(forbidden.join(" ")), { secret }),
+              message: forbidden.join(" "),
+              operation: forbidden.join(" "),
+            }),
+          });
+          const queue = yield* replacementDeliveryQueue;
+
+          const transientExit = yield* Effect.exit(
+            queue.take(() => runReplacementQueueHandler(Effect.die(databaseFailure)))
+          ).pipe(Effect.withLogger(logger));
+          expect(Exit.isFailure(transientExit)).toBe(true);
+          const [transientState] = yield* sql`SELECT completed, attempts,
+            last_failure AS "lastFailure" FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
+          expect(transientState).toEqual({
+            completed: false,
+            attempts: 1,
+            lastFailure: 'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"transient"}',
+          });
+          expect(yield* recorder.serializedEnvelopes).toEqual([]);
+
+          const defectExit = yield* Effect.exit(
+            queue.take(() =>
+              runReplacementQueueHandler(
+                Effect.die(Object.assign(new Error(forbidden.join(" ")), { secret }))
+              )
+            )
+          ).pipe(Effect.withLogger(logger));
+          expect(Exit.isFailure(defectExit)).toBe(true);
+          const [defectState] = yield* sql`SELECT completed, attempts,
+            last_failure AS "lastFailure" FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
+          expect(defectState).toEqual({
+            completed: false,
+            attempts: 2,
+            lastFailure:
+              'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"unexpected-defect"}',
+          });
+          const envelopes = yield* recorder.serializedEnvelopes;
+          expect(envelopes).toHaveLength(1);
+          const observableText = [
+            defectState?.lastFailure,
+            ...logs,
+            ...envelopes.map((bytes) => new TextDecoder().decode(bytes)),
+          ].join("\n");
+          for (const value of forbidden) {
+            expect(observableText).not.toContain(value);
+          }
+          expect(
+            yield* sql`SELECT status FROM email_replacement_delivery_intents
+              WHERE id = ${delivery.intentId}`
+          ).toEqual([{ status: "pending" }]);
+        }),
+      30_000
+    );
+
+    it.effect("releases interrupted replacement work without consuming an attempt", () =>
+      Effect.gen(function* () {
+        const { delivery } = yield* admit("replacement-interrupted@example.com");
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
+        const queue = yield* replacementDeliveryQueue;
+
+        const exit = yield* Effect.exit(
+          queue.take(() => runReplacementQueueHandler(Effect.failCause(Cause.interrupt(42))))
+        );
+        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+        expect(
+          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`
+        ).toEqual([{ completed: false, attempts: 0, lastFailure: null }]);
+        expect(
+          yield* sql`SELECT status FROM email_replacement_delivery_intents
+            WHERE id = ${delivery.intentId}`
+        ).toEqual([{ status: "pending" }]);
+      })
+    );
+
+    it.effect("completes expired replacement work without retaining a queue failure", () =>
+      Effect.gen(function* () {
+        const { expiry } = yield* admit("replacement-expired-queue@example.com");
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'email-replacement-expiry' AND id <> ${expiry.workflowId}`;
+        yield* sql`UPDATE email_replacement_workflows
+          SET started_at = now() - interval '24 hours 1 second',
+            expires_at = now() - interval '1 second'
+          WHERE id = ${expiry.workflowId}`;
+
+        const queue = yield* replacementExpiryQueue;
+        yield* queue.take((payload) => runReplacementQueueHandler(expireReplacement(payload)));
+
+        expect(
+          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-expiry' AND id = ${expiry.workflowId}`
+        ).toEqual([{ completed: true, attempts: 1, lastFailure: null }]);
+        expect(
+          yield* sql`SELECT 1 FROM email_replacement_workflows WHERE id = ${expiry.workflowId}`
+        ).toEqual([]);
+      })
+    );
+
+    it.effect("completes a compatible historical payload for a superseded replacement", () =>
+      Effect.gen(function* () {
+        const { delivery } = yield* admit("replacement-superseded@example.com");
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
+        yield* sql`UPDATE email_replacement_delivery_intents SET status = 'superseded'
+          WHERE id = ${delivery.intentId}`;
+        const historicalPayload = yield* Schema.encodeEffect(
+          Schema.fromJsonString(
+            Schema.Struct({
+              intentId: ReplacementDeliveryPayload.fields.intentId,
+              userId: ReplacementDeliveryPayload.fields.userId,
+            })
+          )
+        )({ intentId: delivery.intentId, userId: delivery.userId });
+        yield* sql`UPDATE fidy_durable.fidy_queue SET element = ${historicalPayload}
+          WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
+
+        const queue = yield* replacementDeliveryQueue;
+        yield* queue.take((payload) =>
+          runReplacementQueueHandler(
+            performReplacementAttempt(payload, 1).pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({
+                  send: () => Effect.die("superseded replacement cannot send"),
+                })
+              )
+            )
+          )
+        );
+
+        expect(
+          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`
+        ).toEqual([{ completed: true, attempts: 1, lastFailure: null }]);
+        expect(
+          yield* sql`SELECT 1 FROM email_replacement_delivery_attempts
+            WHERE intent_id = ${delivery.intentId}`
+        ).toEqual([]);
+      })
+    );
+  }
+);
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster replacement delivery",

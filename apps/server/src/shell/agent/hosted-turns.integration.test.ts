@@ -2,11 +2,13 @@ import { expect, layer } from "@effect/vitest";
 import { UnknownJsonString } from "~/schema-compatibility";
 import {
   type Cause,
+  Context,
   Crypto,
   DateTime,
   Deferred,
   type Duration,
   Effect,
+  type Array as EffectArray,
   Fiber,
   Layer,
   ManagedRuntime,
@@ -16,15 +18,25 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
-import { HttpClient } from "effect/unstable/http";
+import { EntityId, RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  type HttpClientError,
+  type HttpClientResponse,
+} from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  authenticatedClusterHttp,
+  maximumClusterMessageBufferBytes,
+} from "~/shell/authenticated-cluster-http";
+import { type ClusterRunnerHttpPolicy, clusterRunnerPath } from "~/shell/cluster-runner-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
   defaultUserId,
@@ -33,6 +45,7 @@ import {
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
@@ -106,13 +119,16 @@ const inference = (execute: (text: string) => Effect.Effect<void>): HostedInfere
     },
     structured: { prepare: () => Effect.die("Unexpected Compaction in bounded Turn fixture") },
   });
-const runtimeLayer = (input: {
-  port: number;
-  crypto: Crypto.Crypto;
-  http: HttpClient.HttpClient;
-  generate: (text: string) => Effect.Effect<void>;
-  deliver: (text: string) => Effect.Effect<void>;
-}): Layer.Layer<
+const runtimeLayer = (
+  input: {
+    port: number;
+    crypto: Crypto.Crypto;
+    http: HttpClient.HttpClient;
+    generate: (text: string) => Effect.Effect<void>;
+    deliver: (text: string) => Effect.Effect<void>;
+  },
+  policy: ClusterRunnerHttpPolicy = loopbackClusterRunnerHttpPolicy([input.port])
+): Layer.Layer<
   | AgentService
   | PersistedQueue.PersistedQueueFactory
   | Layer.Success<typeof PgLive>
@@ -121,21 +137,25 @@ const runtimeLayer = (input: {
 > => {
   const agentRuntime = AgentService.layer.pipe(
     Layer.provideMerge(
-      authenticatedClusterHttp.layerSql(token, {
-        runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-        runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-        availableShardGroups: ["default"],
-        assignedShardGroups: ["default"],
-        shardsPerGroup: testShardCount,
-        entityMessagePollInterval: 50,
-        sendRetryInterval: 50,
-        shardLockDisableAdvisory: true,
-        shardLockRefreshInterval: 500,
-        entityTerminationTimeout: 1000,
-        shardLockExpiration: 3000,
-        runnerHealthCheckInterval: 250,
-        refreshAssignmentsInterval: 100,
-      })
+      authenticatedClusterHttp.layerSql(
+        token,
+        {
+          runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+          runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
+          availableShardGroups: ["default"],
+          assignedShardGroups: ["default"],
+          shardsPerGroup: testShardCount,
+          entityMessagePollInterval: 50,
+          sendRetryInterval: 50,
+          shardLockDisableAdvisory: true,
+          shardLockRefreshInterval: 500,
+          entityTerminationTimeout: 1000,
+          shardLockExpiration: 3000,
+          runnerHealthCheckInterval: 250,
+          refreshAssignmentsInterval: 100,
+        },
+        policy
+      )
     ),
     Layer.provide(
       WhatsAppReplyDeliveryLive.pipe(
@@ -222,6 +242,41 @@ const disposeRuntimes = (
     Effect.asVoid
   );
 
+const runnerIngressPort = 24667;
+
+/** Raw wire client: the ingress guard must hold before any RPC decoding, without an RPC adapter. */
+type RunnerIngressRequest = Readonly<{
+  readonly path: string;
+  readonly authorization: Option.Option<string>;
+  readonly body: Option.Option<Uint8Array>;
+}>;
+
+const runnerIngressResponse = (
+  client: HttpClient.HttpClient,
+  request: RunnerIngressRequest
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
+  client.post(`http://127.0.0.1:${runnerIngressPort}${request.path}`, {
+    headers: Option.match(request.authorization, {
+      onNone: () => undefined,
+      onSome: (authorization) => ({ authorization }),
+    }),
+    body: Option.match(request.body, {
+      onNone: () => undefined,
+      onSome: (body) => HttpBody.uint8Array(body, "application/msgpack"),
+    }),
+  });
+
+const runnerIngressStatus = (
+  client: HttpClient.HttpClient,
+  path: string,
+  authorization?: string
+): Effect.Effect<number, HttpClientError.HttpClientError> =>
+  runnerIngressResponse(client, {
+    path,
+    authorization: Option.fromUndefinedOr(authorization),
+    body: Option.none(),
+  }).pipe(Effect.map((response) => response.status));
+
 /**
  * Waits until an operation reaches the named test barrier. A caller that finishes first means the
  * scenario never blocked, which is a broken test rather than a passing one.
@@ -275,11 +330,17 @@ type HostedRuntimeSpec = Readonly<{
  * shards, and disposes every runtime when the enclosing test scope closes. Returns each runtime
  * with its generated HostedTurns client, in spec order.
  */
-const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRuntimeSpec>) {
+const startHostedRuntimes = Effect.fn(function* (
+  specs: EffectArray.NonEmptyArray<HostedRuntimeSpec>,
+  policy: ClusterRunnerHttpPolicy = loopbackClusterRunnerHttpPolicy([
+    specs[0].port,
+    ...specs.slice(1).map((spec) => spec.port),
+  ])
+) {
   const crypto = yield* Crypto.Crypto;
   const http = yield* HttpClient.HttpClient;
   const runtimes = specs.map((spec) =>
-    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
+    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }, policy))
   );
   yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
   yield* Effect.forEach(
@@ -885,6 +946,117 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(
             yield* sql`SELECT content FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
           ).toEqual([{ content: null }]);
+        })
+    );
+
+    it.effect(
+      "keeps a hosted Work exchange over the private runner listener beyond the health deadline",
+      () =>
+        Effect.gen(function* () {
+          yield* reset;
+          yield* seedDevelopmentIdentity(defaultPatBearer);
+          const modelEntered = yield* Deferred.make<void>();
+          const modelRelease = yield* Deferred.make<void>();
+          const generated = yield* Ref.make<ReadonlyArray<string>>([]);
+          const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
+          const recordGenerated = (text: string): Effect.Effect<void> =>
+            Ref.update(generated, (items) => [...items, text]);
+          const generate = gatedRecorder(recordGenerated, "held-remote", {
+            entered: modelEntered,
+            release: modelRelease,
+          });
+          const deliver = (text: string): Effect.Effect<void> =>
+            Ref.update(delivered, (items) => [...items, text]);
+          // Only the health bound is shortened: a hosted Work exchange must not inherit it.
+          const policy: ClusterRunnerHttpPolicy = {
+            ...loopbackClusterRunnerHttpPolicy([24665, 24666]),
+            healthDeadline: "2 seconds",
+          };
+          const started = yield* startHostedRuntimes(
+            [
+              { port: 24665, generate, deliver },
+              { port: 24666, generate, deliver },
+            ],
+            policy
+          );
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
+          const [first] = yield* Effect.promise(() =>
+            Promise.all([
+              firstRuntime.runPromise(Sharding.Sharding),
+              secondRuntime.runPromise(Sharding.Sharding),
+            ])
+          );
+          // Dial from the runtime that does not own the entity, so the immediate Turn crosses the
+          // private runner listener instead of staying local.
+          const shard = first.getShardId(EntityId.make(defaultUserId), "default");
+          const caller = first.hasShardId(shard) ? secondRuntime : firstRuntime;
+          const call = caller.runFork(handle(defaultUserId, "held-remote"));
+          yield* awaitBarrier("model barrier", modelEntered, call);
+          yield* Effect.sleep("3100 millis");
+          yield* Deferred.succeed(modelRelease, undefined);
+          yield* Fiber.join(call);
+          expect(yield* Ref.get(generated)).toEqual(["held-remote"]);
+          expect(yield* Ref.get(delivered)).toEqual(["held-remote"]);
+          expect(yield* states(defaultUserId)).toEqual([{ state: "Completed" }]);
+        })
+    );
+
+    it.effect(
+      "refuses unauthenticated aliases and oversized frames at the real runner listener",
+      () =>
+        Effect.gen(function* () {
+          const modelCalls = yield* Ref.make(0);
+          yield* startHostedRuntime({
+            port: runnerIngressPort,
+            generate: () => Ref.update(modelCalls, (count) => count + 1),
+            deliver: () => Effect.void,
+          });
+          // The harness HttpClient is in-process; the ingress guard lives on a real socket.
+          const runnerHttpClient = yield* Effect.map(
+            Layer.build(FetchHttpClient.layer),
+            (context) => Context.get(context, HttpClient.HttpClient)
+          );
+          const listener = runnerIngressStatus(runnerHttpClient, clusterRunnerPath).pipe(
+            Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 40 })
+          );
+          expect(yield* listener).toBe(401);
+
+          // HttpRouter matches these aliases on the runner route, so the guard must wrap the route
+          // handler itself rather than compare the request path.
+          const aliases = [
+            "//_fidy//cluster",
+            "/_fidy/cluster/",
+            "/_FIDY/CLUSTER",
+            "/%5Ffidy/cluster",
+          ];
+          for (const path of aliases) {
+            expect(yield* runnerIngressStatus(runnerHttpClient, path)).toBe(401);
+          }
+          expect(
+            yield* runnerIngressStatus(
+              runnerHttpClient,
+              clusterRunnerPath,
+              `Bearer ${"b".repeat(64)}`
+            )
+          ).toBe(401);
+          const credential = `Bearer ${"a".repeat(64)}`;
+          expect(
+            yield* runnerIngressStatus(runnerHttpClient, clusterRunnerPath, credential)
+          ).not.toBe(401);
+
+          const oversizedFrame = new Uint8Array(maximumClusterMessageBufferBytes + 1);
+          oversizedFrame.set([0xdd, 0xff, 0xff, 0xff, 0xff]);
+          const oversizedResponse = yield* runnerIngressResponse(runnerHttpClient, {
+            path: clusterRunnerPath,
+            authorization: Option.some(credential),
+            body: Option.some(oversizedFrame),
+          });
+          expect(oversizedResponse.status).toBe(200);
+          expect(new Uint8Array(yield* oversizedResponse.arrayBuffer).byteLength).toBeGreaterThan(
+            0
+          );
+          expect(yield* Ref.get(modelCalls)).toBe(0);
         })
     );
   }

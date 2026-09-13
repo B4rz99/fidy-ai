@@ -1,0 +1,50 @@
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_fda4b0d9a6ada5::t_7e64066d1553fb 32,48
+  s_fda4b0d9a6ada5::t_bb913e44305851 780-785,791
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_fda4b0d9a6ada5::t_e8b5d945021a0e 318,341-345,357
+  s_fda4b0d9a6ada5::t_8a86db68d029e2 1-2,13-16,319-320,328-331,334-340,349-355,360-362,364-365,370-372,375,378-380,392-393,395,407,409,412,414-416,418-421
+  s_fda4b0d9a6ada5::t_5a0028dd2dfdad 346-348,356,358-359,363,366-369,373,376-377
+  s_fda4b0d9a6ada5::t_aa3511573a23f7 321-327,332-333
+  s_fda4b0d9a6ada5::t_dcbad761924633 6,374
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_fda4b0d9a6ada5::t_a8e4939f85b444 16,293
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_fda4b0d9a6ada5::t_1f236530c8462a 626-705,712-723,792
+  s_fda4b0d9a6ada5::t_863c0905508e79 40-45,624-625,724-732,734-742,744-749,755-756,760-773,776-779,782-785,788-791
+  s_fda4b0d9a6ada5::t_e510f4dca827b3 750-754
+  s_fda4b0d9a6ada5::t_88c661feaea137 609
+  s_fda4b0d9a6ada5::t_d72d20be33bd8a 21-26,774-775,780-781,786-787
+  s_fda4b0d9a6ada5::t_439389af4cb631 9
+  s_fda4b0d9a6ada5::t_bb9bad37f896c8 3,8,31-34,101-105,571-608,610-623
+  s_fda4b0d9a6ada5::t_e8b5d945021a0e 706-711,733,743
+  s_fda4b0d9a6ada5::t_c399ccbf39c040 65,94-99
+  s_fda4b0d9a6ada5::t_f0204a7f0b2fad 30,757-759
+  s_7197d5d6d0f777::t_6fe3f6e6a7ec42 793
+apps/server/src/shell/observability/registry.ts
+  s_fda4b0d9a6ada5::t_85086eeffc999b 84-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f7338ffe47c9dcf87d436266234dc89e1865feeb",
+  "prompts": {},
+  "sessions": {
+    "s_7197d5d6d0f777": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c00-1765-7527-8801-2f6d1791cb9c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fda4b0d9a6ada5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-d59d-760e-b69f-193c769efdd6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

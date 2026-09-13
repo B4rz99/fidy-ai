@@ -177,6 +177,25 @@ const collectBoundedBytes = Effect.fn(function* (
   return bytes;
 });
 
+const boundedWebResponse = (
+  body: Uint8Array,
+  status: number,
+  headers: Headers.Headers
+): Response => {
+  const response = new Response(body, { status, headers });
+  // Expose the exact bounded bytes as an ArrayBuffer from the active browser realm. Besides
+  // avoiding another implementation-defined body conversion, this keeps jsdom's realm check
+  // equivalent to a real browser response.
+  if (typeof window !== "undefined") {
+    const realmBody = new window.Uint8Array(body.byteLength);
+    realmBody.set(body);
+    Object.defineProperty(response, "arrayBuffer", {
+      value: () => Promise.resolve(realmBody.buffer),
+    });
+  }
+  return response;
+};
+
 const materializeResponse = (
   request: HttpClientRequest.HttpClientRequest,
   response: HttpClientResponse.HttpClientResponse,
@@ -192,10 +211,7 @@ const materializeResponse = (
     Effect.map((body) =>
       HttpClientResponse.fromWeb(
         diagnosticsRequest(request),
-        new Response(body, {
-          status: response.status,
-          headers: projectResponseHeaders(response),
-        })
+        boundedWebResponse(body, response.status, projectResponseHeaders(response))
       )
     ),
     Effect.mapError(sanitizeHttpClientError)

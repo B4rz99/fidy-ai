@@ -1,0 +1,50 @@
+apps/server/src/shell/observability/protocol.ts
+  s_7197d5d6d0f777::t_fce801325855d7 82
+apps/server/src/shell/observability/registry.ts
+  s_7197d5d6d0f777::t_4895cb409fc836 62
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_7197d5d6d0f777::t_c914e8bcde9552 1056-1063,1081,1096-1103
+  s_7197d5d6d0f777::t_2148d29388d702 1106-1110
+  s_7197d5d6d0f777::t_1487cb9c0892f3 1024,1032-1037,1052-1053
+  s_7197d5d6d0f777::t_98bd1d10189fc6 950
+  s_7197d5d6d0f777::t_cea826544b1200 32,36,878-889,893-910,918-939,942-949,951-956,959-960,962-977,991-1017,1019,1021-1023,1027-1028,1030-1031,1038-1046,1048-1049,1051,1054-1055,1064-1080,1083-1087,1091-1095,1104-1105
+  s_7197d5d6d0f777::t_f9e09ab9427550 981
+  s_7197d5d6d0f777::t_982a1d4465d754 113-115
+  s_7197d5d6d0f777::t_013189a6d01e43 4-16,1025-1026,1029,1047
+  s_7197d5d6d0f777::t_4b41e5f13d6736 940-941,957-958,961,978-980,982-990,1018,1020
+  s_7197d5d6d0f777::t_0993b94f2c4ada 35,1050,1082,1088-1090
+  s_7197d5d6d0f777::t_1dde5c7c1f9998 890-892,911-917
+apps/server/src/shell/agent/agent-service.ts
+  s_7197d5d6d0f777::t_306eaf6f50b00e 2110
+apps/server/src/shell/observability/projectors.ts
+  s_7197d5d6d0f777::t_4efef1fbeb6558 283-286
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  s_7197d5d6d0f777::t_4944948515f224 10,67,69-72,74,78-79,81-83,86-88,90-101,124,223-227
+  s_7197d5d6d0f777::t_eb9e7a0de8969b 103-104,113-119,220-221,292-294
+  s_7197d5d6d0f777::t_e57480f622b972 17
+  s_7197d5d6d0f777::t_7a4c5c046650ec 18,68,73,84-85,106-112,120,122-123
+  s_7197d5d6d0f777::t_9fafa91ff15ddf 80,121
+  s_7197d5d6d0f777::t_24114e976e4540 75-76
+  s_7197d5d6d0f777::t_0993b94f2c4ada 77,89
+  s_7197d5d6d0f777::t_36a6548cd1724b 1,13-16,102,105
+apps/server/src/shell/channels/whatsapp/routes.ts
+  s_7197d5d6d0f777::t_310ba13184e217 164
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_7197d5d6d0f777::t_7df6cdadf74cde 371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0d86d23e971989e2b21247c61a1d1c200ee47cf0",
+  "prompts": {},
+  "sessions": {
+    "s_7197d5d6d0f777": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c00-1765-7527-8801-2f6d1791cb9c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,16 @@
+apps/server/src/shell/durable-queue-health.ts
+  h_c6d49c804e0ad2 293-307,311-316
+apps/server/src/shell/durable-queue-policy.ts
+  h_c6d49c804e0ad2 30,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b85af7facfe41a266f81edb10c68b4afc3b4e63b",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 171-176,180-182
+  h_c6d49c804e0ad2 45-49
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,11,21-35,41-42,53-128,131-135,137-152,174-175,180-190
+  h_c6d49c804e0ad2 6-9,36-40,43-52
+apps/server/src/shell/_shared/projected-http-client-error.ts
+  h_c6d49c804e0ad2 1-121
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 10,12,15-19,60-79
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 35,147-165
+apps/server/src/shell/_shared/protected-http-client.ts
+  h_c6d49c804e0ad2 1-49
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,289-304
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,7,25-32,39-41,46,50-58,66-69,77-81,83-85,98-111,121-122,128-131,134-137,144,151-152
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 2-8,10-23,25-184,190-191,193,195,197,200,202-203,207-208,210-211,213-214,218-219,221,228-230,238-241,243-330,332-570,573-587
+  h_c6d49c804e0ad2 1,9,24,185-189,192,194,196,198-199,201,204-206,209,212,215-217,220,222-227,231-237,242,331,571-572
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-272
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16-17,45,85-95,150-153,173,183-186,192,276
+apps/server/src/shell/_shared/hosted-turn-bounds.ts
+  h_c6d49c804e0ad2 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7bc2db45550a34cad359e8636846e0d540bd40c8",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

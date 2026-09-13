@@ -188,6 +188,35 @@ describe("browser HTTP policy", () => {
     })
   );
 
+  it.effect("refuses invalid destinations before invoking the browser transport", () =>
+    Effect.gen(function* () {
+      let executions = 0;
+      const httpClient = makeHttpClient((request) => {
+        executions++;
+        return Effect.succeed(responseJson(request, { ok: true }));
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        "web-auth"
+      );
+
+      const exit = yield* client.get("not a URL").pipe(Effect.exit);
+
+      expect(executions).toBe(0);
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: HttpClientRequest.make("GET")("https://browser-api.invalid"),
+              description: "request destination invalid",
+            }),
+          })
+        )
+      );
+    })
+  );
+
   it.effect("refuses redirect responses without following their destination", () =>
     Effect.gen(function* () {
       let executions = 0;
@@ -265,6 +294,48 @@ describe("browser HTTP policy", () => {
     })
   );
 
+  it.effect("rejects a declared response length above the boundary byte cap", () =>
+    Effect.gen(function* () {
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("{}", {
+              headers: {
+                "content-length": String(64 * 1024 + 1),
+                "content-type": "application/json",
+              },
+            })
+          )
+        )
+      );
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        "web-auth"
+      );
+
+      const exit = yield* client.get("https://api.test.fidyapp.com/large").pipe(Effect.exit);
+
+      const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.DecodeError({
+              request: diagnosticRequest,
+              response: HttpClientResponse.fromWeb(
+                diagnosticRequest,
+                new Response(null, {
+                  headers: { "content-type": "application/json" },
+                })
+              ),
+            }),
+          })
+        )
+      );
+    })
+  );
+
   it.effect("keeps credentials out of transport failure diagnostics", () =>
     Effect.gen(function* () {
       const secret = "secret-proof-value";
@@ -302,6 +373,35 @@ describe("browser HTTP policy", () => {
     })
   );
 
+  it.effect("sanitizes request encoding failures from the underlying transport", () =>
+    Effect.gen(function* () {
+      const httpClient = makeHttpClient((request) =>
+        Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.EncodeError({
+              request,
+              cause: new Error("sensitive encoder detail"),
+            }),
+          })
+        )
+      );
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
+
+      const exit = yield* client.post("https://api.test.fidyapp.com/write").pipe(Effect.exit);
+
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.EncodeError({
+              request: HttpClientRequest.make("POST")("https://browser-api.invalid"),
+            }),
+          })
+        )
+      );
+    })
+  );
+
   it.effect("retries one transport failure only for safe request methods", () =>
     Effect.gen(function* () {
       const executions: Array<string> = [];
@@ -316,9 +416,10 @@ describe("browser HTTP policy", () => {
       const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
 
       yield* client.get("https://api.test.fidyapp.com/read").pipe(Effect.exit);
+      yield* client.head("https://api.test.fidyapp.com/read-metadata").pipe(Effect.exit);
       yield* client.post("https://api.test.fidyapp.com/write").pipe(Effect.exit);
 
-      expect(executions).toEqual(["GET", "GET", "POST"]);
+      expect(executions).toEqual(["GET", "GET", "HEAD", "HEAD", "POST"]);
     })
   );
 

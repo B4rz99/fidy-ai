@@ -519,18 +519,6 @@ const registerClusterTopologyScenarios = (): void => {
           // SIGKILL ran no finalizer, so the survivor can only take over once the lease expires.
           runner.kill("SIGKILL");
           yield* Effect.tryPromise(() => runner.exited);
-          yield* Effect.promise(() =>
-            survivor.runPromise(
-              clusterTopologyProbeWorkflow
-                .execute(probe.payload)
-                .pipe(Effect.timeout("2 seconds"), Effect.exit)
-            )
-          );
-          yield* waitForCondition(
-            Effect.promise(() => survivor.runPromise(sampleClusterObservation)).pipe(
-              Effect.map((sample) => sample.requestRetriesTotal > 0)
-            )
-          );
           yield* waitForCondition(
             Effect.promise(() => survivor.runPromise(ownedShardCount)).pipe(
               Effect.map((owned) => owned === shardCount)

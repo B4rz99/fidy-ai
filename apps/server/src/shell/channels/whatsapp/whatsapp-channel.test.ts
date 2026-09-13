@@ -35,9 +35,11 @@ import { HostedInference } from "~/shell/agent/hosted-inference";
 import {
   AgentReply,
   AgentService,
-  durableTransportRetryCause,
-  settleDurableWhatsAppExchange,
+  HostedTurnProtocolFailed,
+  HostedTurnUnavailable,
+  classifyDurableWhatsAppExchange,
 } from "~/shell/agent/agent-service";
+import { PersistedQueueHandlerFailure } from "~/shell/_shared/persisted-queue-handler";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
@@ -1166,24 +1168,22 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const services = yield* Layer.build(telemetryEnvelopeRecording());
         const telemetry = Context.get(services, Telemetry);
 
-        // The raw transport failure never becomes the handler's cause: the persisted queue stores
-        // `Cause.pretty`, so only the stable retry signal may be re-raised, and the burst stays
-        // pending for the queue's bounded retry.
-        const transport = RpcClientError.RpcClientError.make({
-          reason: HttpClientError.HttpClientErrorSchema.make({
-            _tag: "HttpError",
-            kind: "TransportError",
-          }),
+        // The raw transport classification stays typed until the public queue worker maps it to
+        // the shared redacted retry marker, and the burst stays pending for bounded retry.
+        const transportCause = HttpClientError.HttpClientErrorSchema.make({
+          _tag: "HttpError",
+          kind: "TransportError",
         });
+        const transport = RpcClientError.RpcClientError.make({ reason: transportCause });
+        const exit = yield* Effect.exit(
+          classifyDurableWhatsAppExchange({
+            telemetry,
+            exchange: Exit.fail(transport),
+          })
+        );
         assert.deepStrictEqual(
-          yield* Effect.exit(
-            settleDurableWhatsAppExchange({
-              telemetry,
-              work: { userId: defaultUserId, inboundJobId: job.id },
-              exchange: Exit.fail(transport),
-            })
-          ),
-          Exit.die(durableTransportRetryCause)
+          exit,
+          Exit.fail(new HostedTurnUnavailable({ cause: transportCause }))
         );
         expect(
           yield* admin`SELECT content, terminal_outcome AS "terminalOutcome"
@@ -1211,9 +1211,8 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         // Interruption is neither a transient retry nor a terminal failure: it propagates and
         // leaves the burst for the persisted queue to requeue without an attempt increment.
         const exit = yield* Effect.exit(
-          settleDurableWhatsAppExchange({
+          classifyDurableWhatsAppExchange({
             telemetry,
-            work: { userId: defaultUserId, inboundJobId: job.id },
             exchange: Exit.interrupt(),
           })
         );
@@ -1230,7 +1229,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     );
 
     it.effect(
-      "retires malformed and undeclared durable exchanges with metadata-only evidence",
+      "leaves malformed and undeclared durable exchanges for the queue worker boundary",
       () =>
         Effect.gen(function* () {
           yield* seedDevelopmentIdentity(defaultPatBearer);
@@ -1265,43 +1264,55 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               cause: new Error("undeclared response"),
             }),
           });
-          yield* settleDurableWhatsAppExchange({
-            telemetry,
-            work: { userId: defaultUserId, inboundJobId: malformedJob.id },
-            exchange: Exit.fail(malformed),
-          });
-          yield* settleDurableWhatsAppExchange({
-            telemetry,
-            work: { userId: defaultUserId, inboundJobId: undeclaredJob.id },
-            exchange: Exit.die(new Error("unexpected client defect")),
-          });
+          const malformedExit = yield* Effect.exit(
+            classifyDurableWhatsAppExchange({
+              telemetry,
+              exchange: Exit.fail(malformed),
+            })
+          );
+          const clientDefect = new Error("unexpected client defect");
+          const defectExit = yield* Effect.exit(
+            classifyDurableWhatsAppExchange({
+              telemetry,
+              exchange: Exit.die(clientDefect),
+            })
+          );
 
+          const compositeDefect = new Error("unexpected composite defect");
+          const compositeExit = yield* Effect.exit(
+            classifyDurableWhatsAppExchange({
+              telemetry,
+              exchange: Exit.failCause(
+                Cause.fromReasons([
+                  ...Cause.fail(malformed).reasons,
+                  ...Cause.die(compositeDefect).reasons,
+                ])
+              ),
+            })
+          );
+
+          assert.deepStrictEqual(
+            malformedExit,
+            Exit.fail(new HostedTurnProtocolFailed({ cause: malformed }))
+          );
+          assert.deepStrictEqual(defectExit, Exit.die(clientDefect));
+          assert.deepStrictEqual(compositeExit, Exit.die(compositeDefect));
           expect(
             yield* admin`SELECT content, terminal_outcome AS "terminalOutcome"
-            FROM whatsapp_inbound_jobs ORDER BY id`
+            FROM whatsapp_inbound_jobs ORDER BY content`
           ).toEqual([
-            { content: null, terminalOutcome: "ambiguous_crash" },
-            { content: null, terminalOutcome: "ambiguous_crash" },
+            { content: "dos", terminalOutcome: null },
+            { content: "uno", terminalOutcome: null },
           ]);
-          const tags = errorEnvelopePayloads(
-            yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes
-          ).map(({ tags }) => tags);
-          expect(tags).toContainEqual({
-            component: "agent",
-            operation: "agent.hostedTurn",
-            error: "invalid_runtime_response",
-            retryable: "false",
-          });
-          expect(tags).toContainEqual({
-            component: "agent",
-            operation: "agent.hostedTurn",
-            error: "unexpected_defect",
-            retryable: "false",
-          });
+          expect(
+            errorEnvelopePayloads(
+              yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes
+            )
+          ).toEqual([]);
         })
     );
 
-    it.effect("retires an undeclared typed durable exchange without exchanging again", () =>
+    it.effect("leaves an undeclared typed durable exchange as a defect for the worker", () =>
       Effect.gen(function* () {
         yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
@@ -1317,27 +1328,24 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const services = yield* Layer.build(telemetryEnvelopeRecording());
         const telemetry = Context.get(services, Telemetry);
 
-        // A typed failure outside the declared client taxonomy is an invariant, not a transient
-        // condition: the settlement records the fixed category and terminally retires the burst.
-        yield* settleDurableWhatsAppExchange({
-          telemetry,
-          work: { userId: defaultUserId, inboundJobId: job.id },
-          exchange: Exit.fail(new UndeclaredDurableFailure()),
-        });
+        // A typed failure outside the declared client taxonomy remains a defect for the shared
+        // worker boundary to observe and redact before PersistedQueue can render it.
+        const undeclared = new UndeclaredDurableFailure();
+        const exit = yield* Effect.exit(
+          classifyDurableWhatsAppExchange({
+            telemetry,
+            exchange: Exit.fail(undeclared),
+          })
+        );
 
+        assert.deepStrictEqual(exit, Exit.die(undeclared));
         expect(
           yield* admin`SELECT content, terminal_outcome AS "terminalOutcome"
             FROM whatsapp_inbound_jobs`
-        ).toEqual([{ content: null, terminalOutcome: "ambiguous_crash" }]);
-        const tags = errorEnvelopePayloads(
-          yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes
-        ).map(({ tags }) => tags);
-        expect(tags).toContainEqual({
-          component: "agent",
-          operation: "agent.hostedTurn",
-          error: "unexpected_defect",
-          retryable: "false",
-        });
+        ).toEqual([{ content: "privado", terminalOutcome: null }]);
+        expect(
+          errorEnvelopePayloads(yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes)
+        ).toEqual([]);
       })
     );
 
@@ -1696,7 +1704,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
           Effect.flatMap((attempt) =>
             attempt === 1
-              ? Effect.die(durableTransportRetryCause)
+              ? Effect.fail(PersistedQueueHandlerFailure.make({ reason: "transient" }))
               : Deferred.succeed(resumed, undefined).pipe(Effect.andThen(Effect.never))
           )
         );

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import { UnknownJsonString } from "~/schema-compatibility";
 import {
@@ -7,6 +8,7 @@ import {
   Deferred,
   type Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   ManagedRuntime,
@@ -42,12 +44,14 @@ import {
 } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import {
   type AgentReply,
   AgentService,
   type AgentTurnError,
   CurrentAgentLimits,
   InboundMessage,
+  WhatsAppInboundRoutingRejected,
 } from "./agent-service";
 import { HostedTurns } from "./hosted-turns";
 import { HostedInference, type HostedTextContext, makeHostedInference } from "./hosted-inference";
@@ -121,6 +125,7 @@ const runtimeLayer = (input: {
 }): Layer.Layer<
   | AgentService
   | PersistedQueue.PersistedQueueFactory
+  | Telemetry
   | Layer.Success<typeof PgLive>
   | Layer.Success<ReturnType<typeof authenticatedClusterHttp.layerSql>>,
   Layer.Error<typeof PgLive> | Layer.Error<ReturnType<typeof authenticatedClusterHttp.layerSql>>
@@ -175,7 +180,10 @@ const runtimeLayer = (input: {
     Layer.provideMerge(PgLive),
     Layer.provide(TestPublicNamespace)
   );
-  return SqlWhatsAppQueueLive.pipe(Layer.provideMerge(agentRuntime));
+  return SqlWhatsAppQueueLive.pipe(
+    Layer.provideMerge(agentRuntime),
+    Layer.provideMerge(TelemetryDisabled)
+  );
 };
 /** One poll policy: how long to keep observing, and how often to recheck. */
 type WaitPolicy = Readonly<{
@@ -573,8 +581,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const sql = yield* MigrationSqlClient;
           const before =
             yield* sql`SELECT * FROM whatsapp_inbound_jobs WHERE id = ${work.inboundJobId}`;
-          yield* Effect.promise(() =>
-            runtime.runPromise(agent.handleWhatsAppWork({ ...work, userId: otherUserId }))
+          assert.deepStrictEqual(
+            yield* Effect.promise(() =>
+              runtime.runPromise(
+                Effect.exit(agent.handleWhatsAppWork({ ...work, userId: otherUserId }))
+              )
+            ),
+            Exit.fail(new WhatsAppInboundRoutingRejected())
           );
           expect(
             yield* sql`SELECT * FROM whatsapp_inbound_jobs WHERE id = ${work.inboundJobId}`

@@ -1,0 +1,19 @@
+apps/server/src/shell/channels/whatsapp/worker.integration.test.ts
+  s_4a59a79f7ab288::t_ca2f77d5e17130 19,96-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a625baf0c0be90e3ff05eb209e4fb24ef2815293",
+  "prompts": {},
+  "sessions": {
+    "s_4a59a79f7ab288": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-7a2d-73ee-9b5f-1ce5a24da025",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

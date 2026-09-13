@@ -282,8 +282,10 @@ const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRunt
     ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
   );
   yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
-  yield* Effect.promise(() =>
-    Promise.all(runtimes.map((runtime) => runtime.runPromise(Effect.void)))
+  yield* Effect.forEach(
+    runtimes,
+    (runtime) => Effect.promise(() => runtime.runPromise(Effect.void)),
+    { concurrency: 1, discard: true }
   );
   yield* waitForAssignments(
     yield* Effect.promise(() =>

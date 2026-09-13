@@ -22,6 +22,7 @@ import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { emailCredentialLookupKey } from "./admission";
 import { BrowserPairingEmailWorkflowLive } from "./authentication-delivery-worker";
 import { processBrowserPairingEmailStartRequest } from "./browser-pairing-authentication";
@@ -87,19 +88,23 @@ const admit = Effect.fn(function* () {
 
 const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPortService) {
   const crypto = yield* Crypto.Crypto;
-  const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
-    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
-    entityMessagePollInterval: 50,
-    sendRetryInterval: 50,
-    runnerHealthCheckInterval: 100,
-    refreshAssignmentsInterval: 100,
-    shardLockRefreshInterval: 250,
-    shardLockExpiration: "2 seconds",
-  });
+  const cluster = authenticatedClusterHttp.layerSql(
+    Redacted.make("c".repeat(64)),
+    {
+      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+      availableShardGroups: ["default"],
+      assignedShardGroups: ["default"],
+      shardsPerGroup: 300,
+      entityMessagePollInterval: 50,
+      sendRetryInterval: 50,
+      runnerHealthCheckInterval: 100,
+      refreshAssignmentsInterval: 100,
+      shardLockRefreshInterval: 250,
+      shardLockExpiration: "2 seconds",
+    },
+    loopbackClusterRunnerHttpPolicy
+  );
   return yield* Effect.acquireRelease(
     Effect.sync(() =>
       ManagedRuntime.make(

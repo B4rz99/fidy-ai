@@ -1,0 +1,30 @@
+apps/server/src/shell/channels/whatsapp/inbound-execution.ts
+  h_c6d49c804e0ad2 4,15-16
+apps/server/src/shell/durable-queue-health.test.ts
+  h_c6d49c804e0ad2 3,5,7,9,14-22,37,104,111-172,288-290,292-293,319-327,331-337,339-356,358-368,395,404,419-442,447-453,457,460,462,470-476,480,484-491
+apps/server/src/shell/durable-queue-health.ts
+  h_c6d49c804e0ad2 1,7,11,18-21,29-30,38,49,58,65-69,72-76,78-89,91-133,140,142-143,146-170,182,187-191,193,207,209,211,213,215,217,224-228,231,280-284,289-291
+apps/server/src/shell/durable-queue-policy.test.ts
+  h_c6d49c804e0ad2 2,8-9,23,59-72,104-113
+apps/server/src/shell/durable-queue-policy.ts
+  h_c6d49c804e0ad2 37-47,51-52,130,148-151,159
+apps/server/src/shell/http.test.ts
+  h_c6d49c804e0ad2 18,33-37,100,108-110
+apps/server/src/shell/ingestion/worker.ts
+  h_c6d49c804e0ad2 17,64
+apps/server/src/shell/observability/protocol.ts
+  h_c6d49c804e0ad2 7-9,24
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 104-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3e97ee111dba38f5ee5401eaa976ee832ff821cc",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

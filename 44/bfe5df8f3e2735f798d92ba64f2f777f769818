@@ -1,0 +1,59 @@
+apps/web/src/features/subscription/feature.test.tsx
+  s_6fddb121afb0c2::t_6d8e8a28645e22 526-527,533,536
+  s_6fddb121afb0c2::t_a120cb3f3a6929 540-550,553-557,559,561-566,568-573,580-592,594-610,612-621
+  s_6fddb121afb0c2::t_6147f0c97c285b 558
+  s_6fddb121afb0c2::t_73350072667189 534-535
+  s_6fddb121afb0c2::t_464583d844fb71 560
+  s_6fddb121afb0c2::t_d8659bdb967ace 567,611
+  s_6fddb121afb0c2::t_226a9c6005fd1d 503-525,528-532,537-539
+  s_a634f65f042137::t_dcc2a1d00847b6 622
+  s_6fddb121afb0c2::t_b099801e9bf4ce 574-579,593
+  s_6fddb121afb0c2::t_bfe2188e185015 551-552
+apps/web/src/features/subscription/feature.tsx
+  s_c7a5a6727cd856::t_925ed1f3d8249c 747
+  s_6fddb121afb0c2::t_0899a602cd898c 419-423,674,676-677,701,707,727,736-737,740-743,745-746
+  s_6fddb121afb0c2::t_f0b221b1ca3f6e 672,699,706,712,720-721,735
+  s_6fddb121afb0c2::t_223481cceb127e 629-641,643-644,667-670,673,675,679,690-698,700,709,719,734
+  s_6fddb121afb0c2::t_6c4b696a586114 658
+  s_6fddb121afb0c2::t_1f63b71d421408 645-657
+  s_6fddb121afb0c2::t_a3ed3ada60f9bc 5,794
+  s_6fddb121afb0c2::t_bfe2188e185015 505-507
+  s_c7a5a6727cd856::t_3863a1819a3da8 659
+  s_6fddb121afb0c2::t_84e4eef1890dc3 660
+  s_6fddb121afb0c2::t_614144230e33e5 661,663-666,783
+  s_6fddb121afb0c2::t_251f404bed9e44 485-489,492,494,499-500,642,683,685-686
+  s_6fddb121afb0c2::t_d9f0e4d98259ae 624,744,782
+  s_6fddb121afb0c2::t_c7806180e26955 662
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "44bfe5df8f3e2735f798d92ba64f2f777f769818",
+  "prompts": {},
+  "sessions": {
+    "s_6fddb121afb0c2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-88db-7794-900a-b3cdf5b64949",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

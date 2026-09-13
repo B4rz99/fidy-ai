@@ -1,0 +1,25 @@
+apps/web/src/browser/clipboard.test.ts
+  s_96f79810fa0fd1::t_672244596be0e5 60,63-65,78,81-83,86-88,105,114-116
+apps/web/src/browser/use-sensitive-clipboard.test.tsx
+  s_96f79810fa0fd1::t_430da709752fb6 58-61,63
+apps/web/src/browser/sensitive-clipboard.ts
+  s_96f79810fa0fd1::t_a338de195b809c 1,124-134
+  s_96f79810fa0fd1::t_788a5a13f1f147 168-169
+  s_96f79810fa0fd1::t_32c7bbef70f05a 144,153,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "03a2a6770de1501db02aa0edb895388b29fe5daa",
+  "prompts": {},
+  "sessions": {
+    "s_96f79810fa0fd1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-3ccd-7059-8d21-dcc4141d6e50",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

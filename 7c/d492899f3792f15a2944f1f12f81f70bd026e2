@@ -1,0 +1,20 @@
+apps/web/src/features/pats/feature.tsx
+  s_96f79810fa0fd1::t_c364d49cdd394f 7,26-51,53-59,188-196
+  s_96f79810fa0fd1::t_2c733d997b9481 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7cd492899f3792f15a2944f1f12f81f70bd026e2",
+  "prompts": {},
+  "sessions": {
+    "s_96f79810fa0fd1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-3ccd-7059-8d21-dcc4141d6e50",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

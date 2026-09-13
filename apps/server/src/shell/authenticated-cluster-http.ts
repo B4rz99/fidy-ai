@@ -14,8 +14,10 @@ import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
+  HttpMiddleware,
   HttpRouter,
-  type HttpServerError,
+  HttpServer,
+  HttpServerError,
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
@@ -143,6 +145,36 @@ const gateClusterCompatibility = <A, E, R>(
 ): Layer.Layer<A, E | ClusterTopologyIncompatible | SqlError.SqlError, R | SqlClient.SqlClient> =>
   Layer.unwrap(ensureClusterCompatibility(compatibility).pipe(Effect.as(infrastructure)));
 
+/**
+ * Serves `appLayer` on its own `HttpRouter` instance. `HttpRouter.serve` reuses the module-level
+ * `HttpRouter.layer`, which the public application also builds: the deny-by-default runner
+ * middleware would then answer public routes and the runner routes would appear on the public
+ * listener. This mirrors `HttpRouter.serve`, including its request logger and listen-address log.
+ */
+const serveIsolatedRouter = <A, E, R>(
+  appLayer: Layer.Layer<A, E, R>
+): Layer.Layer<A, E, HttpServer.HttpServer | Exclude<R, HttpRouter.HttpRouter>> =>
+  Effect.gen(function* () {
+    const router = yield* HttpRouter.HttpRouter;
+    // `asHttpEffect` mirrors `HttpRouter.serve`, whose error channel is declared `unknown` while the
+    // server itself handles routed failures. Classifying keeps HTTP server errors (for example, an
+    // unmatched route) as responses and treats anything else as a defect, answered with 500.
+    const handler = Effect.catchIf(
+      // @effect-diagnostics-next-line anyUnknownInErrorContext:off
+      router.asHttpEffect(),
+      (error): error is HttpServerError.HttpServerError =>
+        error instanceof HttpServerError.HttpServerError,
+      (error) => Effect.fail(error),
+      (error) => Effect.die(error)
+    );
+    return HttpServer.serve(handler, HttpMiddleware.logger);
+  }).pipe(
+    Layer.unwrap,
+    Layer.provideMerge(appLayer),
+    Layer.provide(Layer.fresh(HttpRouter.layer)),
+    HttpServer.withLogAddress
+  );
+
 const layerAuthenticatedSqlCluster = (
   token: ClusterToken,
   shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>
@@ -156,16 +188,18 @@ const layerAuthenticatedSqlCluster = (
   );
   // `RunnerServer.layerWithClients` builds Sharding on the plain runner client; composing the
   // server here instead substitutes the request-retry client so Sharding routes sends through it.
-  const runner = HttpRouter.serve(
-    Layer.mergeAll(
-      authenticatedRunnerMiddleware(token),
-      RunnerServer.layer.pipe(
-        Layer.provide(RpcServer.layerProtocolHttp({ path: clusterRunnerPath })),
-        Layer.provideMerge(Sharding.layer),
-        Layer.provideMerge(requestRetryRunnersLive)
-      )
+  const runnerRoutes = Layer.mergeAll(
+    authenticatedRunnerMiddleware(token),
+    RunnerServer.layer.pipe(
+      Layer.provide(RpcServer.layerProtocolHttp({ path: clusterRunnerPath })),
+      Layer.provideMerge(Sharding.layer),
+      Layer.provideMerge(requestRetryRunnersLive)
     )
-  ).pipe(Layer.provide(protocol), Layer.provide(BunClusterHttp.layerHttpServer));
+  );
+  const runner = serveIsolatedRouter(runnerRoutes).pipe(
+    Layer.provide(protocol),
+    Layer.provide(BunClusterHttp.layerHttpServer)
+  );
 
   const infrastructure = runner.pipe(
     Layer.provide(runnerHealth),

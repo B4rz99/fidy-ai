@@ -123,7 +123,7 @@ layer(clusterSerializationLayers[clusterSerialization](clusterSerializationMaxBu
   }
 );
 
-it.effect("closes the private runner listener to every unauthenticated request", () =>
+it.effect("keeps Cluster credentials out of authentication failures", () =>
   Effect.gen(function* () {
     const invocations = yield* Ref.make(0);
     const routes = HttpRouter.use((router) =>

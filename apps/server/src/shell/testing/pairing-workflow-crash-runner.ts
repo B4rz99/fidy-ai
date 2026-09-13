@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
+import { clusterTestSharedOptions } from "./cluster-topology-fixtures";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import {
@@ -18,11 +19,7 @@ const crashRunnerPort = 24643;
 const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(testSecretLength)), {
   runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
   runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-  availableShardGroups: ["default"],
-  assignedShardGroups: ["default"],
-  shardsPerGroup: 300,
-  entityMessagePollInterval: 50,
-  sendRetryInterval: 50,
+  ...clusterTestSharedOptions,
   runnerHealthCheckInterval: 100,
   refreshAssignmentsInterval: 100,
   shardLockRefreshInterval: 250,

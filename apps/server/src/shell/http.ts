@@ -17,6 +17,7 @@ import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
+import { ClusterReadiness } from "./cluster-readiness";
 import {
   ConsentDisclosureQueueLive,
   ConsentDisclosureWorkflowLive,
@@ -171,6 +172,28 @@ const HealthLive = Layer.unwrap(
   )
 );
 
+const readinessStatus = { ok: 200, unavailable: 503 } as const;
+
+/**
+ * Readiness never means "the listener is bound": it reports whether this runner can refresh runner
+ * state, route over the private Cluster transport, and use the durable mailbox. The body carries
+ * only booleans, so a degraded dependency never exposes SQL, addresses, or credentials.
+ */
+const ReadinessLive = HttpRouter.add("GET", "/ready", () =>
+  Effect.gen(function* () {
+    const readiness = yield* ClusterReadiness;
+    const checks = yield* readiness.probe;
+    const ready = checks.runnerState && checks.routing && checks.messageStorage;
+    return HttpServerResponse.jsonUnsafe(
+      { status: ready ? "ready" : "unready", checks },
+      {
+        status: ready ? readinessStatus.ok : readinessStatus.unavailable,
+        headers: { "cache-control": "no-store" },
+      }
+    );
+  })
+);
+
 const canonicalCorsMethods = Array.from(
   new Set(operationCatalog.operations.map(({ method }) => method))
 ).sort();
@@ -253,6 +276,7 @@ export const HttpLive = HttpRouter.serve(
     SubscriptionEnrollmentDirectLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
+    ReadinessLive,
     KapsoWebhookLive,
     SupportRecoveryPrivateRouteLive,
     ResendWebhookLive,

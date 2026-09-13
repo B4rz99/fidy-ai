@@ -22,6 +22,8 @@ import { findPendingConsentExchange, removePendingConsentExchange } from "~/shel
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -96,11 +98,7 @@ const acquireRuntime = Effect.fn(function* (
           authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
             runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
             runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            availableShardGroups: ["default"],
-            assignedShardGroups: ["default"],
-            shardsPerGroup: 300,
-            entityMessagePollInterval: 50,
-            sendRetryInterval: 50,
+            ...clusterTestSharedOptions,
             entityTerminationTimeout: 100,
           })
         )
@@ -173,6 +171,8 @@ const failingDeliveryProvider = Effect.fn(function* (successOrdinal: number, wam
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster Consent disclosure delivery",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect(
       "coordinates duplicate execution across two runtimes and accepts delivery before send settlement",
       Effect.fn(function* () {

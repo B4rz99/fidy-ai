@@ -1,17 +1,14 @@
 import { type Config, Crypto, Layer, Option, Redacted } from "effect";
 import type { PgClient } from "@effect/sql-pg/PgClient";
-import {
-  ClusterWorkflowEngine,
-  type MessageStorage,
-  RunnerAddress,
-  type Runners,
-  type Sharding,
-} from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import type { SqlClient, SqlError } from "effect/unstable/sql";
+import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import type { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
+import { clusterTestSharedOptions } from "./cluster-topology-fixtures";
 import {
   EmailDeliveryPort,
   type EmailDeliveryPortService,
@@ -37,13 +34,11 @@ export const replacementRuntimeLayer = ({
   deliveryLive: typeof ReplacementDeliveryWorkflowLive;
   expiryLive: typeof ReplacementExpiryWorkflowLive;
 }>): Layer.Layer<
-  | MessageStorage.MessageStorage
-  | Runners.Runners
-  | Sharding.Sharding
   | WorkflowEngine.WorkflowEngine
   | SqlClient.SqlClient
-  | PgClient,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | PgClient
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > =>
   Layer.mergeAll(deliveryLive, expiryLive).pipe(
     Layer.provideMerge(
@@ -54,11 +49,7 @@ export const replacementRuntimeLayer = ({
             {
               runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
               runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              availableShardGroups: ["default"],
-              assignedShardGroups: ["default"],
-              shardsPerGroup: 300,
-              entityMessagePollInterval: 50,
-              sendRetryInterval: 50,
+              ...clusterTestSharedOptions,
               runnerHealthCheckInterval: "1 second",
               shardLockRefreshInterval: "500 millis",
               shardLockExpiration: "2 seconds",

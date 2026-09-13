@@ -72,10 +72,17 @@ immutable `RAILWAY_GIT_COMMIT_SHA`. The public diagnostics are:
 
 ```sh
 curl --fail --silent https://api.fidyapp.com/health | jq
+curl --fail --silent https://api.fidyapp.com/ready | jq
 curl --fail --silent https://fidyapp.com/deployment-metadata.json | jq
 ```
 
-Both must report the same 40-character `gitRevision` and 64-character `contractDigest`.
+`/health` and the web metadata must report the same 40-character `gitRevision` and 64-character
+`contractDigest`. `/ready` must report `status: "ready"` with `runnerState`, `routing`, and
+`messageStorage` all `true`; `503` means the runner is not usable for Cluster work even though the
+listener is bound. A replica that cannot publish or validate the deployment's Cluster compatibility
+identity fails startup before it serves anything, so Railway surfaces it as a failed deployment
+rather than a serving replica. See [cluster-topology.md](cluster-topology.md) for the contract,
+readiness probes, and recovery timing.
 
 ## Route and response verification
 

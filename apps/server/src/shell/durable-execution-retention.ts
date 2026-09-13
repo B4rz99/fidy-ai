@@ -2,6 +2,7 @@ import { DateTime, Duration, Effect, Schema } from "effect";
 import { MachineId, Snowflake } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { HostedTurns } from "~/shell/agent/hosted-turns";
+import { clusterMessagesTable, clusterRepliesTable, durableQueueTable } from "./durable-tables";
 
 /**
  * Version-local RC.112 mailbox cleanup: only completed HostedTurns requests and their unit replies.
@@ -13,7 +14,9 @@ export const pruneCompletedHostedTurnMessages = Effect.fn("DurableExecutionReten
     const sql = yield* SqlClient.SqlClient;
     const [tables] = yield* Schema.decodeUnknownEffect(
       Schema.Array(Schema.Struct({ available: Schema.Boolean }))
-    )(yield* sql`SELECT to_regclass('fidy_durable.cluster_messages') IS NOT NULL AS available`);
+    )(
+      yield* sql`SELECT to_regclass(${`fidy_durable.${clusterMessagesTable}`}) IS NOT NULL AS available`
+    );
     if (tables?.available !== true) return;
     const cutoff = Snowflake.make({
       machineId: MachineId.make(0),
@@ -22,13 +25,13 @@ export const pruneCompletedHostedTurnMessages = Effect.fn("DurableExecutionReten
     });
     yield* sql`
     WITH eligible AS MATERIALIZED (
-      SELECT request_id FROM fidy_durable.cluster_messages
+      SELECT request_id FROM fidy_durable.${sql(clusterMessagesTable)}
       WHERE entity_type = ${HostedTurns.type} AND kind = 0 AND processed = TRUE AND last_reply_id < ${cutoff.toString()}
       ORDER BY last_reply_id LIMIT 256 FOR UPDATE SKIP LOCKED
     ), replies AS (
-      DELETE FROM fidy_durable.cluster_replies AS reply USING eligible
+      DELETE FROM fidy_durable.${sql(clusterRepliesTable)} AS reply USING eligible
       WHERE reply.request_id = eligible.request_id
-    ) DELETE FROM fidy_durable.cluster_messages AS message USING eligible
+    ) DELETE FROM fidy_durable.${sql(clusterMessagesTable)} AS message USING eligible
       WHERE message.request_id = eligible.request_id
   `;
   },
@@ -53,7 +56,7 @@ export const durableQueueRetention = {
         ? yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
             yield* sql`SELECT count(*) FILTER (WHERE completed = FALSE)::int AS incomplete,
                 0::int AS "requiredCompleted"
-              FROM fidy_queue
+              FROM ${sql(durableQueueTable)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
           ).pipe(Effect.orDie)
         : yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
@@ -62,7 +65,7 @@ export const durableQueueRetention = {
                 count(*) FILTER (
                   WHERE completed = TRUE AND id IN ${sql.in(requiredItemIds)}
                 )::int AS "requiredCompleted"
-              FROM fidy_queue
+              FROM ${sql(durableQueueTable)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
           ).pipe(Effect.orDie);
     return state?.incomplete === 0 && state.requiredCompleted === requiredItemIds.length;
@@ -80,8 +83,8 @@ export const durableQueueRetention = {
   ) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      DELETE FROM fidy_queue WHERE sequence IN (
-        SELECT sequence FROM fidy_queue
+      DELETE FROM ${sql(durableQueueTable)} WHERE sequence IN (
+        SELECT sequence FROM ${sql(durableQueueTable)}
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
           AND completed = TRUE
         ORDER BY sequence LIMIT 100
@@ -91,7 +94,7 @@ export const durableQueueRetention = {
       Request: Schema.Void,
       Result: Schema.Struct({ empty: Schema.Boolean }),
       execute: () => sql`SELECT NOT EXISTS (
-        SELECT 1 FROM fidy_queue
+        SELECT 1 FROM ${sql(durableQueueTable)}
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
       ) AS empty`,
     })(undefined).pipe(Effect.orDie)).empty;
@@ -104,7 +107,7 @@ export const durableQueueRetention = {
     if (itemIds.length === 0) return;
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      DELETE FROM fidy_queue
+      DELETE FROM ${sql(durableQueueTable)}
       WHERE queue_name = ${queueName} AND completed = TRUE AND id IN ${sql.in(itemIds)}
     `;
   }),
@@ -123,14 +126,14 @@ export const durableWorkflowMailboxesTerminal = Effect.fn(
   const present = yield* SqlSchema.findOne({
     Request: Schema.Void,
     Result: Schema.Struct({ present: Schema.Boolean }),
-    execute: () => sql`SELECT to_regclass('cluster_messages') IS NOT NULL AS present`,
+    execute: () => sql`SELECT to_regclass(${clusterMessagesTable}) IS NOT NULL AS present`,
   })(undefined).pipe(Effect.orDie);
   if (!present.present) return true;
   return (yield* SqlSchema.findOne({
     Request: Schema.Void,
     Result: Schema.Struct({ terminal: Schema.Boolean }),
     execute: () => sql`SELECT NOT EXISTS (
-        SELECT 1 FROM cluster_messages WHERE entity_id = ${executionId}
+        SELECT 1 FROM ${sql(clusterMessagesTable)} WHERE entity_id = ${executionId}
           AND entity_type IN ${sql.in(entityTypes)} AND processed = FALSE
       ) AS terminal`,
   })(undefined).pipe(Effect.orDie)).terminal;

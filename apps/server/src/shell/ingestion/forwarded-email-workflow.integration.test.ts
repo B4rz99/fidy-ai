@@ -18,8 +18,7 @@ import {
   type Runners,
   type Sharding,
 } from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import type { SqlClient, SqlError } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import { makeColombianUser } from "~/core/identity/rules";
 import { UserId } from "~/core/identity/reference";
@@ -28,10 +27,15 @@ import {
   ReceivedEmailContent as ReceivedEmailContentSchema,
 } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
@@ -135,15 +139,14 @@ const makeRuntimeLayer = (
   | Runners.Runners
   | SqlClient.SqlClient
   | Sharding.Sharding
-  | WorkflowEngine.WorkflowEngine,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | WorkflowEngine.WorkflowEngine
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > => {
   const cluster = authenticatedClusterHttp.layerSql(clusterToken, {
     runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
     runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
+    ...clusterTestSharedOptions,
     entityMessagePollInterval: 100,
     sendRetryInterval: 100,
   });
@@ -156,9 +159,22 @@ const makeRuntimeLayer = (
   );
 };
 
+type Disposable = Readonly<{ dispose: () => Promise<void> }>;
+
+/**
+ * Disposes test Cluster runtimes from a finalizer. A test that times out must not leave a runner
+ * behind, because its shard ownership would keep attracting Work away from later runtimes.
+ */
+const disposeRuntimes = (runtimes: ReadonlyArray<Disposable>): Effect.Effect<void> =>
+  Effect.promise(() => Promise.all(runtimes.map((runtime) => runtime.dispose()))).pipe(
+    Effect.asVoid
+  );
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster forwarded-email workflow",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect(
       "coordinates one idempotent workflow across independent runtimes",
       () =>
@@ -176,6 +192,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24611, provider }));
           const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24612, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtimeA, runtimeB]));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           yield* Effect.tryPromise(() =>
@@ -288,6 +305,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24620, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
@@ -331,6 +349,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24617, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -362,6 +381,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24619, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -397,6 +417,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24615, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
@@ -458,6 +479,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24616, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(

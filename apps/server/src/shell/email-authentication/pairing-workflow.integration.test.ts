@@ -22,6 +22,8 @@ import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 import { emailCredentialLookupKey } from "./admission";
 import { BrowserPairingEmailWorkflowLive } from "./authentication-delivery-worker";
 import { processBrowserPairingEmailStartRequest } from "./browser-pairing-authentication";
@@ -90,11 +92,7 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
   const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
     runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
     runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
-    entityMessagePollInterval: 50,
-    sendRetryInterval: 50,
+    ...clusterTestSharedOptions,
     runnerHealthCheckInterval: 100,
     refreshAssignmentsInterval: 100,
     shardLockRefreshInterval: 250,
@@ -161,6 +159,8 @@ const killAtBoundary = Effect.fn(function* (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL browser-pairing email workflows",
   (it) => {
+    resetClusterTopologyBeforeAll();
+
     it.effect.each(["before-send", "after-send"] as const)(
       "recovers abrupt process death at %s without another provider effect",
       (mode) =>

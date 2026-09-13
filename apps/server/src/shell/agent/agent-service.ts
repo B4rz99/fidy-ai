@@ -2107,7 +2107,7 @@ const processSubmittedWhatsAppTurn = Effect.fn(function* (
         _tag: "Queue",
         attempt: prepared.processingAttempt,
         inputCount: TelemetryCount.make(prepared.inputCount),
-        delayMilliseconds: prepared.queueDelayMilliseconds,
+        delayMilliseconds: Option.some(prepared.queueDelayMilliseconds),
       },
     },
     executeWhatsAppMessage(context, prepared)

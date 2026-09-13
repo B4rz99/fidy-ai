@@ -86,6 +86,8 @@ apps/server/src/shell/testing/fixtures/durable-workflows/email-replacement-expir
 apps/server/src/shell/testing/fixtures/durable-queues.json
   s_83feee5077baba::t_7624457c663a8b 1-7,22-65
   s_83feee5077baba::t_32a120b1bc60be 8-21
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  s_83feee5077baba::t_e29c6f30035e99 40-58
 ---
 {
   "schema_version": "authorship/3.0.0",

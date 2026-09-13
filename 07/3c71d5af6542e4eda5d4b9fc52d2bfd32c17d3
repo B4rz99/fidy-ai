@@ -1,0 +1,126 @@
+apps/server/src/shell/ingestion/worker.ts
+  s_e1f10896c22e8f::t_d3dfa284fb949b 103,106
+  s_e1f10896c22e8f::t_bef74ab939c3ff 359,364-368
+  s_e1f10896c22e8f::t_57d42dfd43833a 29-32,360-363,369,409,477
+apps/server/src/shell/queue-compatibility/queue-compatibility.test.ts
+  s_e1f10896c22e8f::t_fcd9070c6f9b26 27,33-35
+.oxlintrc.json
+  s_e1f10896c22e8f::t_760c68107f250f 37
+apps/server/src/shell/channels/whatsapp/inbound-execution.ts
+  s_e1f10896c22e8f::t_028e02879e6147 3,22,25
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_e1f10896c22e8f::t_a9c44232db2c29 44,47,149-156,162-169,224-227,241-246,286-289,316-319,779
+  s_e1f10896c22e8f::t_2bbe013db55d17 352-361,363-364
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_e1f10896c22e8f::t_b2bc1c2ecce0b3 186-188,223,264-266
+  s_e1f10896c22e8f::t_ec7c1fae8054ba 34
+apps/server/src/shell/_shared/persisted-queue-handler.ts
+  s_e1f10896c22e8f::t_7131752d93153b 2-3,224-235,240-243
+  s_e1f10896c22e8f::t_9a340725d87251 28-29,46,68,81,193,197,212-223
+  s_e1f10896c22e8f::t_e289b07578ecf7 194-196,198-203,205-206,208-211,236-239
+  s_e1f10896c22e8f::t_31cf96af5cf7c9 204,207
+apps/server/src/shell/ingestion/forwarded-email-execution.ts
+  s_e1f10896c22e8f::t_703dff42930698 5,32,35
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_e1f10896c22e8f::t_070e3a5f385a5e 475
+  s_e1f10896c22e8f::t_82d9c8f7f13d94 15,460,462-465,470,515,545
+  s_e1f10896c22e8f::t_95cdb391985c75 509-514,530-544
+  s_e1f10896c22e8f::t_ba7c09f9c57e31 47-48
+  s_e1f10896c22e8f::t_03e14f4ce2c7d1 461,466-469
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_e1f10896c22e8f::t_f2e61889ba1e92 63,68,70-71
+  s_e1f10896c22e8f::t_6f926027a21e33 5,64-67,78-80
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  s_e1f10896c22e8f::t_8f92a541355778 61,64
+  s_e1f10896c22e8f::t_b83b512ac865b6 13-15,89,106,122,221-224,295-298
+  s_e1f10896c22e8f::t_a514b54b3db0cc 90-95,101
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  s_e1f10896c22e8f::t_36952fce207ba9 11,25,28-31,59,62-65,79,82-85
+apps/server/src/shell/email-authentication/replacement-protocol.ts
+  s_e1f10896c22e8f::t_0d5858b0db0939 10,60,63-64,66,68,71-72,74
+  s_e1f10896c22e8f::t_7afdcca1d0483a 4,65,73
+apps/server/src/shell/queue-compatibility/queue-compatibility.integration.test.ts
+  s_e1f10896c22e8f::t_bacf49af3acd0b 7,84-90
+  s_e1f10896c22e8f::t_d98b3404552d26 91-93,123-125,224,234
+  s_e1f10896c22e8f::t_394d60071a48ea 145-147
+apps/server/src/shell/_shared/persisted-queue-handler.test.ts
+  s_e1f10896c22e8f::t_0d0e79f621e4fa 376-379
+  s_e1f10896c22e8f::t_9cb41a0d850ec0 391-392
+  s_e1f10896c22e8f::t_6ab652bcf64ca3 375,380
+  s_e1f10896c22e8f::t_ef79795f9b1121 339-349
+  s_e1f10896c22e8f::t_b07578145193ea 10,71-75,324,362-374,381-390
+  s_e1f10896c22e8f::t_85600038ce4045 325-338,350-361
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_e1f10896c22e8f::t_980a8191baabf1 366-369,373-376
+  s_e1f10896c22e8f::t_d69afbf55b3e4b 13,365,370-372,378,385,397,404,415,417,434-439,441-443,457,460,463
+  s_e1f10896c22e8f::t_929ccfc38ea6ce 14-16,389-390,408,421
+  s_e1f10896c22e8f::t_ac410f793f630c 391
+  s_e1f10896c22e8f::t_3d041bae8dbf2d 409
+  s_e1f10896c22e8f::t_f4062ebb9dcf30 422
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_e1f10896c22e8f::t_dae1d812e67448 612,661
+  s_e1f10896c22e8f::t_b187348f2ac111 466,506
+  s_e1f10896c22e8f::t_0414744359cca0 46,124,736,801-803,852-854
+  s_e1f10896c22e8f::t_95cdb391985c75 457-465,735,804-808
+  s_e1f10896c22e8f::t_34704d787fb84b 496-505,508
+apps/server/src/shell/_shared/persisted-queue.ts
+  s_e1f10896c22e8f::t_604551603655a1 36,49-51,53,58,64-66
+  s_e1f10896c22e8f::t_95cdb391985c75 59-62
+  s_e1f10896c22e8f::t_7d34a9fde8daf2 107-108
+  s_e1f10896c22e8f::t_69936c126ab513 124
+  s_e1f10896c22e8f::t_f632ebdd8876b2 1,3-4,6,9,21-35,69-70,81,86,88-91,126
+  s_e1f10896c22e8f::t_8f0ddefad978f0 68
+  s_e1f10896c22e8f::t_2c853fc78a8417 2,5,7-8,12-20,67,71,96,98,103-106,109,116-117,119-123,125,127-128,136-139
+  s_e1f10896c22e8f::t_cd2bca95fc3e1d 10,115
+  s_e1f10896c22e8f::t_50cb68d825ffe4 37-48,52,54-57,63,129-135
+  s_e1f10896c22e8f::t_feaaf40dd121f8 11,97
+  s_e1f10896c22e8f::t_a0b154d1b60052 72-80,82-85,87,92-95,99-102,110-114,118
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_e1f10896c22e8f::t_95cdb391985c75 1133-1136,1140-1148
+  s_e1f10896c22e8f::t_85d1883a9f6b75 37,1130-1132,1137-1139
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  s_e1f10896c22e8f::t_5e2ea4840865aa 27,29,563,565-570,572,630-631,639,646-648,650-651
+  s_e1f10896c22e8f::t_95cdb391985c75 689
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  s_e1f10896c22e8f::t_c3a6d24f99a733 5,41,44,52,55
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  s_e1f10896c22e8f::t_49914b4f96500a 184-189,196
+  s_e1f10896c22e8f::t_963ea2f5fd8db0 15,183,197-202,227-232,243-244,248
+  s_e1f10896c22e8f::t_5fe7a1f7aad5b2 170-171
+  s_e1f10896c22e8f::t_dcd463d06a24a0 203-204
+  s_e1f10896c22e8f::t_95cdb391985c75 245-247
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  s_e1f10896c22e8f::t_6a2f62d6a43797 9-11,395-398,400-403,417
+  s_e1f10896c22e8f::t_0068d0a9546f22 399,404-407
+  s_e1f10896c22e8f::t_f4e2a7589072bb 63,66
+apps/server/src/shell/onboarding/delivery-workflow.test.ts
+  s_e1f10896c22e8f::t_f8b711d6af7616 10,62,64
+apps/server/ARCHITECTURE.md
+  s_e1f10896c22e8f::t_dc587e23ed347b 165-170
+apps/server/scripts/check-lint-guards.ts
+  s_e1f10896c22e8f::t_f613b0dd988497 32
+  s_e1f10896c22e8f::t_6e430f9221d2be 29
+  s_e1f10896c22e8f::t_f6d5f3754a38af 30-31,33
+apps/server/src/shell/queue-compatibility/contracts.ts
+  s_e1f10896c22e8f::t_4fbfa17b2b1f82 3,90,109
+  s_e1f10896c22e8f::t_13b2a953ca380b 91-94,96-100,102-103,110-111
+scripts/oxlint/effect-guards.js
+  s_e1f10896c22e8f::t_8090710604881d 805-826,828-830,844
+  s_e1f10896c22e8f::t_c97e7e661953f4 745-804,827
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "073c71d5af6542e4eda5d4b9fc52d2bfd32c17d3",
+  "prompts": {},
+  "sessions": {
+    "s_e1f10896c22e8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09428-abba-70d3-aa68-ef54f9642da1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

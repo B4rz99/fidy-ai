@@ -10,18 +10,18 @@ import { UserId } from "~/core/identity/reference";
 
 /** Persisted routing facts only; an intent identifier never grants another User's authority. */
 export const ReplacementDeliveryPayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   userId: UserId,
   intentId: EmailDeliveryIntentId,
-});
+}).annotate({ identifier: "ReplacementDeliveryPayload" });
 export type ReplacementDeliveryPayload = typeof ReplacementDeliveryPayload.Type;
 
 /** Original replacement identity; resends do not create or extend its expiry execution. */
 export const ReplacementExpiryPayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   userId: UserId,
   workflowId: EmailReplacementWorkflowId,
-});
+}).annotate({ identifier: "ReplacementExpiryPayload" });
 export type ReplacementExpiryPayload = typeof ReplacementExpiryPayload.Type;
 
 /** Safe delivery outcomes; provider errors and proofs never enter execution history. */

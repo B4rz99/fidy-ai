@@ -1,0 +1,44 @@
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  s_d1095367e935ef::t_2fb6e3d24e3e4a 8,92-101,116-118
+  s_d1095367e935ef::t_b05d96639de4dd 107-109
+scripts/ci/server-test-timings.ts
+  s_d1095367e935ef::t_37b400de41520d 1,3-30
+.github/workflows/ci.yml
+  s_d1095367e935ef::t_4db8b79f952cac 132,138,156-158,160-162,171,224-227,229-231,233
+  s_d1095367e935ef::t_eb7a468550b7a7 159,228,232
+scripts/ci/server-test-timings-cache.ts
+  s_d1095367e935ef::t_f08fd32e05ba12 1-2
+apps/web/scripts/preview-workflow.test.ts
+  s_d1095367e935ef::t_0bf5b922be6377 44,46,55-56
+scripts/ci/server-test-sequencer.ts
+  s_d1095367e935ef::t_41bf0040473f71 3,6
+  s_d1095367e935ef::t_64ed549f0be70e 7-9
+scripts/ci/collect-server-test-timings.ts
+  s_d1095367e935ef::t_e625c8a1418bb3 3,12-26,34-36,56,58-59,65-69,71,74-75,79
+  s_d1095367e935ef::t_68a91d42da456b 48-50,62-64,72
+  s_d1095367e935ef::t_cc707a8690cadb 4,9-10
+  s_d1095367e935ef::t_7122b7a951f0aa 1-2,5-8,11,27-33,37-47,51-55,57,60-61,81
+  s_d1095367e935ef::t_cd7bb454d6848e 70
+  s_d1095367e935ef::t_026226b4463c47 76-78
+  s_d1095367e935ef::t_899e537e22517b 84
+  s_d1095367e935ef::t_6689fcccefc3af 80,82-83
+  s_d1095367e935ef::t_ba3cedf81bae9e 73
+scripts/ci/collect-server-test-timings.test.ts
+  s_d1095367e935ef::t_abbcfa72a268f3 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5507946c0a2a90870479c977814ddfc7c9b68359",
+  "prompts": {},
+  "sessions": {
+    "s_d1095367e935ef": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09cdd-c65d-77b3-9691-c36c14135ff0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,14 +1,14 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Option, Redacted } from "effect";
+import { Effect, Option } from "effect";
 import { type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
-import { readClipboardText, writeClipboardText } from "@/browser/clipboard";
+import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { useSession } from "@/session/session-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
-import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
+import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
   ActivePATManagementView,
@@ -102,30 +102,6 @@ const makeApprovePairingCommand = (
     { concurrent: false }
   );
 
-const clearClipboard = (bearer: RedactedTokenBearer): void => {
-  Effect.runFork(
-    readClipboardText(Option.fromUndefinedOr(navigator.clipboard)).pipe(
-      Effect.flatMap((current) =>
-        current === Redacted.value(bearer)
-          ? writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), "")
-          : Effect.void
-      ),
-      Effect.ignore
-    )
-  );
-};
-
-const copyToClipboard = (bearer: RedactedTokenBearer, onCopied: () => void): void => {
-  Effect.runFork(
-    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), Redacted.value(bearer)).pipe(
-      Effect.tap(() => Effect.sync(onCopied)),
-      Effect.tap(() => Effect.sleep(bearerRevealLifetime)),
-      Effect.tap(() => Effect.sync(() => clearClipboard(bearer))),
-      Effect.ignore
-    )
-  );
-};
-
 /**
  * Coordinates authenticated PAT management: direct-client pairing approval and manual issuance.
  * The pairing path never receives a bearer; manual bearers remain confined to the mounted view,
@@ -175,14 +151,22 @@ export const PATManagementFeature = (): JSX.Element => {
   const inspect = useAtomSet(inspectAtom);
   const approve = useAtomSet(approveAtom);
   return (
-    <div className="flex flex-col gap-8" key={authentication}>
-      <ActivePATManagementView state={activePATState} revokeAll={revokeAll} revokeOne={revoke} />
-      <PATPairingView approve={approve} inspect={inspect} />
-      <ManualPATView
-        clearClipboard={clearClipboard}
-        copyToClipboard={copyToClipboard}
-        issue={issue}
-      />
-    </div>
+    <SensitiveClipboardBoundary
+      className={Option.some("flex flex-col gap-8")}
+      key={authentication}
+      lifetime={bearerRevealLifetime}
+    >
+      {(clipboard) => (
+        <>
+          <ActivePATManagementView
+            state={activePATState}
+            revokeAll={revokeAll}
+            revokeOne={revoke}
+          />
+          <PATPairingView approve={approve} inspect={inspect} />
+          <ManualPATView clipboard={clipboard} issue={issue} />
+        </>
+      )}
+    </SensitiveClipboardBoundary>
   );
 };

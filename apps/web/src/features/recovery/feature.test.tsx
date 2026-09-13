@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { makeSensitiveClipboardSpy } from "@/testing/sensitive-clipboard";
 import { BackupRecoveryCode } from "@/transport/client";
 import { BackupRecoveryRotationView, type RotateBackupRecoveryCommand } from "./feature";
 
@@ -9,9 +10,9 @@ afterEach(cleanup);
 
 it("keeps disclosure only in one mounted view identity", () => {
   const rotate = vi.fn((command: RotateBackupRecoveryCommand) => command.onRotated(code));
-  const copy = vi.fn((_code: BackupRecoveryCode, onCopied: () => void) => onCopied());
+  const clipboard = makeSensitiveClipboardSpy();
   const { rerender, unmount } = render(
-    <BackupRecoveryRotationView key="fresh" copy={copy} rotate={rotate} />
+    <BackupRecoveryRotationView key="fresh" clipboard={clipboard} rotate={rotate} />
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Crear un código nuevo" }));
@@ -27,33 +28,33 @@ it("keeps disclosure only in one mounted view identity", () => {
   }
 
   fireEvent.click(screen.getByRole("button", { name: "Copiar código" }));
-  expect(copy).toHaveBeenCalledWith(code, expect.any(Function));
+  expect(clipboard.copy).toHaveBeenCalledWith(code, expect.any(Function));
   expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
 
-  rerender(<BackupRecoveryRotationView key="navigated" copy={copy} rotate={rotate} />);
+  rerender(<BackupRecoveryRotationView key="navigated" clipboard={clipboard} rotate={rotate} />);
   expect(screen.queryByText(code)).not.toBeInTheDocument();
 
   unmount();
-  render(<BackupRecoveryRotationView copy={copy} rotate={rotate} />);
+  render(<BackupRecoveryRotationView clipboard={clipboard} rotate={rotate} />);
   expect(screen.queryByText(code)).not.toBeInTheDocument();
   expect(rotate).toHaveBeenCalledTimes(1);
 });
 
 it("does not report a denied clipboard write as successful", () => {
   const rotate = vi.fn((command: RotateBackupRecoveryCommand) => command.onRotated(code));
-  const copy = vi.fn();
-  render(<BackupRecoveryRotationView copy={copy} rotate={rotate} />);
+  const clipboard = makeSensitiveClipboardSpy(false);
+  render(<BackupRecoveryRotationView clipboard={clipboard} rotate={rotate} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Crear un código nuevo" }));
   fireEvent.click(screen.getByRole("button", { name: "Copiar código" }));
 
-  expect(copy).toHaveBeenCalledWith(code, expect.any(Function));
+  expect(clipboard.copy).toHaveBeenCalledWith(code, expect.any(Function));
   expect(screen.getByRole("button", { name: "Copiar código" })).toBeVisible();
 });
 
 it("shows a safe retry without retaining a code after rotation fails", () => {
   const rotate = vi.fn((command: RotateBackupRecoveryCommand) => command.onFailed());
-  render(<BackupRecoveryRotationView copy={vi.fn()} rotate={rotate} />);
+  render(<BackupRecoveryRotationView clipboard={makeSensitiveClipboardSpy()} rotate={rotate} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Crear un código nuevo" }));
 

@@ -1,6 +1,4 @@
-import { Duration } from "effect";
-
-const bearerRevealMinutes = 10;
+import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 
 /** Maximum lifetime of a disclosed PAT in the view and a matching clipboard. */
-export const bearerRevealLifetime = Duration.minutes(bearerRevealMinutes);
+export const bearerRevealLifetime = sensitiveClipboardLifetime;

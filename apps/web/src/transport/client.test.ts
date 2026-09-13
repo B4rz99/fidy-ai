@@ -1,15 +1,33 @@
 // @vitest-environment node
 
-import { DateTime, Deferred, Effect, Layer, Option, Redacted } from "effect";
+import assert from "node:assert/strict";
 import {
+  Cause,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
+import { TestClock } from "effect/testing";
+import {
+  FetchHttpClient,
   HttpClient,
-  type HttpClientRequest,
+  HttpClientError,
+  HttpClientRequest,
+  type HttpClientRequest as HttpClientRequestType,
   HttpClientResponse,
   UrlParams,
 } from "effect/unstable/http";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { vi } from "vitest";
+import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";
 import { presentCanonicalQuery } from "./canonical-query";
 import {
   ManualPATRequestId,
@@ -19,7 +37,7 @@ import {
 } from "./client";
 
 const responseJson = (
-  request: HttpClientRequest.HttpClientRequest,
+  request: HttpClientRequestType.HttpClientRequest,
   body: unknown,
   status = 200
 ): HttpClientResponse.HttpClientResponse =>
@@ -33,7 +51,7 @@ const responseJson = (
 
 const makeHttpClient = (
   handler: (
-    request: HttpClientRequest.HttpClientRequest
+    request: HttpClientRequestType.HttpClientRequest
   ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 ): HttpClient.HttpClient =>
   HttpClient.makeWith<
@@ -51,6 +69,27 @@ const interruptibleWork = (
     onStarted();
     return Effect.sync(onInterrupted);
   });
+
+const policyTestOrigin = "https://api.test.fidyapp.com";
+const makePolicyTestClient = (
+  httpClient: Layer.Layer<HttpClient.HttpClient>,
+  boundary: BrowserHttpBoundary = "canonical"
+): Effect.Effect<HttpClient.HttpClient> =>
+  HttpClient.HttpClient.pipe(
+    Effect.provide(browserHttpClientLayer(boundary, policyTestOrigin, httpClient))
+  );
+
+const boundaryExitKind = (
+  exit: Exit.Exit<unknown, unknown>
+): "http-defect" | "interrupted" | "schema-defect" | "typed-failure" => {
+  if (Exit.isSuccess(exit)) throw new Error("Expected a boundary failure");
+  if (Cause.hasInterrupts(exit.cause)) return "interrupted";
+  const defect = Cause.findDefect(exit.cause);
+  if (Result.isFailure(defect)) return "typed-failure";
+  if (HttpClientError.isHttpClientError(defect.success)) return "http-defect";
+  if (Schema.isSchemaError(defect.success)) return "schema-defect";
+  throw new Error("Expected an HTTP or Schema boundary defect");
+};
 
 const manualPATDisclosureBody = (bearer: string): unknown => ({
   data: {
@@ -96,6 +135,222 @@ describe("subscription enrollment transport", () => {
   });
 });
 
+describe("browser HTTP policy", () => {
+  it.effect("terminates a request when its browser deadline expires", () =>
+    Effect.gen(function* () {
+      const neverClient = makeHttpClient(() => Effect.never);
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, neverClient));
+      const fiber = yield* Effect.forkChild(client.get("https://api.test.fidyapp.com/health"));
+
+      yield* TestClock.adjust("15 seconds");
+      const exit = yield* Fiber.await(fiber);
+
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: HttpClientRequest.make("GET")("https://browser-api.invalid"),
+              description: "browser request deadline exceeded",
+            }),
+          })
+        )
+      );
+    })
+  );
+
+  it.effect("refuses cross-origin destinations before sending a credentialed request", () =>
+    Effect.gen(function* () {
+      let executions = 0;
+      const httpClient = makeHttpClient((request) => {
+        executions++;
+        return Effect.succeed(responseJson(request, { ok: true }));
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        "web-auth"
+      );
+
+      const exit = yield* client.get("https://attacker.example/collect").pipe(Effect.exit);
+
+      expect(executions).toBe(0);
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: HttpClientRequest.make("GET")("https://browser-api.invalid"),
+              description: "request destination origin refused",
+            }),
+          })
+        )
+      );
+    })
+  );
+
+  it.effect("refuses redirect responses without following their destination", () =>
+    Effect.gen(function* () {
+      let executions = 0;
+      const httpClient = makeHttpClient((request) => {
+        executions++;
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(null, {
+              status: 302,
+              headers: { location: "https://attacker.example/collect" },
+            })
+          )
+        );
+      });
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
+
+      const exit = yield* client.get("https://api.test.fidyapp.com/redirect").pipe(Effect.exit);
+
+      expect(executions).toBe(1);
+      const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.DecodeError({
+              request: diagnosticRequest,
+              response: HttpClientResponse.fromWeb(
+                diagnosticRequest,
+                new Response(null, { status: 302 })
+              ),
+              description: "redirect response refused",
+            }),
+          })
+        )
+      );
+    })
+  );
+
+  it.effect("stops consuming a response after the boundary byte cap", () =>
+    Effect.gen(function* () {
+      const oversized = new Uint8Array(64 * 1024 + 1);
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(oversized, { headers: { "content-type": "application/json" } })
+          )
+        )
+      );
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        "web-auth"
+      );
+
+      const exit = yield* client.get("https://api.test.fidyapp.com/large").pipe(Effect.exit);
+
+      const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.DecodeError({
+              request: diagnosticRequest,
+              response: HttpClientResponse.fromWeb(
+                diagnosticRequest,
+                new Response(null, {
+                  headers: { "content-type": "application/json" },
+                })
+              ),
+            }),
+          })
+        )
+      );
+    })
+  );
+
+  it.effect("keeps credentials out of transport failure diagnostics", () =>
+    Effect.gen(function* () {
+      const secret = "secret-proof-value";
+      const httpClient = makeHttpClient((request) => {
+        const credentialed = request.pipe(
+          HttpClientRequest.setHeader("authorization", `Bearer ${secret}`)
+        );
+        return Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: credentialed,
+              cause: new Error(secret),
+              description: secret,
+            }),
+          })
+        );
+      });
+      const client = yield* makePolicyTestClient(
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        "enrollment"
+      );
+
+      const exit = yield* client.post("https://api.test.fidyapp.com/submit").pipe(Effect.exit);
+
+      assert.deepStrictEqual(
+        exit,
+        Exit.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: HttpClientRequest.make("POST")("https://browser-api.invalid"),
+            }),
+          })
+        )
+      );
+    })
+  );
+
+  it.effect("retries one transport failure only for safe request methods", () =>
+    Effect.gen(function* () {
+      const executions: Array<string> = [];
+      const httpClient = makeHttpClient((request) => {
+        executions.push(request.method);
+        return Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request }),
+          })
+        );
+      });
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, httpClient));
+
+      yield* client.get("https://api.test.fidyapp.com/read").pipe(Effect.exit);
+      yield* client.post("https://api.test.fidyapp.com/write").pipe(Effect.exit);
+
+      expect(executions).toEqual(["GET", "GET", "POST"]);
+    })
+  );
+
+  it.effect("uses credentialed manual no-store Fetch requests at every browser boundary", () =>
+    Effect.gen(function* () {
+      const requestOptions: Array<RequestInit> = [];
+      const fakeFetch: typeof globalThis.fetch = (_input, init) => {
+        requestOptions.push(init ?? {});
+        return Promise.resolve(
+          new Response("{}", { headers: { "content-type": "application/json" } })
+        );
+      };
+
+      for (const boundary of ["canonical", "web-auth", "enrollment"] as const) {
+        const client = yield* makePolicyTestClient(FetchHttpClient.layer, boundary);
+        yield* client
+          .get("https://api.test.fidyapp.com/policy")
+          .pipe(Effect.provideService(FetchHttpClient.Fetch, fakeFetch));
+      }
+
+      expect(requestOptions).toHaveLength(3);
+      for (const options of requestOptions) {
+        expect(options).toMatchObject({
+          credentials: "include",
+          redirect: "manual",
+          cache: "no-store",
+        });
+      }
+    })
+  );
+});
+
 describe("canonical browser transport", () => {
   it("keeps the typed Atom client while substituting only HttpClient", async () => {
     const requests: string[] = [];
@@ -123,6 +378,88 @@ describe("canonical browser transport", () => {
 
       expect(response.data.url.href).toBe("https://upgrade.fidyapp.com/");
       expect(requests).toEqual(["https://api.test.fidyapp.com/subscription/upgrade-url"]);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it("keeps malformed schemas and HTTP failures as distinguishable boundary defects", async () => {
+    const malformedClient = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(
+        HttpClient.HttpClient,
+        makeHttpClient((request) =>
+          Effect.succeed(responseJson(request, { unexpected: "secret parser material" }))
+        )
+      )
+    );
+    const malformedAtom = malformedClient.query("subscription", "getUpgradeUrl", {});
+    const malformedRegistry = AtomRegistry.make();
+    const unmountMalformed = malformedRegistry.mount(malformedAtom);
+
+    const transportClient = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(
+        HttpClient.HttpClient,
+        makeHttpClient((request) =>
+          Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request }),
+            })
+          )
+        )
+      )
+    );
+    const transportAtom = transportClient.query("subscription", "getUpgradeUrl", {});
+    const transportRegistry = AtomRegistry.make();
+    const unmountTransport = transportRegistry.mount(transportAtom);
+
+    try {
+      const malformedExit = await Effect.runPromise(
+        Effect.exit(AtomRegistry.getResult(malformedRegistry, malformedAtom))
+      );
+      const transportExit = await Effect.runPromise(
+        Effect.exit(AtomRegistry.getResult(transportRegistry, transportAtom))
+      );
+      expect(Exit.isFailure(malformedExit)).toBe(true);
+      expect(Exit.isFailure(transportExit)).toBe(true);
+      if (Exit.isFailure(malformedExit) && Exit.isFailure(transportExit)) {
+        expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
+        expect(boundaryExitKind(transportExit)).toBe("http-defect");
+      }
+    } finally {
+      unmountMalformed();
+      malformedRegistry.dispose();
+      unmountTransport();
+      transportRegistry.dispose();
+    }
+  });
+
+  it("preserves endpoint-declared failures as typed product outcomes", async () => {
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(
+        responseJson(
+          request,
+          {
+            error: { code: "unauthenticated", message: "Authentication expired." },
+            next: [],
+          },
+          401
+        )
+      )
+    );
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const atom = client.query("identity", "getCurrentUser", {});
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(atom);
+
+    try {
+      const exit = await Effect.runPromise(Effect.exit(AtomRegistry.getResult(registry, atom)));
+      expect(boundaryExitKind(exit)).toBe("typed-failure");
     } finally {
       unmount();
       registry.dispose();

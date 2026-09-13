@@ -11,6 +11,7 @@ import { Context, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "ef
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { AtomHttpApi } from "effect/unstable/reactivity";
+import { browserHttpClientLayer } from "./browser-http-policy";
 
 export type {
   CanonicalInput,
@@ -71,13 +72,14 @@ export {
  */
 export type FidyClientLayer = Layer.Layer<HttpClient.HttpClient>;
 
-const withCredentials = (httpClient: FidyClientLayer): FidyClientLayer =>
-  httpClient.pipe(
-    Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" }))
+const canonicalHttpClientLayer = (
+  apiOrigin: string,
+  httpClient: FidyClientLayer
+): FidyClientLayer =>
+  Layer.merge(
+    browserHttpClientLayer("canonical", apiOrigin, httpClient),
+    TokenAuthorizationClientAnonymousLive
   );
-
-const withBrowserTransportInvariants = (httpClient: FidyClientLayer): FidyClientLayer =>
-  Layer.merge(withCredentials(httpClient), TokenAuthorizationClientAnonymousLive);
 
 /** Receives the single browser-lifetime transition caused by a canonical 401 response. */
 export type CanonicalAuthenticationObserver = Readonly<{
@@ -118,7 +120,7 @@ export const makeFidyClient = (
   AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
     baseUrl: apiOrigin,
-    httpClient: withBrowserTransportInvariants(httpClient),
+    httpClient: canonicalHttpClientLayer(apiOrigin, httpClient),
     transformResponse: observeAuthenticationExpiration(observer),
   });
 
@@ -137,7 +139,7 @@ export const makeWebAuthClient = (
   AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
     api: WebAuthApi,
     baseUrl: apiOrigin,
-    httpClient: withCredentials(httpClient),
+    httpClient: browserHttpClientLayer("web-auth", apiOrigin, httpClient),
   });
 
 type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
@@ -166,7 +168,7 @@ export const makeSubscriptionEnrollmentClient = (
   const live = Layer.effect(
     EnrollmentClientService,
     HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: apiOrigin })
-  ).pipe(Layer.provide(withCredentials(httpClient)));
+  ).pipe(Layer.provide(browserHttpClientLayer("enrollment", apiOrigin, httpClient)));
   const runtime = ManagedRuntime.make(live);
   let available = true;
   let disposal = Option.none<Promise<void>>();

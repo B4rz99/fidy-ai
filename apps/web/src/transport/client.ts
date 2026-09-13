@@ -108,9 +108,11 @@ export type FidyClient = AtomHttpApi.AtomHttpApiClient<
 /**
  * Derives the sole browser transport from the server-owned canonical API declaration. `apiOrigin`
  * must be a credential-free HTTP(S) origin already validated by `parseApiOrigin`; it is used as the
- * request base URL without further normalization. Production callers use credentialed Fetch; tests
- * may replace only the underlying HttpClient layer while keeping this same derived typed client and
- * canonical request decoding.
+ * request base URL without further normalization. Production callers use credentialed, no-store
+ * Fetch with manual redirects; tests may replace only the underlying HttpClient layer. The client
+ * refuses other origins and redirects, bounds request time and response bytes, retries GET/HEAD
+ * transport failures once, and exposes transport or schema failures as sanitized defects while
+ * retaining canonical request decoding and endpoint-declared failures.
  */
 export const makeFidyClient = (
   apiOrigin: string,
@@ -131,7 +133,13 @@ export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
   WebAuthApiGroups
 >;
 
-/** Derives browser authentication calls from the server declaration over the same Fetch runtime. */
+/**
+ * Derives proof-bearing browser authentication calls from the server declaration. `apiOrigin` must
+ * be a validated, credential-free HTTP(S) origin; `httpClient` may replace only the underlying
+ * transport. Requests use credentialed, no-store Fetch with manual redirects, refuse other origins
+ * and redirects, and apply the authentication deadline and response-byte budget. GET/HEAD transport
+ * failures retry once; sanitized transport and schema failures remain defects.
+ */
 export const makeWebAuthClient = (
   apiOrigin: string,
   httpClient: FidyClientLayer = FetchHttpClient.layer
@@ -160,7 +168,14 @@ export type SubscriptionEnrollmentClient = Readonly<{
   dispose: () => Promise<void>;
 }>;
 
-/** Derives exact enrollment calls with first-party cookies over the shared browser runtime. */
+/**
+ * Derives exact enrollment calls with first-party cookies. `apiOrigin` must be a validated,
+ * credential-free HTTP(S) origin; `httpClient` may replace only the underlying transport. Requests
+ * use no-store Fetch with manual redirects, refuse other origins and redirects, and apply the
+ * enrollment deadline and response-byte budget. GET/HEAD transport failures retry once; sanitized
+ * transport and schema failures reject `execute`, while endpoint-declared failures retain their
+ * generated semantics.
+ */
 export const makeSubscriptionEnrollmentClient = (
   apiOrigin: string,
   httpClient: FidyClientLayer = FetchHttpClient.layer

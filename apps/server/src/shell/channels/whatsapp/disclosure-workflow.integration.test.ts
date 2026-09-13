@@ -17,6 +17,7 @@ import { PersistedQueue } from "effect/unstable/persistence";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
@@ -99,7 +100,8 @@ const acquireRuntime = Effect.fn(function* (
             clusterTestRunnerOptions({
               port,
               overrides: { entityTerminationTimeout: 100 },
-            })
+            }),
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

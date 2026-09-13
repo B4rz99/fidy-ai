@@ -1,8 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { BunClusterHttp, BunCrypto } from "@effect/platform-bun";
-import { Effect, Layer, Option, Redacted } from "effect";
+import { type Duration, Effect, Layer, Option } from "effect";
 import {
   type MessageStorage,
+  type RunnerAddress,
   RunnerHealth,
   RunnerServer,
   type RunnerStorage,
@@ -15,7 +16,6 @@ import {
 import {
   FetchHttpClient,
   HttpClient,
-  HttpClientRequest,
   HttpMiddleware,
   HttpRouter,
   HttpServer,
@@ -25,6 +25,14 @@ import {
 } from "effect/unstable/http";
 import { RpcClient, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
+import {
+  type ClusterRunnerHttpPolicy,
+  type ClusterToken,
+  boundRunnerRpcProtocol,
+  clusterBearerValue,
+  clusterRunnerPath,
+  makeClusterRunnerHttpClient,
+} from "./cluster-runner-http";
 import {
   type ClusterTopologyIncompatible,
   ensureClusterCompatibility,
@@ -42,23 +50,16 @@ import {
   clusterSerializationMaxBufferSizeBytes,
 } from "./cluster-topology";
 
-const clusterRunnerPath = "/_fidy/cluster";
-
 /** The one approved Cluster wire codec, bounded by the deployment compatibility contract. */
 export const ClusterSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
   RpcSerialization.layerMsgPackWith({ maxBufferSize: clusterSerializationMaxBufferSizeBytes });
-/** Opaque Cluster bearer token; unwrapped only for the wire header and the constant-time comparison. */
-type ClusterToken = Redacted.Redacted<string>;
-
 // Avoid presenting HttpRouter's non-React `use` API as a hook call to the React Hooks linter.
 const registerRouterMiddleware = HttpRouter.use;
-
-const bearer = (token: ClusterToken): string => `Bearer ${Redacted.value(token)}`;
 
 const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
   if (Option.isNone(actual)) return false;
   const actualBytes = Buffer.from(actual.value);
-  const expectedBytes = Buffer.from(bearer(expected));
+  const expectedBytes = Buffer.from(clusterBearerValue(expected));
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 };
 
@@ -85,7 +86,9 @@ export const authenticatedRunnerMiddleware = (
   );
 
 const authenticatedClientProtocol = (
-  token: ClusterToken
+  token: ClusterToken,
+  policy: ClusterRunnerHttpPolicy,
+  deadline: Duration.Input
 ): Layer.Layer<
   Runners.RpcClientProtocol,
   never,
@@ -98,18 +101,20 @@ const authenticatedClientProtocol = (
       const client = yield* HttpClient.HttpClient;
       return {
         codecFor: serialization.codecFor,
-        make: (address: {
-          readonly host: string;
-          readonly port: number;
-        }): ReturnType<Runners.RpcClientProtocol["Service"]["make"]> => {
-          const prependUrl = HttpClientRequest.prependUrl(
-            `http://${address.host}:${address.port}${clusterRunnerPath}`
-          );
-          const authenticatedClient = HttpClient.mapRequest(client, (request) =>
-            HttpClientRequest.setHeader(prependUrl(request), "authorization", bearer(token))
-          );
-          return RpcClient.makeProtocolHttp(authenticatedClient).pipe(
-            Effect.provideService(RpcSerialization.RpcSerialization, serialization)
+        make: (
+          address: RunnerAddress.RunnerAddress
+        ): ReturnType<Runners.RpcClientProtocol["Service"]["make"]> => {
+          const runnerClient = makeClusterRunnerHttpClient({
+            client,
+            token,
+            address,
+            connectDeadline: policy.connectDeadline,
+            runnerHosts: policy.runnerHosts,
+            runnerPorts: policy.runnerPorts,
+          });
+          return RpcClient.makeProtocolHttp(runnerClient).pipe(
+            Effect.provideService(RpcSerialization.RpcSerialization, serialization),
+            Effect.map((protocol) => boundRunnerRpcProtocol({ protocol, deadline }))
           );
         },
       };
@@ -200,14 +205,20 @@ const clusterSqlStorageLive = (
 
 const layerAuthenticatedSqlCluster = (
   token: ClusterToken,
-  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>
+  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>,
+  policy: ClusterRunnerHttpPolicy
 ): AuthenticatedClusterLayer => {
   const sharding = { ...ShardingConfig.defaults, ...shardingOptions };
   const compatibility = clusterCompatibilityIdentity(sharding);
-  const protocol = authenticatedClientProtocol(token).pipe(Layer.provide(FetchHttpClient.layer));
+  const healthProtocol = authenticatedClientProtocol(token, policy, policy.healthDeadline).pipe(
+    Layer.provide(FetchHttpClient.layer)
+  );
   const runnerHealth = RunnerHealth.layerPing.pipe(
-    Layer.provide(Runners.layerRpc),
-    Layer.provide(protocol)
+    Layer.provide(Layer.fresh(Runners.layerRpc)),
+    Layer.provide(healthProtocol)
+  );
+  const workProtocol = authenticatedClientProtocol(token, policy, policy.requestDeadline).pipe(
+    Layer.provide(FetchHttpClient.layer)
   );
   // `RunnerServer.layerWithClients` builds Sharding on the plain runner client; composing the
   // server here instead substitutes the request-retry client so Sharding routes sends through it.
@@ -220,7 +231,7 @@ const layerAuthenticatedSqlCluster = (
     )
   );
   const runner = serveIsolatedRouter(runnerRoutes).pipe(
-    Layer.provide(protocol),
+    Layer.provide(workProtocol),
     Layer.provide(BunClusterHttp.layerHttpServer)
   );
 
@@ -250,11 +261,14 @@ const layerAuthenticatedSqlCluster = (
  */
 const layerAuthenticatedSqlClusterClient = (
   token: ClusterToken,
-  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>
+  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>,
+  policy: ClusterRunnerHttpPolicy
 ): AuthenticatedClusterClientLayer => {
   const sharding = { ...ShardingConfig.defaults, ...shardingOptions };
   const compatibility = clusterCompatibilityIdentity(sharding);
-  const protocol = authenticatedClientProtocol(token).pipe(Layer.provide(FetchHttpClient.layer));
+  const protocol = authenticatedClientProtocol(token, policy, policy.requestDeadline).pipe(
+    Layer.provide(FetchHttpClient.layer)
+  );
   const infrastructure = RunnerServer.layerClientOnly.pipe(
     Layer.provide(protocol),
     Layer.provideMerge(clusterSqlStorageLive(compatibility)),

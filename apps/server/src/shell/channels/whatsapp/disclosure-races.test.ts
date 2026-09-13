@@ -24,6 +24,7 @@ import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { PgLive } from "~/shell/db/client";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
@@ -103,7 +104,8 @@ const acquireRuntime = Effect.fn(function* (
                 sendRetryInterval: 25,
                 entityTerminationTimeout: 100,
               },
-            })
+            }),
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

@@ -19,6 +19,7 @@ import { EmailAddress } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
@@ -99,7 +100,8 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
         shardLockRefreshInterval: 250,
         shardLockExpiration: "2 seconds",
       },
-    })
+    }),
+    loopbackClusterRunnerHttpPolicy([port])
   );
   return yield* Effect.acquireRelease(
     Effect.sync(() =>

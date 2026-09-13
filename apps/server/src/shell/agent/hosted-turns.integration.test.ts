@@ -26,6 +26,7 @@ import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
   defaultUserId,
@@ -135,7 +136,8 @@ const runtimeLayer = (input: {
             runnerHealthCheckInterval: 250,
             refreshAssignmentsInterval: 100,
           },
-        })
+        }),
+        loopbackClusterRunnerHttpPolicy([input.port])
       )
     ),
     Layer.provide(

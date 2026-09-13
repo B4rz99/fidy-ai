@@ -1,8 +1,13 @@
-import { Config, Effect, Layer, Schema } from "effect";
+import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option, Schema } from "effect";
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { configuredSecret } from "~/shell/_shared/configured-secret";
+import {
+  maximumHostedTurnIterations,
+  maximumModelRoundMillis,
+} from "~/shell/_shared/hosted-turn-bounds";
+import type { ClusterRunnerHttpPolicy } from "./cluster-runner-http";
 import {
   durableQueueLockExpiration,
   durableQueueLockRefreshInterval,
@@ -21,17 +26,91 @@ const clusterAuthenticationToken = configuredSecret({
   requirement: "must be a 32-byte lowercase hexadecimal key",
 });
 
+const workDeadlineMarginMinutes = 10;
+const runnerConnectDeadlineSeconds = 5;
+const runnerHealthDeadlineSeconds = 10;
+const workDeadlineMargin = Duration.minutes(workDeadlineMarginMinutes);
+export const productionRunnerConnectDeadline = Duration.seconds(runnerConnectDeadlineSeconds);
+export const productionRunnerHealthDeadline = Duration.seconds(runnerHealthDeadlineSeconds);
+export const productionRunnerRequestDeadline = Duration.sum(
+  Duration.millis(maximumHostedTurnIterations * maximumModelRoundMillis),
+  workDeadlineMargin
+);
+
+const blankRunnerAdvertisedHostError = (): Config.ConfigError =>
+  new Config.ConfigError(
+    new ConfigProvider.SourceError({ message: "FIDY_CLUSTER_RUNNER_HOST must not be blank" })
+  );
+
+const runnerAdvertisedHost = Config.string("FIDY_CLUSTER_RUNNER_HOST").pipe(
+  Config.mapOrFail((host): Effect.Effect<string, Config.ConfigError> => {
+    const advertised = host.trim();
+    return advertised === ""
+      ? Effect.fail(blankRunnerAdvertisedHostError())
+      : Effect.succeed(advertised);
+  })
+);
+const runnerPort = Config.port("FIDY_CLUSTER_RUNNER_PORT");
+const runnerHostAndPort = Config.all({ host: runnerAdvertisedHost, port: runnerPort });
+const runnerPeerHosts = Config.string("FIDY_CLUSTER_RUNNER_PEER_HOSTS").pipe(
+  Config.withDefault(""),
+  Config.map((hosts) =>
+    hosts
+      .split(",")
+      .map((host) => host.trim())
+      .filter((host) => host !== "")
+  )
+);
+const missingRunnerHostError = (): Config.ConfigError =>
+  new Config.ConfigError(
+    new ConfigProvider.SourceError({
+      message:
+        "FIDY_CLUSTER_RUNNER_HOST or FIDY_CLUSTER_RUNNER_PEER_HOSTS must configure at least one runner host",
+    })
+  );
+const requireRunnerHosts = (
+  hosts: ReadonlyArray<string>
+): Effect.Effect<Array.NonEmptyArray<string>, Config.ConfigError> =>
+  Option.match(Array.head(hosts), {
+    onNone: () => Effect.fail(missingRunnerHostError()),
+    onSome: (head) => Effect.succeed(Array.prepend(hosts.slice(1), head)),
+  });
+const clientRunnerHosts = Config.all({
+  advertised: Config.option(runnerAdvertisedHost),
+  peers: runnerPeerHosts,
+}).pipe(
+  Config.mapOrFail(({ advertised, peers }) =>
+    requireRunnerHosts(
+      Option.match(advertised, {
+        onNone: () => peers,
+        onSome: (host) => Array.prepend(peers, host),
+      })
+    )
+  )
+);
+const productionClusterRunnerHttpPolicy = (
+  runnerHosts: Array.NonEmptyArray<string>,
+  port: number
+): ClusterRunnerHttpPolicy => ({
+  runnerHosts,
+  runnerPorts: [port],
+  connectDeadline: productionRunnerConnectDeadline,
+  healthDeadline: productionRunnerHealthDeadline,
+  requestDeadline: productionRunnerRequestDeadline,
+});
+
 const ProductionClusterLive = Layer.unwrap(
   Effect.gen(function* () {
-    const { advertisedHost, listenHost, port } = yield* Config.all({
-      advertisedHost: Config.string("FIDY_CLUSTER_RUNNER_HOST"),
-      port: Config.port("FIDY_CLUSTER_RUNNER_PORT"),
-      listenHost: Config.string("FIDY_CLUSTER_LISTEN_HOST").pipe(Config.withDefault("0.0.0.0")),
-    });
+    const { host: advertisedHost, port } = yield* runnerHostAndPort;
+    const peerHosts = yield* runnerPeerHosts;
+    const listenHost = yield* Config.string("FIDY_CLUSTER_LISTEN_HOST").pipe(
+      Config.withDefault("0.0.0.0")
+    );
     const authenticationToken = yield* clusterAuthenticationToken;
     return authenticatedClusterHttp.layerSql(
       authenticationToken,
-      productionRunnerTopology({ advertisedHost, listenHost, port }).sharding
+      productionRunnerTopology({ advertisedHost, listenHost, port }).sharding,
+      productionClusterRunnerHttpPolicy(Array.prepend(peerHosts, advertisedHost), port)
     );
   })
 );
@@ -65,11 +144,17 @@ export const DurableExecutionLive = ClusterObservationLive.pipe(
 export const DurableExecutionClientLive = Layer.unwrap(
   Effect.gen(function* () {
     const token = yield* clusterAuthenticationToken;
+    const hosts = yield* clientRunnerHosts;
+    const port = yield* runnerPort;
     return Layer.mergeAll(
       SqlPersistedQueueLive,
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-          authenticatedClusterHttp.layerSqlClient(token, clientClusterTopology().sharding)
+          authenticatedClusterHttp.layerSqlClient(
+            token,
+            clientClusterTopology().sharding,
+            productionClusterRunnerHttpPolicy(hosts, port)
+          )
         )
       )
     );

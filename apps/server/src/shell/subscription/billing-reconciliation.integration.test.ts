@@ -33,6 +33,7 @@ import {
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -296,7 +297,8 @@ const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
             clusterTestRunnerOptions({
               port,
               overrides: { runnerHealthCheckInterval: "1 second" },
-            })
+            }),
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

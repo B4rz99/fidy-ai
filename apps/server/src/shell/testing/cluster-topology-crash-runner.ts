@@ -3,6 +3,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Schedule } from "effect";
 import { Sharding } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 import { PgLive } from "~/shell/db/client";
 import {
   clusterTestAuthenticationToken,
@@ -21,7 +22,8 @@ const cluster = authenticatedClusterHttp.layerSql(
       runnerHealthCheckInterval: 100,
       refreshAssignmentsInterval: 100,
     },
-  })
+  }),
+  loopbackClusterRunnerHttpPolicy([port])
 );
 const Live = cluster.pipe(Layer.provide(PgLive), Layer.provide(BunServices.layer));
 const program = Effect.gen(function* () {

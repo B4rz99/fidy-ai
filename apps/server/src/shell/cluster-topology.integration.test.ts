@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { BunServices } from "@effect/platform-bun";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { expect, layer } from "@effect/vitest";
 import { describe } from "vitest";
 import {
@@ -102,7 +103,11 @@ const runtimeLayer = (
   Layer.Error<AuthenticatedClusterLayer> | Layer.Error<typeof PgLive>
 > =>
   authenticatedClusterHttp
-    .layerSql(clusterToken, runtimeSharding(port, overrides))
+    .layerSql(
+      clusterToken,
+      runtimeSharding(port, overrides),
+      loopbackClusterRunnerHttpPolicy([port])
+    )
     .pipe(Layer.provideMerge(PgLive), Layer.provide(BunServices.layer));
 
 type ClusterRuntime = ManagedRuntime.ManagedRuntime<

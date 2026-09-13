@@ -1,3 +1,4 @@
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 import { type Config, Crypto, Layer, Redacted } from "effect";
 import type { PgClient } from "@effect/sql-pg/PgClient";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
@@ -53,7 +54,8 @@ export const replacementRuntimeLayer = ({
                 shardLockRefreshInterval: "500 millis",
                 shardLockExpiration: "2 seconds",
               },
-            })
+            }),
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

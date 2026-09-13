@@ -1,3 +1,4 @@
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
@@ -176,7 +177,8 @@ const makeRuntimeLayer = (
     clusterTestRunnerOptions({
       port,
       overrides: { entityMessagePollInterval: 100, sendRetryInterval: 100 },
-    })
+    }),
+    loopbackClusterRunnerHttpPolicy([port])
   );
   return OnboardingEmailDeliveryWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),

@@ -3,6 +3,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 import { PgLive } from "~/shell/db/client";
 import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
@@ -26,7 +27,8 @@ const cluster = authenticatedClusterHttp.layerSql(
       shardLockRefreshInterval: 250,
       shardLockExpiration: "2 seconds",
     },
-  })
+  }),
+  loopbackClusterRunnerHttpPolicy([crashRunnerPort])
 );
 const mode = Schema.decodeUnknownSync(Schema.Literals(["before-send", "after-send", "expiry"]))(
   process.argv[2]

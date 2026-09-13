@@ -45,7 +45,7 @@ export const clusterTestSharedOptions = {
   sendRetryInterval: 50,
   shardLockDisableAdvisory: true,
   shardLockRefreshInterval: 500,
-  shardLockExpiration: "3 seconds",
+  shardLockExpiration: "2 seconds",
 } satisfies Partial<ShardingConfig.ShardingConfig["Service"]>;
 
 /** Builds the shared test topology for one loopback runner, with scenario-specific overrides. */

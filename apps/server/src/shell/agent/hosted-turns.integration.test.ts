@@ -132,7 +132,6 @@ const runtimeLayer = (input: {
           overrides: {
             shardLockRefreshInterval: 500,
             entityTerminationTimeout: 1000,
-            shardLockExpiration: 3000,
             runnerHealthCheckInterval: 250,
             refreshAssignmentsInterval: 100,
           },

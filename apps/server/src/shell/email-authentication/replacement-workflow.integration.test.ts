@@ -19,6 +19,7 @@ import { EmailAddress } from "~/core/email-authentication/model";
 import { TokenBearer } from "~/core/tokens/model";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
@@ -263,11 +264,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(deliveredCodes).toHaveLength(1);
           for (const secret of [...deliveredCodes, "replacement-cluster-once@example.com"]) {
             expect(
-              yield* sql`SELECT 1 FROM fidy_durable.cluster_messages row
+              yield* sql`SELECT 1 FROM fidy_durable.${sql(clusterMessagesTable)} row
         WHERE strpos(row_to_json(row)::text, ${secret}) > 0`
             ).toEqual([]);
             expect(
-              yield* sql`SELECT 1 FROM fidy_durable.cluster_replies row
+              yield* sql`SELECT 1 FROM fidy_durable.${sql(clusterRepliesTable)} row
         WHERE strpos(row_to_json(row)::text, ${secret}) > 0`
             ).toEqual([]);
             expect(
@@ -448,8 +449,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             );
             expect(yield* Ref.get(calls)).toBe(phase === "arming" ? 0 : 1);
             expect(
-              yield* sql`SELECT 1 FROM fidy_durable.cluster_replies row
-            JOIN fidy_durable.cluster_messages message ON message.request_id = row.request_id
+              yield* sql`SELECT 1 FROM fidy_durable.${sql(clusterRepliesTable)} row
+            JOIN fidy_durable.${sql(clusterMessagesTable)} message ON message.request_id = row.request_id
             WHERE message.entity_id = ${executionId} AND strpos(row_to_json(row)::text, 'delivery-database-secret-sentinel') > 0`
             ).toEqual([]);
             yield* sql`DROP TRIGGER test_delivery_failure ON email_replacement_delivery_attempts`;
@@ -505,8 +506,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT id FROM email_replacement_executions WHERE id = ${expiry.workflowId}`
           ).toHaveLength(1);
           expect(
-            yield* sql`SELECT 1 FROM fidy_durable.cluster_replies row
-                JOIN fidy_durable.cluster_messages message ON message.request_id = row.request_id
+            yield* sql`SELECT 1 FROM fidy_durable.${sql(clusterRepliesTable)} row
+                JOIN fidy_durable.${sql(clusterMessagesTable)} message ON message.request_id = row.request_id
                 WHERE message.entity_id = ${executionId} AND strpos(row_to_json(row)::text, 'expiry-database-secret-sentinel') > 0`
           ).toEqual([]);
           yield* Effect.tryPromise(() => runtimeA.dispose());

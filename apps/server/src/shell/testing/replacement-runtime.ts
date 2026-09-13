@@ -1,17 +1,15 @@
-import { type Config, Crypto, Layer, Option, Redacted } from "effect";
+import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
+import { type Config, Crypto, Layer, Redacted } from "effect";
 import type { PgClient } from "@effect/sql-pg/PgClient";
-import {
-  ClusterWorkflowEngine,
-  type MessageStorage,
-  RunnerAddress,
-  type Runners,
-  type Sharding,
-} from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import type { SqlClient, SqlError } from "effect/unstable/sql";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
+import type { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
+import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
 import {
   EmailDeliveryPort,
   type EmailDeliveryPortService,
@@ -20,7 +18,6 @@ import {
   type ReplacementDeliveryWorkflowLive,
   type ReplacementExpiryWorkflowLive,
 } from "~/shell/email-authentication/replacement-workflow";
-import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 
 /** Real SQL/HTTP Cluster configuration shared by in-process and hard-killed replacement test runners. */
 const testAuthenticationTokenBytes = 64;
@@ -38,13 +35,11 @@ export const replacementRuntimeLayer = ({
   deliveryLive: typeof ReplacementDeliveryWorkflowLive;
   expiryLive: typeof ReplacementExpiryWorkflowLive;
 }>): Layer.Layer<
-  | MessageStorage.MessageStorage
-  | Runners.Runners
-  | Sharding.Sharding
   | WorkflowEngine.WorkflowEngine
   | SqlClient.SqlClient
-  | PgClient,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | PgClient
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > =>
   Layer.mergeAll(deliveryLive, expiryLive).pipe(
     Layer.provideMerge(
@@ -52,18 +47,14 @@ export const replacementRuntimeLayer = ({
         Layer.provideMerge(
           authenticatedClusterHttp.layerSql(
             Redacted.make("d".repeat(testAuthenticationTokenBytes)),
-            {
-              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              availableShardGroups: ["default"],
-              assignedShardGroups: ["default"],
-              shardsPerGroup: 300,
-              entityMessagePollInterval: 50,
-              sendRetryInterval: 50,
-              runnerHealthCheckInterval: "1 second",
-              shardLockRefreshInterval: "500 millis",
-              shardLockExpiration: "2 seconds",
-            },
+            clusterTestRunnerOptions({
+              port,
+              overrides: {
+                runnerHealthCheckInterval: "1 second",
+                shardLockRefreshInterval: "500 millis",
+                shardLockExpiration: "2 seconds",
+              },
+            }),
             loopbackClusterRunnerHttpPolicy([port])
           )
         )

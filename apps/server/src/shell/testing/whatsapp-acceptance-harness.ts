@@ -47,7 +47,7 @@ import {
 import { findPendingConsentExchange, observeConsentRecords } from "~/shell/consent/repo";
 import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
-import { DurableExecutionSqlQueueMemoryWorkflow } from "~/shell/durable-execution";
+import { SqlQueueHarness } from "./durable-execution";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
 import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
@@ -548,7 +548,7 @@ const AcceptanceApplication = Layer.mergeAll(
  * the same layers used by production.
  */
 export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
-  Layer.provideMerge(DurableExecutionSqlQueueMemoryWorkflow),
+  Layer.provideMerge(SqlQueueHarness),
   Layer.provideMerge(AcceptanceCallerProbe),
   Layer.provideMerge(AcceptanceDisclosureControl),
   Layer.provideMerge(AcceptanceKapsoTransport),

@@ -11,18 +11,19 @@ import {
   Ref,
   Result,
 } from "effect";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { SqlClient, Statement } from "effect/unstable/sql";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -96,16 +97,10 @@ const acquireRuntime = Effect.fn(function* (
         Layer.provideMerge(
           authenticatedClusterHttp.layerSql(
             Redacted.make("c".repeat(64)),
-            {
-              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              availableShardGroups: ["default"],
-              assignedShardGroups: ["default"],
-              shardsPerGroup: 300,
-              entityMessagePollInterval: 50,
-              sendRetryInterval: 50,
-              entityTerminationTimeout: 100,
-            },
+            clusterTestRunnerOptions({
+              port,
+              overrides: { entityTerminationTimeout: 100 },
+            }),
             loopbackClusterRunnerHttpPolicy([port])
           )
         )

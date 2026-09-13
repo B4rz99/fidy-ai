@@ -1,3 +1,4 @@
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { expect, layer } from "@effect/vitest";
 import {
   type Config,
@@ -14,12 +15,10 @@ import {
 import {
   ClusterWorkflowEngine,
   type MessageStorage,
-  RunnerAddress,
   type Runners,
   type Sharding,
 } from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import type { SqlClient, SqlError } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import { makeColombianUser } from "~/core/identity/rules";
 import { UserId } from "~/core/identity/reference";
@@ -28,11 +27,22 @@ import {
   ReceivedEmailContent as ReceivedEmailContentSchema,
 } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
+import {
+  clusterMessagesTable,
+  clusterRepliesTable,
+  durableQueueTable,
+} from "~/shell/durable-tables";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+import {
+  clusterTestRunnerOptions,
+  disposeTestRuntimes as disposeRuntimes,
+} from "~/shell/testing/cluster-topology-fixtures";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
@@ -68,7 +78,7 @@ const cleanup = Effect.fn("test.cleanupForwardedEmailWorkflow")(function* () {
       forwarded_email_user_admission_windows, forwarded_email_known_admission_window,
       resend_webhook_deliveries, resend_webhook_admission_window
   `;
-  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion'`;
+  yield* sql`DELETE FROM fidy_durable.${sql(durableQueueTable)} WHERE queue_name = 'forwarded-email-ingestion'`;
 });
 
 const admit = Effect.fn("test.admitForwardedEmailWorkflow")(function* (receivedEmailId: string) {
@@ -136,20 +146,16 @@ const makeRuntimeLayer = (
   | Runners.Runners
   | SqlClient.SqlClient
   | Sharding.Sharding
-  | WorkflowEngine.WorkflowEngine,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | WorkflowEngine.WorkflowEngine
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > => {
   const cluster = authenticatedClusterHttp.layerSql(
     clusterToken,
-    {
-      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
-      availableShardGroups: ["default"],
-      assignedShardGroups: ["default"],
-      shardsPerGroup: 300,
-      entityMessagePollInterval: 100,
-      sendRetryInterval: 100,
-    },
+    clusterTestRunnerOptions({
+      port: input.port,
+      overrides: { entityMessagePollInterval: 100, sendRetryInterval: 100 },
+    }),
     loopbackClusterRunnerHttpPolicy([input.port])
   );
   return ForwardedEmailWorkflowLive.pipe(
@@ -181,6 +187,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24611, provider }));
           const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24612, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtimeA, runtimeB]));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           yield* Effect.tryPromise(() =>
@@ -199,21 +206,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             Schema.Array(Schema.Struct({ payload: Schema.String }))
           )(
             yield* sql`
-            SELECT element AS payload FROM fidy_durable.fidy_queue
+            SELECT element AS payload FROM fidy_durable.${sql(durableQueueTable)}
             WHERE queue_name = 'forwarded-email-ingestion'
               AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}
             UNION ALL
-            SELECT payload FROM fidy_durable.cluster_messages
+            SELECT payload FROM fidy_durable.${sql(clusterMessagesTable)}
             WHERE entity_type = 'Workflow/ForwardedEmailIngestion'
             UNION ALL
-            SELECT payload FROM fidy_durable.cluster_replies
+            SELECT payload FROM fidy_durable.${sql(clusterRepliesTable)}
           `
           ).pipe(Effect.orDie);
           const durableText = durableRows.map(({ payload }) => payload).join("\n");
           expect(durableText).not.toContain("Compra aprobada");
           expect(durableText).not.toContain("Compra por COP 25000");
           expect(durableText).not.toContain(admitted.address);
-          yield* sql`UPDATE fidy_durable.fidy_queue SET completed = true
+          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET completed = true
             WHERE queue_name = 'forwarded-email-ingestion'
               AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`;
           yield* cleanupIsolatedUser();
@@ -235,7 +242,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             FROM generate_series(1, 100) AS series
           `;
           yield* sql`
-            INSERT INTO fidy_durable.fidy_queue (
+            INSERT INTO fidy_durable.${sql(durableQueueTable)} (
               id, queue_name, element, completed, attempts, created_at, updated_at
             )
             SELECT receipt.received_email_id, 'forwarded-email-ingestion',
@@ -264,7 +271,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           ).toBe(1);
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(durableQueueTable)}
               WHERE queue_name = 'forwarded-email-ingestion'
                 AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`
           ).toEqual([{ count: 0 }]);
@@ -286,13 +293,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             SET status = 'expired', completed_at = now() - interval '91 days',
               durable_cleanup_checked_at = now(), durable_cleanup_started_at = now()
             WHERE received_email_id = ${admitted.payload.receivedEmailId}`;
-          yield* sql`UPDATE fidy_durable.fidy_queue SET completed = true
+          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET completed = true
             WHERE queue_name = 'forwarded-email-ingestion'
               AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`;
           const provider = ResendReceivingClient.of({
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24620, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
@@ -308,7 +316,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               WHERE received_email_id = ${admitted.payload.receivedEmailId}`
           ).toEqual([{ cleared: true }]);
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(durableQueueTable)}
               WHERE queue_name = 'forwarded-email-ingestion'
                 AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`
           ).toEqual([{ count: 0 }]);
@@ -336,6 +344,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24617, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -367,6 +376,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24619, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -402,6 +412,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24615, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
@@ -463,6 +474,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ),
           });
           const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24616, provider }));
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(

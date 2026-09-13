@@ -12,17 +12,19 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { EmailAddress } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { emailCredentialLookupKey } from "./admission";
 import { BrowserPairingEmailWorkflowLive } from "./authentication-delivery-worker";
 import { processBrowserPairingEmailStartRequest } from "./browser-pairing-authentication";
@@ -90,19 +92,15 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
   const crypto = yield* Crypto.Crypto;
   const cluster = authenticatedClusterHttp.layerSql(
     Redacted.make("c".repeat(64)),
-    {
-      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      availableShardGroups: ["default"],
-      assignedShardGroups: ["default"],
-      shardsPerGroup: 300,
-      entityMessagePollInterval: 50,
-      sendRetryInterval: 50,
-      runnerHealthCheckInterval: 100,
-      refreshAssignmentsInterval: 100,
-      shardLockRefreshInterval: 250,
-      shardLockExpiration: "2 seconds",
-    },
+    clusterTestRunnerOptions({
+      port,
+      overrides: {
+        runnerHealthCheckInterval: 100,
+        refreshAssignmentsInterval: 100,
+        shardLockRefreshInterval: 250,
+        shardLockExpiration: "2 seconds",
+      },
+    }),
     loopbackClusterRunnerHttpPolicy([port])
   );
   return yield* Effect.acquireRelease(
@@ -290,10 +288,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           // Native storage is an explicit security observer: no bearer-equivalent values may reach it.
           const sql = yield* MigrationSqlClient;
           const history = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-            yield* sql`SELECT * FROM fidy_durable.cluster_messages`
+            yield* sql`SELECT * FROM fidy_durable.${sql(clusterMessagesTable)}`
           );
           const replies = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-            yield* sql`SELECT * FROM fidy_durable.cluster_replies`
+            yield* sql`SELECT * FROM fidy_durable.${sql(clusterRepliesTable)}`
           );
           for (const input of attempts) {
             expect(history + replies).not.toContain(input.combinedCode);
@@ -503,7 +501,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-expiry'`
           ).toEqual([]);
           expect(
-            yield* sql`SELECT id FROM fidy_durable.cluster_messages WHERE entity_id = ${executionId}`
+            yield* sql`SELECT id FROM fidy_durable.${sql(clusterMessagesTable)} WHERE entity_id = ${executionId}`
           ).toEqual([]);
         }),
       30_000

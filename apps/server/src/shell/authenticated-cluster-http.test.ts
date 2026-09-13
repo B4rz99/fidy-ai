@@ -4,26 +4,20 @@ import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization } from "effect/unstable/rpc";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
 import {
-  ClusterRunnerSerializationLive,
+  ClusterSerializationLive,
   authenticatedRunnerMiddleware,
-  maximumClusterMessageBufferBytes,
 } from "./authenticated-cluster-http";
+import { clusterSerializationMaxBufferSizeBytes } from "./cluster-topology";
 
 const tokenFixture = "f1d7c0de".repeat(8);
 const token = Redacted.make(tokenFixture);
+const clusterPath = "/_fidy/cluster";
 type RunnerHandler = (request: Request) => Promise<Response>;
-const postTo = (
-  handler: RunnerHandler,
-  path: string,
-  headers: Readonly<Record<string, string>> = {}
-): Effect.Effect<Response> =>
-  Effect.promise(() => handler(new Request(`http://runner${path}`, { method: "POST", headers })));
-const post = (
-  handler: RunnerHandler,
-  headers: Readonly<Record<string, string>> = {}
-): Effect.Effect<Response> => postTo(handler, "/_fidy/cluster", headers);
-const get = (handler: RunnerHandler, path: string): Effect.Effect<Response> =>
-  Effect.promise(() => handler(new Request(`http://runner${path}`)));
+/** Curried so each test binds one method and then spells only the path and headers it exercises. */
+const request =
+  (handler: RunnerHandler, method: string) =>
+  (path: string, headers: Readonly<Record<string, string>> = {}): Effect.Effect<Response> =>
+    Effect.promise(() => handler(new Request(`http://runner${path}`, { method, headers })));
 const releaseHandler = (dispose: () => Promise<void>): Effect.Effect<void> =>
   Effect.promise(dispose);
 const responseText = (response: Response): Effect.Effect<string> =>
@@ -62,10 +56,10 @@ const declaredOversizeFrame = (bytes: number): Uint8Array => {
   return frame;
 };
 
-layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it) => {
+layer(ClusterSerializationLive)("Cluster runner MessagePack framing", (it) => {
   it("pins the configured retained-frame bound", () => {
     // The reviewed 64 KiB bound; changing it must be a deliberate, reviewed protocol decision.
-    expect(maximumClusterMessageBufferBytes).toBe(64 * 1024);
+    expect(clusterSerializationMaxBufferSizeBytes).toBe(64 * 1024);
   });
 
   it.effect("rejects malformed MessagePack frames without retaining a partial prefix", () =>
@@ -96,12 +90,14 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
     () =>
       Effect.gen(function* () {
         const parser = yield* parserUnderTest;
-        expect(parser.decode(declaredOversizeFrame(maximumClusterMessageBufferBytes))).toEqual([]);
+        expect(
+          parser.decode(declaredOversizeFrame(clusterSerializationMaxBufferSizeBytes))
+        ).toEqual([]);
         const failure = yield* decodeFailure(parser, new Uint8Array([0x00]));
         if (!(failure.error instanceof RpcSerialization.MaxBufferSizeExceeded)) {
           return yield* Effect.die("expected MaxBufferSizeExceeded");
         }
-        expect(failure.error.maxBufferSize).toBe(maximumClusterMessageBufferBytes);
+        expect(failure.error.maxBufferSize).toBe(clusterSerializationMaxBufferSizeBytes);
         const encoded = yield* encodedBytes(parser, { recovered: true });
         expect(parser.decode(encoded)).toEqual([{ recovered: true }]);
       })
@@ -114,12 +110,12 @@ layer(ClusterRunnerSerializationLive)("Cluster runner MessagePack framing", (it)
         const parser = yield* parserUnderTest;
         const failure = yield* decodeFailure(
           parser,
-          declaredOversizeFrame(maximumClusterMessageBufferBytes + 1)
+          declaredOversizeFrame(clusterSerializationMaxBufferSizeBytes + 1)
         );
         if (!(failure.error instanceof RpcSerialization.MaxBufferSizeExceeded)) {
           return yield* Effect.die("expected MaxBufferSizeExceeded");
         }
-        expect(failure.error.maxBufferSize).toBe(maximumClusterMessageBufferBytes);
+        expect(failure.error.maxBufferSize).toBe(clusterSerializationMaxBufferSizeBytes);
       })
   );
 });
@@ -130,7 +126,7 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
     const routes = HttpRouter.use((router) =>
       router.add(
         "POST",
-        "/_fidy/cluster",
+        clusterPath,
         Ref.update(invocations, (count) => count + 1).pipe(
           Effect.as(HttpServerResponse.text("accepted"))
         )
@@ -139,89 +135,46 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
 
     yield* Effect.acquireUseRelease(
       Effect.sync(() =>
-        HttpRouter.toWebHandler(routes.pipe(Layer.provide(authenticatedRunnerMiddleware(token))), {
+        HttpRouter.toWebHandler(Layer.mergeAll(authenticatedRunnerMiddleware(token), routes), {
           disableLogger: true,
         })
       ),
       ({ handler }) =>
         Effect.gen(function* () {
-          const missing = yield* post(handler);
-          const malformed = yield* post(handler, { authorization: Redacted.value(token) });
-          const incorrect = yield* post(handler, {
-            authorization: `Bearer ${"b".repeat(64)}`,
-          });
-
-          expect(missing.status).toBe(401);
-          expect(malformed.status).toBe(401);
-          expect(incorrect.status).toBe(401);
-          expect(yield* responseText(missing)).toBe("");
-          expect(yield* responseText(malformed)).toBe("");
-          expect(yield* responseText(incorrect)).toBe("");
-
-          // HttpRouter matches aliases (duplicate slashes, trailing slash, case, decoded escapes)
-          // on the runner route. The guard wraps the route handler itself, so every spelling that
-          // the router dispatches to the runner route is authenticated before the handler runs.
-          const aliases = [
-            "//_fidy//cluster",
-            "/_fidy/cluster/",
-            "/_FIDY/CLUSTER",
-            "/%5Ffidy/cluster",
-          ];
-          for (const path of aliases) {
-            const unauthenticated = yield* postTo(handler, path);
-            expect(unauthenticated.status).toBe(401);
-            expect(yield* responseText(unauthenticated)).toBe("");
-            const authenticated = yield* postTo(handler, path, {
-              authorization: `Bearer ${Redacted.value(token)}`,
-            });
-            expect(authenticated.status).toBe(200);
-            expect(yield* responseText(authenticated)).toBe("accepted");
+          const post = request(handler, "POST");
+          const get = request(handler, "GET");
+          const rejected = yield* Effect.all([
+            post(clusterPath),
+            post(clusterPath, { authorization: Redacted.value(token) }),
+            post(clusterPath, { authorization: `Bearer ${"b".repeat(64)}` }),
+            // The router matches these spellings of the same route, so the guard cannot rely on
+            // the exact path before authenticating.
+            post(`${clusterPath}/`),
+            post(`/${clusterPath}`),
+            post("/_FIDY/CLUSTER"),
+            get("/health"),
+          ]);
+          for (const response of rejected) {
+            expect(response.status).toBe(401);
+            expect(yield* responseText(response)).toBe("");
           }
-          expect(yield* Ref.get(invocations)).toBe(aliases.length);
+          expect(yield* Ref.get(invocations)).toBe(0);
 
           expectNotInspected(token, tokenFixture);
           expectNotInspected(authenticatedRunnerMiddleware(token), tokenFixture);
 
-          const accepted = yield* post(handler, {
+          const accepted = yield* post(clusterPath, {
             authorization: `Bearer ${Redacted.value(token)}`,
           });
           expect(accepted.status).toBe(200);
           expect(yield* responseText(accepted)).toBe("accepted");
-          expect(yield* Ref.get(invocations)).toBe(aliases.length + 1);
+          expect(yield* Ref.get(invocations)).toBe(1);
 
-          const publicResponse = yield* get(handler, "/health");
-          expect(publicResponse.status).toBe(404);
-        }),
-      ({ dispose }) => releaseHandler(dispose)
-    );
-  })
-);
-
-it.effect("leaves routes outside the runner route reachable on a shared router", () =>
-  Effect.gen(function* () {
-    // One `HttpRouter` instance serves every listener in the process, so the runner guard must
-    // attach to the runner route only: a guard that refuses unrelated paths would break the
-    // public listener that shares the router.
-    const runner = HttpRouter.use((router) =>
-      router.add("POST", "/_fidy/cluster", Effect.succeed(HttpServerResponse.text("accepted")))
-    ).pipe(Layer.provide(authenticatedRunnerMiddleware(token)));
-    const health = HttpRouter.use((router) =>
-      router.add("GET", "/health", Effect.succeed(HttpServerResponse.text("ok")))
-    );
-
-    yield* Effect.acquireUseRelease(
-      Effect.sync(() =>
-        HttpRouter.toWebHandler(Layer.mergeAll(runner, health), { disableLogger: true })
-      ),
-      ({ handler }) =>
-        Effect.gen(function* () {
-          const healthResponse = yield* get(handler, "/health");
-          expect(healthResponse.status).toBe(200);
-          expect(yield* responseText(healthResponse)).toBe("ok");
-
-          const unauthenticated = yield* post(handler);
-          expect(unauthenticated.status).toBe(401);
-          expect(yield* responseText(unauthenticated)).toBe("");
+          // Valid credentials still cannot reach a route this listener does not serve.
+          const unknown = yield* get("/health", {
+            authorization: `Bearer ${Redacted.value(token)}`,
+          });
+          expect(unknown.status).toBe(404);
         }),
       ({ dispose }) => releaseHandler(dispose)
     );

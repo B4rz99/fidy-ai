@@ -1,3 +1,4 @@
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
@@ -10,7 +11,6 @@ import {
   Exit,
   Layer,
   ManagedRuntime,
-  Option,
   Redacted,
   Ref,
   Schema,
@@ -18,17 +18,18 @@ import {
 import {
   ClusterWorkflowEngine,
   type MessageStorage,
-  RunnerAddress,
   type Runners,
   type Sharding,
 } from "effect/unstable/cluster";
-import type { HttpServerError } from "effect/unstable/http";
-import { SqlClient, type SqlError } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
-import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import {
+  type AuthenticatedClusterLayer,
+  authenticatedClusterHttp,
+} from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
   EmailDeliveryPort,
@@ -36,7 +37,7 @@ import {
   EmailSendFailed,
 } from "~/shell/email-authentication/delivery";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
@@ -167,20 +168,16 @@ const makeRuntimeLayer = (
   | MessageStorage.MessageStorage
   | Runners.Runners
   | Sharding.Sharding
-  | WorkflowEngine.WorkflowEngine,
-  Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
+  | WorkflowEngine.WorkflowEngine
+  | Layer.Success<AuthenticatedClusterLayer>,
+  Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > => {
   const cluster = authenticatedClusterHttp.layerSql(
     token,
-    {
-      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      availableShardGroups: ["default"],
-      assignedShardGroups: ["default"],
-      shardsPerGroup: 300,
-      entityMessagePollInterval: 100,
-      sendRetryInterval: 100,
-    },
+    clusterTestRunnerOptions({
+      port,
+      overrides: { entityMessagePollInterval: 100, sendRetryInterval: 100 },
+    }),
     loopbackClusterRunnerHttpPolicy([port])
   );
   return OnboardingEmailDeliveryWorkflowLive.pipe(

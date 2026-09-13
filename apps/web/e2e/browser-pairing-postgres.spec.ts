@@ -598,14 +598,20 @@ test("renders authoritative PostgreSQL Subscription offers and prepares Pro paym
     }
   });
 
-  const offersResponse = page.waitForResponse(
-    (response) =>
-      response.url() === `${apiOrigin}/subscription/offers` && response.request().method() === "GET"
-  );
+  const offersResponse = page
+    .waitForResponse(
+      (response) =>
+        response.url() === `${apiOrigin}/subscription/offers` &&
+        response.request().method() === "GET"
+    )
+    .then(async (response) => {
+      const body: unknown = await response.json();
+      return { status: response.status(), body };
+    });
   await page.goto("/upgrade");
   const response = await offersResponse;
-  expect(response.status()).toBe(successStatus);
-  expect(await response.json()).toEqual(subscriptionOffersBody);
+  expect(response.status).toBe(successStatus);
+  expect(response.body).toEqual(subscriptionOffersBody);
 
   await expect(page.getByText(/COP\s+9\.900\/semana$/u)).toBeVisible();
   await expect(page.getByText(/COP\s+28\.900\/mes$/u)).toBeVisible();

@@ -14,7 +14,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
@@ -33,11 +33,12 @@ import {
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   BillingAttemptReconciliationPayload,
@@ -293,18 +294,10 @@ const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
         Layer.provideMerge(
           authenticatedClusterHttp.layerSql(
             Redacted.make("e".repeat(64)),
-            {
-              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              availableShardGroups: ["default"],
-              assignedShardGroups: ["default"],
-              shardsPerGroup: 300,
-              entityMessagePollInterval: 50,
-              sendRetryInterval: 50,
-              runnerHealthCheckInterval: "1 second",
-              shardLockRefreshInterval: "500 millis",
-              shardLockExpiration: "2 seconds",
-            },
+            clusterTestRunnerOptions({
+              port,
+              overrides: { runnerHealthCheckInterval: "1 second" },
+            }),
             loopbackClusterRunnerHttpPolicy([port])
           )
         )

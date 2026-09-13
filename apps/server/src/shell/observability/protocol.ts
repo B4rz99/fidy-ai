@@ -13,6 +13,10 @@ export const TelemetryCount = Schema.Int.check(
 ).pipe(Schema.brand("TelemetryCount"));
 export type TelemetryCount = typeof TelemetryCount.Type;
 
+/** Clamps any count reading into the approved telemetry-count range. */
+export const boundedTelemetryCount = (value: number): TelemetryCount =>
+  TelemetryCount.make(Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryCount));
+
 /** A one-based attempt number from 1 through 100 for queue, provider, model, or scheduled work. */
 export const TelemetryAttempt = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 100 })
@@ -24,6 +28,12 @@ export const TelemetryDuration = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumTelemetryDurationMilliseconds })
 ).pipe(Schema.brand("TelemetryDuration"));
 export type TelemetryDuration = typeof TelemetryDuration.Type;
+
+/** Clamps any millisecond reading into the approved telemetry-duration range. */
+export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
+  TelemetryDuration.make(
+    Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMilliseconds)
+  );
 
 /** An HTTP response status from 100 through 599 used only as bounded diagnostic metadata. */
 export const TelemetryHttpStatus = Schema.Int.check(

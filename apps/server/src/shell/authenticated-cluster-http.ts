@@ -1,13 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { BunClusterHttp, BunCrypto } from "@effect/platform-bun";
-import { type Config, type Duration, Effect, Layer, Option } from "effect";
+import { type Duration, Effect, Layer, Option } from "effect";
 import {
-  HttpRunner,
   type MessageStorage,
   type RunnerAddress,
   RunnerHealth,
+  RunnerServer,
+  type RunnerStorage,
   Runners,
-  type Sharding,
+  Sharding,
   ShardingConfig,
   SqlMessageStorage,
   SqlRunnerStorage,
@@ -15,13 +16,15 @@ import {
 import {
   FetchHttpClient,
   HttpClient,
+  HttpMiddleware,
   HttpRouter,
-  type HttpServerError,
+  HttpServer,
+  HttpServerError,
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import type { SqlClient } from "effect/unstable/sql";
+import { RpcClient, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import type { SqlClient, SqlError } from "effect/unstable/sql";
 import {
   type ClusterRunnerHttpPolicy,
   type ClusterToken,
@@ -30,19 +33,28 @@ import {
   clusterRunnerPath,
   makeClusterRunnerHttpClient,
 } from "./cluster-runner-http";
+import {
+  type ClusterTopologyIncompatible,
+  ensureClusterCompatibility,
+} from "./cluster-compatibility";
+import type { ClusterObservationDependencies } from "./cluster-observation-sample";
+import { ClusterReadiness } from "./cluster-readiness";
+import {
+  ClusterTelemetry,
+  requestRetryRunnersLive,
+  shardLockStorageLive,
+} from "./cluster-telemetry";
+import {
+  type ClusterCompatibilityIdentity,
+  clusterCompatibilityIdentity,
+  clusterSerializationMaxBufferSizeBytes,
+} from "./cluster-topology";
 
-const messageBufferKibibytes = 64;
-const bytesPerKibibyte = 1024;
-/** Retained incomplete-frame bound shared by every private Cluster client and runner. */
-export const maximumClusterMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
-
-/**
- * Exact MessagePack framing shared by private Cluster clients and runners. The bound applies to an
- * incomplete frame retained across chunks, so a malformed or oversized peer cannot grow parser
- * memory without limit.
- */
-export const ClusterRunnerSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
-  RpcSerialization.layerMsgPackWith({ maxBufferSize: maximumClusterMessageBufferBytes });
+/** The one approved Cluster wire codec, bounded by the deployment compatibility contract. */
+export const ClusterSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
+  RpcSerialization.layerMsgPackWith({ maxBufferSize: clusterSerializationMaxBufferSizeBytes });
+// Avoid presenting HttpRouter's non-React `use` API as a hook call to the React Hooks linter.
+const registerRouterMiddleware = HttpRouter.use;
 
 const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
   if (Option.isNone(actual)) return false;
@@ -52,25 +64,27 @@ const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken)
 };
 
 /**
- * Requires the shared bearer credential for every request routed to the private Cluster runner,
- * including aliased path spellings, while leaving unrelated routes unchanged.
+ * Installs fail-closed bearer authentication over the private Cluster runner listener. Every
+ * request must present the shared token: the router matches paths case-insensitively and ignores
+ * trailing or duplicated slashes, so guarding the exact path would let a differently spelled
+ * request reach the runner handlers unauthenticated. The listener serves only the runner protocol,
+ * so it denies every request that does not authenticate instead of choosing per path.
  */
-export const authenticatedRunnerMiddleware = (token: ClusterToken): Layer.Layer<never> =>
-  HttpRouter.middleware((next) =>
-    Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      if (!credentialsMatch(Option.fromUndefinedOr(request.headers.authorization), token)) {
-        return HttpServerResponse.empty({ status: 401 });
-      }
-      return yield* next;
-    })
-  ).layer;
+export const authenticatedRunnerMiddleware = (
+  token: ClusterToken
+): Layer.Layer<never, never, HttpRouter.HttpRouter> =>
+  registerRouterMiddleware((router) =>
+    router.addGlobalMiddleware((next) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        if (!credentialsMatch(Option.fromUndefinedOr(request.headers.authorization), token)) {
+          return HttpServerResponse.empty({ status: 401 });
+        }
+        return yield* next;
+      })
+    )
+  );
 
-/**
- * The one runner RPC protocol, derived per address from the policy-bearing client. Health and
- * hosted Work each select their own exchange deadline, but share the destination, redirect,
- * credential, and diagnostic policy.
- */
 const authenticatedClientProtocol = (
   token: ClusterToken,
   policy: ClusterRunnerHttpPolicy,
@@ -100,7 +114,6 @@ const authenticatedClientProtocol = (
           });
           return RpcClient.makeProtocolHttp(runnerClient).pipe(
             Effect.provideService(RpcSerialization.RpcSerialization, serialization),
-            // The protocol carries the exchange deadline and failure projection.
             Effect.map((protocol) => boundRunnerRpcProtocol({ protocol, deadline }))
           );
         },
@@ -108,20 +121,95 @@ const authenticatedClientProtocol = (
     })
   );
 
-/** SQL-backed Bun Cluster transport with authenticated runner ingress and egress. */
+/**
+ * SQL-backed Bun Cluster transport with authenticated runner ingress and egress. The effective
+ * Sharding configuration becomes an explicit topology, and no process may acquire shards or read
+ * the durable mailbox until it has published or validated the shared compatibility identity.
+ */
+export type AuthenticatedClusterLayer = Layer.Layer<
+  | MessageStorage.MessageStorage
+  | Runners.Runners
+  | ClusterReadiness
+  | ClusterObservationDependencies,
+  HttpServerError.ServeError | ClusterTopologyIncompatible | SqlError.SqlError,
+  SqlClient.SqlClient
+>;
+
+/** Client-only SQL Cluster transport that validates compatibility and routes without owning shards. */
+export type AuthenticatedClusterClientLayer = Layer.Layer<
+  MessageStorage.MessageStorage | Runners.Runners | Sharding.Sharding,
+  ClusterTopologyIncompatible | SqlError.SqlError,
+  SqlClient.SqlClient
+>;
+
+/**
+ * Runs the compatibility gate before building the Cluster infrastructure. A mismatch fails startup
+ * with `ClusterTopologyIncompatible` naming the differing fields instead of letting the
+ * infrastructure build; the process-level failure is the single report.
+ */
+const gateClusterCompatibility = <A, E, R>(
+  compatibility: ClusterCompatibilityIdentity,
+  infrastructure: Layer.Layer<A, E, R>
+): Layer.Layer<A, E | ClusterTopologyIncompatible | SqlError.SqlError, R | SqlClient.SqlClient> =>
+  Layer.unwrap(ensureClusterCompatibility(compatibility).pipe(Effect.as(infrastructure)));
+
+/**
+ * Serves `appLayer` on its own `HttpRouter` instance. `HttpRouter.serve` reuses the module-level
+ * `HttpRouter.layer`, which the public application also builds: the deny-by-default runner
+ * middleware would then answer public routes and the runner routes would appear on the public
+ * listener. This mirrors `HttpRouter.serve`, including its request logger and listen-address log.
+ */
+const serveIsolatedRouter = <A, E, R>(
+  appLayer: Layer.Layer<A, E, R>
+): Layer.Layer<A, E, HttpServer.HttpServer | Exclude<R, HttpRouter.HttpRouter>> =>
+  Effect.gen(function* () {
+    const router = yield* HttpRouter.HttpRouter;
+    // `asHttpEffect` mirrors `HttpRouter.serve`, whose error channel is declared `unknown` while the
+    // server itself handles routed failures. Classifying keeps HTTP server errors (for example, an
+    // unmatched route) as responses and treats anything else as a defect, answered with 500.
+    const handler = Effect.catchIf(
+      // @effect-diagnostics-next-line anyUnknownInErrorContext:off
+      router.asHttpEffect(),
+      (error): error is HttpServerError.HttpServerError =>
+        error instanceof HttpServerError.HttpServerError,
+      (error) => Effect.fail(error),
+      (error) => Effect.die(error)
+    );
+    return HttpServer.serve(handler, HttpMiddleware.logger);
+  }).pipe(
+    Layer.unwrap,
+    Layer.provideMerge(appLayer),
+    Layer.provide(Layer.fresh(HttpRouter.layer)),
+    HttpServer.withLogAddress
+  );
+
+const clusterMessageStorageLive = (
+  prefix: string
+): Layer.Layer<
+  MessageStorage.MessageStorage,
+  never,
+  SqlClient.SqlClient | ShardingConfig.ShardingConfig
+> => Layer.orDie(SqlMessageStorage.layerWith({ prefix })).pipe(Layer.provide(BunCrypto.layer));
+
+const clusterSqlStorageLive = (
+  compatibility: ClusterCompatibilityIdentity
+): Layer.Layer<
+  MessageStorage.MessageStorage | RunnerStorage.RunnerStorage,
+  never,
+  SqlClient.SqlClient | ShardingConfig.ShardingConfig
+> =>
+  Layer.mergeAll(
+    clusterMessageStorageLive(compatibility.messageStoragePrefix),
+    Layer.orDie(SqlRunnerStorage.layerWith({ prefix: compatibility.runnerStoragePrefix }))
+  );
+
 const layerAuthenticatedSqlCluster = (
   token: ClusterToken,
-  shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]>,
+  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>,
   policy: ClusterRunnerHttpPolicy
-): Layer.Layer<
-  MessageStorage.MessageStorage | Runners.Runners | Sharding.Sharding,
-  Config.ConfigError | HttpServerError.ServeError,
-  SqlClient.SqlClient
-> => {
-  // Health probes fail fast so shard ownership can move; Work outlives its own bounded Turn.
-  // The health probe needs its own `Runners` instance: layer memoization is keyed by layer
-  // identity, so sharing `Runners.layerRpc` here would bind the Work client to whichever protocol
-  // is built first, silently giving hosted Work the health deadline.
+): AuthenticatedClusterLayer => {
+  const sharding = { ...ShardingConfig.defaults, ...shardingOptions };
+  const compatibility = clusterCompatibilityIdentity(sharding);
   const healthProtocol = authenticatedClientProtocol(token, policy, policy.healthDeadline).pipe(
     Layer.provide(FetchHttpClient.layer)
   );
@@ -132,23 +220,65 @@ const layerAuthenticatedSqlCluster = (
   const workProtocol = authenticatedClientProtocol(token, policy, policy.requestDeadline).pipe(
     Layer.provide(FetchHttpClient.layer)
   );
-  // Wrap the registered handler rather than checking a raw path: router-normalized aliases reach
-  // the same handler, while unrelated routes on the shared router remain unaffected.
-  const runner = HttpRouter.serve(
-    HttpRunner.layerHttpOptions({ path: clusterRunnerPath }).pipe(
-      Layer.provide(authenticatedRunnerMiddleware(token))
+  // `RunnerServer.layerWithClients` builds Sharding on the plain runner client; composing the
+  // server here instead substitutes the request-retry client so Sharding routes sends through it.
+  const runnerRoutes = Layer.mergeAll(
+    authenticatedRunnerMiddleware(token),
+    RunnerServer.layer.pipe(
+      Layer.provide(RpcServer.layerProtocolHttp({ path: clusterRunnerPath })),
+      Layer.provideMerge(Sharding.layer),
+      Layer.provideMerge(requestRetryRunnersLive)
     )
-  ).pipe(Layer.provide(workProtocol), Layer.provide(BunClusterHttp.layerHttpServer));
-
-  return runner.pipe(
-    Layer.provide(runnerHealth),
-    Layer.provideMerge(Layer.orDie(SqlMessageStorage.layer).pipe(Layer.provide(BunCrypto.layer))),
-    Layer.provide(Layer.orDie(SqlRunnerStorage.layer)),
-    Layer.provide(ShardingConfig.layerFromEnv(shardingConfig)),
-    Layer.provide(ClusterRunnerSerializationLive)
   );
+  const runner = serveIsolatedRouter(runnerRoutes).pipe(
+    Layer.provide(workProtocol),
+    Layer.provide(BunClusterHttp.layerHttpServer)
+  );
+
+  const infrastructure = runner.pipe(
+    Layer.provide(runnerHealth),
+    Layer.provideMerge(clusterMessageStorageLive(compatibility.messageStoragePrefix)),
+    Layer.provideMerge(
+      Layer.orDie(shardLockStorageLive({ prefix: compatibility.runnerStoragePrefix })).pipe(
+        Layer.provideMerge(ClusterTelemetry.layer)
+      )
+    ),
+    Layer.provideMerge(ShardingConfig.layer(sharding)),
+    Layer.provide(ClusterSerializationLive)
+  );
+
+  const gatedCluster = gateClusterCompatibility(compatibility, infrastructure);
+
+  // Readiness must observe the same memoized Cluster services that serve traffic. One
+  // `provideMerge` edge keeps a single dependency on the gated Cluster, so a compatibility refusal
+  // is recorded once and readiness starts only after the gate has passed.
+  return ClusterReadiness.layer.pipe(Layer.provideMerge(gatedCluster));
+};
+
+/**
+ * SQL-backed authenticated Cluster client. It validates the deployment topology and can route Work,
+ * but does not construct a runner server, bind a port, acquire shards, or expose health endpoints.
+ */
+const layerAuthenticatedSqlClusterClient = (
+  token: ClusterToken,
+  shardingOptions: Partial<ShardingConfig.ShardingConfig["Service"]>,
+  policy: ClusterRunnerHttpPolicy
+): AuthenticatedClusterClientLayer => {
+  const sharding = { ...ShardingConfig.defaults, ...shardingOptions };
+  const compatibility = clusterCompatibilityIdentity(sharding);
+  const protocol = authenticatedClientProtocol(token, policy, policy.requestDeadline).pipe(
+    Layer.provide(FetchHttpClient.layer)
+  );
+  const infrastructure = RunnerServer.layerClientOnly.pipe(
+    Layer.provide(protocol),
+    Layer.provideMerge(clusterSqlStorageLive(compatibility)),
+    Layer.provideMerge(ShardingConfig.layer(sharding)),
+    Layer.provide(ClusterSerializationLive)
+  );
+  return gateClusterCompatibility(compatibility, infrastructure);
 };
 
 export const authenticatedClusterHttp = {
   layerSql: layerAuthenticatedSqlCluster,
+  layerSqlClient: layerAuthenticatedSqlClusterClient,
 };

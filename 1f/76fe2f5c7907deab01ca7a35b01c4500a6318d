@@ -4,6 +4,7 @@ apps/server/src/shell/testing/cluster-runner-http-policy.ts
   h_c6d49c804e0ad2 1-14
 apps/server/src/shell/durable-execution.ts
   h_c6d49c804e0ad2 1,6-9,17,26-139,142-146,148-163,197-198,203-213
+  s_edd6294739ecd8::t_f22277325d1a77 10
 apps/server/src/shell/cluster-runner-http.test.ts
   h_c6d49c804e0ad2 1-587
 apps/server/src/shell/durable-execution.test.ts
@@ -50,6 +51,16 @@ apps/server/src/shell/agent/hosted-turns.ts
   "humans": {
     "h_c6d49c804e0ad2": {
       "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_edd6294739ecd8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bb6-9572-7386-9e2e-a0c3c2d7cfb1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
     }
   }
 }

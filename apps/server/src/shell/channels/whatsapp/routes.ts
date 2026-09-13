@@ -161,7 +161,7 @@ const enqueueAuthorizedTurn = (
               _tag: "Queue",
               attempt: TelemetryAttempt.make(1),
               inputCount: TelemetryCount.make(1),
-              delayMilliseconds: TelemetryDuration.make(0),
+              delayMilliseconds: Option.some(TelemetryDuration.make(0)),
             },
           },
           Effect.gen(function* () {

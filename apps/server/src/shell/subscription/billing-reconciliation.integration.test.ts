@@ -1,6 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import { BunServices } from "@effect/platform-bun";
 import {
+  Cause,
+  Context,
   Crypto,
   DateTime,
   type Duration,
@@ -14,8 +16,10 @@ import {
   Schedule,
   Schema,
 } from "effect";
+import { TestConsole } from "effect/testing";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { WorkflowEngine } from "effect/unstable/workflow";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { amountInCentsForBilling } from "~/core/subscription/billing-rules";
@@ -37,13 +41,19 @@ import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { SqlQueueHarness } from "~/shell/testing/durable-execution";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   BillingAttemptReconciliationPayload,
   BillingAttemptReconciliationWorkflow,
   billingAttemptReconciliationWorkflowLayer,
+  processNextBillingAttempt,
 } from "./billing-attempt-execution";
 import { BillingReconciliationMaintenanceLive } from "./billing-reconciliation-maintenance";
 import {
@@ -388,6 +398,12 @@ const offerBillingQueueItem = Effect.fn("Test.offerBillingQueueItem")(function* 
     ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
 });
 
+const clearBillingQueue = Effect.fn("Test.clearBillingQueue")(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name = ${billingAttemptQueueName}`.pipe(Effect.orDie);
+});
+
 /** Forces the queue row into the exhausted but incomplete state the retirement must observe. */
 const exhaustBillingQueueItem = Effect.fn("Test.exhaustBillingQueueItem")(function* (
   attempt: SeededAttempt
@@ -417,6 +433,22 @@ const readBillingQueueRow = Effect.fn("Test.readBillingQueueRow")(function* (
   })({ id: attempt.payload.billingAttemptId }).pipe(Effect.orDie);
 });
 
+const makeBillingQueueServices = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const durableLayer = BillingAttemptReconciliationWorkflow.toLayer(() => Effect.never).pipe(
+    Layer.provideMerge(SqlQueueHarness.pipe(Layer.provide(Layer.succeed(SqlClient.SqlClient, sql))))
+  );
+  const durableServices = yield* Layer.build(durableLayer);
+  const telemetryServices = yield* Layer.build(TelemetryEnvelopeRecording);
+  const consoleServices = yield* Layer.build(TestConsole.layer);
+  return {
+    services: Context.merge(Context.merge(durableServices, telemetryServices), consoleServices),
+    workflowEngine: Context.get(durableServices, WorkflowEngine.WorkflowEngine),
+    recorder: Context.get(telemetryServices, EnvelopeRecorder),
+    consoleServices,
+  };
+});
+
 const TestLayer = Layer.mergeAll(
   MigrationSqlClient.layer,
   MigratorLive,
@@ -436,6 +468,107 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           yield* Effect.sleep("500 millis");
         })
       )
+    );
+
+    it.effect("persists only the shared defect marker when workflow submission defects", () =>
+      Effect.gen(function* () {
+        yield* clearBillingQueue();
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 40,
+          transactionId: Option.some(WompiTransactionId.make("txn-queue-defect-40")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* offerBillingQueueItem(attempt);
+        const { services, workflowEngine, recorder, consoleServices } =
+          yield* makeBillingQueueServices;
+        const sensitiveDetails = [
+          "payment-source-sentinel",
+          attempt.reference,
+          `COP ${attempt.amountInCents}`,
+          attempt.userId,
+          "sql-detail-sentinel",
+          "provider-response-sentinel",
+          "secret-sentinel",
+        ];
+        const defectiveEngine = WorkflowEngine.WorkflowEngine.of({
+          ...workflowEngine,
+          execute: () => Effect.die(new Error(sensitiveDetails.join(" | "))),
+        });
+        const exit = yield* Effect.exit(
+          processNextBillingAttempt().pipe(
+            Effect.provide(Context.add(services, WorkflowEngine.WorkflowEngine, defectiveEngine))
+          )
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        const row = yield* readBillingQueueRow(attempt).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: Option.exists((value) => value.attempts === 1),
+          }),
+          Effect.timeout("2 seconds")
+        );
+        expect(Option.isSome(row)).toBe(true);
+        if (Option.isNone(row)) return;
+        expect(row.value).toMatchObject({ completed: false, attempts: 1 });
+        expect(row.value.lastFailure).toContain("PersistedQueueHandlerFailure");
+        expect(row.value.lastFailure).toContain('"reason":"unexpected-defect"');
+        const envelopes = yield* recorder.serializedEnvelopes;
+        expect(envelopes).toHaveLength(1);
+        const observableText = [
+          row.value.lastFailure,
+          ...envelopes.map((bytes) => new TextDecoder().decode(bytes)),
+          ...(yield* TestConsole.logLines.pipe(Effect.provide(consoleServices))),
+          ...(yield* TestConsole.errorLines.pipe(Effect.provide(consoleServices))),
+        ].join("\n");
+        for (const sensitiveDetail of sensitiveDetails) {
+          expect(observableText).not.toContain(sensitiveDetail);
+        }
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("releases interrupted workflow submission without consuming an attempt", () =>
+      Effect.gen(function* () {
+        yield* clearBillingQueue();
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 41,
+          transactionId: Option.some(WompiTransactionId.make("txn-queue-interrupt-41")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* offerBillingQueueItem(attempt);
+        const { services, workflowEngine, recorder } = yield* makeBillingQueueServices;
+        const interruptedEngine = WorkflowEngine.WorkflowEngine.of({
+          ...workflowEngine,
+          execute: () => Effect.interrupt,
+        });
+        const exit = yield* Effect.exit(
+          processNextBillingAttempt().pipe(
+            Effect.provide(Context.add(services, WorkflowEngine.WorkflowEngine, interruptedEngine))
+          )
+        );
+
+        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+        yield* Effect.sleep("100 millis");
+        const row = yield* readBillingQueueRow(attempt);
+        expect(Option.isSome(row)).toBe(true);
+        if (Option.isNone(row)) return;
+        expect(row.value).toEqual({ completed: false, attempts: 0, lastFailure: null });
+        expect(yield* recorder.serializedEnvelopes).toEqual([]);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          periods: 0,
+          paid: false,
+        });
+      })
     );
 
     it.effect(

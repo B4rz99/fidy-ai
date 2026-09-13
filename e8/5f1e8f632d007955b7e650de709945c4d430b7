@@ -1,0 +1,21 @@
+.agents/skills/opening-a-pr/SKILL.md
+  s_7ca3cdb338d896::t_da20cc1210eed7 37,40-45,51
+  s_7ca3cdb338d896::t_bcf8b5ec1b7f3d 31,33-36,38-39,46-50,52-56,63
+  s_7ca3cdb338d896::t_9e74bb32e5dfa5 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e85f1e8f632d007955b7e650de709945c4d430b7",
+  "prompts": {},
+  "sessions": {
+    "s_7ca3cdb338d896": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b83-d190-710e-b44d-171664d2bc03",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

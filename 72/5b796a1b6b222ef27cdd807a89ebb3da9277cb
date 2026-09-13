@@ -1,0 +1,49 @@
+apps/web/src/transport/client.ts
+  s_c7a5a6727cd856::t_d12f4437b1dd1b 14,75-81,123,142,171
+apps/web/src/transport/client.test.ts
+  s_c7a5a6727cd856::t_d3ed7659483ea8 336,428-429,462
+  s_c7a5a6727cd856::t_2ae074fa0b6a2c 30,142,206,316
+  s_c7a5a6727cd856::t_efee2106edfd09 146
+  s_c7a5a6727cd856::t_09ce81dda33684 28
+  s_c7a5a6727cd856::t_0f25005475d6f9 305-315,317-324
+  s_c7a5a6727cd856::t_b9da26014ce67e 73-75,77-83,85,87-93
+  s_c7a5a6727cd856::t_1d379a7b68cde9 169-171,241-243,285-287
+  s_c7a5a6727cd856::t_f757f967a8a8a2 76
+  s_c7a5a6727cd856::t_bc35e2932044c3 17,138-141,144,147,348-351
+  s_c7a5a6727cd856::t_1cc0fed06dc9d9 19,21-23,40,54,159-168,172-176,188-205,207-210,227-240,244-247,265-279,281-284,288-291,302-304,325-335,337-347
+  s_c7a5a6727cd856::t_fd0c829db10a73 145
+  s_c7a5a6727cd856::t_662bd96c5e83c5 3,148-158,177-187,211-226,248-264,292-301
+  s_c7a5a6727cd856::t_fd4e9ae4dee922 143
+  s_c7a5a6727cd856::t_586679e197fbd8 84,86
+  s_c7a5a6727cd856::t_839220b2119c2b 280
+  s_c7a5a6727cd856::t_f2379fbded0d3c 5-6,8-16,387-427,430-461,463,466-467
+  s_c7a5a6727cd856::t_1c4abcc2fa7456 18
+  s_c7a5a6727cd856::t_575b3f8a3b7dc0 352-353
+  s_c7a5a6727cd856::t_f54940a75a9cf7 464-465
+  s_c7a5a6727cd856::t_ba25187a659683 468
+  s_c7a5a6727cd856::t_80093e277b1872 7
+apps/web/src/transport/browser-http-policy.ts
+  s_c7a5a6727cd856::t_fd4e9ae4dee922 142-144,167-169,229-231
+  s_c7a5a6727cd856::t_879611e9d0a966 2-18,23,36-40,43-47,57-64,66-76,78-80,82-84,86-141,145-166,170-184,189-196,198-228,237-240,243-275
+  s_c7a5a6727cd856::t_9a60199283ff01 49-56,65,197,241-242
+  s_c7a5a6727cd856::t_2504c36855aeed 19-22,24-35,41-42,77,81,85,185-188
+  s_c7a5a6727cd856::t_2b884abf9e53cd 48
+  s_c7a5a6727cd856::t_04581892e1fce4 232-236
+  s_c7a5a6727cd856::t_b868b3d6a07460 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "725b796a1b6b222ef27cdd807a89ebb3da9277cb",
+  "prompts": {},
+  "sessions": {
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+apps/web/src/transport/client.ts
+  s_c7a5a6727cd856::t_19527e825fe86b 111-115,136-142,171-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2c2cc4a391c421534c71a05a48361cc7a778c18b",
+  "prompts": {},
+  "sessions": {
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

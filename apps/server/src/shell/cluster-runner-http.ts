@@ -128,16 +128,17 @@ const destinationRefused = (
 ): HttpClientError.HttpClientError =>
   runnerHttpClientError(new HttpClientError.InvalidUrlError({ request }));
 
-/** Brackets an IPv6 literal so it forms a valid URL authority; hostnames pass through unchanged. */
-const urlAuthorityHost = (host: string): string =>
-  host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-
 /**
  * The one absolute request URL for a runner address. An IPv6 runner host is bracketed so the URL
  * stays parseable; the destination allowlist matches either spelling.
  */
-export const runnerRequestUrl = (address: RunnerAddress.RunnerAddress): string =>
-  `http://${urlAuthorityHost(address.host)}:${address.port}${clusterRunnerPath}`;
+export const runnerRequestUrl = (address: RunnerAddress.RunnerAddress): string => {
+  const authorityHost =
+    address.host.includes(":") && !address.host.startsWith("[")
+      ? `[${address.host}]`
+      : address.host;
+  return `http://${authorityHost}:${address.port}${clusterRunnerPath}`;
+};
 
 const runnerRequest = (
   address: RunnerAddress.RunnerAddress,

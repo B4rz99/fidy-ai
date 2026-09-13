@@ -714,6 +714,7 @@ describe("canonical browser transport", () => {
 
       registry.refresh(atom);
       await vi.waitFor(() => expect(requestCount).toBe(3));
+      await vi.waitFor(() => expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true));
       await Effect.runPromise(AtomRegistry.getResult(registry, atom));
       expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
         _tag: "Ready",

@@ -1,0 +1,14 @@
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 1208,1366
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3a00152be89d7eec4e26d96cce29e17610ca0a4f",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

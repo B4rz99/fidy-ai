@@ -1,0 +1,14 @@
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  h_c6d49c804e0ad2 219,250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c58414928f1263a13e7a46d07c887bd39e9dab37",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

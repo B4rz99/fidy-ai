@@ -1,0 +1,18 @@
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  h_c6d49c804e0ad2 47,50
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  h_c6d49c804e0ad2 219-220,252-253
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 34-36,38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7453a61beadf5ebb19d59c90125912b8f8fd7873",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

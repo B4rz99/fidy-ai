@@ -41,8 +41,9 @@ describe("pull-request preview workflow policy", () => {
     );
 
     expect(serverJob).toContain("matrix:");
-    expect(serverJob).toContain("shard: [1, 2, 3]");
+    expect(serverJob).toContain("shard: [1, 2, 3, 4, 5]");
     expect(serverJob).toContain("SERVER_TEST_SHARD");
+    expect(serverJob).toContain("Restore server test timings");
     expect(serverJob).toContain("server-coverage-${{ matrix.shard }}");
     expect(checksWorkflow).toContain("name: server-coverage-core");
     expect(qualityJob).toContain("      - server\n      - unit");
@@ -51,6 +52,8 @@ describe("pull-request preview workflow policy", () => {
     expect(qualityJob).toContain("Create restricted runtime role");
     expect(qualityJob).toContain("DATABASE_URL:");
     expect(qualityJob).toContain("bun run verify -- --group quality");
+    expect(qualityJob).toContain("Collect server test timings");
+    expect(qualityJob).toContain("Save server test timings");
   });
 
   it("reuses browser downloads without restoring stale dependency caches", () => {

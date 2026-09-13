@@ -5,6 +5,7 @@
  */
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { RunnerAddress, ShardId, type ShardingConfig } from "effect/unstable/cluster";
+import { SqlSchema } from "effect/unstable/sql";
 import { Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
@@ -88,27 +89,33 @@ export const clusterTopologyProbeWorkflowLayer: Layer.Layer<
   WorkflowEngine.WorkflowEngine
 > = clusterTopologyProbeWorkflow.toLayer(() => Effect.succeed("recovered"));
 
+const clearClusterTableIfPresent = Effect.fn(function* (tableName: string) {
+  const sql = yield* MigrationSqlClient;
+  const { exists } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ exists: Schema.Boolean }),
+    execute: () => sql`SELECT to_regclass(${`fidy_durable.${tableName}`}) IS NOT NULL AS exists`,
+  })(undefined).pipe(Effect.orDie);
+  if (exists) yield* sql`DELETE FROM fidy_durable.${sql(tableName)}`;
+});
+
 /**
  * Deletes the published identity before the first SQL Cluster runtime creates its storage tables.
  * The helper owns its privileged migration connection because the runtime role cannot delete it.
  */
 export const resetClusterTopologyIdentity: Effect.Effect<void> = Layer.build(
-  Layer.effectDiscard(
-    Effect.gen(function* () {
-      const sql = yield* MigrationSqlClient;
-      yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
-    })
-  ).pipe(Layer.provide(MigrationSqlClient.layer))
+  Layer.effectDiscard(clearClusterTableIfPresent(topologyIdentityTable)).pipe(
+    Layer.provide(MigrationSqlClient.layer)
+  )
 ).pipe(Effect.scoped, Effect.orDie);
 
 /** Clears inactive runner ownership and identity between serialized deployment scenarios. */
 export const resetClusterTopologyState: Effect.Effect<void> = Layer.build(
   Layer.effectDiscard(
     Effect.gen(function* () {
-      const sql = yield* MigrationSqlClient;
-      yield* sql`DELETE FROM fidy_durable.${sql(clusterLocksTable)}`;
-      yield* sql`DELETE FROM fidy_durable.${sql(clusterRunnersTable)}`;
-      yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
+      yield* clearClusterTableIfPresent(clusterLocksTable);
+      yield* clearClusterTableIfPresent(clusterRunnersTable);
+      yield* clearClusterTableIfPresent(topologyIdentityTable);
     })
   ).pipe(Layer.provide(MigrationSqlClient.layer))
 ).pipe(Effect.scoped, Effect.orDie);

@@ -129,13 +129,13 @@ jobs:
         run: bun run verify -- --group browser
 
   server:
-    name: Server integration (${{ matrix.shard }}/3)
+    name: Server integration (${{ matrix.shard }}/5)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
     services:
       postgres:
         image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
@@ -153,6 +153,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+      - name: Restore server test timings
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: scripts/ci/server-test-timings-cache.ts
+          key: ${{ runner.os }}-server-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-server-test-timings-
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
@@ -161,7 +168,7 @@ jobs:
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          SERVER_TEST_SHARD: ${{ matrix.shard }}/3
+          SERVER_TEST_SHARD: ${{ matrix.shard }}/5
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run verify -- --group server
       - name: Preserve server coverage and test evidence
@@ -214,6 +221,16 @@ jobs:
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run verify -- --group quality
+      - name: Collect server test timings
+        run: >-
+          bun scripts/ci/collect-server-test-timings.ts
+          --input server-coverage
+          --output scripts/ci/server-test-timings-cache.ts
+      - name: Save server test timings
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: scripts/ci/server-test-timings-cache.ts
+          key: ${{ runner.os }}-server-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
 
   production-image:
     name: Production image

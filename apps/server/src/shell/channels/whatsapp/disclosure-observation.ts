@@ -11,8 +11,9 @@ import type { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 const recordExit = (
   telemetry: TelemetryService,
   exit: Exit.Exit<unknown, unknown>,
-  descriptor: SpanDescriptor
+  options: Readonly<{ descriptor: SpanDescriptor; captureFailure: boolean }>
 ): Effect.Effect<void> => {
+  const { captureFailure, descriptor } = options;
   if (Exit.isSuccess(exit)) return Effect.void;
   const cause = exit.cause;
   if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
@@ -24,43 +25,50 @@ const recordExit = (
   }
   const defect = Cause.hasDies(cause);
   const error = defect ? "unexpected_defect" : "operational_failure";
-  return telemetry
-    .recordOutcome({ outcome: "failed", error: Option.some(error), retryable: !defect })
-    .pipe(
-      Effect.andThen(
-        telemetry.captureFailure(
-          defect
-            ? {
-                _tag: "Defect",
-                component: "whatsapp",
-                operation: descriptor.operation,
-                error,
-                cause,
-              }
-            : {
-                _tag: "ExhaustedOperationalFailure",
-                component: "whatsapp",
-                operation: descriptor.operation,
-                error,
-                provider: Option.none(),
-                retryable: true,
-                cause,
-              }
-        )
+  const outcome = telemetry.recordOutcome({
+    outcome: "failed",
+    error: Option.some(error),
+    retryable: !defect,
+  });
+  if (!captureFailure) return outcome;
+  return outcome.pipe(
+    Effect.andThen(
+      telemetry.captureFailure(
+        defect
+          ? {
+              _tag: "Defect",
+              component: "whatsapp",
+              operation: descriptor.operation,
+              error,
+              cause,
+            }
+          : {
+              _tag: "ExhaustedOperationalFailure",
+              component: "whatsapp",
+              operation: descriptor.operation,
+              error,
+              provider: Option.none(),
+              retryable: true,
+              cause,
+            }
       )
-    );
+    )
+  );
 };
 
 const observe = <A, E, R>(
   work: Effect.Effect<A, E, R>,
-  descriptor: SpanDescriptor
+  descriptor: SpanDescriptor,
+  captureFailure = true
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const telemetry = yield* Effect.serviceOption(Telemetry);
     if (Option.isNone(telemetry)) return yield* work;
     return yield* telemetry.value.span(
       descriptor,
-      Effect.onExit(work, (exit) => recordExit(telemetry.value, exit, descriptor))
+      Effect.onExit(work, (exit) =>
+        recordExit(telemetry.value, exit, { descriptor, captureFailure })
+      )
     );
   });
 
@@ -107,21 +115,25 @@ export const observeConsentDisclosureResume = <A, E, R>(
     metadata: { _tag: "None" },
   });
 
-/** Wrap the native take handler, not its blocking wait or an infinite loop. This owns escaped failures. */
+/** Wraps one native take handler while the shared redacted boundary owns escaped failures. */
 export const observeConsentDisclosureQueue: {
   (kind: "start" | "evidence"): <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   <A, E, R>(work: Effect.Effect<A, E, R>, kind: "start" | "evidence"): Effect.Effect<A, E, R>;
 } = dual(
   2,
   <A, E, R>(work: Effect.Effect<A, E, R>, kind: "start" | "evidence"): Effect.Effect<A, E, R> =>
-    observe(work, {
-      component: "whatsapp",
-      operation: kind === "start" ? "whatsapp.disclosureStart" : "whatsapp.disclosureEvidence",
-      trigger: "queue",
-      spanOperation: "queue.process",
-      workKind: "canonical_operation",
-      metadata: { _tag: "None" },
-    })
+    observe(
+      work,
+      {
+        component: "whatsapp",
+        operation: kind === "start" ? "whatsapp.disclosureStart" : "whatsapp.disclosureEvidence",
+        trigger: "queue",
+        spanOperation: "queue.process",
+        workKind: "canonical_operation",
+        metadata: { _tag: "None" },
+      },
+      false
+    )
 );
 
 const ownerOutcomes = {

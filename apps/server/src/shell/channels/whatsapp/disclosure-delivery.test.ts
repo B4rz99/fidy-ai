@@ -1,24 +1,52 @@
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Layer, Option, Ref, Schedule } from "effect";
+import {
+  Cause,
+  Console,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Schema,
+} from "effect";
+import { TestConsole } from "effect/testing";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
-import { ApiHarness } from "~/shell/testing/api-harness";
+import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
+import {
+  EnvelopeRecorder,
+  type EnvelopeRecorderService,
+} from "~/shell/observability/envelope-recorder";
+import { ProjectedErrorEvent } from "~/shell/observability/projectors";
+import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
   applyConsentDisclosureLifecycle,
   performConsentDisclosureAttempt,
   requestConsentDisclosureDelivery,
+  runDisclosureQueueHandler,
+  startNextConsentDisclosure,
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
-import { ConsentDisclosureWorkflow } from "./disclosure-workflow";
+import {
+  ConsentDisclosureWorkflow,
+  consentDisclosureEvidenceQueue,
+  consentDisclosureEvidenceQueueName,
+  consentDisclosureQueue,
+  consentDisclosureQueueName,
+} from "./disclosure-workflow";
 import { findConsentDisclosureDeliveryState } from "./disclosure-store";
 import {
+  DisclosureDeliveryAttemptId,
   DisclosureDeliveryAttemptNumber,
   DisclosureDeliveryCorrelationToken,
 } from "./disclosure-model";
@@ -60,9 +88,198 @@ const admit = Effect.fn(function* (phone: string) {
   };
 });
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+const DurableFailureRow = Schema.Struct({
+  attempts: Schema.Int,
+  lastFailure: Schema.String,
+});
+const unexpectedDefectMarker =
+  'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"unexpected-defect"}';
+
+const errorCount = (
+  recorder: EnvelopeRecorderService,
+  operation: "whatsapp.disclosureStart" | "whatsapp.disclosureEvidence"
+): Effect.Effect<number> =>
+  recorder.serializedEnvelopes.pipe(
+    Effect.map(
+      (envelopes) =>
+        envelopes
+          .flatMap(decodeEnvelopeItems)
+          .flatMap((item) => Option.toArray(Schema.decodeUnknownOption(ProjectedErrorEvent)(item)))
+          .filter((event) => event.tags.operation === operation).length
+    )
+  );
+
+layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })(
   "durable Consent disclosure delivery",
   (it) => {
+    it.effect("completes stale start and already-settled evidence handoffs", () =>
+      Effect.gen(function* () {
+        const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000550");
+        const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000551");
+        const startQueue = yield* consentDisclosureQueue;
+        yield* startQueue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
+        yield* startNextConsentDisclosure();
+
+        const evidenceQueue = yield* consentDisclosureEvidenceQueue;
+        yield* evidenceQueue.offer(
+          { revision: 1, exchangeId, attemptId, evidenceRevision: 1 },
+          { id: "5a110000-0000-4000-8000-000000000552" }
+        );
+        yield* startNextConsentDisclosureEvidence();
+
+        const admin = yield* MigrationSqlClient;
+        expect(
+          yield* admin`SELECT queue_name AS "queueName", completed, attempts,
+              last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE (queue_name = ${consentDisclosureQueueName} AND id = ${exchangeId})
+              OR (queue_name = ${consentDisclosureEvidenceQueueName}
+                AND id = '5a110000-0000-4000-8000-000000000552')
+            ORDER BY queue_name`
+        ).toEqual([
+          {
+            queueName: consentDisclosureQueueName,
+            completed: true,
+            attempts: 1,
+            lastFailure: null,
+          },
+          {
+            queueName: consentDisclosureEvidenceQueueName,
+            completed: true,
+            attempts: 1,
+            lastFailure: null,
+          },
+        ]);
+      })
+    );
+
+    it.effect("redacts unexpected start defects before PostgreSQL stores the retry", () =>
+      Effect.gen(function* () {
+        const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000555");
+        const queue = yield* consentDisclosureQueue;
+        yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
+        const recorder = yield* EnvelopeRecorder;
+        const testConsole = yield* TestConsole.make;
+        const errorsBefore = yield* errorCount(recorder, "whatsapp.disclosureStart");
+        const protectedValues = [
+          exchangeId,
+          "disclosure-content-sentinel",
+          "consent-id-sentinel",
+          "user-id-sentinel",
+          "whatsapp-provider-sentinel",
+          "sql-detail-sentinel",
+          "secret-sentinel",
+        ];
+
+        const exit = yield* Effect.exit(
+          queue
+            .take(() =>
+              runDisclosureQueueHandler("whatsapp.disclosureStart")(
+                Effect.die(new Error(protectedValues.join(" ")))
+              )
+            )
+            .pipe(Effect.provideService(Console.Console, testConsole))
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        const admin = yield* MigrationSqlClient;
+        const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DurableFailureRow))(
+          yield* admin`SELECT attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${consentDisclosureQueueName} AND id = ${exchangeId}`
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.attempts).toBe(1);
+        expect(rows[0]?.lastFailure).toBe(unexpectedDefectMarker);
+        expect(yield* errorCount(recorder, "whatsapp.disclosureStart")).toBe(errorsBefore + 1);
+        const observableText = [
+          rows.map((row) => row.lastFailure).join("\n"),
+          ...(yield* recorder.serializedEnvelopes).map((bytes) => new TextDecoder().decode(bytes)),
+          ...(yield* testConsole.logLines).map(String),
+          ...(yield* testConsole.errorLines).map(String),
+        ].join("\n");
+        for (const value of protectedValues) expect(observableText).not.toContain(value);
+      })
+    );
+
+    it.effect(
+      "releases interrupted disclosure start without consuming an attempt or evidence",
+      () =>
+        Effect.gen(function* () {
+          const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000556");
+          const queue = yield* consentDisclosureQueue;
+          yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
+
+          const exit = yield* Effect.exit(
+            queue.take(() =>
+              runDisclosureQueueHandler("whatsapp.disclosureStart")(Effect.interrupt)
+            )
+          );
+          expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+          const admin = yield* MigrationSqlClient;
+          expect(
+            yield* admin`SELECT completed, attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${consentDisclosureQueueName} AND id = ${exchangeId}`
+          ).toEqual([{ completed: false, attempts: 0, lastFailure: null }]);
+          expect(
+            yield* admin`SELECT id FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${consentDisclosureEvidenceQueueName}
+              AND element::jsonb->>'exchangeId' = ${exchangeId}`
+          ).toEqual([]);
+        })
+    );
+
+    it.effect("redacts unexpected evidence defects before PostgreSQL stores the retry", () =>
+      Effect.gen(function* () {
+        const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000557");
+        const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000558");
+        const queue = yield* consentDisclosureEvidenceQueue;
+        yield* queue.offer(
+          { revision: 1, exchangeId, attemptId, evidenceRevision: 7 },
+          { id: "5a110000-0000-4000-8000-000000000559" }
+        );
+        const recorder = yield* EnvelopeRecorder;
+        const testConsole = yield* TestConsole.make;
+        const errorsBefore = yield* errorCount(recorder, "whatsapp.disclosureEvidence");
+        const protectedValues = [
+          exchangeId,
+          attemptId,
+          "disclosure-evidence-sentinel",
+          "provider-detail-sentinel",
+          "sql-evidence-sentinel",
+          "evidence-secret-sentinel",
+        ];
+
+        yield* Effect.exit(
+          queue
+            .take(() =>
+              runDisclosureQueueHandler("whatsapp.disclosureEvidence")(
+                Effect.die(new Error(protectedValues.join(" ")))
+              )
+            )
+            .pipe(Effect.provideService(Console.Console, testConsole))
+        );
+        const admin = yield* MigrationSqlClient;
+        const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DurableFailureRow))(
+          yield* admin`SELECT attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${consentDisclosureEvidenceQueueName}
+              AND id = '5a110000-0000-4000-8000-000000000559'`
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.attempts).toBe(1);
+        expect(rows[0]?.lastFailure).toBe(unexpectedDefectMarker);
+        expect(yield* errorCount(recorder, "whatsapp.disclosureEvidence")).toBe(errorsBefore + 1);
+        const observableText = [
+          rows.map((row) => row.lastFailure).join("\n"),
+          ...(yield* recorder.serializedEnvelopes).map((bytes) => new TextDecoder().decode(bytes)),
+          ...(yield* testConsole.logLines).map(String),
+          ...(yield* testConsole.errorLines).map(String),
+        ].join("\n");
+        for (const value of protectedValues) expect(observableText).not.toContain(value);
+      })
+    );
+
     it.effect(
       "acknowledges duplicate accepted work without invoking the provider in the request",
       () =>

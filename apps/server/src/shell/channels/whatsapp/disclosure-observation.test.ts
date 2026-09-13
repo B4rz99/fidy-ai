@@ -59,7 +59,7 @@ it.effect(
     })
 );
 
-it.effect("captures escaped failure once at each disjoint attempt, resume, and queue handler", () =>
+it.effect("leaves queue-handler failure reporting to the redacted boundary", () =>
   Effect.gen(function* () {
     const services = yield* Layer.build(TelemetryEnvelopeRecording);
     const recorder = Context.get(services, EnvelopeRecorder);
@@ -86,8 +86,6 @@ it.effect("captures escaped failure once at each disjoint attempt, resume, and q
     expect(errors.map(({ tags }) => [tags.operation, tags.error])).toEqual([
       ["whatsapp.disclosureAttempt", "operational_failure"],
       ["whatsapp.disclosureResume", "unexpected_defect"],
-      ["whatsapp.disclosureStart", "operational_failure"],
-      ["whatsapp.disclosureEvidence", "unexpected_defect"],
     ]);
     const serialized = envelopes.map((envelope) => new TextDecoder().decode(envelope)).join("\n");
     for (const value of protectedValues) expect(serialized).not.toContain(value);

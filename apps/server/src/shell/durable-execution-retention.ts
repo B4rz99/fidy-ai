@@ -1,6 +1,7 @@
 import { DateTime, Duration, Effect, Schema } from "effect";
 import { MachineId, Snowflake } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { HostedTurns } from "~/shell/agent/hosted-turns";
 
 /**
  * Version-local RC.112 mailbox cleanup: only completed HostedTurns requests and their unit replies.
@@ -22,7 +23,7 @@ export const pruneCompletedHostedTurnMessages = Effect.fn("DurableExecutionReten
     yield* sql`
     WITH eligible AS MATERIALIZED (
       SELECT request_id FROM fidy_durable.cluster_messages
-      WHERE entity_type = 'HostedTurns' AND kind = 0 AND processed = TRUE AND last_reply_id < ${cutoff.toString()}
+      WHERE entity_type = ${HostedTurns.type} AND kind = 0 AND processed = TRUE AND last_reply_id < ${cutoff.toString()}
       ORDER BY last_reply_id LIMIT 256 FOR UPDATE SKIP LOCKED
     ), replies AS (
       DELETE FROM fidy_durable.cluster_replies AS reply USING eligible

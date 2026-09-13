@@ -25,7 +25,8 @@ import type { SqlClient } from "effect/unstable/sql";
 
 const messageBufferKibibytes = 64;
 const bytesPerKibibyte = 1024;
-const maximumMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
+/** Retained incomplete-frame bound shared by every private Cluster client and runner. */
+export const maximumClusterMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
 const clusterRunnerPath = "/_fidy/cluster";
 const registerRoutes = HttpRouter.use;
 
@@ -33,6 +34,14 @@ const registerRoutes = HttpRouter.use;
 type ClusterToken = Redacted.Redacted<string>;
 
 const bearer = (token: ClusterToken): string => `Bearer ${Redacted.value(token)}`;
+
+/**
+ * Exact MessagePack framing shared by private Cluster clients and runners. The bound applies to an
+ * incomplete frame retained across chunks, so a malformed or oversized peer cannot grow parser
+ * memory without limit.
+ */
+export const ClusterRunnerSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
+  RpcSerialization.layerMsgPackWith({ maxBufferSize: maximumClusterMessageBufferBytes });
 
 const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken): boolean => {
   if (Option.isNone(actual)) return false;
@@ -119,7 +128,7 @@ const layerAuthenticatedSqlCluster = (
     Layer.provideMerge(Layer.orDie(SqlMessageStorage.layer).pipe(Layer.provide(BunCrypto.layer))),
     Layer.provide(Layer.orDie(SqlRunnerStorage.layer)),
     Layer.provide(ShardingConfig.layerFromEnv(shardingConfig)),
-    Layer.provide(RpcSerialization.layerMsgPackWith({ maxBufferSize: maximumMessageBufferBytes }))
+    Layer.provide(ClusterRunnerSerializationLive)
   );
 };
 

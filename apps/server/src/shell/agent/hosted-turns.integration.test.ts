@@ -1,9 +1,11 @@
 import { expect, layer } from "@effect/vitest";
 import { UnknownJsonString } from "~/schema-compatibility";
 import {
+  type Cause,
   Crypto,
   DateTime,
   Deferred,
+  type Duration,
   Effect,
   Fiber,
   Layer,
@@ -14,8 +16,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { ClusterSchema, Entity, RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
-import { Rpc } from "effect/unstable/rpc";
+import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
 import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
@@ -35,13 +36,13 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
-  AgentLimits,
-  AgentReply,
+  type AgentReply,
   AgentService,
   type AgentTurnError,
   CurrentAgentLimits,
   InboundMessage,
 } from "./agent-service";
+import { HostedTurns } from "./hosted-turns";
 import { HostedInference, type HostedTextContext, makeHostedInference } from "./hosted-inference";
 import { ImmediateDelivery } from "./immediate-delivery";
 import { WhatsAppReplyDeliveryLive } from "./whatsapp-delivery";
@@ -59,29 +60,6 @@ import { truncateWhatsAppChannel } from "~/shell/channels/whatsapp/fixtures";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-
-/** Independent wire client: exercise malformed addresses and replay without exposing lifecycle APIs. */
-const HostedWire = Entity.make("HostedTurns", [
-  Rpc.make("Handle", {
-    payload: {
-      userId: UserId,
-      turnId: TranscriptTurnId,
-      message: InboundMessage,
-      limits: AgentLimits,
-      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
-    },
-    success: AgentReply,
-    error: Schema.String,
-  }),
-  Rpc.make("Recover", {
-    payload: { userId: UserId, turnId: TranscriptTurnId },
-    primaryKey: ({ turnId }) => turnId,
-  }).annotate(ClusterSchema.Persisted, true),
-  Rpc.make("ProcessWhatsApp", {
-    payload: WhatsAppInboundWork.fields,
-    primaryKey: ({ inboundJobId }) => inboundJobId,
-  }).annotate(ClusterSchema.Persisted, true),
-]);
 
 const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
   Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))
@@ -103,7 +81,7 @@ const mailbox = Effect.gen(function* () {
   return yield* Schema.decodeUnknownEffect(
     Schema.Array(Schema.Struct({ processed: Schema.Boolean }))
   )(
-    yield* sql`SELECT processed FROM fidy_durable.cluster_messages WHERE entity_type = 'HostedTurns' AND kind = 0`
+    yield* sql`SELECT processed FROM fidy_durable.cluster_messages WHERE entity_type = ${HostedTurns.type} AND kind = 0`
   );
 });
 const inference = (execute: (text: string) => Effect.Effect<void>): HostedInference["Service"] =>
@@ -195,6 +173,31 @@ const runtimeLayer = (input: {
   );
   return SqlWhatsAppQueueLive.pipe(Layer.provideMerge(agentRuntime));
 };
+/** One poll policy: how long to keep observing, and how often to recheck. */
+type WaitPolicy = Readonly<{
+  readonly timeout: Duration.Input;
+  readonly interval: Duration.Input;
+}>;
+
+/** Poll cadence for operations that settle quickly. */
+const defaultWait: WaitPolicy = { timeout: "10 seconds", interval: "20 millis" };
+/** Poll cadence for recovery scenarios that can take longer to settle. */
+const recoveryWait: WaitPolicy = { timeout: "20 seconds", interval: "50 millis" };
+
+/** Poll cadence for the mailbox observation before retention, which settles without a model barrier. */
+const retentionWait: WaitPolicy = { timeout: "5 seconds", interval: "20 millis" };
+
+/** Polls an observation until it satisfies `until`, or fails the scenario after the policy's wait. */
+const waitUntil = <A, E, R>(
+  observation: Effect.Effect<A, E, R>,
+  until: (value: A) => boolean,
+  policy: WaitPolicy = defaultWait
+): Effect.Effect<A, E | Cause.TimeoutError, R> =>
+  observation.pipe(
+    Effect.repeat({ until, schedule: Schedule.spaced(policy.interval) }),
+    Effect.timeout(policy.timeout)
+  );
+
 /** Waits for the initial rebalance, so a serialization test does not accidentally test owner shutdown. */
 const waitForAssignments = Effect.fn(function* (
   runners: ReadonlyArray<{ readonly hasShardId: (id: ShardId.ShardId) => boolean }>
@@ -202,13 +205,13 @@ const waitForAssignments = Effect.fn(function* (
   const shards = Array.from({ length: testShardCount }, (_, index) =>
     ShardId.make("default", index + 1)
   );
-  return yield* Effect.sync(
-    () =>
-      runners.every((runner) => shards.some(runner.hasShardId)) &&
-      shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
-  ).pipe(
-    Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("20 millis") }),
-    Effect.timeout("10 seconds")
+  return yield* waitUntil(
+    Effect.sync(
+      () =>
+        runners.every((runner) => shards.some(runner.hasShardId)) &&
+        shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
+    ),
+    (ready) => ready
   );
 });
 
@@ -218,6 +221,111 @@ const disposeRuntimes = (
   Effect.promise(() => Promise.all(runtimes.map((runtime) => runtime.dispose()))).pipe(
     Effect.asVoid
   );
+
+/**
+ * Waits until an operation reaches the named test barrier. A caller that finishes first means the
+ * scenario never blocked, which is a broken test rather than a passing one.
+ */
+const awaitBarrier = <A, E, Barrier>(
+  label: string,
+  barrier: Deferred.Deferred<Barrier>,
+  caller: Fiber.Fiber<A, E>
+): Effect.Effect<Barrier, E> =>
+  Effect.raceFirst(
+    Deferred.await(barrier),
+    Fiber.join(caller).pipe(Effect.andThen(Effect.die(`Request completed before ${label}`)))
+  );
+
+/** One model or delivery gate: a held operation signals `entered`, then waits for `release`. */
+type TurnGate = Readonly<{
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+}>;
+
+/**
+ * Records one observed value and, when it matches `held`, signals the gate's `entered` barrier and
+ * waits for its release, so a test can park one operation while it drives others.
+ */
+const gatedRecorder =
+  (
+    record: (value: string) => Effect.Effect<void>,
+    held: string,
+    gate: TurnGate
+  ): ((value: string) => Effect.Effect<void>) =>
+  (value) =>
+    record(value).pipe(
+      Effect.andThen(
+        value === held
+          ? Deferred.succeed(gate.entered, undefined).pipe(
+              Effect.andThen(Deferred.await(gate.release))
+            )
+          : Effect.void
+      )
+    );
+
+/** One hosted-agent test runtime: its listen port plus the model and delivery probes it records. */
+type HostedRuntimeSpec = Readonly<{
+  readonly port: number;
+  readonly generate: (text: string) => Effect.Effect<void>;
+  readonly deliver: (text: string) => Effect.Effect<void>;
+}>;
+
+/**
+ * Starts one test runtime per spec, waits until the runners have rebalanced across the configured
+ * shards, and disposes every runtime when the enclosing test scope closes. Returns each runtime
+ * with its generated HostedTurns client, in spec order.
+ */
+const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRuntimeSpec>) {
+  const crypto = yield* Crypto.Crypto;
+  const http = yield* HttpClient.HttpClient;
+  const runtimes = specs.map((spec) =>
+    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
+  );
+  yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
+  yield* Effect.forEach(
+    runtimes,
+    (runtime) => Effect.promise(() => runtime.runPromise(Effect.void)),
+    { concurrency: 1, discard: true }
+  );
+  yield* waitForAssignments(
+    yield* Effect.promise(() =>
+      Promise.all(runtimes.map((runtime) => runtime.runPromise(Sharding.Sharding)))
+    )
+  );
+  return yield* Effect.forEach(runtimes, (runtime) =>
+    Effect.promise(() => runtime.runPromise(HostedTurns.client)).pipe(
+      Effect.map((client) => ({ runtime, client }))
+    )
+  );
+});
+
+/** Reads one started runtime, failing the test when the builder started none at that position. */
+const startedRuntimeAt = <A>(started: ReadonlyArray<A>, index: number): Effect.Effect<A> =>
+  Option.match(Option.fromUndefinedOr(started[index]), {
+    onNone: () => Effect.die(`hosted runtime ${index} was not started`),
+    onSome: Effect.succeed,
+  });
+
+/** Starts the single hosted-agent runtime a one-runner scenario needs. */
+const startHostedRuntime = Effect.fn(function* (spec: HostedRuntimeSpec) {
+  return yield* startedRuntimeAt(yield* startHostedRuntimes([spec]), 0);
+});
+
+/** The immediate Handle request every direct-client scenario sends, varying only turn and text. */
+const immediateTurnRequest = Effect.fn(function* (turnId: TranscriptTurnId, text: string) {
+  return {
+    userId: defaultUserId,
+    turnId,
+    limits: yield* CurrentAgentLimits,
+    message: InboundMessage.make({ text: TranscriptText.make(text) }),
+    authorityRoot: "no-verified-whatsapp-authority" as const,
+  };
+});
+
+/** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
+const everyMailboxEntryProcessed = (
+  rows: ReadonlyArray<{ readonly processed: boolean }>
+): boolean => rows.every(({ processed }) => processed);
 
 const handle = (
   userId: UserId,
@@ -333,57 +441,31 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
       () =>
         Effect.gen(function* () {
           yield* reset;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const events = yield* Ref.make<ReadonlyArray<string>>([]);
           const modelEntered = yield* Deferred.make<void>();
           const modelRelease = yield* Deferred.make<void>();
           const deliveryEntered = yield* Deferred.make<void>();
           const deliveryRelease = yield* Deferred.make<void>();
-          const generate = (text: string): Effect.Effect<void> =>
-            Ref.update(events, (items) => [...items, `model:${text}`]).pipe(
-              Effect.andThen(
-                text === "held"
-                  ? Deferred.succeed(modelEntered, undefined).pipe(
-                      Effect.andThen(Deferred.await(modelRelease))
-                    )
-                  : Effect.void
-              )
-            );
-          const deliver = (text: string): Effect.Effect<void> =>
-            Ref.update(events, (items) => [...items, `delivery:${text}`]).pipe(
-              Effect.andThen(
-                text === "held"
-                  ? Deferred.succeed(deliveryEntered, undefined).pipe(
-                      Effect.andThen(Deferred.await(deliveryRelease))
-                    )
-                  : Effect.void
-              )
-            );
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24651, generate, deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24652, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const recordModel = (text: string): Effect.Effect<void> =>
+            Ref.update(events, (items) => [...items, `model:${text}`]);
+          const recordDelivery = (text: string): Effect.Effect<void> =>
+            Ref.update(events, (items) => [...items, `delivery:${text}`]);
+          const generate = gatedRecorder(recordModel, "held", {
+            entered: modelEntered,
+            release: modelRelease,
+          });
+          const deliver = gatedRecorder(recordDelivery, "held", {
+            entered: deliveryEntered,
+            release: deliveryRelease,
+          });
+          const started = yield* startHostedRuntimes([
+            { port: 24651, generate, deliver },
+            { port: 24652, generate, deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "held"));
-          yield* Effect.raceFirst(
-            Deferred.await(modelEntered),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before model barrier"))
-            )
-          );
+          yield* awaitBarrier("model barrier", modelEntered, first);
           const blockedAt = yield* DateTime.now;
           const admin = yield* MigrationSqlClient;
           const backends = yield* Effect.promise(() =>
@@ -438,8 +520,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
       () =>
         Effect.gen(function* () {
           yield* reset;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const owner = yield* Deferred.make<number>();
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
@@ -451,38 +531,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
                 Effect.andThen(Effect.never)
               );
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24653, generate: generate(24653), deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24654, generate: generate(24654), deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24653, generate: generate(24653), deliver },
+            { port: 24654, generate: generate(24654), deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           const first = firstRuntime.runFork(handle(defaultUserId, "abandoned"));
-          const running = yield* Effect.raceFirst(
-            Deferred.await(owner),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before owner barrier"))
-            )
-          );
+          const running = yield* awaitBarrier("owner barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24653 ? firstRuntime : secondRuntime).dispose());
-          const recovered = yield* states(defaultUserId).pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.state === "Interrupted",
-              schedule: Schedule.spaced("50 millis"),
-            }),
-            Effect.timeout("20 seconds")
+          const recovered = yield* waitUntil(
+            states(defaultUserId),
+            (rows) => rows[0]?.state === "Interrupted",
+            recoveryWait
           );
           expect(recovered).toEqual([{ state: "Interrupted" }]);
           expect(yield* Ref.get(calls)).toBe(1);
@@ -497,24 +559,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
-          const runtime = ManagedRuntime.make(
-            runtimeLayer({
-              crypto,
-              http,
-              port: 24659,
-              generate: () => Ref.update(calls, (count) => count + 1),
-              deliver: () => Ref.update(sends, (count) => count + 1),
-            })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+          const { runtime } = yield* startHostedRuntime({
+            port: 24659,
+            generate: () => Ref.update(calls, (count) => count + 1),
+            deliver: () => Ref.update(sends, (count) => count + 1),
+          });
           const agent = yield* Effect.promise(() => runtime.runPromise(AgentService));
-          yield* waitForAssignments([
-            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-          ]);
           const work = yield* enqueue("owned-whatsapp-input");
           const sql = yield* MigrationSqlClient;
           const before =
@@ -527,7 +579,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           ).toEqual(before);
           expect(
             yield* sql`SELECT request_id FROM fidy_durable.cluster_messages
-              WHERE entity_type = 'HostedTurns' AND tag = 'ProcessWhatsApp'
+              WHERE entity_type = ${HostedTurns.type}
               AND payload::text LIKE ${`%${work.inboundJobId}%`}`
           ).toEqual([]);
           expect(yield* states(defaultUserId)).toEqual([]);
@@ -549,29 +601,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Effect.void;
-          const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24660, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-          const client = yield* Effect.promise(() => runtime.runPromise(HostedWire.client));
-          yield* waitForAssignments([
-            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-          ]);
+          const { runtime, client } = yield* startHostedRuntime({ port: 24660, generate, deliver });
           const turnId = TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
           const inboundJobId = WhatsAppInboundJobId.make(
             yield* crypto.randomUUIDv4.pipe(Effect.orDie)
           );
-          const request = {
-            userId: defaultUserId,
-            turnId,
-            limits: yield* CurrentAgentLimits,
-            message: InboundMessage.make({ text: TranscriptText.make("wire-identity") }),
-            authorityRoot: "no-verified-whatsapp-authority" as const,
-          };
+          const request = yield* immediateTurnRequest(turnId, "wire-identity");
           expect(
             yield* Effect.promise(() =>
               runtime.runPromise(client(otherUserId).Handle(request).pipe(Effect.flip))
@@ -631,26 +669,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-          const runtimes = [
-            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24661, generate, deliver })),
-            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24662, generate, deliver })),
-          ] as const;
-          yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
-          yield* Effect.promise(() => runtimes[0].runPromise(Effect.void));
-          yield* Effect.promise(() => runtimes[1].runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                runtimes[0].runPromise(Sharding.Sharding),
-                runtimes[1].runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24661, generate, deliver },
+            { port: 24662, generate, deliver },
+          ]);
           const workerLayer = Layer.build(WhatsAppWorkerLive).pipe(
             Effect.andThen(Effect.never),
             Effect.scoped,
@@ -660,14 +686,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
               sendText: () => Effect.die("Unexpected disclosure"),
             })
           );
-          const workers = runtimes.map((runtime) => runtime.runFork(workerLayer));
+          const workers = started.map(({ runtime }) => runtime.runFork(workerLayer));
           yield* enqueue("composed-worker");
-          yield* states(defaultUserId).pipe(
-            Effect.repeat({
-              until: (rows) => rows.length === 1 && rows[0]?.state === "Completed",
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("10 seconds")
+          yield* waitUntil(
+            states(defaultUserId),
+            (rows) => rows.length === 1 && rows[0]?.state === "Completed"
           );
           yield* Effect.forEach(workers, Fiber.interrupt, { discard: true });
           expect(yield* Ref.get(calls)).toBe(1);
@@ -682,46 +705,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const entered = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
           const generated = yield* Ref.make<ReadonlyArray<string>>([]);
           const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
-          const generate = (text: string): Effect.Effect<void> =>
-            Ref.update(generated, (items) => [...items, text]).pipe(
-              Effect.andThen(
-                text === "holds-user"
-                  ? Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(Deferred.await(release))
-                    )
-                  : Effect.void
-              )
-            );
+          const recordGenerated = (text: string): Effect.Effect<void> =>
+            Ref.update(generated, (items) => [...items, text]);
+          const generate = gatedRecorder(recordGenerated, "holds-user", { entered, release });
           const deliver = (text: string): Effect.Effect<void> =>
             Ref.update(delivered, (items) => [...items, text]);
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24655, generate, deliver })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24656, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24655, generate, deliver },
+            { port: 24656, generate, deliver },
+          ]);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
           const first = firstRuntime.runFork(handle(defaultUserId, "holds-user"));
-          yield* Effect.raceFirst(
-            Deferred.await(entered),
-            Fiber.join(first).pipe(Effect.andThen(Effect.die("Request completed before barrier")))
-          );
+          yield* awaitBarrier("model barrier", entered, first);
           yield* enqueue("queued-whatsapp");
           yield* Effect.sleep("2100 millis");
           expect(yield* inboundState).toEqual([{ assigned: false, terminalOutcome: null }]);
@@ -729,13 +728,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(first);
           const replacement = firstRuntime.runFork(processNextWhatsAppTurn());
-          yield* inboundState.pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.terminalOutcome === "delivered",
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("10 seconds")
-          );
+          yield* waitUntil(inboundState, (rows) => rows[0]?.terminalOutcome === "delivered");
           yield* Fiber.interrupt(replacement);
           expect(yield* Ref.get(generated)).toEqual(["holds-user", "queued-whatsapp"]);
           expect(yield* Ref.get(delivered)).toEqual(["holds-user", "queued-whatsapp"]);
@@ -745,26 +738,106 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           ]);
           const sql = yield* MigrationSqlClient;
           const messages =
-            yield* sql`SELECT payload, headers FROM fidy_durable.cluster_messages WHERE entity_type = 'HostedTurns'`;
+            yield* sql`SELECT payload, headers FROM fidy_durable.cluster_messages WHERE entity_type = ${HostedTurns.type}`;
           const retained = yield* Schema.encodeEffect(UnknownJsonString)(messages);
           expect(retained).not.toContain("queued-whatsapp");
           expect(retained).not.toContain("holds-user");
           expect(
             yield* sql`SELECT content FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
           ).toEqual([{ content: null }]);
-          const completed = yield* mailbox.pipe(
-            Effect.repeat({
-              until: (rows) => rows.every(({ processed }) => processed),
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("5 seconds")
-          );
+          const completed = yield* waitUntil(mailbox, everyMailboxEntryProcessed, retentionWait);
           expect(completed.length).toBeGreaterThan(0);
           yield* pruneCompletedHostedTurnMessages(yield* DateTime.now);
           expect(yield* mailbox).toEqual(completed);
           yield* pruneCompletedHostedTurnMessages(DateTime.add(yield* DateTime.now, { days: 2 }));
           expect(yield* mailbox).toEqual([]);
         })
+    );
+
+    it.effect("runs an immediate Handle to completion after its caller disconnects", () =>
+      Effect.gen(function* () {
+        yield* reset;
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        const crypto = yield* Crypto.Crypto;
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const calls = yield* Ref.make(0);
+        const sends = yield* Ref.make(0);
+        const recordCall = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
+        const generate = gatedRecorder(recordCall, "caller-disconnect", { entered, release });
+        const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
+        const { runtime, client } = yield* startHostedRuntime({
+          port: 24663,
+          generate,
+          deliver,
+        });
+        const request = yield* immediateTurnRequest(
+          TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+          "caller-disconnect"
+        );
+        const caller = runtime.runFork(client(defaultUserId).Handle(request));
+        yield* awaitBarrier("model barrier", entered, caller);
+        expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
+        // The client-annotated operation must outlive its caller and finish the admitted Turn.
+        yield* Fiber.interrupt(caller);
+        yield* Deferred.succeed(release, undefined);
+        const completed = yield* waitUntil(
+          states(defaultUserId),
+          (rows) => rows[0]?.state === "Completed"
+        );
+        expect(completed).toEqual([{ state: "Completed" }]);
+        expect(yield* Ref.get(calls)).toBe(1);
+        expect(yield* Ref.get(sends)).toBe(1);
+      })
+    );
+
+    it.effect("keeps a persisted ProcessWhatsApp running after its caller disconnects", () =>
+      Effect.gen(function* () {
+        yield* reset;
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        yield* truncateWhatsAppChannel;
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const generated = yield* Ref.make<ReadonlyArray<string>>([]);
+        const delivered = yield* Ref.make<ReadonlyArray<string>>([]);
+        const recordGenerated = (text: string): Effect.Effect<void> =>
+          Ref.update(generated, (items) => [...items, text]);
+        const generate = gatedRecorder(recordGenerated, "persisted-disconnect", {
+          entered,
+          release,
+        });
+        const deliver = (text: string): Effect.Effect<void> =>
+          Ref.update(delivered, (items) => [...items, text]);
+        const { runtime, client } = yield* startHostedRuntime({
+          port: 24664,
+          generate,
+          deliver,
+        });
+        const work = yield* enqueue("persisted-disconnect");
+        const caller = runtime.runFork(client(defaultUserId).ProcessWhatsApp(work));
+        yield* awaitBarrier("model barrier", entered, caller);
+        // A durable client-annotated operation settles its accepted inbound work exactly once
+        // even when the caller that submitted it is gone.
+        yield* Fiber.interrupt(caller);
+        // Give a forwarded interrupt time to arrive while the handler is still parked. Without
+        // the client annotation the durable run would be cancelled here instead of settling.
+        yield* Effect.sleep("1 second");
+        yield* Deferred.succeed(release, undefined);
+        const settled = yield* waitUntil(
+          inboundState,
+          (rows) => rows[0]?.terminalOutcome === "delivered"
+        );
+        expect(settled).toEqual([{ assigned: true, terminalOutcome: "delivered" }]);
+        expect(yield* Ref.get(generated)).toEqual(["persisted-disconnect"]);
+        expect(yield* Ref.get(delivered)).toEqual(["persisted-disconnect"]);
+        expect(yield* states(defaultUserId)).toEqual([{ state: "Completed" }]);
+        // Replaying the same durable identity after the disconnect must not repeat effects.
+        yield* Effect.promise(() =>
+          runtime.runPromise(client(defaultUserId).ProcessWhatsApp(work))
+        );
+        expect(yield* Ref.get(generated)).toEqual(["persisted-disconnect"]);
+        expect(yield* Ref.get(delivered)).toEqual(["persisted-disconnect"]);
+      })
     );
 
     it.effect(
@@ -774,8 +847,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           yield* reset;
           yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
-          const crypto = yield* Crypto.Crypto;
-          const http = yield* HttpClient.HttpClient;
           const owner = yield* Deferred.make<number>();
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
@@ -787,41 +858,23 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
                 Effect.andThen(Deferred.succeed(owner, port)),
                 Effect.andThen(Effect.never)
               );
-          const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24657, generate, deliver: deliver(24657) })
-          );
-          const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24658, generate, deliver: deliver(24658) })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
-          yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
-          yield* Effect.promise(() => secondRuntime.runPromise(Effect.void));
-          yield* waitForAssignments(
-            yield* Effect.promise(() =>
-              Promise.all([
-                firstRuntime.runPromise(Sharding.Sharding),
-                secondRuntime.runPromise(Sharding.Sharding),
-              ])
-            )
-          );
+          const started = yield* startHostedRuntimes([
+            { port: 24657, generate, deliver: deliver(24657) },
+            { port: 24658, generate, deliver: deliver(24658) },
+          ]);
+          const { runtime: firstRuntime } = yield* startedRuntimeAt(started, 0);
+          const { runtime: secondRuntime } = yield* startedRuntimeAt(started, 1);
           yield* enqueue("ambiguous-whatsapp");
           const first = firstRuntime.runFork(processNextWhatsAppTurn());
-          const running = yield* Effect.raceFirst(
-            Deferred.await(owner),
-            Fiber.join(first).pipe(
-              Effect.andThen(Effect.die("Request completed before delivery barrier"))
-            )
-          );
+          const running = yield* awaitBarrier("delivery barrier", owner, first);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24657 ? firstRuntime : secondRuntime).dispose());
           const replacementRuntime = running === 24657 ? secondRuntime : firstRuntime;
           const replacement = replacementRuntime.runFork(processNextWhatsAppTurn());
-          const recovered = yield* inboundState.pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.terminalOutcome === "ambiguous_crash",
-              schedule: Schedule.spaced("50 millis"),
-            }),
-            Effect.timeout("20 seconds")
+          const recovered = yield* waitUntil(
+            inboundState,
+            (rows) => rows[0]?.terminalOutcome === "ambiguous_crash",
+            recoveryWait
           );
           expect(recovered).toEqual([{ assigned: true, terminalOutcome: "ambiguous_crash" }]);
           yield* Fiber.interrupt(replacement);

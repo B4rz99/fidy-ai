@@ -6,12 +6,12 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { RollbackMigrationFixture } from "~/shell/testing/rollback-migration-fixture";
 import { hmacKeyByteSemantics } from "./0060-hmac-key-byte-semantics";
 
-const fixtureUserId = "f1d1a000-0000-4000-8000-0000000005b1";
-const fixturePairingId = "f1d1a000-0000-4000-8000-0000000005b2";
+const fixtureUserId = "f1d1a000-0000-4000-8000-0000000005d1";
+const fixturePairingId = "f1d1a000-0000-4000-8000-0000000005d2";
 const fixtureEmail = "migration-vector@example.com";
 // OpenSSL dgst -sha256 -mac HMAC -macopt hexkey:abab...ab of the credential lookup scope.
 const fixtureLookupIdentifier = "cb2939ae11f44e2f6ff30065939e4ef3ef449aed086eab2ea71868818e674546";
-const createdUserId = "f1d1a000-0000-4000-8000-0000000005b3";
+const createdUserId = "f1d1a000-0000-4000-8000-0000000005d3";
 const createdEmail = "migration-created@example.com";
 const createdLookupIdentifier = "205976dfa5b07f6468c0681b54df730866816b005b9bbf2e55a23939978714c5";
 const legacyOneWayKey = "f".repeat(64);

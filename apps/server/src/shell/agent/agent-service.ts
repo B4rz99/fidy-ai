@@ -22,11 +22,20 @@ import { HttpClient, HttpClientError } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import { ClusterError, ClusterSchema, Entity } from "effect/unstable/cluster";
-import { Rpc, RpcClientError, type RpcGroup } from "effect/unstable/rpc";
-import { AgentReply, InboundMessage } from "./message";
+import { ClusterError, Entity } from "effect/unstable/cluster";
+import { RpcClientError } from "effect/unstable/rpc";
+import { AgentReply, type InboundMessage } from "./message";
 import { ImmediateDelivery } from "./immediate-delivery";
 import { OnboardingConsentRequired } from "./consent-error";
+import {
+  AgentLimits,
+  HostedTurns,
+  type HostedTurnsClient,
+  type ImmediateTurnPayload,
+  type RecoveryPayload,
+  type TurnFailure,
+  type WhatsAppTurnPayload,
+} from "./hosted-turns";
 
 import { WhatsAppReplyDelivery } from "./whatsapp-delivery";
 import {
@@ -36,16 +45,13 @@ import {
   ownsWhatsAppInboundWork,
   prepareWhatsAppTurn,
 } from "~/shell/channels/whatsapp/repo";
-import {
-  WhatsAppInboundWork,
-  type WhatsAppInboundWork as WhatsAppInboundWorkType,
-} from "~/shell/channels/whatsapp/inbound-execution";
+import { type WhatsAppInboundWork as WhatsAppInboundWorkType } from "~/shell/channels/whatsapp/inbound-execution";
 
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { isTransientHttpStatus } from "~/shell/_shared/http-status";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
-import { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/reference";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import {
@@ -161,17 +167,6 @@ const modelRoundDescriptor: SpanDescriptor = {
   metadata: { _tag: "Model", model: "hosted_inference" },
 };
 
-/** Resource and context bounds applied independently to every hosted turn. */
-export const AgentLimits = Schema.Struct({
-  maxIterations: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 32 })),
-  maxToolCallsPerTurn: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 64 })),
-  maxToolResultCharacters: Schema.Int.check(
-    Schema.isBetween({ minimum: 1_000, maximum: 1_000_000 })
-  ),
-  maxModelRoundMillis: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120_000 })),
-});
-export type AgentLimits = typeof AgentLimits.Type;
-
 /** Default launch bounds; tests may override this reference at the public seam. */
 export const CurrentAgentLimits = Context.Reference<AgentLimits>(
   "@fidy/server/shell/agent/agent-service/CurrentAgentLimits",
@@ -265,46 +260,6 @@ export class HostedTurnProtocolFailed extends Data.TaggedError("HostedTurnProtoc
     return "The hosted Turn runtime exchanged an undeclared protocol message";
   }
 }
-
-const TurnFailure = Schema.Literals([
-  "UnknownUser",
-  "OnboardingConsentRequired",
-  "HostedCapacityExceeded",
-  "ModelUnavailable",
-  "ModelResponseRejected",
-  "HostedTurnAlreadyHandled",
-  "HostedTurnUnavailable",
-  "delivery_failed",
-]);
-
-const HostedTurns = Entity.make("HostedTurns", [
-  Rpc.make("Handle", {
-    payload: {
-      userId: UserId,
-      turnId: TranscriptTurnId,
-      message: InboundMessage,
-      limits: AgentLimits,
-      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
-    },
-    success: AgentReply,
-    error: TurnFailure,
-  }).annotate(ClusterSchema.Uninterruptible, "client"),
-  Rpc.make("ProcessWhatsApp", {
-    payload: WhatsAppInboundWork.fields,
-    primaryKey: ({ inboundJobId }) => inboundJobId,
-  })
-    .annotate(ClusterSchema.Persisted, true)
-    .annotate(ClusterSchema.Uninterruptible, "client"),
-  Rpc.make("Recover", {
-    payload: { userId: UserId, turnId: TranscriptTurnId },
-    primaryKey: ({ turnId }) => turnId,
-  })
-    .annotate(ClusterSchema.Persisted, true)
-    .annotate(ClusterSchema.Uninterruptible, "client"),
-]);
-
-type HostedTurnsClient = Effect.Success<typeof HostedTurns.client>;
-
 export { AgentReply, InboundMessage, AgentAttachment, AgentChoice } from "./message";
 export { OnboardingConsentRequired } from "./consent-error";
 
@@ -1865,9 +1820,7 @@ const executeMessage = <E, R>(
  * classifies one: a handler deducing one would report its own invariant violation as a peer fault
  * and dies instead.
  */
-const turnFailureConstructors: Readonly<
-  Record<typeof TurnFailure.Type, (userId: UserId) => AgentTurnError>
-> = {
+const turnFailureConstructors: Readonly<Record<TurnFailure, (userId: UserId) => AgentTurnError>> = {
   UnknownUser: (userId) => new UnknownUser({ userId }),
   OnboardingConsentRequired: (userId) => new OnboardingConsentRequired({ userId }),
   HostedCapacityExceeded: () => new HostedCapacityExceeded(),
@@ -1885,12 +1838,10 @@ type DeclaredTurnFailureTag = Exclude<AgentTurnError["_tag"], "HostedTurnProtoco
  * Only the delivery failure travels as a foreign tag; every other declared class travels as its
  * own, so a class the wire does not declare fails the mapped return type.
  */
-const declaredTurnWireTag = (tag: DeclaredTurnFailureTag): typeof TurnFailure.Type =>
+const declaredTurnWireTag = (tag: DeclaredTurnFailureTag): TurnFailure =>
   tag === "DeliveryFailed" ? "delivery_failed" : tag;
 
-const mapDeclaredTurnFailure = (
-  failure: AgentTurnError
-): Effect.Effect<AgentReply, typeof TurnFailure.Type> =>
+const mapDeclaredTurnFailure = (failure: AgentTurnError): Effect.Effect<AgentReply, TurnFailure> =>
   failure._tag === "HostedTurnProtocolFailed"
     ? Effect.die(failure)
     : Effect.fail(declaredTurnWireTag(failure._tag));
@@ -2043,10 +1994,6 @@ const settleDurableHostedWork = <E, R>(
     )
   );
 
-type HostedTurnRpc = RpcGroup.Rpcs<typeof HostedTurns.protocol>;
-type ImmediateTurnPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "Handle">>;
-type WhatsAppTurnPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "ProcessWhatsApp">>;
-type RecoveryPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "Recover">>;
 type HostedTurnContext = Readonly<{
   dependencies: AgentServiceDependencies;
   client: HostedTurnsClient;
@@ -2183,7 +2130,7 @@ const makeHostedTurnHandlers = Effect.fn(function* (
       payload,
     }: {
       payload: ImmediateTurnPayload;
-    }): Effect.Effect<AgentReply, typeof TurnFailure.Type> => handleImmediateTurn(context, payload),
+    }): Effect.Effect<AgentReply, TurnFailure> => handleImmediateTurn(context, payload),
     ProcessWhatsApp: ({ payload }: { payload: WhatsAppTurnPayload }): Effect.Effect<void> =>
       settleDurableHostedWork(
         dependencies,

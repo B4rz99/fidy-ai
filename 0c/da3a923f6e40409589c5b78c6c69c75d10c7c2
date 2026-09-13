@@ -1,0 +1,198 @@
+apps/server/src/shell/channels/whatsapp/repo.ts
+  h_c6d49c804e0ad2 29-32,214,225,226-229,236,263,285
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 6-11,44-48,50-57
+apps/server/src/shell/durable-queue-health.test.ts
+  h_c6d49c804e0ad2 1,15,16,17,18,19,20,21,22-25,26,28-31,33-36,37,39-47,49-50,51,52-75,76-77,78-84,85,86,88-92,94-115,117-119,148,149-154,155-158,159-160,161-163,165,166,167-173,174-175,176-178,180,181,182-193,195-206,207-209,210-218,219,236,246,247,253,277,278,314,340,341,350,368,369,383,385-389,397,477,497,561,581-585,585,589,603,626,648
+  s_ba8d087ff26ac2::t_b4801cfd22008e 220-222,646-652
+  s_ba8d087ff26ac2::t_ece292eec55546 27,32,38,87,93,130,164,179,194,280-281,378,415-422,424-459
+  s_ba8d087ff26ac2::t_2581c269095c0a 48,116
+  s_ba8d087ff26ac2::t_464e0fd3b9e73b 224-225,229-230,232-235,237-239,269,275,285-304,308-313,315-323,325-326,338,345-346,352-353,362-363,366,399-400,409-410,471,499-500,505,514,523,538,543-544,549,567-568,570,591-592,605-606,616,628-629,644
+  s_ba8d087ff26ac2::t_90f2e65c09e46e 627
+  s_ba8d087ff26ac2::t_eb742ce0da488a 283,349,496,540,564,588,602,625,653-654
+  s_ba8d087ff26ac2::t_e75c81c5183ecb 242-245,248-252,254-265,337
+  s_ba8d087ff26ac2::t_f78bd2d522eb33 305-307
+  s_ba8d087ff26ac2::t_bcb9b759bd0952 3-14,121-129,131-146
+  s_ba8d087ff26ac2::t_4880a4290e1917 120,147
+  s_ba8d087ff26ac2::t_87016dc57c68b1 393-394,489-493
+  s_ba8d087ff26ac2::t_eec0830b6c22bf 2
+  s_ba8d087ff26ac2::t_51666ec9d509ab 282,348,395-396,495,539,563,587,601,624,645
+  s_c5b72526daa7fd::t_f9d18213265982 223,226-228,231,240-241,266-268,270-274,276,279,284,324,327-336,339,342-344,347,351,354-361,364-365,367,370-377,379-382,384,390-392,398,401-408,411-414,460-470,472-476,478-488,494,498,501-504,506-513,515-522,524-537,542,545-548,550-560,562,566,569,571-580,586,589-590,593-600,603-604,607-615,617-623,626,630-643
+apps/server/src/shell/durable-queue-health.ts
+  h_c6d49c804e0ad2 2-3,5,8,10,11-12,13,15,16,17-19,20,22,23-26,27,28,30,34-35,38,41,68-72,68-74,74,75,77-78,79-83,88,93-96,98-100,98-99,101-102,103,109,110,111-112,114-121,116-121,124-127,125-127,130,130-150,138-140,142-144,146,153-155,153-157,157,158-160,162-163,164-165,164-168,168,169,170,170-171,172,174-176,177,178-179,182,184-185,186-187,188-194,195-203,205,206,207-225,227,228,229-233,234-239,247,249,251-257,258-259,261,262,263,264,265,266,267,268,269,270,271,272,273-278,279-283,300,304-305,307-312,313,318-327,336,337,342,344,370,371
+  s_ba8d087ff26ac2::t_1a1f778eb18931 9,89-92
+  s_ba8d087ff26ac2::t_a5b951451df1f6 21
+  s_ba8d087ff26ac2::t_05d7d06a5341c4 321-325,343,360-361,363-369
+  s_ba8d087ff26ac2::t_379f7e0306e676 67,316
+  s_ba8d087ff26ac2::t_75f6f815fb9397 106-108,181,248,285
+  s_ba8d087ff26ac2::t_41f7de8541080e 240-246,260
+  s_ba8d087ff26ac2::t_398c1c24aff6fe 84
+  s_ba8d087ff26ac2::t_12a2b22fc68bb5 306-315,317-320,326
+  s_ba8d087ff26ac2::t_abc1e4efd1cc43 29
+  s_ba8d087ff26ac2::t_7de538206d4ccb 1,327-336,345-348,350-351,358-359,362
+  s_ba8d087ff26ac2::t_acac5d15910af1 14,76,97,104-105,161
+  s_ba8d087ff26ac2::t_c3b741242b7f3e 66,338-340,349,353-356
+  s_ba8d087ff26ac2::t_74be20f007eea8 7
+  s_ba8d087ff26ac2::t_205a1d6c36b30c 6,31,39,43-50,52,54-65,85-87,113,122-123,128-129,151-152,173,183,204,226,250,298
+  s_ba8d087ff26ac2::t_6875459103fc39 341-342,352,357
+  s_ba8d087ff26ac2::t_9bf337c602c167 4,337
+apps/server/src/shell/durable-queue-policy.test.ts
+  h_c6d49c804e0ad2 1,2,3,10-14,16-17,18-20,21,22,24,27-32,33,34,35,36-46,56-57,74,74-76,75-76,79-89,90-103,104-134,135-144,145-158,159,160-162,172
+  s_ba8d087ff26ac2::t_16a53241624de4 5-9,15,47-51,78
+  s_ba8d087ff26ac2::t_04e282f619a4ce 23,25-26,54-55,58-62,71-73,77,163-171
+  s_ba8d087ff26ac2::t_e5bcfd9947e142 64-70
+  s_6479fed071c96c::t_017879013bd847 4,63,79-80
+apps/server/src/shell/durable-queue-policy.ts
+  h_c6d49c804e0ad2 2,4-14,15,16-19,20,21-24,26-30,32-35,36-38,40-42,44-45,46,48-52,55,58,60-61,61,64-75,76,77,78,79-80,89-90,91-92,95-101,102,103,104,105-111,114-115,117,119
+  s_ba8d087ff26ac2::t_2e0f0e54cf089c 1,81-88
+  s_ba8d087ff26ac2::t_4a00bbe29f34c1 3,25,31,56,59
+  s_ba8d087ff26ac2::t_4f42866f6e3dfb 53-54
+  s_ba8d087ff26ac2::t_7b0f98de30ea0c 62-63,112-113,116,118,120
+  s_ba8d087ff26ac2::t_dd696aac9d1455 93-94
+  s_ba8d087ff26ac2::t_d023aa30299a82 39,43,47
+  s_5c389bf705abd8::t_2860a2cdb2c1eb 64
+apps/server/src/shell/http.test.ts
+  h_c6d49c804e0ad2 2,6,60,65-68,69-70,71-72,73,75,76,77-80,81,83-90,91,92-95
+  s_ba8d087ff26ac2::t_3e3dd4c7205375 59,61-63,82
+  s_ba8d087ff26ac2::t_dc51f55257992d 5,64,74
+  s_ba8d087ff26ac2::t_12721c264ccb93 96-104
+apps/server/src/shell/http.ts
+  h_c6d49c804e0ad2 11,257
+apps/server/src/shell/maintenance.ts
+  h_c6d49c804e0ad2 4,27
+apps/server/src/shell/observability/registry.ts
+  h_c6d49c804e0ad2 80
+apps/server/src/shell/observability/protocol.ts
+  h_c6d49c804e0ad2 7-9,24
+apps/server/src/shell/durable-execution-retention.ts
+  h_c6d49c804e0ad2 5,57,66,84-85,95,108
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  h_c6d49c804e0ad2 11,84,100-101
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  h_c6d49c804e0ad2 12
+apps/server/src/shell/queue-compatibility/contracts.ts
+  s_ba8d087ff26ac2::t_2e08a784108041 73-74
+  s_ba8d087ff26ac2::t_1d31d9f9992143 3
+apps/server/src/shell/queue-compatibility/queue-compatibility.test.ts
+  s_ba8d087ff26ac2::t_03a5bba8cc3797 66
+apps/web/ARCHITECTURE.md
+  s_ba8d087ff26ac2::t_32255efba7521c 31-35
+apps/web/src/app/routes.ts
+  s_ba8d087ff26ac2::t_32255efba7521c 21
+docs/architecture/durable-execution-inventory.md
+  s_ba8d087ff26ac2::t_2e2f598dea2b0c 126
+  s_ff19f4fb42a224::t_5dc8af333704d7 104-125,127
+apps/web/src/features/subscription/feature.test.tsx
+  s_ba8d087ff26ac2::t_022060accf703b 552-671,743
+apps/web/src/session/subscription-enrollment-lifetime.tsx
+  s_ba8d087ff26ac2::t_8893227c4a39f0 1-46
+apps/web/src/features/subscription/feature.tsx
+  s_ba8d087ff26ac2::t_022060accf703b 11,13,440-444,506-510,513,515,520-521,526-528,645,650-691,693-698,700,704,706-707,711-722,727-728,730,733,740-742,748,755-758,761-768,803-804,815,990-991
+apps/server/src/shell/testing/durable-queue-crash-runner.ts
+  s_ba8d087ff26ac2::t_7ab6420cab68cf 24,32
+  s_ba8d087ff26ac2::t_87ddb6bab25be3 1,3-7,9-21,25-31
+  s_ba8d087ff26ac2::t_cfdb39a37dc98a 8,33
+  s_ba8d087ff26ac2::t_8611d3bb309198 2,22-23
+apps/server/src/shell/channels/whatsapp/inbound-execution.ts
+  s_ba8d087ff26ac2::t_f0dd2c3b301a46 16
+  s_ba8d087ff26ac2::t_23360d2552e7a2 17-21
+apps/web/src/app/application.tsx
+  s_ba8d087ff26ac2::t_32255efba7521c 3,7,16,18-19,25-26,30-40
+  s_ba8d087ff26ac2::t_5590422cfa72dd 41-42
+apps/server/src/shell/ingestion/worker.ts
+  s_ba8d087ff26ac2::t_7f4a640510337e 63
+apps/web/src/session/subscription-enrollment-context.ts
+  s_ba8d087ff26ac2::t_8893227c4a39f0 1-19
+apps/server/src/shell/subscription/billing-repo.ts
+  s_ba8d087ff26ac2::t_12e9667874c30c 681,699
+  s_a634f65f042137::t_dd7f0ff7e45e36 31-34,618,627,649
+apps/server/src/shell/db/migrations/0061-durable-queue-acquisitions.ts
+  s_ba8d087ff26ac2::t_884ed704e75051 1-8,10-11,15-18,20-24,27-31
+  s_ba8d087ff26ac2::t_d776f7be338022 9,12-14,25-26
+  s_ba8d087ff26ac2::t_c8b1c46175fac5 19
+apps/web/src/transport/client.ts
+  s_ba8d087ff26ac2::t_991620d6607926 10,149-155,158,171-172,174-187
+apps/web/src/transport/client.test.ts
+  s_ba8d087ff26ac2::t_39a0cfbcbbd9d5 3,14-19,46-54,75-96
+  s_ba8d087ff26ac2::t_84d724da7f419a 97-98
+apps/server/src/shell/_shared/http-status.ts
+  s_ba8d087ff26ac2::t_8d127a20f2930d 28-30
+apps/server/src/shell/db/migrations/registry.ts
+  s_ba8d087ff26ac2::t_5a73fd85dd1645 60,130
+apps/web/src/application.test.tsx
+  s_ba8d087ff26ac2::t_022060accf703b 10,72-76
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_ba8d087ff26ac2::t_d8633c4bb4be0d 10-13,139
+  s_729685b01e566c::t_8fbf2df45f4892 9
+apps/web/src/session/subscription-enrollment-lifetime.test.tsx
+  s_ba8d087ff26ac2::t_8893227c4a39f0 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0cda3a923f6e40409589c5b78c6c69c75d10c7c2",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_5c389bf705abd8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b20-f638-75a4-ab60-ddcb264a8937",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6479fed071c96c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b7a-efba-7030-b8cf-4db953e90b5f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ba8d087ff26ac2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b21-1651-71c6-bb38-88667d780cc8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c5b72526daa7fd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b86-e895-7128-96a0-5e4d6c553604",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ff19f4fb42a224": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b65-74e5-750e-8d4f-41f7af0d779a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

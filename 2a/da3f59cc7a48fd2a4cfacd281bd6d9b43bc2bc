@@ -1,0 +1,19 @@
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_4a59a79f7ab288::t_4a26d2b934260c 98-105,125,167,218,245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2ada3f59cc7a48fd2a4cfacd281bd6d9b43bc2bc",
+  "prompts": {},
+  "sessions": {
+    "s_4a59a79f7ab288": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-7a2d-73ee-9b5f-1ce5a24da025",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -39,19 +39,24 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
+  BillingAttemptReconciliationPayload,
   BillingAttemptReconciliationWorkflow,
   billingAttemptReconciliationWorkflowLayer,
 } from "./billing-attempt-execution";
 import { BillingReconciliationMaintenanceLive } from "./billing-reconciliation-maintenance";
 import {
   armBillingAttemptInScope,
+  billingAttemptQueueName,
   findBillingAttemptByIdInScope,
   getBillingContextInScope,
   getBillingReconciliationEscalations,
   insertPendingBillingAttemptInScope,
   markBillingAttemptAwaitingReferenceInScope,
   markBillingAttemptManualReconciliationInScope,
+  maximumBillingAttemptQueueAttempts,
+  pruneBillingAttemptQueueHistory,
   recordBillingTransactionInScope,
+  retireExhaustedBillingAttemptWork,
 } from "./billing-repo";
 import { findPrice } from "./repo";
 import {
@@ -358,6 +363,59 @@ const attemptTransactions = Effect.fn("Test.readBillingTransactions")(function* 
       WHERE billing_attempt_id = ${id}
       ORDER BY first_observed_at, wompi_transaction_id
     `,
+  })({ id: attempt.payload.billingAttemptId }).pipe(Effect.orDie);
+});
+
+/**
+ * Offers one identifier-only queue item for a seeded attempt through the production table,
+ * so exhaustion tests exercise the same durable identity the worker consumes. Duplicate offers
+ * converge on one row via the queue's (id, queue_name) identity.
+ */
+const offerBillingQueueItem = Effect.fn("Test.offerBillingQueueItem")(function* (
+  attempt: SeededAttempt
+) {
+  const sql = yield* MigrationSqlClient;
+  const element = yield* Schema.encodeEffect(
+    Schema.fromJsonString(BillingAttemptReconciliationPayload)
+  )({
+    userId: attempt.userId,
+    billingAttemptId: attempt.payload.billingAttemptId,
+    revision: 1,
+  });
+  yield* sql`INSERT INTO fidy_durable.fidy_queue (
+      id, queue_name, element, completed, attempts, created_at, updated_at
+    ) VALUES (
+      ${attempt.payload.billingAttemptId}, ${billingAttemptQueueName}, ${element},
+      FALSE, 0, now(), now()
+    ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
+});
+
+/** Forces the queue row into the exhausted but incomplete state the retirement must observe. */
+const exhaustBillingQueueItem = Effect.fn("Test.exhaustBillingQueueItem")(function* (
+  attempt: SeededAttempt
+) {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`UPDATE fidy_durable.fidy_queue SET attempts = ${maximumBillingAttemptQueueAttempts},
+    updated_at = now()
+    WHERE queue_name = ${billingAttemptQueueName}
+      AND id = ${attempt.payload.billingAttemptId}`.pipe(Effect.orDie);
+});
+
+const readBillingQueueRow = Effect.fn("Test.readBillingQueueRow")(function* (
+  attempt: SeededAttempt
+) {
+  const sql = yield* MigrationSqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({ id: BillingAttemptId }),
+    Result: Schema.Struct({
+      completed: Schema.Boolean,
+      attempts: Schema.Int,
+      lastFailure: Schema.NullOr(Schema.String),
+    }),
+    execute: ({ id }) => sql`SELECT completed, attempts,
+        last_failure AS "lastFailure"
+      FROM fidy_durable.fidy_queue
+      WHERE queue_name = ${billingAttemptQueueName} AND id = ${id}`,
   })({ id: attempt.payload.billingAttemptId }).pipe(Effect.orDie);
 });
 
@@ -1112,6 +1170,467 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           findBillingAttemptByIdInScope(userIdFor(6), attempt.payload.billingAttemptId)
         );
         expect(Option.isNone(crossUser)).toBe(true);
+      })
+    );
+
+    it.effect("retires a pending armed attempt through exhaustion without failing it", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 30,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-30")),
+          armedAt: DateTime.subtract(now, { days: 8 }),
+          createdAt: DateTime.subtract(now, { days: 8 }),
+        });
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        const before = yield* getBillingReconciliationEscalations();
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBeGreaterThanOrEqual(1);
+        // Exhaustion keeps pending status and records manual evidence instead of definitive failure.
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          manualReconciliation: true,
+          periods: 0,
+          paid: false,
+        });
+        const queue = yield* readBillingQueueRow(attempt);
+        expect(Option.isSome(queue)).toBe(true);
+        if (Option.isSome(queue)) {
+          expect(queue.value.completed).toBe(true);
+          expect(queue.value.lastFailure).toBe("exhausted");
+        }
+        const after = yield* getBillingReconciliationEscalations();
+        expect(after.manualReconciliationCount - before.manualReconciliationCount).toBe(1);
+        // A second retirement observes no incomplete exhausted work, so it stays idempotent.
+        expect(yield* retireExhaustedBillingAttemptWork(now)).toBe(0);
+        // A replayed workflow never submits a second provider charge for the armed attempt.
+        const { provider, creations } = yield* makeProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+        });
+        const runtime = yield* acquireRuntime(24730, "25 millis", provider);
+        const result = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "manual-reconciliation-required" });
+        expect(yield* Ref.get(creations)).toBe(0);
+      })
+    );
+
+    it.effect("retires a queued never-armed attempt without submitting a charge", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt(
+          {
+            index: 31,
+            transactionId: Option.none(),
+            armedAt: now,
+            createdAt: now,
+          },
+          false
+        );
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBeGreaterThanOrEqual(1);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          manualReconciliation: true,
+          hasTransaction: false,
+        });
+        const stored = yield* withUserTransaction(
+          attempt.userId,
+          findBillingAttemptByIdInScope(attempt.userId, attempt.payload.billingAttemptId)
+        );
+        expect(Option.isSome(stored)).toBe(true);
+        if (Option.isSome(stored)) {
+          // The attempt was never armed, so no provider mutation could have been sent.
+          expect(stored.value.chargeState).toBe("queued");
+        }
+      })
+    );
+
+    it.effect("retires exhausted work without calling the provider", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 32,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-32")),
+          armedAt: DateTime.subtract(now, { hours: 2 }),
+          createdAt: DateTime.subtract(now, { hours: 2 }),
+        });
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        const { lookups, creations } = yield* buildProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          fault: { _tag: "Lookup" },
+        });
+        // Retirement reads owner state and never performs provider lookups or creations.
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBeGreaterThanOrEqual(1);
+        expect(yield* Ref.get(lookups)).toBe(0);
+        expect(yield* Ref.get(creations)).toBe(0);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+          manualReconciliation: true,
+        });
+      })
+    );
+
+    it.effect("keeps late authenticated success admissible after exhaustion", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 33,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-33")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        yield* retireExhaustedBillingAttemptWork(now);
+        expect(yield* attemptStatus(attempt)).toMatchObject({ status: "pending" });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            {
+              attempt,
+              transactionId: WompiTransactionId.make("txn-exhaust-33"),
+              status: "APPROVED",
+            },
+            Option.some(DateTime.add(now, { minutes: 1 }))
+          ),
+          environment: "sandbox",
+          observedAt: DateTime.add(now, { minutes: 1 }),
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          manualReconciliation: false,
+          periods: 1,
+          paid: true,
+        });
+      })
+    );
+
+    it.effect("keeps late authenticated failure admissible after exhaustion", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt(
+          {
+            index: 34,
+            transactionId: Option.some(WompiTransactionId.make("txn-exhaust-34")),
+            armedAt: now,
+            createdAt: now,
+          },
+          true,
+          DateTime.subtract(now, { minutes: 10 })
+        );
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        yield* retireExhaustedBillingAttemptWork(now);
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction({
+            attempt,
+            transactionId: WompiTransactionId.make("txn-exhaust-34"),
+            status: "DECLINED",
+          }),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "failed",
+          manualReconciliation: false,
+          periods: 0,
+          paid: false,
+        });
+      })
+    );
+
+    it.effect("converges duplicate queue deliveries on one attempt without a second charge", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 35,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-35")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* offerBillingQueueItem(attempt);
+        // A redelivered queue item shares the BillingAttempt identity, so the second offer is ignored.
+        yield* offerBillingQueueItem(attempt);
+        const sql = yield* MigrationSqlClient;
+        const rows = yield* sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue
+          WHERE queue_name = ${billingAttemptQueueName}
+            AND id = ${attempt.payload.billingAttemptId}`.pipe(Effect.orDie);
+        expect(rows).toEqual([{ count: 1 }]);
+        const { provider, creations } = yield* makeProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING", "APPROVED"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+        });
+        const runtime = yield* acquireRuntime(24731, "25 millis", provider);
+        const first = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        const second = yield* Effect.tryPromise(() =>
+          runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(first).toEqual({ outcome: "succeeded" });
+        expect(second).toEqual({ outcome: "succeeded" });
+        // The attempt was already armed, so neither delivery re-sent the provider mutation.
+        expect(yield* Ref.get(creations)).toBe(0);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          periods: 1,
+          paid: true,
+        });
+      })
+    );
+
+    it.effect("retains malformed exhausted work for inspection without domain writes", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const sql = yield* MigrationSqlClient;
+        const malformedId = BillingAttemptId.make("47700000-0000-4000-8000-000000000031");
+        yield* sql`INSERT INTO fidy_durable.fidy_queue (
+            id, queue_name, element, completed, attempts, created_at, updated_at
+          ) VALUES (
+            ${malformedId}, ${billingAttemptQueueName}, 'not-json',
+            FALSE, ${maximumBillingAttemptQueueAttempts}, now(), now()
+          ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBe(0);
+        const row = yield* SqlSchema.findOneOption({
+          Request: Schema.Void,
+          Result: Schema.Struct({
+            completed: Schema.Boolean,
+            lastFailure: Schema.NullOr(Schema.String),
+          }),
+          execute: () => sql`SELECT completed,
+              last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedId}`,
+        })(undefined).pipe(Effect.orDie);
+        expect(Option.isSome(row)).toBe(true);
+        if (Option.isSome(row)) {
+          // Malformed work stays incomplete for inspection with only a bounded marker.
+          expect(row.value.completed).toBe(false);
+          expect(row.value.lastFailure).toBe("schema_incompatible");
+        }
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedId}`.pipe(Effect.orDie);
+      })
+    );
+
+    it.effect("prunes completed queue history only after the attempt is terminal", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const succeeded = yield* seedAttempt({
+          index: 36,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-36")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            {
+              attempt: succeeded,
+              transactionId: WompiTransactionId.make("txn-exhaust-36"),
+              status: "APPROVED",
+            },
+            Option.some(now)
+          ),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        expect(yield* attemptStatus(succeeded)).toMatchObject({ status: "succeeded" });
+        const pending = yield* seedAttempt({
+          index: 37,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-37")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* offerBillingQueueItem(succeeded);
+        yield* offerBillingQueueItem(pending);
+        const sql = yield* MigrationSqlClient;
+        const old = DateTime.subtract(now, { hours: 25 });
+        yield* sql`UPDATE fidy_durable.fidy_queue SET completed = TRUE, updated_at = ${old}
+          WHERE queue_name = ${billingAttemptQueueName}
+            AND id IN ${sql.in([
+              succeeded.payload.billingAttemptId,
+              pending.payload.billingAttemptId,
+            ])}`.pipe(Effect.orDie);
+        const pruned = yield* pruneBillingAttemptQueueHistory(now);
+        expect(pruned).toBeGreaterThanOrEqual(1);
+        const remaining = yield* SqlSchema.findAll({
+          Request: Schema.Void,
+          Result: Schema.Struct({ id: Schema.String }),
+          execute: () => sql`SELECT id FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${billingAttemptQueueName}
+              AND id IN ${sql.in([
+                succeeded.payload.billingAttemptId,
+                pending.payload.billingAttemptId,
+              ])}`,
+        })(undefined).pipe(Effect.orDie);
+        const remainingIds = remaining.map((row) => row.id);
+        // Terminal history is removed while pending submission history is retained for review.
+        expect(remainingIds).not.toContain(succeeded.payload.billingAttemptId);
+        expect(remainingIds).toContain(pending.payload.billingAttemptId);
+      })
+    );
+
+    it.effect("retires exhausted work for an already settled attempt without a domain write", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 38,
+          transactionId: Option.some(WompiTransactionId.make("txn-exhaust-38")),
+          armedAt: now,
+          createdAt: now,
+        });
+        yield* reconcileWompiSettlement({
+          provider: providerTransaction(
+            {
+              attempt,
+              transactionId: WompiTransactionId.make("txn-exhaust-38"),
+              status: "APPROVED",
+            },
+            Option.some(now)
+          ),
+          environment: "sandbox",
+          observedAt: now,
+        });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          manualReconciliation: false,
+        });
+        yield* offerBillingQueueItem(attempt);
+        yield* exhaustBillingQueueItem(attempt);
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBe(1);
+        // A settled attempt needs no manual evidence; retirement only completes the queue row.
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          manualReconciliation: false,
+          periods: 1,
+          paid: true,
+        });
+        const queue = yield* readBillingQueueRow(attempt);
+        expect(Option.isSome(queue)).toBe(true);
+        if (Option.isSome(queue)) {
+          expect(queue.value.completed).toBe(true);
+          expect(queue.value.lastFailure).toBe("exhausted");
+        }
+      })
+    );
+
+    it.effect("retires exhausted work for a missing attempt without a domain write", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const sql = yield* MigrationSqlClient;
+        const missingUserId = userIdFor(90);
+        const missingAttemptId = BillingAttemptId.make("47700000-0000-4000-8000-000000000090");
+        const element = yield* Schema.encodeEffect(
+          Schema.fromJsonString(BillingAttemptReconciliationPayload)
+        )({ userId: missingUserId, billingAttemptId: missingAttemptId, revision: 1 });
+        yield* sql`INSERT INTO fidy_durable.fidy_queue (
+            id, queue_name, element, completed, attempts, created_at, updated_at
+          ) VALUES (
+            ${missingAttemptId}, ${billingAttemptQueueName}, ${element},
+            FALSE, ${maximumBillingAttemptQueueAttempts}, now(), now()
+          ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
+        const retired = yield* retireExhaustedBillingAttemptWork(now);
+        expect(retired).toBe(1);
+        const row = yield* SqlSchema.findOneOption({
+          Request: Schema.Void,
+          Result: Schema.Struct({
+            completed: Schema.Boolean,
+            lastFailure: Schema.NullOr(Schema.String),
+          }),
+          execute: () => sql`SELECT completed,
+              last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${billingAttemptQueueName} AND id = ${missingAttemptId}`,
+        })(undefined).pipe(Effect.orDie);
+        expect(Option.isSome(row)).toBe(true);
+        if (Option.isSome(row)) {
+          expect(row.value.completed).toBe(true);
+          expect(row.value.lastFailure).toBe("exhausted");
+        }
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = ${billingAttemptQueueName} AND id = ${missingAttemptId}`.pipe(
+          Effect.orDie
+        );
+      })
+    );
+
+    it.effect("prunes completed queue history for a missing attempt", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const sql = yield* MigrationSqlClient;
+        const missingUserId = userIdFor(91);
+        const missingAttemptId = BillingAttemptId.make("47700000-0000-4000-8000-000000000091");
+        const element = yield* Schema.encodeEffect(
+          Schema.fromJsonString(BillingAttemptReconciliationPayload)
+        )({ userId: missingUserId, billingAttemptId: missingAttemptId, revision: 1 });
+        const old = DateTime.subtract(now, { hours: 25 });
+        yield* sql`INSERT INTO fidy_durable.fidy_queue (
+            id, queue_name, element, completed, attempts, created_at, updated_at
+          ) VALUES (
+            ${missingAttemptId}, ${billingAttemptQueueName}, ${element},
+            TRUE, ${maximumBillingAttemptQueueAttempts}, ${old}, ${old}
+          ) ON CONFLICT (id, queue_name) DO UPDATE SET
+            completed = TRUE, updated_at = ${old}`.pipe(Effect.orDie);
+        const pruned = yield* pruneBillingAttemptQueueHistory(now);
+        expect(pruned).toBe(1);
+        const remaining = yield* SqlSchema.findOneOption({
+          Request: Schema.Void,
+          Result: Schema.Struct({ id: Schema.String }),
+          execute: () => sql`SELECT id FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${billingAttemptQueueName} AND id = ${missingAttemptId}`,
+        })(undefined).pipe(Effect.orDie);
+        expect(Option.isNone(remaining)).toBe(true);
+      })
+    );
+
+    it.effect("retains malformed completed queue history for inspection", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const sql = yield* MigrationSqlClient;
+        const malformedHistoryId = BillingAttemptId.make("47700000-0000-4000-8000-000000000092");
+        const old = DateTime.subtract(now, { hours: 25 });
+        yield* sql`INSERT INTO fidy_durable.fidy_queue (
+            id, queue_name, element, completed, attempts, created_at, updated_at
+          ) VALUES (
+            ${malformedHistoryId}, ${billingAttemptQueueName}, 'not-json',
+            TRUE, ${maximumBillingAttemptQueueAttempts}, ${old}, ${old}
+          ) ON CONFLICT (id, queue_name) DO UPDATE SET
+            element = 'not-json', completed = TRUE, updated_at = ${old}`.pipe(Effect.orDie);
+        const pruned = yield* pruneBillingAttemptQueueHistory(now);
+        expect(pruned).toBe(0);
+        const row = yield* SqlSchema.findOneOption({
+          Request: Schema.Void,
+          Result: Schema.Struct({ completed: Schema.Boolean }),
+          execute: () => sql`SELECT completed FROM fidy_durable.fidy_queue
+            WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedHistoryId}`,
+        })(undefined).pipe(Effect.orDie);
+        expect(Option.isSome(row)).toBe(true);
+        if (Option.isSome(row)) {
+          expect(row.value.completed).toBe(true);
+        }
+        yield* sql`DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedHistoryId}`.pipe(
+          Effect.orDie
+        );
       })
     );
   }

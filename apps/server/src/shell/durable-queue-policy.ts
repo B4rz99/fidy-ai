@@ -8,10 +8,13 @@ import { Duration } from "effect";
  *
  * Lease sizing is driven by the longest queue-lease holder, `whatsapp-inbound-turn`: one
  * `agent.handleWhatsAppWork` turn runs up to 6 model iterations at up to 30 seconds per round
- * (`CurrentAgentLimits`), about 180 seconds before settlement overhead. The 10-minute expiry holds
- * more than twice that pause with the 30-second refresh continuously renewing the lease (a 20:1
- * refresh-to-expiry ratio), so a healthy handler never loses its lease while a dead runtime's work
- * still becomes stealable within minutes.
+ * (`CurrentAgentLimits`), about 180 seconds before settlement overhead. Every other production
+ * queue handler completes one bounded provider exchange (a consent disclosure send, an onboarding
+ * or pairing email send, one statement file mapping, one billing attempt) while the 30-second
+ * refresh keeps renewing this lease, so its provider retries do not extend the un-refreshed window.
+ * The 10-minute expiry holds more than twice the 210-second turn budget (a 20:1 refresh-to-expiry
+ * ratio), so a healthy handler never loses its lease while a dead runtime's work still becomes
+ * stealable within minutes.
  */
 export const durableQueueTableName = "fidy_queue";
 
@@ -97,16 +100,25 @@ export const durableQueueMaxAttempts: Record<DurableQueueName, number> = {
  */
 const durableQueueNativeMaxAttempts = 10;
 
+/** Whether a name is one of the stable production queue identities. */
+export const isDurableQueueName = (queueName: string): queueName is DurableQueueName =>
+  durableQueueNames.some((name) => name === queueName);
+
 /**
- * Delivery ceiling for one queue name. Unknown names (test-only queues) fall back to the native
- * default ceiling rather than inventing a stricter budget.
+ * Delivery ceiling for one stable production queue name, resolved exactly against
+ * `durableQueueMaxAttempts` so a renamed queue cannot silently change its retry budget.
  */
-export const maxAttemptsForDurableQueue = (queueName: string): number => {
-  for (const name of durableQueueNames) {
-    if (name === queueName) return durableQueueMaxAttempts[name];
-  }
-  return durableQueueNativeMaxAttempts;
-};
+export const maxAttemptsForDurableQueue = (queueName: DurableQueueName): number =>
+  durableQueueMaxAttempts[queueName];
+
+/**
+ * Delivery ceiling for any observed queue name. Test-only queues fall back to the native default
+ * ceiling rather than inventing a stricter budget.
+ */
+export const observedMaxAttemptsForDurableQueue = (queueName: string): number =>
+  isDurableQueueName(queueName)
+    ? durableQueueMaxAttempts[queueName]
+    : durableQueueNativeMaxAttempts;
 
 /**
  * Durable decode-failure marker. Native schema decode failures store `Cause.pretty` in

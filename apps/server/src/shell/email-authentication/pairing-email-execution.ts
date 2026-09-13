@@ -9,6 +9,7 @@ import {
   EmailDeliveryIntentId,
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
+import { durableQueueTableName } from "~/shell/durable-queue-policy";
 
 /** Stable queue names are deployment contracts shared with in-flight handoffs. */
 export const pairingStartQueueName = "browser-pairing-email-start";
@@ -94,7 +95,7 @@ const admitPairingExecutionInScope = Effect.fn(function* () {
     Request: Schema.Void,
     Result: Schema.Struct({ count: Schema.Int }),
     execute: () => sql`SELECT count(*)::int AS count FROM (
-      SELECT 1 FROM fidy_queue WHERE queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
+      SELECT 1 FROM ${sql(durableQueueTableName)} WHERE queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
       LIMIT ${maximumPairingExecutionRows}
     ) AS retained`,
   })(undefined);

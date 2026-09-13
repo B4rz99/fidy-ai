@@ -2,17 +2,18 @@ import { expect, it, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { durableQueueNames } from "./durable-queue-policy";
+import { classifyDurableQueueAttention, durableQueueNames } from "./durable-queue-policy";
 import { ExactOriginCorsLive } from "./http";
 
 /** Strict readiness body so the wiring test proves the exact bounded surface, not a cast. */
 const DurableQueueReadinessBody = Schema.Struct({
-  status: Schema.Literals(["ok", "needs-attention"]),
   queues: Schema.Array(
     Schema.Struct({
       queueName: Schema.String,
       pendingDepth: Schema.Int,
       oldestPendingAgeSeconds: Schema.Int,
+      retainedCount: Schema.Int,
+      oldestRetainedAgeSeconds: Schema.Int,
       activeLeaseCount: Schema.Int,
       staleLeaseCount: Schema.Int,
       stalledLeaseCount: Schema.Int,
@@ -29,11 +30,6 @@ const DurableQueueReadinessBody = Schema.Struct({
     })
   ),
 });
-
-type DurableQueueReadinessBodyType = typeof DurableQueueReadinessBody.Type;
-
-const queueNeedsAttention = (queue: DurableQueueReadinessBodyType["queues"][number]): boolean =>
-  Object.values(queue.attention).some((flag) => flag);
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
   ConfigProvider.fromEnv({
@@ -95,6 +91,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "queueName",
           "pendingDepth",
           "oldestPendingAgeSeconds",
+          "retainedCount",
+          "oldestRetainedAgeSeconds",
           "activeLeaseCount",
           "staleLeaseCount",
           "stalledLeaseCount",
@@ -105,9 +103,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "attention",
         ].sort();
 
-        const anyAttention = body.queues.some(queueNeedsAttention);
         expect(response.status).toBe(200);
-        expect(body.status).toBe(anyAttention ? "needs-attention" : "ok");
         expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
           [...durableQueueNames].sort()
         );
@@ -116,6 +112,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(Object.keys(queue.attention).sort()).toEqual(
             ["backlog", "leaseChurn", "exhausted", "decodeFailure"].sort()
           );
+          expect(queue.attention).toEqual(classifyDurableQueueAttention(queue));
         }
       })
     );

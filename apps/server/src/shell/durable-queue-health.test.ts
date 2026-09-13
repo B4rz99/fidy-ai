@@ -7,6 +7,7 @@ import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import {
   durableQueueAttentionLogAnnotations,
+  durableQueueHealthSchedule,
   getDurableQueueHealthFor,
   observeDurableQueueHealthFor,
   projectDurableQueueReadiness,
@@ -59,7 +60,8 @@ type TestRowInput = Readonly<{
 
 const clearTestQueue = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
-  yield* admin`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = ${testQueueName}`;
+  yield* admin`DELETE FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
+    WHERE queue_name = ${testQueueName}`;
 });
 
 const insertTestRow = (
@@ -67,7 +69,7 @@ const insertTestRow = (
 ): Effect.Effect<void, SqlError.SqlError, MigrationSqlClient> =>
   Effect.gen(function* () {
     const admin = yield* MigrationSqlClient;
-    yield* admin`INSERT INTO fidy_durable.fidy_queue
+    yield* admin`INSERT INTO ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
       (id, queue_name, element, completed, attempts, last_failure, acquired_at, acquired_by,
         created_at, updated_at)
       VALUES (
@@ -112,6 +114,8 @@ const healthKeys = [
   "queueName",
   "pendingDepth",
   "oldestPendingAgeSeconds",
+  "retainedCount",
+  "oldestRetainedAgeSeconds",
   "activeLeaseCount",
   "staleLeaseCount",
   "stalledLeaseCount",
@@ -125,6 +129,8 @@ const attentionAnnotationKeys = [
   "queue_name",
   "pending_depth",
   "oldest_pending_age_seconds",
+  "retained_count",
+  "oldest_retained_age_seconds",
   "active_lease_count",
   "stale_lease_count",
   "stalled_lease_count",
@@ -156,11 +162,9 @@ const runObservedProbe = (
     const services = yield* Layer.build(TelemetryEnvelopeRecording);
     const telemetry = Context.get(services, Telemetry);
     const recorder = Context.get(services, EnvelopeRecorder);
-    yield* runScheduledWork({
-      component: "postgres",
-      schedule: "task.durableQueueHealth",
-      operationalError: "operational_failure",
-    })(observeDurableQueueHealthFor(queueNames)).pipe(Effect.provideService(Telemetry, telemetry));
+    yield* runScheduledWork(durableQueueHealthSchedule)(
+      observeDurableQueueHealthFor(queueNames)
+    ).pipe(Effect.provideService(Telemetry, telemetry));
     const envelopes = yield* recorder.serializedEnvelopes;
     const items = envelopes.flatMap(decodeEnvelopeItems);
     return {
@@ -197,7 +201,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(Option.isNone(stolen)).toBe(true);
         const admin = yield* MigrationSqlClient;
         const rows = yield* admin`SELECT attempts, acquired_by IS NOT NULL AS "held"
-          FROM fidy_durable.fidy_queue
+          FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-held'`;
         expect(rows).toEqual([{ attempts: 0, held: true }]);
         yield* Deferred.succeed(release, undefined);
@@ -224,7 +228,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         }
         const admin = yield* MigrationSqlClient;
         const rows = yield* admin`SELECT attempts, completed
-          FROM fidy_durable.fidy_queue
+          FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-lost'`;
         expect(rows).toEqual([{ attempts: 1, completed: true }]);
       })
@@ -246,7 +250,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const admin = yield* MigrationSqlClient;
         const released = yield* admin`SELECT attempts, completed, acquired_by IS NULL AS "released"
-          FROM fidy_durable.fidy_queue
+          FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-graceful'`;
         expect(released).toEqual([{ attempts: 0, completed: false, released: true }]);
         const replacement = yield* buildTestQueue;
@@ -274,7 +278,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(Schema.isSchemaError(error)).toBe(true);
         const admin = yield* MigrationSqlClient;
         const rows = yield* admin`SELECT attempts, completed
-          FROM fidy_durable.fidy_queue
+          FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-broken'`;
         expect(rows).toEqual([{ attempts: 1, completed: false }]);
         const exhausted = yield* queue
@@ -336,7 +340,6 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(row.exhaustedCount).toBe(0);
         expect(Object.keys(row).sort()).toEqual(healthKeys);
         const readiness = projectDurableQueueReadiness(queues);
-        expect(readiness.status).toBe("needs-attention");
         const attention = classifyDurableQueueAttention(row);
         expect(attention).toEqual({
           backlog: false,
@@ -344,7 +347,8 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           exhausted: false,
           decodeFailure: true,
         });
-        const annotations = durableQueueAttentionLogAnnotations({ queue: row, attention });
+        expect(readiness.queues[0]?.attention).toEqual(attention);
+        const annotations = durableQueueAttentionLogAnnotations({ ...row, attention });
         expect(Object.keys(annotations).sort()).toEqual(attentionAnnotationKeys);
         expectNoSentinels(Object.values(annotations));
         expectNoSentinels(Object.values(readiness));
@@ -405,7 +409,6 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(row?.exhaustedCount).toBe(1);
           expect(row?.schemaIncompatibleCount).toBe(1);
           const readiness = projectDurableQueueReadiness(queues);
-          expect(readiness.status).toBe("needs-attention");
           expect(readiness.queues).toHaveLength(1);
           expect(readiness.queues[0]?.attention).toEqual({
             backlog: true,
@@ -433,6 +436,30 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(classifyDurableQueueAttention(row)).toEqual({
             backlog: false,
             leaseChurn: true,
+            exhausted: false,
+            decodeFailure: false,
+          });
+        }
+      })
+    );
+
+    it.effect("reports retained completed history without raising attention", () =>
+      Effect.gen(function* () {
+        yield* clearTestQueue;
+        yield* pendingRow("health-retained");
+        const admin = yield* MigrationSqlClient;
+        yield* admin`UPDATE ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
+          SET completed = TRUE, updated_at = now() - interval '30 minutes'
+          WHERE queue_name = ${testQueueName} AND id = 'health-retained'`;
+        const queues = yield* getDurableQueueHealthFor([testQueueName]);
+        const row = queues.find((candidate) => candidate.queueName === testQueueName);
+        expect(row?.pendingDepth).toBe(0);
+        expect(row?.retainedCount).toBe(1);
+        expect(row?.oldestRetainedAgeSeconds).toBeGreaterThanOrEqual(1800);
+        if (row !== undefined) {
+          expect(classifyDurableQueueAttention(row)).toEqual({
+            backlog: false,
+            leaseChurn: false,
             exhausted: false,
             decodeFailure: false,
           });
@@ -489,7 +516,12 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(transaction?.tags.error).toBeUndefined();
         expect(transaction?.contexts.trace.status).toBe("ok");
         const queues = yield* getDurableQueueHealthFor([testQueueName]);
-        expect(projectDurableQueueReadiness(queues).status).toBe("ok");
+        expect(projectDurableQueueReadiness(queues).queues[0]?.attention).toEqual({
+          backlog: false,
+          leaseChurn: false,
+          exhausted: false,
+          decodeFailure: false,
+        });
       })
     );
   }

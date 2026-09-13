@@ -14,6 +14,7 @@ import {
   durableQueueNames,
   hasDurableQueueAttention,
   maxAttemptsForDurableQueue,
+  observedMaxAttemptsForDurableQueue,
 } from "./durable-queue-policy";
 
 const healthySignals: DurableQueueSignals = {
@@ -44,7 +45,7 @@ it("keeps statement ingestion on the fast retry budget and every other queue on 
 });
 
 it("falls back to the native ceiling for names outside the production policy", () => {
-  expect(maxAttemptsForDurableQueue("test-only-queue")).toBe(10);
+  expect(observedMaxAttemptsForDurableQueue("test-only-queue")).toBe(10);
 });
 
 it("holds lock expiry above twice the longest handler pause with active refresh", () => {

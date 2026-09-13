@@ -9,6 +9,7 @@ import {
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { Workflow } from "effect/unstable/workflow";
 import { jsonStringSchema } from "~/schema-compatibility";
+import { durableQueueTableName } from "~/shell/durable-queue-policy";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import {
   BrowserPairingEmailDeliveryWorkflow,
@@ -103,7 +104,7 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
             })
           );
         }
-        yield* sql`DELETE FROM fidy_queue WHERE id = ${row.id} AND queue_name = ${row.queueName} AND completed = TRUE`;
+        yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE id = ${row.id} AND queue_name = ${row.queueName} AND completed = TRUE`;
       })
     )
     .pipe(Effect.orDie);
@@ -119,7 +120,8 @@ export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (aft
   const rows = yield* SqlSchema.findAll({
     Request: Schema.Void,
     Result: CompletedQueueItem,
-    execute: () => sql`SELECT sequence, id, queue_name AS "queueName", element FROM fidy_queue
+    execute:
+      () => sql`SELECT sequence, id, queue_name AS "queueName", element FROM ${sql(durableQueueTableName)}
       WHERE sequence > ${afterSequence} AND completed = TRUE AND updated_at < ${cutoff}
         AND queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
       ORDER BY sequence LIMIT 100`,

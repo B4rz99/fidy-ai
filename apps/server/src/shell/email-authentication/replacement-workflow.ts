@@ -11,7 +11,13 @@ import {
 } from "effect";
 import { type SqlClient, SqlError } from "effect/unstable/sql";
 import { Activity, type WorkflowEngine } from "effect/unstable/workflow";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { sleepFor, sleepUntil } from "~/shell/durable-execution-clock";
+import {
+  type PersistedQueueHandlerFailure,
+  runPersistedQueueHandler as runSanitizedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import type { EmailDeliveryPort } from "./delivery";
 import { performReplacementAttempt } from "./replacement-delivery-worker";
 import {
@@ -148,18 +154,90 @@ export const replacementExpiryWorkflowLayer = (
 /** Registers expiry Activities and production's one-minute durable database retry. */
 export const ReplacementExpiryWorkflowLive = replacementExpiryWorkflowLayer("1 minute");
 
+const ReplacementQueueTransient = Schema.TaggedStruct("ReplacementQueueTransient", {
+  reason: Schema.Literal("database-unavailable"),
+});
+type ReplacementQueueTransient = typeof ReplacementQueueTransient.Type;
+
+const isRetryableDatabaseCause = (cause: Cause.Cause<never>): boolean =>
+  cause.reasons.length > 0 &&
+  cause.reasons.every(
+    (reason) =>
+      reason._tag === "Die" && SqlError.isSqlError(reason.defect) && reason.defect.isRetryable
+  );
+
+const classifyReplacementQueueFailure = <A, R>(
+  work: Effect.Effect<A, never, R>
+): Effect.Effect<A, ReplacementQueueTransient, R> =>
+  work.pipe(
+    Effect.catchCauseIf(isRetryableDatabaseCause, () =>
+      Effect.fail({
+        _tag: "ReplacementQueueTransient",
+        reason: "database-unavailable",
+      } as const)
+    )
+  );
+
+const replacementQueueHandlerOptions = {
+  descriptor: {
+    component: "api",
+    operation: CanonicalOperationId.make("emailAuthentication.requestEmailReplacement"),
+  },
+  classify: (_failure: ReplacementQueueTransient) =>
+    ({
+      _tag: "Retry",
+      reason: "transient",
+    }) as const,
+  recordTerminal: () => Effect.void,
+} as const;
+
+/**
+ * Projects one failure-free Email Replacement work contract into safe queue settlement. The work
+ * may defect with a retryable SqlError to request another attempt; all other defects are observed
+ * through Telemetry and redacted, while interruption remains interruption. Successful values are
+ * discarded because the queue item records only completion.
+ */
+export const runReplacementQueueHandler = <A, R>(
+  work: Effect.Effect<A, never, R>
+): Effect.Effect<void, PersistedQueueHandlerFailure, R | Telemetry> =>
+  classifyReplacementQueueFailure(work).pipe(
+    runSanitizedQueueHandler(replacementQueueHandlerOptions)
+  );
+
+/**
+ * Claims one delivery item and completes it after durable Workflow submission. A transient marker
+ * releases the item for retry; interruption releases it without consuming an attempt. Provider
+ * delivery and settlement continue in the Workflow after this call returns.
+ */
+export const consumeReplacementDelivery = Effect.fn(function* () {
+  const queue = yield* replacementDeliveryQueue;
+  yield* queue.take((payload) =>
+    runReplacementQueueHandler(ReplacementDeliveryWorkflow.execute(payload, { discard: true }))
+  );
+});
+
+/**
+ * Claims one expiry item and completes it after durable Workflow submission. A transient marker
+ * releases the item for retry; interruption releases it without consuming an attempt. Deadline
+ * waiting and expiry continue in the Workflow after this call returns.
+ */
+export const consumeReplacementExpiry = Effect.fn(function* () {
+  const queue = yield* replacementExpiryQueue;
+  yield* queue.take((payload) =>
+    runReplacementQueueHandler(ReplacementExpiryWorkflow.execute(payload, { discard: true }))
+  );
+});
+
+const delayFailedTake = Effect.catch(() => Effect.sleep("1 second"));
+
 /** Queue consumers durably submit without holding a queue lease for the entire proof lifetime. */
 export const EmailReplacementDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
-    const delivery = yield* replacementDeliveryQueue;
-    const expiry = yield* replacementExpiryQueue;
-    yield* delivery
-      .take((payload) => ReplacementDeliveryWorkflow.execute(payload, { discard: true }))
-      .pipe(Effect.forever, Effect.forkScoped);
-    yield* expiry
-      .take((payload) => ReplacementExpiryWorkflow.execute(payload, { discard: true }))
-      .pipe(Effect.forever, Effect.forkScoped);
+    // The Work remains the existing Workflow submission; this boundary changes only its failure
+    // projection, so a second span or operation metric would duplicate the Workflow observation.
+    yield* consumeReplacementDelivery().pipe(delayFailedTake, Effect.forever, Effect.forkScoped);
+    yield* consumeReplacementExpiry().pipe(delayFailedTake, Effect.forever, Effect.forkScoped);
   })
 );

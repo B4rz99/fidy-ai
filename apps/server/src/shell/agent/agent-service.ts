@@ -18,11 +18,11 @@ import {
   Struct,
 } from "effect";
 import type { Tool } from "effect/unstable/ai";
-import { HttpClient, HttpClientError } from "effect/unstable/http";
+import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import { ClusterError, Entity } from "effect/unstable/cluster";
+import { Entity } from "effect/unstable/cluster";
 import { RpcClientError } from "effect/unstable/rpc";
 import { AgentReply, type InboundMessage } from "./message";
 import { ImmediateDelivery } from "./immediate-delivery";
@@ -47,7 +47,7 @@ import {
 import { type WhatsAppInboundWork as WhatsAppInboundWorkType } from "~/shell/channels/whatsapp/inbound-execution";
 
 import type { CanonicalCaller } from "~/shell/_shared/authz";
-import { isTransientHttpStatus } from "~/shell/_shared/http-status";
+import { classifyClusterFailure, classifyRpcFailure } from "~/shell/_shared/rpc-client-failure";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
@@ -1854,59 +1854,20 @@ const mapDeclaredTurnFailure = (failure: AgentTurnError): Effect.Effect<AgentRep
     ? Effect.die(failure)
     : Effect.fail(declaredTurnWireTag(failure._tag));
 
-type HostedTurnHttpFailure = Extract<
-  RpcClientError.RpcClientError["reason"],
-  { readonly _tag: "HttpError" }
->;
-
 const hostedTurnTransportFailure = (cause: unknown): HostedTurnUnavailable =>
   new HostedTurnUnavailable({ cause });
 
 const hostedTurnProtocolFailure = (cause: unknown): HostedTurnProtocolFailed =>
   new HostedTurnProtocolFailed({ cause });
 
-/** A status-code failure is transient only when its underlying cause carries a retryable status. */
-const isTransientStatusCodeFailure = (failure: HostedTurnHttpFailure): boolean =>
-  failure.cause instanceof HttpClientError.StatusCodeError &&
-  isTransientHttpStatus(failure.cause.response.status);
-
-const classifyStatusCodeFailure = (
-  failure: HostedTurnHttpFailure
-): HostedTurnUnavailable | HostedTurnProtocolFailed =>
-  isTransientStatusCodeFailure(failure)
-    ? hostedTurnTransportFailure(failure)
-    : hostedTurnProtocolFailure(failure);
-
-const classifyHttpClientFailure = (
-  failure: HostedTurnHttpFailure
+const classifyTurnRpc = (
+  failure: RpcClientError.RpcClientError
 ): HostedTurnUnavailable | HostedTurnProtocolFailed => {
-  switch (failure.kind) {
-    case "TransportError":
-      return hostedTurnTransportFailure(failure);
-    case "StatusCodeError":
-      return classifyStatusCodeFailure(failure);
-    case "EncodeError":
-    case "InvalidUrlError":
-    case "DecodeError":
-    case "EmptyBodyError":
-      return hostedTurnProtocolFailure(failure);
-  }
+  const classified = classifyRpcFailure(failure);
+  return classified.kind === "transient"
+    ? hostedTurnTransportFailure(classified.cause)
+    : hostedTurnProtocolFailure(classified.cause);
 };
-
-/** HTTP reasons delegate to their own classifier; every other transport reason stays transient. */
-const classifyRpcReasonFailure = (
-  failure: RpcClientError.RpcClientError
-): HostedTurnUnavailable | HostedTurnProtocolFailed =>
-  failure.reason._tag === "HttpError"
-    ? classifyHttpClientFailure(failure.reason)
-    : hostedTurnTransportFailure(failure);
-
-const classifyRpcClientFailure = (
-  failure: RpcClientError.RpcClientError
-): HostedTurnUnavailable | HostedTurnProtocolFailed =>
-  failure.reason._tag === "RpcClientDefect"
-    ? hostedTurnProtocolFailure(failure)
-    : classifyRpcReasonFailure(failure);
 
 /**
  * Classifies one RPC client failure into the declared class it represents, or none when it is
@@ -1917,17 +1878,11 @@ const classifyClientFailure = (
   failure: unknown
 ): Option.Option<HostedTurnUnavailable | HostedTurnProtocolFailed> => {
   if (Schema.is(RpcClientError.RpcClientError)(failure)) {
-    return Option.some(classifyRpcClientFailure(failure));
+    return Option.some(classifyTurnRpc(failure));
   }
-  if (
-    Schema.is(ClusterError.MailboxFull)(failure) ||
-    Schema.is(ClusterError.AlreadyProcessingMessage)(failure) ||
-    Schema.is(ClusterError.PersistenceError)(failure) ||
-    Schema.is(ClusterError.EntityNotAssignedToRunner)(failure)
-  ) {
-    return Option.some(hostedTurnTransportFailure(failure));
-  }
-  return Option.none();
+  return Option.map(classifyClusterFailure(failure), (kind) =>
+    kind === "transient" ? hostedTurnTransportFailure(failure) : hostedTurnProtocolFailure(failure)
+  );
 };
 
 /**

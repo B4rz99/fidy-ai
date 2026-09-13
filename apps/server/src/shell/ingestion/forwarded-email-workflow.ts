@@ -1,6 +1,7 @@
 import {
   Cause,
   Config,
+  type Crypto,
   DateTime,
   Effect,
   Array as EffectArray,
@@ -17,12 +18,22 @@ import {
   MessageStorage,
   Sharding,
 } from "effect/unstable/cluster";
-import { Activity, DurableClock } from "effect/unstable/workflow";
+import { RpcClientError } from "effect/unstable/rpc";
+import type { SqlClient } from "effect/unstable/sql";
+import { Activity, DurableClock, type WorkflowEngine } from "effect/unstable/workflow";
 import type { UserId } from "~/core/identity/reference";
 import type { ForwardedEmailProviderFailureReason } from "~/core/ingestion/rules";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import { classifyClusterFailure, classifyRpcFailure } from "~/shell/_shared/rpc-client-failure";
+import {
+  type PersistedQueueFailureDisposition,
+  type PersistedQueueHandlerFailure,
+  type PersistedQueueHandlerOptions,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { sleepUntil } from "~/shell/durable-execution-clock";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import {
   type ForwardedEmailReceiptLifecycle,
   activateDeferredForwardedEmail,
@@ -497,28 +508,155 @@ export const retainForwardedEmailExecutions = Effect.fn("ForwardedEmail.retainEx
   }
 );
 
-const executeForwardedEmailHandoff = Effect.fn("ForwardedEmail.executeHandoff")(function* (
-  payload: ForwardedEmailWorkflowPayload,
-  queueId: string,
-  discard: boolean = false
-) {
-  if ((yield* forwardedEmailQueueId(payload)) !== queueId) return { outcome: "stale" as const };
-  if (discard) {
-    yield* ForwardedEmailWorkflow.execute(payload, { discard: true });
-    return { outcome: "submitted" as const };
+type HandoffFailure =
+  | Readonly<{ readonly _tag: "TransientHandoff" }>
+  | Readonly<{ readonly _tag: "IncompatibleHandoff" }>
+  | Readonly<{ readonly _tag: "StaleRouting" }>
+  | Readonly<{ readonly _tag: "OwnershipMismatch" }>
+  | Readonly<{ readonly _tag: "TerminalOutcome" }>;
+
+const transientHandoff = { _tag: "TransientHandoff" } as const;
+const incompatibleHandoff = { _tag: "IncompatibleHandoff" } as const;
+
+const classifyRpcHandoff = (failure: RpcClientError.RpcClientError): HandoffFailure =>
+  classifyRpcFailure(failure).kind === "transient" ? transientHandoff : incompatibleHandoff;
+
+const classifyHandoffDefect = (defect: unknown): Option.Option<HandoffFailure> => {
+  if (Schema.is(RpcClientError.RpcClientError)(defect)) {
+    return Option.some(classifyRpcHandoff(defect));
   }
-  return yield* ForwardedEmailWorkflow.execute(payload);
+  return Option.map(classifyClusterFailure(defect), (kind) =>
+    kind === "transient" ? transientHandoff : incompatibleHandoff
+  );
+};
+
+const classifyHandoffCause = (cause: Cause.Cause<never>): Effect.Effect<never, HandoffFailure> => {
+  if (Cause.hasInterrupts(cause) || cause.reasons.length !== 1) return Effect.failCause(cause);
+  return Result.match(Cause.findDefect(cause), {
+    onFailure: () => Effect.failCause(cause),
+    onSuccess: (defect) =>
+      Option.match(classifyHandoffDefect(defect), {
+        onNone: () => Effect.failCause(cause),
+        onSome: (failure) => Effect.fail(failure),
+      }),
+  });
+};
+
+const handoffDisposition = (failure: HandoffFailure): PersistedQueueFailureDisposition => {
+  switch (failure._tag) {
+    case "TransientHandoff":
+      return { _tag: "Retry", reason: "transient" };
+    case "IncompatibleHandoff":
+      return { _tag: "Terminal", reason: "payload-rejected" };
+    case "OwnershipMismatch":
+      return { _tag: "Terminal", reason: "identity-rejected" };
+    case "StaleRouting":
+    case "TerminalOutcome":
+      return { _tag: "Terminal", reason: "domain-rejected" };
+  }
+};
+
+/**
+ * Maps known Cluster/RPC capacity and availability defects to retry, incompatible protocol or
+ * decoding defects to terminal payload rejection, and returns none for unexpected defect capture.
+ */
+export const handoffDefectDisposition = (
+  defect: unknown
+): Option.Option<PersistedQueueFailureDisposition> =>
+  Option.map(classifyHandoffDefect(defect), handoffDisposition);
+
+const handoffOptions = (
+  payload: ForwardedEmailWorkflowPayload,
+  markWorkSettled: Effect.Effect<void>
+): PersistedQueueHandlerOptions<HandoffFailure, never, Crypto.Crypto | SqlClient.SqlClient> => ({
+  descriptor: { component: "resend", operation: "resend.forwardedEmailHandoff" },
+  classify: handoffDisposition,
+  recordTerminal: (reason) =>
+    reason === "payload-rejected"
+      ? settleForwardedEmailRetrievalFailure(payload, "invalid-provider-response").pipe(
+          Effect.andThen(markWorkSettled),
+          Effect.asVoid
+        )
+      : Effect.void,
 });
+
+type HandoffMode = "await-workflow-outcome" | "submit-background";
+
+const executeHandoff = Effect.fn("ForwardedEmail.executeHandoff")(function* (input: {
+  readonly payload: ForwardedEmailWorkflowPayload;
+  readonly queueId: string;
+  readonly mode: HandoffMode;
+  readonly markWorkSettled: Effect.Effect<void>;
+}) {
+  const { markWorkSettled, mode, payload, queueId } = input;
+  const expectedQueueId = yield* forwardedEmailQueueId(payload).pipe(
+    Effect.mapError((): HandoffFailure => transientHandoff)
+  );
+  if (expectedQueueId !== queueId) {
+    return yield* Effect.fail<HandoffFailure>({ _tag: "StaleRouting" });
+  }
+  const owner = yield* resolveForwardedEmailUser(payload.receivedEmailId);
+  if (Option.isNone(owner)) {
+    return yield* Effect.fail<HandoffFailure>({ _tag: "StaleRouting" });
+  }
+  if (owner.value !== payload.userId) {
+    return yield* Effect.fail<HandoffFailure>({ _tag: "OwnershipMismatch" });
+  }
+  if (mode === "submit-background") {
+    yield* ForwardedEmailWorkflow.execute(payload, { discard: true }).pipe(
+      Effect.catchCause(classifyHandoffCause)
+    );
+    return yield* markWorkSettled;
+  }
+  const result = yield* ForwardedEmailWorkflow.execute(payload).pipe(
+    Effect.catchCause(classifyHandoffCause)
+  );
+  if (result.outcome !== "completed") {
+    yield* markWorkSettled;
+    return yield* Effect.fail<HandoffFailure>({ _tag: "TerminalOutcome" });
+  }
+  return yield* markWorkSettled;
+});
+
+// The queue callback exposes no safe attempt or timing coordinate for a second Work span; the
+// shared boundary records bounded defect telemetry while PersistedQueue owns retry observability.
+const emailQueueHandler =
+  (
+    mode: HandoffMode,
+    markWorkSettled: Effect.Effect<void> = Effect.void
+  ): ((
+    payload: ForwardedEmailWorkflowPayload,
+    metadata: Readonly<{ readonly id: string }>
+  ) => Effect.Effect<
+    void,
+    PersistedQueueHandlerFailure,
+    Crypto.Crypto | SqlClient.SqlClient | WorkflowEngine.WorkflowEngine | Telemetry
+  >) =>
+  (payload, metadata) =>
+    executeHandoff({
+      payload,
+      queueId: metadata.id,
+      mode,
+      markWorkSettled,
+    }).pipe(runPersistedQueueHandler(handoffOptions(payload, markWorkSettled)));
 
 /** Skips stale or malformed durable entries until one current receipt settles or the seam times out. */
 export const processNextCurrentForwardedEmail = Effect.fn("ForwardedEmail.processNextCurrent")(
   function* () {
     const queue = yield* forwardedEmailWorkflowQueue;
-    const takeCurrent = queue.take((payload, { id }) => executeForwardedEmailHandoff(payload, id));
+    let currentWorkSettled = false;
+    const takeCurrent = queue.take(
+      emailQueueHandler(
+        "await-workflow-outcome",
+        Effect.sync(() => {
+          currentWorkSettled = true;
+        })
+      )
+    );
     const completed = yield* Effect.gen(function* () {
       for (;;) {
         const result = yield* Effect.result(takeCurrent);
-        if (Result.isSuccess(result) && result.success.outcome !== "stale") return true;
+        if (Result.isSuccess(result) && currentWorkSettled) return true;
       }
     }).pipe(Effect.timeoutOption("2 seconds"));
     return Option.getOrElse(completed, () => false);
@@ -551,21 +689,16 @@ export const ForwardedEmailQueueLive = Layer.effectDiscard(
         : Option.none<ResendReceivedEmailId>();
     });
     const firstPage = yield* publishPage(Option.none());
-    yield* queue
-      .take((payload, { id }) =>
-        executeForwardedEmailHandoff(payload, id, true).pipe(
-          Effect.tapCause(() => Effect.logError("Forwarded email workflow execution failed safely"))
-        )
-      )
-      .pipe(
-        Effect.catchCause(() =>
-          Effect.logError("Forwarded email queue entry failed validation").pipe(
-            Effect.andThen(Effect.sleep("1 second"))
-          )
-        ),
-        Effect.forever,
-        Effect.forkScoped
-      );
+    yield* queue.take(emailQueueHandler("submit-background")).pipe(
+      // Queue decoding fails outside the handler boundary; preserve shutdown and pace every other
+      // native or already-redacted failure without logging its Cause.
+      // @effect-diagnostics-next-line catchConditionalRefailToCatchIf:off
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.sleep("1 second")
+      ),
+      Effect.forever,
+      Effect.forkScoped
+    );
     if (Option.isSome(firstPage)) {
       yield* Effect.gen(function* () {
         let cursor: Option.Option<RecoveryCursor> = firstPage;

@@ -8,6 +8,7 @@ import { ReceivedEmailContent } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { grantCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
 import { ForwardedEmailProcessor } from "./forwarded-email-ingestion";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
@@ -84,7 +85,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* publishForwardedEmailWorkflow(userId, receivedEmailId);
         const processorContext = yield* Layer.build(
           ForwardedEmailProcessor.layer.pipe(
-            Layer.provide(Layer.succeed(ResendReceivingClient, provider))
+            Layer.provide(Layer.succeed(ResendReceivingClient, provider)),
+            Layer.provide(TelemetryDisabled)
           )
         );
         const processor = Context.get(processorContext, ForwardedEmailProcessor);
@@ -157,7 +159,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const unsafeProcessor = yield* Layer.build(
           ForwardedEmailProcessor.layer.pipe(
-            Layer.provide(Layer.succeed(ResendReceivingClient, unsafeProvider))
+            Layer.provide(Layer.succeed(ResendReceivingClient, unsafeProvider)),
+            Layer.provide(TelemetryDisabled)
           )
         );
         yield* Context.get(unsafeProcessor, ForwardedEmailProcessor).processNext;

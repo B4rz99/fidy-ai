@@ -1,0 +1,24 @@
+apps/server/src/shell/durable-queue-health.test.ts
+  h_c6d49c804e0ad2 124,139,292-294,297-302,305-307,348,419
+apps/server/src/shell/durable-queue-health.ts
+  h_c6d49c804e0ad2 10,36,42-46,57,69-78,82-87,133-137,143,184,206,314
+apps/server/src/shell/durable-queue-policy.test.ts
+  h_c6d49c804e0ad2 2,16,28,53-62,141
+apps/server/src/shell/durable-queue-policy.ts
+  h_c6d49c804e0ad2 124-126,130-137,151,180
+apps/server/src/shell/http.test.ts
+  h_c6d49c804e0ad2 22,101
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 104-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "77c46b3d9b03bdcf1a02063359d3f0cf2a8ab0cd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import type { SqlClient } from "effect/unstable/sql";
 import { Activity, DurableClock, Workflow, type WorkflowEngine } from "effect/unstable/workflow";
@@ -6,8 +6,13 @@ import { UserId } from "~/core/identity/reference";
 import { amountInCentsForBilling } from "~/core/subscription/billing-rules";
 import { BillingAttemptId, type WompiEnvironment } from "~/core/subscription/model";
 import { BillingEmail } from "~/core/subscription/enrollment-model";
+import {
+  type PersistedQueueHandlerFailure,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { onboardingConsentStandingInScope, withSubjectLockInScope } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import {
   type ArmedCharge,
   type BillingAttemptRecord,
@@ -386,26 +391,52 @@ export const billingAttemptReconciliationWorkflowLayer = (
 export const BillingAttemptReconciliationWorkflowLive =
   billingAttemptReconciliationWorkflowLayer("1 minute");
 
-/** Starts one transactionally accepted reconciliation without holding a queue lease for its lifetime. */
-export const BillingAttemptQueueLive = Layer.effectDiscard(
-  Effect.gen(function* () {
+const handleBillingAttemptQueuePayload = (
+  payload: BillingAttemptReconciliationPayload
+): Effect.Effect<void, PersistedQueueHandlerFailure, Telemetry | WorkflowEngine.WorkflowEngine> =>
+  BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(
+    Effect.asVoid,
+    runPersistedQueueHandler({
+      descriptor: {
+        component: "api",
+        operation: "subscription.processBillingAttempt",
+      },
+      // Submission has no typed failure: every billing disposition is an explicit workflow success.
+      classify: (failure: never) => failure,
+      recordTerminal: () => Effect.void,
+    })
+  );
+
+/**
+ * Starts the next transactionally accepted reconciliation without holding its queue lease for the
+ * workflow lifetime. Workflow outcomes are bounded successes; only a redacted handler marker may
+ * consume one of the queue's bounded submission attempts.
+ */
+export const processNextBillingAttempt = Effect.fn("Subscription.processNextBillingAttempt")(
+  function* () {
     const queue = yield* billingAttemptQueue;
-    yield* queue
-      .take(
-        (payload) =>
-          BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(
-            Effect.asVoid
-          ),
-        { maxAttempts: maximumBillingAttemptQueueAttempts }
-      )
-      .pipe(
-        Effect.catchCause((cause) =>
-          Effect.logError("BillingAttempt reconciliation submission failed", cause)
-        ),
-        Effect.forever,
-        Effect.forkScoped
-      );
-  })
+    yield* queue.take(handleBillingAttemptQueuePayload, {
+      maxAttempts: maximumBillingAttemptQueueAttempts,
+    });
+  }
+);
+
+const superviseBillingAttemptQueue = processNextBillingAttempt().pipe(
+  // Handler defects were already captured by the redacted boundary; do not report them twice.
+  Effect.catchTag("PersistedQueueHandlerFailure", () => Effect.sleep("1 second")),
+  Effect.catchCause((cause) =>
+    Cause.hasInterruptsOnly(cause)
+      ? Effect.interrupt
+      : Effect.logError("BillingAttempt queue iteration failed safely").pipe(
+          Effect.andThen(Effect.sleep("1 second"))
+        )
+  ),
+  Effect.forever
+);
+
+/** Starts the production BillingAttempt queue consumer and preserves shutdown interruption. */
+export const BillingAttemptQueueLive = Layer.effectDiscard(
+  superviseBillingAttemptQueue.pipe(Effect.forkScoped)
 );
 
 /** Registers the workflow and consumes its native queue; an armed redelivery never resends Wompi. */

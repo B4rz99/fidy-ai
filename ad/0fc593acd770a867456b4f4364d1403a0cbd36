@@ -1,0 +1,145 @@
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_a634f65f042137::t_0ce71cf726f69d 92-102
+  s_a634f65f042137::t_d45964c0ff7ae0 15-21,24,65,134-135
+  s_a634f65f042137::t_83be7f2c9e7452 72,104-106
+  s_a634f65f042137::t_2aff3655a8b772 103,107-120,122-127
+  s_a634f65f042137::t_b332465bba46f6 84-91
+  s_a634f65f042137::t_10bd9096973912 121
+apps/web/src/features/dashboard/feature.test.tsx
+  s_a634f65f042137::t_b7d0ba4d2f44c0 342-343,346,352-360,362-366
+  s_a634f65f042137::t_e06249de91a4c8 321-323,361
+  s_a634f65f042137::t_4a78821a29d445 330-338
+apps/web/src/features/subscription/feature.test.tsx
+  s_a634f65f042137::t_ed42cf301e355c 176
+  s_729685b01e566c::t_f2d3295afe8335 184-185
+  s_a634f65f042137::t_84a8069e1fcade 156-166,171-175,177-183
+  s_a634f65f042137::t_4c1377c6ffaf13 147,149,151-153
+apps/web/src/transport/canonical-query.ts
+  s_a634f65f042137::t_e06249de91a4c8 28
+  s_a634f65f042137::t_5194be19f36ac0 1-27,29-70
+apps/web/src/transport/client.test.ts
+  s_a634f65f042137::t_adf104de6c768a 11,13,175-177,179-183,185-207,211-213,215-225,227-234,236-240
+  s_a634f65f042137::t_c58da5593b6284 241
+  s_a634f65f042137::t_96cc7ff0245b07 296-298,328
+  s_a634f65f042137::t_0c8cd850a8ac64 208-210,226
+  s_a634f65f042137::t_293b1c39bf78cc 244-245,280-282,294,308,310-327,329-333
+  s_a634f65f042137::t_7c468e2251d030 242-243,247-279
+  s_a634f65f042137::t_c87f68b63d1281 235
+  s_a634f65f042137::t_5c1f0fb38fe6c0 283-293,295,299-307,309
+  s_a634f65f042137::t_408d55e1d70275 12,178,184,214
+  s_a634f65f042137::t_171a5262a0888e 246
+apps/web/src/features/transactions/feature.test.tsx
+  s_a634f65f042137::t_f75892eaac83b0 93,100-104
+  s_a634f65f042137::t_bd7c0495b41f98 112,114-116,118-119,198-199
+  s_26e59ea2f74415::t_bc1945f4599835 5
+  s_a634f65f042137::t_f43b32a113eb09 32-34
+  s_a634f65f042137::t_e06249de91a4c8 15-18,72-74
+  s_a634f65f042137::t_88be7f2f30a271 1
+  s_a634f65f042137::t_4c93ad20898ee4 10,59,168-188
+  s_a634f65f042137::t_63a8fd27722740 146
+  s_83feee5077baba::t_0f9c7641ab6be3 189
+  s_a634f65f042137::t_7c466d7ddf5349 147-167
+  s_a634f65f042137::t_281ad18ac917a2 190-191
+apps/web/src/features/pats/management-view.tsx
+  s_a634f65f042137::t_d812706ef2b578 30,303-305
+  s_a634f65f042137::t_2eef3d53e3a970 307-315,324-328
+  s_a634f65f042137::t_027dedbb3a80ee 32-44
+  s_a634f65f042137::t_434b28ae4d0974 13,316-323,330-339
+apps/web/src/features/pats/feature.test.tsx
+  s_a634f65f042137::t_b31ba730f18bd8 275,277,279,281-283
+  s_a634f65f042137::t_415b7712bf954b 215,239,260,342
+  s_a634f65f042137::t_6988671c08c841 19,25-32,287-292
+  s_a634f65f042137::t_25c463f3e31b75 300-328
+apps/web/src/features/dashboard/feature.tsx
+  s_a634f65f042137::t_b6da4ce93da312 1,7,180,182-185,187-189,192-193,213
+  s_a634f65f042137::t_7c165650aeec1f 6,143-152
+  s_a634f65f042137::t_e06249de91a4c8 190-191
+  s_a634f65f042137::t_f4ed22dca4d2bc 3,109-110,113,115-118,121,123-126,128-131,142,153-154,163-167,197-198,201,203-205
+  s_a634f65f042137::t_5839c2c9e6a687 111,119,132-136,199
+  s_a634f65f042137::t_75bfc6dbbeea09 112,114,120,122,127,137-141,155-162,200,202
+apps/web/src/features/subscription/feature.tsx
+  s_a634f65f042137::t_7b58808551e4a7 43,828-837
+  s_a634f65f042137::t_a9f0336618ed75 885-895,939-944
+  s_a634f65f042137::t_641e608de6c7e5 907,909-916,923-938,945-946
+  s_a634f65f042137::t_d8baf62f0c5338 44-49,896
+  s_a634f65f042137::t_d963630f6667c3 10
+  s_a634f65f042137::t_927b79b54495ee 1-7,18,51-56
+  s_a634f65f042137::t_805ce479e172da 21,804-811,840-847
+  s_a634f65f042137::t_2bca7e1ec2477f 795-803,838-839,848-850,854-860
+  s_a634f65f042137::t_75cecd034c1705 897-900
+  s_a634f65f042137::t_25c2d7c9148383 40,822-823,917-922
+apps/web/src/features/dashboard/view.tsx
+  s_a634f65f042137::t_6fbd4cb71244bb 939-944,988
+  s_a634f65f042137::t_0de60d3d48d2a8 4
+  s_a634f65f042137::t_2ad0f984d7912a 26
+  s_a634f65f042137::t_361f0c811c5c97 956-964,979,982,985-987,989-999
+  s_a634f65f042137::t_3057c9216595b4 29,966-973
+apps/web/src/features/transactions/feature.tsx
+  s_a634f65f042137::t_fa2a9059e2b0ba 202,204-205,208-235,239-254
+  s_a634f65f042137::t_1d9c81415c5c7d 348-349,356-357,359-362
+  s_a634f65f042137::t_e18a480f6cdf4c 178-189,198
+  s_a634f65f042137::t_73ce71ff2ce92b 381,383,385-387,423
+  s_a634f65f042137::t_f1e81a4f5f0a66 17,168-175,190-197
+  s_a634f65f042137::t_630c7626e9751d 163-167,199-201
+  s_a634f65f042137::t_f10a577345e02c 435-454
+  s_a634f65f042137::t_b3ccb9899cb9b9 283-289
+  s_a634f65f042137::t_c9f0309882bd0d 256-267,270-282,290-294,296-316,331,363,365-377,384,397-410
+  s_a634f65f042137::t_f6b2d652a3f285 18
+  s_a634f65f042137::t_89e13f65607e02 44
+  s_a634f65f042137::t_32951c91132215 1,45,50,54,57-61
+  s_a634f65f042137::t_427578f991d61b 255
+  s_a634f65f042137::t_214cc890c31e45 203
+  s_a634f65f042137::t_d955403eeac8c4 317-330,332
+  s_a634f65f042137::t_32717c3d74c156 350-355,364,378-379,391,395,419-422,424-434
+  s_a634f65f042137::t_10bd9096973912 382
+  s_a634f65f042137::t_023ebf74e6da45 3,41-43
+  s_a634f65f042137::t_65edacd5ec8adb 48,206-207
+apps/web/src/features/pats/feature.tsx
+  s_a634f65f042137::t_9cde80d42d3f1f 1,8,143-144,148-163
+  s_a634f65f042137::t_1dffd728982dd0 4
+  s_a634f65f042137::t_518272d9d842be 145-147
+apps/web/src/ui/canonical-query-feedback.tsx
+  s_a634f65f042137::t_1c6b34bb1a3458 1-33
+apps/web/src/transport/canonical-query.test.ts
+  s_a634f65f042137::t_796dc70f2e3294 1-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ad0fc593acd770a867456b4f4364d1403a0cbd36",
+  "prompts": {},
+  "sessions": {
+    "s_26e59ea2f74415": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b3e-cffd-73e8-826f-864a30ec213d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_83feee5077baba": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b20-5e9d-71da-b0bc-05d61a23aabc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { Data, Effect, Array as EffectArray, Option } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, useState } from "react";
 import { useSession } from "@/session/session-context";
+import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
@@ -822,9 +823,10 @@ const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
 export const SubscriptionOffersFeature = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
+  const enrollmentClient = useSubscriptionEnrollmentClient();
+  const [gateway] = useState(() => makeEnrollmentGateway(enrollmentClient));
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
-  const gateway = makeEnrollmentGateway(router.options.context.subscriptionEnrollmentClient);
   if (AsyncResult.isFailure(result)) {
     const state: SubscriptionOffersPageState =
       authentication === "expired" ? { _tag: "AuthenticationRequired" } : { _tag: "LoadFailure" };

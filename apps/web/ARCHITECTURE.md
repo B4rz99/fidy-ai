@@ -28,9 +28,11 @@ or onboarding, remain separate features.
 Presentation shapes derive from the canonical server declaration or from web-owned view state. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
 is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
-Wompi. The web submits through the server-owned payment boundary and observes only browser-safe
-`BillingAttempt` state through a canonical query; provider references are not part of web application
-state.
+Wompi. The direct enrollment client is one explicitly disposable resource per authentication
+lifetime; replacing or unmounting that lifetime revokes the client and disposes its ManagedRuntime
+without waiting for the Atom registry's delayed cleanup. The web submits through the server-owned
+payment boundary and observes only browser-safe `BillingAttempt` state through a canonical query;
+provider references are not part of web application state.
 
 ## 3. Browser authentication
 

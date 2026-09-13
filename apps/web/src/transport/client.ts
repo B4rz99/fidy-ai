@@ -7,7 +7,7 @@ import {
   WebAuthApi,
   type WebAuthApiGroups,
 } from "@fidy/server/client";
-import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Context, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { AtomHttpApi } from "effect/unstable/reactivity";
@@ -146,9 +146,16 @@ class EnrollmentClientService extends Context.Service<
   EnrollmentApiClient
 >()("@fidy/web/transport/client/EnrollmentClientService") {}
 
-/** Dedicated browser-only enrollment transport, kept outside canonical operations and PATs. */
+class EnrollmentClientDisposed extends Data.TaggedError("EnrollmentClientDisposed")<{}> {}
+
+/**
+ * Dedicated browser-only enrollment transport for one authentication lifetime. `dispose` revokes
+ * new access synchronously, interrupts in-flight work, releases the ManagedRuntime, and is safe to
+ * call repeatedly. The client stays outside canonical operations and PATs.
+ */
 export type SubscriptionEnrollmentClient = Readonly<{
   execute: <A, E>(use: (client: EnrollmentApiClient) => Effect.Effect<A, E>) => Promise<A>;
+  dispose: () => Promise<void>;
 }>;
 
 /** Derives exact enrollment calls with first-party cookies over the shared browser runtime. */
@@ -161,7 +168,22 @@ export const makeSubscriptionEnrollmentClient = (
     HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: apiOrigin })
   ).pipe(Layer.provide(withCredentials(httpClient)));
   const runtime = ManagedRuntime.make(live);
+  let available = true;
+  let disposal = Option.none<Promise<void>>();
   return {
-    execute: (use) => runtime.runPromise(Effect.flatMap(EnrollmentClientService, use)),
+    execute: (use) =>
+      available
+        ? runtime.runPromise(Effect.flatMap(EnrollmentClientService, use))
+        : Effect.runPromise(Effect.fail(new EnrollmentClientDisposed())),
+    dispose: () =>
+      Option.match(disposal, {
+        onNone: () => {
+          available = false;
+          const current = runtime.dispose();
+          disposal = Option.some(current);
+          return current;
+        },
+        onSome: (current) => current,
+      }),
   };
 };

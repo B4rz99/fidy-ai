@@ -1,9 +1,10 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { Option } from "effect";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
 import { useSession } from "@/session/session-context";
+import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   makeFidyClient,
   makeSubscriptionEnrollmentClient,
@@ -12,20 +13,31 @@ import {
 import { parseApiOrigin } from "@/transport/origin";
 import { createWebRouter } from "./routes";
 
-const RoutedApplication = (): JSX.Element => {
+const AuthenticationRouter = ({ apiOrigin }: Readonly<{ apiOrigin: string }>): JSX.Element => {
   const { expireAuthentication } = useSession();
-  const [router] = useState(() => {
-    const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
-    return createWebRouter({
+  const [router] = useState(() =>
+    createWebRouter({
       apiClient: makeFidyClient(apiOrigin, undefined, {
         onAuthenticationExpired: expireAuthentication,
       }),
       webAuthClient: makeWebAuthClient(apiOrigin),
-      subscriptionEnrollmentClient: makeSubscriptionEnrollmentClient(apiOrigin),
       history: Option.none(),
-    });
-  });
+    })
+  );
   return <RouterProvider router={router} />;
+};
+
+const RoutedApplication = (): JSX.Element => {
+  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
+  const makeEnrollmentClient = useCallback(
+    () => makeSubscriptionEnrollmentClient(apiOrigin),
+    [apiOrigin]
+  );
+  return (
+    <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>
+      <AuthenticationRouter apiOrigin={apiOrigin} />
+    </SubscriptionEnrollmentLifetime>
+  );
 };
 
 /** Composes the production browser application from Vite's validated API-origin configuration. */

@@ -571,6 +571,7 @@ it("submits normalized billing data and card fields after both Wompi checks", as
 it("derives enrollment operations from the browser enrollment client", async () => {
   const transportFailure = new Error("transport unavailable");
   const service: SubscriptionEnrollmentClient = {
+    dispose: () => Promise.resolve(),
     execute: () => Promise.reject(transportFailure),
   };
   const gateway = makeEnrollmentGateway(service);

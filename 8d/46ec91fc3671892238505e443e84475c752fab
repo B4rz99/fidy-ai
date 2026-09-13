@@ -1,0 +1,21 @@
+apps/server/src/shell/durable-execution-retention.ts
+  s_729685b01e566c::t_514814c7a0dc47 91-92
+apps/server/src/shell/observability/protocol.ts
+  s_729685b01e566c::t_514814c7a0dc47 34-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8d46ec91fc3671892238505e443e84475c752fab",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

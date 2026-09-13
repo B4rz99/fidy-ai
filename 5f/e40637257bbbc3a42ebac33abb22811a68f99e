@@ -1,0 +1,21 @@
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_729685b01e566c::t_423d5c16e96d8b 601-607,610-611
+apps/server/src/shell/testing/api-harness.ts
+  s_729685b01e566c::t_a9749b304675d4 390-392
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5fe40637257bbbc3a42ebac33abb22811a68f99e",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

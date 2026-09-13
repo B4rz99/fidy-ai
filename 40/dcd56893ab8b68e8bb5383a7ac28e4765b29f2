@@ -1,0 +1,20 @@
+apps/server/src/shell/cluster-telemetry.ts
+  s_729685b01e566c::t_05ea3dd259f81d 143-147
+  s_729685b01e566c::t_675d8da01a6a92 151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "40dcd56893ab8b68e8bb5383a7ac28e4765b29f2",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

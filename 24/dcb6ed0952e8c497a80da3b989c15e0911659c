@@ -1,0 +1,56 @@
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 140
+  s_729685b01e566c::t_727d887573f774 29,139
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 104
+  s_729685b01e566c::t_a9a78146e120dd 22,103
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  s_729685b01e566c::t_2bad7d2c729137 6
+  s_729685b01e566c::t_f798d71bbb25ff 26
+  s_729685b01e566c::t_1d48f4e632d41d 25
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 301
+  s_729685b01e566c::t_7610702c1d20a8 36,300
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 1,180-181
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 106-110
+  s_729685b01e566c::t_a9626959e9f729 3
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_729685b01e566c::t_788f3d06764b0c 6
+  s_729685b01e566c::t_f798d71bbb25ff 31
+  s_729685b01e566c::t_95757a2942b9b9 30
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 108
+  s_729685b01e566c::t_09b6098d365d91 27,107
+apps/server/src/shell/authenticated-cluster-http.ts
+  s_729685b01e566c::t_2cb0e5b3a706ee 209,265
+  s_729685b01e566c::t_9d8a9fde051f46 3,6,28-35,62,89-91,104-117,208,213-215,217-221,234,264,269-271
+apps/server/src/shell/durable-execution.ts
+  s_729685b01e566c::t_e31e267d4ca958 29-34
+  s_729685b01e566c::t_cb7098636455ec 1,6-10,35-101,104-108,112-113,147-148,153-157
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_729685b01e566c::t_f798d71bbb25ff 58
+  s_729685b01e566c::t_99baf598d15705 1,57
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 104
+  s_729685b01e566c::t_3abd6991c3158d 20,103
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_729685b01e566c::t_f798d71bbb25ff 1,158-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "24dcb6ed0952e8c497a80da3b989c15e0911659c",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

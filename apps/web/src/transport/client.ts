@@ -77,7 +77,7 @@ const canonicalHttpClientLayer = (
   httpClient: FidyClientLayer
 ): FidyClientLayer =>
   Layer.merge(
-    browserHttpClientLayer("canonical", apiOrigin, httpClient),
+    httpClient.pipe(browserHttpClientLayer("canonical", apiOrigin)),
     TokenAuthorizationClientAnonymousLive
   );
 
@@ -147,7 +147,7 @@ export const makeWebAuthClient = (
   AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
     api: WebAuthApi,
     baseUrl: apiOrigin,
-    httpClient: browserHttpClientLayer("web-auth", apiOrigin, httpClient),
+    httpClient: httpClient.pipe(browserHttpClientLayer("web-auth", apiOrigin)),
   });
 
 type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
@@ -183,7 +183,7 @@ export const makeSubscriptionEnrollmentClient = (
   const live = Layer.effect(
     EnrollmentClientService,
     HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: apiOrigin })
-  ).pipe(Layer.provide(browserHttpClientLayer("enrollment", apiOrigin, httpClient)));
+  ).pipe(Layer.provide(httpClient.pipe(browserHttpClientLayer("enrollment", apiOrigin))));
   const runtime = ManagedRuntime.make(live);
   let available = true;
   let disposal = Option.none<Promise<void>>();

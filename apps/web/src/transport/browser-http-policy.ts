@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect";
+import { type Duration, Effect, Layer, Stream } from "effect";
 import {
   FetchHttpClient,
   Headers,
@@ -12,7 +12,7 @@ import {
 export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth";
 
 type BrowserHttpPolicy = Readonly<{
-  deadline: string;
+  deadline: Duration.Input;
   maximumResponseBytes: number;
 }>;
 
@@ -140,9 +140,7 @@ const collectBoundedBytes = Effect.fn(function* (
   const declaredLength = Number(response.headers["content-length"] ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
     yield* Effect.scoped(Stream.toPull(response.stream).pipe(Effect.asVoid));
-    return yield* Effect.fail(
-      responseFailure(response.request, response, "response body too large")
-    );
+    return yield* responseFailure(response.request, response, "response body too large");
   }
 
   const chunks: Array<Uint8Array> = [];
@@ -165,9 +163,7 @@ const collectBoundedBytes = Effect.fn(function* (
   );
 
   if (byteLength > maximumBytes) {
-    return yield* Effect.fail(
-      responseFailure(response.request, response, "response body too large")
-    );
+    return yield* responseFailure(response.request, response, "response body too large");
   }
   const bytes = new Uint8Array(byteLength);
   let offset = 0;
@@ -179,7 +175,7 @@ const collectBoundedBytes = Effect.fn(function* (
 });
 
 const boundedWebResponse = (
-  body: Uint8Array,
+  body: Uint8Array<ArrayBuffer>,
   status: number,
   headers: Headers.Headers
 ): Response => {
@@ -273,26 +269,24 @@ const makePolicyClient = (
  * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
  * retry, once.
  */
-export const browserHttpClientLayer = (
-  boundary: BrowserHttpBoundary,
-  apiOrigin: string,
-  httpClient: Layer.Layer<HttpClient.HttpClient>
-): Layer.Layer<HttpClient.HttpClient> =>
-  Layer.effect(
-    HttpClient.HttpClient,
-    Effect.map(HttpClient.HttpClient, (client) =>
-      makePolicyClient(client, apiOrigin, browserHttpPolicies[boundary])
-    )
-  ).pipe(
-    Layer.provide(
-      httpClient.pipe(
-        Layer.provide(
-          Layer.succeed(FetchHttpClient.RequestInit, {
-            credentials: "include",
-            redirect: "manual",
-            cache: "no-store",
-          })
+export const browserHttpClientLayer =
+  (boundary: BrowserHttpBoundary, apiOrigin: string) =>
+  (httpClient: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<HttpClient.HttpClient> =>
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.map(HttpClient.HttpClient, (client) =>
+        makePolicyClient(client, apiOrigin, browserHttpPolicies[boundary])
+      )
+    ).pipe(
+      Layer.provide(
+        httpClient.pipe(
+          Layer.provide(
+            Layer.succeed(FetchHttpClient.RequestInit, {
+              credentials: "include",
+              redirect: "manual",
+              cache: "no-store",
+            })
+          )
         )
       )
-    )
-  );
+    );

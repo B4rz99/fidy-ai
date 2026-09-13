@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import {
   Cause,
+  Context,
   DateTime,
   Deferred,
   Effect,
@@ -75,8 +76,9 @@ const makePolicyTestClient = (
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   boundary: BrowserHttpBoundary = "canonical"
 ): Effect.Effect<HttpClient.HttpClient> =>
-  HttpClient.HttpClient.pipe(
-    Effect.provide(browserHttpClientLayer(boundary, policyTestOrigin, httpClient))
+  Layer.build(httpClient.pipe(browserHttpClientLayer(boundary, policyTestOrigin))).pipe(
+    Effect.map((context) => Context.get(context, HttpClient.HttpClient)),
+    Effect.scoped
   );
 
 const boundaryExitKind = (
@@ -426,12 +428,15 @@ describe("browser HTTP policy", () => {
   it.effect("uses credentialed manual no-store Fetch requests at every browser boundary", () =>
     Effect.gen(function* () {
       const requestOptions: Array<RequestInit> = [];
-      const fakeFetch: typeof globalThis.fetch = (_input, init) => {
-        requestOptions.push(init ?? {});
-        return Promise.resolve(
-          new Response("{}", { headers: { "content-type": "application/json" } })
-        );
-      };
+      const fakeFetch: typeof globalThis.fetch = Object.assign(
+        (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+          requestOptions.push(init ?? {});
+          return Promise.resolve(
+            new Response("{}", { headers: { "content-type": "application/json" } })
+          );
+        },
+        { preconnect: globalThis.fetch.preconnect }
+      );
 
       for (const boundary of ["canonical", "web-auth", "enrollment"] as const) {
         const client = yield* makePolicyTestClient(FetchHttpClient.layer, boundary);

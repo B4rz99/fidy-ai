@@ -4,7 +4,6 @@ import {
   Data,
   DateTime,
   Effect,
-  Exit,
   Layer,
   Option,
   Random,
@@ -12,12 +11,14 @@ import {
   Schema,
 } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
-import { Activity, DurableClock, DurableDeferred } from "effect/unstable/workflow";
+import { Activity, DurableDeferred } from "effect/unstable/workflow";
 import { type PendingConsentExchangeId } from "~/core/consent/model";
 import { TranscriptText } from "~/core/transcript/model";
 import { findPendingConsentExchange, recordConsentDisclosureDelivery } from "~/shell/consent/repo";
+import { sleepUntil } from "~/shell/durable-execution-clock";
 import {
   type DisclosureDeliveryAttemptCapability,
+  type DisclosureDeliveryAttemptId,
   DisclosureDeliveryAttemptNumber,
   type DisclosureDeliveryEvidence,
   disclosureActivityAttempt,
@@ -59,6 +60,43 @@ export { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 export class ConsentDisclosureDeliveryUnavailable extends Data.TaggedError(
   "ConsentDisclosureDeliveryUnavailable"
 )<{}> {}
+
+type DisclosureActivityRevision = {
+  readonly attemptNumber: DisclosureDeliveryAttemptNumber;
+  readonly evidenceRevision: number;
+};
+
+/** Stable durable identities of the consent-disclosure Activities. */
+export const disclosureActivityIdentities = {
+  send: (_input: DisclosureActivityRevision) => ({ name: "Send" as const }),
+  retry: (_input: DisclosureActivityRevision) => ({
+    name: "Retry" as const,
+    success: Schema.DateTimeUtc,
+  }),
+} as const;
+
+const disclosureRevisionName = (input: {
+  readonly attemptId: DisclosureDeliveryAttemptId;
+  readonly evidenceRevision: number;
+}): string => `${input.attemptId}/${input.evidenceRevision}`;
+
+export const disclosureRetryClockName = (input: {
+  readonly attemptId: DisclosureDeliveryAttemptId;
+  readonly evidenceRevision: number;
+}): string => `Retry/${disclosureRevisionName(input)}`;
+export const disclosureExpiryClockName = "Expiry";
+export const disclosureRetryWakeName = (input: {
+  readonly attemptId: DisclosureDeliveryAttemptId;
+  readonly evidenceRevision: number;
+}): string => `RetryWake/${disclosureRevisionName(input)}`;
+export const disclosureEvidenceWakeName = (input: {
+  readonly attemptId: DisclosureDeliveryAttemptId;
+  readonly evidenceRevision: number;
+}): string => `EvidenceWake/${disclosureRevisionName(input)}`;
+export const disclosureWakeDeferredCompletion = {
+  success: Schema.Void,
+  error: Schema.Never,
+} as const;
 
 /**
  * Accepts one disclosure without waiting for Kapso. Receipt handoff, immutable routing, and native
@@ -267,18 +305,6 @@ export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosu
   }
 );
 
-const sleepUntil = Effect.fn(function* (name: string, at: DateTime.Utc) {
-  return yield* DateTime.now.pipe(
-    Effect.flatMap((now) =>
-      DurableClock.sleep({
-        name,
-        duration: Math.max(0, DateTime.toEpochMillis(at) - DateTime.toEpochMillis(now)),
-        inMemoryThreshold: "0 millis",
-      })
-    )
-  );
-});
-
 /** No prior evidence authorizes the first delivery attempt, so its identity uses revision zero. */
 const initialDisclosureEvidenceRevision = 0;
 
@@ -288,7 +314,7 @@ const sendAttempt = Effect.fn(function* (
   evidenceRevision: number
 ) {
   return yield* Activity.make({
-    name: "Send",
+    ...disclosureActivityIdentities.send({ attemptNumber, evidenceRevision }),
     execute: performConsentDisclosureAttempt(
       exchangeId,
       attemptNumber,
@@ -309,8 +335,10 @@ const retryDisclosure = Effect.fn(function* (
   expiresAt: DateTime.Utc
 ) {
   const resumeAt = yield* Activity.make({
-    name: "Retry",
-    success: Schema.DateTimeUtc,
+    ...disclosureActivityIdentities.retry({
+      attemptNumber: attempt.attemptNumber,
+      evidenceRevision: attempt.evidenceRevision,
+    }),
     execute: Effect.gen(function* () {
       const failedAt = yield* Effect.fromOption(attempt.failureOccurredAt).pipe(Effect.orDie);
       const base = 2 ** (attempt.attemptNumber - 1) * millisecondsPerSecond;
@@ -324,13 +352,13 @@ const retryDisclosure = Effect.fn(function* (
     )
   );
   yield* DurableDeferred.raceAll({
-    name: `RetryWake/${attempt.attemptId}/${attempt.evidenceRevision}`,
+    name: disclosureRetryWakeName(attempt),
     success: Schema.Void,
     error: Schema.Never,
     effects: [
       DurableDeferred.await(disclosureEvidenceChanged(attempt)),
-      sleepUntil(`Retry/${attempt.attemptId}/${attempt.evidenceRevision}`, resumeAt),
-      sleepUntil("Expiry", expiresAt),
+      sleepUntil(disclosureRetryClockName(attempt), resumeAt),
+      sleepUntil(disclosureExpiryClockName, expiresAt),
     ],
   });
   const now = yield* DateTime.now;
@@ -362,12 +390,12 @@ const continueDisclosure = Effect.fn(function* (
     return yield* retryDisclosure(exchangeId, attempt, expiresAt);
   }
   yield* DurableDeferred.raceAll({
-    name: `EvidenceWake/${attempt.attemptId}/${attempt.evidenceRevision}`,
+    name: disclosureEvidenceWakeName(attempt),
     success: Schema.Void,
     error: Schema.Never,
     effects: [
       DurableDeferred.await(disclosureEvidenceChanged(attempt)),
-      sleepUntil("Expiry", expiresAt),
+      sleepUntil(disclosureExpiryClockName, expiresAt),
     ],
   });
 });
@@ -447,12 +475,12 @@ export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisc
           const executionId = yield* ConsentDisclosureWorkflow.executionId(payload).pipe(
             Effect.orDie
           );
-          yield* DurableDeferred.done(deferred, {
+          yield* DurableDeferred.succeed(deferred, {
             token: DurableDeferred.tokenFromExecutionId(deferred, {
               workflow: ConsentDisclosureWorkflow,
               executionId,
             }),
-            exit: Exit.void,
+            value: undefined,
           });
         }).pipe(observeConsentDisclosureQueue("evidence"))
       )

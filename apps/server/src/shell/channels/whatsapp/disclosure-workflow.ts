@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { DisclosureDeliveryAttemptId } from "./disclosure-model";
+import { DisclosureDeliveryAttemptId, type DisclosureRevision } from "./disclosure-model";
 
 /** Identifier-only pre-User work. No User exists before verified onboarding completes. */
 export const ConsentDisclosurePayload = Schema.Struct({
@@ -43,6 +43,10 @@ export const consentDisclosureQueue = PersistedQueue.make({
   schema: ConsentDisclosurePayload,
 });
 
+/** Stable native queue key from one offered payload; the exchange identity stays in the payload. */
+export const consentDisclosureQueueId = (payload: ConsentDisclosurePayload): string =>
+  payload.exchangeId;
+
 /** Identifier-only evidence handoff, committed with Consent facts and completed outside SQL locks. */
 export const consentDisclosureEvidenceQueue = PersistedQueue.make({
   name: consentDisclosureEvidenceQueueName,
@@ -52,18 +56,18 @@ export const consentDisclosureEvidenceQueue = PersistedQueue.make({
 const queueKeyHexLength = 32;
 
 /** Bounded deterministic native queue key; source identifiers remain in the payload only. */
-export const disclosureEvidenceQueueId = (input: {
-  readonly attemptId: DisclosureDeliveryAttemptId;
-  readonly evidenceRevision: number;
-}): string =>
+export const disclosureEvidenceQueueId = (input: DisclosureRevision): string =>
   createHash("sha256")
     .update(`${input.attemptId}/${input.evidenceRevision}`)
     .digest("hex")
     .slice(0, queueKeyHexLength);
 
+/** Stable DurableDeferred identity for one effective evidence revision. */
+export const disclosureEvidenceDeferredName = (input: DisclosureRevision): string =>
+  `Evidence/${input.attemptId}/${input.evidenceRevision}`;
+
 /** One observation's wake-up: every effective evidence change completes the prior revision once. */
-export const disclosureEvidenceChanged = (input: {
-  readonly attemptId: DisclosureDeliveryAttemptId;
-  readonly evidenceRevision: number;
-}): DurableDeferred.DurableDeferred<typeof Schema.Void> =>
-  DurableDeferred.make(`Evidence/${input.attemptId}/${input.evidenceRevision}`);
+export const disclosureEvidenceChanged = (
+  input: DisclosureRevision
+): DurableDeferred.DurableDeferred<typeof Schema.Void> =>
+  DurableDeferred.make(disclosureEvidenceDeferredName(input));

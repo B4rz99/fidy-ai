@@ -1,6 +1,6 @@
 import { Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { Activity, DurableClock } from "effect/unstable/workflow";
+import { Activity } from "effect/unstable/workflow";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
   BrowserPairingEmailWorkflowId,
@@ -13,6 +13,7 @@ import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/ser
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { sleepUntil } from "~/shell/durable-execution-clock";
 import { attemptEmailDelivery, settleTerminalEmailFailure } from "./delivery-retry";
 import {
   digestBrowserPairingEmailProof,
@@ -35,6 +36,21 @@ const AttemptResult = Schema.Union([
   Schema.Struct({ outcome: Schema.Literal("retry"), retryAt: Schema.DateTimeUtc }),
 ]);
 type AttemptResult = typeof AttemptResult.Type;
+const PairingEmailDeadline = Schema.Option(Schema.DateTimeUtc);
+
+/** Stable durable identities of pairing-email Activities. */
+export const pairingEmailActivityIdentities = {
+  deliver: { name: "DeliverPairingEmail", success: AttemptResult },
+  deadline: { name: "PairingEmailDeadline", success: PairingEmailDeadline },
+  expire: { name: "ExpirePairingEmail" },
+} as const;
+
+/** Stable DurableClock identity for the wait after one pairing-email delivery attempt. */
+export const pairingEmailRetryClockName = (attempt: number): string =>
+  `PairingEmailRetry/${attempt}`;
+/** Fixed expiry clock for one browser-pairing email. */
+export const pairingEmailExpiryClockName = "PairingEmailExpiry";
+
 const DeliveryRow = Schema.Struct({
   workflowId: BrowserPairingEmailWorkflowId,
   pairingId: BrowserLoginPairingId,
@@ -236,20 +252,11 @@ const runDelivery = Effect.fn("EmailAuthentication.deliverPairingEmail")(functio
 ) {
   for (let attempt = 1; attempt <= maximumProviderAttempts; attempt++) {
     const result = yield* Activity.make({
-      name: "DeliverPairingEmail",
-      success: AttemptResult,
+      ...pairingEmailActivityIdentities.deliver,
       execute: deliverAttempt(payload, attempt),
     }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
     if (result.outcome !== "retry") return result;
-    const remaining =
-      DateTime.toEpochMillis(result.retryAt) - DateTime.toEpochMillis(yield* DateTime.now);
-    if (remaining > 0) {
-      yield* DurableClock.sleep({
-        name: `PairingEmailRetry/${attempt}`,
-        duration: remaining,
-        inMemoryThreshold: "0 millis",
-      });
-    }
+    yield* sleepUntil(pairingEmailRetryClockName(attempt), result.retryAt);
   }
   return { outcome: "retry-exhausted" } satisfies PairingDeliveryResult;
 });
@@ -278,8 +285,7 @@ export const BrowserPairingEmailWorkflowLive = Layer.mergeAll(
   BrowserPairingEmailExpiryWorkflow.toLayer(
     Effect.fn(function* (payload) {
       const deadline = yield* Activity.make({
-        name: "PairingEmailDeadline",
-        success: Schema.Option(Schema.DateTimeUtc),
+        ...pairingEmailActivityIdentities.deadline,
         execute: withUserTransaction(
           payload.userId,
           Effect.gen(function* () {
@@ -295,16 +301,11 @@ export const BrowserPairingEmailWorkflowLive = Layer.mergeAll(
         ),
       });
       if (Option.isNone(deadline)) return;
-      const remaining =
-        DateTime.toEpochMillis(deadline.value) - DateTime.toEpochMillis(yield* DateTime.now);
-      if (remaining > 0) {
-        yield* DurableClock.sleep({
-          name: "PairingEmailExpiry",
-          duration: remaining,
-          inMemoryThreshold: "0 millis",
-        });
-      }
-      yield* Activity.make({ name: "ExpirePairingEmail", execute: expirePairingEmail(payload) });
+      yield* sleepUntil(pairingEmailExpiryClockName, deadline.value);
+      yield* Activity.make({
+        ...pairingEmailActivityIdentities.expire,
+        execute: expirePairingEmail(payload),
+      });
     })
   )
 );

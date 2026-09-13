@@ -1,0 +1,50 @@
+{
+  "queues": [
+    {
+      "key": "statement-ingestion",
+      "name": "statement-ingestion",
+      "payloads": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "submissionId": "019cda32-1250-7000-8000-000000000501",
+            "userId": "019cda32-1250-7000-8000-000000000502"
+          },
+          "reencoded": {
+            "submissionId": "019cda32-1250-7000-8000-000000000501",
+            "userId": "019cda32-1250-7000-8000-000000000502",
+            "revision": 1
+          },
+          "id": "019cda32-1250-7000-8000-000000000501"
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "submissionId": "019cda32-1250-7000-8000-000000000501",
+            "userId": "019cda32-1250-7000-8000-000000000502",
+            "revision": 1
+          },
+          "id": "019cda32-1250-7000-8000-000000000501"
+        }
+      ]
+    },
+    {
+      "key": "whatsapp-inbound-turn",
+      "name": "whatsapp-inbound-turn",
+      "payloads": [
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "version": 1,
+            "userId": "019cda32-1250-7000-8000-000000000505",
+            "inboundJobId": "019cda32-1250-7000-8000-000000000506"
+          },
+          "id": "019cda32-1250-7000-8000-000000000506"
+        }
+      ]
+    }
+  ]
+}

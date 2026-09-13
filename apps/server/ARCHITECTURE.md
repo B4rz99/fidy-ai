@@ -177,9 +177,11 @@ authoritative evidence matching the attempt may atomically create its paid perio
 Pro.
 
 See [ADR 0024](../../docs/adr/0024-effect-durable-execution.md),
-[ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md), and the
-[durable-execution inventory](../../docs/architecture/durable-execution-inventory.md) for
-substrate choices, per-flow mechanics, migration status, and retention details.
+[ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md), the
+[durable-execution inventory](../../docs/architecture/durable-execution-inventory.md), and the
+[durable execution deployment runbook](../../docs/operations/durable-execution-deployments.md) for
+substrate choices, per-flow mechanics, migration status, retention details, and the
+reader-before-writer deployment check.
 
 ## 8. Testing seams
 

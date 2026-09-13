@@ -1,0 +1,306 @@
+{
+  "workflow": {
+    "tag": "OnboardingEmailDelivery"
+  },
+  "payloads": [
+    {
+      "label": "current",
+      "current": true,
+      "encoded": {
+        "intentId": "019cda32-1250-7000-8000-000000000460",
+        "revision": 1
+      },
+      "idempotencyKey": "019cda32-1250-7000-8000-000000000460",
+      "executionId": "0dc98422c8388d79d0ca9e4b5354ac05"
+    },
+    {
+      "label": "revisionless",
+      "current": false,
+      "encoded": {
+        "intentId": "019cda32-1250-7000-8000-000000000460"
+      },
+      "reencoded": {
+        "intentId": "019cda32-1250-7000-8000-000000000460",
+        "revision": 1
+      },
+      "idempotencyKey": "019cda32-1250-7000-8000-000000000460",
+      "executionId": "0dc98422c8388d79d0ca9e4b5354ac05"
+    }
+  ],
+  "results": [
+    {
+      "label": "sent",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "sent"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "not-current",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "not-current"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "rejected",
+      "kind": "error",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Failure",
+            "cause": [
+              {
+                "_tag": "Fail",
+                "error": {
+                  "_tag": "OnboardingDeliveryFailed",
+                  "outcome": "rejected"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "label": "uncertain",
+      "kind": "error",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Failure",
+            "cause": [
+              {
+                "_tag": "Fail",
+                "error": {
+                  "_tag": "OnboardingDeliveryFailed",
+                  "outcome": "uncertain"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "activityResultGroups": {
+    "deliver-results": [
+      {
+        "label": "sent",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "sent"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "not-current",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "not-current"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "rejected",
+        "kind": "error",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Failure",
+              "cause": [
+                {
+                  "_tag": "Fail",
+                  "error": {
+                    "_tag": "OnboardingDeliveryFailed",
+                    "outcome": "rejected"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "uncertain",
+        "kind": "error",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Failure",
+              "cause": [
+                {
+                  "_tag": "Fail",
+                  "error": {
+                    "_tag": "OnboardingDeliveryFailed",
+                    "outcome": "uncertain"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "activities": [
+    {
+      "key": "deliver",
+      "requests": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "name": "DeliverOnboardingEmail",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "DeliverOnboardingEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "name": "DeliverOnboardingEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": ["DeliverOnboardingEmail/1"],
+      "resultGroup": "deliver-results"
+    }
+  ],
+  "clocks": [],
+  "deferreds": [],
+  "queues": [
+    {
+      "key": "delivery",
+      "name": "onboarding-email-delivery",
+      "payloads": [
+        {
+          "id": "019cda32-1250-7000-8000-000000000460",
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "intentId": "019cda32-1250-7000-8000-000000000460",
+            "revision": 1
+          }
+        },
+        {
+          "id": "019cda32-1250-7000-8000-000000000460",
+          "label": "revisionless",
+          "current": false,
+          "encoded": {
+            "intentId": "019cda32-1250-7000-8000-000000000460"
+          },
+          "reencoded": {
+            "intentId": "019cda32-1250-7000-8000-000000000460",
+            "revision": 1
+          }
+        }
+      ]
+    }
+  ],
+  "resume": {
+    "label": "current",
+    "current": true,
+    "encoded": {},
+    "primaryKey": ""
+  }
+}

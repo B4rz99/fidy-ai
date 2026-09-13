@@ -57,9 +57,12 @@ effectIt.effect("expiry clears the matching sensitive clipboard value", () =>
   Effect.gen(function* () {
     const stub = clipboardStub();
     const copied = yield* Deferred.make<void>();
+    const context = yield* Effect.context<never>();
     const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
 
-    command.copy("sensitive-value", () => Effect.runSync(Deferred.succeed(copied, undefined)));
+    command.copy("sensitive-value", () =>
+      Effect.runSyncWith(context)(Deferred.succeed(copied, undefined))
+    );
     yield* Deferred.await(copied);
     yield* TestClock.adjust("10 minutes");
 
@@ -72,12 +75,17 @@ effectIt.effect("a replacement copy owns expiry without clearing newer clipboard
     const stub = clipboardStub();
     const firstCopied = yield* Deferred.make<void>();
     const secondCopied = yield* Deferred.make<void>();
+    const context = yield* Effect.context<never>();
     const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
 
-    command.copy("first-secret", () => Effect.runSync(Deferred.succeed(firstCopied, undefined)));
+    command.copy("first-secret", () =>
+      Effect.runSyncWith(context)(Deferred.succeed(firstCopied, undefined))
+    );
     yield* Deferred.await(firstCopied);
     yield* TestClock.adjust("5 minutes");
-    command.copy("second-secret", () => Effect.runSync(Deferred.succeed(secondCopied, undefined)));
+    command.copy("second-secret", () =>
+      Effect.runSyncWith(context)(Deferred.succeed(secondCopied, undefined))
+    );
     yield* Deferred.await(secondCopied);
     yield* TestClock.adjust("5 minutes");
     expect(stub.read()).toBe("second-secret");
@@ -94,6 +102,7 @@ effectIt.effect("closing its owner interrupts pending sensitive callbacks immedi
     const stub = clipboardStub();
     const copied = yield* Deferred.make<void>();
     const owner = yield* Scope.make();
+    const context = yield* Effect.context<never>();
     let expired = 0;
     const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes").pipe(
       Scope.provide(owner)
@@ -102,7 +111,9 @@ effectIt.effect("closing its owner interrupts pending sensitive callbacks immedi
     command.reveal(() => {
       expired += 1;
     });
-    command.copy("recovery-secret", () => Effect.runSync(Deferred.succeed(copied, undefined)));
+    command.copy("recovery-secret", () =>
+      Effect.runSyncWith(context)(Deferred.succeed(copied, undefined))
+    );
     yield* Deferred.await(copied);
     yield* Scope.close(owner, Exit.void);
     yield* TestClock.adjust("10 minutes");

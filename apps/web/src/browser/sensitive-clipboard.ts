@@ -1,4 +1,4 @@
-import { Duration, Effect, FiberHandle, Option, Ref, type Scope } from "effect";
+import { Duration, Effect, FiberHandle, Function, Option, Ref, type Scope } from "effect";
 import {
   type BrowserClipboard,
   ClipboardAccessFailed,
@@ -121,10 +121,17 @@ const clearOwned = (state: ClipboardState, value: string): Effect.Effect<void> =
  * Creates scoped sensitive-value commands. Values are forgotten after expiry, explicit clearing,
  * or scope close and never enter the typed error channel or generic Cause rendering.
  */
-export const makeSensitiveClipboard = (
-  clipboard: Option.Option<BrowserClipboard>,
-  lifetime: Duration.Input
-): Effect.Effect<SensitiveClipboard, never, Scope.Scope> =>
+export const makeSensitiveClipboard: {
+  (
+    clipboard: Option.Option<BrowserClipboard>,
+    lifetime: Duration.Input
+  ): Effect.Effect<SensitiveClipboard, never, Scope.Scope>;
+  (
+    lifetime: Duration.Input
+  ): (
+    clipboard: Option.Option<BrowserClipboard>
+  ) => Effect.Effect<SensitiveClipboard, never, Scope.Scope>;
+} = Function.dual(2, (clipboard: Option.Option<BrowserClipboard>, lifetime: Duration.Input) =>
   Effect.gen(function* () {
     const owner = yield* Ref.make(Option.none<CopyOwner>());
     const state: ClipboardState = { owner, latest: { current: Option.none() }, clipboard };
@@ -134,7 +141,7 @@ export const makeSensitiveClipboard = (
     const revealRun = yield* FiberHandle.makeRuntime<never, never, void>();
 
     return {
-      reveal: (onExpired) => {
+      reveal: (onExpired: () => void) => {
         revealRun(
           Effect.sleep(lifetime).pipe(
             Effect.andThen(Effect.sync(onExpired)),
@@ -143,7 +150,7 @@ export const makeSensitiveClipboard = (
           )
         );
       },
-      copy: (value, onCopied) => {
+      copy: (value: string, onCopied: () => void) => {
         copyRun(
           activateCopy(state, value).pipe(
             Effect.flatMap(() =>
@@ -156,6 +163,7 @@ export const makeSensitiveClipboard = (
           )
         );
       },
-      clear: (value) => copyRun(clearOwned(state, value)),
+      clear: (value: string) => copyRun(clearOwned(state, value)),
     };
-  });
+  })
+);

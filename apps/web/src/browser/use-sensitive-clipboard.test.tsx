@@ -55,12 +55,12 @@ const installDelayedClipboard = (denyReads = false): DelayedClipboard => {
       text = value;
       return Promise.resolve();
     }
-    return new Promise<void>((resolve) => {
-      pendingWrites.push(() => {
-        text = value;
-        resolve();
-      });
+    const pending = Promise.withResolvers<void>();
+    pendingWrites.push(() => {
+      text = value;
+      pending.resolve();
     });
+    return pending.promise;
   });
   installClipboard(
     () => (denyReads ? Promise.reject(new Error("clipboard read denied")) : Promise.resolve(text)),

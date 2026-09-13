@@ -1,0 +1,20 @@
+apps/server/src/shell/agent/agent-service.test.ts
+  h_c6d49c804e0ad2 2482-2491
+apps/server/src/shell/cluster-topology.integration.test.ts
+  h_c6d49c804e0ad2 7,188-189,194,347-348,352-353,361-362
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 162-172,195,308,352,384,420,482
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  h_c6d49c804e0ad2 26-31,39-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f661eb62e50e9eb0667fe73d176db55afb846047",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

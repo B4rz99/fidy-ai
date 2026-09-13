@@ -23,7 +23,12 @@ export const clusterTestShardIds = Array.from({ length: clusterTestShardCount },
   ShardId.make("default", index + 1)
 );
 
-/** Topology every SQL Cluster scenario shares; scenarios may tighten lease timings on top. */
+/**
+ * Topology every SQL Cluster scenario shares. Row leases match production so the identity and the
+ * recovery paths stay production-shaped, but the lease window is deliberately short: a disposed
+ * runtime's shard locks and runner registration must stop attracting Work within a test's timeout
+ * instead of lingering for production's 35-second staleness budget. Scenarios may tighten further.
+ */
 export const clusterTestSharedOptions = {
   availableShardGroups: ["default"],
   assignedShardGroups: ["default"],
@@ -31,6 +36,8 @@ export const clusterTestSharedOptions = {
   entityMessagePollInterval: 50,
   sendRetryInterval: 50,
   shardLockDisableAdvisory: true,
+  shardLockRefreshInterval: 500,
+  shardLockExpiration: "3 seconds",
 } satisfies Partial<ShardingConfig.ShardingConfig["Service"]>;
 
 const clusterTopologyProbeWorkflowName = "ClusterTopologyProbe";

@@ -31,7 +31,7 @@ const cluster = authenticatedClusterHttp.layerSql(
     shardLockRefreshInterval: 250,
     shardLockExpiration: "2 seconds",
   },
-  loopbackClusterRunnerHttpPolicy
+  loopbackClusterRunnerHttpPolicy([crashRunnerPort])
 );
 const mode = Schema.decodeUnknownSync(Schema.Literals(["before-send", "after-send", "expiry"]))(
   process.argv[2]

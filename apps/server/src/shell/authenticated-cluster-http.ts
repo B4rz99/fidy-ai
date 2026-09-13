@@ -52,14 +52,8 @@ const credentialsMatch = (actual: Option.Option<string>, expected: ClusterToken)
 };
 
 /**
- * Installs fail-closed bearer authentication on the private Cluster runner route.
- *
- * `HttpRouter` matching accepts aliased spellings of a route (case, duplicate or trailing slashes,
- * decoded escapes), and one router instance serves every listener in the process. A guard keyed on
- * the request path cannot cover every spelling that still reaches the runner handler, while
- * refusing unrelated paths would break the public listener that shares the router. Attaching the
- * guard to the runner route registration wraps that handler itself, so every request the router
- * dispatches to the runner route — aliases included — is authenticated before it can run.
+ * Requires the shared bearer credential for every request routed to the private Cluster runner,
+ * including aliased path spellings, while leaving unrelated routes unchanged.
  */
 export const authenticatedRunnerMiddleware = (token: ClusterToken): Layer.Layer<never> =>
   HttpRouter.middleware((next) =>
@@ -100,6 +94,7 @@ const authenticatedClientProtocol = (
             client,
             token,
             address,
+            connectDeadline: policy.connectDeadline,
             runnerHosts: policy.runnerHosts,
             runnerPorts: policy.runnerPorts,
           });
@@ -137,6 +132,8 @@ const layerAuthenticatedSqlCluster = (
   const workProtocol = authenticatedClientProtocol(token, policy, policy.requestDeadline).pipe(
     Layer.provide(FetchHttpClient.layer)
   );
+  // Wrap the registered handler rather than checking a raw path: router-normalized aliases reach
+  // the same handler, while unrelated routes on the shared router remain unaffected.
   const runner = HttpRouter.serve(
     HttpRunner.layerHttpOptions({ path: clusterRunnerPath }).pipe(
       Layer.provide(authenticatedRunnerMiddleware(token))

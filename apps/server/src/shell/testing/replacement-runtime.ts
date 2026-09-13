@@ -64,7 +64,7 @@ export const replacementRuntimeLayer = ({
               shardLockRefreshInterval: "500 millis",
               shardLockExpiration: "2 seconds",
             },
-            loopbackClusterRunnerHttpPolicy
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

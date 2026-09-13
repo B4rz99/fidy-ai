@@ -150,7 +150,7 @@ const makeRuntimeLayer = (
       entityMessagePollInterval: 100,
       sendRetryInterval: 100,
     },
-    loopbackClusterRunnerHttpPolicy
+    loopbackClusterRunnerHttpPolicy([input.port])
   );
   return ForwardedEmailWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),

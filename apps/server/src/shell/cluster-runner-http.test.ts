@@ -29,7 +29,6 @@ import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcSerialization } from "effe
 import { expectNotInspected, renderedFailure } from "~/shell/testing/credential-failure";
 import { authenticatedRunnerMiddleware } from "./authenticated-cluster-http";
 import {
-  type ClusterRunnerPorts,
   type ClusterToken,
   boundRunnerRpcProtocol,
   clusterRunnerPath,
@@ -62,8 +61,9 @@ type TestServer = Readonly<{
 
 type RunnerClientOptions = Readonly<{
   readonly runnerHosts: Array.NonEmptyArray<string>;
-  readonly runnerPorts: ClusterRunnerPorts;
-  readonly deadline: Duration.Input;
+  readonly runnerPorts: Array.NonEmptyArray<number>;
+  readonly connectDeadline: Duration.Input;
+  readonly requestDeadline: Duration.Input;
   readonly token: ClusterToken;
 }>;
 
@@ -104,8 +104,9 @@ const runnerClientOptions = (
   overrides: Partial<RunnerClientOptions> = {}
 ): RunnerClientOptions => ({
   runnerHosts: [server.host],
-  runnerPorts: { _tag: "Configured", ports: [server.port] },
-  deadline: "5 seconds",
+  runnerPorts: [server.port],
+  connectDeadline: "5 seconds",
+  requestDeadline: "5 seconds",
   token,
   ...overrides,
 });
@@ -119,6 +120,7 @@ const configuredRunnerClientFrom = (
       client: Context.get(context, HttpClient.HttpClient),
       token: options.token,
       address,
+      connectDeadline: options.connectDeadline,
       runnerHosts: options.runnerHosts,
       runnerPorts: options.runnerPorts,
     })
@@ -170,7 +172,7 @@ const probeRunner = (
       RunnerAddress.make(server.host, server.port),
       options
     );
-    const protocol = yield* makeBoundedProbeProtocol(client, options.deadline);
+    const protocol = yield* makeBoundedProbeProtocol(client, options.requestDeadline);
     return yield* probeProtocol(protocol);
   });
 
@@ -328,10 +330,23 @@ const stalledHandler =
 
 const assertExchangeDeadline = (
   server: TestServer,
-  deadline: Duration.Input
+  requestDeadline: Duration.Input
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const exit = yield* probeRunner(server, { deadline });
+    const exit = yield* probeRunner(server, { requestDeadline });
+    expect(server.requests).toHaveLength(1);
+    yield* expectRunnerRpcFailure(exit, expectedTransportRpcFailure(), [
+      tokenFixture,
+      server.origin,
+    ]);
+  });
+
+const assertConnectDeadline = (
+  server: TestServer,
+  connectDeadline: Duration.Input
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const exit = yield* probeRunner(server, { connectDeadline, requestDeadline: "5 seconds" });
     expect(server.requests).toHaveLength(1);
     yield* expectRunnerRpcFailure(exit, expectedTransportRpcFailure(), [
       tokenFixture,
@@ -417,7 +432,7 @@ it.effect("accepts only absolute HTTP URLs on configured runner hosts and ports"
   Effect.sync(() => {
     const allowed = isConfiguredRunnerDestination({
       runnerHosts: ["127.0.0.1", "Runner.internal."],
-      runnerPorts: { _tag: "Configured", ports: [8080] },
+      runnerPorts: [8080],
     });
     expect(allowed("http://127.0.0.1:8080/_fidy/cluster")).toBe(true);
     // The runner transport forms plain HTTP; any other scheme is refused.
@@ -430,14 +445,6 @@ it.effect("accepts only absolute HTTP URLs on configured runner hosts and ports"
     expect(allowed("http://user:secret@127.0.0.1:8080/_fidy/cluster")).toBe(false);
     expect(allowed("file://127.0.0.1:8080/_fidy/cluster")).toBe(false);
     expect(allowed("/_fidy/cluster")).toBe(false);
-
-    // Loopback harnesses listen on ephemeral ports and opt into any port explicitly.
-    const anyPort = isConfiguredRunnerDestination({
-      runnerHosts: ["127.0.0.1"],
-      runnerPorts: { _tag: "Any" },
-    });
-    expect(anyPort("http://127.0.0.1:9000/_fidy/cluster")).toBe(true);
-    expect(anyPort("http://127.0.0.1.evil.test:9000/_fidy/cluster")).toBe(false);
   })
 );
 
@@ -451,7 +458,7 @@ it.effect("forms a bracketed URL for an IPv6 runner address the allowlist accept
     );
     const allowed = isConfiguredRunnerDestination({
       runnerHosts: ["::1"],
-      runnerPorts: { _tag: "Configured", ports: [8080] },
+      runnerPorts: [8080],
     });
     expect(allowed(runnerRequestUrl(RunnerAddress.make("::1", 8080)))).toBe(true);
     expect(allowed("http://[::1]:9000/_fidy/cluster")).toBe(false);
@@ -490,7 +497,20 @@ it.effect("refuses redirects without forwarding the Cluster credential", () =>
   )
 );
 
-it.live("terminates a stalled runner exchange inside the configured deadline", () =>
+it.live("terminates stalled response headers inside the connection deadline", () =>
+  Effect.gen(function* () {
+    const stalled = yield* Deferred.make<Response>();
+    const services = yield* Effect.context<never>();
+    yield* withTestServer(stalledHandler(services, stalled), (server) =>
+      Effect.ensuring(
+        assertConnectDeadline(server, "150 millis"),
+        Deferred.succeed(stalled, new Response("late"))
+      )
+    );
+  })
+);
+
+it.live("terminates a stalled runner exchange inside the configured request deadline", () =>
   Effect.gen(function* () {
     const stalled = yield* Deferred.make<Response>();
     const services = yield* Effect.context<never>();

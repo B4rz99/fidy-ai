@@ -103,7 +103,7 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
       shardLockRefreshInterval: 250,
       shardLockExpiration: "2 seconds",
     },
-    loopbackClusterRunnerHttpPolicy
+    loopbackClusterRunnerHttpPolicy([port])
   );
   return yield* Effect.acquireRelease(
     Effect.sync(() =>

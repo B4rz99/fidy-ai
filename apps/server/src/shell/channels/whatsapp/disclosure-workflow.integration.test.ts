@@ -106,7 +106,7 @@ const acquireRuntime = Effect.fn(function* (
               sendRetryInterval: 50,
               entityTerminationTimeout: 100,
             },
-            loopbackClusterRunnerHttpPolicy
+            loopbackClusterRunnerHttpPolicy([port])
           )
         )
       )

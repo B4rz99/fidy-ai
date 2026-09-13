@@ -30,10 +30,16 @@ const clusterAuthenticationToken = configuredSecret({
 // settles durably, so an expired wait detaches the caller instead of cancelling the Work. Health
 // probes use the upstream ping bound instead of waiting on a dead runner.
 const workDeadlineMarginMinutes = 10;
+const productionRunnerConnectDeadlineSeconds = 5;
 const productionRunnerHealthDeadlineSeconds = 10;
 const workDeadlineMargin = Duration.minutes(workDeadlineMarginMinutes);
 
-/** Fast health probe, so shard ownership can move away from a dead runner. */
+/** Short connection and response-header bound shared by health and hosted Work calls. */
+export const productionRunnerConnectDeadline = Duration.seconds(
+  productionRunnerConnectDeadlineSeconds
+);
+
+/** Fast whole-exchange health bound, so shard ownership can move away from a dead runner. */
 export const productionRunnerHealthDeadline = Duration.seconds(
   productionRunnerHealthDeadlineSeconds
 );
@@ -132,7 +138,8 @@ const productionClusterRunnerHttpPolicy = (
   port: number
 ): ClusterRunnerHttpPolicy => ({
   runnerHosts,
-  runnerPorts: { _tag: "Configured", ports: [port] },
+  runnerPorts: [port],
+  connectDeadline: productionRunnerConnectDeadline,
   healthDeadline: productionRunnerHealthDeadline,
   requestDeadline: productionRunnerRequestDeadline,
 });

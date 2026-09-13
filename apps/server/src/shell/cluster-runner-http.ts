@@ -36,21 +36,12 @@ export type ClusterToken = Redacted.Redacted<string>;
 export const clusterBearerValue = (token: ClusterToken): string =>
   `Bearer ${Redacted.value(token)}`;
 
-/**
- * Configured private Cluster runner ports. Replicas share one advertised port, so production
- * pins it (`Configured`); loopback harnesses listen on ephemeral ports they cannot know at layer
- * construction, so they explicitly opt into every port (`Any`).
- */
-export type ClusterRunnerPorts =
-  | Readonly<{ readonly _tag: "Any" }>
-  | Readonly<{ readonly _tag: "Configured"; readonly ports: Array.NonEmptyArray<number> }>;
-
-/** Private Cluster runner addresses a client protocol may dial with the shared credential. */
+/** Exact private Cluster runner addresses allowed to receive the shared credential. */
 export type ClusterRunnerAllowlist = Readonly<{
   /** Configured private Cluster hosts allowed to receive the shared Cluster credential. */
   readonly runnerHosts: Array.NonEmptyArray<string>;
-  /** Ports on those hosts that may receive the shared Cluster credential. */
-  readonly runnerPorts: ClusterRunnerPorts;
+  /** Configured private Cluster ports allowed to receive the shared Cluster credential. */
+  readonly runnerPorts: Array.NonEmptyArray<number>;
 }>;
 
 /**
@@ -65,6 +56,11 @@ export type ClusterRunnerAllowlist = Readonly<{
  */
 export type ClusterRunnerHttpPolicy = ClusterRunnerAllowlist &
   Readonly<{
+    /**
+     * Bound on connection establishment and response headers for every runner exchange. This stays
+     * short even when hosted Work has a much longer whole-exchange deadline.
+     */
+    readonly connectDeadline: Duration.Input;
     /**
      * Bound on one runner health exchange from connection establishment through response body
      * consumption. A runner that cannot answer inside this bound is reported unhealthy so shard
@@ -112,9 +108,7 @@ export const isConfiguredRunnerDestination =
     if (!allowlist.runnerHosts.some((configured) => normalizedHost(configured) === host)) {
       return false;
     }
-    return (
-      allowlist.runnerPorts._tag === "Any" || allowlist.runnerPorts.ports.includes(urlPort(url))
-    );
+    return allowlist.runnerPorts.includes(urlPort(url));
   };
 
 const projectedRequest = (
@@ -145,7 +139,7 @@ const urlAuthorityHost = (host: string): string =>
 export const runnerRequestUrl = (address: RunnerAddress.RunnerAddress): string =>
   `http://${urlAuthorityHost(address.host)}:${address.port}${clusterRunnerPath}`;
 
-const authenticatedRequest = (
+const runnerRequest = (
   address: RunnerAddress.RunnerAddress,
   request: HttpClientRequest.HttpClientRequest
 ): HttpClientRequest.HttpClientRequest =>
@@ -205,12 +199,9 @@ const projectedRunnerRpcError = (
 };
 
 /**
- * Bounds one derived RPC exchange from connection establishment through response body
- * consumption, and rebuilds every transport reason over the coordinate-free runner request.
- * `FetchHttpClient` hands the executing fiber's abort signal to `fetch`, so interrupting this
- * bound aborts an in-flight connection attempt as well as the response stream. `RpcClient`
- * consumes the response stream inside `Protocol.send`, outside any `HttpClient` transform, so
- * the protocol is the one seam that observes the whole exchange.
+ * Bounds one derived RPC exchange through response body consumption and rebuilds every transport
+ * reason over the coordinate-free runner request. The caller may rely on interruption of the
+ * underlying request when the bound expires.
  */
 export const boundRunnerRpcProtocol = (input: {
   readonly protocol: RpcClient.Protocol["Service"];
@@ -231,8 +222,8 @@ export const boundRunnerRpcProtocol = (input: {
  * Derives one policy-bearing client for a private runner address. It owns the runner URL, the
  * bearer header, destination refusal, redirect refusal, and coordinate-free failure
  * classification, and applies the shared protected-client hardening, so the RPC protocol derived
- * from it can only ever report safe transport metadata. The derived protocol, not this client,
- * owns the exchange deadline.
+ * from it can only ever report safe transport metadata. This client bounds receipt of response
+ * headers; the derived protocol separately bounds the whole exchange through body consumption.
  */
 export const makeClusterRunnerHttpClient = (
   input: ClusterRunnerAllowlist &
@@ -240,11 +231,13 @@ export const makeClusterRunnerHttpClient = (
       readonly client: HttpClient.HttpClient;
       readonly token: ClusterToken;
       readonly address: RunnerAddress.RunnerAddress;
+      /** Bound on connection establishment and receipt of response headers. */
+      readonly connectDeadline: Duration.Input;
     }>
 ): HttpClient.HttpClient => {
   const authenticated = HttpClient.mapRequest(input.client, (request) =>
     HttpClientRequest.setHeader(
-      authenticatedRequest(input.address, request),
+      runnerRequest(input.address, request),
       authorizationHeader,
       clusterBearerValue(input.token)
     )
@@ -266,7 +259,11 @@ export const makeClusterRunnerHttpClient = (
   return HttpClient.transform(protectedClient, (responseEffect) =>
     responseEffect.pipe(
       // The runtime refuses any 3xx itself: no redirect target can receive the bearer header.
-      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" })
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+      Effect.timeoutOrElse({
+        duration: input.connectDeadline,
+        orElse: () => Effect.fail(runnerHttpClientError(projectedTransportReason())),
+      })
     )
   );
 };

@@ -1,0 +1,45 @@
+apps/server/src/shell/ingestion/worker.ts
+  s_a7e46a2585cde3::t_cccee70efd5e69 298,300,303,345,350,407
+  s_a7e46a2585cde3::t_d66a720ba827f6 327-329,363-364,385
+  s_a7e46a2585cde3::t_a40bf492180d04 78,88
+  s_a7e46a2585cde3::t_68b7cb8bee6a49 1-13,15,17,29-32,64,69,72-76,79-87,89-95,346-349,351-353,355,357-362,365-366,380-383,389-402,458-467,469
+  s_a7e46a2585cde3::t_dddc1821a3ad33 299
+  s_4f5e7831503ec4::t_f8df2a40caa60e 77,384
+apps/server/src/shell/ingestion/column-mapper.test.ts
+  s_a7e46a2585cde3::t_4661610eeaf7b3 1,22,44-75
+apps/server/src/shell/ingestion/worker-sanitization.test.ts
+  s_a7e46a2585cde3::t_1da649a3a67301 49,69
+  s_a7e46a2585cde3::t_acccc8ed9a2895 7,25
+  s_a7e46a2585cde3::t_68b7cb8bee6a49 1-6,8-24,26-48,50-54,63-68,70-166,185-188
+  s_a7e46a2585cde3::t_6d24bbcbc44726 55-62,167-184
+apps/server/src/shell/ingestion/column-mapper.ts
+  s_a7e46a2585cde3::t_060e36794900ab 8,61
+  s_a7e46a2585cde3::t_7ba1680b7bb248 59-60,62
+apps/server/src/shell/ingestion/worker.test.ts
+  s_a7e46a2585cde3::t_68b7cb8bee6a49 38,79,83,85-86,108,116-117,399,426,543-565
+  s_a7e46a2585cde3::t_75508999122151 98-107,421,460,462-463,505,566-569,593-594,598
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7071093c53930c555b4648088638c746ce262cb1",
+  "prompts": {},
+  "sessions": {
+    "s_4f5e7831503ec4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c31-3ce5-7417-9d92-d3101fc1cf5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a7e46a2585cde3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bfd-8b20-71c1-a137-d64884434c1b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

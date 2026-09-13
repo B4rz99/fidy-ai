@@ -5,7 +5,7 @@ import { StatementColumnMapping, type StatementMappingSample } from "~/core/inge
 
 /** Safe failure returned when one bounded statement-mapping request cannot produce a mapping. */
 export class StatementColumnMappingFailed extends Data.TaggedError("StatementColumnMappingFailed")<{
-  readonly safeReason: "provider-unavailable" | "invalid-structured-output";
+  readonly safeReason: "provider-unavailable" | "invalid-structured-output" | "permanent-failure";
 }> {}
 
 /** Edge seam that maps one bounded raw statement sample. */
@@ -56,7 +56,10 @@ export class StatementColumnMapper extends Context.Service<
             .pipe(
               Effect.map((response) => response.value),
               Effect.mapError(
-                () => new StatementColumnMappingFailed({ safeReason: "provider-unavailable" })
+                (failure) =>
+                  new StatementColumnMappingFailed({
+                    safeReason: failure.isRetryable ? "provider-unavailable" : "permanent-failure",
+                  })
               )
             ),
       });

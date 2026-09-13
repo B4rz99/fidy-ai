@@ -1,0 +1,45 @@
+apps/server/src/shell/_shared/persisted-queue-handler.test.ts
+  s_80cef19f03db2e::t_451348eed3535a 37-42,145,256
+  s_80cef19f03db2e::t_e771222102d708 2,4,50-54,64,87-92,94-98,101-110,132-137,139-141,143,148-151,269-271,273-277,280-286
+  s_80cef19f03db2e::t_11b19455b59db3 11-12,21-35
+  s_80cef19f03db2e::t_c5f538bc157b2c 100,147,279
+  s_80cef19f03db2e::t_54411688a87190 74,76-77
+  s_80cef19f03db2e::t_9c64065b0145fd 67
+  s_80cef19f03db2e::t_bd6c8feb64cd9e 75,99,121-123,125-126,144,146,170,207,278,295-299
+  s_80cef19f03db2e::t_58c6a278b9a997 5
+  s_80cef19f03db2e::t_68116a0c13e738 3,6-10,13-15,44-49,111-119,127-131,152-169,171-206,208-210,212-213,287-294,300-309
+  s_80cef19f03db2e::t_fd574b14779c83 215,219-234,236-255,257-268
+  s_80cef19f03db2e::t_dac476d37075d2 43,124,235
+  s_80cef19f03db2e::t_cdf97f69d4238a 120,142
+  s_80cef19f03db2e::t_21523bb8faf462 55-63,93,138,272
+  s_80cef19f03db2e::t_ce9fcb9798cb40 1,16-20,65-66,68-73,78-86,216-217,310-311
+  s_80cef19f03db2e::t_df50aca4900c8e 36,211,214,218
+apps/server/src/shell/_shared/persisted-queue-handler.ts
+  s_80cef19f03db2e::t_be0750ace2695f 147,151
+  s_80cef19f03db2e::t_ab30fd30724a3a 58-70,76-78,129
+  s_80cef19f03db2e::t_8f0ed87a36356c 1,82,86-99,102-104,106,119-125,134,152
+  s_80cef19f03db2e::t_8e39ae3d38e5b2 36-39
+  s_80cef19f03db2e::t_1ab2a8a572663b 3-6,8-26,32-35,40-41,43-57,71-72,74-75,79,136-142
+  s_80cef19f03db2e::t_506cbd280e0e8c 2
+  s_80cef19f03db2e::t_083fddc8714324 27-31,42,73
+  s_80cef19f03db2e::t_a0450b8e5e064d 80-81,83-85,100-101,105,107,112-113,115-118,126-128,130-132,135
+  s_80cef19f03db2e::t_9ea4e57d2ab4c7 108-111,114,133
+  s_80cef19f03db2e::t_5efda7b437d682 7,146,148-150,153
+  s_80cef19f03db2e::t_1998a13b8e9323 143-145,154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "81d718aed6a7c3065e246f4af56e4991be820fa7",
+  "prompts": {},
+  "sessions": {
+    "s_80cef19f03db2e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bb9-1adb-7521-9efc-47d7efdeede8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

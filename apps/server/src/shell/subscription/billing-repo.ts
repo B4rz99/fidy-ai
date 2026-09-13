@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money, encodeMoneyAmount } from "~/core/_shared/money";
@@ -27,8 +27,20 @@ import {
   WompiSourceId,
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const WompiSourceIdFromDb = Schema.FiniteFromString.pipe(Schema.decodeTo(WompiSourceId));
+
+/** Stable SQL queue identity for one pending BillingAttempt's durable reconciliation. */
+export const billingAttemptQueueName = "subscription-billing-attempt" as const;
+
+/**
+ * Bounded delivery ceiling for BillingAttempt reconciliation submission. The queue handler only
+ * starts the durable workflow; the workflow itself owns provider retries. Exhaustion means the
+ * workflow was never reliably started, so the attempt needs explicit operational disposition
+ * rather than silent ineligibility.
+ */
+export const maximumBillingAttemptQueueAttempts = 10;
 
 const BillingAttemptRow = Schema.Struct({
   id: BillingAttemptId,
@@ -562,6 +574,130 @@ export const getBillingReconciliationEscalations = Effect.fn(
       FROM fidy_billing_reconciliation_escalations()
     `,
   })(undefined).pipe(Effect.orDie);
+});
+
+const BillingAttemptQueueCandidate = Schema.Struct({
+  sequence: Schema.Int,
+  element: Schema.String,
+});
+
+/**
+ * Identifier-only queue identity a retired item must carry. Revision is intentionally absent:
+ * additive payload revisions remain decodable, and the worker re-reads owner state anyway.
+ */
+const BillingAttemptQueueIdentity = Schema.fromJsonString(
+  Schema.Struct({ userId: UserId, billingAttemptId: BillingAttemptId })
+);
+
+const exhaustedRetirementPage = 256;
+const queueHistoryPage = 256;
+const queueHistoryHorizon = { hours: 24 } as const;
+
+/**
+ * Terminally retires one bounded page of BillingAttempt reconciliation work whose native delivery
+ * budget is exhausted. A pending attempt keeps its pending status and gains explicit
+ * manual-reconciliation evidence, so exhaustion distinguishes unknown provider outcome from
+ * definitive failure; an already settled or missing attempt needs no domain write. Late
+ * authenticated Wompi settlement still converges on the same BillingAttempt because settlement
+ * reads owner state, never queue eligibility. An already armed attempt is never re-armed here,
+ * so no second provider charge can be submitted. Malformed items retain a bounded marker for
+ * inspection instead of disappearing. Only bounded counts and the queue sequence reach
+ * operational evidence, never User, attempt, or provider identity.
+ */
+export const retireExhaustedBillingAttemptWork = Effect.fn(
+  "Subscription.retireExhaustedBillingAttemptWork"
+)(function* (now: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  const exhausted = yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: BillingAttemptQueueCandidate,
+    execute: () => sql`SELECT sequence, element FROM fidy_queue
+      WHERE queue_name = ${billingAttemptQueueName} AND completed = FALSE
+        AND attempts >= ${maximumBillingAttemptQueueAttempts}
+      ORDER BY sequence LIMIT ${exhaustedRetirementPage}`,
+  })(undefined).pipe(Effect.orDie);
+  let retired = 0;
+  for (const item of exhausted) {
+    const identity = Schema.decodeOption(BillingAttemptQueueIdentity)(item.element);
+    if (Option.isNone(identity)) {
+      yield* sql`UPDATE fidy_queue SET last_failure = 'schema_incompatible', updated_at = ${now}
+        WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
+      yield* Effect.logWarning("Retained malformed exhausted BillingAttempt work", {
+        sequence: item.sequence,
+      }).pipe(Effect.annotateLogs({ work_kind: "billing-reconciliation" }));
+      continue;
+    }
+    const attempt = yield* withUserTransaction(
+      identity.value.userId,
+      findBillingAttemptByIdInScope(identity.value.userId, identity.value.billingAttemptId)
+    );
+    if (Option.isSome(attempt) && attempt.value.status === "pending") {
+      yield* withUserTransaction(
+        identity.value.userId,
+        markBillingAttemptManualReconciliationInScope(
+          identity.value.userId,
+          identity.value.billingAttemptId,
+          now
+        )
+      );
+    }
+    const retiredRows =
+      yield* sql`UPDATE fidy_queue SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
+      last_failure = 'exhausted', updated_at = ${now}
+      WHERE sequence = ${item.sequence} AND completed = FALSE
+        AND attempts >= ${maximumBillingAttemptQueueAttempts}
+      RETURNING sequence`.pipe(Effect.orDie);
+    retired += retiredRows.length;
+  }
+  if (retired > 0) {
+    yield* Effect.logWarning("Retired exhausted BillingAttempt work", { count: retired }).pipe(
+      Effect.annotateLogs({
+        work_kind: "billing-reconciliation",
+        outcome: "manual-reconciliation-required",
+      })
+    );
+  }
+  return retired;
+});
+
+/**
+ * Removes one bounded page of completed BillingAttempt queue history after the replay horizon,
+ * but only when the owning attempt is terminal or missing. A pending attempt retains its
+ * submission history for operator review, so pruning can never hide work that still needs
+ * reviewed reconciliation. Malformed history is retained with a bounded warning.
+ */
+export const pruneBillingAttemptQueueHistory = Effect.fn(
+  "Subscription.pruneBillingAttemptQueueHistory"
+)(function* (now: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  const cutoff = DateTime.subtract(now, queueHistoryHorizon);
+  const candidates = yield* SqlSchema.findAll({
+    Request: Schema.DateTimeUtc,
+    Result: BillingAttemptQueueCandidate,
+    execute: (before) => sql`SELECT sequence, element FROM fidy_queue
+      WHERE queue_name = ${billingAttemptQueueName} AND completed = TRUE AND updated_at < ${before}
+      ORDER BY sequence LIMIT ${queueHistoryPage}`,
+  })(cutoff).pipe(Effect.orDie);
+  let pruned = 0;
+  for (const candidate of candidates) {
+    const identity = Schema.decodeOption(BillingAttemptQueueIdentity)(candidate.element);
+    if (Option.isNone(identity)) {
+      yield* Effect.logWarning("Retained malformed BillingAttempt queue history", {
+        sequence: candidate.sequence,
+      }).pipe(Effect.annotateLogs({ work_kind: "billing-reconciliation" }));
+      continue;
+    }
+    const attempt = yield* withUserTransaction(
+      identity.value.userId,
+      findBillingAttemptByIdInScope(identity.value.userId, identity.value.billingAttemptId)
+    );
+    if (Option.isSome(attempt) && attempt.value.status === "pending") continue;
+    const prunedRows = yield* sql`DELETE FROM fidy_queue
+      WHERE sequence = ${candidate.sequence} AND completed = TRUE
+      RETURNING sequence`.pipe(Effect.orDie);
+    pruned += prunedRows.length;
+  }
+  return pruned;
 });
 
 /** Projects one trusted relational BillingAttempt without any private provider references. */

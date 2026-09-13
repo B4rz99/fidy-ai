@@ -12,11 +12,13 @@ import {
   type ArmedCharge,
   type BillingAttemptRecord,
   armBillingAttemptInScope,
+  billingAttemptQueueName,
   failBillingAttemptInScope,
   findBillingAttemptByIdInScope,
   findBillingTransactionsInScope,
   markBillingAttemptAwaitingReferenceInScope,
   markBillingAttemptManualReconciliationInScope,
+  maximumBillingAttemptQueueAttempts,
   recordBillingTransactionInScope,
 } from "./billing-repo";
 import {
@@ -56,7 +58,7 @@ export const BillingAttemptReconciliationWorkflow = Workflow.make("BillingAttemp
 
 /** Transactional acceptance handoff; one queue item per BillingAttempt identity. */
 const billingAttemptQueue = PersistedQueue.make({
-  name: "subscription-billing-attempt",
+  name: billingAttemptQueueName,
   schema: BillingAttemptReconciliationPayload,
 });
 
@@ -309,8 +311,9 @@ const markManualReconciliation = Effect.fn("Subscription.markManualBillingReconc
  * Builds the reconciliation workflow registration with a testable base backoff. Each wake is a fresh
  * owner read behind a durable clock; a known PENDING transaction is re-checked on a bounded backoff
  * and never gives up. An unresolved provider outcome is escalated for manual reconciliation, never
- * silently stopped. Terminal workflow and queue history cleanup is deferred to #468/#471; this change
- * adds no billing retention loop.
+ * silently stopped. Queue submission is bounded by the shared delivery ceiling; exhausted
+ * submissions are retired hourly with explicit manual-reconciliation evidence, and completed
+ * history is pruned only after the owning attempt is terminal.
  */
 export const billingAttemptReconciliationWorkflowLayer = (
   baseDelay: Duration.Input
@@ -375,8 +378,12 @@ export const BillingAttemptQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const queue = yield* billingAttemptQueue;
     yield* queue
-      .take((payload) =>
-        BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(Effect.asVoid)
+      .take(
+        (payload) =>
+          BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(
+            Effect.asVoid
+          ),
+        { maxAttempts: maximumBillingAttemptQueueAttempts }
       )
       .pipe(
         Effect.catchCause((cause) =>

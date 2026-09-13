@@ -368,7 +368,7 @@ const workAttributes = [
         _tag: "Queue",
         attempt: TelemetryAttempt.make(2),
         inputCount: TelemetryCount.make(7),
-        delayMilliseconds: TelemetryDuration.make(1_500),
+        delayMilliseconds: Option.some(TelemetryDuration.make(1_500)),
       },
     },
     attributes: {

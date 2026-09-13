@@ -40,6 +40,11 @@ const disableAutomaticHttpSpan = (): boolean => true;
 const safeResponseHeaders = ["content-type"] as const;
 const redirectStatusMinimum = 300;
 const redirectStatusMaximumExclusive = 400;
+const noContentStatus = 204;
+const resetContentStatus = 205;
+const notModifiedStatus = 304;
+const responseStatusForbidsBody = (status: number): boolean =>
+  status === noContentStatus || status === resetContentStatus || status === notModifiedStatus;
 
 const diagnosticsRequest = (
   request: HttpClientRequest.HttpClientRequest
@@ -178,7 +183,10 @@ const boundedWebResponse = (
   status: number,
   headers: Headers.Headers
 ): Response => {
-  const response = new Response(body, { status, headers });
+  const response = new Response(responseStatusForbidsBody(status) ? null : body, {
+    status,
+    headers,
+  });
   // Expose the exact bounded bytes as an ArrayBuffer from the active browser realm. Besides
   // avoiding another implementation-defined body conversion, this keeps jsdom's realm check
   // equivalent to a real browser response.

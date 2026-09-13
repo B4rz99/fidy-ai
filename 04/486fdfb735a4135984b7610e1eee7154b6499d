@@ -1,0 +1,66 @@
+apps/server/src/shell/cluster-runner-http.test.ts
+  s_edd6294739ecd8::t_a06c98ce1c4d99 344-346,349,500-513
+  s_edd6294739ecd8::t_79a4b77c26a870 64-66,107-109,123,175,333-336,435,461
+  s_edd6294739ecd8::t_8298ae274afca5 337-343
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_edd6294739ecd8::t_a2a67c7eed5937 106
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_edd6294739ecd8::t_0f1417ed3119af 34
+apps/server/src/shell/durable-execution.test.ts
+  s_edd6294739ecd8::t_bf39567e152a57 8,13,15,20-21
+  s_edd6294739ecd8::t_e015acffef37f5 22
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_edd6294739ecd8::t_5c8d35015fc3d7 11
+  s_edd6294739ecd8::t_5b8cf02f21a507 1006
+  s_edd6294739ecd8::t_236bd18d199361 22-26,28,35-38,1043,1047-1049,1059
+  s_edd6294739ecd8::t_77045217ad0b4c 1009,1012
+  s_edd6294739ecd8::t_74c1d968806efa 254-255,267-268,1055-1058
+  s_edd6294739ecd8::t_a1a219bef4df4b 1016-1018,1020,1034,1037-1041,1045,1050
+  s_edd6294739ecd8::t_ba30aec91b75fc 130,335-338,972
+  s_edd6294739ecd8::t_efbb741e7e5197 250-251,259-266,274-277,1052-1053
+  s_edd6294739ecd8::t_9fe1a3712f6c38 334
+  s_edd6294739ecd8::t_76a78d996e55b5 278
+  s_edd6294739ecd8::t_08618d811b8416 27,248-249,252-253,256-258,1051,1054
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_edd6294739ecd8::t_b783ff2be506cc 153
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_edd6294739ecd8::t_32aebffcfa22f5 67
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_edd6294739ecd8::t_fe484b18f41355 109
+apps/server/src/shell/authenticated-cluster-http.ts
+  s_edd6294739ecd8::t_31b6d02c47694f 135-136
+  s_edd6294739ecd8::t_5fbd53f5085aa9 55-56
+  s_edd6294739ecd8::t_ace33cef272b4d 97
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_edd6294739ecd8::t_e57d1113e032d2 109
+apps/server/src/shell/durable-execution.ts
+  s_edd6294739ecd8::t_f0345fdcf28340 33,37-42,141-142
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_edd6294739ecd8::t_d495422d8896db 308
+apps/server/src/shell/db/migrations/0060-hmac-key-byte-semantics.test.ts
+  s_edd6294739ecd8::t_b5d12888efdac3 11,74
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_edd6294739ecd8::t_18c102481cdb37 184
+apps/server/src/shell/cluster-runner-http.ts
+  s_edd6294739ecd8::t_f605e93ce6f4e6 225-226
+  s_edd6294739ecd8::t_8247391b856024 39,142,240
+  s_edd6294739ecd8::t_68f119ce904a1b 43-44,59-63,111,202-204,234-235,262-266
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  s_edd6294739ecd8::t_48b082ab31d332 1,4-7,9-10,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "04486fdfb735a4135984b7610e1eee7154b6499d",
+  "prompts": {},
+  "sessions": {
+    "s_edd6294739ecd8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bb6-9572-7386-9e2e-a0c3c2d7cfb1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

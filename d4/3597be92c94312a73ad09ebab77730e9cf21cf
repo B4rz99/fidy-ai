@@ -1,0 +1,24 @@
+apps/server/src/shell/observability/registry.ts
+  h_c6d49c804e0ad2 79
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  h_c6d49c804e0ad2 15,21,61,314-316,381-386
+apps/server/src/shell/subscription/billing-reconciliation-maintenance.ts
+  h_c6d49c804e0ad2 1,4-8,16-18,42-55,58,69
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 42,49,56-57,59,369-421,1175-1635
+apps/server/src/shell/subscription/billing-repo.ts
+  h_c6d49c804e0ad2 1,30,34-44,579-702
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 104-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d43597be92c94312a73ad09ebab77730e9cf21cf",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -8,6 +8,7 @@ import { hmacKeyByteSemantics } from "./0060-hmac-key-byte-semantics";
 
 const fixtureUserId = "f1d1a000-0000-4000-8000-0000000005d1";
 const fixturePairingId = "f1d1a000-0000-4000-8000-0000000005d2";
+const fixturePublicCode = "MNPQ-RSTW";
 const fixtureEmail = "migration-vector@example.com";
 // OpenSSL dgst -sha256 -mac HMAC -macopt hexkey:abab...ab of the credential lookup scope.
 const fixtureLookupIdentifier = "cb2939ae11f44e2f6ff30065939e4ef3ef449aed086eab2ea71868818e674546";
@@ -70,7 +71,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 INSERT INTO browser_login_pairings (
                   id, public_code, verifier_digest, created_at, expires_at
                 ) VALUES (
-                  ${fixturePairingId}, 'BCDF-GHJK', decode(repeat('00', 32), 'hex'),
+                  ${fixturePairingId}, ${fixturePublicCode}, decode(repeat('00', 32), 'hex'),
                   now(), now() + interval '10 minutes'
                 )
               `;

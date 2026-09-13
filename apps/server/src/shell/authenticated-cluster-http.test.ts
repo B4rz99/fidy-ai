@@ -12,13 +12,16 @@ import {
 const tokenFixture = "f1d7c0de".repeat(8);
 const token = Redacted.make(tokenFixture);
 type RunnerHandler = (request: Request) => Promise<Response>;
+const postTo = (
+  handler: RunnerHandler,
+  path: string,
+  headers: Readonly<Record<string, string>> = {}
+): Effect.Effect<Response> =>
+  Effect.promise(() => handler(new Request(`http://runner${path}`, { method: "POST", headers })));
 const post = (
   handler: RunnerHandler,
   headers: Readonly<Record<string, string>> = {}
-): Effect.Effect<Response> =>
-  Effect.promise(() =>
-    handler(new Request("http://runner/_fidy/cluster", { method: "POST", headers }))
-  );
+): Effect.Effect<Response> => postTo(handler, "/_fidy/cluster", headers);
 const get = (handler: RunnerHandler, path: string): Effect.Effect<Response> =>
   Effect.promise(() => handler(new Request(`http://runner${path}`)));
 const releaseHandler = (dispose: () => Promise<void>): Effect.Effect<void> =>
@@ -136,7 +139,7 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
 
     yield* Effect.acquireUseRelease(
       Effect.sync(() =>
-        HttpRouter.toWebHandler(Layer.mergeAll(authenticatedRunnerMiddleware(token), routes), {
+        HttpRouter.toWebHandler(routes.pipe(Layer.provide(authenticatedRunnerMiddleware(token))), {
           disableLogger: true,
         })
       ),
@@ -154,7 +157,27 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
           expect(yield* responseText(missing)).toBe("");
           expect(yield* responseText(malformed)).toBe("");
           expect(yield* responseText(incorrect)).toBe("");
-          expect(yield* Ref.get(invocations)).toBe(0);
+
+          // HttpRouter matches aliases (duplicate slashes, trailing slash, case, decoded escapes)
+          // on the runner route. The guard wraps the route handler itself, so every spelling that
+          // the router dispatches to the runner route is authenticated before the handler runs.
+          const aliases = [
+            "//_fidy//cluster",
+            "/_fidy/cluster/",
+            "/_FIDY/CLUSTER",
+            "/%5Ffidy/cluster",
+          ];
+          for (const path of aliases) {
+            const unauthenticated = yield* postTo(handler, path);
+            expect(unauthenticated.status).toBe(401);
+            expect(yield* responseText(unauthenticated)).toBe("");
+            const authenticated = yield* postTo(handler, path, {
+              authorization: `Bearer ${Redacted.value(token)}`,
+            });
+            expect(authenticated.status).toBe(200);
+            expect(yield* responseText(authenticated)).toBe("accepted");
+          }
+          expect(yield* Ref.get(invocations)).toBe(aliases.length);
 
           expectNotInspected(token, tokenFixture);
           expectNotInspected(authenticatedRunnerMiddleware(token), tokenFixture);
@@ -164,10 +187,41 @@ it.effect("keeps Cluster credentials out of authentication failures", () =>
           });
           expect(accepted.status).toBe(200);
           expect(yield* responseText(accepted)).toBe("accepted");
-          expect(yield* Ref.get(invocations)).toBe(1);
+          expect(yield* Ref.get(invocations)).toBe(aliases.length + 1);
 
           const publicResponse = yield* get(handler, "/health");
           expect(publicResponse.status).toBe(404);
+        }),
+      ({ dispose }) => releaseHandler(dispose)
+    );
+  })
+);
+
+it.effect("leaves routes outside the runner route reachable on a shared router", () =>
+  Effect.gen(function* () {
+    // One `HttpRouter` instance serves every listener in the process, so the runner guard must
+    // attach to the runner route only: a guard that refuses unrelated paths would break the
+    // public listener that shares the router.
+    const runner = HttpRouter.use((router) =>
+      router.add("POST", "/_fidy/cluster", Effect.succeed(HttpServerResponse.text("accepted")))
+    ).pipe(Layer.provide(authenticatedRunnerMiddleware(token)));
+    const health = HttpRouter.use((router) =>
+      router.add("GET", "/health", Effect.succeed(HttpServerResponse.text("ok")))
+    );
+
+    yield* Effect.acquireUseRelease(
+      Effect.sync(() =>
+        HttpRouter.toWebHandler(Layer.mergeAll(runner, health), { disableLogger: true })
+      ),
+      ({ handler }) =>
+        Effect.gen(function* () {
+          const healthResponse = yield* get(handler, "/health");
+          expect(healthResponse.status).toBe(200);
+          expect(yield* responseText(healthResponse)).toBe("ok");
+
+          const unauthenticated = yield* post(handler);
+          expect(unauthenticated.status).toBe(401);
+          expect(yield* responseText(unauthenticated)).toBe("");
         }),
       ({ dispose }) => releaseHandler(dispose)
     );

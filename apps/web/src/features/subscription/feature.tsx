@@ -2,7 +2,7 @@ import { make as makeScopedAtom, useAtom, useAtomSet, useAtomValue } from "@effe
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { type FormEvent, type JSX, useState } from "react";
+import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -416,6 +416,11 @@ type PaymentFlowState =
 
 type PaymentSubmissionFlowState = Extract<PaymentFlowState, { _tag: "PaymentSubmission" }>;
 
+type ScopedPaymentFlow = Readonly<{
+  flowId: number;
+  state: PaymentFlowState;
+}>;
+
 const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
 const submissionFlow = (
   value: PaymentSubmission,
@@ -477,20 +482,29 @@ const refreshPaymentUntilTerminal = Effect.fn(function* (
   }
 });
 
+type PaymentRefreshIdentity = Readonly<{
+  enrollmentId: PreparedEnrollment["enrollmentId"];
+  flowId: ScopedPaymentFlow["flowId"];
+}>;
+
 type PaymentStatusRefreshCommand = Readonly<{
   gateway: EnrollmentGateway;
+  identity: PaymentRefreshIdentity;
   initial: PaymentSubmissionFlowState;
-  publish: (current: PaymentSubmissionFlowState) => void;
+  publish: (identity: PaymentRefreshIdentity, current: PaymentSubmissionFlowState) => void;
 }>;
 
 const PaymentStatusRefresh = makeScopedAtom(() =>
   Atom.fn<PaymentStatusRefreshCommand>()(
-    ({ gateway, initial, publish }) => refreshPaymentUntilTerminal(gateway, initial, publish),
+    ({ gateway, identity, initial, publish }) =>
+      refreshPaymentUntilTerminal(gateway, initial, (current) => publish(identity, current)),
     { concurrent: false }
   )
 );
 
-const PaymentFlow = makeScopedAtom(() => Atom.make<Option.Option<PaymentFlowState>>(Option.none()));
+const PaymentFlow = makeScopedAtom(() =>
+  Atom.make<Option.Option<ScopedPaymentFlow>>(Option.none())
+);
 
 const renderPaymentEnrollment = (input: {
   current: PaymentFlowState;
@@ -607,61 +621,130 @@ type EnrollmentInteraction = Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   failed: boolean;
+  interrupt: () => void;
   start: (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>) => void;
   reset: () => void;
 }>;
 
-const useEnrollmentInteraction = (
-  gateway: Option.Option<EnrollmentGateway>
-): EnrollmentInteraction => {
-  const [enrollment, setEnrollment] = useAtom(PaymentFlow.use());
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+type PaymentFlowSetter = (
+  value:
+    | Option.Option<ScopedPaymentFlow>
+    | ((current: Option.Option<ScopedPaymentFlow>) => Option.Option<ScopedPaymentFlow>)
+) => void;
+
+type PaymentRefreshControl = Readonly<{
+  interrupt: () => void;
+  start: (flowId: number, value: PaymentFlowState) => void;
+}>;
+
+const retainCurrentFlow = (
+  existing: Option.Option<ScopedPaymentFlow>,
+  identity: PaymentRefreshIdentity,
+  current: PaymentSubmissionFlowState
+): Option.Option<ScopedPaymentFlow> =>
+  Option.orElse(
+    Option.map(
+      Option.filter(
+        existing,
+        (active) =>
+          active.flowId === identity.flowId &&
+          active.state._tag === "PaymentSubmission" &&
+          active.state.value.enrollmentId === identity.enrollmentId &&
+          current.value.enrollmentId === identity.enrollmentId
+      ),
+      () => ({ flowId: identity.flowId, state: current })
+    ),
+    () => existing
+  );
+
+const usePaymentRefreshLifetimeRef = (interrupt: () => void): RefCallback<HTMLDivElement> => {
+  const [lifetimeRef] = useState<RefCallback<HTMLDivElement>>(
+    () => (): ReturnType<RefCallback<HTMLDivElement>> => interrupt
+  );
+  return lifetimeRef;
+};
+
+const usePaymentRefresh = (
+  gateway: Option.Option<EnrollmentGateway>,
+  setScopedFlow: PaymentFlowSetter
+): PaymentRefreshControl => {
   const refreshPaymentStatus = useAtomSet(PaymentStatusRefresh.use());
-  const startAutomaticRefresh = (value: PaymentFlowState): void => {
-    if (value._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(value.value)) return;
+  const interrupt = (): void => refreshPaymentStatus(Atom.Interrupt);
+  const start = (flowId: number, value: PaymentFlowState): void => {
+    if (value._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(value.value)) {
+      interrupt();
+      return;
+    }
     Option.match(gateway, {
-      onNone: () => undefined,
+      onNone: interrupt,
       onSome: (availableGateway) =>
         refreshPaymentStatus({
           gateway: availableGateway,
+          identity: { enrollmentId: value.value.enrollmentId, flowId },
           initial: value,
-          publish: (current) => setEnrollment(Option.some(current)),
+          publish: (identity, current) =>
+            setScopedFlow((existing) => retainCurrentFlow(existing, identity, current)),
         }),
     });
   };
-  const run = (work: () => Promise<PaymentFlowState>): Promise<void> => {
+  return { interrupt, start };
+};
+
+const useEnrollmentInteraction = (
+  gateway: Option.Option<EnrollmentGateway>
+): EnrollmentInteraction => {
+  const [scopedFlow, setScopedFlow] = useAtom(PaymentFlow.use());
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const activeFlowId = useRef(0);
+  const paymentRefresh = usePaymentRefresh(gateway, setScopedFlow);
+  const run = (flowId: number, work: () => Promise<PaymentFlowState>): Promise<void> => {
     setBusy(true);
     setFailed(false);
     return work().then(
       (value) => {
-        setEnrollment(Option.some(value));
+        if (activeFlowId.current !== flowId) return;
+        setScopedFlow(Option.some({ flowId, state: value }));
         setBusy(false);
-        startAutomaticRefresh(value);
+        paymentRefresh.start(flowId, value);
       },
       () => {
+        if (activeFlowId.current !== flowId) return;
         setFailed(true);
         setBusy(false);
       }
     );
   };
   const start = (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>): void => {
+    paymentRefresh.interrupt();
+    activeFlowId.current += 1;
+    const flowId = activeFlowId.current;
     Option.match(gateway, {
       onNone: () => undefined,
       onSome: (availableGateway) =>
         Effect.runFork(
           Effect.tryPromise({
-            try: () => run(() => work(availableGateway)),
+            try: () => run(flowId, () => work(availableGateway)),
             catch: () => new EnrollmentInteractionFailed(),
           }).pipe(Effect.ignore)
         ),
     });
   };
   const reset = (): void => {
-    setEnrollment(Option.none());
+    paymentRefresh.interrupt();
+    activeFlowId.current += 1;
+    setScopedFlow(Option.none());
+    setBusy(false);
     setFailed(false);
   };
-  return { enrollment, busy, failed, start, reset };
+  return {
+    enrollment: Option.map(scopedFlow, (active) => active.state),
+    busy,
+    failed,
+    interrupt: paymentRefresh.interrupt,
+    start,
+    reset,
+  };
 };
 
 const OfferSelection = ({
@@ -696,7 +779,8 @@ const ReadyOffersContent = ({
   gateway: Option.Option<EnrollmentGateway>;
 }>): JSX.Element => {
   const [selectedId, setSelectedId] = useState<Option.Option<PriceId>>(Option.none);
-  const { enrollment, busy, failed, start, reset } = useEnrollmentInteraction(gateway);
+  const { enrollment, busy, failed, interrupt, start, reset } = useEnrollmentInteraction(gateway);
+  const refreshLifetimeRef = usePaymentRefreshLifetimeRef(interrupt);
   const presented = offers.map(presentSubscriptionOffer);
   const sharedTerms = presentSubscriptionOffer(offers[0]);
   const selectionDisabled = Option.exists(
@@ -707,7 +791,7 @@ const ReadyOffersContent = ({
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
   return (
-    <div className="flex flex-col gap-6">
+    <div ref={refreshLifetimeRef} className="flex flex-col gap-6">
       <SubscriptionTerms offer={sharedTerms} />
       <OfferSelection
         disabled={busy || selectionDisabled}

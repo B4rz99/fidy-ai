@@ -16,7 +16,7 @@ import {
   TelemetryEnvelopeRecording,
 } from "~/shell/observability/envelope-recorder";
 import { UserId } from "~/core/identity/reference";
-import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
+import { TokenBearer } from "~/core/tokens/model";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   WhatsAppInboundWork,
@@ -93,7 +93,10 @@ const agentWith = (
 });
 
 const seedInboundJob = Effect.fn("Test.seedWhatsAppInboundJob")(function* () {
-  yield* seedConsentedPatIdentity({ userId: work.userId, bearer: defaultPatBearer });
+  yield* seedConsentedPatIdentity({
+    userId: work.userId,
+    bearer: TokenBearer.make("fin_whats550_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+  });
   const sql = yield* MigrationSqlClient;
   yield* sql`INSERT INTO whatsapp_message_evidence
     (provider_message_id, user_id, direction, occurred_at)

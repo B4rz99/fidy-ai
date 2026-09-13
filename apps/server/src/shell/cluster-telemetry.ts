@@ -140,12 +140,15 @@ type RunnerCallErrorTag =
  * envelopes and control messages are not operator-facing request retries, and other error tags do
  * not reach the retry loop.
  */
+const requestRetryErrorTags: ReadonlySet<RunnerCallErrorTag> = new Set([
+  "EntityNotAssignedToRunner",
+  "RunnerUnavailable",
+]);
+
 export const isRequestRetry = (send: {
   readonly messageTag: "OutgoingRequest" | "OutgoingEnvelope";
   readonly errorTag: RunnerCallErrorTag;
-}): boolean =>
-  send.messageTag === "OutgoingRequest" &&
-  (send.errorTag === "EntityNotAssignedToRunner" || send.errorTag === "RunnerUnavailable");
+}): boolean => send.messageTag === "OutgoingRequest" && requestRetryErrorTags.has(send.errorTag);
 
 /**
  * Wraps the runner client so retryable request-attempt failures become a delta rate in each

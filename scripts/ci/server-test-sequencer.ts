@@ -1,8 +1,12 @@
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 import { serverTestTimings } from "./server-test-timings";
+import { cachedServerTestTimings } from "./server-test-timings-cache";
 
 const measuredSeconds = new Map(
-  Object.entries(serverTestTimings).map(([path, seconds]) => [path, Number(seconds)])
+  Object.entries({ ...serverTestTimings, ...cachedServerTestTimings }).map(([path, seconds]) => [
+    path,
+    Number(seconds),
+  ])
 );
 const bytesPerFallbackWeight = 50_000;
 

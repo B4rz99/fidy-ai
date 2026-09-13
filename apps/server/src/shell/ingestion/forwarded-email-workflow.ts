@@ -692,9 +692,9 @@ export const ForwardedEmailQueueLive = Layer.effectDiscard(
     yield* queue.take(emailQueueHandler("submit-background")).pipe(
       // Queue decoding fails outside the handler boundary; preserve shutdown and pace every other
       // native or already-redacted failure without logging its Cause.
-      // @effect-diagnostics-next-line catchConditionalRefailToCatchIf:off
-      Effect.catchCause((cause) =>
-        Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.sleep("1 second")
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterrupts(cause),
+        () => Effect.sleep("1 second")
       ),
       Effect.forever,
       Effect.forkScoped

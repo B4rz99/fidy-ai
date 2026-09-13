@@ -873,12 +873,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
               })
             );
-            const crypto = yield* Crypto.Crypto;
-            yield* grantCurrentOnboardingConsentForTesting({
-              sourceUserId: defaultUserId,
-              subjectUserId: input.userId,
-              grantId: ConsentRecordId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
-            });
             yield* sql`
             INSERT INTO email_forwarding_addresses (user_id, local_part)
             VALUES (${input.userId}, ${input.localPart})

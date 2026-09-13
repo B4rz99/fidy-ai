@@ -15,7 +15,7 @@ import {
   recipientLabelLimit,
 } from "@/transport/client";
 import { Crypto, DateTime, Duration, Effect, PlatformError, Redacted } from "effect";
-import { bearerRevealLifetime } from "./policy";
+import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import {
   type Dispatch,
   type FormEvent,
@@ -321,26 +321,19 @@ const IssuedGrant = ({
 
 type SetCreationState = Dispatch<SetStateAction<ManualPATCreationState>>;
 
+const expireIssuedPAT = (issued: IssuedPAT, setState: SetCreationState): void => {
+  setState((current) =>
+    current._tag === "Issued" && current.issued.pat.id === issued.pat.id ? initialState : current
+  );
+};
+
 const revealIssuedPAT = (
   issued: IssuedPAT,
   setState: SetCreationState,
-  clearClipboard: (bearer: RedactedTokenBearer) => void
+  clipboard: SensitiveClipboard
 ): void => {
   setState({ _tag: "Issued", issued });
-  Effect.runFork(
-    Effect.sleep(bearerRevealLifetime).pipe(
-      Effect.andThen(
-        Effect.sync(() => {
-          clearClipboard(issued.bearer);
-          setState((current) =>
-            current._tag === "Issued" && current.issued.pat.id === issued.pat.id
-              ? initialState
-              : current
-          );
-        })
-      )
-    )
-  );
+  clipboard.reveal(() => expireIssuedPAT(issued, setState));
 };
 
 const beginReview = (
@@ -376,12 +369,12 @@ const ReviewState = ({
   state,
   setState,
   issue,
-  clearClipboard,
+  clipboard,
 }: Readonly<{
   state: Extract<ManualPATCreationState, { _tag: "Reviewing" | "Issuing" }>;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  clearClipboard: (bearer: RedactedTokenBearer) => void;
+  clipboard: SensitiveClipboard;
 }>): JSX.Element => (
   <GrantReview
     confirm={() => {
@@ -390,7 +383,7 @@ const ReviewState = ({
       issue({
         grant,
         requestId,
-        onIssued: (issued) => revealIssuedPAT(issued, setState, clearClipboard),
+        onIssued: (issued) => revealIssuedPAT(issued, setState, clipboard),
         onFailed: () => setState({ _tag: "IssueFailed", grant, requestId }),
       });
     }}
@@ -441,33 +434,24 @@ const CreationContent = ({
   state,
   setState,
   issue,
-  copyToClipboard,
-  clearClipboard,
+  clipboard,
 }: Readonly<{
   state: ManualPATCreationState;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
-  clearClipboard: (bearer: RedactedTokenBearer) => void;
+  clipboard: SensitiveClipboard;
 }>): JSX.Element => {
   if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
   if (state._tag === "Reviewing" || state._tag === "Issuing") {
-    return (
-      <ReviewState
-        clearClipboard={clearClipboard}
-        issue={issue}
-        setState={setState}
-        state={state}
-      />
-    );
+    return <ReviewState clipboard={clipboard} issue={issue} setState={setState} state={state} />;
   }
   if (state._tag === "IssueFailed") return <FailedState setState={setState} state={state} />;
   return (
     <IssuedGrant
-      copyToClipboard={copyToClipboard}
+      copyToClipboard={(bearer, onCopied) => clipboard.copy(Redacted.value(bearer), onCopied)}
       issued={state.issued}
       reset={() => {
-        clearClipboard(state.issued.bearer);
+        clipboard.clear(Redacted.value(state.issued.bearer));
         setState(initialState);
       }}
     />
@@ -482,19 +466,17 @@ const onPageHide = (listener: () => void): (() => void) => {
 /** Guides one exact PAT grant from editing through review and one-time disclosure. */
 export const ManualPATView = ({
   issue,
-  copyToClipboard,
-  clearClipboard,
+  clipboard,
 }: Readonly<{
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
-  clearClipboard: (bearer: RedactedTokenBearer) => void;
+  clipboard: SensitiveClipboard;
 }>): JSX.Element => {
   const [state, setState] = useState<ManualPATCreationState>(initialState);
   const lifecycleRef: RefCallback<HTMLElement> = useCallback(
     (node) => {
       if (node === null || state._tag !== "Issued") return;
       const clearBearer = (): void => {
-        clearClipboard(state.issued.bearer);
+        clipboard.clear(Redacted.value(state.issued.bearer));
         setState(initialState);
       };
       const stopListening = onPageHide(clearBearer);
@@ -503,7 +485,7 @@ export const ManualPATView = ({
         clearBearer();
       };
     },
-    [clearClipboard, state]
+    [clipboard, state]
   );
   return (
     <main
@@ -519,13 +501,7 @@ export const ManualPATView = ({
           Crea un token con el acceso mínimo que necesita su destinatario.
         </p>
       </header>
-      <CreationContent
-        clearClipboard={clearClipboard}
-        copyToClipboard={copyToClipboard}
-        issue={issue}
-        setState={setState}
-        state={state}
-      />
+      <CreationContent clipboard={clipboard} issue={issue} setState={setState} state={state} />
     </main>
   );
 };

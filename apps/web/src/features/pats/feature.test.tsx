@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DateTime, Duration, Option, Redacted } from "effect";
+import { DateTime, Option, Redacted } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   type ActivePATMetadata,
@@ -13,8 +13,8 @@ import {
   patLifetimeDayOptions,
   recipientLabelLimit,
 } from "@/transport/client";
-import { bearerRevealLifetime } from "./policy";
-import { type IssueManualPATCommand, ManualPATView, type RedactedTokenBearer } from "./view";
+import { makeSensitiveClipboardSpy } from "@/testing/sensitive-clipboard";
+import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
   ActivePATManagementView,
@@ -70,26 +70,14 @@ const issueReviewedPAT = (): void => {
   fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
 };
 
-const expectRedactedBearer = (received: Option.Option<RedactedTokenBearer>): void => {
-  expect(Option.map(received, Redacted.value)).toEqual(Option.some(bearer));
-};
-
 it("defaults to 90 days, reviews exact expiration, and issues the selected fixed lifetime", () => {
   vi.useFakeTimers();
   vi.setSystemTime(DateTime.toEpochMillis(createdAt));
   const issue = vi.fn((command: IssueManualPATCommand) => {
     command.onIssued(issued);
   });
-  const copyToClipboard = vi.fn((_bearer: RedactedTokenBearer, onCopied: () => void) => onCopied());
-  const clearClipboard = vi.fn();
-  render(
-    <ManualPATView
-      key="signed-in"
-      clearClipboard={clearClipboard}
-      copyToClipboard={copyToClipboard}
-      issue={issue}
-    />
-  );
+  const clipboard = makeSensitiveClipboardSpy();
+  render(<ManualPATView key="signed-in" clipboard={clipboard} issue={issue} />);
 
   expect(screen.getByRole("button", { name: "90 días" })).toHaveAttribute("aria-pressed", "true");
   prepareGrantReview();
@@ -119,9 +107,22 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   expect(screen.queryByText("Se muestra una sola vez")).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Copiar token" }));
-  expect(copyToClipboard).toHaveBeenCalledTimes(1);
-  expectRedactedBearer(Option.fromUndefinedOr(copyToClipboard.mock.calls[0]?.[0]));
+  expect(clipboard.copy).toHaveBeenCalledWith(bearer, expect.any(Function));
   expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
+});
+
+it("hides an issued bearer when its owned reveal expires", () => {
+  const clipboard = makeSensitiveClipboardSpy();
+  const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
+  render(<ManualPATView clipboard={clipboard} issue={issue} />);
+
+  issueReviewedPAT();
+  expect(screen.getByText(bearer)).toBeVisible();
+  expect(clipboard.reveal).toHaveBeenCalledWith(expect.any(Function));
+
+  act(() => clipboard.reveal.mock.calls[0]?.[0]());
+
+  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
 });
 
 it("hides an issued bearer and clears the clipboard when its disclosure unmounts", () => {
@@ -130,34 +131,22 @@ it("hides an issued bearer and clears the clipboard when its disclosure unmounts
   const issue = vi.fn((command: IssueManualPATCommand) => {
     command.onIssued(issued);
   });
-  const clearClipboard = vi.fn();
+  const clipboard = makeSensitiveClipboardSpy();
   const { rerender } = render(
-    <ManualPATView
-      key="signed-in"
-      clearClipboard={clearClipboard}
-      copyToClipboard={vi.fn()}
-      issue={issue}
-    />
+    <ManualPATView key="signed-in" clipboard={clipboard} issue={issue} />
   );
 
   issueReviewedPAT();
   expect(screen.getByText(bearer)).toBeVisible();
 
-  rerender(
-    <ManualPATView
-      key="navigated"
-      clearClipboard={clearClipboard}
-      copyToClipboard={vi.fn()}
-      issue={issue}
-    />
-  );
+  rerender(<ManualPATView key="navigated" clipboard={clipboard} issue={issue} />);
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls[0]?.[0]));
+  expect(clipboard.clear).toHaveBeenCalledWith(bearer);
   vi.useRealTimers();
 });
 
 it("offers every fixed lifetime preset and preserves a changed selection through editing", () => {
-  render(<ManualPATView clearClipboard={vi.fn()} copyToClipboard={vi.fn()} issue={vi.fn()} />);
+  render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={vi.fn()} />);
 
   for (const days of patLifetimeDayOptions) {
     expect(screen.getByRole("button", { name: `${days} días` })).toBeVisible();
@@ -171,7 +160,7 @@ it("offers every fixed lifetime preset and preserves a changed selection through
 
 it("edits a reviewed grant and preserves one request identity across a failed retry", () => {
   const issue = vi.fn<(command: IssueManualPATCommand) => void>();
-  render(<ManualPATView clearClipboard={vi.fn()} copyToClipboard={vi.fn()} issue={issue} />);
+  render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={issue} />);
 
   expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), {
@@ -364,22 +353,19 @@ it("serializes revocation, allows cancellation, and reports failures and plural 
   expect(screen.getByText("Se desactivaron 2 tokens activos.")).toBeVisible();
 });
 
-it("clears an issued bearer on reset and page hide", async () => {
-  vi.useFakeTimers();
-  const clearClipboard = vi.fn();
+it("clears an issued bearer on reset and page hide", () => {
+  const clipboard = makeSensitiveClipboardSpy();
   const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
-  render(<ManualPATView clearClipboard={clearClipboard} copyToClipboard={vi.fn()} issue={issue} />);
+  render(<ManualPATView clipboard={clipboard} issue={issue} />);
 
   issueReviewedPAT();
   fireEvent.click(screen.getByRole("button", { name: "Crear otro token" }));
-  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls[0]?.[0]));
-  await vi.advanceTimersByTimeAsync(Duration.toMillis(bearerRevealLifetime));
+  expect(clipboard.clear).toHaveBeenCalledWith(bearer);
 
   issueReviewedPAT();
   act(() => {
     window.dispatchEvent(new Event("pagehide"));
   });
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expectRedactedBearer(Option.fromUndefinedOr(clearClipboard.mock.calls.at(-1)?.[0]));
-  vi.useRealTimers();
+  expect(clipboard.clear).toHaveBeenLastCalledWith(bearer);
 });

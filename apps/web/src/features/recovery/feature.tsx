@@ -3,7 +3,8 @@ import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Redacted } from "effect";
 import type { Atom } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
-import { writeClipboardText } from "@/browser/clipboard";
+import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
+import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -30,7 +31,7 @@ type RotationState =
 
 type RotationViewProps = Readonly<{
   rotate: (command: RotateBackupRecoveryCommand) => void;
-  copy: (code: BackupRecoveryCode, onCopied: () => void) => void;
+  clipboard: SensitiveClipboard;
 }>;
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
@@ -83,7 +84,10 @@ const RotationAction = (props: {
 );
 
 /** Mounted disclosure view; replacing its React identity irreversibly drops the raw code state. */
-export const BackupRecoveryRotationView = ({ rotate, copy }: RotationViewProps): JSX.Element => {
+export const BackupRecoveryRotationView = ({
+  rotate,
+  clipboard,
+}: RotationViewProps): JSX.Element => {
   const [state, setState] = useState<RotationState>({ _tag: "Idle" });
   const start = (): void => {
     setState({ _tag: "Rotating" });
@@ -94,7 +98,7 @@ export const BackupRecoveryRotationView = ({ rotate, copy }: RotationViewProps):
   };
   const copyCode = (): void => {
     if (state._tag !== "Disclosed") return;
-    copy(state.code, () => setState({ ...state, copied: true }));
+    clipboard.copy(state.code, () => setState({ ...state, copied: true }));
   };
 
   return (
@@ -129,18 +133,14 @@ const makeRotateCommand = (
     { concurrent: false }
   );
 
-const copyRecoveryCode = (code: BackupRecoveryCode, onCopied: () => void): void => {
-  Effect.runFork(
-    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), code).pipe(
-      Effect.tap(() => Effect.sync(onCopied)),
-      Effect.ignore
-    )
-  );
-};
-
 /** Coordinates the canonical mutation without retaining its raw response in shared Atom state. */
 export const BackupRecoveryFeature = (): JSX.Element => {
   const router = useRouter();
   const [rotateAtom] = useState(() => makeRotateCommand(router.options.context.apiClient));
-  return <BackupRecoveryRotationView copy={copyRecoveryCode} rotate={useAtomSet(rotateAtom)} />;
+  const rotate = useAtomSet(rotateAtom);
+  return (
+    <SensitiveClipboardBoundary className={Option.none()} lifetime={sensitiveClipboardLifetime}>
+      {(clipboard) => <BackupRecoveryRotationView clipboard={clipboard} rotate={rotate} />}
+    </SensitiveClipboardBoundary>
+  );
 };

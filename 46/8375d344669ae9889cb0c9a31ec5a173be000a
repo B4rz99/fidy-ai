@@ -1,0 +1,18 @@
+apps/server/src/shell/testing/durable-execution-compatibility/declaration-coverage.compatibility.test.ts
+  h_c6d49c804e0ad2 2,126-146,166,180,450-460
+apps/server/src/shell/testing/durable-workflow-compatibility.ts
+  h_c6d49c804e0ad2 4,13-14,1490-1661,1669,1672-1673,1675-1677,1681,1687-1688,1690-1692,1700,1706,1709,1714,1720,1730,1744,1795,1818-1821,1826-1827,1836,1843,1845,1949-1952,1957-1959
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 47-54,104-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "468375d344669ae9889cb0c9a31ec5a173be000a",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

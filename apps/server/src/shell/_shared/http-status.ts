@@ -25,6 +25,9 @@ export const tooManyRequestsStatus = 429;
 /** Lowest status in the range that blames the server rather than the caller. */
 export const firstServerErrorStatus = 500;
 
+/** The status returned when a required server dependency is unavailable. */
+export const serviceUnavailableStatus = 503;
+
 /** Highest status in the range that blames the server rather than the caller. */
 export const lastServerErrorStatus = 599;
 

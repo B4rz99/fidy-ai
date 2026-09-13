@@ -2,21 +2,28 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { CurrentAgentLimits } from "~/shell/agent/agent-service";
 import {
+  maximumWhatsAppInboundAttempts,
+  whatsappInboundConsumerCount,
+} from "~/shell/channels/whatsapp/inbound-execution";
+import { maximumStatementIngestionAttempts } from "~/shell/ingestion/worker";
+import { maximumBillingAttemptQueueAttempts } from "~/shell/subscription/billing-repo";
+import {
   type DurableQueueSignals,
   classifyDurableQueueAttention,
   durableQueueBacklogAgeSeconds,
   durableQueueBacklogDepth,
+  durableQueueDefaultMaxAttempts,
   durableQueueHandlerSettlementOverheadSeconds,
   durableQueueLeaseStallSeconds,
   durableQueueLockExpirationSeconds,
   durableQueueLockRefreshSeconds,
   durableQueueLongestHandlerPauseSeconds,
-  durableQueueMaxAttempts,
   durableQueueNames,
   durableQueueNativeDecodeFailurePrefix,
+  durableQueueNativeJsonFailurePrefix,
   hasDurableQueueAttention,
-  maxAttemptsForDurableQueue,
-  observedMaxAttemptsForDurableQueue,
+  isPermanentDurableQueueAttention,
+  isTransientDurableQueueAttention,
 } from "./durable-queue-policy";
 
 const healthySignals: DurableQueueSignals = {
@@ -37,27 +44,38 @@ it("declares one stable queue name per production queue within the Effect column
   }
 });
 
-it("keeps statement ingestion on the fast retry budget and every other queue on the native ceiling", () => {
-  expect(maxAttemptsForDurableQueue("statement-ingestion")).toBe(3);
-  for (const name of durableQueueNames) {
-    if (name === "statement-ingestion") continue;
-    expect(maxAttemptsForDurableQueue(name)).toBe(10);
-  }
-  expect(Object.keys(durableQueueMaxAttempts).sort()).toEqual([...durableQueueNames].sort());
+it("keeps owner-specific retry budgets explicit beside the native ceiling", () => {
+  expect(durableQueueDefaultMaxAttempts).toBe(10);
+  expect(maximumStatementIngestionAttempts).toBe(3);
+  expect(maximumWhatsAppInboundAttempts).toBe(10);
+  expect(maximumBillingAttemptQueueAttempts).toBe(10);
 });
 
-it("falls back to the native ceiling for names outside the production policy", () => {
-  expect(observedMaxAttemptsForDurableQueue("test-only-queue")).toBe(10);
-});
-
-it("pins the native decode-failure prefix to the store's failure rendering", () => {
-  const exit = Effect.runSync(
+it("pins native decode-failure prefixes to the store's failure rendering", () => {
+  const schemaExit = Effect.runSync(
     Effect.exit(Schema.decodeUnknownEffect(Schema.Struct({ note: Schema.String }))({ note: null }))
   );
-  expect(Exit.isFailure(exit)).toBe(true);
-  if (Exit.isFailure(exit)) {
-    expect(Cause.pretty(exit.cause).startsWith(durableQueueNativeDecodeFailurePrefix)).toBe(true);
+  expect(Exit.isFailure(schemaExit)).toBe(true);
+  if (Exit.isFailure(schemaExit)) {
+    expect(Cause.pretty(schemaExit.cause).startsWith(durableQueueNativeDecodeFailurePrefix)).toBe(
+      true
+    );
   }
+  const jsonExit = Effect.runSync(
+    Effect.exit(
+      Effect.sync(() => {
+        throw new SyntaxError("invalid persisted JSON");
+      })
+    )
+  );
+  expect(Exit.isFailure(jsonExit)).toBe(true);
+  if (Exit.isFailure(jsonExit)) {
+    expect(Cause.pretty(jsonExit.cause).startsWith(durableQueueNativeJsonFailurePrefix)).toBe(true);
+  }
+});
+
+it("declares eight longest-handler lanes per runtime", () => {
+  expect(whatsappInboundConsumerCount).toBe(8);
 });
 
 it("holds lock expiry above twice the longest handler pause with active refresh", () => {
@@ -142,4 +160,13 @@ it("flags permanently ineligible work separately from transient signals", () => 
   });
   expect(decodeFailure.decodeFailure).toBe(true);
   expect(decodeFailure.exhausted).toBe(false);
+  expect(isTransientDurableQueueAttention(decodeFailure)).toBe(true);
+  expect(isPermanentDurableQueueAttention(decodeFailure)).toBe(false);
+  const exhaustedDecodeFailure = classifyDurableQueueAttention({
+    ...healthySignals,
+    decodeFailureCount: 1,
+    exhaustedCount: 1,
+  });
+  expect(isTransientDurableQueueAttention(exhaustedDecodeFailure)).toBe(false);
+  expect(isPermanentDurableQueueAttention(exhaustedDecodeFailure)).toBe(true);
 });

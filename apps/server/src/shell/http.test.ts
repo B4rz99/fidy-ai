@@ -2,34 +2,9 @@ import { expect, it, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { DurableQueueReadiness } from "./durable-queue-health";
 import { classifyDurableQueueAttention, durableQueueNames } from "./durable-queue-policy";
 import { ExactOriginCorsLive } from "./http";
-
-/** Strict readiness body so the wiring test proves the exact bounded surface, not a cast. */
-const DurableQueueReadinessBody = Schema.Struct({
-  queues: Schema.Array(
-    Schema.Struct({
-      queueName: Schema.String,
-      pendingDepth: Schema.Int,
-      oldestPendingAgeSeconds: Schema.Int,
-      retainedCount: Schema.Int,
-      oldestRetainedAgeSeconds: Schema.Int,
-      activeLeaseCount: Schema.Int,
-      staleLeaseCount: Schema.Int,
-      stalledLeaseCount: Schema.Int,
-      redeliveredCount: Schema.Int,
-      failedCount: Schema.Int,
-      decodeFailureCount: Schema.Int,
-      exhaustedCount: Schema.Int,
-      attention: Schema.Struct({
-        backlog: Schema.Boolean,
-        leaseChurn: Schema.Boolean,
-        exhausted: Schema.Boolean,
-        decodeFailure: Schema.Boolean,
-      }),
-    })
-  ),
-});
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
   ConfigProvider.fromEnv({
@@ -81,12 +56,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("exposes bounded durable-queue readiness without caller credentials", () =>
+    it.effect("exposes bounded durable-queue readiness to an Access-authenticated operator", () =>
       Effect.gen(function* () {
-        const response = yield* HttpClient.get("/readiness/durable-queues");
-        const body = yield* Schema.decodeUnknownEffect(DurableQueueReadinessBody)(
-          yield* response.json
-        );
+        const response = yield* HttpClient.get("/internal/readiness/durable-queues", {
+          headers: { "cf-access-jwt-assertion": "test-support-access-token" },
+        });
+        const body = yield* Schema.decodeUnknownEffect(DurableQueueReadiness)(yield* response.json);
         const expectedKeys = [
           "queueName",
           "pendingDepth",
@@ -96,7 +71,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "activeLeaseCount",
           "staleLeaseCount",
           "stalledLeaseCount",
-          "redeliveredCount",
+          "redeliveryCount",
           "failedCount",
           "decodeFailureCount",
           "exhaustedCount",
@@ -104,6 +79,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ].sort();
 
         expect(response.status).toBe(200);
+        expect(response.headers["cache-control"]).toBe("no-store");
         expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
           [...durableQueueNames].sort()
         );
@@ -114,6 +90,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           expect(queue.attention).toEqual(classifyDurableQueueAttention(queue));
         }
+      })
+    );
+
+    it.effect("refuses detailed durable-queue readiness without Access authentication", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get("/internal/readiness/durable-queues");
+
+        expect(response.status).toBe(401);
+        expect(response.headers["cache-control"]).toBe("no-store");
       })
     );
 

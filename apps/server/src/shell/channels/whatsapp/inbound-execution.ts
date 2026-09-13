@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
-import { maxAttemptsForDurableQueue } from "~/shell/durable-queue-policy";
 import { WhatsAppInboundJobId } from "./model";
 
 /** Identifier-only durable handoff for one accepted User-owned WhatsApp message. */
@@ -12,11 +11,14 @@ export const WhatsAppInboundWork = Schema.Struct({
 }).annotate({ identifier: "WhatsAppInboundWork" });
 export type WhatsAppInboundWork = typeof WhatsAppInboundWork.Type;
 
-/** Retry budget shared by acquisition and exhausted-work retirement, declared by queue policy. */
-export const maximumWhatsAppInboundAttempts = maxAttemptsForDurableQueue("whatsapp-inbound-turn");
+/** Retry budget shared by acquisition and exhausted-work retirement. */
+export const maximumWhatsAppInboundAttempts = 10;
 
 /** Stable persisted queue whose item identity is the accepted inbound job identity. */
 export const whatsappInboundQueueName = "whatsapp-inbound-turn";
+
+/** Concurrent inbound queue consumers started by each production runtime. */
+export const whatsappInboundConsumerCount = 8;
 export const whatsappInboundQueue = PersistedQueue.make({
   name: whatsappInboundQueueName,
   schema: WhatsAppInboundWork,

@@ -14,7 +14,6 @@ import { TransactionExtraction } from "~/core/transactions/model";
 import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
-import { maxAttemptsForDurableQueue } from "~/shell/durable-queue-policy";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import { StatementColumnMapper } from "./column-mapper";
@@ -61,9 +60,7 @@ class StatementIngestionPayloadMismatch extends Schema.Error<StatementIngestionP
 }) {}
 
 export const statementIngestionQueueName = "statement-ingestion";
-export const maximumStatementIngestionAttempts = maxAttemptsForDurableQueue(
-  statementIngestionQueueName
-);
+export const maximumStatementIngestionAttempts = 3;
 export const statementIngestionQueue = PersistedQueue.make({
   name: statementIngestionQueueName,
   schema: StatementIngestionPayload,

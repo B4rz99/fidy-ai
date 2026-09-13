@@ -1,5 +1,6 @@
 import type { Schema } from "effect";
 import type { PersistedQueue } from "effect/unstable/persistence";
+import { type DurableQueueName, durableQueueNames } from "~/shell/durable-queue-policy";
 import {
   ConsentDisclosureEvidencePayload,
   ConsentDisclosurePayload,
@@ -69,21 +70,8 @@ export const maximumQueueIdLength = 36;
  * defaults or unions; an incompatible change requires a named new queue or an
  * explicit drain/migration plan recorded alongside the new fixture.
  */
-export const productionQueueNames = [
-  consentDisclosureQueueName,
-  consentDisclosureEvidenceQueueName,
-  onboardingDeliveryQueueName,
-  whatsappInboundQueueName,
-  pairingStartQueueName,
-  pairingDeliveryQueueName,
-  pairingExpiryQueueName,
-  billingAttemptQueueName,
-  replacementDeliveryQueueName,
-  replacementExpiryQueueName,
-  forwardedEmailQueueName,
-  statementIngestionQueueName,
-] as const;
-export type ProductionQueueName = (typeof productionQueueNames)[number];
+export const productionQueueNames = durableQueueNames;
+export type ProductionQueueName = DurableQueueName;
 
 /**
  * One production queue's compatibility contract. The schema is the decoder the

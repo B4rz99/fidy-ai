@@ -18,12 +18,11 @@ import { BackupRecoveryFeature } from "@/features/recovery/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
-import type { FidyClient, SubscriptionEnrollmentClient, WebAuthClient } from "@/transport/client";
+import type { FidyClient, WebAuthClient } from "@/transport/client";
 
 type WebRouterContext = Readonly<{
   apiClient: FidyClient;
   webAuthClient: WebAuthClient;
-  subscriptionEnrollmentClient: SubscriptionEnrollmentClient;
 }>;
 type WebRouterOptions = WebRouterContext &
   Readonly<{
@@ -130,7 +129,6 @@ export const createWebRouter = (options: WebRouterOptions) =>
     context: {
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
-      subscriptionEnrollmentClient: options.subscriptionEnrollmentClient,
     },
     history: Option.getOrUndefined(options.history),
   });

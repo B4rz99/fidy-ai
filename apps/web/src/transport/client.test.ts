@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { DateTime, Effect, Layer, Option, Redacted } from "effect";
+import { DateTime, Deferred, Effect, Layer, Option, Redacted } from "effect";
 import {
   HttpClient,
   type HttpClientRequest,
@@ -10,7 +10,12 @@ import {
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { describe, expect, it } from "vitest";
-import { ManualPATRequestId, PATRecipientLabel, makeFidyClient } from "./client";
+import {
+  ManualPATRequestId,
+  PATRecipientLabel,
+  makeFidyClient,
+  makeSubscriptionEnrollmentClient,
+} from "./client";
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
@@ -37,6 +42,15 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
+const interruptibleWork = (
+  onStarted: () => void,
+  onInterrupted: () => void
+): Effect.Effect<never> =>
+  Effect.callback<never>(() => {
+    onStarted();
+    return Effect.sync(onInterrupted);
+  });
+
 const manualPATDisclosureBody = (bearer: string): unknown => ({
   data: {
     pat: {
@@ -55,6 +69,30 @@ const manualPATDisclosureBody = (bearer: string): unknown => ({
     bearer,
   },
   next: [],
+});
+
+describe("subscription enrollment transport", () => {
+  it("interrupts in-flight work and refuses access as soon as its runtime is disposed", async () => {
+    const started = Deferred.makeUnsafe<void>();
+    let interrupted = 0;
+    const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
+    const request = client.execute(() =>
+      interruptibleWork(
+        () => Effect.runSync(Deferred.succeed(started, undefined)),
+        () => {
+          interrupted += 1;
+        }
+      )
+    );
+
+    await Effect.runPromise(Deferred.await(started));
+    const disposal = client.dispose();
+
+    await expect(request).rejects.toBeDefined();
+    await disposal;
+    expect(interrupted).toBe(1);
+    await expect(client.execute(() => Effect.succeed("stale"))).rejects.toBeDefined();
+  });
 });
 
 describe("canonical browser transport", () => {

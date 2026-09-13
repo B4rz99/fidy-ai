@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
+import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   BackupRecoveryCode,
   type FidyClient,
@@ -64,13 +65,15 @@ const renderRoute = async (
   const router = createWebRouter({
     apiClient,
     webAuthClient,
-    subscriptionEnrollmentClient: makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com"),
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
-
   render(
     <SessionRegistryProvider>
-      <RouterProvider router={router} />
+      <SubscriptionEnrollmentLifetime
+        makeClient={() => makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com")}
+      >
+        <RouterProvider router={router} />
+      </SubscriptionEnrollmentLifetime>
     </SessionRegistryProvider>
   );
   await router.load();

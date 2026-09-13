@@ -1,0 +1,41 @@
+apps/web/src/features/transactions/feature.test.tsx
+  s_a634f65f042137::t_7d61e2c98ef274 91,93
+  s_a634f65f042137::t_1d3a4159746ac2 198,204-211
+  s_a634f65f042137::t_01c82ef5ae7061 157-160,192,201,203
+  s_a634f65f042137::t_cc3ca9a0aff7ee 94-95,105
+  s_a634f65f042137::t_02ecb09a7b3c9a 171,173-178
+  s_a634f65f042137::t_820994ca33f10b 92,96-104,106-108,117-118,126-133,246-247,249-256
+apps/web/src/features/dashboard/feature.test.tsx
+  s_a634f65f042137::t_e516239af45b5f 340-347,365-369,373
+  s_a634f65f042137::t_0fe90baed838ba 372
+  s_a634f65f042137::t_aaa113f3f3d2b8 383,386-391
+  s_a634f65f042137::t_86648d7d889c4a 371
+  s_a634f65f042137::t_1b1b5eaee9e6be 385,394
+  s_96f79810fa0fd1::t_9f9ba0f38107dc 392
+apps/web/src/features/subscription/feature.test.tsx
+  s_a634f65f042137::t_37b0b50e16092c 169-182,185,187,190,193,195-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0733680de06bccabca9925e479a00dd2329e0ffe",
+  "prompts": {},
+  "sessions": {
+    "s_96f79810fa0fd1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-3ccd-7059-8d21-dcc4141d6e50",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

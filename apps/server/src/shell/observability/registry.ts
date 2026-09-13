@@ -59,6 +59,7 @@ export const TelemetryRegistry = {
     "http.kapsoWebhook",
     "http.kapsoIdentityWebhook",
     "authorization.agentBearer",
+    "onboarding.deliverVerification",
     "agent.hostedTurn",
     "agent.modelRound",
     "whatsapp.publishTurn",

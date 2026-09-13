@@ -1,4 +1,4 @@
-import { Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
+import { type Cause, Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import {
   EntityAddress,
   EntityId,
@@ -7,8 +7,15 @@ import {
   Sharding,
 } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
+import { SqlError } from "effect/unstable/sql";
 import { Activity, Workflow } from "effect/unstable/workflow";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
+import {
+  type PersistedQueueHandlerFailure,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
+import { TelemetryAttempt, TelemetryCount } from "~/shell/observability/protocol";
+import { Telemetry } from "~/shell/observability/telemetry";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import {
   attemptEmailDelivery,
@@ -56,6 +63,64 @@ export const onboardingEmailDeliveryQueue = PersistedQueue.make({
   name: onboardingDeliveryQueueName,
   schema: OnboardingDeliveryPayload,
 });
+
+const OnboardingDeliveryRetry = Schema.TaggedStruct("OnboardingDeliveryRetry", {
+  reason: Schema.Literal("retryable-sql-failure"),
+});
+type OnboardingDeliveryRetry = typeof OnboardingDeliveryRetry.Type;
+type OnboardingQueueFailure = OnboardingDeliveryFailed | OnboardingDeliveryRetry;
+
+const retryableSqlDefectCause = (cause: Cause.Cause<OnboardingDeliveryFailed>): boolean =>
+  cause.reasons.length > 0 &&
+  cause.reasons.every(
+    (reason) =>
+      reason._tag === "Die" && SqlError.isSqlError(reason.defect) && reason.defect.isRetryable
+  );
+
+const classifyRetryableSqlDefect = <A, R>(
+  work: Effect.Effect<A, OnboardingDeliveryFailed, R>
+): Effect.Effect<A, OnboardingQueueFailure, R> =>
+  work.pipe(
+    Effect.catchCauseIf(retryableSqlDefectCause, () =>
+      Effect.fail({ _tag: "OnboardingDeliveryRetry", reason: "retryable-sql-failure" })
+    )
+  );
+
+const runOnboardingQueueHandler = runPersistedQueueHandler<OnboardingQueueFailure, never, never>({
+  descriptor: {
+    component: "onboarding",
+    operation: "onboarding.deliverVerification",
+  },
+  classify: (failure) =>
+    failure._tag === "OnboardingDeliveryRetry"
+      ? { _tag: "Retry", reason: "transient" }
+      : { _tag: "Terminal", reason: "domain-rejected" },
+  // Every OnboardingDeliveryFailed is raised only after its intent is already terminally settled.
+  recordTerminal: () => Effect.void,
+});
+
+const consumeOnboardingDelivery = <A, R>(
+  work: Effect.Effect<A, OnboardingDeliveryFailed, R>,
+  previousAttempts: number
+): Effect.Effect<void, PersistedQueueHandlerFailure, R | Telemetry> =>
+  Effect.flatMap(Telemetry, (telemetry) =>
+    telemetry.rootSpan(
+      {
+        component: "onboarding",
+        operation: "onboarding.deliverVerification",
+        trigger: "queue",
+        spanOperation: "queue.process",
+        workKind: "queue_attempt",
+        metadata: {
+          _tag: "Queue",
+          attempt: TelemetryAttempt.make(Math.min(previousAttempts + 1, 100)),
+          inputCount: TelemetryCount.make(1),
+          delayMilliseconds: Option.none(),
+        },
+      },
+      classifyRetryableSqlDefect(work).pipe(runOnboardingQueueHandler)
+    )
+  );
 
 /** Stable native queue key from one offered payload. */
 export const onboardingEmailDeliveryQueueId = (payload: OnboardingDeliveryPayload): string =>
@@ -152,13 +217,14 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
 
     const firstPageCursor = yield* publishPendingPage(Option.none());
     yield* queue
-      .take((payload) =>
-        OnboardingEmailDeliveryWorkflow.execute(payload).pipe(
-          Effect.catchTag("OnboardingDeliveryFailed", () => Effect.void),
-          Effect.asVoid
-        )
+      .take((payload, { attempts }) =>
+        consumeOnboardingDelivery(OnboardingEmailDeliveryWorkflow.execute(payload), attempts)
       )
-      .pipe(Effect.forever, Effect.forkScoped);
+      .pipe(
+        Effect.catchTag("PersistedQueueHandlerFailure", () => Effect.void),
+        Effect.forever,
+        Effect.forkScoped
+      );
     if (Option.isSome(firstPageCursor)) {
       yield* Effect.gen(function* () {
         let cursor: Option.Option<
@@ -223,7 +289,9 @@ export const deliverOneOnboardingEmailForTesting = Effect.fn(
 )(function* () {
   const queue = yield* onboardingEmailDeliveryQueue;
   const completed = yield* queue
-    .take((payload) => performOnboardingEmailDelivery(payload).pipe(Effect.ignore))
+    .take((payload, { attempts }) =>
+      consumeOnboardingDelivery(performOnboardingEmailDelivery(payload), attempts)
+    )
     .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
   return Option.getOrElse(completed, () => false);
 });

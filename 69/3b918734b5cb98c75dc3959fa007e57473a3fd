@@ -1,0 +1,96 @@
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 164-173
+apps/server/src/shell/durable-execution-retention.ts
+  h_c6d49c804e0ad2 4,16-18,27,31,33,58,67,85-86,96,109,128,135
+apps/server/src/shell/cluster-topology.test.ts
+  h_c6d49c804e0ad2 1-96
+docs/operations/cluster-topology.md
+  h_c6d49c804e0ad2 1-183
+apps/server/src/shell/cluster-telemetry.test.ts
+  h_c6d49c804e0ad2 1-19,22-121
+  h_c6d49c804e0ad2 20-21
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  h_c6d49c804e0ad2 1-41
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 75,809
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 7,9,22-27,29-39,42-52,67-73,121-145,148-151,157-158,162-166,170,172-185,187-193
+  h_c6d49c804e0ad2 3,28,81
+apps/server/src/shell/cluster-compatibility.ts
+  h_c6d49c804e0ad2 1-86
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 2,7-10,27,29-30,39-41,47-49,70-71,78-79
+  h_c6d49c804e0ad2 1,28,59
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 9,11-15,21,27,42-45,47-58,71,75
+  h_c6d49c804e0ad2 46,64,72-74
+apps/server/src/shell/cluster-observation.ts
+  h_c6d49c804e0ad2 1-48,50-82,85-87,90-174,181-241,253-325
+  h_c6d49c804e0ad2 49,83-84,88-89,175-180,242-252
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25-26,101,174-175
+apps/server/src/shell/durable-tables.ts
+  h_c6d49c804e0ad2 1-18
+apps/server/src/shell/cluster-readiness.ts
+  h_c6d49c804e0ad2 1-113
+apps/server/src/shell/cluster-shard-coverage.test.ts
+  h_c6d49c804e0ad2 1-52
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  h_c6d49c804e0ad2 1-5,7-13,17-72
+  h_c6d49c804e0ad2 6,14-16
+apps/server/src/shell/cluster-observation.test.ts
+  h_c6d49c804e0ad2 1-118
+apps/server/src/shell/testing/cluster-topology-reset.ts
+  h_c6d49c804e0ad2 1-11
+apps/server/src/shell/cluster-compatibility.test.ts
+  h_c6d49c804e0ad2 1-101
+apps/server/src/shell/cluster-topology.integration.test.ts
+  h_c6d49c804e0ad2 1-472
+apps/server/src/shell/cluster-readiness.test.ts
+  h_c6d49c804e0ad2 1-175
+apps/server/src/shell/cluster-telemetry.ts
+  h_c6d49c804e0ad2 1-181,184-206
+  h_c6d49c804e0ad2 182-183
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  h_c6d49c804e0ad2 24,174-175
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32-33,101,263-264
+apps/server/src/shell/db/migrations/0061-cluster-topology-identity.ts
+  h_c6d49c804e0ad2 1-39
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 7,22
+docs/operations/production-releases.md
+  h_c6d49c804e0ad2 75,79-85
+apps/server/src/shell/cluster-topology.ts
+  h_c6d49c804e0ad2 1-155
+apps/server/src/shell/http.ts
+  h_c6d49c804e0ad2 20,175-196,279
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,30-33,41-42,173-175,180,195-196
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 3-4,6-9,11,39-41
+  h_c6d49c804e0ad2 52
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 17-23,41-45,156,206,309-310
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 21,30-33,37-38,142-144,149,165-166
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25-26,95,162-163
+apps/server/src/shell/cluster-shard-coverage.ts
+  h_c6d49c804e0ad2 1-93
+apps/server/src/shell/observability/protocol.ts
+  h_c6d49c804e0ad2 13-16,23-25,28,32-35
+apps/server/src/shell/db/migrations/registry.ts
+  h_c6d49c804e0ad2 60,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "693b918734b5cb98c75dc3959fa007e57473a3fd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

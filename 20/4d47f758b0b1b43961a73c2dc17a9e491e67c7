@@ -1,0 +1,32 @@
+apps/server/src/shell/channels/whatsapp/repo.ts
+  h_c6d49c804e0ad2 29-32,213,224,235,262,284
+apps/server/src/shell/durable-execution-retention.ts
+  h_c6d49c804e0ad2 4,56,65,83-84,94,107
+apps/server/src/shell/durable-queue-health.test.ts
+  h_c6d49c804e0ad2 10,63-64,72,117-118,132-133,165-167,204,231,253,281,350-351,446-469,519-524
+apps/server/src/shell/durable-queue-health.ts
+  h_c6d49c804e0ad2 15,22,28-29,39-61,68-74,76-135,141,163-201,208,210,233,258-264,267,280,292-294,297-300
+apps/server/src/shell/durable-queue-policy.test.ts
+  h_c6d49c804e0ad2 17,48
+apps/server/src/shell/durable-queue-policy.ts
+  h_c6d49c804e0ad2 11-17,103-106,108-109,111-121
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  h_c6d49c804e0ad2 11,81,97-98
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  h_c6d49c804e0ad2 12,87
+apps/server/src/shell/http.test.ts
+  h_c6d49c804e0ad2 5,15-16,94-95,115
+docs/architecture/durable-execution-inventory.md
+  h_c6d49c804e0ad2 104-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "204d47f758b0b1b43961a73c2dc17a9e491e67c7",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

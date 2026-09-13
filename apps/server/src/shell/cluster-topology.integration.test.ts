@@ -51,6 +51,7 @@ import {
   clusterTopologyProbeWorkflowLayer,
   disposeTestRuntimes as disposeRuntimes,
   resetClusterTopologyIdentity,
+  resetClusterTopologyState,
 } from "~/shell/testing/cluster-topology-fixtures";
 
 const clusterToken = clusterTestAuthenticationToken;
@@ -390,7 +391,7 @@ const registerClusterTopologyScenarios = (): void => {
         Effect.gen(function* () {
           // The production lease window is a different deployment topology than the tightened
           // scenarios, so this scenario publishes its own identity.
-          yield* resetClusterTopologyIdentity;
+          yield* resetClusterTopologyState;
           const first = makeWorkRuntime(gracefulFirstPort, productionCadence);
           const second = makeWorkRuntime(gracefulSecondPort, productionCadence);
           yield* Effect.addFinalizer(() => disposeRuntimes([first, second]));
@@ -459,7 +460,7 @@ const registerClusterTopologyScenarios = (): void => {
       () =>
         Effect.gen(function* () {
           // Tightened lease timings are a different deployment topology than the graceful scenario.
-          yield* resetClusterTopologyIdentity;
+          yield* resetClusterTopologyState;
           const survivor = makeWorkRuntime(lossSurvivorPort);
           yield* Effect.addFinalizer(() => disposeRuntimes([survivor]));
           yield* Effect.promise(() => survivor.runPromise(Effect.void));
@@ -508,11 +509,6 @@ const registerClusterTopologyScenarios = (): void => {
             )
           );
           yield* waitForCondition(
-            Effect.promise(() => survivor.runPromise(sampleClusterObservation)).pipe(
-              Effect.map((sample) => sample.requestRetriesTotal > 0)
-            )
-          );
-          yield* waitForCondition(
             sql`SELECT EXISTS (
               SELECT 1 FROM fidy_durable.${sql(clusterMessagesTable)}
               WHERE entity_type = ${clusterTopologyProbeEntityType}
@@ -523,6 +519,18 @@ const registerClusterTopologyScenarios = (): void => {
           // SIGKILL ran no finalizer, so the survivor can only take over once the lease expires.
           runner.kill("SIGKILL");
           yield* Effect.tryPromise(() => runner.exited);
+          yield* Effect.promise(() =>
+            survivor.runPromise(
+              clusterTopologyProbeWorkflow
+                .execute(probe.payload, { discard: true })
+                .pipe(Effect.timeout("2 seconds"), Effect.exit)
+            )
+          );
+          yield* waitForCondition(
+            Effect.promise(() => survivor.runPromise(sampleClusterObservation)).pipe(
+              Effect.map((sample) => sample.requestRetriesTotal > 0)
+            )
+          );
           yield* waitForCondition(
             Effect.promise(() => survivor.runPromise(ownedShardCount)).pipe(
               Effect.map((owned) => owned === shardCount)

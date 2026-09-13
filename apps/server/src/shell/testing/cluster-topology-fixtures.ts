@@ -89,13 +89,20 @@ export const clusterTopologyProbeWorkflowLayer: Layer.Layer<
 > = clusterTopologyProbeWorkflow.toLayer(() => Effect.succeed("recovered"));
 
 /**
- * Clears inactive runner topology before a scenario publishes a different deployment identity.
- * Callers serialize these resets after disposing prior runtimes; removing stale registrations and
- * locks prevents the next deployment's longer lease window from inheriting the prior deployment's
- * ownership. The helper owns its privileged migration connection because the runtime role cannot
- * delete compatibility state.
+ * Deletes the published identity before the first SQL Cluster runtime creates its storage tables.
+ * The helper owns its privileged migration connection because the runtime role cannot delete it.
  */
 export const resetClusterTopologyIdentity: Effect.Effect<void> = Layer.build(
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
+    })
+  ).pipe(Layer.provide(MigrationSqlClient.layer))
+).pipe(Effect.scoped, Effect.orDie);
+
+/** Clears inactive runner ownership and identity between serialized deployment scenarios. */
+export const resetClusterTopologyState: Effect.Effect<void> = Layer.build(
   Layer.effectDiscard(
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;

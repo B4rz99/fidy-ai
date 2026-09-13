@@ -113,6 +113,7 @@ const inference = (execute: (text: string) => Effect.Effect<void>): HostedInfere
   });
 const runtimeLayer = (input: {
   port: number;
+  runnerPorts: [number, ...number[]];
   crypto: Crypto.Crypto;
   http: HttpClient.HttpClient;
   generate: (text: string) => Effect.Effect<void>;
@@ -137,7 +138,7 @@ const runtimeLayer = (input: {
             refreshAssignmentsInterval: 100,
           },
         }),
-        loopbackClusterRunnerHttpPolicy([input.port])
+        loopbackClusterRunnerHttpPolicy(input.runnerPorts)
       )
     ),
     Layer.provide(
@@ -269,11 +270,18 @@ type HostedRuntimeSpec = Readonly<{
  * shards, and disposes every runtime when the enclosing test scope closes. Returns each runtime
  * with its generated HostedTurns client, in spec order.
  */
-const startHostedRuntimes = Effect.fn(function* (specs: ReadonlyArray<HostedRuntimeSpec>) {
+const startHostedRuntimes = Effect.fn(function* (
+  specs: readonly [HostedRuntimeSpec, ...HostedRuntimeSpec[]]
+) {
   const crypto = yield* Crypto.Crypto;
   const http = yield* HttpClient.HttpClient;
+  const [firstSpec, ...remainingSpecs] = specs;
+  const runnerPorts: [number, ...number[]] = [
+    firstSpec.port,
+    ...remainingSpecs.map((spec) => spec.port),
+  ];
   const runtimes = specs.map((spec) =>
-    ManagedRuntime.make(runtimeLayer({ crypto, http, ...spec }))
+    ManagedRuntime.make(runtimeLayer({ crypto, http, runnerPorts, ...spec }))
   );
   yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
   yield* Effect.forEach(

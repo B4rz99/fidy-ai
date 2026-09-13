@@ -12,6 +12,7 @@ import {
 } from "./cluster-topology-fixtures";
 
 const port = Number(process.argv[2]);
+const peerPort = Number(process.argv[3]);
 const cluster = authenticatedClusterHttp.layerSql(
   clusterTestAuthenticationToken,
   clusterTestRunnerOptions({
@@ -23,7 +24,7 @@ const cluster = authenticatedClusterHttp.layerSql(
       refreshAssignmentsInterval: 100,
     },
   }),
-  loopbackClusterRunnerHttpPolicy([port])
+  loopbackClusterRunnerHttpPolicy([port, peerPort])
 );
 const Live = cluster.pipe(Layer.provide(PgLive), Layer.provide(BunServices.layer));
 const program = Effect.gen(function* () {

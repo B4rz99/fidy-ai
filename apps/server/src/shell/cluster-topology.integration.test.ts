@@ -68,6 +68,17 @@ const gracefulFirstPort = 24706;
 const gracefulSecondPort = 24707;
 const lossRunnerPort = 24708;
 const lossSurvivorPort = 24709;
+const topologyRunnerPorts: [number, ...number[]] = [
+  observationLoopPort,
+  sharingFirstPort,
+  sharingSecondPort,
+  compatiblePort,
+  incompatiblePort,
+  gracefulFirstPort,
+  gracefulSecondPort,
+  lossRunnerPort,
+  lossSurvivorPort,
+];
 
 /** Production-shaped Cluster settings; only leases are tightened so recovery is observable. */
 const clusterOptions = {
@@ -106,7 +117,7 @@ const runtimeLayer = (
     .layerSql(
       clusterToken,
       runtimeSharding(port, overrides),
-      loopbackClusterRunnerHttpPolicy([port])
+      loopbackClusterRunnerHttpPolicy(topologyRunnerPorts)
     )
     .pipe(Layer.provideMerge(PgLive), Layer.provide(BunServices.layer));
 
@@ -232,11 +243,19 @@ const waitForCondition = <E, R>(
 const maximumCrashRunnerOutputBytes = 16_384;
 
 const spawnLossRunner = (port: number): Bun.Subprocess<"ignore", "pipe", "ignore"> =>
-  Bun.spawn(["bun", "src/shell/testing/cluster-topology-crash-runner.ts", String(port)], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+  Bun.spawn(
+    [
+      "bun",
+      "src/shell/testing/cluster-topology-crash-runner.ts",
+      String(port),
+      String(lossSurvivorPort),
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    }
+  );
 
 const killLossRunner = (child: Bun.Subprocess<"ignore", "pipe", "ignore">): Effect.Effect<void> =>
   Effect.sync(() => {

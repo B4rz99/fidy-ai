@@ -1,6 +1,20 @@
-import { Config, Crypto, DateTime, Effect, Encoding, Layer, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  Config,
+  Crypto,
+  DateTime,
+  Effect,
+  Encoding,
+  Layer,
+  Option,
+  Ref,
+  Result,
+  Schema,
+} from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
+import { SqlError } from "effect/unstable/sql";
 import { UnknownJsonString } from "~/schema-compatibility";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import type {
   InterpretedStatementRow,
@@ -12,6 +26,10 @@ import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/refer
 import { UserId } from "~/core/identity/reference";
 import { TransactionExtraction } from "~/core/transactions/model";
 import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import {
+  type PersistedQueueFailureDisposition,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
@@ -43,21 +61,42 @@ export const StatementIngestionPayload = Schema.Struct({
 }).annotate({ identifier: "StatementIngestionPayload" });
 export type StatementIngestionPayload = typeof StatementIngestionPayload.Type;
 
-/** Safe retry marker persisted when statement mapping is temporarily unavailable. */
+/** Safe retry marker persisted for a transient mapping or database outage. */
 export class StatementIngestionRetry extends Schema.Error<StatementIngestionRetry>(
   "StatementIngestionRetry"
 )({
   _tag: Schema.tag("StatementIngestionRetry"),
-  reason: Schema.Literal("mapping-unavailable"),
+  reason: Schema.Literals(["mapping-unavailable", "infrastructure-unavailable"]),
 }) {}
 
-/** Fail-closed signal for queue routing metadata that disagrees with durable ownership. */
-class StatementIngestionPayloadMismatch extends Schema.Error<StatementIngestionPayloadMismatch>(
-  "StatementIngestionPayloadMismatch"
-)({
-  _tag: Schema.tag("StatementIngestionPayloadMismatch"),
-  reason: Schema.Literal("routing-identity-mismatch"),
-}) {}
+const classifyStatementFailure = (
+  _failure: StatementIngestionRetry
+): PersistedQueueFailureDisposition => ({ _tag: "Retry", reason: "transient" });
+
+const statementIngestionOperation = CanonicalOperationId.make("ingestion.submitForExtraction");
+
+const isRetryableSqlCause = function <E>(cause: Cause.Cause<E>): boolean {
+  return (
+    cause.reasons.length > 0 &&
+    cause.reasons.every(
+      (reason) =>
+        Cause.isDieReason(reason) && SqlError.isSqlError(reason.defect) && reason.defect.isRetryable
+    )
+  );
+};
+
+const classifyRetryableInfrastructure = function <A, E, R>(
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E | StatementIngestionRetry, R> {
+  return Effect.catchCauseIf(work, isRetryableSqlCause, () =>
+    Effect.fail(StatementIngestionRetry.make({ reason: "infrastructure-unavailable" }))
+  );
+};
+
+const statementHandlerDescriptor = {
+  component: "api",
+  operation: statementIngestionOperation,
+} as const;
 
 export const statementIngestionQueueName = "statement-ingestion";
 export const maximumStatementIngestionAttempts = 3;
@@ -260,19 +299,12 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
   payload: StatementIngestionPayload,
   attempts: number
 ) {
-  if (queueId !== payload.submissionId) {
-    return yield* StatementIngestionPayloadMismatch.make({
-      reason: "routing-identity-mismatch",
-    });
-  }
+  // Conflicting routing metadata has no trustworthy owning submission to mutate. Completing this
+  // item is its terminal queue disposition; any valid submission remains unchanged.
+  if (queueId !== payload.submissionId) return "stale-routing" as const;
   const authoritativeUserId = yield* resolveStatementSubmissionUser(payload.submissionId);
   if (Option.isNone(authoritativeUserId)) return "stale" as const;
-  if (authoritativeUserId.value !== payload.userId) {
-    return yield* StatementIngestionPayloadMismatch.make({
-      reason: "routing-identity-mismatch",
-    });
-  }
-  yield* Effect.annotateCurrentSpan("fidy.user.id", authoritativeUserId.value);
+  if (authoritativeUserId.value !== payload.userId) return "stale-routing" as const;
   const startedAt = yield* DateTime.now;
   const queued = yield* startQueuedStatement(
     authoritativeUserId.value,
@@ -296,8 +328,9 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
 
   const mapping = yield* mappingFor(statement, parsed.value).pipe(
     Effect.asSome,
-    Effect.catchTag("StatementColumnMappingFailed", () =>
-      (attempts + 1 >= maximumStatementIngestionAttempts
+    Effect.catchTag("StatementColumnMappingFailed", (failure) =>
+      (failure.safeReason === "permanent-failure" ||
+      attempts + 1 >= maximumStatementIngestionAttempts
         ? finalizeUnmappedRows(statement, parsed.value)
         : StatementIngestionRetry.make({ reason: "mapping-unavailable" })
       ).pipe(Effect.as(Option.none<{ fingerprint: string; mapping: StatementColumnMapping }>()))
@@ -313,15 +346,28 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
   return "processed" as const;
 });
 
+type StatementQueueOutcome = "processed" | "stale" | "stale-routing";
+type StatementQueueWork = Readonly<{
+  queueId: string;
+  payload: StatementIngestionPayload;
+  attempts: number;
+  /** Preserves the successful outcome that the redaction boundary intentionally erases. */
+  observeOutcome: (outcome: StatementQueueOutcome) => Effect.Effect<void>;
+}>;
+
 const processQueuedWork = Effect.fn("StatementIngestion.processWork")(function* (
-  queueId: string,
-  payload: StatementIngestionPayload,
-  attempts: number
+  work: StatementQueueWork
 ) {
-  return yield* processQueued(queueId, payload, attempts).pipe(
-    Effect.withSpan("ingestion.processStatementSubmission", {
-      attributes: { "fidy.statement_submission.id": payload.submissionId },
-    })
+  return yield* processQueued(work.queueId, work.payload, work.attempts).pipe(
+    Effect.tap(work.observeOutcome),
+    classifyRetryableInfrastructure,
+    runPersistedQueueHandler({
+      descriptor: statementHandlerDescriptor,
+      classify: classifyStatementFailure,
+      // A future terminal classification must add an owning persisted disposition first.
+      recordTerminal: () => Effect.die("unexpected terminal classification"),
+    }),
+    Effect.withSpan("ingestion.processStatementSubmission")
   );
 });
 
@@ -335,20 +381,34 @@ export const publishStatementIngestion = Effect.fn("StatementIngestion.publish")
   yield* queue.offer(payload, { id: statementIngestionQueueId(payload) }).pipe(Effect.orDie);
 });
 
-/** Processes one owning submission, skipping stale items until work succeeds or two seconds pass. */
+const observeStatementOutcome =
+  (outcome: Ref.Ref<StatementQueueOutcome>) =>
+  (current: StatementQueueOutcome): Effect.Effect<void> =>
+    Ref.set(outcome, current);
+
+/** Processes one submission; skips absent items and returns false on retry, stale routing, or timeout. */
 export const processNextStatement = Effect.fn("processNextStatement")(function* () {
   yield* expireStatementIngestion();
   const queue = yield* statementIngestionQueue;
-  const takeCurrent = queue
-    .take((payload, { id, attempts }) => processQueuedWork(id, payload, attempts), {
-      maxAttempts: maximumStatementIngestionAttempts,
-    })
-    .pipe(Effect.orElseSucceed(() => "retrying" as const));
+  const takeCurrent = Effect.gen(function* () {
+    const outcome = yield* Ref.make<StatementQueueOutcome>("stale");
+    yield* queue.take(
+      (payload, { id, attempts }) =>
+        processQueuedWork({
+          queueId: id,
+          payload,
+          attempts,
+          observeOutcome: observeStatementOutcome(outcome),
+        }),
+      { maxAttempts: maximumStatementIngestionAttempts }
+    );
+    return yield* Ref.get(outcome);
+  }).pipe(Effect.orElseSucceed(() => "retrying" as const));
   const completed = yield* Effect.gen(function* () {
     for (;;) {
       const result = yield* takeCurrent;
       if (result === "processed") return true;
-      if (result === "retrying") return false;
+      if (result === "retrying" || result === "stale-routing") return false;
     }
   }).pipe(Effect.timeoutOption("2 seconds"));
   return Option.getOrElse(completed, () => false);
@@ -399,12 +459,18 @@ const continueQueuedRecovery = Effect.fn("StatementIngestion.continueRecovery")(
 const consumeStatementQueue = Effect.gen(function* () {
   const queue = yield* statementIngestionQueue;
   return yield* queue
-    .take((payload, { id, attempts }) => processQueuedWork(id, payload, attempts), {
-      maxAttempts: maximumStatementIngestionAttempts,
-    })
+    .take(
+      (payload, { id, attempts }) =>
+        processQueuedWork({
+          queueId: id,
+          payload,
+          attempts,
+          observeOutcome: () => Effect.void,
+        }),
+      { maxAttempts: maximumStatementIngestionAttempts }
+    )
     .pipe(
-      Effect.catchTag("StatementIngestionRetry", () => Effect.void),
-      Effect.catchCause((cause) => Effect.logError("Statement ingestion iteration failed", cause)),
+      Effect.catchTag("PersistedQueueHandlerFailure", () => Effect.void),
       Effect.forever
     );
 });

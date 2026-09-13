@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer, Stream } from "effect";
+import { Context, Effect, Layer, Stream } from "effect";
 import { AiError, LanguageModel } from "effect/unstable/ai";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
@@ -19,7 +19,7 @@ describe("statement mapping prompt", () => {
     );
   });
 
-  it.effect("maps model failures to a safe adapter error", () => {
+  it.effect("maps retryable model failures to a safe transient adapter error", () => {
     const modelFailure = AiError.AiError.make({
       module: "StatementColumnMapperTest",
       method: "generateObject",
@@ -41,10 +41,38 @@ describe("statement mapping prompt", () => {
         headers: ["Date", "Amount"],
         sampleRows: [["2026-02-05", "25"]],
       } as const;
-      const first = yield* Effect.exit(mapper.mapColumns(input));
-      const second = yield* Effect.exit(mapper.mapColumns(input));
-      expect(Exit.isFailure(first)).toBe(true);
-      expect(Exit.isFailure(second)).toBe(true);
+      const first = yield* mapper.mapColumns(input).pipe(Effect.flip);
+      const second = yield* mapper.mapColumns(input).pipe(Effect.flip);
+      expect(first.safeReason).toBe("provider-unavailable");
+      expect(second.safeReason).toBe("provider-unavailable");
+    });
+  });
+
+  it.effect("maps non-retryable model failures to a safe permanent adapter error", () => {
+    const modelFailure = AiError.AiError.make({
+      module: "StatementColumnMapperTest",
+      method: "generateObject",
+      reason: AiError.AuthenticationError.make({ kind: "InvalidKey" }),
+    });
+    const FailingModel = Layer.effect(
+      LanguageModel.LanguageModel,
+      LanguageModel.make({
+        generateText: () => Effect.fail(modelFailure),
+        streamText: () => Stream.fail(modelFailure),
+      })
+    );
+    const MapperTestLive = StatementColumnMapper.layer.pipe(Layer.provide(FailingModel));
+    return Effect.gen(function* () {
+      const context = yield* Effect.scoped(Layer.build(MapperTestLive));
+      const mapper = Context.get(context, StatementColumnMapper);
+      const failure = yield* mapper
+        .mapColumns({
+          sourceFormat: "csv",
+          headers: ["Date", "Amount"],
+          sampleRows: [["2026-02-05", "25"]],
+        })
+        .pipe(Effect.flip);
+      expect(failure.safeReason).toBe("permanent-failure");
     });
   });
 });

@@ -35,6 +35,7 @@ import {
   ApiHarnessClient,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { getTransactionUserDecisions, transactionPayload } from "~/shell/transactions/fixtures";
 import { StatementColumnMapper, StatementColumnMappingFailed } from "./column-mapper";
 import { truncateStatementIngestion } from "./fixtures";
@@ -75,13 +76,14 @@ const MapperOnce = Layer.effect(
   })
 );
 
-const WorkerHarness = Layer.merge(ApiHarness, MapperOnce);
+const WorkerHarness = Layer.mergeAll(ApiHarness, MapperOnce, TelemetryDisabled);
 const SucceedingMapper = StatementColumnMapper.of({
   mapColumns: () => Effect.succeed(mapping),
 });
-const ReviewWorkerHarness = Layer.merge(
+const ReviewWorkerHarness = Layer.mergeAll(
   ApiHarness,
-  Layer.succeed(StatementColumnMapper, SucceedingMapper)
+  Layer.succeed(StatementColumnMapper, SucceedingMapper),
+  TelemetryDisabled
 );
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-00000000e001");
 const otherTokenId = PATId.make("f1d1a000-0000-4000-8000-00000000e002");
@@ -93,7 +95,17 @@ const IsolationWorkerHarness = makeApiClientLive({ tag: OtherApiClient, bearer: 
   Layer.provideMerge(ReviewWorkerHarness)
 );
 
-const FailingWorkerHarness = Layer.merge(
+const expectQueueCompletedOnce = Effect.fn(function* (id: string) {
+  const sql = yield* MigrationSqlClient;
+  const rows = yield* sql`
+    SELECT attempts, completed, last_failure AS "lastFailure"
+    FROM fidy_durable.fidy_queue
+    WHERE queue_name = 'statement-ingestion' AND id = ${id}
+  `;
+  expect(rows).toEqual([{ attempts: 1, completed: true, lastFailure: null }]);
+});
+
+const FailingWorkerHarness = Layer.mergeAll(
   ApiHarness,
   Layer.succeed(
     StatementColumnMapper,
@@ -101,7 +113,8 @@ const FailingWorkerHarness = Layer.merge(
       mapColumns: () =>
         Effect.fail(new StatementColumnMappingFailed({ safeReason: "provider-unavailable" })),
     })
-  )
+  ),
+  TelemetryDisabled
 );
 
 const increment = (count: number): number => count + 1;
@@ -383,7 +396,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
       })
     );
 
-    it.effect("rejects queue metadata that mismatches its payload submission", () =>
+    it.effect("completes incompatible queue identity without retrying", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
@@ -405,11 +418,12 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
           params: { id: submitted.data.id },
         });
         expect(status.data).toMatchObject({ status: "queued" });
+        yield* expectQueueCompletedOnce(mismatchedId);
         yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 
-    it.effect("rejects queue routing metadata that mismatches the submission User", () =>
+    it.effect("completes incompatible User routing without domain side effects", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         yield* seedConsentedPatIdentity({
@@ -443,12 +457,10 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
         const effects = yield* sql`
           SELECT
             (SELECT count(*)::int FROM transactions) AS transactions,
-            (SELECT count(*)::int FROM needs_review_items) AS reviews,
-            (SELECT attempts FROM fidy_durable.fidy_queue
-              WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id})
-              AS queue_attempts
+            (SELECT count(*)::int FROM needs_review_items) AS reviews
         `;
-        expect(effects).toEqual([{ transactions: 0, reviews: 0, queue_attempts: 1 }]);
+        expect(effects).toEqual([{ transactions: 0, reviews: 0 }]);
+        yield* expectQueueCompletedOnce(submitted.data.id);
         yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
@@ -490,6 +502,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(effects).toEqual([
           { bytesDeleted: true, transactions: 0, attestations: 0, mappings: 0, reviews: 0 },
         ]);
+        yield* expectQueueCompletedOnce(submitted.data.id);
         const empty = yield* client.ingestion.submitForExtraction({
           payload: {
             idempotencyKey: StatementIdempotencyKey.make("f1d1a000-0000-4000-8000-00000000c197"),
@@ -527,6 +540,33 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("completes resource-limit failures without consuming a retry", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: {
+            idempotencyKey: StatementIdempotencyKey.make("f1d1a000-0000-4000-8000-00000000c201"),
+            file: {
+              name: "oversized.csv",
+              declaredMediaType: "text/csv",
+              contentBase64: Base64FileContent.make(
+                Encoding.encodeBase64(`Date,Amount\n${"1,1\n".repeat(20_001)}`)
+              ),
+            },
+          },
+        });
+
+        yield* processNextStatement();
+
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "failed", failureReason: "resource-limit" });
+        yield* expectQueueCompletedOnce(submitted.data.id);
+      })
+    );
+
     it.effect("expires stale queued bytes independently of successful processing", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
@@ -550,10 +590,12 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           failureReason: "retention-expired",
         });
         const stored = yield* sql`
-          SELECT file_content AS "fileContent" FROM statement_submissions
+          SELECT file_content AS "fileContent"
+          FROM statement_submissions
           WHERE id = ${submitted.data.id}
         `;
         expect(stored).toEqual([{ fileContent: null }]);
+        yield* expectQueueCompletedOnce(submitted.data.id);
         const replacement = yield* client.ingestion.submitForExtraction({
           payload: statementPayload("f1d1a000-0000-4000-8000-00000000c198"),
         });

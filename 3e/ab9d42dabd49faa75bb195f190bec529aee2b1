@@ -1,0 +1,43 @@
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  s_cd0b1f5563f558::t_fd07d7bd4970e1 157-163,168-172,178-183,185-194,199-201,203-206,212-218,224-230,232
+  s_cd0b1f5563f558::t_bff382cc10127d 14,164-165,167,173-177,184
+  s_cd0b1f5563f558::t_1bbc1f17db64f1 16-20,202
+  s_cd0b1f5563f558::t_79586c1b7002c0 166
+  s_cd0b1f5563f558::t_ac9cf89d599ee0 195-198,207-211,219-223,231,238-241
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_cd0b1f5563f558::t_24a3c787eb7326 41-42,245,250,298-299,331-332,343
+  s_cd0b1f5563f558::t_449ccd5be06a70 294-295
+  s_cd0b1f5563f558::t_946adf802c1024 196,246
+  s_cd0b1f5563f558::t_b6099fe2a677be 12,16,202-204,207,216,229-234,249
+  s_cd0b1f5563f558::t_d35105e7c8380a 205-206,320-329
+  s_cd0b1f5563f558::t_77fb7cbf4f056b 337-339
+  s_cd0b1f5563f558::t_b12bc6e984cac2 333-336,340-342
+  s_cd0b1f5563f558::t_acd88463a773fd 3,9,21,29-30,46,179-195,197-201,208-215,217-223,225-228,235-242,244,247-248,251-283,309-319,330,344-357
+  s_cd0b1f5563f558::t_cad798dacaae2d 284-293,296-297,300-308
+  s_cd0b1f5563f558::t_a90e1f2bbd86d2 224,243
+  s_30b73be60cafbb::t_8ebe0031030bed 358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3eab9d42dabd49faa75bb195f190bec529aee2b1",
+  "prompts": {},
+  "sessions": {
+    "s_30b73be60cafbb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c1f-2cda-71f9-b8b2-10f84d69b232",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cd0b1f5563f558": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-f4e2-74f0-b07a-b00a44a4e5f2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

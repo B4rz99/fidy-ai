@@ -1,0 +1,62 @@
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_fda4b0d9a6ada5::t_a8e4939f85b444 16,293
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_7197d5d6d0f777::t_6fe3f6e6a7ec42 884
+  s_fda4b0d9a6ada5::t_c399ccbf39c040 69,98-103
+  s_fda4b0d9a6ada5::t_bb9bad37f896c8 3,8,33-36,105-109,571-584,587-598,605-613,615-628
+  s_fda4b0d9a6ada5::t_709de08b458944 11,20,690-746,751,755-757,759-769
+  s_fda4b0d9a6ada5::t_913e533e8d044d 585-586,599,614,645-646,659,678
+  s_fda4b0d9a6ada5::t_863c0905508e79 44-49,629-630,815-823,825-833,835-840,846-847,851-864,867-870,873-876,879-882
+  s_fda4b0d9a6ada5::t_e510f4dca827b3 841-845
+  s_fda4b0d9a6ada5::t_ed7b67021054e4 747-750,752-754,758
+  s_fda4b0d9a6ada5::t_e8b5d945021a0e 797-802,824,834
+  s_fda4b0d9a6ada5::t_bd41e6fe3d5d86 600-602,604,660-662,664
+  s_fda4b0d9a6ada5::t_d72d20be33bd8a 23-28,865-866,871-872,877-878
+  s_fda4b0d9a6ada5::t_439389af4cb631 9
+  s_fda4b0d9a6ada5::t_1f236530c8462a 631-644,647-658,665-677,679-689,770-796,803-814,883
+  s_fda4b0d9a6ada5::t_d130b220f21cec 603,663
+  s_fda4b0d9a6ada5::t_f0204a7f0b2fad 32,848-850
+apps/server/src/shell/observability/registry.ts
+  s_fda4b0d9a6ada5::t_85086eeffc999b 84-86
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_fda4b0d9a6ada5::t_bb913e44305851 780-785,791
+  s_fda4b0d9a6ada5::t_7e64066d1553fb 32,48
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_fda4b0d9a6ada5::t_69af33c4897e01 613
+  s_fda4b0d9a6ada5::t_0b821ecade2ade 622,634
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_fda4b0d9a6ada5::t_8a86db68d029e2 1-2,13-14,16-17,320,326,337,340-343,354,363,365-366,370-373,381-383,389-390,398-400,407,410-412,424-425,427,439,441,444,446-448,450-453
+  s_fda4b0d9a6ada5::t_dcbad761924633 6,406
+  s_fda4b0d9a6ada5::t_9a08063cf71762 327,338-339
+  s_fda4b0d9a6ada5::t_aa3511573a23f7 328-333
+  s_fda4b0d9a6ada5::t_67a364a2e65d3f 384-388,401-405
+  s_fda4b0d9a6ada5::t_fa8099efed381f 334-336
+  s_fda4b0d9a6ada5::t_b562e303f39e28 15,321-325,344-350,352-353,360-361,364,367-369,376-378,393-395
+  s_fda4b0d9a6ada5::t_e8b5d945021a0e 319,355-359,375
+  s_fda4b0d9a6ada5::t_69dfe99e2eb523 351
+  s_fda4b0d9a6ada5::t_5a0028dd2dfdad 362,374,379-380,391-392,396-397,408-409
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f1b786acf8432b0cb957420f0db0697322e108ba",
+  "prompts": {},
+  "sessions": {
+    "s_7197d5d6d0f777": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c00-1765-7527-8801-2f6d1791cb9c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_fda4b0d9a6ada5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-d59d-760e-b69f-193c769efdd6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

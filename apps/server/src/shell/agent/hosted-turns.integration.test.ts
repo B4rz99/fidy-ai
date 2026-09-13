@@ -201,13 +201,13 @@ const waitForAssignments = Effect.fn(function* (
   runners: ReadonlyArray<{ readonly hasShardId: (id: ShardId.ShardId) => boolean }>
 ) {
   const shards = clusterTestShardIds;
-  return yield* Effect.sync(
-    () =>
-      runners.every((runner) => shards.some(runner.hasShardId)) &&
-      shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
-  ).pipe(
-    Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("20 millis") }),
-    Effect.timeout("10 seconds")
+  return yield* waitUntil(
+    Effect.sync(
+      () =>
+        runners.every((runner) => shards.some(runner.hasShardId)) &&
+        shards.every((shard) => runners.filter((runner) => runner.hasShardId(shard)).length === 1)
+    ),
+    (ready) => ready
   );
 });
 

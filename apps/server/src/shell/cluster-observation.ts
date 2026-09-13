@@ -6,7 +6,7 @@ import {
   ShardingConfig,
   Snowflake,
 } from "effect/unstable/cluster";
-import { SqlClient, type SqlError } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import { shardCoverage } from "./cluster-shard-coverage";
 import { ClusterTelemetry } from "./cluster-telemetry";
 import { clusterMessagesTable, durableQueueTable } from "./durable-tables";
@@ -94,7 +94,7 @@ export type ClusterObservationDependencies =
  */
 export const sampleClusterObservation: Effect.Effect<
   ClusterObservationSample,
-  ClusterError.PersistenceError | SqlError.SqlError,
+  ClusterError.PersistenceError,
   SqlClient.SqlClient | ClusterObservationDependencies
 > = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

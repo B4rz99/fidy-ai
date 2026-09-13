@@ -4,7 +4,7 @@ import { Effect, Option } from "effect";
 import { type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
-import { useSession } from "@/session/session-context";
+import { type BrowserAuthentication, useSession } from "@/session/session-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
@@ -22,6 +22,40 @@ import {
 } from "./pairing-view";
 
 const activePATReactivityKey = ["pats", "active"] as const;
+
+type PATManagementContentProps = Readonly<{
+  activePATState: ActivePATManagementState;
+  approve: (command: ApprovePATPairingCommand) => void;
+  authentication: BrowserAuthentication;
+  inspect: (command: InspectPATPairingCommand) => void;
+  issue: (command: IssueManualPATCommand) => void;
+  revoke: (command: RevokeActivePATCommand) => void;
+  revokeAll: (command: RevokeAllActivePATsCommand) => void;
+}>;
+
+const PATManagementContent = ({
+  activePATState,
+  approve,
+  authentication,
+  inspect,
+  issue,
+  revoke,
+  revokeAll,
+}: PATManagementContentProps): JSX.Element => (
+  <SensitiveClipboardBoundary
+    className={Option.some("flex flex-col gap-8")}
+    key={authentication}
+    lifetime={bearerRevealLifetime}
+  >
+    {(clipboard) => (
+      <>
+        <ActivePATManagementView state={activePATState} revokeAll={revokeAll} revokeOne={revoke} />
+        <PATPairingView approve={approve} inspect={inspect} />
+        <ManualPATView clipboard={clipboard} issue={issue} />
+      </>
+    )}
+  </SensitiveClipboardBoundary>
+);
 
 const makeRevokeActivePATCommand = (
   apiClient: FidyClient
@@ -151,22 +185,14 @@ export const PATManagementFeature = (): JSX.Element => {
   const inspect = useAtomSet(inspectAtom);
   const approve = useAtomSet(approveAtom);
   return (
-    <SensitiveClipboardBoundary
-      className={Option.some("flex flex-col gap-8")}
-      key={authentication}
-      lifetime={bearerRevealLifetime}
-    >
-      {(clipboard) => (
-        <>
-          <ActivePATManagementView
-            state={activePATState}
-            revokeAll={revokeAll}
-            revokeOne={revoke}
-          />
-          <PATPairingView approve={approve} inspect={inspect} />
-          <ManualPATView clipboard={clipboard} issue={issue} />
-        </>
-      )}
-    </SensitiveClipboardBoundary>
+    <PATManagementContent
+      activePATState={activePATState}
+      approve={approve}
+      authentication={authentication}
+      inspect={inspect}
+      issue={issue}
+      revoke={revoke}
+      revokeAll={revokeAll}
+    />
   );
 };

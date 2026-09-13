@@ -387,7 +387,9 @@ export const ApiHarness = ApiHarnessBase.pipe(Layer.provide(TelemetryDisabled));
 const NonRunnerClusterInfrastructure = Runners.layerNoop.pipe(
   Layer.provideMerge(RunnerStorage.layerMemory),
   Layer.provideMerge(MessageStorage.layerMemory),
-  Layer.provideMerge(ShardingConfig.layerDefaults)
+  Layer.provideMerge(
+    ShardingConfig.layer({ runnerAddress: Option.none(), runnerListenAddress: Option.none() })
+  )
 );
 
 /** Public API stack whose listener is bound but whose process advertises no Cluster runner. */

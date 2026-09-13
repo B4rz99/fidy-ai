@@ -1,6 +1,6 @@
 ---
 name: opening-a-pr
-description: How to open and merge a pull request in fidy-ai. Use whenever you are about to create a PR, write a commit or PR title, or merge to trunk — covers the commit/PR-title convention, scope allowlist, and merge conditions.
+description: How to open, validate, and merge a pull request in fidy-ai. Use when creating or updating a PR, waiting for CI, writing a commit or PR title, or merging to trunk — covers the commit/PR-title convention, scope allowlist, CI observation, and merge conditions.
 ---
 
 # Opening a PR
@@ -28,15 +28,38 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 - **Body**: short `- ` bullets only, same terse style as commit bodies. No `What/Why` headings, no prose paragraphs.
 - `gh pr create --base trunk --title "type(scope): summary" --body "..."` (heredoc for the bullets).
 
-## 4. Conditions to merge
+## 4. Wait for CI
 
-- All required checks pass. The fail-closed `Required Checks` job aggregates the parallel static,
+After creating the PR, capture its number and hand CI observation to GitHub CLI's built-in watcher:
+
+```sh
+PR_NUMBER=$(gh pr view --json number --jq .number)
+gh pr checks "$PR_NUMBER" --watch --interval 60 --fail-fast
+```
+
+Watch every check attached to the PR: the fail-closed `Required Checks` job may not exist until its
+parallel jobs finish, so filtering to `--required` can report no checks while CI is still running.
+This is one foreground wait: `--watch` owns the refresh loop, and the 60-second interval avoids hot
+polling while keeping completion reasonably prompt. Keep the watcher running until it exits; the
+completion criterion is exit code 0. After every push that changes the PR head, run it again. CI
+waiting is delegated to this command rather than a `sleep` loop or repeated manual status checks.
+
+If it exits non-zero, inspect the terminal verdicts and the focused failing job, then fix, commit,
+push, and restart the watcher:
+
+```sh
+gh pr checks "$PR_NUMBER" --json name,state,bucket,link
+```
+
+## 5. Conditions to merge
+
+- The CI watcher exited 0. The fail-closed `Required Checks` job aggregates the parallel static,
   build, unit, integration, acceptance, quality, production-image, and provider-hosted security jobs;
   every dependency must report `success`. Read the failing sibling job for its focused verdict.
 - **0 approvals required** — solo self-merge is allowed.
 - **Squash only**: `gh pr merge <n> --squash --delete-branch`. Merge commits and rebase are disabled.
 - Resulting `trunk` commit reads `type(scope): summary (#N)`.
 
-## 5. After merge
+## 6. After merge
 
 - Sync local trunk: `git checkout trunk && git pull --ff-only`.

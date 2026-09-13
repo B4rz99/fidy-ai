@@ -1,0 +1,27 @@
+apps/server/src/web-auth-api.ts
+  s_37f0c7b1ebb55a::t_7501048d958d0e 41
+  s_37f0c7b1ebb55a::t_5a338160f311d2 42-44,117-121
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_37f0c7b1ebb55a::t_aa8277755bd618 87-88,90
+  s_37f0c7b1ebb55a::t_6e464eb1cfc9b8 1,4,26-38
+  s_37f0c7b1ebb55a::t_8d631efc5c3639 71-76,79-83,85-86,91-99
+  s_37f0c7b1ebb55a::t_7cf2990a56b84c 7,68-70,84
+  s_37f0c7b1ebb55a::t_9f84b277c01a5c 77-78,100
+  s_37f0c7b1ebb55a::t_0bf241efd93296 2,39-40,89,101-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "73905f94f0d73d0ef7891206f4ca1c490770d370",
+  "prompts": {},
+  "sessions": {
+    "s_37f0c7b1ebb55a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c01-c03e-71a1-9763-e866750b7276",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,175 +1,89 @@
-import { expect, layer } from "@effect/vitest";
-import { Context, Effect, Layer, Option, Ref } from "effect";
-import {
-  MessageStorage,
-  RunnerAddress,
-  RunnerStorage,
-  Runners,
-  ShardingConfig,
-} from "effect/unstable/cluster";
+import { expect, it, layer } from "@effect/vitest";
+import { Clock, Effect, Option, Ref } from "effect";
+import { TestClock } from "effect/testing";
+import { HttpClient } from "effect/unstable/http";
+import { ApiHarnessWithoutClusterRunner } from "~/shell/testing/api-harness";
 import {
   ClusterReadiness,
-  type ClusterReadinessReport,
   ClusterReadinessVolatile,
+  cacheReadinessProbe,
+  runReadinessAbility,
 } from "./cluster-readiness";
 
-const advertisedAddress = RunnerAddress.make("runner.internal", 34431);
+layer(ApiHarnessWithoutClusterRunner, { excludeTestServices: true })(
+  "public degraded Cluster readiness",
+  (it) => {
+    it.effect("returns bounded 503 responses when the listener has no Cluster runner", () =>
+      Effect.gen(function* () {
+        const responses = yield* Effect.all([
+          HttpClient.get("/ready"),
+          HttpClient.get("/ready"),
+          HttpClient.get("/ready"),
+        ]);
 
-/** In-memory Cluster substrate; readiness probes only need each ability to answer. */
-const MemoryCluster = Runners.layerNoop.pipe(
-  Layer.provideMerge(RunnerStorage.layerMemory),
-  Layer.provideMerge(MessageStorage.layerMemory),
-  Layer.provideMerge(ShardingConfig.layerDefaults)
-);
+        for (const response of responses) {
+          expect(response.status).toBe(503);
+          expect(response.headers["cache-control"]).toBe("no-store");
+          expect(yield* response.json).toEqual({
+            status: "unready",
+            checks: { runnerState: false, routing: false, messageStorage: true },
+          });
+        }
 
-type ProbeOverrides = Partial<
-  Readonly<{
-    runnerAddress: Option.Option<RunnerAddress.RunnerAddress>;
-    runnerStorage: (
-      base: RunnerStorage.RunnerStorage["Service"]
-    ) => RunnerStorage.RunnerStorage["Service"];
-    runners: (base: Runners.Runners["Service"]) => Runners.Runners["Service"];
-    messageStorage: (
-      base: MessageStorage.MessageStorage["Service"]
-    ) => MessageStorage.MessageStorage["Service"];
-  }>
->;
-
-type MemoryClusterServices =
-  | RunnerStorage.RunnerStorage
-  | Runners.Runners
-  | MessageStorage.MessageStorage
-  | ShardingConfig.ShardingConfig;
-
-/**
- * Runs the real readiness probe against in-memory services, replacing one ability at a time so
- * each failure branch is exercised without breaking the others.
- */
-const probeWith = (
-  overrides: ProbeOverrides
-): Effect.Effect<ClusterReadinessReport, never, MemoryClusterServices> =>
-  Effect.gen(function* () {
-    const runnerStorage = yield* RunnerStorage.RunnerStorage;
-    const runners = yield* Runners.Runners;
-    const messageStorage = yield* MessageStorage.MessageStorage;
-    const shardingConfig = yield* ShardingConfig.ShardingConfig;
-    return yield* Effect.flatMap(ClusterReadiness, (readiness) => readiness.probe).pipe(
-      // This helper is the probe's entry point; the harness owns the in-memory Cluster lifetime.
-      // @effect-diagnostics-next-line strictEffectProvide:off
-      Effect.provide(ClusterReadiness.layer),
-      Effect.provideService(
-        RunnerStorage.RunnerStorage,
-        overrides.runnerStorage?.(runnerStorage) ?? runnerStorage
-      ),
-      Effect.provideService(Runners.Runners, overrides.runners?.(runners) ?? runners),
-      Effect.provideService(
-        MessageStorage.MessageStorage,
-        overrides.messageStorage?.(messageStorage) ?? messageStorage
-      ),
-      Effect.provideService(ShardingConfig.ShardingConfig, {
-        ...shardingConfig,
-        runnerAddress: overrides.runnerAddress ?? Option.some(advertisedAddress),
+        // The private runner route is absent from the real public application router even when a
+        // caller presents a credential-shaped value.
+        const privateRoute = yield* HttpClient.get("/_fidy/cluster", {
+          headers: { authorization: `Bearer ${"f".repeat(64)}` },
+        });
+        expect(privateRoute.status).toBe(404);
       })
     );
-  });
+  }
+);
 
-layer(MemoryCluster, { excludeTestServices: true })("Cluster readiness probes", (it) => {
-  it.effect("reports ready when runner state, routing, and the durable mailbox all answer", () =>
-    Effect.gen(function* () {
-      const report = yield* probeWith({});
-      expect(report).toEqual({ runnerState: true, routing: true, messageStorage: true });
-    })
-  );
+it.effect("shares one readiness execution across a burst and refreshes once after the TTL", () =>
+  Effect.gen(function* () {
+    const invocations = yield* Ref.make(0);
+    const ability = Ref.update(invocations, (count) => count + 1).pipe(Effect.as(true));
+    const probe = yield* cacheReadinessProbe({
+      runnerState: ability,
+      routing: ability,
+      messageStorage: ability,
+    });
 
-  it.effect(
-    "reports runner state unavailable when the runner cannot refresh its registration",
-    () =>
-      Effect.gen(function* () {
-        const report = yield* probeWith({
-          runnerStorage: (base) => ({
-            ...base,
-            refresh: (): Effect.Effect<never> =>
-              Effect.die(new Error("runner storage unavailable")),
-          }),
-        });
-        expect(report).toEqual({ runnerState: false, routing: true, messageStorage: true });
-      })
-  );
+    yield* Effect.all(
+      Array.from({ length: 50 }, () => probe),
+      { concurrency: "unbounded" }
+    );
+    yield* probe;
+    expect(yield* Ref.get(invocations)).toBe(3);
 
-  it.effect(
-    "reports runner state and routing unavailable when this process advertises no runner address",
-    () =>
-      Effect.gen(function* () {
-        const report = yield* probeWith({ runnerAddress: Option.none() });
-        expect(report).toEqual({ runnerState: false, routing: false, messageStorage: true });
-      })
-  );
+    yield* TestClock.adjust("2001 millis");
+    yield* Effect.all(
+      Array.from({ length: 50 }, () => probe),
+      { concurrency: "unbounded" }
+    );
+    expect(yield* Ref.get(invocations)).toBe(6);
+  })
+);
 
-  it.effect("reports routing unavailable when the private transport does not answer", () =>
-    Effect.gen(function* () {
-      const report = yield* probeWith({
-        runners: (base) => ({
-          ...base,
-          ping: (): Effect.Effect<never> => Effect.die(new Error("runner unreachable")),
-        }),
-      });
-      expect(report).toEqual({ runnerState: true, routing: false, messageStorage: true });
-    })
-  );
-
-  it.effect("reports message storage unavailable when the durable mailbox cannot be read", () =>
-    Effect.gen(function* () {
-      const report = yield* probeWith({
-        messageStorage: (base) => ({
-          ...base,
-          requestIdForPrimaryKey: (): Effect.Effect<never> =>
-            Effect.die(new Error("mailbox unavailable")),
-        }),
-      });
-      expect(report).toEqual({ runnerState: true, routing: true, messageStorage: false });
-    })
-  );
-
-  it.effect("serves repeated readiness requests from one probe execution", () =>
-    Effect.gen(function* () {
-      const base = yield* RunnerStorage.RunnerStorage;
-      const refreshes = yield* Ref.make(0);
-      const counting = RunnerStorage.RunnerStorage.of({
-        ...base,
-        refresh: (address, shardIds) =>
-          Ref.update(refreshes, (count) => count + 1).pipe(
-            Effect.andThen(base.refresh(address, shardIds))
-          ),
-      });
-
-      const report = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* Layer.build(
-            ClusterReadiness.layer.pipe(
-              Layer.provide(Layer.succeed(RunnerStorage.RunnerStorage, counting))
-            )
-          );
-          const readiness = Context.get(context, ClusterReadiness);
-          const probed = yield* readiness.probe;
-          // An unauthenticated readiness flood must not write runner state per request.
-          yield* readiness.probe;
-          yield* readiness.probe;
-          return probed;
-        })
-      );
-
-      expect(report).toEqual({ runnerState: true, routing: true, messageStorage: true });
-      expect(yield* Ref.get(refreshes)).toBe(1);
-    })
-  );
-});
+it.live("bounds and cancels a stalled readiness ability", () =>
+  Effect.gen(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
+    expect(yield* runReadinessAbility(Option.some(Effect.never))).toBe(false);
+    expect((yield* Clock.currentTimeMillis) - startedAt).toBeLessThan(2_500);
+  })
+);
 
 layer(ClusterReadinessVolatile)("volatile Cluster readiness", (it) => {
   it.effect("volatile readiness reports every ability without durable Cluster state", () =>
     Effect.gen(function* () {
       const readiness = yield* ClusterReadiness;
-      const report = yield* readiness.probe;
-      expect(report).toEqual({ runnerState: true, routing: true, messageStorage: true });
+      expect(yield* readiness.probe).toEqual({
+        runnerState: true,
+        routing: true,
+        messageStorage: true,
+      });
     })
   );
 });

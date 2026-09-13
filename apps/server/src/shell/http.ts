@@ -180,7 +180,7 @@ const readinessStatus = { ok: 200, unavailable: 503 } as const;
  * state, route over the private Cluster transport, and use the durable mailbox. The body carries
  * only booleans, so a degraded dependency never exposes SQL, addresses, or credentials.
  */
-const ReadinessLive = HttpRouter.add("GET", "/ready", () =>
+const ReadinessRouteLive = HttpRouter.add("GET", "/ready", () =>
   Effect.gen(function* () {
     const readiness = yield* ClusterReadiness;
     const checks = yield* readiness.probe;
@@ -278,7 +278,7 @@ export const HttpLive = HttpRouter.serve(
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
     DurableQueueReadinessLive,
-    ReadinessLive,
+    ReadinessRouteLive,
     KapsoWebhookLive,
     SupportRecoveryPrivateRouteLive,
     ResendWebhookLive,

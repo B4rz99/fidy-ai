@@ -24,15 +24,6 @@ export const clusterTopologyIdentity = Effect.gen(function* () {
       recorded_at timestamptz NOT NULL DEFAULT now()
     )
   `;
-  // The vitest harness drops only `public`, so migrations re-run over a kept `fidy_durable` schema.
-  // A durable identity table created by an earlier revision of this migration gains the lock
-  // columns here instead of failing the run; the backfill is the production lock configuration.
-  yield* sql`
-    ALTER TABLE fidy_durable.cluster_topology_identity
-      ADD COLUMN IF NOT EXISTS shard_lock_disable_advisory boolean NOT NULL DEFAULT true,
-      ADD COLUMN IF NOT EXISTS shard_lock_expiration_millis integer NOT NULL DEFAULT 35000
-        CHECK (shard_lock_expiration_millis BETWEEN 1000 AND 3600000)
-  `;
   yield* sql`
     GRANT SELECT, INSERT ON fidy_durable.cluster_topology_identity TO fidy_runtime
   `;

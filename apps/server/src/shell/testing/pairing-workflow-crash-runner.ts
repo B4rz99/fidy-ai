@@ -1,10 +1,10 @@
 /** Subprocess fixture: the parent kills this runner without running any finalizers. */
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
-import { clusterTestSharedOptions } from "./cluster-topology-fixtures";
+import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import {
@@ -13,39 +13,21 @@ import {
   PairingDeliveryPayload,
   PairingExpiryPayload,
 } from "~/shell/email-authentication/pairing-email-execution";
-import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 
 const testSecretLength = 64;
 const crashRunnerPort = 24643;
-<<<<<<< HEAD
 const cluster = authenticatedClusterHttp.layerSql(
   Redacted.make("c".repeat(testSecretLength)),
-  {
-    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-    availableShardGroups: ["default"],
-    assignedShardGroups: ["default"],
-    shardsPerGroup: 300,
-    entityMessagePollInterval: 50,
-    sendRetryInterval: 50,
-    runnerHealthCheckInterval: 100,
-    refreshAssignmentsInterval: 100,
-    shardLockRefreshInterval: 250,
-    shardLockExpiration: "2 seconds",
-  },
-  loopbackClusterRunnerHttpPolicy([crashRunnerPort])
+  clusterTestRunnerOptions({
+    port: crashRunnerPort,
+    overrides: {
+      runnerHealthCheckInterval: 100,
+      refreshAssignmentsInterval: 100,
+      shardLockRefreshInterval: 250,
+      shardLockExpiration: "2 seconds",
+    },
+  })
 );
-=======
-const cluster = authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(testSecretLength)), {
-  runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-  runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
-  ...clusterTestSharedOptions,
-  runnerHealthCheckInterval: 100,
-  refreshAssignmentsInterval: 100,
-  shardLockRefreshInterval: 250,
-  shardLockExpiration: "2 seconds",
-});
->>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
 const mode = Schema.decodeUnknownSync(Schema.Literals(["before-send", "after-send", "expiry"]))(
   process.argv[2]
 );

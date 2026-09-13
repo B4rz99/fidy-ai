@@ -1,4 +1,4 @@
-import { Duration, Equal, Function, Option, Schema } from "effect";
+import { Duration, Equal, Option, Schema } from "effect";
 import { RunnerAddress, type ShardingConfig } from "effect/unstable/cluster";
 
 /**
@@ -25,19 +25,33 @@ export const clusterProtocolGeneration = 1;
  * addresses, shard group assignment, weights, and local timing overrides: those may differ per
  * process without splitting shard ownership or the durable mailbox. Lock mode and lock expiration
  * are included because they select the lock mechanism and the staleness window every runner uses to
- * decide whether another runner's shards are free. Fields are decoded leniently from the published
- * row so a divergent value becomes a named difference instead of an opaque parse error.
+ * decide whether another runner's shards are free. Broad bounds preserve useful mismatch reports
+ * while rejecting database values large enough to make compatibility decoding itself unsafe.
  */
+const maximumCompatibilityLabelLength = 128;
+const maximumCompatibilityShardGroups = 256;
+const maximumSerializationNameLength = 64;
+const compatibilityLabel = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(maximumCompatibilityLabelLength)
+);
+const compatibilityPositiveInt = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: 2_147_483_647 })
+);
+
 export const ClusterCompatibilityIdentity = Schema.Struct({
-  protocolGeneration: Schema.Int,
-  shardsPerGroup: Schema.Int,
-  availableShardGroups: Schema.Array(Schema.String),
-  serialization: Schema.String,
-  serializationMaxBufferSize: Schema.Int,
-  messageStoragePrefix: Schema.String,
-  runnerStoragePrefix: Schema.String,
+  protocolGeneration: compatibilityPositiveInt,
+  shardsPerGroup: compatibilityPositiveInt,
+  availableShardGroups: Schema.UniqueArray(compatibilityLabel).check(
+    Schema.isNonEmpty(),
+    Schema.isMaxLength(maximumCompatibilityShardGroups)
+  ),
+  serialization: Schema.String.check(Schema.isMaxLength(maximumSerializationNameLength)),
+  serializationMaxBufferSize: compatibilityPositiveInt,
+  messageStoragePrefix: compatibilityLabel,
+  runnerStoragePrefix: compatibilityLabel,
   shardLockDisableAdvisory: Schema.Boolean,
-  shardLockExpirationMillis: Schema.Int,
+  shardLockExpirationMillis: compatibilityPositiveInt,
 });
 export type ClusterCompatibilityIdentity = typeof ClusterCompatibilityIdentity.Type;
 
@@ -70,19 +84,14 @@ export const clusterCompatibilityIdentity = (
 });
 
 /** Names every compatibility field whose published value differs from the local deployment. */
-export const clusterCompatibilityDifferences: {
-  (
-    published: ClusterCompatibilityIdentity
-  ): (local: ClusterCompatibilityIdentity) => ReadonlyArray<ClusterCompatibilityField>;
-  (
-    published: ClusterCompatibilityIdentity,
-    local: ClusterCompatibilityIdentity
-  ): ReadonlyArray<ClusterCompatibilityField>;
-} = Function.dual(
-  2,
-  (published: ClusterCompatibilityIdentity, local: ClusterCompatibilityIdentity) =>
-    clusterCompatibilityFields.filter((field) => !Equal.equals(published[field], local[field]))
-);
+export const clusterCompatibilityDifferences = ({
+  published,
+  local,
+}: {
+  readonly published: ClusterCompatibilityIdentity;
+  readonly local: ClusterCompatibilityIdentity;
+}): ReadonlyArray<ClusterCompatibilityField> =>
+  clusterCompatibilityFields.filter((field) => !Equal.equals(published[field], local[field]));
 
 /** The explicit production Cluster deployment contract for one runner process. */
 export type ClusterTopology = Readonly<{

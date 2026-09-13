@@ -1,25 +1,28 @@
 /** Subprocess fixture: the parent kills this runner with SIGKILL without running any finalizers. */
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect, Layer, Option, Schedule } from "effect";
-import { RunnerAddress, Sharding } from "effect/unstable/cluster";
+import { Effect, Layer, Schedule } from "effect";
+import { Sharding } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
 import {
   clusterTestAuthenticationToken,
+  clusterTestRunnerOptions,
   clusterTestShardIds,
-  clusterTestSharedOptions,
 } from "./cluster-topology-fixtures";
 
 const port = Number(process.argv[2]);
-const cluster = authenticatedClusterHttp.layerSql(clusterTestAuthenticationToken, {
-  ...clusterTestSharedOptions,
-  runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-  runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-  shardLockRefreshInterval: 250,
-  shardLockExpiration: "2 seconds",
-  runnerHealthCheckInterval: 100,
-  refreshAssignmentsInterval: 100,
-});
+const cluster = authenticatedClusterHttp.layerSql(
+  clusterTestAuthenticationToken,
+  clusterTestRunnerOptions({
+    port,
+    overrides: {
+      shardLockRefreshInterval: 250,
+      shardLockExpiration: "2 seconds",
+      runnerHealthCheckInterval: 100,
+      refreshAssignmentsInterval: 100,
+    },
+  })
+);
 const Live = cluster.pipe(Layer.provide(PgLive), Layer.provide(BunServices.layer));
 const program = Effect.gen(function* () {
   const sharding = yield* Sharding.Sharding;

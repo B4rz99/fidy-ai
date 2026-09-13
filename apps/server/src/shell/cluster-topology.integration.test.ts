@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
+import { describe } from "vitest";
 import {
   type Cause,
   Clock,
@@ -15,13 +16,7 @@ import {
   Schedule,
   Stream,
 } from "effect";
-import {
-  ClusterWorkflowEngine,
-  EntityId,
-  RunnerAddress,
-  Sharding,
-  ShardingConfig,
-} from "effect/unstable/cluster";
+import { ClusterWorkflowEngine, EntityId, Sharding, ShardingConfig } from "effect/unstable/cluster";
 import { HttpClient } from "effect/unstable/http";
 import { type Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import {
@@ -29,28 +24,34 @@ import {
   authenticatedClusterHttp,
 } from "./authenticated-cluster-http";
 import { ClusterTopologyIncompatible } from "./cluster-compatibility";
+import { ClusterObservationLive, observeClusterTopology } from "./cluster-observation";
 import {
-  ClusterObservationLive,
   type ClusterRetryCounts,
-  observeClusterTopology,
   projectClusterObservation,
-  sampleClusterObservation,
-} from "./cluster-observation";
+} from "./cluster-observation-projection";
+import { sampleClusterObservation } from "./cluster-observation-sample";
 import { ClusterReadiness, type ClusterReadinessReport } from "./cluster-readiness";
 import { clusterCompatibilityIdentity } from "./cluster-topology";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import {
+  clusterLocksTable,
+  clusterMessagesTable,
+  clusterRunnersTable,
+  topologyIdentityTable,
+} from "./durable-tables";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   clusterTestAuthenticationToken,
+  clusterTestRunnerOptions,
   clusterTestShardCount,
   clusterTestShardIds,
   clusterTestSharedOptions,
   clusterTopologyProbeEntityType,
   clusterTopologyProbeWorkflow,
   clusterTopologyProbeWorkflowLayer,
+  disposeTestRuntimes as disposeRuntimes,
   resetClusterTopologyIdentity,
 } from "~/shell/testing/cluster-topology-fixtures";
-import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
 
 const clusterToken = clusterTestAuthenticationToken;
 const shardCount = clusterTestShardCount;
@@ -77,6 +78,7 @@ const clusterOptions = {
 
 /** Production cadence, proving takeover fits inside the deployment grace budget. */
 const productionCadence = {
+  entityTerminationTimeout: "15 seconds",
   shardLockRefreshInterval: 10_000,
   shardLockExpiration: "35 seconds",
   refreshAssignmentsInterval: "3 seconds",
@@ -88,10 +90,7 @@ const runtimeSharding = (
   overrides?: Partial<ShardingConfig.ShardingConfig["Service"]>
 ): ShardingConfig.ShardingConfig["Service"] => ({
   ...ShardingConfig.defaults,
-  ...clusterOptions,
-  runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-  runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-  ...overrides,
+  ...clusterTestRunnerOptions({ port, overrides: { ...clusterOptions, ...overrides } }),
 });
 
 const runtimeLayer = (
@@ -120,7 +119,8 @@ const makeRuntime = (
  * taking over a dead runner's shards.
  */
 const workRuntimeLayer = (
-  port: number
+  port: number,
+  overrides?: Partial<ShardingConfig.ShardingConfig["Service"]>
 ): Layer.Layer<
   | Layer.Success<AuthenticatedClusterLayer>
   | Layer.Success<typeof PgLive>
@@ -128,7 +128,9 @@ const workRuntimeLayer = (
   Layer.Error<AuthenticatedClusterLayer> | Layer.Error<typeof PgLive>
 > =>
   clusterTopologyProbeWorkflowLayer.pipe(
-    Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(runtimeLayer(port))))
+    Layer.provideMerge(
+      ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(runtimeLayer(port, overrides)))
+    )
   );
 
 type WorkRuntime = ManagedRuntime.ManagedRuntime<
@@ -136,7 +138,41 @@ type WorkRuntime = ManagedRuntime.ManagedRuntime<
   Layer.Error<ReturnType<typeof workRuntimeLayer>>
 >;
 
-const makeWorkRuntime = (port: number): WorkRuntime => ManagedRuntime.make(workRuntimeLayer(port));
+const makeWorkRuntime = (
+  port: number,
+  overrides?: Partial<ShardingConfig.ShardingConfig["Service"]>
+): WorkRuntime => ManagedRuntime.make(workRuntimeLayer(port, overrides));
+
+type SerialProbeControl = Readonly<{
+  readonly activeHandlers: Ref.Ref<number>;
+  readonly maximumConcurrentHandlers: Ref.Ref<number>;
+  readonly handlerCalls: Ref.Ref<number>;
+}>;
+
+const makeSerialProbeLayer = ({
+  activeHandlers,
+  maximumConcurrentHandlers,
+  handlerCalls,
+}: SerialProbeControl): Layer.Layer<never, never, WorkflowEngine.WorkflowEngine> =>
+  clusterTopologyProbeWorkflow.toLayer(() =>
+    Effect.gen(function* () {
+      const active = yield* Ref.updateAndGet(activeHandlers, (count) => count + 1);
+      yield* Ref.update(maximumConcurrentHandlers, (maximum) => Math.max(maximum, active));
+      yield* Ref.update(handlerCalls, (count) => count + 1);
+      yield* Effect.sleep("250 millis");
+      return "recovered";
+    }).pipe(Effect.ensuring(Ref.update(activeHandlers, (count) => count - 1)))
+  );
+
+const makeSerialProbeRuntime = (
+  port: number,
+  workflowLayer: Layer.Layer<never, never, WorkflowEngine.WorkflowEngine>
+): WorkRuntime =>
+  ManagedRuntime.make(
+    workflowLayer.pipe(
+      Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(runtimeLayer(port))))
+    )
+  );
 
 /** Whether the Workflow engine has a completed result for an execution. */
 const probeCompleted = (state: Option.Option<Workflow.Result<string, never>>): boolean =>
@@ -164,17 +200,10 @@ const selectProbe = (
     return yield* Effect.die("the crash runner held no shard that accepts a probe");
   });
 
-type Disposable = Readonly<{ dispose: () => Promise<void> }>;
-
 const startRuntimes = (runtimes: ReadonlyArray<ClusterRuntime>): Effect.Effect<void> =>
   Effect.forEach(runtimes, (runtime) => Effect.promise(() => runtime.runPromise(Effect.void)), {
     discard: true,
   });
-
-const disposeRuntimes = (runtimes: ReadonlyArray<Disposable>): Effect.Effect<void> =>
-  Effect.promise(() => Promise.all(runtimes.map((runtime) => runtime.dispose()))).pipe(
-    Effect.asVoid
-  );
 
 const readinessProbe: Effect.Effect<ClusterReadinessReport, never, ClusterReadiness> =
   Effect.flatMap(ClusterReadiness, (readiness) => readiness.probe);
@@ -213,14 +242,14 @@ const sampleObservedTopology = Effect.gen(function* () {
   const previousRetries = yield* Ref.make(Option.none<ClusterRetryCounts>());
   const sample = yield* sampleClusterObservation;
   yield* observeClusterTopology(previousRetries);
-  return projectClusterObservation(sample, yield* Ref.get(previousRetries));
+  return projectClusterObservation({
+    sample,
+    previousRetries: yield* Ref.get(previousRetries),
+  });
 });
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
-  "durable Cluster topology",
-  (it) => {
-    resetClusterTopologyBeforeAll();
-
+const registerClusterTopologyScenarios = (): void => {
+  layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })("scenarios", (it) => {
     // Route contract under the harness's in-memory readiness; the SQL-backed probe distinction is
     // asserted on live runners in the multi-runtime scenarios below.
     it.effect("reports readiness as bounded booleans over the public route", () =>
@@ -238,8 +267,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
       "shares one durable identity across compatible runners that both report ready",
       () =>
         Effect.gen(function* () {
-          const first = makeRuntime(sharingFirstPort);
-          const second = makeRuntime(sharingSecondPort);
+          yield* resetClusterTopologyIdentity;
+          const activeHandlers = yield* Ref.make(0);
+          const maximumConcurrentHandlers = yield* Ref.make(0);
+          const handlerCalls = yield* Ref.make(0);
+          const serialProbeLayer = makeSerialProbeLayer({
+            activeHandlers,
+            maximumConcurrentHandlers,
+            handlerCalls,
+          });
+          const first = makeSerialProbeRuntime(sharingFirstPort, serialProbeLayer);
+          const second = makeSerialProbeRuntime(sharingSecondPort, serialProbeLayer);
           yield* Effect.addFinalizer(() => disposeRuntimes([first, second]));
           yield* startRuntimes([first, second]);
           const [firstReady, secondReady] = yield* Effect.promise(() =>
@@ -253,39 +291,52 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
               Promise.all([first.runPromise(ownedShardCount), second.runPromise(ownedShardCount)])
             ).pipe(Effect.map(([firstOwned, secondOwned]) => firstOwned > 0 && secondOwned > 0))
           );
-          // Wait until the first runner holds every shard the healthy ring assigns it, then prove
-          // the observation reports zero assignment lag for that runner.
+          // Wait until every configured shard has one fresh durable ownership lock, then prove the
+          // deployment-wide observation reports no assignment lag.
           yield* waitForCondition(
             Effect.promise(() => first.runPromise(sampleClusterObservation)).pipe(
               Effect.map(
                 (sample) =>
-                  sample.expectedShards > 0 && sample.assignedShards === sample.expectedShards
+                  sample.expectedShards === shardCount &&
+                  sample.assignedShards === sample.expectedShards
               )
             )
           );
           const observed = yield* Effect.promise(() => first.runPromise(sampleObservedTopology));
           expect(observed.runnersTotal).toBeGreaterThanOrEqual(2);
           expect(observed.runnersHealthy).toBeGreaterThanOrEqual(2);
-          expect(observed.assignedShards).toBeGreaterThan(0);
-          // The ring splits the group across healthy runners, so one runner never expects all shards.
-          expect(observed.expectedShards).toBeGreaterThan(0);
-          expect(observed.expectedShards).toBeLessThan(shardCount);
+          expect(observed.assignedShards).toBe(shardCount);
+          expect(observed.expectedShards).toBe(shardCount);
           expect(observed.unassignedShards).toBe(0);
           expect(observed.residentCapacity).toEqual(
             Option.some({ limit: 10_000, pressure: false })
           );
 
+          const serialProbePayload = {
+            probe: `shared-owner-${yield* Clock.currentTimeMillis}`,
+          };
+          expect(
+            yield* Effect.promise(() =>
+              Promise.all([
+                first.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
+                second.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
+              ])
+            )
+          ).toEqual(["recovered", "recovered"]);
+          expect(yield* Ref.get(handlerCalls)).toBe(1);
+          expect(yield* Ref.get(maximumConcurrentHandlers)).toBe(1);
+
           const sql = yield* MigrationSqlClient;
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.cluster_topology_identity`
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(topologyIdentityTable)}`
           ).toEqual([{ count: 1 }]);
           expect(
             yield* sql`SELECT shards_per_group AS "shardsPerGroup",
             available_shard_groups AS "availableShardGroups"
-            FROM fidy_durable.cluster_topology_identity`
+            FROM fidy_durable.${sql(topologyIdentityTable)}`
           ).toEqual([{ shardsPerGroup: shardCount, availableShardGroups: ["default"] }]);
           expect(
-            yield* sql`SELECT address, healthy FROM fidy_durable.cluster_runners
+            yield* sql`SELECT address, healthy FROM fidy_durable.${sql(clusterRunnersTable)}
             WHERE address IN (${`127.0.0.1:${sharingFirstPort}`}, ${`127.0.0.1:${sharingSecondPort}`})
             ORDER BY address`
           ).toEqual([
@@ -328,7 +379,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
         const sql = yield* MigrationSqlClient;
         expect(
           yield* sql`SELECT shards_per_group AS "shardsPerGroup"
-            FROM fidy_durable.cluster_topology_identity`
+            FROM fidy_durable.${sql(topologyIdentityTable)}`
         ).toEqual([{ shardsPerGroup: shardCount }]);
       })
     );
@@ -340,10 +391,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
           // The production lease window is a different deployment topology than the tightened
           // scenarios, so this scenario publishes its own identity.
           yield* resetClusterTopologyIdentity;
-          const first = makeRuntime(gracefulFirstPort, productionCadence);
-          const second = makeRuntime(gracefulSecondPort, productionCadence);
+          const first = makeWorkRuntime(gracefulFirstPort, productionCadence);
+          const second = makeWorkRuntime(gracefulSecondPort, productionCadence);
           yield* Effect.addFinalizer(() => disposeRuntimes([first, second]));
-          yield* startRuntimes([first, second]);
+          yield* Effect.all(
+            [
+              Effect.promise(() => first.runPromise(Effect.void)),
+              Effect.promise(() => second.runPromise(Effect.void)),
+            ],
+            { discard: true }
+          );
           // Production assignment sync is a 3-second tick per phase, so allow several ticks: a
           // loaded runner may stall one while its storage operations time out and retry.
           yield* waitForCondition(
@@ -353,22 +410,44 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
             "30 seconds"
           );
 
-          // Preemptive shutdown releases every lock and unregisters, so no lease must expire.
-          yield* Effect.promise(() => first.dispose());
-          yield* waitForCondition(
-            Effect.promise(() => second.runPromise(ownedShardCount)).pipe(
-              Effect.map((owned) => owned === shardCount)
-            ),
-            "30 seconds"
-          );
-          const firstAddress = `127.0.0.1:${gracefulFirstPort}`;
           const sql = yield* MigrationSqlClient;
+          const firstAddress = `127.0.0.1:${gracefulFirstPort}`;
+          const lockedShards = yield* sql`SELECT shard_id AS "shardId"
+            FROM fidy_durable.${sql(clusterLocksTable)} WHERE address = ${firstAddress}`;
+          const gracefulProbeBase = `graceful-${yield* Clock.currentTimeMillis}`;
+          const lockedShardIds = new Set<string>();
+          for (const row of lockedShards) lockedShardIds.add(String(row.shardId));
+          const probe = yield* Effect.promise(() =>
+            first.runPromise(selectProbe(gracefulProbeBase, lockedShardIds))
+          );
+          yield* Effect.promise(() =>
+            first.runPromise(clusterTopologyProbeWorkflow.execute(probe.payload))
+          );
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.cluster_locks
+            (yield* Effect.promise(() => first.runPromise(sampleClusterObservation)))
+              .residentEntities
+          ).toBeGreaterThan(0);
+
+          // One configured deployment-drain deadline covers resident-entity termination, disposal,
+          // and survivor takeover. Preemptive shutdown must release every lock before lease expiry.
+          yield* Effect.promise(() => first.dispose()).pipe(
+            Effect.andThen(
+              Effect.promise(() => second.runPromise(ownedShardCount)).pipe(
+                Effect.repeat({
+                  until: (owned) => owned === shardCount,
+                  schedule: Schedule.spaced("50 millis"),
+                }),
+                Effect.asVoid
+              )
+            ),
+            Effect.timeout("25 seconds")
+          );
+          expect(
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(clusterLocksTable)}
             WHERE address = ${firstAddress}`
           ).toEqual([{ count: 0 }]);
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.cluster_runners
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(clusterRunnersTable)}
             WHERE address = ${firstAddress}`
           ).toEqual([{ count: 0 }]);
         }),
@@ -407,7 +486,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
           const sql = yield* MigrationSqlClient;
           const crashRunnerAddress = `127.0.0.1:${lossRunnerPort}`;
           const lockedShards = yield* sql`SELECT shard_id AS "shardId"
-            FROM fidy_durable.cluster_locks WHERE address = ${crashRunnerAddress}`;
+            FROM fidy_durable.${sql(clusterLocksTable)} WHERE address = ${crashRunnerAddress}`;
           expect(lockedShards.length).toBeGreaterThan(0);
           const lockedShardIds = new Set(lockedShards.map((row) => String(row.shardId)));
 
@@ -428,9 +507,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
                 .pipe(Effect.timeout("2 seconds"), Effect.exit)
             )
           );
+          expect(
+            (yield* Effect.promise(() => survivor.runPromise(sampleClusterObservation)))
+              .requestRetriesTotal
+          ).toBeGreaterThan(0);
           yield* waitForCondition(
             sql`SELECT EXISTS (
-              SELECT 1 FROM fidy_durable.cluster_messages
+              SELECT 1 FROM fidy_durable.${sql(clusterMessagesTable)}
               WHERE entity_type = ${clusterTopologyProbeEntityType}
                 AND entity_id = ${probe.executionId} AND processed = FALSE
             ) AS persisted`.pipe(Effect.map((rows) => rows[0]?.persisted === true))
@@ -453,13 +536,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
           );
           expect(
             yield* sql`SELECT EXISTS (
-              SELECT 1 FROM fidy_durable.cluster_messages
+              SELECT 1 FROM fidy_durable.${sql(clusterMessagesTable)}
               WHERE entity_type = ${clusterTopologyProbeEntityType}
                 AND entity_id = ${probe.executionId} AND processed = FALSE
             ) AS pending`
           ).toEqual([{ pending: false }]);
           expect(
-            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.cluster_locks
+            yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(clusterLocksTable)}
             WHERE address = ${crashRunnerAddress}`
           ).toEqual([{ count: 0 }]);
         }),
@@ -474,5 +557,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "60 seconds" })(
         ).pipe(Effect.scoped),
       60_000
     );
-  }
-);
+  });
+};
+
+describe.sequential("durable Cluster topology", registerClusterTopologyScenarios);

@@ -11,7 +11,7 @@ import {
   Ref,
   Schema,
 } from "effect";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
 import {
   Activity,
@@ -29,12 +29,7 @@ import { findPendingConsentExchange, removePendingConsentExchange } from "~/shel
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { ApiHarness } from "~/shell/testing/api-harness";
-<<<<<<< HEAD
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
-=======
-import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
-import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
->>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -99,31 +94,17 @@ const acquireRuntime = Effect.fn(function* (
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
-<<<<<<< HEAD
           authenticatedClusterHttp.layerSql(
             Redacted.make("c".repeat(64)),
-            {
-              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              availableShardGroups: ["default"],
-              assignedShardGroups: ["default"],
-              shardsPerGroup: 300,
-              entityMessagePollInterval: 25,
-              sendRetryInterval: 25,
-              entityTerminationTimeout: 100,
-            },
-            loopbackClusterRunnerHttpPolicy([port])
+            clusterTestRunnerOptions({
+              port,
+              overrides: {
+                entityMessagePollInterval: 25,
+                sendRetryInterval: 25,
+                entityTerminationTimeout: 100,
+              },
+            })
           )
-=======
-          authenticatedClusterHttp.layerSql(Redacted.make("c".repeat(64)), {
-            runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-            ...clusterTestSharedOptions,
-            entityMessagePollInterval: 25,
-            sendRetryInterval: 25,
-            entityTerminationTimeout: 100,
-          })
->>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
         )
       )
     ),
@@ -281,8 +262,6 @@ const replaceFailureEvidence = Effect.fn(function* (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "disclosure evidence races",
   (it) => {
-    resetClusterTopologyBeforeAll();
-
     it.effect(
       "newer failure evidence reopens ordinal two despite an earlier cached no-op Activity",
       Effect.fn(function* () {

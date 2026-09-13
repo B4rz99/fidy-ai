@@ -1,14 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import { Option } from "effect";
 import {
-  type ClusterObservationSample,
   type ClusterRetryCounts,
   projectClusterObservation,
-} from "./cluster-observation";
+} from "./cluster-observation-projection";
+import type { ClusterObservationSample } from "./cluster-observation-sample";
 
 const noPreviousRetries: Option.Option<ClusterRetryCounts> = Option.none();
 
-const sample: ClusterObservationSample = {
+const makeObservationSample = (
+  overrides: Partial<ClusterObservationSample> = {}
+): ClusterObservationSample => ({
   isShutdown: false,
   runnersTotal: 3,
   runnersHealthy: 2,
@@ -24,10 +26,16 @@ const sample: ClusterObservationSample = {
   queueRetriesTotal: 120,
   queuePendingRetries: 0,
   requestRetriesTotal: 9,
-};
+  ...overrides,
+});
 
 it("projects a sample into a bounded telemetry shape", () => {
-  expect(projectClusterObservation(sample, noPreviousRetries)).toEqual({
+  expect(
+    projectClusterObservation({
+      sample: makeObservationSample(),
+      previousRetries: noPreviousRetries,
+    })
+  ).toEqual({
     isShutdown: false,
     runnersTotal: 3,
     runnersHealthy: 2,
@@ -46,42 +54,43 @@ it("projects a sample into a bounded telemetry shape", () => {
     requestRetriesTotal: 9,
     retriesDelta: Option.none(),
   });
-  const withPrevious = projectClusterObservation(
-    sample,
-    Option.some({ queueRetries: 115, requestRetries: 5 })
-  );
+  const withPrevious = projectClusterObservation({
+    sample: makeObservationSample(),
+    previousRetries: Option.some({ queueRetries: 115, requestRetries: 5 }),
+  });
   expect(withPrevious.retriesDelta).toEqual(Option.some({ queue: 5, request: 4 }));
 });
 
 it("reports shard assignment lag and resident entity capacity pressure", () => {
   expect(
-    projectClusterObservation(
-      {
-        ...sample,
+    projectClusterObservation({
+      sample: makeObservationSample({
         assignedShards: 288,
         expectedShards: 300,
         residentEntities: 8,
         residentEntityCapacity: Option.some(10),
-      },
-      noPreviousRetries
-    )
+      }),
+      previousRetries: noPreviousRetries,
+    })
   ).toMatchObject({
     unassignedShards: 12,
     residentCapacity: Option.some({ limit: 10, pressure: true }),
   });
   expect(
-    projectClusterObservation(
-      { ...sample, residentEntities: 7, residentEntityCapacity: Option.some(10) },
-      noPreviousRetries
-    )
+    projectClusterObservation({
+      sample: makeObservationSample({
+        residentEntities: 7,
+        residentEntityCapacity: Option.some(10),
+      }),
+      previousRetries: noPreviousRetries,
+    })
   ).toMatchObject({ residentCapacity: Option.some({ limit: 10, pressure: false }) });
 });
 
 it("clamps counts, ages, negatives, and unbounded capacity", () => {
   expect(
-    projectClusterObservation(
-      {
-        ...sample,
+    projectClusterObservation({
+      sample: makeObservationSample({
         runnersTotal: 4_000_000,
         runnersHealthy: -5,
         assignedShards: 2,
@@ -93,9 +102,9 @@ it("clamps counts, ages, negatives, and unbounded capacity", () => {
         queueRetriesTotal: 2_000_001,
         queuePendingRetries: 2_000_000,
         requestRetriesTotal: -1,
-      },
-      Option.some({ queueRetries: -2_999_999, requestRetries: -2_000_000 })
-    )
+      }),
+      previousRetries: Option.some({ queueRetries: -2_999_999, requestRetries: -2_000_000 }),
+    })
   ).toEqual({
     isShutdown: false,
     runnersTotal: 1_000_000,

@@ -1,8 +1,9 @@
-import { Clock, Context, Effect, Function, Layer, Option, Ref } from "effect";
+import { Clock, Context, Effect, Equal, Layer, Option, Ref } from "effect";
 import {
   type MessageStorage,
   RunnerStorage,
   Runners,
+  type ShardId,
   type ShardingConfig,
   SqlRunnerStorage,
 } from "effect/unstable/cluster";
@@ -53,52 +54,62 @@ export class ClusterTelemetry extends Context.Service<
   );
 }
 
+/** Whether a refresh retained every shard whose ownership the runner attempted to renew. */
+export const retainedEveryShard = ({
+  requested,
+  refreshed,
+}: {
+  readonly requested: ReadonlyArray<ShardId.ShardId>;
+  readonly refreshed: ReadonlyArray<ShardId.ShardId>;
+}): boolean =>
+  requested.length === refreshed.length &&
+  requested.every((requestedShard) =>
+    refreshed.some((refreshedShard) => Equal.equals(requestedShard, refreshedShard))
+  );
+
 /**
  * Wraps runner storage so shard-lock acquisition and refresh failures become telemetry. A refresh
  * that carries no shard ids only writes the runner heartbeat — the readiness probe uses it — and is
- * left uncounted so heartbeat traffic cannot fake lock-refresh recency. Every other operation
- * passes through unchanged; Sharding keeps the same storage semantics.
+ * left uncounted so heartbeat traffic cannot fake lock-refresh recency. A successful call that
+ * returns fewer locks than requested is ownership loss and therefore a failure, not fresh recency.
+ * Every other operation passes through unchanged; Sharding keeps the same storage semantics.
  */
-export const observeShardLocks: {
-  (
-    telemetry: ClusterTelemetry["Service"]
-  ): (storage: RunnerStorage.RunnerStorage["Service"]) => RunnerStorage.RunnerStorage["Service"];
-  (
-    storage: RunnerStorage.RunnerStorage["Service"],
-    telemetry: ClusterTelemetry["Service"]
-  ): RunnerStorage.RunnerStorage["Service"];
-} = Function.dual(
-  2,
-  (
-    storage: RunnerStorage.RunnerStorage["Service"],
-    telemetry: ClusterTelemetry["Service"]
-  ): RunnerStorage.RunnerStorage["Service"] => {
-    const observedRefresh: typeof storage.refresh = (address, shardIds) => {
-      const shards = Array.from(shardIds);
-      return shards.length === 0
-        ? storage.refresh(address, shards)
-        : storage.refresh(address, shards).pipe(
-            Effect.tap(() => telemetry.recordLockRefreshSuccess),
-            Effect.tapError(() => telemetry.recordLockFailure)
-          );
-    };
-    const observedAcquire: typeof storage.acquire = (address, shardIds) =>
-      storage.acquire(address, shardIds).pipe(Effect.tapError(() => telemetry.recordLockFailure));
-    return RunnerStorage.RunnerStorage.of({
-      register: storage.register,
-      unregister: storage.unregister,
-      getRunners: storage.getRunners,
-      setRunnerHealth: storage.setRunnerHealth,
-      acquire: observedAcquire,
-      refresh: observedRefresh,
-      release: storage.release,
-      releaseAll: storage.releaseAll,
-    });
-  }
-);
+export const observeShardLocks = ({
+  storage,
+  telemetry,
+}: {
+  readonly storage: RunnerStorage.RunnerStorage["Service"];
+  readonly telemetry: ClusterTelemetry["Service"];
+}): RunnerStorage.RunnerStorage["Service"] => {
+  const observedRefresh: typeof storage.refresh = (address, shardIds) => {
+    const shards = Array.from(shardIds);
+    return shards.length === 0
+      ? storage.refresh(address, shards)
+      : storage.refresh(address, shards).pipe(
+          Effect.tap((refreshed) =>
+            retainedEveryShard({ requested: shards, refreshed })
+              ? telemetry.recordLockRefreshSuccess
+              : telemetry.recordLockFailure
+          ),
+          Effect.tapError(() => telemetry.recordLockFailure)
+        );
+  };
+  const observedAcquire: typeof storage.acquire = (address, shardIds) =>
+    storage.acquire(address, shardIds).pipe(Effect.tapError(() => telemetry.recordLockFailure));
+  return RunnerStorage.RunnerStorage.of({
+    register: storage.register,
+    unregister: storage.unregister,
+    getRunners: storage.getRunners,
+    setRunnerHealth: storage.setRunnerHealth,
+    acquire: observedAcquire,
+    refresh: observedRefresh,
+    release: storage.release,
+    releaseAll: storage.releaseAll,
+  });
+};
 
 /** SQL runner storage with lock acquire and shard-carrying refresh telemetry attached. */
-export const shardLockStorageLayer = (options: {
+export const shardLockStorageLive = (options: {
   readonly prefix: string;
 }): Layer.Layer<
   RunnerStorage.RunnerStorage,
@@ -109,7 +120,7 @@ export const shardLockStorageLayer = (options: {
     Effect.gen(function* () {
       const storage = yield* RunnerStorage.RunnerStorage;
       const telemetry = yield* ClusterTelemetry;
-      return observeShardLocks(storage, telemetry);
+      return observeShardLocks({ storage, telemetry });
     })
   ).pipe(Layer.provide(SqlRunnerStorage.layerWith({ prefix: options.prefix })));
 
@@ -137,53 +148,46 @@ export const isRequestRetry = (send: {
   (send.errorTag === "EntityNotAssignedToRunner" || send.errorTag === "RunnerUnavailable");
 
 /**
- * Wraps the runner client so a request call that failed with a retryable routing error is counted.
- * Methods are forwarded explicitly, so a new upstream `Runners` method fails to compile here instead
- * of silently bypassing the counter; every passing call passes through unchanged. Persisted Work
- * completes through durable redelivery rather than an in-flight retry, so its pressure is visible as
- * mailbox redeliveries and depth instead of this counter.
+ * Wraps the runner client so retryable request-attempt failures become a delta rate in each
+ * observation interval. Persisted Work with no current assignment still reaches `Runners.notify`
+ * with an absent address, so assignment misses and unavailable remote runners pass this same
+ * observation point. Methods are forwarded explicitly, so a new upstream `Runners` method fails to
+ * compile here instead of silently bypassing the counter; every passing call passes through
+ * unchanged.
  */
-export const observeRequestRetries: {
-  (
-    telemetry: ClusterTelemetry["Service"]
-  ): (runners: Runners.Runners["Service"]) => Runners.Runners["Service"];
-  (
-    runners: Runners.Runners["Service"],
-    telemetry: ClusterTelemetry["Service"]
-  ): Runners.Runners["Service"];
-} = Function.dual(
-  2,
-  (
-    runners: Runners.Runners["Service"],
-    telemetry: ClusterTelemetry["Service"]
-  ): Runners.Runners["Service"] => {
-    const recordRetry = (
-      messageTag: "OutgoingRequest" | "OutgoingEnvelope",
-      errorTag: RunnerCallErrorTag
-    ): Effect.Effect<void> =>
-      isRequestRetry({ messageTag, errorTag }) ? telemetry.recordRequestRetry : Effect.void;
-    const send: Runners.Runners["Service"]["send"] = (options) => {
-      const messageTag = options.message._tag;
-      return runners
-        .send(options)
-        .pipe(Effect.tapError((error) => recordRetry(messageTag, error._tag)));
-    };
-    const notify: Runners.Runners["Service"]["notify"] = (options) => {
-      const messageTag = options.message._tag;
-      return runners
-        .notify(options)
-        .pipe(Effect.tapError((error) => recordRetry(messageTag, error._tag)));
-    };
-    return {
-      ping: runners.ping,
-      sendLocal: runners.sendLocal,
-      send,
-      notify,
-      notifyLocal: runners.notifyLocal,
-      onRunnerUnavailable: runners.onRunnerUnavailable,
-    };
-  }
-);
+export const observeRequestRetries = ({
+  runners,
+  telemetry,
+}: {
+  readonly runners: Runners.Runners["Service"];
+  readonly telemetry: ClusterTelemetry["Service"];
+}): Runners.Runners["Service"] => {
+  const recordRetry = (
+    messageTag: "OutgoingRequest" | "OutgoingEnvelope",
+    errorTag: RunnerCallErrorTag
+  ): Effect.Effect<void> =>
+    isRequestRetry({ messageTag, errorTag }) ? telemetry.recordRequestRetry : Effect.void;
+  const send: Runners.Runners["Service"]["send"] = (options) => {
+    const messageTag = options.message._tag;
+    return runners
+      .send(options)
+      .pipe(Effect.tapError((error) => recordRetry(messageTag, error._tag)));
+  };
+  const notify: Runners.Runners["Service"]["notify"] = (options) => {
+    const messageTag = options.message._tag;
+    return runners
+      .notify(options)
+      .pipe(Effect.tapError((error) => recordRetry(messageTag, error._tag)));
+  };
+  return {
+    ping: runners.ping,
+    sendLocal: runners.sendLocal,
+    send,
+    notify,
+    notifyLocal: runners.notifyLocal,
+    onRunnerUnavailable: runners.onRunnerUnavailable,
+  };
+};
 
 /**
  * The Cluster runner client whose request calls feed retry telemetry. It replaces the plain
@@ -201,6 +205,6 @@ export const requestRetryRunnersLive: Layer.Layer<
   Effect.gen(function* () {
     const runners = yield* Runners.Runners;
     const telemetry = yield* ClusterTelemetry;
-    return observeRequestRetries(runners, telemetry);
+    return observeRequestRetries({ runners, telemetry });
   })
 ).pipe(Layer.provide(Runners.layerRpc));

@@ -10,7 +10,6 @@ import {
   Exit,
   Layer,
   ManagedRuntime,
-  Option,
   Redacted,
   Ref,
   Schema,
@@ -18,7 +17,6 @@ import {
 import {
   ClusterWorkflowEngine,
   type MessageStorage,
-  RunnerAddress,
   type Runners,
   type Sharding,
 } from "effect/unstable/cluster";
@@ -38,12 +36,7 @@ import {
   EmailSendFailed,
 } from "~/shell/email-authentication/delivery";
 import { ApiHarness } from "~/shell/testing/api-harness";
-<<<<<<< HEAD
-import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
-=======
-import { clusterTestSharedOptions } from "~/shell/testing/cluster-topology-fixtures";
-import { resetClusterTopologyBeforeAll } from "~/shell/testing/cluster-topology-reset";
->>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
+import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
@@ -178,29 +171,13 @@ const makeRuntimeLayer = (
   | Layer.Success<AuthenticatedClusterLayer>,
   Config.ConfigError | Layer.Error<AuthenticatedClusterLayer>
 > => {
-<<<<<<< HEAD
   const cluster = authenticatedClusterHttp.layerSql(
     token,
-    {
-      runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-      availableShardGroups: ["default"],
-      assignedShardGroups: ["default"],
-      shardsPerGroup: 300,
-      entityMessagePollInterval: 100,
-      sendRetryInterval: 100,
-    },
-    loopbackClusterRunnerHttpPolicy([port])
+    clusterTestRunnerOptions({
+      port,
+      overrides: { entityMessagePollInterval: 100, sendRetryInterval: 100 },
+    })
   );
-=======
-  const cluster = authenticatedClusterHttp.layerSql(token, {
-    runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-    ...clusterTestSharedOptions,
-    entityMessagePollInterval: 100,
-    sendRetryInterval: 100,
-  });
->>>>>>> 38d5f2373d (feat(api): make production Cluster topology explicit and observable)
   return OnboardingEmailDeliveryWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),
     Layer.provide(Layer.succeed(EmailDeliveryPort, deliveryPort)),
@@ -212,8 +189,6 @@ const makeRuntimeLayer = (
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster onboarding delivery",
   (it) => {
-    resetClusterTopologyBeforeAll();
-
     it.effect(
       "coordinates one Activity across two independent runtimes",
       () =>

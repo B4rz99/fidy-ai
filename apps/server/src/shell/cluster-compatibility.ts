@@ -72,7 +72,7 @@ export const ensureClusterCompatibility = (
         new Error(`Cluster topology identity is missing from fidy_durable.${topologyIdentityTable}`)
       );
     }
-    const differences = clusterCompatibilityDifferences(row, local);
+    const differences = clusterCompatibilityDifferences({ published: row, local });
     if (differences.length > 0) {
       return yield* new ClusterTopologyIncompatible({ differences, published: row, local });
     }

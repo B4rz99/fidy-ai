@@ -8,7 +8,7 @@ import { categoryIds } from "~/core/categories/taxonomy";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
-import { DurableExecutionSqlQueueMemoryWorkflow } from "~/shell/durable-execution";
+import { SqlQueueHarness } from "./durable-execution";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
 import { emailCredentialLookupKey } from "~/shell/email-authentication/admission";
 import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";
@@ -288,7 +288,7 @@ export const makeBrowserLoginPairingAcceptanceControlServer = ({
       })
     ),
     Layer.provide(BunServices.layer),
-    Layer.provide(DurableExecutionSqlQueueMemoryWorkflow),
+    Layer.provide(SqlQueueHarness),
     Layer.provide(MigrationSqlClient.layer),
     Layer.provide(PgLive)
   );

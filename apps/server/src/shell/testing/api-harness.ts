@@ -66,8 +66,15 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
-import { DurableExecutionSqlQueueMemoryWorkflow } from "~/shell/durable-execution";
-import type { MessageStorage, Sharding } from "effect/unstable/cluster";
+import { SqlQueueHarness, makeSqlQueueHarness } from "./durable-execution";
+import {
+  MessageStorage,
+  RunnerStorage,
+  Runners,
+  type Sharding,
+  ShardingConfig,
+} from "effect/unstable/cluster";
+import { ClusterReadiness } from "~/shell/cluster-readiness";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultPatBearer } from "./identity-fixtures";
@@ -342,7 +349,10 @@ type SupportAccessApiHarnessLive = Layer.Layer<
   SupportAccessApiHarnessError
 >;
 
-const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): SupportAccessApiHarness =>
+const makeApiHarnessBase = (
+  access: Layer.Layer<SupportAccessVerifier>,
+  durableExecution = SqlQueueHarness
+): SupportAccessApiHarness =>
   makeApiClientLive({
     tag: ApiHarnessClient,
     bearer: defaultPatBearer,
@@ -350,7 +360,7 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
     Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive), Layer.provide(access))),
     Layer.provideMerge(ConsentDisclosureWorkflowLive),
     Layer.provideMerge(BillingAttemptWorkerLive),
-    Layer.provideMerge(DurableExecutionSqlQueueMemoryWorkflow),
+    Layer.provideMerge(durableExecution),
     Layer.provideMerge(TestKapsoClient),
     Layer.provideMerge(MemoryInferenceTest),
     Layer.provideMerge(BaselineCompactionInference),
@@ -373,6 +383,18 @@ export const makeApiHarnessWithSupportAccess = (
 
 /** The ordinary API test stack, with observability fully disabled and no SDK transport. */
 export const ApiHarness = ApiHarnessBase.pipe(Layer.provide(TelemetryDisabled));
+
+const NonRunnerClusterInfrastructure = Runners.layerNoop.pipe(
+  Layer.provideMerge(RunnerStorage.layerMemory),
+  Layer.provideMerge(MessageStorage.layerMemory),
+  Layer.provideMerge(ShardingConfig.layerDefaults)
+);
+
+/** Public API stack whose listener is bound but whose process advertises no Cluster runner. */
+export const ApiHarnessWithoutClusterRunner = makeApiHarnessBase(
+  SupportRecoveryTestAccess,
+  makeSqlQueueHarness(ClusterReadiness.layer.pipe(Layer.provide(NonRunnerClusterInfrastructure)))
+).pipe(Layer.provide(TelemetryDisabled));
 
 const AcceptancePublicNamespace = ConfigProvider.layer(
   ConfigProvider.orElse(
@@ -402,7 +424,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
   readonly privateKey: Bun.BunFile;
 }): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
   HttpLive.pipe(
-    Layer.provide(DurableExecutionSqlQueueMemoryWorkflow),
+    Layer.provide(SqlQueueHarness),
     Layer.provide(MigratorLive),
     Layer.provide(SupportRecoveryTestAccess),
     Layer.provide(TestKapsoClient),

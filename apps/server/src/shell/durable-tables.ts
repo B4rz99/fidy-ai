@@ -8,6 +8,12 @@ import { clusterStoragePrefix } from "./cluster-topology";
 /** Persisted queue table whose failed attempts are the durable retry-rate signal. */
 export const durableQueueTable = "fidy_queue";
 
+/** Cluster runner-registration table whose heartbeats reveal serving replica health. */
+export const clusterRunnersTable = `${clusterStoragePrefix}_runners`;
+
+/** Cluster shard-lock table whose fresh rows reveal deployment-wide assignment coverage. */
+export const clusterLocksTable = `${clusterStoragePrefix}_locks`;
+
 /** Cluster mailbox table whose unprocessed depth and oldest message drive backlog telemetry. */
 export const clusterMessagesTable = `${clusterStoragePrefix}_messages`;
 

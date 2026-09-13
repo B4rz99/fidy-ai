@@ -5,6 +5,7 @@ import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { MigrationSqlClient, MigratorLive } from "~/shell/db/client";
 import { ClusterTopologyIncompatible, ensureClusterCompatibility } from "./cluster-compatibility";
+import { topologyIdentityTable } from "./durable-tables";
 import { productionRunnerTopology } from "./cluster-topology";
 
 const runnerTopology = productionRunnerTopology({
@@ -37,11 +38,11 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const exit = yield* sql
           .withTransaction(
             Effect.gen(function* () {
-              yield* sql`DELETE FROM fidy_durable.cluster_topology_identity`;
+              yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
               yield* ensureClusterCompatibility(runnerTopology.compatibility);
               yield* ensureClusterCompatibility(runnerTopology.compatibility);
               expect(
-                yield* sql`SELECT count(*)::int AS count FROM fidy_durable.cluster_topology_identity`
+                yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(topologyIdentityTable)}`
               ).toEqual([{ count: 1 }]);
               return yield* Effect.die(rollback);
             })
@@ -66,7 +67,7 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
           const exit = yield* sql
             .withTransaction(
               Effect.gen(function* () {
-                yield* sql`DELETE FROM fidy_durable.cluster_topology_identity`;
+                yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
                 yield* ensureClusterCompatibility(incompatible);
                 assert.deepStrictEqual(
                   yield* ensureClusterCompatibility(runnerTopology.compatibility).pipe(
@@ -88,7 +89,7 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
                 );
                 expect(
                   yield* sql`SELECT protocol_generation AS "protocolGeneration"
-                  FROM fidy_durable.cluster_topology_identity`
+                  FROM fidy_durable.${sql(topologyIdentityTable)}`
                 ).toEqual([{ protocolGeneration: incompatible.protocolGeneration }]);
                 return yield* Effect.die(rollback);
               })

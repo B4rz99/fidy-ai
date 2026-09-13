@@ -1,6 +1,6 @@
-import { type Config, Crypto, Layer, Option, Redacted } from "effect";
+import { type Config, Crypto, Layer, Redacted } from "effect";
 import type { PgClient } from "@effect/sql-pg/PgClient";
-import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import type { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import {
@@ -8,7 +8,7 @@ import {
   authenticatedClusterHttp,
 } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
-import { clusterTestSharedOptions } from "./cluster-topology-fixtures";
+import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
 import {
   EmailDeliveryPort,
   type EmailDeliveryPortService,
@@ -17,7 +17,6 @@ import {
   type ReplacementDeliveryWorkflowLive,
   type ReplacementExpiryWorkflowLive,
 } from "~/shell/email-authentication/replacement-workflow";
-import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 
 /** Real SQL/HTTP Cluster configuration shared by in-process and hard-killed replacement test runners. */
 const testAuthenticationTokenBytes = 64;
@@ -47,15 +46,14 @@ export const replacementRuntimeLayer = ({
         Layer.provideMerge(
           authenticatedClusterHttp.layerSql(
             Redacted.make("d".repeat(testAuthenticationTokenBytes)),
-            {
-              runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
-              ...clusterTestSharedOptions,
-              runnerHealthCheckInterval: "1 second",
-              shardLockRefreshInterval: "500 millis",
-              shardLockExpiration: "2 seconds",
-            },
-            loopbackClusterRunnerHttpPolicy([port])
+            clusterTestRunnerOptions({
+              port,
+              overrides: {
+                runnerHealthCheckInterval: "1 second",
+                shardLockRefreshInterval: "500 millis",
+                shardLockExpiration: "2 seconds",
+              },
+            })
           )
         )
       )

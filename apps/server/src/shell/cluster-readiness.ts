@@ -32,6 +32,28 @@ const readinessProbeDeadline = Duration.seconds(2);
  */
 const readinessProbeCacheTtl = Duration.seconds(2);
 
+/** Shares one bounded readiness execution across requests in the public endpoint's cache window. */
+export const cacheReadinessProbe = (probes: {
+  readonly runnerState: Effect.Effect<boolean>;
+  readonly routing: Effect.Effect<boolean>;
+  readonly messageStorage: Effect.Effect<boolean>;
+}): Effect.Effect<Effect.Effect<ClusterReadinessReport>> =>
+  Effect.cachedWithTTL(Effect.all(probes), readinessProbeCacheTtl);
+
+/** Converts one optional Cluster ability into a deadline-bounded readiness boolean. */
+export const runReadinessAbility = <A, E, R>(
+  probe: Option.Option<Effect.Effect<A, E, R>>
+): Effect.Effect<boolean, never, R> =>
+  Option.match(probe, {
+    onNone: () => Effect.succeed(false),
+    onSome: (effect) =>
+      effect.pipe(
+        Effect.timeout(readinessProbeDeadline),
+        Effect.as(true),
+        Effect.catchCause(() => Effect.succeed(false))
+      ),
+  });
+
 /**
  * Probe seam that distinguishes a bound HTTP listener from a runner able to do Cluster work. A
  * probe writes this runner's heartbeat (state refresh), pings its advertised address over the
@@ -60,28 +82,13 @@ export class ClusterReadiness extends Context.Service<
       const messageStorage = yield* MessageStorage.MessageStorage;
       const shardingConfig = yield* ShardingConfig.ShardingConfig;
 
-      // The wrapper turns a completed probe into `true` and an absent, failed, or timed-out probe
-      // into `false`, so a degraded ability never exposes an error and never blocks readiness.
-      const withProbeDeadline = <A, E, R>(
-        probe: Option.Option<Effect.Effect<A, E, R>>
-      ): Effect.Effect<boolean, never, R> =>
-        Option.match(probe, {
-          onNone: () => Effect.succeed(false),
-          onSome: (effect) =>
-            effect.pipe(
-              Effect.timeout(readinessProbeDeadline),
-              Effect.as(true),
-              Effect.catchCause(() => Effect.succeed(false))
-            ),
-        });
-
-      const probeRunnerState = withProbeDeadline(
+      const probeRunnerState = runReadinessAbility(
         Option.map(shardingConfig.runnerAddress, (address) => runnerStorage.refresh(address, []))
       );
-      const probeRouting = withProbeDeadline(
+      const probeRouting = runReadinessAbility(
         Option.map(shardingConfig.runnerAddress, (address) => runners.ping(address))
       );
-      const probeMessageStorage = withProbeDeadline(
+      const probeMessageStorage = runReadinessAbility(
         Option.some(
           messageStorage.requestIdForPrimaryKey({
             address: readinessProbeAddress,
@@ -92,14 +99,11 @@ export class ClusterReadiness extends Context.Service<
       );
 
       return ClusterReadiness.of({
-        probe: yield* Effect.cachedWithTTL(
-          Effect.all({
-            runnerState: probeRunnerState,
-            routing: probeRouting,
-            messageStorage: probeMessageStorage,
-          }),
-          readinessProbeCacheTtl
-        ),
+        probe: yield* cacheReadinessProbe({
+          runnerState: probeRunnerState,
+          routing: probeRouting,
+          messageStorage: probeMessageStorage,
+        }),
       });
     })
   );

@@ -3,17 +3,16 @@
  * for every process on a database, so every integration scenario and subprocess fixture must use
  * these values even when it would rather exercise fewer shards.
  */
-import { Effect, Layer, Redacted, Schema } from "effect";
-import { ShardId, type ShardingConfig } from "effect/unstable/cluster";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import { RunnerAddress, ShardId, type ShardingConfig } from "effect/unstable/cluster";
 import { Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { topologyIdentityTable } from "~/shell/durable-tables";
 
-const clusterTestAuthenticationTokenBytes = 64;
+const clusterTestTokenHexLength = 64;
 
-/** 64-byte bearer token every test runner and client presents to the Cluster HTTP listener. */
-export const clusterTestAuthenticationToken = Redacted.make(
-  "f".repeat(clusterTestAuthenticationTokenBytes)
-);
+/** 32-byte bearer token encoded as 64 hex characters for every test runner and client. */
+export const clusterTestAuthenticationToken = Redacted.make("f".repeat(clusterTestTokenHexLength));
 
 /** Shard count the shared test topology publishes in the deployment compatibility identity. */
 export const clusterTestShardCount = 300;
@@ -22,6 +21,15 @@ export const clusterTestShardCount = 300;
 export const clusterTestShardIds = Array.from({ length: clusterTestShardCount }, (_, index) =>
   ShardId.make("default", index + 1)
 );
+
+/** Releases test runtimes concurrently so a timed-out scenario cannot retain shard ownership. */
+export const disposeTestRuntimes = (
+  runtimes: ReadonlyArray<{ readonly dispose: () => Promise<void> }>
+): Effect.Effect<void> =>
+  Effect.tryPromise(() => Promise.all(runtimes.map((runtime) => runtime.dispose()))).pipe(
+    Effect.orDie,
+    Effect.asVoid
+  );
 
 /**
  * Topology every SQL Cluster scenario shares. Row leases match production so the identity and the
@@ -39,6 +47,20 @@ export const clusterTestSharedOptions = {
   shardLockRefreshInterval: 500,
   shardLockExpiration: "3 seconds",
 } satisfies Partial<ShardingConfig.ShardingConfig["Service"]>;
+
+/** Builds the shared test topology for one loopback runner, with scenario-specific overrides. */
+export const clusterTestRunnerOptions = ({
+  port,
+  overrides,
+}: {
+  readonly port: number;
+  readonly overrides: Partial<ShardingConfig.ShardingConfig["Service"]>;
+}): Partial<ShardingConfig.ShardingConfig["Service"]> => ({
+  ...clusterTestSharedOptions,
+  runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+  runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
+  ...overrides,
+});
 
 const clusterTopologyProbeWorkflowName = "ClusterTopologyProbe";
 
@@ -73,7 +95,7 @@ export const resetClusterTopologyIdentity: Effect.Effect<void> = Layer.build(
   Layer.effectDiscard(
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`DELETE FROM fidy_durable.cluster_topology_identity`;
+      yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
     })
   ).pipe(Layer.provide(MigrationSqlClient.layer))
 ).pipe(Effect.scoped, Effect.orDie);

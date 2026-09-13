@@ -125,17 +125,17 @@ Each runner logs one structured observation at startup and then every 60 seconds
 
 `Observed Cluster topology` with the following fields, all bounded and dimension-free:
 
-| Field                                                                 | Covers                                                                                                               |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `isShutdown`                                                          | Whether the runner is draining.                                                                                      |
-| `runnersTotal`, `runnersHealthy`                                      | Runner health across the topology.                                                                                   |
-| `assignedShards`, `expectedShards`, `unassignedShards`                | Shard ownership and assignment lag. `expectedShards` is this runner's weighted hash-ring share, not the whole group. |
-| `shardLockFailures`, `shardLockRefreshAgeMillis`                      | Row-lock acquire failures and shard-carrying refresh failures, plus refresh recency.                                 |
-| `mailboxUnprocessed`, `mailboxOldestAgeMillis`, `mailboxRedeliveries` | Durable mailbox depth, age, and redelivery of persisted Work requests.                                               |
-| `residentEntities`, `residentCapacity`                                | Resident capacity: the limit and whether four fifths of it is used.                                                  |
-| `queueRetriesTotal`, `queuePendingRetries`                            | Durable-queue retries (attempts after the first) and pending retries.                                                |
-| `requestRetriesTotal`                                                 | Cross-runner request calls (sends and discard notifications) retried after a retryable routing failure.              |
-| `retriesDelta`                                                        | Queue and request retries gained since the previous sample; absent on the first sample.                              |
+| Field                                                                 | Covers                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `isShutdown`                                                          | Whether the runner is draining.                                                                         |
+| `runnersTotal`, `runnersHealthy`                                      | Runner health across the topology.                                                                      |
+| `assignedShards`, `expectedShards`, `unassignedShards`                | Deployment-wide fresh shard locks, configured shard count, and assignment lag.                          |
+| `shardLockFailures`, `shardLockRefreshAgeMillis`                      | Row-lock acquire failures and shard-carrying refresh failures, plus refresh recency.                    |
+| `mailboxUnprocessed`, `mailboxOldestAgeMillis`, `mailboxRedeliveries` | Durable mailbox depth, age, and redelivery of persisted Work requests.                                  |
+| `residentEntities`, `residentCapacity`                                | Resident capacity: the limit and whether four fifths of it is used.                                     |
+| `queueRetriesTotal`, `queuePendingRetries`                            | Durable-queue retries (attempts after the first) and pending retries.                                   |
+| `requestRetriesTotal`                                                 | Cross-runner request calls (sends and discard notifications) retried after a retryable routing failure. |
+| `retriesDelta`                                                        | Queue and request retries gained since the previous sample; absent on the first sample.                 |
 
 Counts clamp at 1,000,000, ages clamp at one day, and absent readings — including unbounded capacity
 and the first sample's rates — are omitted from the log record. A failed observation logs exactly
@@ -144,9 +144,9 @@ address, entity id, or User id.
 
 Operational reading:
 
-- Rising `unassignedShards` means the runner is holding fewer shards than the healthy weighted ring
-  assigns it: check database health and `runnersHealthy`. A steady fleet reports zero for every
-  runner even though no single runner owns the whole group.
+- Rising `unassignedShards` means configured shards lack a fresh durable ownership lock: check
+  database health and `runnersHealthy`. Every runner observes the same deployment-wide count; the
+  implementation reads lock state directly rather than duplicating Effect's hash-ring algorithm.
 - Rising `mailboxOldestAgeMillis` or `mailboxUnprocessed` means admitted Work is not being drained.
 - Rising `shardLockFailures` or `shardLockRefreshAgeMillis` means lock storage is failing and
   ownership may be lost; the runner logs `Shard lock storage is unhealthy` separately. The counter
@@ -161,11 +161,11 @@ Operational reading:
 
 ## Recovery expectations
 
-- **Deployment grace period**: the window the platform allows between SIGTERM and SIGKILL. It must
-  be at least `entityTerminationTimeout` (15 seconds) plus one `refreshAssignmentsInterval`
-  (3 seconds) so a gracefully draining runner always releases its locks before it is killed. The
-  graceful-stop integration scenario runs at production cadence and requires a survivor to hold
-  every shard within 15 seconds of shutdown returning.
+- **Deployment grace period**: the window the platform allows between SIGTERM and SIGKILL.
+  `apps/server/railway.json` fixes it at 30 seconds. The graceful-stop integration scenario starts
+  with a resident Workflow entity and runs at the production 15-second entity-termination and
+  3-second assignment cadences. It places shutdown plus complete ownership transfer under one
+  25-second deadline, preserving 5 seconds of platform scheduling and SQL margin before SIGKILL.
 - **Graceful stop**: `preemptiveShutdown` releases every shard lock and unregisters the runner.
   Surviving runners pick up the released shards on the next `refreshAssignmentsInterval`, so
   ownership moves within seconds and no lease has to expire.

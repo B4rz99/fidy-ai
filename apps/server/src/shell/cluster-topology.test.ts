@@ -79,7 +79,7 @@ it("names every compatibility field that differs without reporting address or ca
     shardLockExpirationMillis: published.shardLockExpirationMillis + 1,
   };
 
-  expect(clusterCompatibilityDifferences(published, local)).toEqual([
+  expect(clusterCompatibilityDifferences({ published, local })).toEqual([
     "protocolGeneration",
     "shardsPerGroup",
     "availableShardGroups",
@@ -89,8 +89,8 @@ it("names every compatibility field that differs without reporting address or ca
     "shardLockDisableAdvisory",
     "shardLockExpirationMillis",
   ]);
-  expect(clusterCompatibilityDifferences(published, { ...published })).toEqual([]);
+  expect(clusterCompatibilityDifferences({ published, local: { ...published } })).toEqual([]);
   expect(clusterCompatibilityFields).toEqual(
-    expect.arrayContaining([...clusterCompatibilityDifferences(published, local)])
+    expect.arrayContaining([...clusterCompatibilityDifferences({ published, local })])
   );
 });

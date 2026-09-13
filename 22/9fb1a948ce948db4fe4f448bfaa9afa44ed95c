@@ -1,0 +1,21 @@
+apps/web/ARCHITECTURE.md
+  s_c7a5a6727cd856::t_600b7685fdd669 17-20
+apps/web/src/transport/browser-http-policy.ts
+  s_c7a5a6727cd856::t_57cd8c7f956614 74,77-78,80-81,83-84,86-88,90,92-94,96,98-100,102,104,261-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "229fb1a948ce948db4fe4f448bfaa9afa44ed95c",
+  "prompts": {},
+  "sessions": {
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

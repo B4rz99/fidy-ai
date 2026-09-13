@@ -96,7 +96,8 @@ const emptyMailboxSample: typeof MailboxSample.Type = {
 const emptyQueueSample: typeof QueueSample.Type = { retries: 0, pendingRetries: 0 };
 const emptyShardAssignmentSample: typeof ShardAssignmentSample.Type = { assigned: 0 };
 
-const firstOr = <A>(rows: ReadonlyArray<A>, fallback: A): A => rows[0] ?? fallback;
+type FirstOr = <A>(rows: ReadonlyArray<A>, fallback: A) => A;
+const firstOr: FirstOr = (rows, fallback) => rows[0] ?? fallback;
 
 /** Cluster services required to take one topology observation sample. */
 export type ClusterObservationDependencies =

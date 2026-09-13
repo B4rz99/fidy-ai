@@ -1,0 +1,14 @@
+apps/server/src/shell/db/migrations/0060-hmac-key-byte-semantics.test.ts
+  h_c6d49c804e0ad2 9-10,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "92ed5d9d82245b64647132843b65a20b83628acd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

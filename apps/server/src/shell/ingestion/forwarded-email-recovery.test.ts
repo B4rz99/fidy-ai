@@ -20,6 +20,7 @@ import { ReceivedEmailContent } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   grantCurrentOnboardingConsentForTesting,
@@ -119,6 +120,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               yield* TestClock.setTime(DateTime.toEpochMillis(now));
               yield* Layer.build(
                 ForwardedEmailQueueLive.pipe(
+                  Layer.provide(TelemetryDisabled),
                   Layer.provide(
                     ConfigProvider.layer(
                       ConfigProvider.fromEnv({
@@ -142,6 +144,30 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 )
               );
               expect(rows).toEqual([{ count: expectedCount }]);
+              if (mode === "production-full") {
+                const staleHandoff = yield* TestClock.withLive(
+                  sql`
+                    SELECT completed, attempts, last_failure AS "lastFailure"
+                    FROM fidy_durable.fidy_queue
+                    WHERE id = 'wrong-forwarded-email-queue-identity'
+                  `.pipe(
+                    Effect.flatMap(
+                      Schema.decodeUnknownEffect(
+                        Schema.Array(
+                          Schema.Struct({
+                            completed: Schema.Boolean,
+                            attempts: Schema.Int,
+                            lastFailure: Schema.OptionFromNullOr(Schema.String),
+                          })
+                        )
+                      )
+                    )
+                  )
+                );
+                expect(staleHandoff).toEqual([
+                  { completed: true, attempts: 1, lastFailure: Option.none() },
+                ]);
+              }
             }).pipe(Effect.provide(context));
           }),
         20_000

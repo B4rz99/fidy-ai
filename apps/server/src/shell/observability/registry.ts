@@ -70,6 +70,7 @@ export const TelemetryRegistry = {
     "whatsapp.disclosureResume",
     "whatsapp.disclosureStart",
     "whatsapp.disclosureEvidence",
+    "resend.forwardedEmailHandoff",
     "postgres.repositoryOperation",
     "postgres.compatibilityProbe",
     "task.auditRetention",

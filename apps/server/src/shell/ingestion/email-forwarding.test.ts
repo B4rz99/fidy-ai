@@ -9,10 +9,12 @@ import {
   Effect,
   Fiber,
   Layer,
+  Logger,
   Option,
   Schema,
   Stream,
 } from "effect";
+import { ClusterError } from "effect/unstable/cluster";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { type SqlClient, SqlSchema, type Statement } from "effect/unstable/sql";
 import { ConsentRecordId } from "~/core/consent/model";
@@ -23,12 +25,19 @@ import {
   type ReceivedEmailContent as ReceivedEmailContentType,
 } from "~/core/ingestion/model";
 import {
+  EmailForwardingLocalPart,
   IngestSampleId,
   ResendReceivedEmailId,
   type ResendReceivedEmailId as ResendReceivedEmailIdType,
+  ResendWebhookDeliveryId,
 } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import {
   grantCurrentOnboardingConsentForTesting,
@@ -72,6 +81,53 @@ const getTestRow = <Result extends Schema.Constraint>(
     Result,
     execute: () => statement,
   })(undefined).pipe(Effect.orDie);
+
+type HandoffFixture = Readonly<{
+  receivedEmailId: ResendReceivedEmailIdType;
+  ownerId: UserId;
+  payloadUserId: UserId;
+  localPart: EmailForwardingLocalPart;
+  deliveryId: ResendWebhookDeliveryId;
+}>;
+
+const stageHandoff = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  overrides: Partial<HandoffFixture> = {}
+) {
+  const fixture: HandoffFixture = {
+    receivedEmailId: ResendReceivedEmailId.make("unexpected-handoff-defect"),
+    ownerId: defaultUserId,
+    payloadUserId: defaultUserId,
+    localPart: EmailForwardingLocalPart.make("unexpectedhandoffdefect000000000"),
+    deliveryId: ResendWebhookDeliveryId.make("unexpected-handoff-delivery"),
+    ...overrides,
+  };
+  yield* sql`
+    INSERT INTO email_forwarding_addresses (user_id, local_part)
+    VALUES (${fixture.ownerId}, ${fixture.localPart})
+  `;
+  yield* sql`
+    INSERT INTO forwarded_email_receipts (
+      received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
+      time_zone, period_start, consumes_free_allowance, admitted_at
+    ) VALUES (
+      ${fixture.receivedEmailId}, ${fixture.ownerId}, ${fixture.deliveryId}, 'accepted',
+      'CO', 'es-CO', 'America/Bogota', now(), false, now()
+    )
+  `;
+  yield* publishForwardedEmailWorkflow(fixture.payloadUserId, fixture.receivedEmailId);
+  return fixture;
+});
+
+const processHandoff = Effect.fnUntraced(function* (provider: ResendReceivingClientService) {
+  const context = yield* Layer.build(
+    ForwardedEmailProcessor.layer.pipe(
+      Layer.provide(Layer.succeed(ResendReceivingClient, provider)),
+      Layer.provide(TelemetryDisabled)
+    )
+  );
+  yield* Context.get(context, ForwardedEmailProcessor).processNext;
+});
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Email forwarding operations",
@@ -250,10 +306,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`
           INSERT INTO fidy_durable.fidy_queue (
             id, queue_name, element, completed, attempts, created_at, updated_at
-          ) VALUES (
-            'malformed-forwarded-email-envelope', 'forwarded-email-ingestion', '{}',
-            false, 0, now(), now()
-          )
+          ) VALUES
+            (
+              'malformed-forwarded-email-envelope', 'forwarded-email-ingestion', '{}',
+              false, 0, now(), now()
+            ),
+            (
+              'stale-forwarded-email-envelope', 'forwarded-email-ingestion',
+              ${encodeJson({
+                userId: defaultUserId,
+                receivedEmailId: "sender-recipient-subject-body-attachment-sentinel",
+                revision: 1,
+              })},
+              false, 0, now(), now()
+            )
         `;
         const accepted = yield* makeDelivery("email_known_1", first.data.address);
         const replays = yield* Effect.forEach(
@@ -325,16 +391,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(forged.status).toBe(401);
 
         const receivedAt = DateTime.makeUnsafe("2020-01-02T02:00:00Z");
-        const processWith = Effect.fn("test.processForwardedEmailThroughInterface")(function* (
-          provider: ResendReceivingClientService
-        ) {
-          const context = yield* Layer.build(
-            ForwardedEmailProcessor.layer.pipe(
-              Layer.provide(Layer.succeed(ResendReceivingClient, provider))
-            )
-          );
-          yield* Context.get(context, ForwardedEmailProcessor).processNext;
-        });
+        const processWith = Effect.fn("test.processForwardedEmailThroughInterface")(processHandoff);
         let unavailableRetrievals = 0;
         const unavailable = ResendReceivingClient.of({
           retrieveEmail: () => {
@@ -355,6 +412,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             `
           )
         ).toEqual({ attempts: 1, rejected: true });
+        yield* sql`
+          DELETE FROM fidy_durable.fidy_queue
+          WHERE id = 'malformed-forwarded-email-envelope'
+        `;
+        expect(
+          yield* getTestRow(
+            sql,
+            Schema.Struct({
+              completed: Schema.Boolean,
+              lastFailure: Schema.OptionFromNullOr(Schema.String),
+            }),
+            sql`
+              SELECT completed, last_failure AS "lastFailure"
+              FROM fidy_durable.fidy_queue
+              WHERE id = 'stale-forwarded-email-envelope'
+            `
+          )
+        ).toEqual({ completed: true, lastFailure: Option.none() });
         const review = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
@@ -786,16 +861,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const sql = yield* MigrationSqlClient;
           yield* cleanupForwardedEmailFixtures(sql);
-          const processWith = Effect.fn("test.processConsentRace")(function* (
-            provider: ResendReceivingClientService
-          ) {
-            const context = yield* Layer.build(
-              ForwardedEmailProcessor.layer.pipe(
-                Layer.provide(Layer.succeed(ResendReceivingClient, provider))
-              )
-            );
-            yield* Context.get(context, ForwardedEmailProcessor).processNext;
-          });
+          const processWith = Effect.fn("test.processConsentRace")(processHandoff);
           const setup = Effect.fn("test.setupConsentRaceUser")(function* (input: {
             readonly userId: UserId;
             readonly localPart: string;
@@ -901,6 +967,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* Deferred.await(interruptedStarted);
           yield* Fiber.interrupt(interrupted);
           yield* Deferred.succeed(releaseInterrupted, undefined);
+          expect(
+            yield* getTestRow(
+              sql,
+              Schema.Struct({
+                attempts: Schema.Int,
+                completed: Schema.Boolean,
+                lastFailure: Schema.OptionFromNullOr(Schema.String),
+              }),
+              sql`
+                SELECT attempts, completed, last_failure AS "lastFailure"
+                FROM fidy_durable.fidy_queue
+                WHERE queue_name = 'forwarded-email-ingestion'
+                  AND element::jsonb->>'receivedEmailId' = 'email_external_work_interrupted'
+              `
+            )
+          ).toEqual({ attempts: 0, completed: false, lastFailure: Option.none() });
           const released = yield* revokeCurrentOnboardingConsentForTesting(
             interruptedUserId,
             ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a6")
@@ -963,23 +1045,205 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       30_000
     );
 
-    it.effect("does not dispatch external work when no receipt is claimable", () =>
+    it.effect("rejects a correctly routed queue payload owned by another User", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        const crypto = yield* Crypto.Crypto;
+        yield* cleanupForwardedEmailFixtures(sql);
+        const receivedEmailId = ResendReceivedEmailId.make("ownership-mismatch-sentinel");
+        const mismatchedUserId = UserId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+        yield* stageHandoff(sql, {
+          receivedEmailId,
+          payloadUserId: mismatchedUserId,
+          localPart: EmailForwardingLocalPart.make("ownershipmismatchsentinel000000"),
+          deliveryId: ResendWebhookDeliveryId.make("ownership-mismatch-delivery"),
+        });
+        const beforeTransactionCount = yield* getTestRow(
+          sql,
+          Schema.Struct({ count: Schema.Int }),
+          sql`SELECT count(*)::int AS count FROM transactions`
+        );
+        let providerCalls = 0;
+        yield* processHandoff(
+          ResendReceivingClient.of({
+            retrieveEmail: () => {
+              providerCalls += 1;
+              return Effect.die("ownership mismatch reached provider");
+            },
+          })
+        );
+        const result = yield* getTestRow(
+          sql,
+          Schema.Struct({
+            completed: Schema.Boolean,
+            attempts: Schema.Int,
+            lastFailure: Schema.OptionFromNullOr(Schema.String),
+            receiptStatus: Schema.String,
+            sampleCount: Schema.Int,
+            transactionCount: Schema.Int,
+          }),
+          sql`
+            SELECT
+              q.completed,
+              q.attempts,
+              q.last_failure AS "lastFailure",
+              r.status AS "receiptStatus",
+              (SELECT count(*)::int FROM raw_email_ingest_samples) AS "sampleCount",
+              (SELECT count(*)::int FROM transactions) AS "transactionCount"
+            FROM fidy_durable.fidy_queue q
+            JOIN forwarded_email_receipts r
+              ON r.received_email_id = q.element::jsonb->>'receivedEmailId'
+            WHERE q.queue_name = 'forwarded-email-ingestion'
+              AND q.element::jsonb->>'receivedEmailId' = ${receivedEmailId}
+          `
+        );
+        expect(result).toEqual({
+          completed: true,
+          attempts: 1,
+          lastFailure: Option.none(),
+          receiptStatus: "accepted",
+          sampleCount: 0,
+          transactionCount: beforeTransactionCount.count,
+        });
+        expect(providerCalls).toBe(0);
+      })
+    );
+
+    it.effect("persists only the stable marker for a transient handoff failure", () =>
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
         yield* cleanupForwardedEmailFixtures(sql);
+        const receivedEmailId = ResendReceivedEmailId.make("transient-handoff-sentinel");
+        yield* stageHandoff(sql, {
+          receivedEmailId,
+          localPart: EmailForwardingLocalPart.make("transienthandoffsentinel0000000000"),
+          deliveryId: ResendWebhookDeliveryId.make("transient-handoff-delivery"),
+        });
+        const diagnostics = "sql-detail provider-diagnostic secret-sentinel";
+        yield* processHandoff(
+          ResendReceivingClient.of({
+            retrieveEmail: () =>
+              Effect.die(ClusterError.PersistenceError.make({ cause: new Error(diagnostics) })),
+          })
+        );
+        const queueFailure = yield* getTestRow(
+          sql,
+          Schema.Struct({
+            attempts: Schema.Int,
+            completed: Schema.Boolean,
+            lastFailure: Schema.String,
+            receiptStatus: Schema.String,
+          }),
+          sql`
+            SELECT
+              q.attempts,
+              q.completed,
+              q.last_failure AS "lastFailure",
+              r.status AS "receiptStatus"
+            FROM fidy_durable.fidy_queue q
+            JOIN forwarded_email_receipts r
+              ON r.received_email_id = q.element::jsonb->>'receivedEmailId'
+            WHERE q.queue_name = 'forwarded-email-ingestion'
+              AND q.element::jsonb->>'receivedEmailId' = ${receivedEmailId}
+          `
+        );
+        expect(queueFailure.attempts).toBeGreaterThan(0);
+        expect(queueFailure).toMatchObject({ completed: false, receiptStatus: "accepted" });
+        expect(queueFailure.lastFailure.split("\n")[0]).toBe(
+          'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"transient"}'
+        );
+        expect(queueFailure.lastFailure.length).toBeLessThanOrEqual(512);
+        for (const forbidden of [String(defaultUserId), ...diagnostics.split(" ")]) {
+          expect(queueFailure.lastFailure).not.toContain(forbidden);
+        }
+      })
+    );
+
+    it.effect("redacts an unexpected handoff defect from PostgreSQL and telemetry", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        yield* cleanupForwardedEmailFixtures(sql);
+        const receivedEmailId = ResendReceivedEmailId.make("unexpected-handoff-defect");
+        yield* stageHandoff(sql);
+        const forbiddenDiagnostics = [
+          "sender-sentinel@example.test",
+          "recipient-sentinel@example.test",
+          "subject-body-sentinel",
+          "attachment-evidence-sentinel",
+          String(defaultUserId),
+          "sql-detail-sentinel",
+          "provider-diagnostic-sentinel",
+          "secret-sentinel",
+        ];
+        const capturedLogs: Array<string> = [];
+        const logger = Logger.make((options) => {
+          const structured = Logger.formatStructured.log(options);
+          const parts = [String(structured.message), structured.cause ?? ""];
+          for (const [key, value] of Object.entries(structured.annotations)) {
+            parts.push(key, String(value));
+          }
+          capturedLogs.push(parts.join("\n"));
+        });
         const context = yield* Layer.build(
           ForwardedEmailProcessor.layer.pipe(
             Layer.provide(
               Layer.succeed(
                 ResendReceivingClient,
                 ResendReceivingClient.of({
-                  retrieveEmail: () => Effect.die("idle processing must not retrieve email"),
+                  retrieveEmail: () => Effect.die(new Error(forbiddenDiagnostics.join(" "))),
                 })
               )
-            )
+            ),
+            Layer.provideMerge(TelemetryEnvelopeRecording)
           )
         );
-        yield* Context.get(context, ForwardedEmailProcessor).processNext;
+        yield* Context.get(context, ForwardedEmailProcessor).processNext.pipe(
+          Effect.withLogger(logger)
+        );
+        const queueFailure = yield* getTestRow(
+          sql,
+          Schema.Struct({ attempts: Schema.Int, lastFailure: Schema.String }),
+          sql`
+            SELECT attempts, last_failure AS "lastFailure"
+            FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'forwarded-email-ingestion'
+              AND element::jsonb->>'receivedEmailId' = ${receivedEmailId}
+          `
+        );
+        expect(queueFailure.attempts).toBeGreaterThan(0);
+        expect(queueFailure.lastFailure.split("\n")[0]).toBe(
+          'Error: {"_tag":"PersistedQueueHandlerFailure","reason":"unexpected-defect"}'
+        );
+        expect(queueFailure.lastFailure.length).toBeLessThanOrEqual(512);
+        const serializedEnvelopes = yield* Context.get(context, EnvelopeRecorder)
+          .serializedEnvelopes;
+        const decodedEnvelopes = serializedEnvelopes.map((bytes) =>
+          new TextDecoder().decode(bytes)
+        );
+        expect(
+          decodedEnvelopes.filter((envelope) =>
+            envelope.includes('"operation":"resend.forwardedEmailHandoff"')
+          )
+        ).toHaveLength(queueFailure.attempts);
+        const defectTelemetry = decodedEnvelopes.join("\n");
+        const defectLogs = capturedLogs.join("\n");
+        for (const forbidden of forbiddenDiagnostics) {
+          expect(queueFailure.lastFailure).not.toContain(forbidden);
+          expect(defectLogs).not.toContain(forbidden);
+          expect(defectTelemetry).not.toContain(forbidden);
+        }
+      })
+    );
+
+    it.effect("does not dispatch external work when no receipt is claimable", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        yield* cleanupForwardedEmailFixtures(sql);
+        yield* processHandoff(
+          ResendReceivingClient.of({
+            retrieveEmail: () => Effect.die("idle processing must not retrieve email"),
+          })
+        );
         const receipts = yield* getTestRow(
           sql,
           Schema.Struct({ count: Schema.Int }),

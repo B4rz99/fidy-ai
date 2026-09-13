@@ -21,6 +21,7 @@ import {
 import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion/reference";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import { jsonStringSchema } from "~/schema-compatibility";
 import { forwardingLocalPartForDomain } from "./email-address";
 import {
@@ -164,7 +165,8 @@ type ForwardedEmailProcessorDependencies =
   | SqlClient.SqlClient
   | ResendReceivingClient
   | PersistedQueue.PersistedQueueFactory
-  | WorkflowEngine.WorkflowEngine;
+  | WorkflowEngine.WorkflowEngine
+  | Telemetry;
 
 const makeForwardedEmailProcessor = Effect.gen(function* () {
   const dependencies = yield* Effect.context<ForwardedEmailProcessorDependencies>();

@@ -1,0 +1,54 @@
+apps/web/src/features/subscription/feature.tsx
+  s_6fddb121afb0c2::t_223481cceb127e 628-640,642-646,648,652-658,661-662,664,668,679-687,689,698,708,723
+  s_6fddb121afb0c2::t_a81d2bc34880ce 899-901
+  s_6fddb121afb0c2::t_f0b221b1ca3f6e 5,660,688,695,701,709-710,724
+  s_6fddb121afb0c2::t_251f404bed9e44 485-489,492,494,499-500,641,647,649-651,672,674-675
+  s_6fddb121afb0c2::t_0899a602cd898c 419-423,663,665-666,690,696,716,725-726,729-734
+  s_6fddb121afb0c2::t_bfe2188e185015 505-507
+  s_6fddb121afb0c2::t_da2b8e9f882aaf 28
+  s_c7a5a6727cd856::t_925ed1f3d8249c 735
+apps/web/src/features/subscription/feature.test.tsx
+  s_6fddb121afb0c2::t_a120cb3f3a6929 503-513,516-520,522,524-529,531-536,543-555,557-573,575-584
+  s_6fddb121afb0c2::t_6147f0c97c285b 521
+  s_6fddb121afb0c2::t_464583d844fb71 523
+  s_6fddb121afb0c2::t_bfe2188e185015 514-515
+  s_6fddb121afb0c2::t_d8659bdb967ace 530,574
+  s_6fddb121afb0c2::t_b099801e9bf4ce 537-542,556
+  s_a634f65f042137::t_dcc2a1d00847b6 585
+apps/web/src/features/subscription/payment-refresh-lifetime.ts
+  s_6fddb121afb0c2::t_4040b06c70083f 1,3-4,7-8,11
+  s_6fddb121afb0c2::t_0cb666b08c9a82 2,9-10
+  s_6fddb121afb0c2::t_3c6b5d5f0fba64 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0260cafb0d989e3bfdbe8d7e08253780ddf48026",
+  "prompts": {},
+  "sessions": {
+    "s_6fddb121afb0c2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-88db-7794-900a-b3cdf5b64949",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

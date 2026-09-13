@@ -1,0 +1,54 @@
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  h_c6d49c804e0ad2 32,97-110
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  h_c6d49c804e0ad2 35,142-154
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 4,6,8,10,15,17,20-24,142,160-180,190,199-229
+apps/server/src/shell/_shared/bounded-external-http.ts
+  h_c6d49c804e0ad2 16-17,45,85-95,150-153,173,183-186,192,276
+apps/server/src/shell/cluster-runner-http.ts
+  h_c6d49c804e0ad2 1-272
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  h_c6d49c804e0ad2 15,19-35
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  h_c6d49c804e0ad2 40,294-309
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 5,21,29,38,130-146,148,236-248,969-973,979-982,983-1006
+  h_c6d49c804e0ad2 112-121,147,917-922,924-927,933-939,949-954,955-959,961-968
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,91-107
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  h_c6d49c804e0ad2 39,173-185
+apps/server/src/shell/_shared/protected-http-client.ts
+  h_c6d49c804e0ad2 1-49
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  h_c6d49c804e0ad2 25,97-110
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 1,6-9,11,21-134,137-141,143-158,180-181,186-196
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 3,7,25-32,39,43,50,54-73,75-79,81-83,96-109,119-120,126,130-132,135-138,141-142,144
+  h_c6d49c804e0ad2 127-129,134
+apps/server/src/shell/_shared/projected-http-client-error.ts
+  h_c6d49c804e0ad2 1-121
+apps/server/src/shell/cluster-runner-http.test.ts
+  h_c6d49c804e0ad2 1-587
+apps/server/src/shell/testing/cluster-runner-http-policy.ts
+  h_c6d49c804e0ad2 1-14
+apps/server/src/shell/durable-execution.test.ts
+  h_c6d49c804e0ad2 1-21
+apps/server/src/shell/_shared/hosted-turn-bounds.ts
+  h_c6d49c804e0ad2 1-8
+apps/server/src/shell/testing/replacement-runtime.ts
+  h_c6d49c804e0ad2 23,66-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "80cbcc7f3377a793fa2ff5c2f02650e1e6627e18",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

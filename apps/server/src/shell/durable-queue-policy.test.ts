@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import { Cause, Effect, Exit, Schema } from "effect";
 import { CurrentAgentLimits } from "~/shell/agent/agent-service";
 import {
   type DurableQueueSignals,
@@ -12,6 +13,7 @@ import {
   durableQueueLongestHandlerPauseSeconds,
   durableQueueMaxAttempts,
   durableQueueNames,
+  durableQueueNativeDecodeFailurePrefix,
   hasDurableQueueAttention,
   maxAttemptsForDurableQueue,
   observedMaxAttemptsForDurableQueue,
@@ -23,7 +25,7 @@ const healthySignals: DurableQueueSignals = {
   staleLeaseCount: 0,
   stalledLeaseCount: 0,
   exhaustedCount: 0,
-  schemaIncompatibleCount: 0,
+  decodeFailureCount: 0,
 };
 
 it("declares one stable queue name per production queue within the Effect column bound", () => {
@@ -46,6 +48,16 @@ it("keeps statement ingestion on the fast retry budget and every other queue on 
 
 it("falls back to the native ceiling for names outside the production policy", () => {
   expect(observedMaxAttemptsForDurableQueue("test-only-queue")).toBe(10);
+});
+
+it("pins the native decode-failure prefix to the store's failure rendering", () => {
+  const exit = Effect.runSync(
+    Effect.exit(Schema.decodeUnknownEffect(Schema.Struct({ note: Schema.String }))({ note: null }))
+  );
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) {
+    expect(Cause.pretty(exit.cause).startsWith(durableQueueNativeDecodeFailurePrefix)).toBe(true);
+  }
 });
 
 it("holds lock expiry above twice the longest handler pause with active refresh", () => {
@@ -126,7 +138,7 @@ it("flags permanently ineligible work separately from transient signals", () => 
   expect(exhausted.leaseChurn).toBe(false);
   const decodeFailure = classifyDurableQueueAttention({
     ...healthySignals,
-    schemaIncompatibleCount: 1,
+    decodeFailureCount: 1,
   });
   expect(decodeFailure.decodeFailure).toBe(true);
   expect(decodeFailure.exhausted).toBe(false);

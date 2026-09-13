@@ -7,6 +7,7 @@ import {
   durableQueueLeaseStallSeconds,
   durableQueueLockExpirationSeconds,
   durableQueueNames,
+  durableQueueNativeDecodeFailurePrefix,
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
   hasDurableQueueAttention,
@@ -32,17 +33,17 @@ const DurableQueueHealthCounts = Schema.Struct({
   stalledLeaseCount: Schema.Int,
   redeliveredCount: Schema.Int,
   failedCount: Schema.Int,
-  schemaIncompatibleCount: Schema.Int,
+  decodeFailureCount: Schema.Int,
   exhaustedCount: Schema.Int,
 });
 
 /**
  * One queue's bounded health counts, derived from the schema that decodes them. The probe never
- * selects `element` or `last_failure` content: every signal is a count, a bounded age, or an
- * equality match against the exact `durableQueueSchemaIncompatibleMarker`, so queue payloads, User
- * identifiers, and failure text cannot enter readiness, logs, or telemetry. Native schema decode
- * failures are counted as failed and redelivered rows; only work retired as schema-incompatible
- * carries the exact marker. Retained history is exposed for observation and never alerts alone.
+ * selects `element` or `last_failure` content: every signal is a count, a bounded age, an equality
+ * match against the exact `durableQueueSchemaIncompatibleMarker`, or a bounded prefix match against
+ * the store's native `SchemaError` rendering, so queue payloads, User identifiers, and failure text
+ * cannot enter readiness, logs, or telemetry. Retained history is exposed for observation and never
+ * alerts alone.
  */
 export type DurableQueueHealth = Readonly<{ readonly queueName: string }> &
   typeof DurableQueueHealthCounts.Type;
@@ -53,6 +54,7 @@ const DurableQueueHealthRequest = Schema.Struct({
   expirySeconds: Schema.Int,
   stallSeconds: Schema.Int,
   schemaMarker: Schema.String,
+  decodeFailurePattern: Schema.String,
 });
 
 /** One queue's bounded health counts plus its alert flags, the exact readiness shape. */
@@ -64,14 +66,25 @@ const maximumDurableQueueAgeSeconds = Math.floor(
   Duration.toSeconds(Duration.millis(maximumTelemetryDurationMilliseconds))
 );
 
+/** Bounded probe parameters; the decode-failure pattern is a prefix, never failure content. */
+const durableQueueHealthParams = (queueName: string): typeof DurableQueueHealthRequest.Type => ({
+  queueName,
+  maxAttempts: observedMaxAttemptsForDurableQueue(queueName),
+  expirySeconds: durableQueueLockExpirationSeconds,
+  stallSeconds: durableQueueLeaseStallSeconds,
+  schemaMarker: durableQueueSchemaIncompatibleMarker,
+  decodeFailurePattern: `${durableQueueNativeDecodeFailurePrefix}%`,
+});
+
 /**
  * One indexed aggregate over a single queue. The probe never selects `element` or `last_failure`:
  * pending means eligible (`attempts < maxAttempts`); retained rows are completed history awaiting
- * domain retention; stalled leases missed two refresh intervals while still live (refresh failure);
- * stale leases are held past expiry (refresh failed and stayed failed, or a process died without
- * releasing); redelivered rows carry at least one attempt; exhausted rows have spent their retry
- * budget and will never be reclaimed by polling. Counts are capped at the shared telemetry-count
- * maximum and ages at the shared duration maximum.
+ * domain retention; decode failures are rows whose recorded failure is the store's native
+ * `SchemaError` rendering or the exact retirement marker; stalled leases missed two refresh
+ * intervals while still live (refresh failure); stale leases are held past expiry (refresh failed
+ * and stayed failed, or a process died without releasing); redelivered rows carry at least one
+ * attempt; exhausted rows have spent their retry budget and will never be reclaimed by polling.
+ * Counts are capped at the shared telemetry-count maximum and ages at the shared duration maximum.
  */
 const readDurableQueueCounts = (
   sql: SqlClient.SqlClient,
@@ -117,20 +130,17 @@ const readDurableQueueCounts = (
             AND attempts < ${request.maxAttempts}
         ), ${maximumTelemetryCount})::int AS "failedCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND last_failure = ${request.schemaMarker}
-        ), ${maximumTelemetryCount})::int AS "schemaIncompatibleCount",
+          WHERE completed = FALSE AND (
+            last_failure = ${request.schemaMarker}
+            OR last_failure LIKE ${request.decodeFailurePattern}
+          )
+        ), ${maximumTelemetryCount})::int AS "decodeFailureCount",
         LEAST(count(*) FILTER (
           WHERE completed = FALSE AND attempts >= ${request.maxAttempts}
         ), ${maximumTelemetryCount})::int AS "exhaustedCount"
       FROM ${sql(durableQueueTableName)} WHERE queue_name = ${request.queueName}
     `,
-  })({
-    queueName,
-    maxAttempts: observedMaxAttemptsForDurableQueue(queueName),
-    expirySeconds: durableQueueLockExpirationSeconds,
-    stallSeconds: durableQueueLeaseStallSeconds,
-    schemaMarker: durableQueueSchemaIncompatibleMarker,
-  }).pipe(Effect.orDie);
+  })(durableQueueHealthParams(queueName)).pipe(Effect.orDie);
 
 /** Reads one queue's bounded health counts. */
 const readDurableQueueHealth = (
@@ -171,7 +181,7 @@ export type DurableQueueAttentionLogAnnotations = Readonly<{
   stalled_lease_count: number;
   redelivered_count: number;
   failed_count: number;
-  schema_incompatible_count: number;
+  decode_failure_count: number;
   exhausted_count: number;
   backlog: boolean;
   lease_churn: boolean;
@@ -193,7 +203,7 @@ export const durableQueueAttentionLogAnnotations = (
   stalled_lease_count: queue.stalledLeaseCount,
   redelivered_count: queue.redeliveredCount,
   failed_count: queue.failedCount,
-  schema_incompatible_count: queue.schemaIncompatibleCount,
+  decode_failure_count: queue.decodeFailureCount,
   exhausted_count: queue.exhaustedCount,
   backlog: queue.attention.backlog,
   lease_churn: queue.attention.leaseChurn,
@@ -301,7 +311,7 @@ export const projectDurableQueueReadiness = (
     stalledLeaseCount: queue.stalledLeaseCount,
     redeliveredCount: queue.redeliveredCount,
     failedCount: queue.failedCount,
-    schemaIncompatibleCount: queue.schemaIncompatibleCount,
+    decodeFailureCount: queue.decodeFailureCount,
     exhaustedCount: queue.exhaustedCount,
     attention: classifyDurableQueueAttention(queue),
   })),

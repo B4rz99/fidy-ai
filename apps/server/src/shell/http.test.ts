@@ -19,7 +19,7 @@ const DurableQueueReadinessBody = Schema.Struct({
       stalledLeaseCount: Schema.Int,
       redeliveredCount: Schema.Int,
       failedCount: Schema.Int,
-      schemaIncompatibleCount: Schema.Int,
+      decodeFailureCount: Schema.Int,
       exhaustedCount: Schema.Int,
       attention: Schema.Struct({
         backlog: Schema.Boolean,
@@ -98,7 +98,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "stalledLeaseCount",
           "redeliveredCount",
           "failedCount",
-          "schemaIncompatibleCount",
+          "decodeFailureCount",
           "exhaustedCount",
           "attention",
         ].sort();

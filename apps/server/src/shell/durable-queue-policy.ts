@@ -121,12 +121,19 @@ export const observedMaxAttemptsForDurableQueue = (queueName: string): number =>
     : durableQueueNativeMaxAttempts;
 
 /**
- * Durable decode-failure marker. Native schema decode failures store `Cause.pretty` in
- * `last_failure`; the WhatsApp exhausted-work retirement instead writes this exact marker so the
- * health probe can count confirmed decode failures with an equality match, never by reading
- * failure text.
+ * Durable decode-failure marker. The WhatsApp exhausted-work retirement writes this exact marker so
+ * the health probe can count confirmed retirements with an equality match, never by reading failure
+ * text.
  */
 export const durableQueueSchemaIncompatibleMarker = "schema_incompatible";
+
+/**
+ * Prefix the SQL store writes for native schema decode failures. `PersistedQueue` records
+ * `Cause.pretty(cause)` in `last_failure`; a `SchemaError` renders as `SchemaError: <message>` while
+ * handler failures render their own error names. The probe matches this bounded prefix in-database
+ * and emits only counts, so failure text never leaves Postgres.
+ */
+export const durableQueueNativeDecodeFailurePrefix = "SchemaError:";
 
 /** Pending depth that pages an operator: one full retention page of undrained eligible work. */
 export const durableQueueBacklogDepth = 256;
@@ -141,7 +148,7 @@ export type DurableQueueSignals = Readonly<{
   readonly staleLeaseCount: number;
   readonly stalledLeaseCount: number;
   readonly exhaustedCount: number;
-  readonly schemaIncompatibleCount: number;
+  readonly decodeFailureCount: number;
 }>;
 
 /**
@@ -170,7 +177,7 @@ export const classifyDurableQueueAttention = (
     signals.oldestPendingAgeSeconds >= durableQueueBacklogAgeSeconds,
   leaseChurn: signals.staleLeaseCount > 0 || signals.stalledLeaseCount > 0,
   exhausted: signals.exhaustedCount > 0,
-  decodeFailure: signals.schemaIncompatibleCount > 0,
+  decodeFailure: signals.decodeFailureCount > 0,
 });
 
 /** Whether any alert flag is set for one queue. */

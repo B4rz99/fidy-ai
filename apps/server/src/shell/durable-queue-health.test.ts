@@ -121,7 +121,7 @@ const healthKeys = [
   "stalledLeaseCount",
   "redeliveredCount",
   "failedCount",
-  "schemaIncompatibleCount",
+  "decodeFailureCount",
   "exhaustedCount",
 ].sort();
 
@@ -136,7 +136,7 @@ const attentionAnnotationKeys = [
   "stalled_lease_count",
   "redelivered_count",
   "failed_count",
-  "schema_incompatible_count",
+  "decode_failure_count",
   "exhausted_count",
   "backlog",
   "lease_churn",
@@ -289,13 +289,22 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const row = queues.find((candidate) => candidate.queueName === testQueueName);
         expect(row?.failedCount).toBe(1);
         expect(row?.redeliveredCount).toBe(1);
-        // Native decode failures store `Cause.pretty`, not the exact retirement marker, so they
-        // surface as failed/redelivered work rather than as a confirmed schema-incompatible count.
-        expect(row?.schemaIncompatibleCount).toBe(0);
+        // The store records native decode failures as `Cause.pretty(SchemaError)`, so the bounded
+        // `SchemaError:` prefix match confirms them per queue without reading failure text.
+        expect(row?.decodeFailureCount).toBe(1);
         if (row !== undefined) {
           expect(Object.keys(row).sort()).toEqual(healthKeys);
+          expect(classifyDurableQueueAttention(row)).toEqual({
+            backlog: false,
+            leaseChurn: false,
+            exhausted: false,
+            decodeFailure: true,
+          });
           expectNoSentinels(Object.values(row));
         }
+        const { transactions } = yield* runObservedProbe([testQueueName]);
+        expect(transactions[0]?.tags.outcome).toBe("rejected");
+        expect(transactions[0]?.tags.retryable).toBe("false");
       })
     );
 
@@ -336,7 +345,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(row.pendingDepth).toBe(3);
         expect(row.redeliveredCount).toBe(3);
         expect(row.failedCount).toBe(2);
-        expect(row.schemaIncompatibleCount).toBe(1);
+        expect(row.decodeFailureCount).toBe(1);
         expect(row.exhaustedCount).toBe(0);
         expect(Object.keys(row).sort()).toEqual(healthKeys);
         const readiness = projectDurableQueueReadiness(queues);
@@ -407,7 +416,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(row?.staleLeaseCount).toBe(1);
           expect(row?.stalledLeaseCount).toBe(0);
           expect(row?.exhaustedCount).toBe(1);
-          expect(row?.schemaIncompatibleCount).toBe(1);
+          expect(row?.decodeFailureCount).toBe(1);
           const readiness = projectDurableQueueReadiness(queues);
           expect(readiness.queues).toHaveLength(1);
           expect(readiness.queues[0]?.attention).toEqual({

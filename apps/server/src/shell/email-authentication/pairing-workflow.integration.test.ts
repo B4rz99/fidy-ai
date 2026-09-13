@@ -1,10 +1,14 @@
 import { expect, layer } from "@effect/vitest";
 import {
+  Context,
   Crypto,
   DateTime,
   Deferred,
   Effect,
+  Exit,
+  Fiber,
   Layer,
+  Logger,
   ManagedRuntime,
   Option,
   Redacted,
@@ -13,12 +17,23 @@ import {
   Stream,
 } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
+import { WorkflowEngine } from "effect/unstable/workflow";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
-import { EmailAddress } from "~/core/email-authentication/model";
+import {
+  BrowserPairingEmailStartRequestId,
+  BrowserPairingEmailWorkflowId,
+  EmailAddress,
+  EmailDeliveryIntentId,
+} from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
@@ -26,8 +41,12 @@ import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-table
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { emailCredentialLookupKey } from "./admission";
-import { BrowserPairingEmailWorkflowLive } from "./authentication-delivery-worker";
-import { processBrowserPairingEmailStartRequest } from "./browser-pairing-authentication";
+import {
+  BrowserPairingEmailWorkflowLive,
+  processPairingDeliveryQueueItem,
+  processPairingExpiryQueueItem,
+  processPairingStartQueueItem,
+} from "./authentication-delivery-worker";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import {
   BrowserPairingEmailDeliveryWorkflow,
@@ -47,7 +66,7 @@ const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000464");
 const bearer = TokenBearer.make("fin_login463_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const email = EmailAddress.make("workflow-463@example.com");
 
-const admit = Effect.fn(function* () {
+const requestStart = Effect.fn(function* () {
   const sql = yield* MigrationSqlClient;
   yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
   yield* sql`DELETE FROM browser_pairing_email_start_requests`;
@@ -76,8 +95,36 @@ const admit = Effect.fn(function* () {
     }),
   });
   expect(response.status).toBe(202);
+  return pairing;
+});
+
+const startQueueFailureFixture = Effect.fn(function* () {
+  const pairing = yield* requestStart();
+  const sql = yield* MigrationSqlClient;
+  const queued = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ requestId: BrowserPairingEmailStartRequestId }))
+  )(
+    yield* sql`SELECT id AS "requestId" FROM browser_pairing_email_start_requests
+      WHERE pairing_id = ${pairing.pairingId}`
+  );
+  const payload = queued[0];
+  if (payload === undefined) return yield* Effect.die("expected queued start request");
+  const telemetry = yield* Layer.build(TelemetryEnvelopeRecording);
+  const recorder = Context.get(telemetry, EnvelopeRecorder);
+  const logs: Array<string> = [];
+  const logger = Logger.make((options) => logs.push(Bun.inspect(options)));
+  return { pairing, payload, telemetry, recorder, logs, logger };
+});
+
+const admit = Effect.fn(function* () {
+  const sql = yield* MigrationSqlClient;
+  const pairing = yield* requestStart();
   const queue = yield* pairingStartQueue;
-  yield* queue.take(({ requestId }) => processBrowserPairingEmailStartRequest(requestId));
+  yield* queue.take(processPairingStartQueueItem).pipe(
+    // This focused helper owns disabled telemetry for the sanitized consumer boundary.
+    // @effect-diagnostics-next-line strictEffectProvide:off
+    Effect.provide(TelemetryDisabled)
+  );
   const payloads = yield* Schema.decodeUnknownEffect(Schema.Array(PairingDeliveryPayload))(
     yield* sql`SELECT 1 AS revision, intent.id AS "intentId", workflow.user_id AS "userId"
       FROM browser_pairing_email_delivery_intents intent JOIN browser_pairing_email_workflows workflow ON workflow.id = intent.workflow_id
@@ -537,6 +584,303 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(yield* Ref.get(sends)).toBe(1);
         }),
       30_000
+    );
+
+    it.effect("stores only the stable retry marker for transient start database failures", () =>
+      Effect.gen(function* () {
+        const { pairing, payload, telemetry, recorder, logs, logger } =
+          yield* startQueueFailureFixture();
+        const sql = yield* MigrationSqlClient;
+
+        yield* sql`CREATE OR REPLACE FUNCTION fidy_test_pairing_start_retry() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            RAISE EXCEPTION 'sql-detail-sentinel provider-diagnostic-sentinel secret-sentinel'
+              USING ERRCODE = '40001';
+          END
+        $$;
+        CREATE TRIGGER fidy_test_pairing_start_retry BEFORE DELETE ON browser_pairing_email_start_requests
+          FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_retry()`;
+        const exit = yield* Effect.exit(
+          (yield* pairingStartQueue)
+            .take(processPairingStartQueueItem)
+            .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
+        ).pipe(
+          Effect.ensuring(
+            sql`DROP TRIGGER fidy_test_pairing_start_retry ON browser_pairing_email_start_requests;
+              DROP FUNCTION fidy_test_pairing_start_retry()`.pipe(Effect.orDie)
+          )
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        const rows = yield* sql`SELECT attempts, last_failure FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'browser-pairing-email-start' AND id = ${payload.requestId}`;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.attempts).toBe(1);
+        expect(rows[0]?.last_failure).toContain('"reason":"transient"');
+        expect(yield* recorder.serializedEnvelopes).toEqual([]);
+        const observableText = [rows[0]?.last_failure, ...logs].join("\n");
+        for (const sentinel of [
+          payload.requestId,
+          pairing.pairingId,
+          pairing.publicCode,
+          Redacted.value(pairing.privateVerifier),
+          email,
+          userId,
+          "sql-detail-sentinel",
+          "provider-diagnostic-sentinel",
+          "secret-sentinel",
+        ]) {
+          expect(observableText).not.toContain(sentinel);
+        }
+      })
+    );
+
+    it.effect("observes one start defect and stores only the shared defect marker", () =>
+      Effect.gen(function* () {
+        const { pairing, payload, telemetry, recorder, logs, logger } =
+          yield* startQueueFailureFixture();
+        const sql = yield* MigrationSqlClient;
+
+        yield* sql`CREATE OR REPLACE FUNCTION fidy_test_pairing_start_defect() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            RAISE EXCEPTION 'sql-defect-sentinel provider-defect-sentinel secret-defect-sentinel'
+              USING ERRCODE = '23514';
+          END
+        $$;
+        CREATE TRIGGER fidy_test_pairing_start_defect BEFORE DELETE ON browser_pairing_email_start_requests
+          FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_defect()`;
+        const exit = yield* Effect.exit(
+          (yield* pairingStartQueue)
+            .take(processPairingStartQueueItem)
+            .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
+        ).pipe(
+          Effect.ensuring(
+            sql`DROP TRIGGER fidy_test_pairing_start_defect ON browser_pairing_email_start_requests;
+              DROP FUNCTION fidy_test_pairing_start_defect()`.pipe(Effect.orDie)
+          )
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        const rows = yield* sql`SELECT attempts, last_failure FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'browser-pairing-email-start' AND id = ${payload.requestId}`;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.attempts).toBe(1);
+        expect(rows[0]?.last_failure).toContain('"reason":"unexpected-defect"');
+        const envelopes = yield* recorder.serializedEnvelopes;
+        expect(envelopes).toHaveLength(1);
+        const observableText = [
+          rows[0]?.last_failure,
+          ...envelopes.map((bytes) => new TextDecoder().decode(bytes)),
+          ...logs,
+        ].join("\n");
+        for (const sentinel of [
+          payload.requestId,
+          pairing.pairingId,
+          pairing.publicCode,
+          Redacted.value(pairing.privateVerifier),
+          email,
+          userId,
+          "sql-defect-sentinel",
+          "provider-defect-sentinel",
+          "secret-defect-sentinel",
+        ]) {
+          expect(observableText).not.toContain(sentinel);
+        }
+      })
+    );
+
+    it.effect("redacts unexpected delivery and expiry submission defects", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
+        const delivery = yield* pairingDeliveryQueue;
+        const expiry = yield* pairingExpiryQueue;
+        const deliveryPayload = PairingDeliveryPayload.make({
+          revision: 1,
+          userId,
+          intentId: EmailDeliveryIntentId.make("f1d1a000-0000-4000-8000-000000000468"),
+        });
+        const expiryPayload = PairingExpiryPayload.make({
+          revision: 1,
+          userId,
+          workflowId: BrowserPairingEmailWorkflowId.make("f1d1a000-0000-4000-8000-000000000469"),
+        });
+        yield* delivery.offer(deliveryPayload, { id: deliveryPayload.intentId });
+        yield* expiry.offer(expiryPayload, { id: expiryPayload.workflowId });
+
+        const telemetry = yield* Layer.build(TelemetryEnvelopeRecording);
+        const recorder = Context.get(telemetry, EnvelopeRecorder);
+        const logs: Array<string> = [];
+        const logger = Logger.make((options) => logs.push(Bun.inspect(options)));
+        const engine = yield* WorkflowEngine.WorkflowEngine;
+        const defectingEngine = WorkflowEngine.WorkflowEngine.of({
+          ...engine,
+          execute: () =>
+            Effect.die(
+              new Error(
+                `provider-defect-sentinel secret-defect-sentinel proof-defect-sentinel ${email} ${userId}`
+              )
+            ),
+        });
+
+        const exits = yield* Effect.all(
+          [
+            Effect.exit(delivery.take(processPairingDeliveryQueueItem)),
+            Effect.exit(expiry.take(processPairingExpiryQueueItem)),
+          ],
+          { concurrency: 1 }
+        ).pipe(
+          Effect.provideService(WorkflowEngine.WorkflowEngine, defectingEngine),
+          Effect.provide(telemetry),
+          Effect.withLogger(logger)
+        );
+
+        expect(exits.every(Exit.isFailure)).toBe(true);
+        const rows = yield* sql`SELECT queue_name, attempts, last_failure
+          FROM fidy_durable.fidy_queue
+          WHERE id IN (${deliveryPayload.intentId}, ${expiryPayload.workflowId})
+          ORDER BY queue_name`;
+        expect(rows).toHaveLength(2);
+        expect(rows.map((row) => row.queue_name)).toEqual([
+          "browser-pairing-email-delivery",
+          "browser-pairing-email-expiry",
+        ]);
+        expect(rows.map((row) => row.attempts)).toEqual([1, 1]);
+        expect(rows[0]?.last_failure).toContain('"reason":"unexpected-defect"');
+        expect(rows[1]?.last_failure).toContain('"reason":"unexpected-defect"');
+        const envelopes = yield* recorder.serializedEnvelopes;
+        expect(envelopes).toHaveLength(2);
+        const observableText = [
+          ...rows.map((row) => String(row.last_failure)),
+          ...envelopes.map((bytes) => new TextDecoder().decode(bytes)),
+          ...logs,
+        ].join("\n");
+        for (const sentinel of [
+          deliveryPayload.intentId,
+          expiryPayload.workflowId,
+          email,
+          userId,
+          "provider-defect-sentinel",
+          "secret-defect-sentinel",
+          "proof-defect-sentinel",
+        ]) {
+          expect(observableText).not.toContain(sentinel);
+        }
+      })
+    );
+
+    it.effect("releases interrupted start work without consuming an attempt", () =>
+      Effect.gen(function* () {
+        const pairing = yield* requestStart();
+        const sql = yield* MigrationSqlClient;
+        const queued = yield* Schema.decodeUnknownEffect(
+          Schema.Array(Schema.Struct({ requestId: BrowserPairingEmailStartRequestId }))
+        )(
+          yield* sql`SELECT id AS "requestId" FROM browser_pairing_email_start_requests
+            WHERE pairing_id = ${pairing.pairingId}`
+        );
+        const payload = queued[0];
+        if (payload === undefined) return yield* Effect.die("expected queued start request");
+
+        yield* sql`CREATE OR REPLACE FUNCTION fidy_test_pairing_start_pause() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            PERFORM pg_sleep(30);
+            RETURN OLD;
+          END
+        $$;
+        CREATE TRIGGER fidy_test_pairing_start_pause BEFORE DELETE ON browser_pairing_email_start_requests
+          FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_pause()`;
+        yield* Effect.gen(function* () {
+          const fiber = yield* (yield* pairingStartQueue).take(processPairingStartQueueItem).pipe(
+            // The test owns the disabled telemetry lifetime around the interrupted consumer.
+            // @effect-diagnostics-next-line strictEffectProvide:off
+            Effect.provide(TelemetryDisabled),
+            Effect.forkChild
+          );
+          yield* Effect.sleep("200 millis");
+          yield* Fiber.interrupt(fiber);
+        }).pipe(
+          Effect.ensuring(
+            sql`DROP TRIGGER fidy_test_pairing_start_pause ON browser_pairing_email_start_requests;
+              DROP FUNCTION fidy_test_pairing_start_pause()`.pipe(Effect.orDie)
+          )
+        );
+
+        expect(
+          yield* sql`SELECT attempts, last_failure FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'browser-pairing-email-start' AND id = ${payload.requestId}`
+        ).toEqual([{ attempts: 0, last_failure: null }]);
+      })
+    );
+
+    it.effect("completes stale work through every sanitized queue consumer", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
+        const start = yield* pairingStartQueue;
+        const delivery = yield* pairingDeliveryQueue;
+        const expiry = yield* pairingExpiryQueue;
+        const startPayload = {
+          revision: 1 as const,
+          requestId: BrowserPairingEmailStartRequestId.make("f1d1a000-0000-4000-8000-000000000465"),
+        };
+        const deliveryPayload = PairingDeliveryPayload.make({
+          revision: 1,
+          userId,
+          intentId: EmailDeliveryIntentId.make("f1d1a000-0000-4000-8000-000000000466"),
+        });
+        const expiryPayload = PairingExpiryPayload.make({
+          revision: 1,
+          userId,
+          workflowId: BrowserPairingEmailWorkflowId.make("f1d1a000-0000-4000-8000-000000000467"),
+        });
+        yield* start.offer(startPayload, { id: startPayload.requestId });
+        yield* delivery.offer(deliveryPayload, { id: deliveryPayload.intentId });
+        yield* expiry.offer(expiryPayload, { id: expiryPayload.workflowId });
+
+        yield* Effect.all(
+          [
+            start.take(processPairingStartQueueItem),
+            delivery.take(processPairingDeliveryQueueItem),
+            expiry.take(processPairingExpiryQueueItem),
+          ],
+          { concurrency: 1 }
+        ).pipe(
+          // This focused consumer test owns the workflow registration and disabled telemetry scope.
+          // @effect-diagnostics-next-line strictEffectProvide:off
+          Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled)),
+          Effect.provideService(
+            EmailDeliveryPort,
+            EmailDeliveryPort.of({ send: () => Effect.die("stale work must not send") })
+          )
+        );
+
+        expect(
+          yield* sql`SELECT queue_name, completed, attempts, last_failure
+            FROM fidy_durable.fidy_queue
+            WHERE id IN (${startPayload.requestId}, ${deliveryPayload.intentId}, ${expiryPayload.workflowId})
+            ORDER BY queue_name`
+        ).toEqual([
+          {
+            queue_name: "browser-pairing-email-delivery",
+            completed: true,
+            attempts: 1,
+            last_failure: null,
+          },
+          {
+            queue_name: "browser-pairing-email-expiry",
+            completed: true,
+            attempts: 1,
+            last_failure: null,
+          },
+          {
+            queue_name: "browser-pairing-email-start",
+            completed: true,
+            attempts: 1,
+            last_failure: null,
+          },
+        ]);
+      })
     );
 
     it.effect("rolls back native publication with its enclosing transaction", () =>

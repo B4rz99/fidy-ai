@@ -604,13 +604,17 @@ const processStartRequestInScope = Effect.fn(function* (
   yield* deleteStartRequestInScope(claim);
 });
 
-/** Resolves only one admitted request; resolution, consumption, and publication commit together. */
+/**
+ * Resolves only one admitted request; resolution, consumption, and publication commit together.
+ * Returns `processed` after consuming a current request and `not-current` when no request identity
+ * remains for the queue item, allowing callers to complete stale work without retrying it.
+ */
 export const processBrowserPairingEmailStartRequest = Effect.fn(
   "EmailAuthentication.processPairingStartRequest"
 )(function* (requestId: BrowserPairingEmailStartRequestId) {
   const sql = yield* SqlClient.SqlClient;
   const processedAt = yield* DateTime.now;
-  yield* sql
+  return yield* sql
     .withTransaction(
       Effect.gen(function* () {
         const owner = yield* SqlSchema.findOneOption({
@@ -619,7 +623,7 @@ export const processBrowserPairingEmailStartRequest = Effect.fn(
           execute: () => sql`SELECT user_id AS "userId"
         FROM fidy_resolve_browser_pairing_email_start_request(${requestId}, ${processedAt})`,
         })(undefined).pipe(Effect.orDie);
-        if (Option.isNone(owner)) return;
+        if (Option.isNone(owner)) return "not-current" as const;
         const userId = owner.value.userId;
         yield* withUserTransaction(
           userId,
@@ -631,6 +635,7 @@ export const processBrowserPairingEmailStartRequest = Effect.fn(
             )
           )
         );
+        return "processed" as const;
       })
     )
     .pipe(Effect.orDie);

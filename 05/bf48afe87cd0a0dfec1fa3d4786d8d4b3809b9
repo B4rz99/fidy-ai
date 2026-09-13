@@ -1,0 +1,16 @@
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 298,306,449-450,522-523,711,861-862
+apps/server/src/shell/agent/hosted-turns.test.ts
+  h_c6d49c804e0ad2 328-330
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "05bf48afe87cd0a0dfec1fa3d4786d8d4b3809b9",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

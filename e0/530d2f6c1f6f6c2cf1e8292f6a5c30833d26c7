@@ -1,0 +1,14 @@
+apps/server/src/shell/durable-execution-retention.ts
+  h_c6d49c804e0ad2 4,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e0530d2f6c1f6f6c2cf1e8292f6a5c30833d26c7",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

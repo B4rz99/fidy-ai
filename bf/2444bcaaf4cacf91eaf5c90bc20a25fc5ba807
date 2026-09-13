@@ -1,0 +1,26 @@
+apps/server/src/shell/agent/agent-service.test.ts
+  h_c6d49c804e0ad2 94
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 27,30-38,48,54,1823,2133
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  h_c6d49c804e0ad2 17,37,43,82,198-211,371,457,510,540,701,725,747-781,782,783-830,831,832-858,898
+apps/server/src/shell/agent/hosted-turns.test.ts
+  h_c6d49c804e0ad2 1-11,12-19,21-22,23-24,25-353,354-360,361,362,363-365,366,367,368,369-370,371,372-373,374-376,377-401,402,403-407,408,409,410,411,412-420,421,422-423,424,425,426,427-435,436,437-438,439,440,441,442-451,452-454,455-471,472,473-494,495,496-506,507,508-521,522-524,525-531
+apps/server/src/shell/agent/hosted-turns.ts
+  h_c6d49c804e0ad2 1-27,29-33,34-37,38-78
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  h_c6d49c804e0ad2 1,4,6,7,8,9-10,29-60,61,62-126
+apps/server/src/shell/authenticated-cluster-http.ts
+  h_c6d49c804e0ad2 28-29,38-42,43,44-45,131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bf2444bcaaf4cacf91eaf5c90bc20a25fc5ba807",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

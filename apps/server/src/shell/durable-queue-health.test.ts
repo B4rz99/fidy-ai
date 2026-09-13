@@ -1,24 +1,25 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer, Option, Ref, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Option, Schema, type Scope } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
-import { type SqlError } from "effect/unstable/sql";
+import { type SqlClient, type SqlError } from "effect/unstable/sql";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import {
+  durableQueueAttentionLogAnnotations,
   getDurableQueueHealthFor,
   observeDurableQueueHealthFor,
   projectDurableQueueReadiness,
 } from "./durable-queue-health";
-import type {
-  ClassifiedFailure,
-  DeclaredOutcome,
-  DurableTraceContext,
-  SpanDescriptor,
-  TelemetryBreadcrumb,
-  TelemetryHttpStatus,
-  TelemetryModelUsage,
-} from "./observability/protocol";
-import { Telemetry, type TelemetryService } from "./observability/telemetry";
+import {
+  classifyDurableQueueAttention,
+  durableQueueSchemaIncompatibleMarker,
+  durableQueueTableName,
+} from "./durable-queue-policy";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./observability/envelope-recorder";
+import { ProjectedTransaction } from "./observability/projectors";
+import { runScheduledWork } from "./observability/scheduled-work";
+import { Telemetry } from "./observability/telemetry";
 
 const testQueueName = "test-durable-queue-health";
 const lostWorkerId = "f1d1a000-0000-4000-8000-00000000dead";
@@ -33,7 +34,7 @@ const makeTestQueue = PersistedQueue.make({ name: testQueueName, schema: TestPay
 const testRuntime = PersistedQueue.layer.pipe(
   Layer.provideMerge(
     PersistedQueue.layerStoreSql({
-      tableName: "fidy_queue",
+      tableName: durableQueueTableName,
       pollInterval: "10 millis",
       lockRefreshInterval: "50 millis",
       lockExpiration: "2 seconds",
@@ -100,44 +101,75 @@ const buildTestQueue = Effect.gen(function* () {
   return yield* makeTestQueue.pipe(Effect.provide(context));
 });
 
-/** Scans already-enumerated helix values for leaked payload, identity, or failure text. */
+/** Scans already-enumerated health values for leaked payload, identity, or failure text. */
 const expectNoSentinels = (values: ReadonlyArray<unknown>): void => {
   for (const value of values) {
     expect(String(value)).not.toContain("sentinel");
   }
 };
 
-/** Captures declared probe outcomes while leaving wrapped work unchanged. */
-const captureProbeOutcomes = Effect.gen(function* () {
-  const captured = yield* Ref.make<ReadonlyArray<DeclaredOutcome>>([]);
-  const stub: TelemetryService = {
-    span: <A, E, R>(
-      _descriptor: SpanDescriptor,
-      work: Effect.Effect<A, E, R>
-    ): Effect.Effect<A, E, R> => work,
-    rootSpan: <A, E, R>(
-      _descriptor: SpanDescriptor,
-      work: Effect.Effect<A, E, R>
-    ): Effect.Effect<A, E, R> => work,
-    continueSpan: <A, E, R>(
-      _saved: unknown,
-      _descriptor: SpanDescriptor,
-      work: Effect.Effect<A, E, R>
-    ): Effect.Effect<A, E, R> => work,
-    recordOutcome: (outcome) => Ref.update(captured, (outcomes) => [...outcomes, outcome]),
-    recordResponseStatus: (_status: TelemetryHttpStatus) => Effect.void,
-    captureFailure: (_failure: ClassifiedFailure) => Effect.void,
-    addBreadcrumb: (_breadcrumb: TelemetryBreadcrumb) => Effect.void,
-    recordModelUsage: (_usage: TelemetryModelUsage) => Effect.void,
-    captureDurableContext: Effect.succeed(Option.none<DurableTraceContext>()),
-    isActiveSpan: (_context: DurableTraceContext, _operation: SpanDescriptor["operation"]) =>
-      Effect.succeed(false),
-  };
-  return {
-    stub,
-    outcomes: Ref.get(captured),
-  };
-});
+const healthKeys = [
+  "queueName",
+  "pendingDepth",
+  "oldestPendingAgeSeconds",
+  "activeLeaseCount",
+  "staleLeaseCount",
+  "stalledLeaseCount",
+  "redeliveredCount",
+  "failedCount",
+  "schemaIncompatibleCount",
+  "exhaustedCount",
+].sort();
+
+const attentionAnnotationKeys = [
+  "queue_name",
+  "pending_depth",
+  "oldest_pending_age_seconds",
+  "active_lease_count",
+  "stale_lease_count",
+  "stalled_lease_count",
+  "redelivered_count",
+  "failed_count",
+  "schema_incompatible_count",
+  "exhausted_count",
+  "backlog",
+  "lease_churn",
+  "exhausted",
+  "decode_failure",
+].sort();
+
+/**
+ * Runs the probe through the production scheduled-work wrapper and its recording Sentry adapter,
+ * then reconstructs the exact serialized transaction the exporter would send.
+ */
+const runObservedProbe = (
+  queueNames: ReadonlyArray<string>
+): Effect.Effect<
+  Readonly<{
+    transactions: ReadonlyArray<ProjectedTransaction>;
+    serialized: string;
+  }>,
+  never,
+  Scope.Scope | SqlClient.SqlClient
+> =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(TelemetryEnvelopeRecording);
+    const telemetry = Context.get(services, Telemetry);
+    const recorder = Context.get(services, EnvelopeRecorder);
+    yield* runScheduledWork({
+      component: "postgres",
+      schedule: "task.durableQueueHealth",
+      operationalError: "operational_failure",
+    })(observeDurableQueueHealthFor(queueNames)).pipe(Effect.provideService(Telemetry, telemetry));
+    const envelopes = yield* recorder.serializedEnvelopes;
+    const items = envelopes.flatMap(decodeEnvelopeItems);
+    return {
+      transactions: items
+        .flatMap((item) => Option.toArray(Schema.decodeUnknownOption(ProjectedTransaction)(item)))
+        .filter((transaction) => transaction.transaction === "task.durableQueueHealth"),
+      serialized: envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n"),
+    };
+  });
 
 layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "durable queue two-runtime behavior",
@@ -253,18 +285,12 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const row = queues.find((candidate) => candidate.queueName === testQueueName);
         expect(row?.failedCount).toBe(1);
         expect(row?.redeliveredCount).toBe(1);
+        // Native decode failures store `Cause.pretty`, not the exact retirement marker, so they
+        // surface as failed/redelivered work rather than as a confirmed schema-incompatible count.
+        expect(row?.schemaIncompatibleCount).toBe(0);
         if (row !== undefined) {
-          expectNoSentinels([
-            row.queueName,
-            row.pendingDepth,
-            row.oldestPendingAgeSeconds,
-            row.activeLeaseCount,
-            row.staleLeaseCount,
-            row.redeliveredCount,
-            row.failedCount,
-            row.schemaIncompatibleCount,
-            row.exhaustedCount,
-          ]);
+          expect(Object.keys(row).sort()).toEqual(healthKeys);
+          expectNoSentinels(Object.values(row));
         }
       })
     );
@@ -290,42 +316,56 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           acquiredMinutesAgo: Option.none(),
           createdMinutesAgo: 0,
         });
+        yield* insertTestRow({
+          id: "health-sentinel-decode",
+          element: '{"note":"sentinel-secret-phrase"}',
+          attempts: 3,
+          lastFailure: Option.some(durableQueueSchemaIncompatibleMarker),
+          acquiredBy: Option.none(),
+          acquiredMinutesAgo: Option.none(),
+          createdMinutesAgo: 0,
+        });
         const queues = yield* getDurableQueueHealthFor([testQueueName]);
         expect(queues).toHaveLength(1);
         const row = queues.find((candidate) => candidate.queueName === testQueueName);
-        expect(row?.pendingDepth).toBe(2);
-        expect(row?.redeliveredCount).toBe(2);
-        expect(row?.failedCount).toBe(1);
-        expect(row?.exhaustedCount).toBe(0);
-        expect(Object.keys(row ?? {}).sort()).toEqual(
-          [
-            "queueName",
-            "pendingDepth",
-            "oldestPendingAgeSeconds",
-            "activeLeaseCount",
-            "staleLeaseCount",
-            "redeliveredCount",
-            "failedCount",
-            "schemaIncompatibleCount",
-            "exhaustedCount",
-          ].sort()
-        );
+        if (row === undefined) throw new Error("missing durable queue health row");
+        expect(row.pendingDepth).toBe(3);
+        expect(row.redeliveredCount).toBe(3);
+        expect(row.failedCount).toBe(2);
+        expect(row.schemaIncompatibleCount).toBe(1);
+        expect(row.exhaustedCount).toBe(0);
+        expect(Object.keys(row).sort()).toEqual(healthKeys);
         const readiness = projectDurableQueueReadiness(queues);
-        expect(readiness.status).toBe("ok");
-        for (const queue of readiness.queues) {
-          expectNoSentinels([
-            queue.queueName,
-            queue.pendingDepth,
-            queue.oldestPendingAgeSeconds,
-            queue.activeLeaseCount,
-            queue.staleLeaseCount,
-            queue.redeliveredCount,
-            queue.failedCount,
-            queue.schemaIncompatibleCount,
-            queue.exhaustedCount,
-            readiness.status,
-          ]);
+        expect(readiness.status).toBe("needs-attention");
+        const attention = classifyDurableQueueAttention(row);
+        expect(attention).toEqual({
+          backlog: false,
+          leaseChurn: false,
+          exhausted: false,
+          decodeFailure: true,
+        });
+        const annotations = durableQueueAttentionLogAnnotations({ queue: row, attention });
+        expect(Object.keys(annotations).sort()).toEqual(attentionAnnotationKeys);
+        expectNoSentinels(Object.values(annotations));
+        expectNoSentinels(Object.values(readiness));
+
+        const { transactions, serialized } = yield* runObservedProbe([testQueueName]);
+        expect(transactions).toHaveLength(1);
+        const transaction = transactions[0];
+        if (transaction === undefined) {
+          throw new Error("missing durable queue health transaction");
         }
+        expect(transaction.tags).toEqual({
+          component: "postgres",
+          operation: "task.durableQueueHealth",
+          trigger: "schedule",
+          work_kind: "scheduled_execution",
+          outcome: "rejected",
+          retryable: "false",
+          error: "operational_failure",
+        });
+        expect(transaction.contexts.trace.status).toBe("invalid_argument");
+        expect(serialized).not.toContain("sentinel");
       })
     );
 
@@ -352,7 +392,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             id: "health-decode-failed",
             element: '{"note":"broken"}',
             attempts: 5,
-            lastFailure: Option.some("schema_incompatible"),
+            lastFailure: Option.some(durableQueueSchemaIncompatibleMarker),
             acquiredBy: Option.none(),
             acquiredMinutesAgo: Option.none(),
             createdMinutesAgo: 0,
@@ -361,6 +401,7 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const row = queues.find((candidate) => candidate.queueName === testQueueName);
           expect(row?.pendingDepth).toBe(3);
           expect(row?.staleLeaseCount).toBe(1);
+          expect(row?.stalledLeaseCount).toBe(0);
           expect(row?.exhaustedCount).toBe(1);
           expect(row?.schemaIncompatibleCount).toBe(1);
           const readiness = projectDurableQueueReadiness(queues);
@@ -375,26 +416,50 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
+    it.effect("reports an active lease that missed refreshes before it expires as churn", () =>
+      Effect.gen(function* () {
+        yield* clearTestQueue;
+        yield* pendingRow("health-stalled-lease", {
+          acquiredBy: Option.some(lostWorkerId),
+          // Two minutes old: past the two-missed-refresh stall window (60s), inside expiry (600s).
+          acquiredMinutesAgo: Option.some(2),
+        });
+        const queues = yield* getDurableQueueHealthFor([testQueueName]);
+        const row = queues.find((candidate) => candidate.queueName === testQueueName);
+        expect(row?.activeLeaseCount).toBe(1);
+        expect(row?.stalledLeaseCount).toBe(1);
+        expect(row?.staleLeaseCount).toBe(0);
+        if (row !== undefined) {
+          expect(classifyDurableQueueAttention(row)).toEqual({
+            backlog: false,
+            leaseChurn: true,
+            exhausted: false,
+            decodeFailure: false,
+          });
+        }
+      })
+    );
+
     it.effect("declares transient backlog as a retryable failure", () =>
       Effect.gen(function* () {
         yield* clearTestQueue;
         yield* pendingRow("health-transient", { createdMinutesAgo: 20 });
-        const probe = yield* captureProbeOutcomes;
-        yield* observeDurableQueueHealthFor([testQueueName]).pipe(
-          Effect.provideService(Telemetry, probe.stub)
-        );
-        const outcomes = yield* probe.outcomes;
-        expect(outcomes.length).toBe(1);
-        expect(outcomes[0]?.outcome).toBe("failed");
-        expect(outcomes[0]?.retryable).toBe(true);
+        const { transactions } = yield* runObservedProbe([testQueueName]);
+        expect(transactions).toHaveLength(1);
+        const transaction = transactions[0];
+        expect(transaction?.tags.outcome).toBe("failed");
+        expect(transaction?.tags.retryable).toBe("true");
+        expect(transaction?.tags.error).toBe("operational_failure");
+        expect(transaction?.contexts.trace.status).toBe("internal_error");
       })
     );
 
-    it.effect("declares permanently ineligible work as a non-retryable rejection", () =>
+    it.effect("outranks transient backlog with permanently ineligible work", () =>
       Effect.gen(function* () {
         yield* clearTestQueue;
+        yield* pendingRow("health-mixed-transient", { createdMinutesAgo: 20 });
         yield* insertTestRow({
-          id: "health-permanent",
+          id: "health-mixed-permanent",
           element: '{"note":"permanent"}',
           attempts: 10,
           lastFailure: Option.some("Error: boom"),
@@ -402,26 +467,28 @@ layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           acquiredMinutesAgo: Option.none(),
           createdMinutesAgo: 0,
         });
-        const probe = yield* captureProbeOutcomes;
-        yield* observeDurableQueueHealthFor([testQueueName]).pipe(
-          Effect.provideService(Telemetry, probe.stub)
-        );
-        const outcomes = yield* probe.outcomes;
-        expect(outcomes.length).toBe(1);
-        expect(outcomes[0]?.outcome).toBe("rejected");
-        expect(outcomes[0]?.retryable).toBe(false);
+        const { transactions } = yield* runObservedProbe([testQueueName]);
+        expect(transactions).toHaveLength(1);
+        const transaction = transactions[0];
+        expect(transaction?.tags.outcome).toBe("rejected");
+        expect(transaction?.tags.retryable).toBe("false");
+        expect(transaction?.tags.error).toBe("operational_failure");
+        expect(transaction?.contexts.trace.status).toBe("invalid_argument");
       })
     );
 
-    it.effect("stays silent when every observed queue is healthy", () =>
+    it.effect("stays silent and successful when every observed queue is healthy", () =>
       Effect.gen(function* () {
         yield* clearTestQueue;
         yield* pendingRow("health-quiet");
-        const probe = yield* captureProbeOutcomes;
-        const queues = yield* observeDurableQueueHealthFor([testQueueName]).pipe(
-          Effect.provideService(Telemetry, probe.stub)
-        );
-        expect(yield* probe.outcomes).toEqual([]);
+        const { transactions } = yield* runObservedProbe([testQueueName]);
+        expect(transactions).toHaveLength(1);
+        const transaction = transactions[0];
+        expect(transaction?.tags.outcome).toBe("succeeded");
+        expect(transaction?.tags.retryable).toBe("false");
+        expect(transaction?.tags.error).toBeUndefined();
+        expect(transaction?.contexts.trace.status).toBe("ok");
+        const queues = yield* getDurableQueueHealthFor([testQueueName]);
         expect(projectDurableQueueReadiness(queues).status).toBe("ok");
       })
     );

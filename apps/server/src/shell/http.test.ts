@@ -15,6 +15,7 @@ const DurableQueueReadinessBody = Schema.Struct({
       oldestPendingAgeSeconds: Schema.Int,
       activeLeaseCount: Schema.Int,
       staleLeaseCount: Schema.Int,
+      stalledLeaseCount: Schema.Int,
       redeliveredCount: Schema.Int,
       failedCount: Schema.Int,
       schemaIncompatibleCount: Schema.Int,
@@ -28,6 +29,11 @@ const DurableQueueReadinessBody = Schema.Struct({
     })
   ),
 });
+
+type DurableQueueReadinessBodyType = typeof DurableQueueReadinessBody.Type;
+
+const queueNeedsAttention = (queue: DurableQueueReadinessBodyType["queues"][number]): boolean =>
+  Object.values(queue.attention).some((flag) => flag);
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
   ConfigProvider.fromEnv({
@@ -91,6 +97,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "oldestPendingAgeSeconds",
           "activeLeaseCount",
           "staleLeaseCount",
+          "stalledLeaseCount",
           "redeliveredCount",
           "failedCount",
           "schemaIncompatibleCount",
@@ -98,8 +105,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "attention",
         ].sort();
 
-        expect([200, 503]).toContain(response.status);
-        expect(response.status).toBe(body.status === "ok" ? 200 : 503);
+        const anyAttention = body.queues.some(queueNeedsAttention);
+        expect(response.status).toBe(200);
+        expect(body.status).toBe(anyAttention ? "needs-attention" : "ok");
         expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
           [...durableQueueNames].sort()
         );
@@ -107,9 +115,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(Object.keys(queue).sort()).toEqual(expectedKeys);
           expect(Object.keys(queue.attention).sort()).toEqual(
             ["backlog", "leaseChurn", "exhausted", "decodeFailure"].sort()
-          );
-          expect(body.status).toBe(
-            Object.values(queue.attention).some((flag) => flag) ? "needs-attention" : "ok"
           );
         }
       })

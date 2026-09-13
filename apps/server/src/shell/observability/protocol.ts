@@ -4,6 +4,9 @@ import { TelemetryCodeSchema, TelemetryWorkKindGroup } from "./registry";
 /** Shared upper bound for every approved telemetry count. */
 export const maximumTelemetryCount = 1_000_000;
 
+/** Shared upper bound for every approved telemetry duration, in milliseconds. */
+export const maximumTelemetryDurationMilliseconds = 86_400_000;
+
 /** An integer count from zero through the shared telemetry-count maximum. */
 export const TelemetryCount = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumTelemetryCount })
@@ -18,7 +21,7 @@ export type TelemetryAttempt = typeof TelemetryAttempt.Type;
 
 /** An elapsed duration from 0 through 86,400,000 ms; it carries no wall-clock timestamp. */
 export const TelemetryDuration = Schema.Int.check(
-  Schema.isBetween({ minimum: 0, maximum: 86_400_000 })
+  Schema.isBetween({ minimum: 0, maximum: maximumTelemetryDurationMilliseconds })
 ).pipe(Schema.brand("TelemetryDuration"));
 export type TelemetryDuration = typeof TelemetryDuration.Type;
 

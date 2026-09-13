@@ -35,9 +35,21 @@ export const durableQueueLockRefreshSeconds: number = Math.ceil(
 );
 
 /**
+ * Consecutive refresh intervals an active lease may miss before the probe reports it as stalled.
+ * One missed refresh is tolerated as jitter; two in a row indicate the store's refresh loop is
+ * failing while the lease is still live, which is visible minutes before expiry would make the
+ * work stealable.
+ */
+export const durableQueueLeaseStallSeconds: number = 2 * durableQueueLockRefreshSeconds;
+
+/** Settlement and I/O overhead allowed on top of the modelled model-round budget. */
+export const durableQueueHandlerSettlementOverheadSeconds = 30;
+
+/**
  * Longest supported uninterrupted handler pause in seconds: 6 model iterations at 30 seconds per
  * round plus settlement overhead. `durableQueueLockExpirationSeconds` must hold a documented
- * multiple of this bound; raise both together when handler limits change.
+ * multiple of this bound; the policy test pins the bound to the configured `CurrentAgentLimits`
+ * defaults, so raising handler limits fails the test until this budget is re-derived.
  */
 export const durableQueueLongestHandlerPauseSeconds = 210;
 
@@ -115,6 +127,7 @@ export type DurableQueueSignals = Readonly<{
   readonly pendingDepth: number;
   readonly oldestPendingAgeSeconds: number;
   readonly staleLeaseCount: number;
+  readonly stalledLeaseCount: number;
   readonly exhaustedCount: number;
   readonly schemaIncompatibleCount: number;
 }>;
@@ -132,9 +145,10 @@ export type DurableQueueAttention = Readonly<{
 }>;
 
 /**
- * Classifies one queue's bounded signals into alert flags. Stale leases mean refresh failed or a
- * runtime died without releasing; exhausted rows have spent `maxAttemptsForDurableQueue` and will
- * never be reclaimed by polling.
+ * Classifies one queue's bounded signals into alert flags. Stalled leases missed refreshes while
+ * still live; stale leases are held past expiry (refresh failed and stayed failed, or a runtime
+ * died without releasing); exhausted rows have spent `maxAttemptsForDurableQueue` and will never be
+ * reclaimed by polling.
  */
 export const classifyDurableQueueAttention = (
   signals: DurableQueueSignals
@@ -142,7 +156,7 @@ export const classifyDurableQueueAttention = (
   backlog:
     signals.pendingDepth >= durableQueueBacklogDepth ||
     signals.oldestPendingAgeSeconds >= durableQueueBacklogAgeSeconds,
-  leaseChurn: signals.staleLeaseCount > 0,
+  leaseChurn: signals.staleLeaseCount > 0 || signals.stalledLeaseCount > 0,
   exhausted: signals.exhaustedCount > 0,
   decodeFailure: signals.schemaIncompatibleCount > 0,
 });

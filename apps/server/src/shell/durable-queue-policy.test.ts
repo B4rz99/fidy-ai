@@ -1,9 +1,12 @@
 import { expect, it } from "@effect/vitest";
+import { CurrentAgentLimits } from "~/shell/agent/agent-service";
 import {
   type DurableQueueSignals,
   classifyDurableQueueAttention,
   durableQueueBacklogAgeSeconds,
   durableQueueBacklogDepth,
+  durableQueueHandlerSettlementOverheadSeconds,
+  durableQueueLeaseStallSeconds,
   durableQueueLockExpirationSeconds,
   durableQueueLockRefreshSeconds,
   durableQueueLongestHandlerPauseSeconds,
@@ -17,6 +20,7 @@ const healthySignals: DurableQueueSignals = {
   pendingDepth: 0,
   oldestPendingAgeSeconds: 0,
   staleLeaseCount: 0,
+  stalledLeaseCount: 0,
   exhaustedCount: 0,
   schemaIncompatibleCount: 0,
 };
@@ -52,6 +56,20 @@ it("holds lock expiry above twice the longest handler pause with active refresh"
   expect(durableQueueLockExpirationSeconds / durableQueueLockRefreshSeconds).toBe(20);
 });
 
+it("sizes the handler pause budget above the configured agent turn bounds", () => {
+  const limits = CurrentAgentLimits.defaultValue();
+  const modelledRoundSeconds = (limits.maxIterations * limits.maxModelRoundMillis) / 1_000;
+  expect(durableQueueLongestHandlerPauseSeconds).toBeGreaterThanOrEqual(
+    modelledRoundSeconds + durableQueueHandlerSettlementOverheadSeconds
+  );
+});
+
+it("reports stalled active leases after two missed refreshes and before expiry", () => {
+  expect(durableQueueLeaseStallSeconds).toBe(60);
+  expect(durableQueueLeaseStallSeconds).toBeGreaterThan(durableQueueLockRefreshSeconds);
+  expect(durableQueueLeaseStallSeconds).toBeLessThan(durableQueueLockExpirationSeconds);
+});
+
 it("leaves healthy queues without attention", () => {
   const attention = classifyDurableQueueAttention(healthySignals);
   expect(attention).toEqual({
@@ -83,9 +101,16 @@ it("flags transient backlog by depth or age", () => {
   expect(below.backlog).toBe(false);
 });
 
-it("flags stale leases as churn independently of backlog", () => {
-  const attention = classifyDurableQueueAttention({ ...healthySignals, staleLeaseCount: 1 });
-  expect(attention).toEqual({
+it("flags stale or stalled leases as churn independently of backlog", () => {
+  const stale = classifyDurableQueueAttention({ ...healthySignals, staleLeaseCount: 1 });
+  expect(stale).toEqual({
+    backlog: false,
+    leaseChurn: true,
+    exhausted: false,
+    decodeFailure: false,
+  });
+  const stalled = classifyDurableQueueAttention({ ...healthySignals, stalledLeaseCount: 1 });
+  expect(stalled).toEqual({
     backlog: false,
     leaseChurn: true,
     exhausted: false,

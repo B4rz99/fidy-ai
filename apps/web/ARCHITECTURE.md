@@ -14,9 +14,10 @@ browser-safe `@fidy/server/client` declaration seam; it never imports server imp
 process never serves web routes or static assets.
 
 Effect Atom derives browser transport from the assembled `FidyApi` with
-`AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. The web application does not
-wrap transport or declare a second canonical surface. Shared and server state belongs to Effect Atom,
-navigation state to TanStack Router, and irreducible one-component interaction state to React.
+`AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
+layer bounds and sanitizes that transport beneath each generated client; the web application does not
+hand-wrap endpoints or declare a second canonical surface. Shared and server state belongs to Effect
+Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
 
 ## 2. Behavioral ownership
 

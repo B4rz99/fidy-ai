@@ -21,6 +21,7 @@ import {
   ConsentDisclosureWorkflow,
   consentDisclosureEvidenceQueueName,
   consentDisclosureQueue,
+  consentDisclosureQueueId,
   consentDisclosureQueueName,
 } from "./disclosure-workflow";
 
@@ -66,18 +67,19 @@ export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosur
           if (!(yield* isConsentDisclosureRequestExpired(exchangeId, now))) return;
           // This also repairs a migrated request with no queue item. Its identity is stable and
           // an existing completed publication is untouched by the native duplicate-offer contract.
-          yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId }).pipe(Effect.orDie);
-          const executionId = yield* ConsentDisclosureWorkflow.executionId({
-            exchangeId,
-            revision: 1,
-          }).pipe(Effect.orDie);
+          const payload = { exchangeId, revision: 1 } as const;
+          const queueId = consentDisclosureQueueId(payload);
+          yield* queue.offer(payload, { id: queueId }).pipe(Effect.orDie);
+          const executionId = yield* ConsentDisclosureWorkflow.executionId(payload).pipe(
+            Effect.orDie
+          );
           const result = yield* ConsentDisclosureWorkflow.poll(executionId);
           if (Option.isNone(result) || result.value._tag !== "Complete") return;
           if (
             !(yield* durableQueueRetention.completed(
               consentDisclosureQueueName,
-              [exchangeId],
-              [exchangeId]
+              [queueId],
+              [queueId]
             ))
           ) {
             return;
@@ -97,7 +99,7 @@ export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosur
             return;
           }
           yield* clearMailboxes(executionId);
-          yield* durableQueueRetention.removeCompleted(consentDisclosureQueueName, [exchangeId]);
+          yield* durableQueueRetention.removeCompleted(consentDisclosureQueueName, [queueId]);
           yield* removeConsentDisclosureRequest(exchangeId);
         })
       );

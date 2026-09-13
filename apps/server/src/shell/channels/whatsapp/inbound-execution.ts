@@ -14,9 +14,12 @@ export type WhatsAppInboundWork = typeof WhatsAppInboundWork.Type;
 /** Retry budget shared by acquisition and exhausted-work retirement. */
 export const maximumWhatsAppInboundAttempts = 10;
 
-/** Stable SQL queue whose item identity is the accepted inbound job identity. */
+/** Stable persisted queue whose item identity is the accepted inbound job identity. */
 export const whatsappInboundQueueName = "whatsapp-inbound-turn";
 export const whatsappInboundQueue = PersistedQueue.make({
   name: whatsappInboundQueueName,
   schema: WhatsAppInboundWork,
 });
+
+/** Native queue primary key: the inbound job this work carries. */
+export const whatsappInboundQueueId = (work: WhatsAppInboundWork): string => work.inboundJobId;

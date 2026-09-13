@@ -198,6 +198,17 @@
                 "processEnv": "off"
               }
             }
+          },
+          {
+            "include": [
+              "./apps/server/src/shell/testing/durable-compatibility.ts",
+              "./apps/server/src/shell/testing/durable-compatibility/fixture-registry.compatibility.test.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "nodeBuiltinImport": "off"
+              }
+            }
           }
         ]
       }

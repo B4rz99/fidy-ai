@@ -23,6 +23,12 @@ export const DisclosureDeliveryAttemptNumber = Schema.Int.check(
 ).pipe(Schema.brand("DisclosureDeliveryAttemptNumber"));
 export type DisclosureDeliveryAttemptNumber = typeof DisclosureDeliveryAttemptNumber.Type;
 
+/** One disclosure attempt revision: durable attempt identity plus the evidence revision it judged. */
+export type DisclosureRevision = {
+  readonly attemptId: DisclosureDeliveryAttemptId;
+  readonly evidenceRevision: number;
+};
+
 /** Exact-attempt capability required by delivery-state mutations. */
 export const DisclosureDeliveryAttemptCapability = Schema.Struct({
   exchangeId: PendingConsentExchangeId,

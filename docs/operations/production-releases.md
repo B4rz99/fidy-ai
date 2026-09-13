@@ -67,6 +67,12 @@ replace an older pending run.
 8. Read the current default-branch head. If the release was superseded, stop and leave the current
    Cloudflare deployment active. Otherwise promote only the captured version ID.
 
+A release that changes a persisted Workflow payload, Activity request, DurableClock, DurableDeferred,
+or workflow-start queue handoff must satisfy the reader-before-writer check in
+[durable execution deployments](durable-execution-deployments.md) before step 2 invokes the
+deployment onto the shared shards. Every runner can acquire any shard, so widening the readers must
+reach the whole fleet one release before any runner writes the new form.
+
 The server embeds the contract digest during its build and obtains its revision from Railway's
 immutable `RAILWAY_GIT_COMMIT_SHA`. The public diagnostics are:
 

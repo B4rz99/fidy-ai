@@ -37,6 +37,7 @@
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:observability-compatibility": "bun --bun vitest run --config vitest.compatibility.config.ts",
+    "test:durable-compatibility": "bun --bun vitest run --config vitest.durable-compatibility.config.ts",
     "test:quality": "bun ../../scripts/ci/merge-server-coverage.ts --input ${SERVER_COVERAGE_INPUT:-coverage} --output coverage/coverage-final.json && bun ../../tools/crap/run.mjs",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:production-image": "bash scripts/check-production-image.sh",

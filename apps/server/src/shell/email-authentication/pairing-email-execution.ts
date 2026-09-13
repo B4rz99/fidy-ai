@@ -10,15 +10,17 @@ import {
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 
+/** Stable queue names are deployment contracts shared with in-flight handoffs. */
+export const pairingStartQueueName = "browser-pairing-email-start";
+export const pairingDeliveryQueueName = "browser-pairing-email-delivery";
+export const pairingExpiryQueueName = "browser-pairing-email-expiry";
+
 /** Only the admitted request identity crosses the pre-subject durable boundary. */
 export const PairingStartPayload = Schema.Struct({
   revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   requestId: BrowserPairingEmailStartRequestId,
 }).annotate({ identifier: "PairingStartPayload" });
 export type PairingStartPayload = typeof PairingStartPayload.Type;
-export const pairingStartQueueName = "browser-pairing-email-start";
-export const pairingDeliveryQueueName = "browser-pairing-email-delivery";
-export const pairingExpiryQueueName = "browser-pairing-email-expiry";
 export const pairingStartQueue = PersistedQueue.make({
   name: pairingStartQueueName,
   schema: PairingStartPayload,
@@ -70,6 +72,11 @@ export const pairingExpiryQueue = PersistedQueue.make({
   schema: PairingExpiryPayload,
 });
 
+/** Stable native queue keys from one offered payload; payloads keep the routing identities. */
+export const pairingStartQueueId = (payload: PairingStartPayload): string => payload.requestId;
+export const pairingDeliveryQueueId = (payload: PairingDeliveryPayload): string => payload.intentId;
+export const pairingExpiryQueueId = (payload: PairingExpiryPayload): string => payload.workflowId;
+
 const maximumPairingExecutionRows = 50_000;
 
 // Count unfinished work and completed history. Each admitted start can still create at most two
@@ -118,10 +125,11 @@ export const publishPairingStart = Effect.fn(function* (request: {
       ${request.requestId}, ${request.pairingId}, ${request.addressLookupKey},
       ${request.requestedAt}, ${request.expiresAt}
     )`;
-        yield* queue.offer(
-          { revision: 1, requestId: request.requestId },
-          { id: request.requestId }
-        );
+        const payload: PairingStartPayload = {
+          revision: 1,
+          requestId: request.requestId,
+        };
+        yield* queue.offer(payload, { id: pairingStartQueueId(payload) });
       })
     )
     .pipe(Effect.orDie);
@@ -130,9 +138,9 @@ export const publishPairingStart = Effect.fn(function* (request: {
 /** Publication shares the caller's SqlClient transaction with the admitted domain transition. */
 export const publishPairingDelivery = Effect.fn(function* (payload: PairingDeliveryPayload) {
   const queue = yield* pairingDeliveryQueue;
-  yield* queue.offer(payload, { id: payload.intentId }).pipe(Effect.orDie);
+  yield* queue.offer(payload, { id: pairingDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
 export const publishPairingExpiry = Effect.fn(function* (payload: PairingExpiryPayload) {
   const queue = yield* pairingExpiryQueue;
-  yield* queue.offer(payload, { id: payload.workflowId }).pipe(Effect.orDie);
+  yield* queue.offer(payload, { id: pairingExpiryQueueId(payload) }).pipe(Effect.orDie);
 });

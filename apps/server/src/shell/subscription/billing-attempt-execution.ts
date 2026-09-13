@@ -62,27 +62,42 @@ export const billingAttemptQueue = PersistedQueue.make({
   schema: BillingAttemptReconciliationPayload,
 });
 
+/** Stable native queue key from one reconciliation payload. */
+export const billingAttemptQueueId = (work: BillingAttemptReconciliationPayload): string =>
+  work.billingAttemptId;
+
 /** Publishes reconciliation Work in the same SQL transaction that creates the BillingAttempt. */
 export const publishBillingAttemptInScope = Effect.fn("Subscription.publishBillingAttemptInScope")(
-  function* (job: Readonly<{ userId: UserId; billingAttemptId: BillingAttemptId }>) {
+  function* (work: Readonly<{ userId: UserId; billingAttemptId: BillingAttemptId }>) {
     const queue = yield* billingAttemptQueue;
-    yield* queue
-      .offer(
-        { userId: job.userId, billingAttemptId: job.billingAttemptId, revision: 1 },
-        { id: job.billingAttemptId }
-      )
-      .pipe(Effect.orDie);
+    const payload: BillingAttemptReconciliationPayload = {
+      userId: work.userId,
+      billingAttemptId: work.billingAttemptId,
+      revision: 1,
+    };
+    yield* queue.offer(payload, { id: billingAttemptQueueId(payload) }).pipe(Effect.orDie);
   }
 );
 
 /** One iteration's durable observation of the owning BillingAttempt before any wait. */
-const ReconciliationDisposition = Schema.Union([
+export const BillingAttemptReconciliationDisposition = Schema.Union([
   Schema.TaggedStruct("Settled", { status: Schema.Literals(["succeeded", "failed"]) }),
   Schema.TaggedStruct("Tracked", { since: Schema.DateTimeUtcFromString }),
   Schema.TaggedStruct("AwaitingReference", {}),
   Schema.TaggedStruct("NotCurrent", {}),
 ]);
-type ReconciliationDisposition = typeof ReconciliationDisposition.Type;
+/** Stable persisted Activity identities of billing reconciliation. */
+export const billingAttemptActivityIdentities = {
+  reconcile: {
+    name: "ReconcileBillingAttempt",
+    success: BillingAttemptReconciliationDisposition,
+  },
+  escalate: { name: "EscalateBillingAttemptReconciliation", success: Schema.Void },
+} as const;
+
+/** Stable clock identity for one unresolved reconciliation attempt. */
+export const billingAttemptReconciliationClockName = (attempt: number): string =>
+  `BillingAttemptReconciliationWait/${attempt}`;
 
 const maximumBackoffExponent = 4;
 const maximumReconciliationDelay: Duration.Input = "15 minutes";
@@ -328,8 +343,7 @@ export const billingAttemptReconciliationWorkflowLayer = (
     ) {
       for (let attempt = 1; ; attempt++) {
         const disposition = yield* Activity.make({
-          name: "ReconcileBillingAttempt",
-          success: ReconciliationDisposition,
+          ...billingAttemptActivityIdentities.reconcile,
           execute: reconcileBillingAttemptOnce(payload),
         }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
         switch (disposition._tag) {
@@ -348,8 +362,7 @@ export const billingAttemptReconciliationWorkflowLayer = (
             const trackedFor = DateTime.distance(disposition.since, now);
             if (Duration.toMillis(trackedFor) >= Duration.toMillis(manualReconciliationAge)) {
               yield* Activity.make({
-                name: "EscalateBillingAttemptReconciliation",
-                success: Schema.Void,
+                ...billingAttemptActivityIdentities.escalate,
                 execute: markManualReconciliation(payload, now),
               }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
               yield* warnOperationalEscalation(
@@ -359,7 +372,7 @@ export const billingAttemptReconciliationWorkflowLayer = (
               return { outcome: "manual-reconciliation-required" as const };
             }
             yield* DurableClock.sleep({
-              name: `BillingAttemptReconciliationWait/${attempt}`,
+              name: billingAttemptReconciliationClockName(attempt),
               duration: reconciliationDelayFor(baseDelay, attempt),
               inMemoryThreshold: "0 millis",
             });

@@ -1,0 +1,407 @@
+{
+  "workflow": {
+    "tag": "WhatsAppConsentDisclosureDelivery"
+  },
+  "payloads": [
+    {
+      "label": "current",
+      "current": true,
+      "encoded": {
+        "revision": 1,
+        "exchangeId": "019cda32-1250-7000-8000-000000000464"
+      },
+      "idempotencyKey": "019cda32-1250-7000-8000-000000000464",
+      "executionId": "77af64757bcc8a65af413c1012bc4264"
+    }
+  ],
+  "results": [
+    {
+      "label": "delivered",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "delivered"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "not-current",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "not-current"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "activityResultGroups": {
+    "send-1-0-results": [
+      {
+        "label": "void",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": null
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ],
+    "retry-1-0-results": [
+      {
+        "label": "resume-at",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": "2027-01-01T00:00:00.000Z"
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "activities": [
+    {
+      "key": "send-1-0",
+      "requests": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "name": "Send",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "Send",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "name": "Send",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": ["Send/1"],
+      "resultGroup": "send-1-0-results"
+    },
+    {
+      "key": "send-2-3",
+      "requests": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "name": "Send",
+            "attempt": 14
+          },
+          "reencoded": {
+            "name": "Send",
+            "attempt": 14,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "name": "Send",
+            "attempt": 14,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": ["Send/14"],
+      "resultGroup": "send-1-0-results"
+    },
+    {
+      "key": "retry-1-0",
+      "requests": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "name": "Retry",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "Retry",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "name": "Retry",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": ["Retry/1"],
+      "resultGroup": "retry-1-0-results"
+    }
+  ],
+  "clocks": [
+    {
+      "key": "retry-1-0",
+      "name": "Retry/019cda32-1250-7000-8000-000000000465/0",
+      "deferredName": "DurableClock/Retry/019cda32-1250-7000-8000-000000000465/0",
+      "request": {
+        "name": "Retry/019cda32-1250-7000-8000-000000000465/0",
+        "workflowName": "WhatsAppConsentDisclosureDelivery",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/Retry/019cda32-1250-7000-8000-000000000465/0",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/Retry/019cda32-1250-7000-8000-000000000465/0",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "expiry",
+      "name": "Expiry",
+      "deferredName": "DurableClock/Expiry",
+      "request": {
+        "name": "Expiry",
+        "workflowName": "WhatsAppConsentDisclosureDelivery",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/Expiry",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/Expiry",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    }
+  ],
+  "deferreds": [
+    {
+      "key": "evidence",
+      "name": "Evidence/019cda32-1250-7000-8000-000000000465/0",
+      "raceAll": false,
+      "current": true,
+      "exit": {
+        "_tag": "Success",
+        "value": null
+      },
+      "request": {
+        "name": "Evidence/019cda32-1250-7000-8000-000000000465/0",
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        }
+      }
+    },
+    {
+      "key": "retry-wake",
+      "name": "raceAll/RetryWake/019cda32-1250-7000-8000-000000000465/0",
+      "raceAll": true,
+      "current": true,
+      "exit": {
+        "_tag": "Success",
+        "value": null
+      },
+      "request": {
+        "name": "raceAll/RetryWake/019cda32-1250-7000-8000-000000000465/0",
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        }
+      }
+    },
+    {
+      "key": "evidence-wake",
+      "name": "raceAll/EvidenceWake/019cda32-1250-7000-8000-000000000465/0",
+      "raceAll": true,
+      "current": true,
+      "exit": {
+        "_tag": "Success",
+        "value": null
+      },
+      "request": {
+        "name": "raceAll/EvidenceWake/019cda32-1250-7000-8000-000000000465/0",
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        }
+      }
+    }
+  ],
+  "queues": [
+    {
+      "key": "delivery",
+      "name": "whatsapp-consent-disclosure",
+      "payloads": [
+        {
+          "id": "019cda32-1250-7000-8000-000000000464",
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "revision": 1,
+            "exchangeId": "019cda32-1250-7000-8000-000000000464"
+          }
+        }
+      ]
+    },
+    {
+      "key": "evidence",
+      "name": "whatsapp-consent-disclosure-evidence",
+      "payloads": [
+        {
+          "id": "49c6eb24c5954a64e1dd2db6bed97f14",
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "revision": 1,
+            "exchangeId": "019cda32-1250-7000-8000-000000000464",
+            "attemptId": "019cda32-1250-7000-8000-000000000465",
+            "evidenceRevision": 0
+          }
+        }
+      ]
+    }
+  ],
+  "resume": {
+    "label": "current",
+    "current": true,
+    "encoded": {},
+    "primaryKey": ""
+  }
+}

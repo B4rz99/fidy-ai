@@ -1,0 +1,1712 @@
+{
+  "workflow": {
+    "tag": "ForwardedEmailIngestion"
+  },
+  "payloads": [
+    {
+      "label": "current",
+      "current": true,
+      "encoded": {
+        "userId": "f1d1a000-0000-4000-8000-000000000101",
+        "receivedEmailId": "received-workflow-510",
+        "revision": 1
+      },
+      "idempotencyKey": "f1d1a000-0000-4000-8000-000000000101:received-workflow-510",
+      "executionId": "7cfc66013f67056d4058e22e2c0a5642"
+    },
+    {
+      "label": "revisionless",
+      "current": false,
+      "encoded": {
+        "userId": "f1d1a000-0000-4000-8000-000000000101",
+        "receivedEmailId": "received-workflow-510"
+      },
+      "reencoded": {
+        "userId": "f1d1a000-0000-4000-8000-000000000101",
+        "receivedEmailId": "received-workflow-510",
+        "revision": 1
+      },
+      "idempotencyKey": "f1d1a000-0000-4000-8000-000000000101:received-workflow-510",
+      "executionId": "7cfc66013f67056d4058e22e2c0a5642"
+    }
+  ],
+  "results": [
+    {
+      "label": "completed",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "completed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "revoked",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "revoked"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "expired",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "expired"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "stale",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "stale"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "activityResultGroups": {
+    "apply-access-results": [
+      {
+        "label": "ready",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Ready"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "deferred",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Deferred",
+                "resumeAt": "2027-01-01T00:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "completed",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Completed"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "revoked",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Revoked"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "stale",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Stale"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ],
+    "retrieve-results": [
+      {
+        "label": "retrieved",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Retrieved"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "consent-deferred",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "ConsentDeferred"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "completed",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Completed"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "revoked",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Revoked"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "stale",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Stale"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "provider-unavailable",
+        "kind": "error",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Failure",
+              "cause": [
+                {
+                  "_tag": "Fail",
+                  "error": {
+                    "_tag": "ForwardedEmailRetrievalFailed",
+                    "reason": "provider-unavailable"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "invalid-provider-response",
+        "kind": "error",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Failure",
+              "cause": [
+                {
+                  "_tag": "Fail",
+                  "error": {
+                    "_tag": "ForwardedEmailRetrievalFailed",
+                    "reason": "invalid-provider-response"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "resource-limit",
+        "kind": "error",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Failure",
+              "cause": [
+                {
+                  "_tag": "Fail",
+                  "error": {
+                    "_tag": "ForwardedEmailRetrievalFailed",
+                    "reason": "resource-limit"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ],
+    "interpret-results": [
+      {
+        "label": "prepared",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "prepared"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "consent-deferred",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "consent-deferred"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "completed",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "completed"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "revoked",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "revoked"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "stale",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "stale"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "evidence-expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "evidence-expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ],
+    "settle-results": [
+      {
+        "label": "consent-deferred",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "consent-deferred"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "completed",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "completed"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "revoked",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "revoked"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "stale",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "stale"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "evidence-expired",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "outcome": "evidence-expired"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "activities": [
+    {
+      "key": "apply-access",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ApplyForwardedEmailAccess",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ApplyForwardedEmailAccess/1",
+        "ApplyForwardedEmailAccess/2",
+        "ApplyForwardedEmailAccess/100"
+      ],
+      "resultGroup": "apply-access-results"
+    },
+    {
+      "key": "resume-access",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailAccess",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ResumeForwardedEmailAccess/1",
+        "ResumeForwardedEmailAccess/2",
+        "ResumeForwardedEmailAccess/100"
+      ],
+      "resultGroup": "apply-access-results"
+    },
+    {
+      "key": "retrieve",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "RetrieveForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "RetrieveForwardedEmail/1",
+        "RetrieveForwardedEmail/2",
+        "RetrieveForwardedEmail/100"
+      ],
+      "resultGroup": "retrieve-results"
+    },
+    {
+      "key": "resume-retrieval-consent",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailRetrievalConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ResumeForwardedEmailRetrievalConsent/1",
+        "ResumeForwardedEmailRetrievalConsent/2",
+        "ResumeForwardedEmailRetrievalConsent/100"
+      ],
+      "resultGroup": "apply-access-results"
+    },
+    {
+      "key": "interpret",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "InterpretForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "InterpretForwardedEmail/1",
+        "InterpretForwardedEmail/2",
+        "InterpretForwardedEmail/100"
+      ],
+      "resultGroup": "interpret-results"
+    },
+    {
+      "key": "resume-interpretation-consent",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailInterpretationConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ResumeForwardedEmailInterpretationConsent/1",
+        "ResumeForwardedEmailInterpretationConsent/2",
+        "ResumeForwardedEmailInterpretationConsent/100"
+      ],
+      "resultGroup": "apply-access-results"
+    },
+    {
+      "key": "settle",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmail",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "SettleForwardedEmail/1",
+        "SettleForwardedEmail/2",
+        "SettleForwardedEmail/100"
+      ],
+      "resultGroup": "settle-results"
+    },
+    {
+      "key": "settle-retrieval-failure",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "SettleForwardedEmailRetrievalFailure",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "SettleForwardedEmailRetrievalFailure/1",
+        "SettleForwardedEmailRetrievalFailure/2",
+        "SettleForwardedEmailRetrievalFailure/100"
+      ],
+      "resultGroup": "settle-results"
+    },
+    {
+      "key": "resume-settlement-consent",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ResumeForwardedEmailSettlementConsent",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ResumeForwardedEmailSettlementConsent/1",
+        "ResumeForwardedEmailSettlementConsent/2",
+        "ResumeForwardedEmailSettlementConsent/100"
+      ],
+      "resultGroup": "apply-access-results"
+    }
+  ],
+  "clocks": [
+    {
+      "key": "retrieve-1",
+      "name": "WaitForForwardedEmailRetrievalConsent/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailRetrievalConsent/1",
+      "request": {
+        "name": "WaitForForwardedEmailRetrievalConsent/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailRetrievalConsent/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailRetrievalConsent/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "retrieve-2",
+      "name": "WaitForForwardedEmailRetrievalConsent/2",
+      "deferredName": "DurableClock/WaitForForwardedEmailRetrievalConsent/2",
+      "request": {
+        "name": "WaitForForwardedEmailRetrievalConsent/2",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailRetrievalConsent/2",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailRetrievalConsent/2",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "interpretation-consent-1",
+      "name": "WaitForForwardedEmailInterpretationConsent/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailInterpretationConsent/1",
+      "request": {
+        "name": "WaitForForwardedEmailInterpretationConsent/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailInterpretationConsent/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailInterpretationConsent/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "settlement-consent-1",
+      "name": "WaitForForwardedEmailSettlementConsent/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailSettlementConsent/1",
+      "request": {
+        "name": "WaitForForwardedEmailSettlementConsent/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailSettlementConsent/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailSettlementConsent/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "allowance-1",
+      "name": "WaitForForwardedEmailAllowance/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailAllowance/1",
+      "request": {
+        "name": "WaitForForwardedEmailAllowance/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailAllowance/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailAllowance/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "retrieve-allow-1",
+      "name": "WaitForForwardedEmailRetrievalConsentAllowance/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailRetrievalConsentAllowance/1",
+      "request": {
+        "name": "WaitForForwardedEmailRetrievalConsentAllowance/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailRetrievalConsentAllowance/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailRetrievalConsentAllowance/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "interpret-allow-1",
+      "name": "WaitForForwardedEmailInterpretationConsentAllowance/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailInterpretationConsentAllowance/1",
+      "request": {
+        "name": "WaitForForwardedEmailInterpretationConsentAllowance/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailInterpretationConsentAllowance/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailInterpretationConsentAllowance/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "settlement-consent-allowance-1",
+      "name": "WaitForForwardedEmailSettlementConsentAllowance/1",
+      "deferredName": "DurableClock/WaitForForwardedEmailSettlementConsentAllowance/1",
+      "request": {
+        "name": "WaitForForwardedEmailSettlementConsentAllowance/1",
+        "workflowName": "ForwardedEmailIngestion",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/WaitForForwardedEmailSettlementConsentAllowance/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/WaitForForwardedEmailSettlementConsentAllowance/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    }
+  ],
+  "deferreds": [],
+  "queues": [
+    {
+      "key": "ingestion",
+      "name": "forwarded-email-ingestion",
+      "payloads": [
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "userId": "f1d1a000-0000-4000-8000-000000000101",
+            "receivedEmailId": "received-workflow-510",
+            "revision": 1
+          },
+          "id": "710bc96e9ca86cb145e06e502edb83473f44"
+        },
+        {
+          "label": "revisionless",
+          "current": false,
+          "encoded": {
+            "userId": "f1d1a000-0000-4000-8000-000000000101",
+            "receivedEmailId": "received-workflow-510"
+          },
+          "reencoded": {
+            "userId": "f1d1a000-0000-4000-8000-000000000101",
+            "receivedEmailId": "received-workflow-510",
+            "revision": 1
+          },
+          "id": "710bc96e9ca86cb145e06e502edb83473f44"
+        }
+      ]
+    }
+  ],
+  "resume": {
+    "label": "current",
+    "current": true,
+    "encoded": {},
+    "primaryKey": ""
+  }
+}

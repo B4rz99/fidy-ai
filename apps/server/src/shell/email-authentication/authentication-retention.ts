@@ -7,13 +7,12 @@ import {
   Sharding,
 } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { Workflow } from "effect/unstable/workflow";
 import { jsonStringSchema } from "~/schema-compatibility";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import {
   BrowserPairingEmailDeliveryWorkflow,
   BrowserPairingEmailExpiryWorkflow,
-  PairingDeliveryPayload,
-  PairingExpiryPayload,
   pairingDeliveryQueueName,
   pairingExpiryQueueName,
   pairingStartQueueName,
@@ -30,38 +29,62 @@ const CompletedQueueItem = Schema.Struct({
   element: Schema.String,
 });
 
+/** One pairing-email workflow's retention target, resolved from its persisted queue element. */
+type PairingRetentionTarget = {
+  readonly workflowTag: string;
+  readonly executionId: string;
+  readonly terminal: boolean;
+};
+
+/** Resolves one pairing-email workflow's terminal retention target from its persisted element. */
+const resolvePairingRetentionTarget = Effect.fn(function* <
+  Tag extends string,
+  Payload extends Workflow.AnyStructSchema,
+  Success extends Schema.Top,
+  WorkflowError extends Schema.Top,
+>(input: {
+  readonly workflow: Workflow.Workflow<Tag, Payload, Success, WorkflowError>;
+  readonly element: string;
+}) {
+  const payload: Payload["~type.make.in"] = yield* Schema.decodeEffect(
+    jsonStringSchema(input.workflow.payloadSchema)
+  )(input.element).pipe(Effect.orDie);
+  const executionId = yield* input.workflow.executionId(payload).pipe(Effect.orDie);
+  const terminal: boolean = yield* input.workflow
+    .poll(executionId)
+    .pipe(Effect.map(Option.exists((state) => state._tag === "Complete")));
+  return {
+    workflowTag: input.workflow._tag,
+    executionId,
+    terminal,
+  } satisfies PairingRetentionTarget;
+});
+
 const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueItem.Type) {
   const sql = yield* SqlClient.SqlClient;
   const storage = yield* MessageStorage.MessageStorage;
   const sharding = yield* Sharding.Sharding;
   let address = Option.none<EntityAddress.EntityAddress>();
   if (row.queueName !== pairingStartQueueName) {
-    const workflow =
+    // The resolver is generic over the Workflow's payload type, so each branch instantiates it with
+    // a concrete workflow; a union workflow cannot satisfy one instantiation.
+    const resolveTarget =
       row.queueName === pairingDeliveryQueueName
-        ? BrowserPairingEmailDeliveryWorkflow
-        : BrowserPairingEmailExpiryWorkflow;
-    const executionId =
-      row.queueName === pairingDeliveryQueueName
-        ? yield* BrowserPairingEmailDeliveryWorkflow.executionId(
-            yield* Schema.decodeEffect(jsonStringSchema(PairingDeliveryPayload))(row.element)
-          ).pipe(Effect.orDie)
-        : yield* BrowserPairingEmailExpiryWorkflow.executionId(
-            yield* Schema.decodeEffect(jsonStringSchema(PairingExpiryPayload))(row.element)
-          ).pipe(Effect.orDie);
-    const terminal =
-      row.queueName === pairingDeliveryQueueName
-        ? yield* BrowserPairingEmailDeliveryWorkflow.poll(executionId).pipe(
-            Effect.map(Option.exists((state) => state._tag === "Complete"))
-          )
-        : yield* BrowserPairingEmailExpiryWorkflow.poll(executionId).pipe(
-            Effect.map(Option.exists((state) => state._tag === "Complete"))
-          );
-    if (!terminal) return;
-    const entityId = EntityId.make(executionId);
+        ? resolvePairingRetentionTarget({
+            workflow: BrowserPairingEmailDeliveryWorkflow,
+            element: row.element,
+          })
+        : resolvePairingRetentionTarget({
+            workflow: BrowserPairingEmailExpiryWorkflow,
+            element: row.element,
+          });
+    const target = yield* resolveTarget;
+    if (!target.terminal) return;
+    const entityId = EntityId.make(target.executionId);
     address = Option.some(
       EntityAddress.make({
         entityId,
-        entityType: EntityType.make(`Workflow/${workflow._tag}`),
+        entityType: EntityType.make(`Workflow/${target.workflowTag}`),
         shardId: sharding.getShardId(entityId, "default"),
       })
     );

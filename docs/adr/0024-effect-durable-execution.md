@@ -162,7 +162,9 @@ or translates its stored envelope under an explicit migration, then deploys the 
 definition and removes the superseded one. During a rolling rollout, old and new runners may overlap
 only when they use the same definition and envelope version. Fixtures prove decoding for every
 version that is currently pending, not compatibility with historical releases. Persisted values are
-never repaired by casting decoded data.
+never repaired by casting decoded data. The reader-before-writer pre-deploy check and the drain or
+migration decision are documented in the
+[durable execution deployment runbook](../operations/durable-execution-deployments.md).
 
 ### Observability
 

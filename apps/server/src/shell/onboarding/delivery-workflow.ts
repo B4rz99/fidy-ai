@@ -28,7 +28,7 @@ export const OnboardingDeliveryPayload = Schema.Struct({
 }).annotate({ identifier: "OnboardingDeliveryPayload" });
 export type OnboardingDeliveryPayload = typeof OnboardingDeliveryPayload.Type;
 
-const OnboardingDeliverySuccess = Schema.Struct({
+export const OnboardingDeliverySuccess = Schema.Struct({
   outcome: Schema.Literals(["sent", "not-current"]),
 }).annotate({ identifier: "OnboardingDeliverySuccess" });
 
@@ -56,6 +56,17 @@ export const onboardingEmailDeliveryQueue = PersistedQueue.make({
   name: onboardingDeliveryQueueName,
   schema: OnboardingDeliveryPayload,
 });
+
+/** Stable native queue key from one offered payload. */
+export const onboardingEmailDeliveryQueueId = (payload: OnboardingDeliveryPayload): string =>
+  payload.intentId;
+
+/** Stable durable identity of the onboarding email-delivery Activity. */
+export const deliverOnboardingEmailActivityIdentity = {
+  name: "DeliverOnboardingEmail",
+  success: OnboardingDeliverySuccess,
+  error: OnboardingDeliveryFailed,
+} as const;
 
 export const performOnboardingEmailDelivery = Effect.fn("OnboardingDelivery.perform")(function* (
   payload: OnboardingDeliveryPayload
@@ -107,9 +118,7 @@ const runOnboardingDelivery = Effect.fn("OnboardingDelivery.run")(function* (
   payload: OnboardingDeliveryPayload
 ) {
   return yield* Activity.make({
-    name: "DeliverOnboardingEmail",
-    success: OnboardingDeliverySuccess,
-    error: OnboardingDeliveryFailed,
+    ...deliverOnboardingEmailActivityIdentity,
     execute: performOnboardingEmailDelivery(payload),
   });
 });
@@ -130,7 +139,12 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
       const pending = yield* findPendingOnboardingEmailDeliveries(cursor);
       yield* Effect.forEach(
         pending,
-        ({ id }) => queue.offer({ intentId: id, revision: 1 }, { id }).pipe(Effect.orDie),
+        ({ id }) => {
+          const payload: OnboardingDeliveryPayload = { intentId: id, revision: 1 };
+          return queue
+            .offer(payload, { id: onboardingEmailDeliveryQueueId(payload) })
+            .pipe(Effect.orDie);
+        },
         { discard: true }
       );
       return Option.fromUndefinedOr(pending.at(-1));
@@ -164,7 +178,8 @@ export const publishOnboardingEmailDelivery = Effect.fn("OnboardingDelivery.publ
   intentId: EmailDeliveryIntentId
 ) {
   const queue = yield* onboardingEmailDeliveryQueue;
-  yield* queue.offer({ intentId, revision: 1 }, { id: intentId }).pipe(Effect.orDie);
+  const payload: OnboardingDeliveryPayload = { intentId, revision: 1 };
+  yield* queue.offer(payload, { id: onboardingEmailDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
 
 /** Workflow-owned terminal-state and cleanup protocol used by onboarding retention. */

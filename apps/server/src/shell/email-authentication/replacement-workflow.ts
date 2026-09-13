@@ -10,7 +10,8 @@ import {
   Schema,
 } from "effect";
 import { type SqlClient, SqlError } from "effect/unstable/sql";
-import { Activity, DurableClock, type WorkflowEngine } from "effect/unstable/workflow";
+import { Activity, type WorkflowEngine } from "effect/unstable/workflow";
+import { sleepFor, sleepUntil } from "~/shell/durable-execution-clock";
 import type { EmailDeliveryPort } from "./delivery";
 import { performReplacementAttempt } from "./replacement-delivery-worker";
 import {
@@ -36,6 +37,28 @@ const replacementDeliveryAttempts = [1, 2, 3] as const;
 const maximumReplacementDeliveryAttempts = replacementDeliveryAttempts.length;
 type ReplacementDeliveryAttempt = (typeof replacementDeliveryAttempts)[number];
 
+const ReplacementAttemptOutcome = Schema.Union([ReplacementAttemptResult, DatabaseUnavailable]);
+const ExpiryCheck = Schema.Union([
+  Schema.TaggedStruct("Done", {}),
+  Schema.TaggedStruct("Waiting", { deadline: Schema.DateTimeUtc }),
+  DatabaseUnavailable,
+]);
+
+/** Stable durable identities of replacement Activities. */
+export const replacementActivityIdentities = {
+  deliver: { name: "DeliverReplacementEmail", success: ReplacementAttemptOutcome },
+  checkExpiry: { name: "CheckReplacementExpiry", success: ExpiryCheck },
+} as const;
+
+/** Stable DurableClock identity for one retry wait at a specific database attempt. */
+export const replacementDatabaseRetryClockName = (input: {
+  readonly attempt: ReplacementDeliveryAttempt;
+  readonly databaseAttempt: number;
+}): string => `ReplacementDatabaseRetry/${input.attempt}/${input.databaseAttempt}`;
+/** Stable expiry-clock identity for one expiry check attempt. */
+export const replacementExpiryClockName = (attempt: number): string =>
+  `ReplacementExpiry/${attempt}`;
+
 const deliverAttempt = Effect.fn("EmailReplacementDelivery.attempt")(function* (
   payload: ReplacementDeliveryPayload,
   attempt: ReplacementDeliveryAttempt,
@@ -56,11 +79,10 @@ const deliverAttempt = Effect.fn("EmailReplacementDelivery.attempt")(function* (
     );
     if (typeof result === "string") return result;
     // Re-enter the SAME logical provider attempt. Armed evidence reconciles to uncertain, not resend.
-    yield* DurableClock.sleep({
-      name: `ReplacementDatabaseRetry/${attempt}/${databaseAttempt}`,
-      duration: databaseRetryDuration,
-      inMemoryThreshold: "0 millis",
-    });
+    yield* sleepFor(
+      replacementDatabaseRetryClockName({ attempt, databaseAttempt }),
+      databaseRetryDuration
+    );
   }
 });
 
@@ -88,12 +110,6 @@ export const replacementDeliveryWorkflowLayer = (
 /** Registers named Activities and production's one-minute durable database retry. */
 export const ReplacementDeliveryWorkflowLive = replacementDeliveryWorkflowLayer("1 minute");
 
-const ExpiryCheck = Schema.Union([
-  Schema.TaggedStruct("Done", {}),
-  Schema.TaggedStruct("Waiting", { deadline: Schema.DateTimeUtc }),
-  DatabaseUnavailable,
-]);
-
 const checkExpiry = Effect.fn("EmailReplacementExpiry.check")(function* (
   payload: ReplacementExpiryPayload
 ) {
@@ -120,15 +136,11 @@ export const replacementExpiryWorkflowLayer = (
           execute: checkExpiry(payload),
         }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
         if (result._tag === "Done") return;
-        const now = yield* DateTime.now;
-        yield* DurableClock.sleep({
-          name: `ReplacementExpiry/${attempt}`,
-          duration:
-            result._tag === "Waiting"
-              ? Math.max(0, DateTime.toEpochMillis(result.deadline) - DateTime.toEpochMillis(now))
-              : databaseRetryDuration,
-          inMemoryThreshold: "0 millis",
-        });
+        if (result._tag === "Waiting") {
+          yield* sleepUntil(replacementExpiryClockName(attempt), result.deadline);
+        } else {
+          yield* sleepFor(replacementExpiryClockName(attempt), databaseRetryDuration);
+        }
       }
     })
   );

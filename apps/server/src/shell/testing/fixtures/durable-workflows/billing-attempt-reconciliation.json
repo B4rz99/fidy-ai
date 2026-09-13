@@ -1,0 +1,560 @@
+{
+  "workflow": {
+    "tag": "BillingAttemptReconciliation"
+  },
+  "payloads": [
+    {
+      "label": "oldest-supported",
+      "current": false,
+      "encoded": {
+        "userId": "019cda32-1250-7000-8000-000000000503",
+        "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+      },
+      "reencoded": {
+        "revision": 1,
+        "userId": "019cda32-1250-7000-8000-000000000503",
+        "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+      },
+      "idempotencyKey": "019cda32-1250-7000-8000-000000000504",
+      "executionId": "9508a1eb0f6c09e0f10be57a94a34595"
+    },
+    {
+      "label": "current",
+      "current": true,
+      "encoded": {
+        "revision": 1,
+        "userId": "019cda32-1250-7000-8000-000000000503",
+        "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+      },
+      "idempotencyKey": "019cda32-1250-7000-8000-000000000504",
+      "executionId": "9508a1eb0f6c09e0f10be57a94a34595"
+    }
+  ],
+  "results": [
+    {
+      "label": "succeeded",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "succeeded"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "failed",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "failed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "awaiting-provider-reference",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "awaiting-provider-reference"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "manual-reconciliation-required",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "manual-reconciliation-required"
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "not-current",
+      "kind": "success",
+      "current": true,
+      "persisted": {
+        "_tag": "Success",
+        "value": {
+          "_tag": "Complete",
+          "exit": {
+            "_tag": "Success",
+            "value": {
+              "outcome": "not-current"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "activityResultGroups": {
+    "reconcile-results": [
+      {
+        "label": "settled-succeeded",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Settled",
+                "status": "succeeded"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "settled-failed",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Settled",
+                "status": "failed"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "tracked",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "Tracked",
+                "since": "2027-01-01T00:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "awaiting-reference",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "AwaitingReference"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "not-current",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": {
+                "_tag": "NotCurrent"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ],
+    "escalate-results": [
+      {
+        "label": "void",
+        "kind": "success",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Complete",
+            "exit": {
+              "_tag": "Success",
+              "value": null
+            }
+          }
+        }
+      },
+      {
+        "label": "suspended",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended"
+          }
+        }
+      },
+      {
+        "label": "suspended-with-cause",
+        "kind": "suspended",
+        "current": true,
+        "persisted": {
+          "_tag": "Success",
+          "value": {
+            "_tag": "Suspended",
+            "cause": [
+              {
+                "_tag": "Die",
+                "defect": "activity suspended"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "defect",
+        "kind": "defect",
+        "current": true,
+        "persisted": {
+          "_tag": "Failure",
+          "cause": [
+            {
+              "_tag": "Die",
+              "defect": "activity handler defect"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "activities": [
+    {
+      "key": "reconcile",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "ReconcileBillingAttempt",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "ReconcileBillingAttempt/1",
+        "ReconcileBillingAttempt/2",
+        "ReconcileBillingAttempt/100"
+      ],
+      "resultGroup": "reconcile-results"
+    },
+    {
+      "key": "escalate",
+      "requests": [
+        {
+          "label": "oldest-supported-attempt-1",
+          "current": false,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 1
+          },
+          "reencoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-1",
+          "current": true,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 1,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-2",
+          "current": false,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 2
+          },
+          "reencoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-2",
+          "current": true,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 2,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "oldest-supported-attempt-100",
+          "current": false,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 100
+          },
+          "reencoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        },
+        {
+          "label": "current-attempt-100",
+          "current": true,
+          "encoded": {
+            "name": "EscalateBillingAttemptReconciliation",
+            "attempt": 100,
+            "withTransaction": false
+          }
+        }
+      ],
+      "primaryKeys": [
+        "EscalateBillingAttemptReconciliation/1",
+        "EscalateBillingAttemptReconciliation/2",
+        "EscalateBillingAttemptReconciliation/100"
+      ],
+      "resultGroup": "escalate-results"
+    }
+  ],
+  "clocks": [
+    {
+      "key": "wait-1",
+      "name": "BillingAttemptReconciliationWait/1",
+      "deferredName": "DurableClock/BillingAttemptReconciliationWait/1",
+      "request": {
+        "name": "BillingAttemptReconciliationWait/1",
+        "workflowName": "BillingAttemptReconciliation",
+        "wakeUp": 1798934400000
+      },
+      "completion": {
+        "name": "DurableClock/BillingAttemptReconciliationWait/1",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/BillingAttemptReconciliationWait/1",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "key": "wait-100",
+      "name": "BillingAttemptReconciliationWait/100",
+      "deferredName": "DurableClock/BillingAttemptReconciliationWait/100",
+      "request": {
+        "name": "BillingAttemptReconciliationWait/100",
+        "workflowName": "BillingAttemptReconciliation",
+        "wakeUp": 1798934460000
+      },
+      "completion": {
+        "name": "DurableClock/BillingAttemptReconciliationWait/100",
+        "current": true,
+        "exit": {
+          "_tag": "Success",
+          "value": null
+        },
+        "request": {
+          "name": "DurableClock/BillingAttemptReconciliationWait/100",
+          "exit": {
+            "_tag": "Success",
+            "value": null
+          }
+        }
+      }
+    }
+  ],
+  "deferreds": [],
+  "queues": [
+    {
+      "key": "reconciliation",
+      "name": "subscription-billing-attempt",
+      "payloads": [
+        {
+          "label": "oldest-supported",
+          "current": false,
+          "encoded": {
+            "userId": "019cda32-1250-7000-8000-000000000503",
+            "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+          },
+          "reencoded": {
+            "revision": 1,
+            "userId": "019cda32-1250-7000-8000-000000000503",
+            "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+          },
+          "id": "019cda32-1250-7000-8000-000000000504"
+        },
+        {
+          "label": "current",
+          "current": true,
+          "encoded": {
+            "revision": 1,
+            "userId": "019cda32-1250-7000-8000-000000000503",
+            "billingAttemptId": "019cda32-1250-7000-8000-000000000504"
+          },
+          "id": "019cda32-1250-7000-8000-000000000504"
+        }
+      ]
+    }
+  ],
+  "resume": {
+    "label": "current",
+    "current": true,
+    "encoded": {},
+    "primaryKey": ""
+  }
+}

@@ -66,6 +66,10 @@ export const statementIngestionQueue = PersistedQueue.make({
   schema: StatementIngestionPayload,
 });
 
+/** Native queue primary key: the submission this work belongs to. */
+export const statementIngestionQueueId = (payload: StatementIngestionPayload): string =>
+  payload.submissionId;
+
 /** Stable revision recorded on extracted outcomes and cached mappings. */
 export const statementExtractorRevision = "statement-extractor-v1";
 const valueShape = (value: string): string =>
@@ -327,9 +331,8 @@ export const publishStatementIngestion = Effect.fn("StatementIngestion.publish")
   submissionId: StatementSubmissionId
 ) {
   const queue = yield* statementIngestionQueue;
-  yield* queue
-    .offer({ userId, submissionId, revision: 1 }, { id: submissionId })
-    .pipe(Effect.orDie);
+  const payload = { userId, submissionId, revision: 1 } as const;
+  yield* queue.offer(payload, { id: statementIngestionQueueId(payload) }).pipe(Effect.orDie);
 });
 
 /** Processes one owning submission, skipping stale items until work succeeds or two seconds pass. */
@@ -358,8 +361,10 @@ const publishQueuedPage = Effect.fn("StatementIngestion.publishPage")(function* 
   const pending = yield* findQueuedStatementSubmissions(cursor);
   yield* Effect.forEach(
     pending,
-    ({ id, userId }) =>
-      queue.offer({ submissionId: id, userId, revision: 1 }, { id }).pipe(Effect.orDie),
+    ({ id, userId }) => {
+      const payload = { submissionId: id, userId, revision: 1 } as const;
+      return queue.offer(payload, { id: statementIngestionQueueId(payload) }).pipe(Effect.orDie);
+    },
     { discard: true }
   );
   return Option.fromUndefinedOr(pending.at(-1));

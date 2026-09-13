@@ -65,6 +65,12 @@ export const replacementExpiryQueue = PersistedQueue.make({
   schema: ReplacementExpiryPayload,
 });
 
+/** Stable native queue keys from one offered payload; payloads keep the routing identities. */
+export const replacementDeliveryQueueId = (payload: ReplacementDeliveryPayload): string =>
+  payload.intentId;
+export const replacementExpiryQueueId = (payload: ReplacementExpiryPayload): string =>
+  payload.workflowId;
+
 /** Publishes accepted work in the caller's SQL transaction, preserving receipts after domain cleanup. */
 export const publishReplacementDelivery = Effect.fn("EmailReplacement.publish")(function* (
   payload: ReplacementDeliveryPayload,
@@ -76,7 +82,7 @@ export const publishReplacementDelivery = Effect.fn("EmailReplacement.publish")(
     Effect.orDie
   );
   const queue = yield* replacementDeliveryQueue;
-  yield* queue.offer(payload, { id: payload.intentId }).pipe(Effect.orDie);
+  yield* queue.offer(payload, { id: replacementDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
 
 /** Transaction-composable expiry publication, once per original replacement workflow. */
@@ -90,5 +96,5 @@ export const publishReplacementExpiry = Effect.fn("EmailReplacement.publishExpir
     Effect.orDie
   );
   const queue = yield* replacementExpiryQueue;
-  yield* queue.offer(payload, { id: payload.workflowId }).pipe(Effect.orDie);
+  yield* queue.offer(payload, { id: replacementExpiryQueueId(payload) }).pipe(Effect.orDie);
 });

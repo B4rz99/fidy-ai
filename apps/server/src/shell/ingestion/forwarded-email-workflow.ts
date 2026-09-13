@@ -21,6 +21,7 @@ import { Activity, DurableClock } from "effect/unstable/workflow";
 import type { UserId } from "~/core/identity/reference";
 import type { ForwardedEmailProviderFailureReason } from "~/core/ingestion/rules";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import { sleepUntil } from "~/shell/durable-execution-clock";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import {
   type ForwardedEmailReceiptLifecycle,
@@ -84,6 +85,60 @@ const SettlementOutcome = Schema.Struct({
   outcome: Schema.Literals(consentAwareTerminalOutcomes),
 });
 
+/** Stable durable identities for every forwarded-email Activity. */
+export const forwardedEmailActivityIdentities = {
+  applyAccess: { name: "ApplyForwardedEmailAccess", success: AccessOutcome },
+  resumeAccess: { name: "ResumeForwardedEmailAccess", success: AccessOutcome },
+  retrieve: {
+    name: "RetrieveForwardedEmail",
+    success: RetrievalOutcome,
+    error: ForwardedEmailRetrievalFailed,
+  },
+  resumeRetrievalConsent: {
+    name: "ResumeForwardedEmailRetrievalConsent",
+    success: AccessOutcome,
+  },
+  interpret: { name: "InterpretForwardedEmail", success: InterpretationOutcome },
+  resumeInterpretationConsent: {
+    name: "ResumeForwardedEmailInterpretationConsent",
+    success: AccessOutcome,
+  },
+  settle: { name: "SettleForwardedEmail", success: SettlementOutcome },
+  settleRetrievalFailure: {
+    name: "SettleForwardedEmailRetrievalFailure",
+    success: SettlementOutcome,
+  },
+  resumeSettlementConsent: {
+    name: "ResumeForwardedEmailSettlementConsent",
+    success: AccessOutcome,
+  },
+} as const;
+
+/** Stable DurableClock wait identity for one consent-aware step. */
+export const forwardedEmailConsentClockName = (input: {
+  readonly phase: "Retrieval" | "Interpretation" | "Settlement";
+  readonly attempt: number;
+}): string => `WaitForForwardedEmail${input.phase}Consent/${input.attempt}`;
+
+/** Stable DurableClock wait identity for one deferred-access allowance. */
+export const forwardedEmailAllowanceClockName = (input: {
+  readonly suffix:
+    | "Allowance"
+    | "RetrievalConsentAllowance"
+    | "InterpretationConsentAllowance"
+    | "SettlementConsentAllowance";
+  readonly attempt: number;
+}): string => `WaitForForwardedEmail${input.suffix}/${input.attempt}`;
+
+type ForwardedEmailConsentPhase = Parameters<typeof forwardedEmailConsentClockName>[0]["phase"];
+
+/** Resume-consent Activity per phase; one phase drives both the Activity and allowance identities. */
+const forwardedEmailConsentResume = {
+  Retrieval: forwardedEmailActivityIdentities.resumeRetrievalConsent,
+  Interpretation: forwardedEmailActivityIdentities.resumeInterpretationConsent,
+  Settlement: forwardedEmailActivityIdentities.resumeSettlementConsent,
+} satisfies Record<ForwardedEmailConsentPhase, { readonly name: string }>;
+
 const terminalAccessOutcome = (
   access: Exclude<typeof AccessOutcome.Type, { readonly _tag: "Ready" | "Deferred" }>
 ): "completed" | "revoked" | "expired" | "stale" =>
@@ -139,34 +194,31 @@ const resumeAccess = Effect.fn("ForwardedEmail.resumeAccess")(
 );
 
 const waitForConsent = Effect.fn("ForwardedEmail.waitForConsent")(function* (
-  name:
-    | "WaitForForwardedEmailRetrievalConsent"
-    | "WaitForForwardedEmailInterpretationConsent"
-    | "WaitForForwardedEmailSettlementConsent",
+  phase: ForwardedEmailConsentPhase,
   attempt: number
 ) {
-  yield* DurableClock.sleep({ name: `${name}/${attempt}`, duration: "1 day" });
+  yield* DurableClock.sleep({
+    name: forwardedEmailConsentClockName({ phase, attempt }),
+    duration: "1 day",
+  });
 });
 
 const awaitForwardedEmailAccess = Effect.fn("ForwardedEmail.awaitAccess")(function* (
   payload: ForwardedEmailWorkflowPayload
 ) {
   let access = yield* Activity.make({
-    name: "ApplyForwardedEmailAccess",
-    success: AccessOutcome,
+    ...forwardedEmailActivityIdentities.applyAccess,
     execute: inspectAccess(payload),
   });
   let attempt = 1;
   while (access._tag === "Deferred") {
     const currentAttempt = attempt++;
-    const now = yield* DateTime.now;
-    yield* DurableClock.sleep({
-      name: `WaitForForwardedEmailAllowance/${currentAttempt}`,
-      duration: DateTime.distance(now, access.resumeAt),
-    });
+    yield* sleepUntil(
+      forwardedEmailAllowanceClockName({ suffix: "Allowance", attempt: currentAttempt }),
+      access.resumeAt
+    );
     access = yield* Activity.make({
-      name: "ResumeForwardedEmailAccess",
-      success: AccessOutcome,
+      ...forwardedEmailActivityIdentities.resumeAccess,
       execute: resumeAccess(payload),
     }).pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt));
   }
@@ -177,32 +229,25 @@ const resumeForwardedEmailAfterConsentWait = Effect.fn("ForwardedEmail.resumeAft
   function* (input: {
     readonly payload: ForwardedEmailWorkflowPayload;
     readonly initialAttempt: number;
-    readonly activityName:
-      | "ResumeForwardedEmailRetrievalConsent"
-      | "ResumeForwardedEmailInterpretationConsent"
-      | "ResumeForwardedEmailSettlementConsent";
-    readonly clockName:
-      | "WaitForForwardedEmailRetrievalConsentAllowance"
-      | "WaitForForwardedEmailInterpretationConsentAllowance"
-      | "WaitForForwardedEmailSettlementConsentAllowance";
+    readonly phase: ForwardedEmailConsentPhase;
   }) {
-    const { activityName, clockName, payload } = input;
+    const { payload, phase } = input;
     let attempt = input.initialAttempt;
     let access = yield* Activity.make({
-      name: activityName,
-      success: AccessOutcome,
+      ...forwardedEmailConsentResume[phase],
       execute: resumeAccess(payload),
     }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt++));
     while (access._tag === "Deferred") {
       const currentAttempt = attempt++;
-      const now = yield* DateTime.now;
-      yield* DurableClock.sleep({
-        name: `${clockName}/${currentAttempt}`,
-        duration: DateTime.distance(now, access.resumeAt),
-      });
+      yield* sleepUntil(
+        forwardedEmailAllowanceClockName({
+          suffix: `${phase}ConsentAllowance`,
+          attempt: currentAttempt,
+        }),
+        access.resumeAt
+      );
       access = yield* Activity.make({
-        name: activityName,
-        success: AccessOutcome,
+        ...forwardedEmailConsentResume[phase],
         execute: resumeAccess(payload),
       }).pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt));
     }
@@ -222,9 +267,7 @@ const retrieveUntilConsentAvailable = Effect.fn("ForwardedEmail.retrieveUntilCon
     const currentAttempt = attempt++;
     retrieval = yield* Effect.result(
       Activity.make({
-        name: "RetrieveForwardedEmail",
-        success: RetrievalOutcome,
-        error: ForwardedEmailRetrievalFailed,
+        ...forwardedEmailActivityIdentities.retrieve,
         execute: retrieveForwardedEmail(payload),
       }).pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt))
     );
@@ -245,12 +288,11 @@ const retrieveUntilConsentAvailable = Effect.fn("ForwardedEmail.retrieveUntilCon
     }
     if (Result.isFailure(retrieval) || retrieval.success._tag !== "ConsentDeferred") break;
     providerRetries = 0;
-    yield* waitForConsent("WaitForForwardedEmailRetrievalConsent", currentAttempt);
+    yield* waitForConsent("Retrieval", currentAttempt);
     const resumed = yield* resumeForwardedEmailAfterConsentWait({
       payload,
       initialAttempt: consentResumeAttempt,
-      activityName: "ResumeForwardedEmailRetrievalConsent",
-      clockName: "WaitForForwardedEmailRetrievalConsentAllowance",
+      phase: "Retrieval",
     });
     consentResumeAttempt = resumed.attempt;
     if (resumed.access._tag !== "Ready") {
@@ -265,15 +307,7 @@ const repeatConsentAwareActivity = Effect.fn("ForwardedEmail.repeatConsentAwareA
   function* <Outcome extends string, R>(input: {
     readonly payload: ForwardedEmailWorkflowPayload;
     readonly initialAttempt: number;
-    readonly waitName:
-      | "WaitForForwardedEmailInterpretationConsent"
-      | "WaitForForwardedEmailSettlementConsent";
-    readonly resumeActivityName:
-      | "ResumeForwardedEmailInterpretationConsent"
-      | "ResumeForwardedEmailSettlementConsent";
-    readonly resumeClockName:
-      | "WaitForForwardedEmailInterpretationConsentAllowance"
-      | "WaitForForwardedEmailSettlementConsentAllowance";
+    readonly waitPhase: Exclude<ForwardedEmailConsentPhase, "Retrieval">;
     readonly execute: (
       attempt: number
     ) => Effect.Effect<Readonly<{ outcome: Outcome | "consent-deferred" }>, never, R>;
@@ -284,12 +318,11 @@ const repeatConsentAwareActivity = Effect.fn("ForwardedEmail.repeatConsentAwareA
       const currentAttempt = attempt++;
       const result = yield* input.execute(currentAttempt);
       if (result.outcome !== "consent-deferred") return { attempt, outcome: result.outcome };
-      yield* waitForConsent(input.waitName, currentAttempt);
+      yield* waitForConsent(input.waitPhase, currentAttempt);
       const resumed = yield* resumeForwardedEmailAfterConsentWait({
         payload: input.payload,
         initialAttempt: consentResumeAttempt,
-        activityName: input.resumeActivityName,
-        clockName: input.resumeClockName,
+        phase: input.waitPhase,
       });
       consentResumeAttempt = resumed.attempt;
       if (resumed.access._tag !== "Ready") {
@@ -304,13 +337,10 @@ const interpretUntilConsentAvailable = Effect.fn("ForwardedEmail.interpretUntilC
     repeatConsentAwareActivity({
       payload,
       initialAttempt,
-      waitName: "WaitForForwardedEmailInterpretationConsent",
-      resumeActivityName: "ResumeForwardedEmailInterpretationConsent",
-      resumeClockName: "WaitForForwardedEmailInterpretationConsentAllowance",
+      waitPhase: "Interpretation",
       execute: (currentAttempt) =>
         Activity.make({
-          name: "InterpretForwardedEmail",
-          success: InterpretationOutcome,
+          ...forwardedEmailActivityIdentities.interpret,
           execute: interpretForwardedEmail(payload),
         }).pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt)),
     })
@@ -325,19 +355,22 @@ const settleUntilConsentAvailable = Effect.fn("ForwardedEmail.settleUntilConsent
     repeatConsentAwareActivity({
       payload,
       initialAttempt,
-      waitName: "WaitForForwardedEmailSettlementConsent",
-      resumeActivityName: "ResumeForwardedEmailSettlementConsent",
-      resumeClockName: "WaitForForwardedEmailSettlementConsentAllowance",
-      execute: (currentAttempt) =>
-        Activity.make({
-          name: Option.isSome(retrievalFailure)
-            ? "SettleForwardedEmailRetrievalFailure"
-            : "SettleForwardedEmail",
-          success: SettlementOutcome,
-          execute: Option.isSome(retrievalFailure)
-            ? settleForwardedEmailRetrievalFailure(payload, retrievalFailure.value)
-            : settleForwardedEmail(payload),
-        }).pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt)),
+      waitPhase: "Settlement",
+      execute: (currentAttempt) => {
+        const settle = Option.match(retrievalFailure, {
+          onNone: () =>
+            Activity.make({
+              ...forwardedEmailActivityIdentities.settle,
+              execute: settleForwardedEmail(payload),
+            }),
+          onSome: (failure) =>
+            Activity.make({
+              ...forwardedEmailActivityIdentities.settleRetrievalFailure,
+              execute: settleForwardedEmailRetrievalFailure(payload, failure),
+            }),
+        });
+        return settle.pipe(Effect.provideService(Activity.CurrentAttempt, currentAttempt));
+      },
     })
 );
 

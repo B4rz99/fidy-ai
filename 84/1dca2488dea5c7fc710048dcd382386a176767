@@ -1,0 +1,46 @@
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  h_c6d49c804e0ad2 15,19
+apps/server/src/shell/durable-execution-clock.ts
+  h_c6d49c804e0ad2 1-21
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  h_c6d49c804e0ad2 10,40-61,69-79
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  h_c6d49c804e0ad2 24,197,216,242,310
+apps/server/src/shell/testing/durable-compatibility.ts
+  h_c6d49c804e0ad2 1646-1649,1659-1664,1669-1717,2040,2054,2056,2065,2070,2072,2084,2091,2093
+apps/server/src/shell/testing/durable-compatibility/browser-pairing-email-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 24
+apps/server/src/shell/testing/durable-compatibility/browser-pairing-email-expiry.compatibility.test.ts
+  h_c6d49c804e0ad2 20
+apps/server/src/shell/testing/durable-compatibility/declaration-coverage.compatibility.test.ts
+  h_c6d49c804e0ad2 40,62-63,364
+apps/server/src/shell/testing/durable-compatibility/email-replacement-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 22
+apps/server/src/shell/testing/durable-compatibility/email-replacement-expiry.compatibility.test.ts
+  h_c6d49c804e0ad2 20
+apps/server/src/shell/testing/durable-compatibility/fixture-registry.compatibility.test.ts
+  h_c6d49c804e0ad2 8
+apps/server/src/shell/testing/durable-compatibility/forwarded-email-ingestion.compatibility.test.ts
+  h_c6d49c804e0ad2 23
+apps/server/src/shell/testing/durable-compatibility/onboarding-email-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 18
+apps/server/src/shell/testing/durable-compatibility/whatsapp-consent-disclosure-delivery.compatibility.test.ts
+  h_c6d49c804e0ad2 35
+apps/server/vitest.durable-compatibility.config.ts
+  h_c6d49c804e0ad2 13
+docs/operations/durable-execution-deployments.md
+  h_c6d49c804e0ad2 13-14,49-54,106-107
+tsconfig.base.json
+  h_c6d49c804e0ad2 204-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "841dca2488dea5c7fc710048dcd382386a176767",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

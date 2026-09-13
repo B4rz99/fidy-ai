@@ -1,0 +1,21 @@
+apps/web/src/transport/browser-http-policy.ts
+  s_c7a5a6727cd856::t_53579812a4e0e8 189
+  s_c7a5a6727cd856::t_503b36b6712e3d 180-185,190-198,214
+  s_c7a5a6727cd856::t_3a4f023462815c 186-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7b6c0461e895750fbed88027ebe0ece82279344c",
+  "prompts": {},
+  "sessions": {
+    "s_c7a5a6727cd856": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b25-385e-7777-8415-0e6d00d5d427",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+apps/server/src/shell/channels/whatsapp/disclosure-observation.ts
+  s_f6fbc39cca4544::t_c1a405a24111fa 14,16,69-71
+  s_f6fbc39cca4544::t_fdef14ca8ab723 28-53,55-56,61-62,125-136
+  s_f6fbc39cca4544::t_d5aa4589502aa1 118
+apps/server/src/shell/observability/disabled.ts
+  s_f6fbc39cca4544::t_5003ba5a8b4252 18-19
+  s_f6fbc39cca4544::t_e69a9890d385bb 2
+  s_a7e46a2585cde3::t_b5b22d3f945993 20
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_f6fbc39cca4544::t_c861405ecd952d 91-97,185-191,195,263-270,274
+  s_f6fbc39cca4544::t_c322f26f3b1cbf 117-118
+  s_f6fbc39cca4544::t_14d64195e3d52b 14,36,162,175-181,192,197-198,213-214,242,254-260,271,276-277
+  s_f6fbc39cca4544::t_4af83c7e0d1b20 103-108,158,196,204-210,212,215-220,223-225,228-229,234-235,275
+  s_cd0b1f5563f558::t_c1d3e98e56cb15 111
+  s_f6fbc39cca4544::t_15bb73bfb0833e 23-29,37,40-46,49,98-102,109-110
+  s_f6fbc39cca4544::t_214fab1f1ce24b 18,156-157,159-161,163-174,182-184,193-194,199-203,211,221-222,226-227,230-233,236-241,243-253,261-262,272-273,278-282
+  s_f6fbc39cca4544::t_2c53e9963a6332 2-13
+  s_f6fbc39cca4544::t_684859f3210773 115-116,119-155
+  s_f6fbc39cca4544::t_c8485e6ca09146 112
+apps/server/src/shell/channels/whatsapp/disclosure-observation.test.ts
+  s_f6fbc39cca4544::t_b28f899d6039ee 62
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_f6fbc39cca4544::t_792bde8714d30d 58,483
+  s_f6fbc39cca4544::t_9826f3943979c1 461-463
+  s_f6fbc39cca4544::t_669b93296801ae 15-16,18-20,457-460,465-466,501,531-532,534
+  s_f6fbc39cca4544::t_74cb365af0a5b9 17
+  s_f6fbc39cca4544::t_7dba6891b20728 59,475,477-482,484-493,502,533
+  s_f6fbc39cca4544::t_19b3d1d05872ac 468-473
+  s_f6fbc39cca4544::t_6ab1c6d5b698d7 464,474
+  s_f6fbc39cca4544::t_8b5c55b0ab4a37 467
+  s_f6fbc39cca4544::t_4af83c7e0d1b20 476
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d95dbf44c72a60b80edd6180015caef4357ed42c",
+  "prompts": {},
+  "sessions": {
+    "s_a7e46a2585cde3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bfd-8b20-71c1-a137-d64884434c1b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cd0b1f5563f558": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bff-f4e2-74f0-b07a-b00a44a4e5f2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f6fbc39cca4544": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c00-4e9c-7338-8509-48138df5411e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

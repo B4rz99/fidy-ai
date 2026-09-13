@@ -31,9 +31,9 @@ import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
   applyConsentDisclosureLifecycle,
+  disclosureQueueHandlerPolicy,
   performConsentDisclosureAttempt,
   requestConsentDisclosureDelivery,
-  runDisclosureQueueHandler,
   startNextConsentDisclosure,
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
@@ -183,10 +183,9 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
         const exit = yield* Effect.exit(
           queue
-            .take(() =>
-              runDisclosureQueueHandler("whatsapp.disclosureStart")(
-                Effect.die(new Error(protectedValues.join(" ")))
-              )
+            .take(
+              () => Effect.die(new Error(protectedValues.join(" "))),
+              disclosureQueueHandlerPolicy
             )
             .pipe(Effect.provideService(Console.Console, testConsole))
         );
@@ -221,9 +220,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
           yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
 
           const exit = yield* Effect.exit(
-            queue.take(() =>
-              runDisclosureQueueHandler("whatsapp.disclosureStart")(Effect.interrupt)
-            )
+            queue.take(() => Effect.interrupt, disclosureQueueHandlerPolicy)
           );
           expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
           const admin = yield* MigrationSqlClient;
@@ -264,10 +261,9 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
         yield* Effect.exit(
           queue
-            .take(() =>
-              runDisclosureQueueHandler("whatsapp.disclosureEvidence")(
-                Effect.die(new Error(protectedValues.join(" ")))
-              )
+            .take(
+              () => Effect.die(new Error(protectedValues.join(" "))),
+              disclosureQueueHandlerPolicy
             )
             .pipe(Effect.provideService(Console.Console, testConsole))
         );

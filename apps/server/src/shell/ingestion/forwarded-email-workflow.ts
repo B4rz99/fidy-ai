@@ -24,16 +24,11 @@ import { Activity, DurableClock, type WorkflowEngine } from "effect/unstable/wor
 import type { UserId } from "~/core/identity/reference";
 import type { ForwardedEmailProviderFailureReason } from "~/core/ingestion/rules";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import { classifyClusterFailure, classifyRpcFailure } from "~/shell/_shared/rpc-client-failure";
-import {
-  type PersistedQueueFailureDisposition,
-  type PersistedQueueHandlerFailure,
-  type PersistedQueueHandlerOptions,
-  runPersistedQueueHandler,
-} from "~/shell/_shared/persisted-queue-handler";
+import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
 import { sleepUntil } from "~/shell/durable-execution-clock";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
-import type { Telemetry } from "~/shell/observability/telemetry";
 import {
   type ForwardedEmailReceiptLifecycle,
   activateDeferredForwardedEmail,
@@ -565,13 +560,16 @@ export const handoffDefectDisposition = (
 ): Option.Option<PersistedQueueFailureDisposition> =>
   Option.map(classifyHandoffDefect(defect), handoffDisposition);
 
-const handoffOptions = (
-  payload: ForwardedEmailWorkflowPayload,
+const handoffPolicy = (
   markWorkSettled: Effect.Effect<void>
-): PersistedQueueHandlerOptions<HandoffFailure, never, Crypto.Crypto | SqlClient.SqlClient> => ({
-  descriptor: { component: "resend", operation: "resend.forwardedEmailHandoff" },
+): ApplicationPersistedQueueHandlerPolicy<
+  ForwardedEmailWorkflowPayload,
+  HandoffFailure,
+  never,
+  Crypto.Crypto | SqlClient.SqlClient
+> => ({
   classify: handoffDisposition,
-  recordTerminal: (reason) =>
+  recordTerminal: (payload, _metadata, reason) =>
     reason === "payload-rejected"
       ? settleForwardedEmailRetrievalFailure(payload, "invalid-provider-response").pipe(
           Effect.andThen(markWorkSettled),
@@ -629,8 +627,8 @@ const emailQueueHandler =
     metadata: Readonly<{ readonly id: string }>
   ) => Effect.Effect<
     void,
-    PersistedQueueHandlerFailure,
-    Crypto.Crypto | SqlClient.SqlClient | WorkflowEngine.WorkflowEngine | Telemetry
+    HandoffFailure,
+    Crypto.Crypto | SqlClient.SqlClient | WorkflowEngine.WorkflowEngine
   >) =>
   (payload, metadata) =>
     executeHandoff({
@@ -638,20 +636,19 @@ const emailQueueHandler =
       queueId: metadata.id,
       mode,
       markWorkSettled,
-    }).pipe(runPersistedQueueHandler(handoffOptions(payload, markWorkSettled)));
+    });
 
 /** Skips stale or malformed durable entries until one current receipt settles or the seam times out. */
 export const processNextCurrentForwardedEmail = Effect.fn("ForwardedEmail.processNextCurrent")(
   function* () {
     const queue = yield* forwardedEmailWorkflowQueue;
     let currentWorkSettled = false;
+    const markWorkSettled = Effect.sync(() => {
+      currentWorkSettled = true;
+    });
     const takeCurrent = queue.take(
-      emailQueueHandler(
-        "await-workflow-outcome",
-        Effect.sync(() => {
-          currentWorkSettled = true;
-        })
-      )
+      emailQueueHandler("await-workflow-outcome", markWorkSettled),
+      handoffPolicy(markWorkSettled)
     );
     const completed = yield* Effect.gen(function* () {
       for (;;) {
@@ -689,7 +686,7 @@ export const ForwardedEmailQueueLive = Layer.effectDiscard(
         : Option.none<ResendReceivedEmailId>();
     });
     const firstPage = yield* publishPage(Option.none());
-    yield* queue.take(emailQueueHandler("submit-background")).pipe(
+    yield* queue.take(emailQueueHandler("submit-background"), handoffPolicy(Effect.void)).pipe(
       // Queue decoding fails outside the handler boundary; preserve shutdown and pace every other
       // native or already-redacted failure without logging its Cause.
       Effect.catchCauseIf(

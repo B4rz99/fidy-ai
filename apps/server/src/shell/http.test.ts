@@ -3,7 +3,7 @@ import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { DurableQueueReadiness } from "./durable-queue-health";
-import { classifyDurableQueueAttention, durableQueueNames } from "./durable-queue-policy";
+import { classifyDurableQueueAttention } from "./durable-queue-policy";
 import { ExactOriginCorsLive } from "./http";
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
@@ -80,9 +80,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(response.status).toBe(200);
         expect(response.headers["cache-control"]).toBe("no-store");
-        expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
-          [...durableQueueNames].sort()
-        );
         for (const queue of body.queues) {
           expect(Object.keys(queue).sort()).toEqual(expectedKeys);
           expect(Object.keys(queue.attention).sort()).toEqual(

@@ -32,13 +32,14 @@ import {
   projectDurableQueueReadiness,
 } from "./durable-queue-health";
 import {
-  type DurableQueueName,
+  DurableQueueName,
+  type DurableQueueName as DurableQueueNameType,
   classifyDurableQueueAttention,
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
 } from "./durable-queue-policy";
 
-const testQueueName = whatsappInboundQueueName;
+const testQueueName = DurableQueueName.make(whatsappInboundQueueName);
 const lostWorkerId = "f1d1a000-0000-4000-8000-00000000dead";
 
 const TestPayload = Schema.Struct({ note: Schema.String });
@@ -194,7 +195,7 @@ const attentionAnnotationKeys = [
  * then reconstructs the exact serialized transaction the exporter would send.
  */
 const runObservedProbe = (
-  queueNames: ReadonlyArray<DurableQueueName>
+  queueNames: ReadonlyArray<DurableQueueNameType>
 ): Effect.Effect<
   Readonly<{
     transactions: ReadonlyArray<ProjectedTransaction>;

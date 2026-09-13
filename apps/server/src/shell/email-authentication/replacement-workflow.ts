@@ -11,13 +11,8 @@ import {
 } from "effect";
 import { type SqlClient, SqlError } from "effect/unstable/sql";
 import { Activity, type WorkflowEngine } from "effect/unstable/workflow";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import { sleepFor, sleepUntil } from "~/shell/durable-execution-clock";
-import {
-  type PersistedQueueHandlerFailure,
-  runPersistedQueueHandler as runSanitizedQueueHandler,
-} from "~/shell/_shared/persisted-queue-handler";
-import type { Telemetry } from "~/shell/observability/telemetry";
 import type { EmailDeliveryPort } from "./delivery";
 import { performReplacementAttempt } from "./replacement-delivery-worker";
 import {
@@ -166,7 +161,8 @@ const isRetryableDatabaseCause = (cause: Cause.Cause<never>): boolean =>
       reason._tag === "Die" && SqlError.isSqlError(reason.defect) && reason.defect.isRetryable
   );
 
-const classifyReplacementQueueFailure = <A, R>(
+/** Reifies retryable database defects before the mandatory queue disposition boundary. */
+export const classifyReplacementQueueFailure = <A, R>(
   work: Effect.Effect<A, never, R>
 ): Effect.Effect<A, ReplacementQueueTransient, R> =>
   work.pipe(
@@ -178,31 +174,20 @@ const classifyReplacementQueueFailure = <A, R>(
     )
   );
 
-const replacementQueueHandlerOptions = {
-  descriptor: {
-    component: "api",
-    operation: CanonicalOperationId.make("emailAuthentication.requestEmailReplacement"),
-  },
+/** Email Replacement queue attempts retry only transient database unavailability. */
+export const replacementQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  ReplacementDeliveryPayload | ReplacementExpiryPayload,
+  ReplacementQueueTransient,
+  never,
+  never
+> = {
   classify: (_failure: ReplacementQueueTransient) =>
     ({
       _tag: "Retry",
       reason: "transient",
     }) as const,
   recordTerminal: () => Effect.void,
-} as const;
-
-/**
- * Projects one failure-free Email Replacement work contract into safe queue settlement. The work
- * may defect with a retryable SqlError to request another attempt; all other defects are observed
- * through Telemetry and redacted, while interruption remains interruption. Successful values are
- * discarded because the queue item records only completion.
- */
-export const runReplacementQueueHandler = <A, R>(
-  work: Effect.Effect<A, never, R>
-): Effect.Effect<void, PersistedQueueHandlerFailure, R | Telemetry> =>
-  classifyReplacementQueueFailure(work).pipe(
-    runSanitizedQueueHandler(replacementQueueHandlerOptions)
-  );
+};
 
 /**
  * Claims one delivery item and completes it after durable Workflow submission. A transient marker
@@ -211,8 +196,12 @@ export const runReplacementQueueHandler = <A, R>(
  */
 export const consumeReplacementDelivery = Effect.fn(function* () {
   const queue = yield* replacementDeliveryQueue;
-  yield* queue.take((payload) =>
-    runReplacementQueueHandler(ReplacementDeliveryWorkflow.execute(payload, { discard: true }))
+  yield* queue.take(
+    (payload) =>
+      classifyReplacementQueueFailure(
+        ReplacementDeliveryWorkflow.execute(payload, { discard: true })
+      ),
+    replacementQueueHandlerPolicy
   );
 });
 
@@ -223,8 +212,12 @@ export const consumeReplacementDelivery = Effect.fn(function* () {
  */
 export const consumeReplacementExpiry = Effect.fn(function* () {
   const queue = yield* replacementExpiryQueue;
-  yield* queue.take((payload) =>
-    runReplacementQueueHandler(ReplacementExpiryWorkflow.execute(payload, { discard: true }))
+  yield* queue.take(
+    (payload) =>
+      classifyReplacementQueueFailure(
+        ReplacementExpiryWorkflow.execute(payload, { discard: true })
+      ),
+    replacementQueueHandlerPolicy
   );
 });
 

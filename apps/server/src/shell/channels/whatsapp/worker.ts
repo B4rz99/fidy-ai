@@ -2,12 +2,11 @@ import { Cause, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 import type { SqlClient } from "effect/unstable/sql";
 import { AgentService, type WhatsAppInboundWorkFailure } from "~/shell/agent/agent-service";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import {
   type PersistedQueueFailureDisposition,
   PersistedQueueHandlerFailure,
-  type PersistedQueueHandlerOptions,
   type PersistedQueueTerminalReason,
-  runPersistedQueueHandler,
 } from "~/shell/_shared/persisted-queue-handler";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { projectStack } from "~/shell/observability/projectors";
@@ -61,26 +60,24 @@ const recordWhatsAppTerminalDisposition = (
   );
 };
 
-const whatsappInboundHandlerOptions = (
-  work: WhatsAppInboundWork
-): PersistedQueueHandlerOptions<WhatsAppInboundWorkFailure, never, SqlClient.SqlClient> => ({
-  descriptor: { component: "whatsapp", operation: "whatsapp.processWork" },
+const whatsappInboundHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  WhatsAppInboundWork,
+  WhatsAppInboundWorkFailure,
+  never,
+  SqlClient.SqlClient
+> = {
   classify: classifyWhatsAppInboundFailure,
-  recordTerminal: (reason) => recordWhatsAppTerminalDisposition(work, reason),
-});
+  recordTerminal: (work, _metadata, reason) => recordWhatsAppTerminalDisposition(work, reason),
+};
 
 /** Takes and settles one durable accepted message without imposing an execution deadline. */
 export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(function* () {
   const queue = yield* whatsappInboundQueue;
   const agent = yield* AgentService;
   return yield* queue
-    .take(
-      (work) =>
-        agent
-          .handleWhatsAppWork(work)
-          .pipe(runPersistedQueueHandler(whatsappInboundHandlerOptions(work))),
-      { maxAttempts: maximumWhatsAppInboundAttempts }
-    )
+    .take((work) => agent.handleWhatsAppWork(work), whatsappInboundHandlerPolicy, {
+      maxAttempts: maximumWhatsAppInboundAttempts,
+    })
     .pipe(Effect.as(true));
 });
 

@@ -324,12 +324,11 @@ const durableCallPatterns = {
   deferredAwait: /DurableDeferred\.await\b/g,
   deferredMake: /DurableDeferred\.make\b/g,
   deferredRace: /DurableDeferred\.raceAll\b/g,
-  queue: /PersistedQueue\.make\b/g,
   sleepFor: /\bsleepFor\s*\(/g,
   sleepUntil: /\bsleepUntil\s*\(/g,
 } as const;
 
-/** Number of persisted declaration sites by production file and primitive. */
+/** Number of durable declaration sites by production file and primitive. */
 export const productionDurableCallCounts: Readonly<Record<string, number>> = (() => {
   const counts: Record<string, number> = {};
   for (const { file, source } of productionSources()) {

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
+import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
 import { WhatsAppInboundJobId } from "./model";
 
 /** Identifier-only durable handoff for one accepted User-owned WhatsApp message. */
@@ -19,9 +19,10 @@ export const whatsappInboundQueueName = "whatsapp-inbound-turn";
 
 /** Concurrent inbound queue consumers started by each production runtime. */
 export const whatsappInboundConsumerCount = 8;
-export const whatsappInboundQueue = PersistedQueue.make({
+export const whatsappInboundQueue = makePersistedQueue({
   name: whatsappInboundQueueName,
   schema: WhatsAppInboundWork,
+  descriptor: { component: "whatsapp", operation: "whatsapp.processWork" },
 });
 
 /** Native queue primary key: the inbound job this work carries. */

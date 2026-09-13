@@ -4,6 +4,7 @@ import { DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
 import { UnknownJsonString } from "~/schema-compatibility";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import {
   WhatsAppInboundWork,
   maximumWhatsAppInboundAttempts,
@@ -80,6 +81,16 @@ const readFixture = (file: string): Effect.Effect<string> =>
   Effect.promise(() => Bun.file(fixtureUrl(file)).text());
 
 /** One successful take records its domain identity exactly once. */
+const compatibilityQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  WhatsAppInboundWork,
+  never,
+  never,
+  never
+> = {
+  classify: (failure) => failure,
+  recordTerminal: () => Effect.void,
+};
+
 const recordCompletion = (
   completions: Ref.Ref<number>,
   seen: Ref.Ref<ReadonlyArray<WhatsAppInboundWork>>
@@ -109,7 +120,9 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
           WHERE id = ${rowId} AND queue_name = ${whatsappInboundQueueName}`;
         for (let attempt = 0; attempt < maximumWhatsAppInboundAttempts; attempt += 1) {
           const error = yield* queue
-            .take(() => Effect.void, { maxAttempts: maximumWhatsAppInboundAttempts })
+            .take(() => Effect.void, compatibilityQueueHandlerPolicy, {
+              maxAttempts: maximumWhatsAppInboundAttempts,
+            })
             .pipe(Effect.flip);
           expect(Schema.isSchemaError(error), `attempt ${attempt}`).toBe(true);
         }
@@ -129,7 +142,9 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
         // The exhausted row is no longer eligible: the consumer observes absence,
         // never a silent drop.
         const missed = yield* queue
-          .take(() => Effect.void, { maxAttempts: maximumWhatsAppInboundAttempts })
+          .take(() => Effect.void, compatibilityQueueHandlerPolicy, {
+            maxAttempts: maximumWhatsAppInboundAttempts,
+          })
           .pipe(Effect.timeoutOption("500 millis"));
         expect(Option.isNone(missed)).toBe(true);
         // The reviewed exhausted-item policy retires the row with its domain identity
@@ -206,7 +221,7 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
           expect(afterOffer[0]?.element).toBe(oldElement);
           const completions = yield* Ref.make(0);
           const seen = yield* Ref.make<ReadonlyArray<WhatsAppInboundWork>>([]);
-          yield* queue.take(recordCompletion(completions, seen));
+          yield* queue.take(recordCompletion(completions, seen), compatibilityQueueHandlerPolicy);
           expect(yield* Ref.get(completions)).toBe(1);
           const [work] = yield* Ref.get(seen);
           expect(work?.version).toBe(1);
@@ -216,7 +231,7 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
           expect(row?.completed).toBe(true);
           expect(row?.attempts).toBe(1);
           const redelivered = yield* queue
-            .take(() => Effect.void)
+            .take(() => Effect.void, compatibilityQueueHandlerPolicy)
             .pipe(Effect.timeoutOption("500 millis"));
           expect(Option.isNone(redelivered)).toBe(true);
           expect(yield* Ref.get(completions)).toBe(1);

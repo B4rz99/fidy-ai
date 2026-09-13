@@ -1022,8 +1022,12 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const intentId = yield* admitQueuedDelivery(sensitiveEmail, "wamid.queue-defect");
         const hostileDefect = new Error(sensitiveValues.join(" "));
         const deliveredCodes: Array<string> = [];
-        const capturedLogs: Array<unknown> = [];
-        const logger = Logger.make((entry) => capturedLogs.push(entry));
+        const capturedLogs: Array<string> = [];
+        const logger = Logger.make(({ message }) =>
+          capturedLogs.push(
+            Array.isArray(message) ? message.map(String).join(" ") : String(message)
+          )
+        );
         const exit = yield* Effect.exit(
           deliverOneOnboardingEmailForTesting().pipe(
             Effect.withLogger(logger),
@@ -1044,9 +1048,12 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         expect(state.attempts).toBe(1);
         const durableFailure = Option.getOrThrow(state.lastFailure);
         expect(durableFailure).toContain('"reason":"unexpected-defect"');
-        expect(capturedLogs).toEqual([]);
+        expect(capturedLogs).toEqual([
+          "Persisted queue handler defect [onboarding:onboarding.deliverVerification:unexpected_defect]",
+        ]);
         const observableText = [
           durableFailure,
+          ...capturedLogs,
           ...(yield* recorder.serializedEnvelopes).map((bytes) => new TextDecoder().decode(bytes)),
         ].join("\n");
         expect(deliveredCodes).toHaveLength(1);

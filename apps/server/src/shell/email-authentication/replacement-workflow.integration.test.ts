@@ -41,9 +41,10 @@ import {
 import { performReplacementAttempt } from "./replacement-delivery-worker";
 import { expireReplacement, removeExpiredReplacementExecutions } from "./replacement-retention";
 import {
+  classifyReplacementQueueFailure,
   replacementDeliveryWorkflowLayer,
   replacementExpiryWorkflowLayer,
-  runReplacementQueueHandler,
+  replacementQueueHandlerPolicy,
 } from "./replacement-workflow";
 import { replacementRuntimeLayer as runtimeLayer } from "~/shell/testing/replacement-runtime";
 
@@ -145,19 +146,27 @@ type ReplacementRuntime = ManagedRuntime.ManagedRuntime<
 
 const submitDelivery = Effect.fn(function* (runtime: ReplacementRuntime) {
   const queue = yield* replacementDeliveryQueue;
-  yield* queue.take((payload) =>
-    Effect.tryPromise(() =>
-      runtime.runPromise(ReplacementDeliveryWorkflow.execute(payload, { discard: true }))
-    )
+  yield* queue.take(
+    (payload) =>
+      classifyReplacementQueueFailure(
+        Effect.tryPromise(() =>
+          runtime.runPromise(ReplacementDeliveryWorkflow.execute(payload, { discard: true }))
+        ).pipe(Effect.orDie)
+      ),
+    replacementQueueHandlerPolicy
   );
 });
 
 const submitExpiry = Effect.fn(function* (runtime: ReplacementRuntime) {
   const queue = yield* replacementExpiryQueue;
-  yield* queue.take((payload) =>
-    Effect.tryPromise(() =>
-      runtime.runPromise(ReplacementExpiryWorkflow.execute(payload, { discard: true }))
-    )
+  yield* queue.take(
+    (payload) =>
+      classifyReplacementQueueFailure(
+        Effect.tryPromise(() =>
+          runtime.runPromise(ReplacementExpiryWorkflow.execute(payload, { discard: true }))
+        ).pipe(Effect.orDie)
+      ),
+    replacementQueueHandlerPolicy
   );
 });
 
@@ -212,7 +221,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           const queue = yield* replacementDeliveryQueue;
 
           const transientExit = yield* Effect.exit(
-            queue.take(() => runReplacementQueueHandler(Effect.die(databaseFailure)))
+            queue.take(
+              () => classifyReplacementQueueFailure(Effect.die(databaseFailure)),
+              replacementQueueHandlerPolicy
+            )
           ).pipe(Effect.withLogger(logger));
           expect(Exit.isFailure(transientExit)).toBe(true);
           const [transientState] = yield* sql`SELECT completed, attempts,
@@ -226,10 +238,12 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           expect(yield* recorder.serializedEnvelopes).toEqual([]);
 
           const defectExit = yield* Effect.exit(
-            queue.take(() =>
-              runReplacementQueueHandler(
-                Effect.die(Object.assign(new Error(forbidden.join(" ")), { secret }))
-              )
+            queue.take(
+              () =>
+                classifyReplacementQueueFailure(
+                  Effect.die(Object.assign(new Error(forbidden.join(" ")), { secret }))
+                ),
+              replacementQueueHandlerPolicy
             )
           ).pipe(Effect.withLogger(logger));
           expect(Exit.isFailure(defectExit)).toBe(true);
@@ -269,7 +283,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const queue = yield* replacementDeliveryQueue;
 
         const exit = yield* Effect.exit(
-          queue.take(() => runReplacementQueueHandler(Effect.failCause(Cause.interrupt(42))))
+          queue.take(
+            () => classifyReplacementQueueFailure(Effect.failCause(Cause.interrupt(42))),
+            replacementQueueHandlerPolicy
+          )
         );
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
         expect(
@@ -296,7 +313,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           WHERE id = ${expiry.workflowId}`;
 
         const queue = yield* replacementExpiryQueue;
-        yield* queue.take((payload) => runReplacementQueueHandler(expireReplacement(payload)));
+        yield* queue.take(
+          (payload) => classifyReplacementQueueFailure(expireReplacement(payload)),
+          replacementQueueHandlerPolicy
+        );
 
         expect(
           yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
@@ -329,17 +349,19 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
 
         const queue = yield* replacementDeliveryQueue;
-        yield* queue.take((payload) =>
-          runReplacementQueueHandler(
-            performReplacementAttempt(payload, 1).pipe(
-              Effect.provideService(
-                EmailDeliveryPort,
-                EmailDeliveryPort.of({
-                  send: () => Effect.die("superseded replacement cannot send"),
-                })
+        yield* queue.take(
+          (payload) =>
+            classifyReplacementQueueFailure(
+              performReplacementAttempt(payload, 1).pipe(
+                Effect.provideService(
+                  EmailDeliveryPort,
+                  EmailDeliveryPort.of({
+                    send: () => Effect.die("superseded replacement cannot send"),
+                  })
+                )
               )
-            )
-          )
+            ),
+          replacementQueueHandlerPolicy
         );
 
         expect(
@@ -754,7 +776,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT id FROM email_replacement_executions WHERE id = ${delivery.intentId}`
           ).toHaveLength(1);
           const queue = yield* replacementDeliveryQueue;
-          yield* queue.take(() => Effect.void);
+          yield* queue.take(() => Effect.void, replacementQueueHandlerPolicy);
           yield* Effect.tryPromise(() =>
             runtime.runPromise(removeExpiredReplacementExecutions(batch.nextCursor))
           );

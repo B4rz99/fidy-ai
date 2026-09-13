@@ -11,7 +11,6 @@ import {
   Result,
   Schema,
 } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlError } from "effect/unstable/sql";
 import { UnknownJsonString } from "~/schema-compatibility";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
@@ -27,9 +26,10 @@ import { UserId } from "~/core/identity/reference";
 import { TransactionExtraction } from "~/core/transactions/model";
 import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import {
-  type PersistedQueueFailureDisposition,
-  runPersistedQueueHandler,
-} from "~/shell/_shared/persisted-queue-handler";
+  type ApplicationPersistedQueueHandlerPolicy,
+  makePersistedQueue,
+} from "~/shell/_shared/persisted-queue";
+import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
@@ -100,9 +100,10 @@ const statementHandlerDescriptor = {
 
 export const statementIngestionQueueName = "statement-ingestion";
 export const maximumStatementIngestionAttempts = 3;
-export const statementIngestionQueue = PersistedQueue.make({
+export const statementIngestionQueue = makePersistedQueue({
   name: statementIngestionQueueName,
   schema: StatementIngestionPayload,
+  descriptor: statementHandlerDescriptor,
 });
 
 /** Native queue primary key: the submission this work belongs to. */
@@ -355,18 +356,23 @@ type StatementQueueWork = Readonly<{
   observeOutcome: (outcome: StatementQueueOutcome) => Effect.Effect<void>;
 }>;
 
+const statementQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  StatementIngestionPayload,
+  StatementIngestionRetry,
+  never,
+  never
+> = {
+  classify: classifyStatementFailure,
+  // A future terminal classification must add an owning persisted disposition first.
+  recordTerminal: () => Effect.die("unexpected terminal classification"),
+};
+
 const processQueuedWork = Effect.fn("StatementIngestion.processWork")(function* (
   work: StatementQueueWork
 ) {
   return yield* processQueued(work.queueId, work.payload, work.attempts).pipe(
     Effect.tap(work.observeOutcome),
     classifyRetryableInfrastructure,
-    runPersistedQueueHandler({
-      descriptor: statementHandlerDescriptor,
-      classify: classifyStatementFailure,
-      // A future terminal classification must add an owning persisted disposition first.
-      recordTerminal: () => Effect.die("unexpected terminal classification"),
-    }),
     Effect.withSpan("ingestion.processStatementSubmission")
   );
 });
@@ -400,6 +406,7 @@ export const processNextStatement = Effect.fn("processNextStatement")(function* 
           attempts,
           observeOutcome: observeStatementOutcome(outcome),
         }),
+      statementQueueHandlerPolicy,
       { maxAttempts: maximumStatementIngestionAttempts }
     );
     return yield* Ref.get(outcome);
@@ -467,6 +474,7 @@ const consumeStatementQueue = Effect.gen(function* () {
           attempts,
           observeOutcome: () => Effect.void,
         }),
+      statementQueueHandlerPolicy,
       { maxAttempts: maximumStatementIngestionAttempts }
     )
     .pipe(

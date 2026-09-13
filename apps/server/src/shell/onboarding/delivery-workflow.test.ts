@@ -7,6 +7,7 @@ import {
   OnboardingDeliveryPayload,
   OnboardingEmailDeliveryWorkflow,
   onboardingEmailDeliveryQueue,
+  onboardingQueueHandlerPolicy,
 } from "./delivery-workflow";
 
 const intentId = EmailDeliveryIntentId.make("019cda32-1250-7000-8000-000000000460");
@@ -58,9 +59,9 @@ layer(DurableExecutionMemory)("native onboarding delivery queue", (it) => {
       yield* queue.offer({ intentId, revision: 1 }, { id: intentId });
 
       const deliveries = yield* Ref.make(0);
-      yield* queue.take(() => recordDelivery(deliveries));
+      yield* queue.take(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy);
       const duplicateFiber = yield* queue
-        .take(() => recordDelivery(deliveries))
+        .take(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy)
         .pipe(Effect.timeoutOption("10 millis"), Effect.forkChild);
       yield* TestClock.adjust("20 millis");
       const duplicate = yield* Fiber.join(duplicateFiber);

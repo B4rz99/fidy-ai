@@ -1,6 +1,5 @@
 import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option, Schema } from "effect";
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { configuredSecret } from "~/shell/_shared/configured-secret";
 import {
@@ -9,11 +8,9 @@ import {
 } from "~/shell/_shared/hosted-turn-bounds";
 import type { ClusterRunnerHttpPolicy } from "./cluster-runner-http";
 import {
-  durableQueueLockExpiration,
-  durableQueueLockRefreshInterval,
-  durableQueuePollInterval,
-  durableQueueTableName,
-} from "./durable-queue-policy";
+  PersistedQueueMemory,
+  SqlPersistedQueueLive,
+} from "~/shell/_shared/persisted-queue-storage";
 import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 import { ClusterObservationLive } from "./cluster-observation";
 import { ClusterReadinessVolatile } from "./cluster-readiness";
@@ -115,17 +112,7 @@ const ProductionClusterLive = Layer.unwrap(
   })
 );
 
-/** Shared SQL queue substrate using the explicit production table and lock policy. */
-export const SqlPersistedQueueLive = PersistedQueue.layer.pipe(
-  Layer.provideMerge(
-    PersistedQueue.layerStoreSql({
-      tableName: durableQueueTableName,
-      pollInterval: durableQueuePollInterval,
-      lockRefreshInterval: durableQueueLockRefreshInterval,
-      lockExpiration: durableQueueLockExpiration,
-    })
-  )
-);
+export { SqlPersistedQueueLive };
 
 /**
  * SQL-backed production substrate for native queues, workflows, and runner observation. The runner
@@ -163,7 +150,7 @@ export const DurableExecutionClientLive = Layer.unwrap(
 
 /** Volatile native substrate for tests that do not assert process-loss or cross-runtime behavior. */
 export const DurableExecutionMemory = Layer.mergeAll(
-  PersistedQueue.layer.pipe(Layer.provideMerge(PersistedQueue.layerStoreMemory)),
+  PersistedQueueMemory,
   WorkflowEngine.layerMemory,
   TestRunner.layer,
   ClusterReadinessVolatile

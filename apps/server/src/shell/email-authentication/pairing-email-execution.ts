@@ -1,6 +1,5 @@
 import { type DateTime, Effect, Schema } from "effect";
 import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { Workflow } from "effect/unstable/workflow";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
@@ -9,6 +8,7 @@ import {
   EmailDeliveryIntentId,
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
+import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
 import { durableQueueTableName } from "~/shell/durable-queue-policy";
 
 /** Stable queue names are deployment contracts shared with in-flight handoffs. */
@@ -22,9 +22,13 @@ export const PairingStartPayload = Schema.Struct({
   requestId: BrowserPairingEmailStartRequestId,
 }).annotate({ identifier: "PairingStartPayload" });
 export type PairingStartPayload = typeof PairingStartPayload.Type;
-export const pairingStartQueue = PersistedQueue.make({
+export const pairingStartQueue = makePersistedQueue({
   name: pairingStartQueueName,
   schema: PairingStartPayload,
+  descriptor: {
+    component: "api",
+    operation: "emailAuthentication.processPairingStart",
+  },
 });
 
 /** Explicit User context is checked against the intent under RLS, never inferred from its id. */
@@ -52,9 +56,13 @@ export const BrowserPairingEmailDeliveryWorkflow = Workflow.make("BrowserPairing
   success: PairingDeliveryResult,
   idempotencyKey: ({ userId, intentId }) => `${userId}/${intentId}`,
 });
-export const pairingDeliveryQueue = PersistedQueue.make({
+export const pairingDeliveryQueue = makePersistedQueue({
   name: pairingDeliveryQueueName,
   schema: PairingDeliveryPayload,
+  descriptor: {
+    component: "api",
+    operation: "emailAuthentication.processPairingDelivery",
+  },
 });
 
 /** Expiry is independent of provider completion and retains no proof or mailbox material. */
@@ -68,9 +76,13 @@ export const BrowserPairingEmailExpiryWorkflow = Workflow.make("BrowserPairingEm
   payload: PairingExpiryPayload,
   idempotencyKey: ({ userId, workflowId }) => `${userId}/${workflowId}`,
 });
-export const pairingExpiryQueue = PersistedQueue.make({
+export const pairingExpiryQueue = makePersistedQueue({
   name: pairingExpiryQueueName,
   schema: PairingExpiryPayload,
+  descriptor: {
+    component: "api",
+    operation: "emailAuthentication.processPairingExpiry",
+  },
 });
 
 /** Stable native queue keys from one offered payload; payloads keep the routing identities. */

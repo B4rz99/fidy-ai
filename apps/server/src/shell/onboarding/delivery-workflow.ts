@@ -6,14 +6,13 @@ import {
   MessageStorage,
   Sharding,
 } from "effect/unstable/cluster";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlError } from "effect/unstable/sql";
 import { Activity, Workflow } from "effect/unstable/workflow";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
 import {
-  type PersistedQueueHandlerFailure,
-  runPersistedQueueHandler,
-} from "~/shell/_shared/persisted-queue-handler";
+  type ApplicationPersistedQueueHandlerPolicy,
+  makePersistedQueue,
+} from "~/shell/_shared/persisted-queue";
 import { TelemetryAttempt, TelemetryCount } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
@@ -59,9 +58,10 @@ export const onboardingDeliveryQueueName = "onboarding-email-delivery";
 const workflowEntityType = "Workflow/OnboardingEmailDelivery";
 const maximumProviderRetries = 2;
 
-export const onboardingEmailDeliveryQueue = PersistedQueue.make({
+export const onboardingEmailDeliveryQueue = makePersistedQueue({
   name: onboardingDeliveryQueueName,
   schema: OnboardingDeliveryPayload,
+  descriptor: { component: "onboarding", operation: "onboarding.deliverVerification" },
 });
 
 const OnboardingDeliveryRetry = Schema.TaggedStruct("OnboardingDeliveryRetry", {
@@ -86,23 +86,24 @@ const classifyRetryableSqlDefect = <A, R>(
     )
   );
 
-const runOnboardingQueueHandler = runPersistedQueueHandler<OnboardingQueueFailure, never, never>({
-  descriptor: {
-    component: "onboarding",
-    operation: "onboarding.deliverVerification",
-  },
+/** Queue settlement policy; terminal delivery failures have already settled their owning intent. */
+export const onboardingQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  OnboardingDeliveryPayload,
+  OnboardingQueueFailure,
+  never,
+  never
+> = {
   classify: (failure) =>
     failure._tag === "OnboardingDeliveryRetry"
       ? { _tag: "Retry", reason: "transient" }
       : { _tag: "Terminal", reason: "domain-rejected" },
-  // Every OnboardingDeliveryFailed is raised only after its intent is already terminally settled.
   recordTerminal: () => Effect.void,
-});
+};
 
 const consumeOnboardingDelivery = <A, R>(
   work: Effect.Effect<A, OnboardingDeliveryFailed, R>,
   previousAttempts: number
-): Effect.Effect<void, PersistedQueueHandlerFailure, R | Telemetry> =>
+): Effect.Effect<void, OnboardingQueueFailure, R | Telemetry> =>
   Effect.flatMap(Telemetry, (telemetry) =>
     telemetry.rootSpan(
       {
@@ -118,7 +119,7 @@ const consumeOnboardingDelivery = <A, R>(
           delayMilliseconds: Option.none(),
         },
       },
-      classifyRetryableSqlDefect(work).pipe(runOnboardingQueueHandler)
+      classifyRetryableSqlDefect(work).pipe(Effect.asVoid)
     )
   );
 
@@ -217,8 +218,10 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
 
     const firstPageCursor = yield* publishPendingPage(Option.none());
     yield* queue
-      .take((payload, { attempts }) =>
-        consumeOnboardingDelivery(OnboardingEmailDeliveryWorkflow.execute(payload), attempts)
+      .take(
+        (payload, { attempts }) =>
+          consumeOnboardingDelivery(OnboardingEmailDeliveryWorkflow.execute(payload), attempts),
+        onboardingQueueHandlerPolicy
       )
       .pipe(
         Effect.catchTag("PersistedQueueHandlerFailure", () => Effect.void),
@@ -289,8 +292,10 @@ export const deliverOneOnboardingEmailForTesting = Effect.fn(
 )(function* () {
   const queue = yield* onboardingEmailDeliveryQueue;
   const completed = yield* queue
-    .take((payload, { attempts }) =>
-      consumeOnboardingDelivery(performOnboardingEmailDelivery(payload), attempts)
+    .take(
+      (payload, { attempts }) =>
+        consumeOnboardingDelivery(performOnboardingEmailDelivery(payload), attempts),
+      onboardingQueueHandlerPolicy
     )
     .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
   return Option.getOrElse(completed, () => false);

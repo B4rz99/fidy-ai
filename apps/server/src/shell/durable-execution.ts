@@ -3,10 +3,15 @@ import { ClusterWorkflowEngine, RunnerAddress, TestRunner } from "effect/unstabl
 import { PersistedQueue } from "effect/unstable/persistence";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { configuredSecret } from "~/shell/_shared/configured-secret";
+import {
+  durableQueueLockExpiration,
+  durableQueueLockRefreshInterval,
+  durableQueuePollInterval,
+  durableQueueTableName,
+} from "./durable-queue-policy";
 import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 
 const ClusterAuthenticationToken = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
-const durableQueueTable = "fidy_queue";
 const clusterAuthenticationToken = configuredSecret({
   name: "FIDY_CLUSTER_AUTH_TOKEN",
   schema: ClusterAuthenticationToken,
@@ -36,8 +41,20 @@ const ProductionClusterLive = Layer.unwrap(
   })
 );
 
+/**
+ * Shared SQL queue substrate with the deliberate production policy from
+ * `durable-queue-policy.ts`: table identity, polling, lock refresh, and lock expiry are explicit
+ * here so the operating point cannot silently drift with upstream store defaults.
+ */
 const SqlPersistedQueueLive = PersistedQueue.layer.pipe(
-  Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: durableQueueTable }))
+  Layer.provideMerge(
+    PersistedQueue.layerStoreSql({
+      tableName: durableQueueTableName,
+      pollInterval: durableQueuePollInterval,
+      lockRefreshInterval: durableQueueLockRefreshInterval,
+      lockExpiration: durableQueueLockExpiration,
+    })
+  )
 );
 
 /**

@@ -77,6 +77,7 @@ export const TelemetryRegistry = {
     "task.supportRecoveryRetention",
     "task.whatsappRetention",
     "task.billingReconciliationMaintenance",
+    "task.durableQueueHealth",
     "provider.request",
     "observability.accountSmoke",
     "browserLogin.redeemPairing",

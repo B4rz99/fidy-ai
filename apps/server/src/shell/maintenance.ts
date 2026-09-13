@@ -1,6 +1,7 @@
 import { Layer } from "effect";
 import { BrowserLoginEvidenceRetentionLive } from "~/shell/browser-login/handlers";
 import { WhatsAppRetentionLive } from "~/shell/channels/whatsapp/worker";
+import { DurableQueueHealthMaintenanceLive } from "~/shell/durable-queue-health";
 import { BrowserPairingEmailRetentionLive } from "~/shell/email-authentication/authentication-retention";
 import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
 import { EvidenceRetentionLive } from "./evidence-retention";
@@ -23,6 +24,7 @@ export const MaintenanceLive = Layer.mergeAll(
   BillingReconciliationMaintenanceLive,
   BrowserLoginEvidenceRetentionLive,
   BrowserPairingEmailRetentionLive,
+  DurableQueueHealthMaintenanceLive,
   EmailReplacementRetentionLive,
   EvidenceRetentionLive,
   ForwardedEmailEvidenceRetentionLive,

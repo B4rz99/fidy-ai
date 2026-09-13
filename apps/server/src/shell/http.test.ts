@@ -1,8 +1,33 @@
 import { expect, it, layer } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { durableQueueNames } from "./durable-queue-policy";
 import { ExactOriginCorsLive } from "./http";
+
+/** Strict readiness body so the wiring test proves the exact bounded surface, not a cast. */
+const DurableQueueReadinessBody = Schema.Struct({
+  status: Schema.Literals(["ok", "needs-attention"]),
+  queues: Schema.Array(
+    Schema.Struct({
+      queueName: Schema.String,
+      pendingDepth: Schema.Int,
+      oldestPendingAgeSeconds: Schema.Int,
+      activeLeaseCount: Schema.Int,
+      staleLeaseCount: Schema.Int,
+      redeliveredCount: Schema.Int,
+      failedCount: Schema.Int,
+      schemaIncompatibleCount: Schema.Int,
+      exhaustedCount: Schema.Int,
+      attention: Schema.Struct({
+        backlog: Schema.Boolean,
+        leaseChurn: Schema.Boolean,
+        exhausted: Schema.Boolean,
+        decodeFailure: Schema.Boolean,
+      }),
+    })
+  ),
+});
 
 const invalidPublicNamespace = (webOrigin?: string): ConfigProvider.ConfigProvider =>
   ConfigProvider.fromEnv({
@@ -51,6 +76,42 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(response.status).toBe(200);
         expect(response.headers["content-type"]).toBe("text/html");
         expect(yield* response.text).toContain("fidy-ai canonical API");
+      })
+    );
+
+    it.effect("exposes bounded durable-queue readiness without caller credentials", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get("/readiness/durable-queues");
+        const body = yield* Schema.decodeUnknownEffect(DurableQueueReadinessBody)(
+          yield* response.json
+        );
+        const expectedKeys = [
+          "queueName",
+          "pendingDepth",
+          "oldestPendingAgeSeconds",
+          "activeLeaseCount",
+          "staleLeaseCount",
+          "redeliveredCount",
+          "failedCount",
+          "schemaIncompatibleCount",
+          "exhaustedCount",
+          "attention",
+        ].sort();
+
+        expect([200, 503]).toContain(response.status);
+        expect(response.status).toBe(body.status === "ok" ? 200 : 503);
+        expect(body.queues.map((queue) => queue.queueName).sort()).toEqual(
+          [...durableQueueNames].sort()
+        );
+        for (const queue of body.queues) {
+          expect(Object.keys(queue).sort()).toEqual(expectedKeys);
+          expect(Object.keys(queue.attention).sort()).toEqual(
+            ["backlog", "leaseChurn", "exhausted", "decodeFailure"].sort()
+          );
+          expect(body.status).toBe(
+            Object.values(queue.attention).some((flag) => flag) ? "needs-attention" : "ok"
+          );
+        }
       })
     );
 

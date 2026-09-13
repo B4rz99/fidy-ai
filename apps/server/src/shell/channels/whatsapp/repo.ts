@@ -26,6 +26,7 @@ import {
 } from "~/shell/agent/tool-confirmation-model";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import { durableQueueSchemaIncompatibleMarker } from "~/shell/durable-queue-policy";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   DurableTraceContext,
@@ -219,8 +220,11 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
   for (const item of exhausted) {
     const identity = Schema.decodeOption(WhatsAppInboundIdentity)(item.element);
     if (Option.isNone(identity)) {
-      yield* sql`UPDATE fidy_queue SET last_failure = 'schema_incompatible', updated_at = ${now}
-        WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
+      yield* sql`UPDATE fidy_queue SET last_failure = ${durableQueueSchemaIncompatibleMarker},
+        updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(
+        Effect.asVoid,
+        Effect.orDie
+      );
       yield* Effect.logWarning("Retained malformed exhausted WhatsApp work", {
         sequence: item.sequence,
       });

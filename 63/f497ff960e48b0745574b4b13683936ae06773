@@ -1,0 +1,20 @@
+apps/server/src/shell/durable-queue-policy.ts
+  s_ba8d087ff26ac2::t_2047dbd3fb0f54 109,116-118,120
+  s_ba8d087ff26ac2::t_cbd839733c7517 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "63f497ff960e48b0745574b4b13683936ae06773",
+  "prompts": {},
+  "sessions": {
+    "s_ba8d087ff26ac2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b21-1651-71c6-bb38-88667d780cc8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

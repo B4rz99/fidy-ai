@@ -1,0 +1,25 @@
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_729685b01e566c::t_43c3974af53d6d 71-81,120,246-253,256-258
+  s_729685b01e566c::t_6c05e868f62ec0 254-255
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  s_729685b01e566c::t_fcf884aab5ed27 15,27
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_729685b01e566c::t_3e018d0bc77e9b 116
+  s_729685b01e566c::t_d7b4ea77e51beb 141,273-275,278-282,284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1a82427faf0d176c73e0f30e13ea5ba118716a46",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

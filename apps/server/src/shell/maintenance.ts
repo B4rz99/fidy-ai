@@ -1,9 +1,9 @@
 import { Layer } from "effect";
 import { BrowserLoginEvidenceRetentionLive } from "~/shell/browser-login/handlers";
 import { WhatsAppRetentionLive } from "~/shell/channels/whatsapp/worker";
-import { DurableQueueHealthMaintenanceLive } from "~/shell/durable-queue-health";
 import { BrowserPairingEmailRetentionLive } from "~/shell/email-authentication/authentication-retention";
 import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
+import { DurableQueueHealthMaintenanceLive } from "./durable-queue-health";
 import { EvidenceRetentionLive } from "./evidence-retention";
 import {
   ForwardedEmailEvidenceRetentionLive,

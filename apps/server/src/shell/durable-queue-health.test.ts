@@ -14,7 +14,15 @@ import {
 } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { type SqlClient, type SqlError } from "effect/unstable/sql";
+import { whatsappInboundQueueName } from "~/shell/channels/whatsapp/inbound-execution";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
+import { ProjectedTransaction } from "~/shell/observability/projectors";
+import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { Telemetry } from "~/shell/observability/telemetry";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import {
   durableQueueAttentionLogAnnotations,
@@ -29,11 +37,6 @@ import {
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
 } from "./durable-queue-policy";
-import { whatsappInboundQueueName } from "./channels/whatsapp/inbound-execution";
-import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./observability/envelope-recorder";
-import { ProjectedTransaction } from "./observability/projectors";
-import { runScheduledWork } from "./observability/scheduled-work";
-import { Telemetry } from "./observability/telemetry";
 
 const testQueueName = whatsappInboundQueueName;
 const lostWorkerId = "f1d1a000-0000-4000-8000-00000000dead";

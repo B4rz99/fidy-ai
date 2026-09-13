@@ -3,6 +3,20 @@ import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { serviceUnavailableStatus, unauthorizedStatus } from "~/shell/_shared/http-status";
 import {
+  maximumStatementIngestionAttempts,
+  statementIngestionQueueName,
+} from "~/shell/ingestion/worker";
+import {
+  maximumTelemetryCount,
+  maximumTelemetryDurationMilliseconds,
+} from "~/shell/observability/protocol";
+import {
+  type ScheduledWorkDescriptor,
+  runScheduledWork,
+} from "~/shell/observability/scheduled-work";
+import { Telemetry } from "~/shell/observability/telemetry";
+import { SupportAccessVerifier } from "~/shell/recovery/access";
+import {
   DurableQueueAttention,
   type DurableQueueName,
   classifyDurableQueueAttention,
@@ -18,15 +32,7 @@ import {
   isPermanentDurableQueueAttention,
   isTransientDurableQueueAttention,
 } from "./durable-queue-policy";
-import { maximumStatementIngestionAttempts, statementIngestionQueueName } from "./ingestion/worker";
 import { runBestEffortMaintenance } from "./maintenance-schedule";
-import {
-  maximumTelemetryCount,
-  maximumTelemetryDurationMilliseconds,
-} from "./observability/protocol";
-import { type ScheduledWorkDescriptor, runScheduledWork } from "./observability/scheduled-work";
-import { Telemetry } from "./observability/telemetry";
-import { SupportAccessVerifier } from "./recovery/access";
 
 const durableQueueHealthCountFields = {
   pendingDepth: Schema.Int,

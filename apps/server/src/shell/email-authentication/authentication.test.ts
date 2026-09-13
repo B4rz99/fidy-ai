@@ -29,22 +29,30 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   BrowserPairingEmailDeliveryWorkerLive,
   BrowserPairingEmailWorkflowLive,
+  processPairingDeliveryQueueItem,
+  processPairingStartQueueItem,
 } from "./authentication-delivery-worker";
 import { browserPairingEmailAuthentication } from "./pairing-authentication";
 import { emailAuthenticationHmacKey, emailCredentialLookupKey } from "./admission";
 import { purgeBrowserPairingEmailAdmissionEvidence } from "./authentication-retention";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
-import { BrowserPairingEmailExpiryWorkflow, PairingExpiryPayload } from "./pairing-email-execution";
+import {
+  BrowserPairingEmailExpiryWorkflow,
+  PairingExpiryPayload,
+  pairingDeliveryQueue,
+  pairingStartQueue,
+} from "./pairing-email-execution";
 
 const processNextBackgroundStep = Effect.fn(function* () {
   return yield* browserPairingEmailAuthentication.processNextBackgroundStep().pipe(
     // Finite test entrypoint: the provider supplied by this test owns the registration scope.
     // @effect-diagnostics-next-line strictEffectProvide:off
-    Effect.provide(BrowserPairingEmailWorkflowLive)
+    Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled))
   );
 });
 const countingEmailDelivery = (sends: Ref.Ref<number>): EmailDeliveryPortService =>
@@ -776,12 +784,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           EmailDeliveryPort.of({ send: () => Effect.void })
         );
         yield* Effect.scoped(
-          Layer.build(BrowserPairingEmailDeliveryWorkerLive.pipe(Layer.provide(delivery)))
+          Layer.build(
+            BrowserPairingEmailDeliveryWorkerLive.pipe(
+              Layer.provide(delivery),
+              Layer.provide(TelemetryDisabled)
+            )
+          )
         );
         yield* Effect.scoped(
           Layer.build(
             BrowserPairingEmailDeliveryWorkerLive.pipe(
               Layer.provide(delivery),
+              Layer.provide(TelemetryDisabled),
               Layer.provide(
                 ConfigProvider.layer(ConfigProvider.fromUnknown({ NODE_ENV: "production" }))
               )
@@ -1112,7 +1126,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const pairing = yield* startPairing;
         yield* requestEmail(pairing, knownEmail);
-        yield* processNextBackgroundStep().pipe(
+        yield* (yield* pairingStartQueue).take(processPairingStartQueueItem).pipe(
+          // Finite start-consumer test entrypoint.
+          // @effect-diagnostics-next-line strictEffectProvide:off
+          Effect.provide(TelemetryDisabled)
+        );
+        yield* (yield* pairingDeliveryQueue).take(processPairingDeliveryQueueItem).pipe(
+          // This test expires the workflow explicitly below, so it drives only the start and
+          // delivery consumer gateways and leaves the queued expiry unclaimed.
+          // @effect-diagnostics-next-line strictEffectProvide:off
+          Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled)),
           Effect.provideService(
             EmailDeliveryPort,
             EmailDeliveryPort.of({ send: () => Effect.void })

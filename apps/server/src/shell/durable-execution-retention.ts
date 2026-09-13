@@ -88,8 +88,8 @@ export const durableQueueRetention = {
       DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
         SELECT sequence FROM ${sql(durableQueueTableName)}
 =======
-      DELETE FROM ${sql(durableQueueTable)} WHERE sequence IN (
-        SELECT sequence FROM ${sql(durableQueueTable)}
+      DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
+        SELECT sequence FROM ${sql(durableQueueTableName)}
 >>>>>>> cb0dfb1830 (feat(api): make production Cluster topology explicit and observable)
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
           AND completed = TRUE

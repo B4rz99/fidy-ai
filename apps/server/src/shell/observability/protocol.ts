@@ -31,7 +31,9 @@ export type TelemetryDuration = typeof TelemetryDuration.Type;
 
 /** Clamps any millisecond reading into the approved telemetry-duration range. */
 export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
-  TelemetryDuration.make(Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMillis));
+  TelemetryDuration.make(
+    Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMilliseconds)
+  );
 
 /** An HTTP response status from 100 through 599 used only as bounded diagnostic metadata. */
 export const TelemetryHttpStatus = Schema.Int.check(

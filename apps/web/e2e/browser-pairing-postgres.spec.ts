@@ -604,7 +604,10 @@ test("renders authoritative PostgreSQL Subscription offers and prepares Pro paym
         response.url() === `${apiOrigin}/subscription/offers` &&
         response.request().method() === "GET"
     )
-    .then(async (response) => ({ status: response.status(), body: await response.json() }));
+    .then(async (response) => {
+      const body: unknown = await response.json();
+      return { status: response.status(), body };
+    });
   await page.goto("/upgrade");
   const response = await offersResponse;
   expect(response.status).toBe(successStatus);

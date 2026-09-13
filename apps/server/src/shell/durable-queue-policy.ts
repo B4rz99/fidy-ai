@@ -27,12 +27,12 @@ export const durableQueueLockRefreshInterval: Duration.Input = "30 seconds";
 /** Lease lifetime; must exceed the longest supported handler pause while refresh stays active. */
 export const durableQueueLockExpiration: Duration.Input = "10 minutes";
 
-/** Whole-second expiry as the store truncates it for the lease comparison. */
+/** Whole-second expiry, ceiled exactly as the store converts it for the lease comparison. */
 export const durableQueueLockExpirationSeconds: number = Math.ceil(
   Duration.toSeconds(Duration.fromInputUnsafe(durableQueueLockExpiration))
 );
 
-/** Whole-second refresh cadence, kept only to pin the refresh-to-expiry ratio in tests. */
+/** Whole-second refresh cadence; production derives the stalled-lease threshold from it. */
 export const durableQueueLockRefreshSeconds: number = Math.ceil(
   Duration.toSeconds(Duration.fromInputUnsafe(durableQueueLockRefreshInterval))
 );

@@ -290,14 +290,30 @@ export type DurableQueueReadiness = Readonly<{
 export const projectDurableQueueReadiness = (
   queues: ReadonlyArray<DurableQueueHealth>
 ): DurableQueueReadiness => ({
-  queues: queues.map((queue) => ({ ...queue, attention: classifyDurableQueueAttention(queue) })),
+  queues: queues.map((queue) => ({
+    queueName: queue.queueName,
+    pendingDepth: queue.pendingDepth,
+    oldestPendingAgeSeconds: queue.oldestPendingAgeSeconds,
+    retainedCount: queue.retainedCount,
+    oldestRetainedAgeSeconds: queue.oldestRetainedAgeSeconds,
+    activeLeaseCount: queue.activeLeaseCount,
+    staleLeaseCount: queue.staleLeaseCount,
+    stalledLeaseCount: queue.stalledLeaseCount,
+    redeliveredCount: queue.redeliveredCount,
+    failedCount: queue.failedCount,
+    schemaIncompatibleCount: queue.schemaIncompatibleCount,
+    exhaustedCount: queue.exhaustedCount,
+    attention: classifyDurableQueueAttention(queue),
+  })),
 });
 
 /**
- * Unauthenticated read-only readiness report for the shared queue store. It always returns 200 and
- * carries one entry per stable queue name with bounded counts and alert flags; the minutely probe
- * declares the alert outcome, and orchestrators decide traffic policy from this body. Transient
- * backlog and lease churn stay retryable; exhausted and schema-incompatible work does not.
+ * Unauthenticated read-only readiness report for the shared queue store. A successful read returns
+ * 200 with one entry per stable queue name carrying bounded counts and alert flags; the report
+ * deliberately has no aggregate gate, so the minutely probe declares the alert outcome and
+ * orchestrators decide traffic policy from the body. Transient backlog and lease churn stay
+ * retryable; exhausted and schema-incompatible work does not. A storage failure is an error
+ * response, never a fabricated queue state.
  */
 export const DurableQueueReadinessLive = HttpRouter.add(
   "GET",

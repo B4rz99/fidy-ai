@@ -184,6 +184,9 @@ const defaultWait: WaitPolicy = { timeout: "10 seconds", interval: "20 millis" }
 /** Poll cadence for recovery scenarios that can take longer to settle. */
 const recoveryWait: WaitPolicy = { timeout: "20 seconds", interval: "50 millis" };
 
+/** Poll cadence for the mailbox observation before retention, which settles without a model barrier. */
+const retentionWait: WaitPolicy = { timeout: "5 seconds", interval: "20 millis" };
+
 /** Polls an observation until it satisfies `until`, or fails the scenario after the policy's wait. */
 const waitUntil = <A, E, R>(
   observation: Effect.Effect<A, E, R>,
@@ -740,10 +743,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(
             yield* sql`SELECT content FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
           ).toEqual([{ content: null }]);
-          const completed = yield* waitUntil(mailbox, everyMailboxEntryProcessed, {
-            timeout: "5 seconds",
-            interval: "20 millis",
-          });
+          const completed = yield* waitUntil(mailbox, everyMailboxEntryProcessed, retentionWait);
           expect(completed.length).toBeGreaterThan(0);
           yield* pruneCompletedHostedTurnMessages(yield* DateTime.now);
           expect(yield* mailbox).toEqual(completed);

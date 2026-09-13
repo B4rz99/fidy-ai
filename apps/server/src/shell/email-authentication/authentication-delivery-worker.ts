@@ -1,14 +1,20 @@
-import { Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type Cause, Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
+import { SqlClient, SqlError, SqlSchema } from "effect/unstable/sql";
 import { Activity } from "effect/unstable/workflow";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
+  type BrowserPairingEmailStartRequestId,
   BrowserPairingEmailWorkflowId,
   EmailAddress,
   EmailVerificationCode,
   EmailVerificationPublicCode,
 } from "~/core/email-authentication/model";
 import { proofExpiry } from "~/core/email-authentication/rules";
+import {
+  type PersistedQueueFailureDisposition,
+  type PersistedQueueTerminalReason,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/service";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
@@ -310,6 +316,112 @@ export const BrowserPairingEmailWorkflowLive = Layer.mergeAll(
   )
 );
 
+const PairingQueueDatabaseUnavailable = Schema.TaggedStruct("PairingQueueDatabaseUnavailable", {});
+type PairingQueueDatabaseUnavailable = typeof PairingQueueDatabaseUnavailable.Type;
+const PairingQueuePermanentOutcome = Schema.TaggedStruct("PairingQueuePermanentOutcome", {
+  reason: Schema.Literals(["identity-rejected", "domain-rejected"]),
+});
+type PairingQueuePermanentOutcome = typeof PairingQueuePermanentOutcome.Type;
+type PairingQueueFailure = PairingQueueDatabaseUnavailable | PairingQueuePermanentOutcome;
+
+const isTransientDatabaseCause = <E>(cause: Cause.Cause<E>): cause is Cause.Cause<never> =>
+  cause.reasons.length > 0 &&
+  cause.reasons.every(
+    (reason) =>
+      reason._tag === "Die" && SqlError.isSqlError(reason.defect) && reason.defect.isRetryable
+  );
+
+const exposeTransientDatabaseFailure = <A, E, R>(
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E | PairingQueueDatabaseUnavailable, R> =>
+  work.pipe(
+    Effect.catchCauseIf(isTransientDatabaseCause, () =>
+      Effect.fail({ _tag: "PairingQueueDatabaseUnavailable" } as const)
+    )
+  );
+
+const classifyPairingQueueFailure = (
+  failure: PairingQueueFailure
+): PersistedQueueFailureDisposition =>
+  failure._tag === "PairingQueueDatabaseUnavailable"
+    ? { _tag: "Retry", reason: "transient" }
+    : { _tag: "Terminal", reason: failure.reason };
+
+const permanentPairingOutcome = (
+  reason: Extract<PersistedQueueTerminalReason, "identity-rejected" | "domain-rejected">
+): Effect.Effect<never, PairingQueuePermanentOutcome> =>
+  Effect.fail({ _tag: "PairingQueuePermanentOutcome", reason });
+
+const deliveryTerminalReason: Readonly<
+  Record<Exclude<PairingDeliveryResult["outcome"], "sent">, PairingQueuePermanentOutcome["reason"]>
+> = {
+  "not-current": "identity-rejected",
+  expired: "domain-rejected",
+  refused: "domain-rejected",
+  "retry-exhausted": "domain-rejected",
+  uncertain: "domain-rejected",
+};
+
+const pairingQueueHandler = (
+  operation:
+    | "emailAuthentication.processPairingStart"
+    | "emailAuthentication.processPairingDelivery"
+    | "emailAuthentication.processPairingExpiry"
+): ReturnType<typeof runPersistedQueueHandler<PairingQueueFailure, never, never>> =>
+  runPersistedQueueHandler<PairingQueueFailure, never, never>({
+    descriptor: { component: "api", operation },
+    classify: classifyPairingQueueFailure,
+    // The work establishes its idempotent domain disposition before exposing the terminal signal.
+    recordTerminal: () => Effect.void,
+  });
+
+// PersistedQueue policy already observes bounded attempts, latency, and continuation pressure. These
+// wrappers add no safe operation-specific dimensions, so only their unexpected defects are observed.
+
+/** Processes one start item while exposing only shared redacted queue failure markers. */
+export const processPairingStartQueueItem = Effect.fn(function* (payload: {
+  readonly requestId: BrowserPairingEmailStartRequestId;
+}) {
+  yield* processBrowserPairingEmailStartRequest(payload.requestId).pipe(
+    Effect.flatMap((outcome) =>
+      outcome === "processed" ? Effect.void : permanentPairingOutcome("identity-rejected")
+    ),
+    exposeTransientDatabaseFailure,
+    pairingQueueHandler("emailAuthentication.processPairingStart")
+  );
+});
+
+/**
+ * Processes one delivery item while keeping workflow and provider diagnostics outside queue state.
+ * The workflow retains its provider retry schedule; only submission/database transience reaches the
+ * queue boundary, preserving the existing single durable delivery execution.
+ */
+export const processPairingDeliveryQueueItem = Effect.fn(function* (
+  payload: PairingDeliveryPayload
+) {
+  yield* BrowserPairingEmailDeliveryWorkflow.execute(payload).pipe(
+    Effect.flatMap((result) =>
+      result.outcome === "sent"
+        ? Effect.void
+        : permanentPairingOutcome(deliveryTerminalReason[result.outcome])
+    ),
+    exposeTransientDatabaseFailure,
+    pairingQueueHandler("emailAuthentication.processPairingDelivery")
+  );
+});
+
+/**
+ * Schedules one queued expiry without retaining its deadline or proof in queue failure state.
+ * Accepted submission completes this handoff; stale expiry state is settled idempotently inside the
+ * durable workflow rather than consuming a queue retry.
+ */
+export const processPairingExpiryQueueItem = Effect.fn(function* (payload: PairingExpiryPayload) {
+  yield* BrowserPairingEmailExpiryWorkflow.execute(payload, { discard: true }).pipe(
+    exposeTransientDatabaseFailure,
+    pairingQueueHandler("emailAuthentication.processPairingExpiry")
+  );
+});
+
 /** Native consumers own acquisition and wakeups; fixed concurrency bounds provider work per process. */
 export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -321,16 +433,10 @@ export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
     const starts = yield* pairingStartQueue;
     const deliveries = yield* pairingDeliveryQueue;
     const expiries = yield* pairingExpiryQueue;
-    yield* starts
-      .take(({ requestId }) => processBrowserPairingEmailStartRequest(requestId))
-      .pipe(Effect.forever, Effect.forkScoped);
-    yield* deliveries
-      .take((payload) => BrowserPairingEmailDeliveryWorkflow.execute(payload))
-      .pipe(Effect.forever, Effect.forkScoped);
+    yield* starts.take(processPairingStartQueueItem).pipe(Effect.forever, Effect.forkScoped);
+    yield* deliveries.take(processPairingDeliveryQueueItem).pipe(Effect.forever, Effect.forkScoped);
     // Expiry is submitted without occupying a worker until the ten-minute deadline.
-    yield* expiries
-      .take((payload) => BrowserPairingEmailExpiryWorkflow.execute(payload, { discard: true }))
-      .pipe(Effect.forever, Effect.forkScoped);
+    yield* expiries.take(processPairingExpiryQueueItem).pipe(Effect.forever, Effect.forkScoped);
   })
 );
 
@@ -342,14 +448,21 @@ export const processNextBackgroundStep = Effect.fn("EmailAuthentication.processN
   function* () {
     const starts = yield* pairingStartQueue;
     const deliveries = yield* pairingDeliveryQueue;
+    const expiries = yield* pairingExpiryQueue;
     const started = yield* starts
-      .take(({ requestId }) => processBrowserPairingEmailStartRequest(requestId))
+      .take(processPairingStartQueueItem)
       .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     const delivered = yield* deliveries
-      .take((payload) => BrowserPairingEmailDeliveryWorkflow.execute(payload))
+      .take(processPairingDeliveryQueueItem)
       .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
+    const expired = yield* expiries
+      .take(processPairingExpiryQueueItem)
+      .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     return {
-      _tag: Option.isSome(started) || Option.isSome(delivered) ? "Progressed" : "Idle",
+      _tag:
+        Option.isSome(started) || Option.isSome(delivered) || Option.isSome(expired)
+          ? "Progressed"
+          : "Idle",
     } satisfies BrowserPairingEmailBackgroundStepOutcome;
   }
 );

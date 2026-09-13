@@ -13,6 +13,7 @@ import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/au
 import { emailCredentialLookupKey } from "~/shell/email-authentication/admission";
 import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import { upsertStableUserFixture } from "./identity-fixtures";
 
@@ -289,6 +290,7 @@ export const makeBrowserLoginPairingAcceptanceControlServer = ({
     ),
     Layer.provide(BunServices.layer),
     Layer.provide(SqlQueueHarness),
+    Layer.provide(TelemetryDisabled),
     Layer.provide(MigrationSqlClient.layer),
     Layer.provide(PgLive)
   );

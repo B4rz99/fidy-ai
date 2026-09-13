@@ -10,6 +10,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "crap4ts@1.0.1": "patches/crap4ts@1.0.1.patch",
+  },
   "overrides": {
     "brace-expansion": "5.0.9",
   },

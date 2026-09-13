@@ -157,6 +157,7 @@ apps/server/src/shell/email-authentication/replacement-workflow.integration.test
 apps/server/src/shell/durable-execution.ts
   s_729685b01e566c::t_11847470ed37ac 72
   s_729685b01e566c::t_e124984d6d4107 40
+  s_729685b01e566c::t_243f1d3095b55e 39
 apps/server/src/shell/cluster-readiness.ts
   s_729685b01e566c::t_094e9371c3e3b4 43-56,85,88,91
   s_729685b01e566c::t_53cee81834bf3d 35-42,102-106

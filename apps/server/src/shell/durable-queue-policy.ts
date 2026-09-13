@@ -106,14 +106,18 @@ export const classifyDurableQueueAttention = (
 
 /** Whether any alert flag is set for one queue. */
 export const hasDurableQueueAttention = (attention: DurableQueueAttention): boolean =>
-  attention.backlog || attention.leaseChurn || attention.exhausted || attention.decodeFailure;
+  Object.values(attention).includes(true);
 
 /**
  * Whether one queue's attention is retryable. Polling can recover backlog, lease churn, and decode
  * failures that have not yet exhausted their delivery ceiling.
  */
 export const isTransientDurableQueueAttention = (attention: DurableQueueAttention): boolean =>
-  attention.backlog || attention.leaseChurn || (attention.decodeFailure && !attention.exhausted);
+  [
+    attention.backlog,
+    attention.leaseChurn,
+    attention.decodeFailure && !attention.exhausted,
+  ].includes(true);
 
 /** Whether one queue contains exhausted work that polling can no longer reclaim. */
 export const isPermanentDurableQueueAttention = (attention: DurableQueueAttention): boolean =>

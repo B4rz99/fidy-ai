@@ -1,17 +1,27 @@
-import { Cause, DateTime, Effect, Layer, Option } from "effect";
+import { Cause, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { dual } from "effect/Function";
-import { AgentService, isDurableTransportRetryCause } from "~/shell/agent/agent-service";
+import type { SqlClient } from "effect/unstable/sql";
+import { AgentService, type WhatsAppInboundWorkFailure } from "~/shell/agent/agent-service";
+import {
+  type PersistedQueueFailureDisposition,
+  PersistedQueueHandlerFailure,
+  type PersistedQueueHandlerOptions,
+  type PersistedQueueTerminalReason,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { projectStack } from "~/shell/observability/projectors";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
 import {
+  type WhatsAppInboundWork,
   maximumWhatsAppInboundAttempts,
   whatsappInboundConsumerCount,
   whatsappInboundQueue,
 } from "./inbound-execution";
 import {
+  failWhatsAppInboundBurst,
   pruneWhatsAppOperationalData,
   pruneWhatsAppQueueHistory,
   retireExhaustedWhatsAppWork,
@@ -24,16 +34,59 @@ const projectCauseForLog = (
   stack: ReturnType<typeof projectStack>;
 }> => ({ reasons: cause.reasons.map((reason) => reason._tag), stack: projectStack(cause) });
 
+const classifyWhatsAppInboundFailure = (
+  failure: WhatsAppInboundWorkFailure
+): PersistedQueueFailureDisposition => {
+  switch (failure._tag) {
+    case "HostedTurnUnavailable":
+      return { _tag: "Retry", reason: "transient" };
+    case "HostedTurnProtocolFailed":
+      return { _tag: "Terminal", reason: "payload-rejected" };
+    case "WhatsAppInboundRoutingRejected":
+      return { _tag: "Terminal", reason: "identity-rejected" };
+  }
+};
+
+const recordWhatsAppTerminalDisposition = (
+  work: WhatsAppInboundWork,
+  reason: PersistedQueueTerminalReason
+): Effect.Effect<void, never, SqlClient.SqlClient> => {
+  // Rejected identity has no domain row owned by the payload User. Record only its bounded reason;
+  // never look up or mutate another User's job by identifier.
+  if (reason === "identity-rejected") {
+    return Effect.logWarning("Rejected WhatsApp inbound queue item: identity-rejected");
+  }
+  return DateTime.now.pipe(
+    Effect.flatMap((failedAt) => failWhatsAppInboundBurst(work, "ambiguous_crash", failedAt))
+  );
+};
+
+const whatsappInboundHandlerOptions = (
+  work: WhatsAppInboundWork
+): PersistedQueueHandlerOptions<WhatsAppInboundWorkFailure, never, SqlClient.SqlClient> => ({
+  descriptor: { component: "whatsapp", operation: "whatsapp.processWork" },
+  classify: classifyWhatsAppInboundFailure,
+  recordTerminal: (reason) => recordWhatsAppTerminalDisposition(work, reason),
+});
+
 /** Takes and settles one durable accepted message without imposing an execution deadline. */
 export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(function* () {
   const queue = yield* whatsappInboundQueue;
   const agent = yield* AgentService;
   return yield* queue
-    .take((work) => agent.handleWhatsAppWork(work), {
-      maxAttempts: maximumWhatsAppInboundAttempts,
-    })
+    .take(
+      (work) =>
+        agent
+          .handleWhatsAppWork(work)
+          .pipe(runPersistedQueueHandler(whatsappInboundHandlerOptions(work))),
+      { maxAttempts: maximumWhatsAppInboundAttempts }
+    )
     .pipe(Effect.as(true));
 });
+
+const isSanitizedQueueFailure = (cause: Cause.Cause<unknown>): boolean =>
+  cause.reasons.length === 1 &&
+  Option.exists(Cause.findErrorOption(cause), Schema.is(PersistedQueueHandlerFailure));
 
 /**
  * Supervises bounded channel iterations. Interruption propagates; other failures receive only
@@ -59,9 +112,9 @@ export const runSupervisedWhatsAppLoop: {
           if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
             return Effect.interrupt;
           }
-          if (isDurableTransportRetryCause(cause)) {
-            // A classified transient exchange is expected to be re-delivered by the persisted
-            // queue and is never an unexpected defect, so the loop reports no failure event for it.
+          if (isSanitizedQueueFailure(cause)) {
+            // The queue boundary already classified or observed this attempt. Supervision delays
+            // the next take without duplicating telemetry or rendering the redacted marker.
             return Effect.logWarning("WhatsApp background iteration will retry", {
               operation,
             }).pipe(Effect.andThen(Effect.sleep("1 second")));

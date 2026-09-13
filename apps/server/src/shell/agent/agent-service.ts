@@ -40,7 +40,6 @@ import {
 import { WhatsAppReplyDelivery } from "./whatsapp-delivery";
 import {
   completeWhatsAppTurn,
-  failWhatsAppInboundBurst,
   failWhatsAppTurn,
   ownsWhatsAppInboundWork,
   prepareWhatsAppTurn,
@@ -260,6 +259,17 @@ export class HostedTurnProtocolFailed extends Data.TaggedError("HostedTurnProtoc
     return "The hosted Turn runtime exchanged an undeclared protocol message";
   }
 }
+
+/** The durable item no longer resolves to work owned by its explicit User. */
+export class WhatsAppInboundRoutingRejected extends Data.TaggedError(
+  "WhatsAppInboundRoutingRejected"
+)<{}> {}
+
+/** Expected outcomes exposed to the WhatsApp queue consumer for retry or terminal settlement. */
+export type WhatsAppInboundWorkFailure =
+  | HostedTurnUnavailable
+  | HostedTurnProtocolFailed
+  | WhatsAppInboundRoutingRejected;
 export { AgentReply, InboundMessage, AgentAttachment, AgentChoice } from "./message";
 export { OnboardingConsentRequired } from "./consent-error";
 
@@ -1968,17 +1978,20 @@ const makeHandleMessage =
 /**
  * A durable HostedTurn RPC declares no failure to the Cluster: domain operations either settle the
  * Turn or die, so a typed failure here is an invariant rather than a declared outcome and any
- * non-interrupt cause is unexpected. Such a cause is recorded once for the Work boundary and
- * re-raised with its original cause; interruption propagates. The persisted queue's bounded
- * attempts are the retry owner — the client boundary re-delivers only a classified transient RPC
- * failure, made safe by durable preparation and replay guards.
+ * non-interrupt cause is unexpected. By default such a cause is recorded for this Work boundary
+ * and re-raised with its original cause; interruption propagates. WhatsApp processing defers that
+ * observation to its public queue boundary so the same defect is observed exactly once. The
+ * persisted queue's bounded attempts are the retry owner — the client boundary re-delivers only a
+ * classified transient RPC failure, made safe by durable preparation and replay guards.
  */
 const settleDurableHostedWork = <E, R>(
   dependencies: AgentServiceDependencies,
-  work: Effect.Effect<void, E, R>
-): Effect.Effect<void, never, R> =>
-  work.pipe(
-    Effect.orDie,
+  work: Effect.Effect<void, E, R>,
+  defectObserver: "hosted-work" | "queue-boundary" = "hosted-work"
+): Effect.Effect<void, never, R> => {
+  const infallible = work.pipe(Effect.orDie);
+  if (defectObserver === "queue-boundary") return infallible;
+  return infallible.pipe(
     Effect.catchCauseIf(Cause.hasDies, (cause) =>
       dependencies.telemetry
         .captureFailure({
@@ -1991,6 +2004,7 @@ const settleDurableHostedWork = <E, R>(
         .pipe(Effect.andThen(Effect.failCause(cause)))
     )
   );
+};
 
 type HostedTurnContext = Readonly<{
   dependencies: AgentServiceDependencies;
@@ -2132,7 +2146,8 @@ const makeHostedTurnHandlers = Effect.fn(function* (
     ProcessWhatsApp: ({ payload }: { payload: WhatsAppTurnPayload }): Effect.Effect<void> =>
       settleDurableHostedWork(
         dependencies,
-        provideAgentDependencies(dependencies, processSubmittedWhatsAppTurn(context, payload))
+        provideAgentDependencies(dependencies, processSubmittedWhatsAppTurn(context, payload)),
+        "queue-boundary"
       ),
     Recover: ({ payload: { userId, turnId } }: { payload: RecoveryPayload }): Effect.Effect<void> =>
       settleDurableHostedWork(
@@ -2168,111 +2183,48 @@ export const durableClientSettlement = (failure: unknown): DurableClientSettleme
   });
 
 /**
- * Stable metadata-only cause retained by the persisted queue for one transient exchange. The raw
- * transport failure never enters the queue's failure record, which persists `Cause.pretty` and
- * would otherwise retain internal runtime endpoints and stacks.
+ * Classifies one HostedTurns exchange for the public queue-worker boundary. Success is done and
+ * interruption propagates unchanged. Expected transport and protocol failures stay typed until the
+ * consumer maps them to retry or terminal disposition, and their bounded outcome is recorded in
+ * telemetry. Undeclared failures remain defects so the shared boundary observes and redacts them
+ * exactly once.
  *
  * @internal
  */
-export const durableTransportRetryCause = "hosted_turn_transport_unavailable";
-
-/**
- * Whether one cause is exactly the stable retry signal a classified transient durable exchange
- * re-raises for the persisted queue. A supervisor recognizes an expected re-delivery without
- * reporting a defect; a cause that combines it with anything else stays on the defect path.
- *
- * @internal
- */
-export const isDurableTransportRetryCause = (cause: Cause.Cause<unknown>): boolean =>
-  cause.reasons.length === 1 &&
-  Result.match(Cause.findDefect(cause), {
-    onFailure: () => false,
-    onSuccess: (defect) => defect === durableTransportRetryCause,
-  });
-
-/** The identifier-only durable work one WhatsApp exchange settlement observes. */
-type DurableWhatsAppWork = Readonly<{
-  readonly userId: UserId;
-  readonly inboundJobId: WhatsAppInboundWorkType["inboundJobId"];
-}>;
-
-/**
- * Terminally retires the inbound burst behind one durable item with metadata-only evidence: the
- * fixed category is captured once and the terminal settlement leaves no retained content. A racing
- * Turn settlement wins because settlement only touches jobs that have not completed.
- */
-const retireDurableWhatsAppFailure = (
-  telemetry: TelemetryService,
-  work: DurableWhatsAppWork,
-  classified: Readonly<{
-    readonly error: "invalid_runtime_response" | "unexpected_defect";
-    readonly cause: unknown;
-  }>
-): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  Effect.gen(function* () {
-    yield* telemetry.captureFailure({
-      _tag: "Defect",
-      component: "agent",
-      operation: "agent.hostedTurn",
-      error: classified.error,
-      cause: classified.cause,
-    });
-    yield* failWhatsAppInboundBurst(work, "ambiguous_crash", yield* DateTime.now);
-  });
-
-/**
- * Settles one HostedTurns exchange observed by durable WhatsApp work. Success is done and
- * interruption propagates; a classified transient condition re-raises only the stable retry cause
- * for the persisted queue's bounded, domain-guarded retry; a protocol violation, an undeclared
- * failure, or a raw client defect records metadata-only evidence and terminally retires the burst
- * instead of exchanging again.
- *
- * @internal
- */
-export const settleDurableWhatsAppExchange = (input: {
+export const classifyDurableWhatsAppExchange = (input: {
   readonly telemetry: TelemetryService;
-  readonly work: DurableWhatsAppWork;
   readonly exchange: Exit.Exit<void, unknown>;
-}): Effect.Effect<void, never, SqlClient.SqlClient> => {
-  const { telemetry, work, exchange } = input;
+}): Effect.Effect<void, HostedTurnUnavailable | HostedTurnProtocolFailed> => {
+  const { telemetry, exchange } = input;
   if (Exit.isSuccess(exchange)) return Effect.void;
   if (Cause.hasInterruptsOnly(exchange.cause)) return Effect.interrupt;
-  const failure = Cause.findErrorOption(exchange.cause);
-  if (Option.isNone(failure)) {
-    return retireDurableWhatsAppFailure(telemetry, work, {
-      error: "unexpected_defect",
-      cause: exchange.cause,
-    });
+  if (Cause.hasDies(exchange.cause)) {
+    return Effect.failCause(
+      Cause.fromReasons(
+        exchange.cause.reasons.filter(
+          (reason) => Cause.isDieReason(reason) || Cause.isInterruptReason(reason)
+        )
+      )
+    );
   }
+  const failure = Cause.findErrorOption(exchange.cause);
+  if (Option.isNone(failure)) return Effect.die(Cause.squash(exchange.cause));
   const settlement = durableClientSettlement(failure.value);
   switch (settlement._tag) {
     case "Retry":
+    case "RetireProtocol":
       return telemetry
         .recordOutcome(turnFailureOutcome(settlement.classified))
-        .pipe(Effect.andThen(Effect.die(durableTransportRetryCause)));
-    case "RetireProtocol":
-      return telemetry.recordOutcome(turnFailureOutcome(settlement.classified)).pipe(
-        Effect.andThen(
-          retireDurableWhatsAppFailure(telemetry, work, {
-            error: "invalid_runtime_response",
-            cause: failure.value,
-          })
-        )
-      );
+        .pipe(Effect.andThen(Effect.fail(settlement.classified)));
     case "RetireDefect":
-      return retireDurableWhatsAppFailure(telemetry, work, {
-        error: "unexpected_defect",
-        cause: failure.value,
-      });
+      return Effect.die(failure.value);
   }
 };
 
 /**
- * Routes one durable identifier-only channel item through its User's serialized entity. A
- * classified transient exchange failure re-raises only a stable cause for the persisted queue's
- * bounded, domain-guarded retry; a protocol violation, an undeclared failure, or a raw client
- * defect terminally retires the burst instead of exchanging again. Only local preconditions stay
- * defects at this Work boundary.
+ * Routes one durable identifier-only channel item through its User's serialized entity. Expected
+ * transient and permanent outcomes remain typed for the public queue-worker boundary; undeclared
+ * failures and local precondition violations remain defects for that boundary to observe once.
  */
 const makeHandleWhatsAppWork =
   (
@@ -2283,14 +2235,15 @@ const makeHandleWhatsAppWork =
     provideAgentDependencies(
       dependencies,
       Effect.gen(function* () {
-        if (!(yield* ownsWhatsAppInboundWork(work))) return;
+        if (!(yield* ownsWhatsAppInboundWork(work).pipe(Effect.orDie))) {
+          return yield* new WhatsAppInboundRoutingRejected();
+        }
         const exchange = yield* client(work.userId).ProcessWhatsApp(work).pipe(Effect.exit);
-        yield* settleDurableWhatsAppExchange({
+        yield* classifyDurableWhatsAppExchange({
           telemetry: dependencies.telemetry,
-          work,
           exchange,
         });
-      }).pipe(Effect.orDie)
+      })
     );
 
 const makeAgentService = Effect.gen(function* () {
@@ -2332,8 +2285,15 @@ export class AgentService extends Context.Service<
       message: InboundMessage,
       authorityRoot?: CanonicalAuthorityRoot
     ) => Effect.Effect<AgentReply, AgentTurnError>;
-    /** Routes one durable identifier-only channel item through its User's serialized entity. */
-    readonly handleWhatsAppWork: (work: WhatsAppInboundWorkType) => Effect.Effect<void>;
+    /**
+     * Routes one identifier-only item through its User's serialized entity. Fails with a retryable
+     * HostedTurnUnavailable when transport is unavailable, or a terminal HostedTurnProtocolFailed /
+     * WhatsAppInboundRoutingRejected when the response or item identity cannot be processed. Other
+     * failures remain defects for the public queue boundary to observe and redact.
+     */
+    readonly handleWhatsAppWork: (
+      work: WhatsAppInboundWorkType
+    ) => Effect.Effect<void, WhatsAppInboundWorkFailure>;
   }
 >()("@fidy/server/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */

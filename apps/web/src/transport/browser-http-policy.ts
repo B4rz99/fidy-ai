@@ -1,4 +1,4 @@
-import { type Duration, Effect, Layer, Stream } from "effect";
+import { type Duration, Effect, Function, Layer, Stream } from "effect";
 import {
   FetchHttpClient,
   Headers,
@@ -269,9 +269,23 @@ const makePolicyClient = (
  * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
  * retry, once.
  */
-export const browserHttpClientLayer =
-  (boundary: BrowserHttpBoundary, apiOrigin: string) =>
-  (httpClient: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<HttpClient.HttpClient> =>
+export const browserHttpClientLayer: {
+  (
+    boundary: BrowserHttpBoundary,
+    apiOrigin: string
+  ): (httpClient: Layer.Layer<HttpClient.HttpClient>) => Layer.Layer<HttpClient.HttpClient>;
+  (
+    httpClient: Layer.Layer<HttpClient.HttpClient>,
+    boundary: BrowserHttpBoundary,
+    apiOrigin: string
+  ): Layer.Layer<HttpClient.HttpClient>;
+} = Function.dual(
+  3,
+  (
+    httpClient: Layer.Layer<HttpClient.HttpClient>,
+    boundary: BrowserHttpBoundary,
+    apiOrigin: string
+  ): Layer.Layer<HttpClient.HttpClient> =>
     Layer.effect(
       HttpClient.HttpClient,
       Effect.map(HttpClient.HttpClient, (client) =>
@@ -289,4 +303,5 @@ export const browserHttpClientLayer =
           )
         )
       )
-    );
+    )
+);

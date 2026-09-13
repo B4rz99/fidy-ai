@@ -1,7 +1,19 @@
 import { expect, layer } from "@effect/vitest";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
-import { Crypto, DateTime, Effect, Exit, Option, Redacted, Ref, Schema } from "effect";
+import {
+  Cause,
+  Crypto,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  Option,
+  Redacted,
+  Ref,
+  Schema,
+} from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
@@ -17,10 +29,11 @@ import {
   publishOnboardingEmailDelivery,
 } from "./delivery-workflow";
 import { type OnboardingTurn, handleOnboardingTurn } from "./onboarding";
-import { ApiHarness } from "~/shell/testing/api-harness";
+import { ApiHarness, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
-import { DisabledTelemetryResource } from "~/shell/observability/disabled";
+import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
+import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
 import {
   type DeclaredOutcome,
   TelemetrySpanId,
@@ -97,7 +110,9 @@ const cleanupCaller = Effect.fn("testCleanupOnboardingCaller")(function* (
 });
 const cleanup = cleanupCaller(caller);
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+const OnboardingHarness = Layer.merge(ApiHarness, TelemetryDisabled);
+
+layer(OnboardingHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "verified email onboarding",
   (it) => {
     it.effect("publishes onboarding delivery transactionally and converges duplicates in SQL", () =>
@@ -855,6 +870,239 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 WHERE business_scoped_user_id = ${caller.businessScopedUserId}) AS identities
           `
         ).toEqual([{ enrollments: 0, pending: 0, identities: 0 }]);
+        yield* cleanup;
+      })
+    );
+  }
+);
+
+const QueueItemState = Schema.Struct({
+  attempts: Schema.Int,
+  completed: Schema.Boolean,
+  lastFailure: Schema.OptionFromNullOr(Schema.String),
+});
+
+const admitQueuedDelivery = Effect.fn("testAdmitQueuedOnboardingDelivery")(function* (
+  email: string,
+  evidencePrefix: string
+) {
+  yield* cleanup;
+  const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name = 'onboarding-email-delivery'`;
+  const startedAt = yield* DateTime.now;
+  const disclosure = yield* handleOnboardingTurn(
+    turn("Inicio", `${evidencePrefix}-start`, startedAt)
+  );
+  if (disclosure._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
+  yield* deliverConsentDisclosureForTesting({
+    exchangeId: disclosure.exchangeId,
+    message: message(`${evidencePrefix}-disclosure`),
+    deliveredAt: DateTime.add(startedAt, { seconds: 1 }),
+  });
+  yield* handleOnboardingTurn(
+    turn("Acepto", `${evidencePrefix}-accept`, DateTime.add(startedAt, { seconds: 2 }))
+  );
+  yield* handleOnboardingTurn(
+    turn(email, `${evidencePrefix}-email`, DateTime.add(startedAt, { seconds: 3 }))
+  );
+  const [intent] = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ id: EmailDeliveryIntentId }))
+  )(
+    yield* sql`SELECT intent.id::text AS id FROM email_delivery_intents AS intent
+      JOIN email_enrollments AS enrollment ON enrollment.id = intent.enrollment_id
+      WHERE enrollment.business_portfolio_id = ${caller.businessPortfolioId}
+        AND enrollment.business_scoped_user_id = ${caller.businessScopedUserId}
+      ORDER BY intent.created_at DESC LIMIT 1`
+  );
+  if (intent === undefined) return yield* Effect.die("missing delivery intent");
+  return intent.id;
+});
+
+const findQueueItemState = Effect.fn("testFindOnboardingQueueItemState")(function* (
+  intentId: EmailDeliveryIntentId
+) {
+  const sql = yield* MigrationSqlClient;
+  const [state] = yield* Schema.decodeUnknownEffect(Schema.Array(QueueItemState))(
+    yield* sql`SELECT attempts, completed, last_failure AS "lastFailure"
+      FROM fidy_durable.fidy_queue
+      WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}`
+  );
+  if (state === undefined) return yield* Effect.die("missing queue item");
+  return state;
+});
+
+layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "redacted onboarding delivery queue consumption",
+  (it) => {
+    it.effect("retries a database failure with only the stable marker", () =>
+      Effect.gen(function* () {
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const sensitiveEmail = "queue-address-sentinel@example.com";
+        const sensitiveSql = "sql-detail-sentinel";
+        const sensitiveSecret = "secret-sentinel";
+        const intentId = yield* admitQueuedDelivery(sensitiveEmail, "wamid.queue-database");
+        const sql = yield* MigrationSqlClient;
+        yield* sql`CREATE OR REPLACE FUNCTION fidy_test_reject_onboarding_queue_arm()
+          RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            RAISE SQLSTATE '40001' USING MESSAGE = 'sql-detail-sentinel secret-sentinel';
+          END;
+          $$`;
+        yield* sql`CREATE TRIGGER fidy_test_reject_onboarding_queue_arm
+          BEFORE UPDATE ON email_enrollments
+          FOR EACH ROW EXECUTE FUNCTION fidy_test_reject_onboarding_queue_arm()`;
+
+        const capturedLogs: Array<unknown> = [];
+        const logger = Logger.make((entry) => capturedLogs.push(entry));
+        const first = yield* Effect.exit(
+          deliverOneOnboardingEmailForTesting().pipe(
+            Effect.withLogger(logger),
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({ send: () => Effect.die("provider must not run") })
+            )
+          )
+        );
+        yield* sql`DROP TRIGGER fidy_test_reject_onboarding_queue_arm ON email_enrollments`;
+        yield* sql`DROP FUNCTION fidy_test_reject_onboarding_queue_arm()`;
+
+        expect(Exit.isFailure(first)).toBe(true);
+        if (Exit.isSuccess(first)) return;
+        const firstState = yield* findQueueItemState(intentId);
+        expect(firstState.attempts).toBe(1);
+        expect(firstState.completed).toBe(false);
+        expect(Option.getOrThrow(firstState.lastFailure)).toContain('"reason":"transient"');
+        const durableText = Option.getOrThrow(firstState.lastFailure);
+        expect(capturedLogs).toEqual([]);
+        const observableText = [
+          durableText,
+          ...(yield* recorder.serializedEnvelopes).map((bytes) => new TextDecoder().decode(bytes)),
+        ].join("\n");
+        for (const forbidden of [
+          sensitiveEmail,
+          sensitiveSql,
+          sensitiveSecret,
+          intentId,
+          caller.businessScopedUserId,
+        ]) {
+          expect(observableText).not.toContain(forbidden);
+        }
+
+        const sends = yield* Ref.make(0);
+        expect(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({ send: () => Ref.update(sends, (count) => count + 1) })
+            )
+          )
+        ).toBe(true);
+        expect(yield* Ref.get(sends)).toBe(1);
+        expect((yield* findQueueItemState(intentId)).completed).toBe(true);
+        yield* cleanup;
+      })
+    );
+
+    it.effect("redacts an unexpected defect from durable failure and observability", () =>
+      Effect.gen(function* () {
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const sensitiveEmail = "defect-address-sentinel@example.com";
+        const sensitiveValues = [
+          sensitiveEmail,
+          "delivery-intent-sentinel",
+          "user-identifier-sentinel",
+          "provider-diagnostic-sentinel",
+          "sql-detail-sentinel",
+          "secret-sentinel",
+          caller.businessScopedUserId,
+        ];
+        const intentId = yield* admitQueuedDelivery(sensitiveEmail, "wamid.queue-defect");
+        const hostileDefect = new Error(sensitiveValues.join(" "));
+        const deliveredCodes: Array<string> = [];
+        const capturedLogs: Array<unknown> = [];
+        const logger = Logger.make((entry) => capturedLogs.push(entry));
+        const exit = yield* Effect.exit(
+          deliverOneOnboardingEmailForTesting().pipe(
+            Effect.withLogger(logger),
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({
+                send: (input) =>
+                  Effect.sync(() => deliveredCodes.push(input.combinedCode)).pipe(
+                    Effect.andThen(Effect.die(hostileDefect))
+                  ),
+              })
+            )
+          )
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        const state = yield* findQueueItemState(intentId);
+        expect(state.attempts).toBe(1);
+        const durableFailure = Option.getOrThrow(state.lastFailure);
+        expect(durableFailure).toContain('"reason":"unexpected-defect"');
+        expect(capturedLogs).toEqual([]);
+        const observableText = [
+          durableFailure,
+          ...(yield* recorder.serializedEnvelopes).map((bytes) => new TextDecoder().decode(bytes)),
+        ].join("\n");
+        expect(deliveredCodes).toHaveLength(1);
+        for (const forbidden of [...sensitiveValues, intentId, ...deliveredCodes]) {
+          expect(observableText).not.toContain(forbidden);
+        }
+        expect(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({ send: () => Effect.die("delivery must not repeat") })
+            )
+          )
+        ).toBe(true);
+        expect((yield* findQueueItemState(intentId)).completed).toBe(true);
+        yield* cleanup;
+      })
+    );
+
+    it.effect("releases interrupted delivery without an attempt or duplicate send", () =>
+      Effect.gen(function* () {
+        const intentId = yield* admitQueuedDelivery(
+          "interrupted-address-sentinel@example.com",
+          "wamid.queue-interrupted"
+        );
+        const sends = yield* Ref.make(0);
+        const interrupted = yield* Effect.exit(
+          deliverOneOnboardingEmailForTesting().pipe(
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({
+                send: () =>
+                  Ref.update(sends, (count) => count + 1).pipe(Effect.andThen(Effect.interrupt)),
+              })
+            )
+          )
+        );
+
+        expect(Exit.isFailure(interrupted) && Cause.hasInterruptsOnly(interrupted.cause)).toBe(
+          true
+        );
+        expect(yield* findQueueItemState(intentId)).toEqual({
+          attempts: 0,
+          completed: false,
+          lastFailure: Option.none(),
+        });
+        expect(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({ send: () => Ref.update(sends, (count) => count + 1) })
+            )
+          )
+        ).toBe(true);
+        expect(yield* Ref.get(sends)).toBe(1);
+        expect((yield* findQueueItemState(intentId)).completed).toBe(true);
         yield* cleanup;
       })
     );

@@ -280,7 +280,10 @@ const spanAttributes = (
       return {
         "fidy.attempt": metadata.attempt,
         "fidy.input_count": metadata.inputCount,
-        "fidy.delay_milliseconds": metadata.delayMilliseconds,
+        ...Option.match(metadata.delayMilliseconds, {
+          onNone: () => ({}),
+          onSome: (value) => ({ "fidy.delay_milliseconds": value }),
+        }),
       };
     case "Provider":
       return {

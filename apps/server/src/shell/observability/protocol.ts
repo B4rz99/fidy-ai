@@ -79,7 +79,7 @@ const DatabaseSpanMetadata = Schema.TaggedStruct("Database", {
 const QueueSpanMetadata = Schema.TaggedStruct("Queue", {
   attempt: TelemetryAttempt,
   inputCount: TelemetryCount,
-  delayMilliseconds: TelemetryDuration,
+  delayMilliseconds: Schema.Option(TelemetryDuration),
 });
 const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
   provider: TelemetryCodeSchema.provider,

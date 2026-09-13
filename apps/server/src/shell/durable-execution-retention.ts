@@ -84,13 +84,8 @@ export const durableQueueRetention = {
   ) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-<<<<<<< HEAD
       DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
         SELECT sequence FROM ${sql(durableQueueTableName)}
-=======
-      DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
-        SELECT sequence FROM ${sql(durableQueueTableName)}
->>>>>>> cb0dfb1830 (feat(api): make production Cluster topology explicit and observable)
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
           AND completed = TRUE
         ORDER BY sequence LIMIT 100

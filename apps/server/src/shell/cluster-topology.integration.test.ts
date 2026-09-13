@@ -507,10 +507,11 @@ const registerClusterTopologyScenarios = (): void => {
                 .pipe(Effect.timeout("2 seconds"), Effect.exit)
             )
           );
-          expect(
-            (yield* Effect.promise(() => survivor.runPromise(sampleClusterObservation)))
-              .requestRetriesTotal
-          ).toBeGreaterThan(0);
+          yield* waitForCondition(
+            Effect.promise(() => survivor.runPromise(sampleClusterObservation)).pipe(
+              Effect.map((sample) => sample.requestRetriesTotal > 0)
+            )
+          );
           yield* waitForCondition(
             sql`SELECT EXISTS (
               SELECT 1 FROM fidy_durable.${sql(clusterMessagesTable)}

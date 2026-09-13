@@ -7,7 +7,11 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { RunnerAddress, ShardId, type ShardingConfig } from "effect/unstable/cluster";
 import { Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { topologyIdentityTable } from "~/shell/durable-tables";
+import {
+  clusterLocksTable,
+  clusterRunnersTable,
+  topologyIdentityTable,
+} from "~/shell/durable-tables";
 
 const clusterTestTokenHexLength = 64;
 
@@ -85,16 +89,18 @@ export const clusterTopologyProbeWorkflowLayer: Layer.Layer<
 > = clusterTopologyProbeWorkflow.toLayer(() => Effect.succeed("recovered"));
 
 /**
- * Deletes the published compatibility identity so the next runners behave as a fresh deployment.
- * Integration files share one database but simulate independent deployments with their own lock
- * timings, and the identity is published first-writer-wins, so a file whose topology differs from
- * the previous file's must reset it before its first runner starts. The helper owns its privileged
- * migration connection because the runtime role may only read and insert the identity.
+ * Clears inactive runner topology before a scenario publishes a different deployment identity.
+ * Callers serialize these resets after disposing prior runtimes; removing stale registrations and
+ * locks prevents the next deployment's longer lease window from inheriting the prior deployment's
+ * ownership. The helper owns its privileged migration connection because the runtime role cannot
+ * delete compatibility state.
  */
 export const resetClusterTopologyIdentity: Effect.Effect<void> = Layer.build(
   Layer.effectDiscard(
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
+      yield* sql`DELETE FROM fidy_durable.${sql(clusterLocksTable)}`;
+      yield* sql`DELETE FROM fidy_durable.${sql(clusterRunnersTable)}`;
       yield* sql`DELETE FROM fidy_durable.${sql(topologyIdentityTable)}`;
     })
   ).pipe(Layer.provide(MigrationSqlClient.layer))

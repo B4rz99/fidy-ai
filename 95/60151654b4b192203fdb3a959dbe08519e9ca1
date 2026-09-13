@@ -1,0 +1,19 @@
+apps/server/src/shell/cluster-runner-http.ts
+  s_edd6294739ecd8::t_4589b2bcd9a8c1 135-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9560151654b4b192203fdb3a959dbe08519e9ca1",
+  "prompts": {},
+  "sessions": {
+    "s_edd6294739ecd8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09bb6-9572-7386-9e2e-a0c3c2d7cfb1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

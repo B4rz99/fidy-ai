@@ -1,0 +1,14 @@
+apps/server/src/shell/agent/agent-service.ts
+  h_c6d49c804e0ad2 1844
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "310ebdad93ccf931ba2c92990e14423f2be36448",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,102 @@
+apps/web/src/browser/clipboard.test.ts
+  s_96f79810fa0fd1::t_c560f7553f0b22 4,6,33-39,43-44,49-50
+  s_96f79810fa0fd1::t_ce0d73e9ac3727 56-61,63-69
+  s_96f79810fa0fd1::t_fe69dcb894f2b2 2-3,5,7,32,40-42,45-48,51-55,70-76,78,81,84,87-101,106-110,112-120,127-133
+  s_96f79810fa0fd1::t_d9b6aaf582c4c3 62,77,80,105
+  s_96f79810fa0fd1::t_ba78db279c2ec5 79,82-83,85-86,102-104,121-126
+  s_96f79810fa0fd1::t_cb9b909a77a4cc 111
+apps/web/src/features/pats/view.tsx
+  s_96f79810fa0fd1::t_c4ecfeb5c93462 336,451
+  s_96f79810fa0fd1::t_92d7986ace7961 446
+  s_96f79810fa0fd1::t_17d0ee1dfe3bbd 18,324-329,333,372,377,386,437,442,454,469,472,479,488,504
+apps/web/src/browser/sensitive-clipboard.ts
+  s_96f79810fa0fd1::t_39d0af2fa69fd9 9-10,12
+  s_96f79810fa0fd1::t_50a254f1e795ef 84,99,149
+  s_96f79810fa0fd1::t_a1d1654016818f 22,73,95,116-117,121-122,131-134,138-139,141,143-144,146-148,151,154-155
+  s_96f79810fa0fd1::t_49f9e1e1443f50 90
+  s_96f79810fa0fd1::t_bd5ea0eb69ab0d 140,142
+  s_96f79810fa0fd1::t_21508854acab2e 127
+  s_96f79810fa0fd1::t_e0f02336d6dd27 41,64,68,74,85-86,88,91,93-94,97-98,100-111,129,159
+  s_96f79810fa0fd1::t_e714141110ff1e 1
+  s_96f79810fa0fd1::t_a349344dcea54c 2-7,76-78,80-83,118-119
+  s_96f79810fa0fd1::t_73d47e115c5118 67,70-72
+  s_96f79810fa0fd1::t_e46cd0a1790abb 8,14,19-20,23-36,120,123-126,128,135-136,145,152-153,156-158,160-161
+  s_96f79810fa0fd1::t_d4d9ea0acc86e1 21,137
+  s_96f79810fa0fd1::t_e4f1202427886a 11,13
+  s_96f79810fa0fd1::t_650ccf1c00776a 37,42,53-58,65,69,75,79,89,92,96,112-115,130,150
+  s_96f79810fa0fd1::t_86de62d3433a06 38-40,43-46,63,66
+  s_96f79810fa0fd1::t_eab3bb7b3e23d7 15-18,47-52,59-62
+  s_96f79810fa0fd1::t_06fed18c17711d 87
+apps/web/src/features/pats/feature.test.tsx
+  s_96f79810fa0fd1::t_61b1104791cc58 103,105-109,111,113-116
+  s_96f79810fa0fd1::t_3d4170e6600a4e 2,17,69,125,131,133,307,310,314,321
+  s_96f79810fa0fd1::t_4093776211f7e9 99,110,112
+  s_96f79810fa0fd1::t_f8098a2d195a58 16
+  s_96f79810fa0fd1::t_484bace0d738d6 68,104,123,138,152,308
+apps/web/src/browser/clipboard.ts
+  s_96f79810fa0fd1::t_bbe4c38a444ab2 8
+  s_96f79810fa0fd1::t_259beb1bb64527 7,10-13
+  s_96f79810fa0fd1::t_7b18b609969a65 6,9
+apps/web/src/features/recovery/feature.tsx
+  s_96f79810fa0fd1::t_1222101e317300 34
+  s_96f79810fa0fd1::t_da881f2fd8aca7 142
+  s_96f79810fa0fd1::t_9f354d8b7a221d 6
+  s_96f79810fa0fd1::t_ce9e7a4a192e69 7,140-141,143-145
+  s_96f79810fa0fd1::t_92d7986ace7961 87-90
+  s_96f79810fa0fd1::t_68cc608f9551af 101
+apps/web/src/features/recovery/feature.test.tsx
+  s_96f79810fa0fd1::t_4bc8b28d7830ca 3
+  s_96f79810fa0fd1::t_a83ed150ceeeb8 13,45,57
+  s_96f79810fa0fd1::t_d9b6aaf582c4c3 31,51
+  s_96f79810fa0fd1::t_b9403227780893 15,38,46
+  s_96f79810fa0fd1::t_92d7986ace7961 34
+apps/web/src/testing/sensitive-clipboard.ts
+  s_96f79810fa0fd1::t_18902b47f4960a 1-5,8-19
+  s_96f79810fa0fd1::t_37eae791f93970 6-7
+apps/web/src/features/pats/policy.ts
+  s_96f79810fa0fd1::t_efcec4d0dfcd74 1,4
+apps/web/src/browser/use-sensitive-clipboard.test.tsx
+  s_96f79810fa0fd1::t_49b86f233a747c 6,35,37-41,130-140
+  s_96f79810fa0fd1::t_282ff48e6510d0 50,65-68,112-113
+  s_96f79810fa0fd1::t_0fc8510368662b 46,52,59,62,69-74,76-79,81-91
+  s_96f79810fa0fd1::t_4899fa7e4dafe1 1,3-4,7-19,24-25,27-29,42,114,116-117,119,122-128,141-143,146-153,155,158-160
+  s_96f79810fa0fd1::t_29c89b1d656576 2
+  s_96f79810fa0fd1::t_e29181041f3ded 53-58,60-61,63-64
+  s_96f79810fa0fd1::t_425ea8b683953e 34,129
+  s_96f79810fa0fd1::t_33e1ba64a58f8a 5,20-23,26,43-45,47-49,51,75,92,118,120-121,144-145,154,156-157
+  s_96f79810fa0fd1::t_bd4e0a0d616dd1 30-33,36,80,93-111,115
+apps/web/src/browser/use-sensitive-clipboard.tsx
+  s_96f79810fa0fd1::t_8cf5593ee67be9 46-48,57-58
+  s_96f79810fa0fd1::t_08b1c73ad88d1f 52,65-68
+  s_96f79810fa0fd1::t_a08e5d02209340 45,49,56,59
+  s_a634f65f042137::t_451c6c397ad6cf 1-44,50-51,53-55,60-64,69-71
+apps/web/src/features/pats/feature.tsx
+  s_96f79810fa0fd1::t_6338ce1e1b18fa 6,136,138-142,148-152
+  s_96f79810fa0fd1::t_f6d588985ba9dc 3,10
+  s_96f79810fa0fd1::t_7d591b2cb72003 143-147
+  s_96f79810fa0fd1::t_e4a036c21950c9 137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f5fcd0001686e396124c3619fd8669a2694d93c8",
+  "prompts": {},
+  "sessions": {
+    "s_96f79810fa0fd1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-3ccd-7059-8d21-dcc4141d6e50",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

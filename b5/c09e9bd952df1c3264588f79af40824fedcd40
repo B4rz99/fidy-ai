@@ -1,0 +1,187 @@
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_729685b01e566c::t_1d1efda25e70fb 14
+  s_729685b01e566c::t_ead314b5da2a8f 25,97-103
+apps/server/src/shell/cluster-topology.ts
+  s_729685b01e566c::t_5f94960c2f3aea 1,87-94
+  s_729685b01e566c::t_7af53e66de4462 28-29,38-41,43-44,50-52,54
+  s_729685b01e566c::t_198d1b5913e768 31-33,47-49
+  s_729685b01e566c::t_447028ac07a50d 34-37,45-46
+apps/server/src/shell/cluster-compatibility.test.ts
+  s_729685b01e566c::t_2c45d515fc022d 8
+  s_729685b01e566c::t_bc46d61bcb2397 41,45,70,92
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_729685b01e566c::t_7516e9eaa0a780 11
+  s_729685b01e566c::t_50806424e5e86e 291
+apps/server/src/shell/authenticated-cluster-http.ts
+  s_729685b01e566c::t_55ef99118be83c 194
+  s_729685b01e566c::t_1704e829f27469 53-55,75
+  s_729685b01e566c::t_71e72035baefa1 13,134-139,196,198-199,247-261,263-266,269
+  s_729685b01e566c::t_48321051bbc0a0 8
+  s_729685b01e566c::t_05cd8f173bdf65 189-193,195
+  s_729685b01e566c::t_954b02a5094eee 236,262
+  s_729685b01e566c::t_7a3906508f05ec 32
+  s_729685b01e566c::t_ce349e4aae4e41 183-186
+  s_729685b01e566c::t_29e8c8586af505 42,47-49,133,181-182,188,197,229
+  s_729685b01e566c::t_a987df7daecfac 187
+  s_729685b01e566c::t_f0c62837bedc7a 37,200,231
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_729685b01e566c::t_255c636177dba9 45,93
+  s_729685b01e566c::t_fbe07cc3fdf1ab 41
+  s_729685b01e566c::t_5155136877bbbb 510-513
+  s_729685b01e566c::t_b1d85f1113467b 4,252,270-273,315-327,560
+  s_729685b01e566c::t_3147441354899b 36-40
+  s_729685b01e566c::t_e53b4c422c6af1 146-172,174-175,274-280
+  s_729685b01e566c::t_0abd92b7f0c9e0 435-440
+  s_729685b01e566c::t_a7241538a066c7 417
+  s_729685b01e566c::t_d0330399e2d9a8 426-429
+  s_729685b01e566c::t_4448ba9b5d2f02 331,336,339,382,416,446,450,489,516,539,545
+  s_729685b01e566c::t_a1a81cef7e17cb 397-402,418-419,421
+  s_729685b01e566c::t_9ed8e1dbc50da0 245-248
+  s_729685b01e566c::t_5516d0f0640e9c 27,31-32,294-295,300-301,308-309,433-434,441
+  s_729685b01e566c::t_1aab5b43b10ce2 81,122-123,131-133,141-144,394-395,403,413-415,420,422-425,430-432,443
+  s_729685b01e566c::t_6278ab3d23d28b 52
+  s_729685b01e566c::t_941736c1db678f 251,561-563
+  s_729685b01e566c::t_579ae18cc80f88 173
+  s_729685b01e566c::t_a4f105e8664878 19,145,328
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  s_729685b01e566c::t_1d1efda25e70fb 3-4
+  s_729685b01e566c::t_cb7463c81571dc 9,14-25
+apps/server/src/shell/http.ts
+  s_729685b01e566c::t_73f766a514c008 182
+  s_729685b01e566c::t_451fe1ec879759 279
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  s_729685b01e566c::t_3f7059f95438a4 10
+  s_729685b01e566c::t_a7c82dc4dbd8b3 7,59
+  s_729685b01e566c::t_9b50e473190790 60-62
+  s_729685b01e566c::t_9b53b82428825a 63-86,88-90,93-102,104,106-108,111-118,120-121
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_729685b01e566c::t_1d1efda25e70fb 1,3
+  s_729685b01e566c::t_33b5c0fc4a680b 11,49-56
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_729685b01e566c::t_43c11da6eaf0f1 39,174-180
+apps/server/src/shell/cluster-observation-sample.ts
+  s_729685b01e566c::t_3d62e4c2c6b82f 1,49-52,65-67,75-81,91-100,134-136,141,148-150,153-155
+  s_729685b01e566c::t_e1c8b516657b30 2-48,53-64,68-74,82-90,101-133,137-140,142-147,151-152,156-158
+apps/server/src/shell/cluster-telemetry.ts
+  s_729685b01e566c::t_91f0c210ccb247 6,57,65-69,73-75,89,91-93
+  s_729685b01e566c::t_264507488f21d0 84-88,94-108,165-189
+  s_729685b01e566c::t_8425f3e5a1395a 151-156
+  s_729685b01e566c::t_6fce0a6797f921 190
+  s_729685b01e566c::t_6e2ab2f81c58d8 1,77-83,109,112,123,158-164,208
+  s_729685b01e566c::t_97bce6aa811014 58-64,90
+apps/server/railway.json
+  s_729685b01e566c::t_9269770da08dec 11
+apps/server/src/shell/testing/api-harness.ts
+  s_729685b01e566c::t_ced9340d58c627 70-73,75-77,352-353,355,363
+  s_729685b01e566c::t_3ba67f8143d203 69,396
+  s_729685b01e566c::t_540cc57c472113 74,387-395,397
+  s_729685b01e566c::t_3457d50c60cf9c 354,427
+  s_a634f65f042137::t_896a5a2248fc4a 398
+apps/server/src/shell/cluster-readiness.test.ts
+  s_729685b01e566c::t_751bb41a4e7da3 1,33-36,38,42,44-52,54-59,61-66,75
+  s_729685b01e566c::t_8a726c819e9043 2,72,74
+  s_729685b01e566c::t_5d3cd80b43e0cd 5,13,16,18-22,24,29,82-86
+  s_729685b01e566c::t_3ba67f8143d203 9
+  s_729685b01e566c::t_fcdbbfb577d269 70,73
+  s_729685b01e566c::t_2a77e33faf3dd1 4
+  s_729685b01e566c::t_5405b8a2e45870 14-15,17,25-28,30-31,40-41,76
+  s_729685b01e566c::t_d60bbecf8744ab 10,67-68,71
+  s_729685b01e566c::t_b0e90dc814ac55 3
+apps/server/src/shell/cluster-topology.test.ts
+  s_729685b01e566c::t_c244f4efd908d6 82,92,94
+apps/server/src/shell/cluster-telemetry.test.ts
+  s_729685b01e566c::t_279cc6d945899c 9-11
+  s_729685b01e566c::t_d3bae6c2e24f59 2-4,6-8
+  s_729685b01e566c::t_830a0eef420481 45
+apps/server/src/shell/durable-tables.ts
+  s_729685b01e566c::t_40aa4e38e8d286 11-13
+  s_729685b01e566c::t_0963999b7112b7 14-16
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_729685b01e566c::t_2fa55086a18843 32,97-107
+  s_729685b01e566c::t_1d1efda25e70fb 14
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_729685b01e566c::t_64d61ff8b6ba24 7,19-30
+  s_729685b01e566c::t_1d1efda25e70fb 4
+apps/server/src/shell/testing/durable-execution.ts
+  s_729685b01e566c::t_e65d0093bc7f9d 1-24
+apps/server/src/shell/cluster-compatibility.ts
+  s_729685b01e566c::t_fdc8365a4f5743 75
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_729685b01e566c::t_ee86261b44c2d2 551
+  s_729685b01e566c::t_7516e9eaa0a780 50
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  s_729685b01e566c::t_fe24f9eed76ace 10,98
+  s_729685b01e566c::t_922ed4144fe506 12,14-15
+  s_729685b01e566c::t_8761b52d52c489 25-28,33
+  s_729685b01e566c::t_d0330399e2d9a8 31-32
+  s_729685b01e566c::t_edca42e70cba4c 54,57
+  s_729685b01e566c::t_ca02814aed3f08 29-30
+  s_729685b01e566c::t_2759454a87c688 6-7,51-53,55-56,58-63
+  s_a634f65f042137::t_43eaaf46a194d3 64
+apps/server/src/shell/cluster-observation.ts
+  s_729685b01e566c::t_ac8938e6664b08 2,5
+  s_729685b01e566c::t_93f0c7a92a366d 35
+  s_729685b01e566c::t_9b851f5515484e 1,4,6-7,9-12
+apps/server/src/shell/cluster-observation-projection.ts
+  s_729685b01e566c::t_69acd468c99696 1,52-58,89
+  s_729685b01e566c::t_85f7bf46beb23c 2-51,66,90-122
+  s_729685b01e566c::t_ff488afe93f6ea 59-65,67-88
+docs/operations/cluster-topology.md
+  s_729685b01e566c::t_44af4e92396ca4 128-138
+  s_729685b01e566c::t_e074cdfb7cda2e 164-168
+  s_729685b01e566c::t_4456c0c4b76a93 147-149
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_729685b01e566c::t_b591693a7edbbb 24
+  s_729685b01e566c::t_1d1efda25e70fb 19
+  s_729685b01e566c::t_d618243b6ffb67 38,128-140
+  s_729685b01e566c::t_2ac8cc4ae2d01c 40
+  s_729685b01e566c::t_bc46d61bcb2397 88,574,734
+apps/server/src/shell/cluster-observation.test.ts
+  s_729685b01e566c::t_2d01326aae7885 6-7
+  s_729685b01e566c::t_086ea6f635e862 57,82-83
+  s_729685b01e566c::t_c2f7c90154e21e 11-13,29-30,33-35,59,80-81,85,105
+  s_729685b01e566c::t_c4565d26a7d6c5 36-38,58,60,66-67,72-74,84,86,92-93,106-107
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_729685b01e566c::t_71f23ecad84381 24
+  s_729685b01e566c::t_f30180183f9dc1 26,92-103
+  s_729685b01e566c::t_1d1efda25e70fb 15
+  s_729685b01e566c::t_bc46d61bcb2397 289,292,502
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_729685b01e566c::t_b3cf0c15e4b9c0 42,152-158
+  s_729685b01e566c::t_7f41de8782e857 41,43-44
+  s_729685b01e566c::t_bc46d61bcb2397 80,207,211,214,221,243,272,294,317
+  s_729685b01e566c::t_22749fb2fecaf8 35-39
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_729685b01e566c::t_bc46d61bcb2397 267,271,452-453,509-510
+  s_729685b01e566c::t_5552bdcb1e3df4 22
+apps/server/src/shell/durable-execution.ts
+  s_729685b01e566c::t_11847470ed37ac 59
+  s_729685b01e566c::t_e124984d6d4107 34
+apps/server/src/shell/cluster-readiness.ts
+  s_729685b01e566c::t_094e9371c3e3b4 43-56,85,88,91
+  s_729685b01e566c::t_53cee81834bf3d 35-42,102-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b5c09e9bd952df1c3264588f79af40824fedcd40",
+  "prompts": {},
+  "sessions": {
+    "s_729685b01e566c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b1f-5aeb-7209-bfa6-ec954fc7a0bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a634f65f042137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09b26-1361-731d-930e-7c4efa948eab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

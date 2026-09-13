@@ -306,6 +306,17 @@ const startHostedRuntime = Effect.fn(function* (spec: HostedRuntimeSpec) {
   return yield* startedRuntimeAt(yield* startHostedRuntimes([spec]), 0);
 });
 
+/** The immediate Handle request every direct-client scenario sends, varying only turn and text. */
+const immediateTurnRequest = Effect.fn(function* (turnId: TranscriptTurnId, text: string) {
+  return {
+    userId: defaultUserId,
+    turnId,
+    limits: yield* CurrentAgentLimits,
+    message: InboundMessage.make({ text: TranscriptText.make(text) }),
+    authorityRoot: "no-verified-whatsapp-authority" as const,
+  };
+});
+
 /** Predicate for the durable mailbox observation, kept named to bound callback nesting. */
 const everyMailboxEntryProcessed = (
   rows: ReadonlyArray<{ readonly processed: boolean }>
@@ -593,13 +604,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const inboundJobId = WhatsAppInboundJobId.make(
             yield* crypto.randomUUIDv4.pipe(Effect.orDie)
           );
-          const request = {
-            userId: defaultUserId,
-            turnId,
-            limits: yield* CurrentAgentLimits,
-            message: InboundMessage.make({ text: TranscriptText.make("wire-identity") }),
-            authorityRoot: "no-verified-whatsapp-authority" as const,
-          };
+          const request = yield* immediateTurnRequest(turnId, "wire-identity");
           expect(
             yield* Effect.promise(() =>
               runtime.runPromise(client(otherUserId).Handle(request).pipe(Effect.flip))
@@ -764,13 +769,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           generate,
           deliver,
         });
-        const request = {
-          userId: defaultUserId,
-          turnId: TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
-          limits: yield* CurrentAgentLimits,
-          message: InboundMessage.make({ text: TranscriptText.make("caller-disconnect") }),
-          authorityRoot: "no-verified-whatsapp-authority" as const,
-        };
+        const request = yield* immediateTurnRequest(
+          TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+          "caller-disconnect"
+        );
         const caller = runtime.runFork(client(defaultUserId).Handle(request));
         yield* awaitBarrier("model barrier", entered, caller);
         expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);

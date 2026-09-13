@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
@@ -7,9 +7,10 @@ import { DisclosureDeliveryAttemptId } from "./disclosure-model";
 
 /** Identifier-only pre-User work. No User exists before verified onboarding completes. */
 export const ConsentDisclosurePayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   exchangeId: PendingConsentExchangeId,
-});
+}).annotate({ identifier: "ConsentDisclosurePayload" });
+export type ConsentDisclosurePayload = typeof ConsentDisclosurePayload.Type;
 
 /** Delivery is established by authenticated delivered/read evidence, never provider send acceptance. */
 export const ConsentDisclosureSuccess = Schema.Struct({
@@ -24,21 +25,28 @@ export const ConsentDisclosureWorkflow = Workflow.make("WhatsAppConsentDisclosur
   idempotencyKey: ({ exchangeId }) => exchangeId,
 });
 
+/** Identifier-only evidence handoff, committed with Consent facts and completed outside SQL locks. */
+export const ConsentDisclosureEvidencePayload = Schema.Struct({
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
+  exchangeId: PendingConsentExchangeId,
+  attemptId: DisclosureDeliveryAttemptId,
+  evidenceRevision: Schema.Finite.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+}).annotate({ identifier: "ConsentDisclosureEvidencePayload" });
+export type ConsentDisclosureEvidencePayload = typeof ConsentDisclosureEvidencePayload.Type;
+
+export const consentDisclosureQueueName = "whatsapp-consent-disclosure";
+export const consentDisclosureEvidenceQueueName = "whatsapp-consent-disclosure-evidence";
+
 /** Transactional acceptance handoff using the shared SQL client; completion is not delivery evidence. */
 export const consentDisclosureQueue = PersistedQueue.make({
-  name: "whatsapp-consent-disclosure",
+  name: consentDisclosureQueueName,
   schema: ConsentDisclosurePayload,
 });
 
 /** Identifier-only evidence handoff, committed with Consent facts and completed outside SQL locks. */
 export const consentDisclosureEvidenceQueue = PersistedQueue.make({
-  name: "whatsapp-consent-disclosure-evidence",
-  schema: Schema.Struct({
-    revision: Schema.Literal(1),
-    exchangeId: PendingConsentExchangeId,
-    attemptId: DisclosureDeliveryAttemptId,
-    evidenceRevision: Schema.Finite.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  }),
+  name: consentDisclosureEvidenceQueueName,
+  schema: ConsentDisclosureEvidencePayload,
 });
 
 const queueKeyHexLength = 32;

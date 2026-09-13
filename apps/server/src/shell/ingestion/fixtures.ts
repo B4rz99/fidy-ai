@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { statementIngestionQueueName } from "./worker";
 
 /** Resets statement ingestion and its Transaction outcomes between integration tests. */
 export const truncateStatementIngestion = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'statement-ingestion'`;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = ${statementIngestionQueueName}`;
   yield* sql`DELETE FROM statement_backfill_entitlements`;
   yield* sql`DELETE FROM needs_review_items`;
   yield* sql`TRUNCATE source_attestations, transactions CASCADE`;

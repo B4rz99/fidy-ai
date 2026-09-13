@@ -48,12 +48,12 @@ export const OnboardingEmailDeliveryWorkflow = Workflow.make("OnboardingEmailDel
   idempotencyKey: ({ intentId }) => intentId,
 });
 
-const deliveryQueueName = "onboarding-email-delivery";
+export const onboardingDeliveryQueueName = "onboarding-email-delivery";
 const workflowEntityType = "Workflow/OnboardingEmailDelivery";
 const maximumProviderRetries = 2;
 
 export const onboardingEmailDeliveryQueue = PersistedQueue.make({
-  name: deliveryQueueName,
+  name: onboardingDeliveryQueueName,
   schema: OnboardingDeliveryPayload,
 });
 
@@ -173,7 +173,7 @@ export const onboardingEmailDeliveryRetention = {
     intentIds: ReadonlyArray<EmailDeliveryIntentId>,
     pendingIntentIds: ReadonlyArray<EmailDeliveryIntentId>
   ): ReturnType<(typeof durableQueueRetention)["completed"]> =>
-    durableQueueRetention.completed(deliveryQueueName, intentIds, pendingIntentIds),
+    durableQueueRetention.completed(onboardingDeliveryQueueName, intentIds, pendingIntentIds),
 
   clearWorkflowHistory: Effect.fn("OnboardingDelivery.clearWorkflowHistory")(function* (
     intentId: EmailDeliveryIntentId
@@ -199,7 +199,7 @@ export const onboardingEmailDeliveryRetention = {
   removeCompletedQueueItems: (
     intentIds: ReadonlyArray<EmailDeliveryIntentId>
   ): ReturnType<(typeof durableQueueRetention)["removeCompleted"]> =>
-    durableQueueRetention.removeCompleted(deliveryQueueName, intentIds),
+    durableQueueRetention.removeCompleted(onboardingDeliveryQueueName, intentIds),
 };
 
 /** Focused test seam for consuming one current queue item without starting a background fiber. */

@@ -12,20 +12,24 @@ import { UserId } from "~/core/identity/reference";
 
 /** Only the admitted request identity crosses the pre-subject durable boundary. */
 export const PairingStartPayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   requestId: BrowserPairingEmailStartRequestId,
-});
+}).annotate({ identifier: "PairingStartPayload" });
+export type PairingStartPayload = typeof PairingStartPayload.Type;
+export const pairingStartQueueName = "browser-pairing-email-start";
+export const pairingDeliveryQueueName = "browser-pairing-email-delivery";
+export const pairingExpiryQueueName = "browser-pairing-email-expiry";
 export const pairingStartQueue = PersistedQueue.make({
-  name: "browser-pairing-email-start",
+  name: pairingStartQueueName,
   schema: PairingStartPayload,
 });
 
 /** Explicit User context is checked against the intent under RLS, never inferred from its id. */
 export const PairingDeliveryPayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   userId: UserId,
   intentId: EmailDeliveryIntentId,
-});
+}).annotate({ identifier: "PairingDeliveryPayload" });
 export type PairingDeliveryPayload = typeof PairingDeliveryPayload.Type;
 export const PairingDeliveryResult = Schema.Struct({
   outcome: Schema.Literals([
@@ -46,23 +50,23 @@ export const BrowserPairingEmailDeliveryWorkflow = Workflow.make("BrowserPairing
   idempotencyKey: ({ userId, intentId }) => `${userId}/${intentId}`,
 });
 export const pairingDeliveryQueue = PersistedQueue.make({
-  name: "browser-pairing-email-delivery",
+  name: pairingDeliveryQueueName,
   schema: PairingDeliveryPayload,
 });
 
 /** Expiry is independent of provider completion and retains no proof or mailbox material. */
 export const PairingExpiryPayload = Schema.Struct({
-  revision: Schema.Literal(1),
+  revision: Schema.Literal(1).pipe(Schema.withDecodingDefaultKey(Effect.succeed(1 as const))),
   userId: UserId,
   workflowId: BrowserPairingEmailWorkflowId,
-});
+}).annotate({ identifier: "PairingExpiryPayload" });
 export type PairingExpiryPayload = typeof PairingExpiryPayload.Type;
 export const BrowserPairingEmailExpiryWorkflow = Workflow.make("BrowserPairingEmailExpiry", {
   payload: PairingExpiryPayload,
   idempotencyKey: ({ userId, workflowId }) => `${userId}/${workflowId}`,
 });
 export const pairingExpiryQueue = PersistedQueue.make({
-  name: "browser-pairing-email-expiry",
+  name: pairingExpiryQueueName,
   schema: PairingExpiryPayload,
 });
 
@@ -83,7 +87,7 @@ const admitPairingExecutionInScope = Effect.fn(function* () {
     Request: Schema.Void,
     Result: Schema.Struct({ count: Schema.Int }),
     execute: () => sql`SELECT count(*)::int AS count FROM (
-      SELECT 1 FROM fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')
+      SELECT 1 FROM fidy_queue WHERE queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
       LIMIT ${maximumPairingExecutionRows}
     ) AS retained`,
   })(undefined);

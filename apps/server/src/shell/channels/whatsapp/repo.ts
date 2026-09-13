@@ -46,6 +46,7 @@ import {
   WhatsAppInboundWork,
   maximumWhatsAppInboundAttempts,
   whatsappInboundQueue,
+  whatsappInboundQueueName,
 } from "./inbound-execution";
 
 const maximumBudgetKeyLength = 256;
@@ -207,7 +208,7 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
     Request: Schema.Void,
     Result: ExhaustedWhatsAppQueueItem,
     execute: () => sql`SELECT sequence, element FROM fidy_queue
-      WHERE queue_name = 'whatsapp-inbound-turn' AND completed = FALSE
+      WHERE queue_name = ${whatsappInboundQueueName} AND completed = FALSE
         AND attempts >= ${maximumWhatsAppInboundAttempts}
       ORDER BY sequence LIMIT 256`,
   })(undefined).pipe(Effect.orDie);
@@ -253,7 +254,7 @@ export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")
     Request: Schema.DateTimeUtc,
     Result: QueueHistoryCandidate,
     execute: (before) => sql`SELECT sequence, element, id FROM fidy_queue
-      WHERE queue_name = 'whatsapp-inbound-turn' AND completed = TRUE AND updated_at < ${before}
+      WHERE queue_name = ${whatsappInboundQueueName} AND completed = TRUE AND updated_at < ${before}
       ORDER BY sequence LIMIT 256`,
   })(cutoff).pipe(Effect.orDie);
   for (const candidate of candidates) {

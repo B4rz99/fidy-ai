@@ -57,7 +57,7 @@ export const BillingAttemptReconciliationWorkflow = Workflow.make("BillingAttemp
 });
 
 /** Transactional acceptance handoff; one queue item per BillingAttempt identity. */
-const billingAttemptQueue = PersistedQueue.make({
+export const billingAttemptQueue = PersistedQueue.make({
   name: billingAttemptQueueName,
   schema: BillingAttemptReconciliationPayload,
 });

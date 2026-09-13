@@ -17,7 +17,12 @@ import {
   lockConsentDisclosure,
   removeConsentDisclosureRequest,
 } from "./disclosure-store";
-import { ConsentDisclosureWorkflow, consentDisclosureQueue } from "./disclosure-workflow";
+import {
+  ConsentDisclosureWorkflow,
+  consentDisclosureEvidenceQueueName,
+  consentDisclosureQueue,
+  consentDisclosureQueueName,
+} from "./disclosure-workflow";
 
 const workflowEntityType = `Workflow/${ConsentDisclosureWorkflow._tag}`;
 // Effect RC.112 addresses clocks by execution id under this shared entity type, not the workflow type.
@@ -70,7 +75,7 @@ export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosur
           if (Option.isNone(result) || result.value._tag !== "Complete") return;
           if (
             !(yield* durableQueueRetention.completed(
-              "whatsapp-consent-disclosure",
+              consentDisclosureQueueName,
               [exchangeId],
               [exchangeId]
             ))
@@ -78,7 +83,7 @@ export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosur
             return;
           }
           const evidenceEmpty = yield* durableQueueRetention.removeCompletedByPayload(
-            "whatsapp-consent-disclosure-evidence",
+            consentDisclosureEvidenceQueueName,
             "exchangeId",
             exchangeId
           );
@@ -92,7 +97,7 @@ export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosur
             return;
           }
           yield* clearMailboxes(executionId);
-          yield* durableQueueRetention.removeCompleted("whatsapp-consent-disclosure", [exchangeId]);
+          yield* durableQueueRetention.removeCompleted(consentDisclosureQueueName, [exchangeId]);
           yield* removeConsentDisclosureRequest(exchangeId);
         })
       );

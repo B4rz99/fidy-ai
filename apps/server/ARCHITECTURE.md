@@ -156,6 +156,15 @@ facilities own durable execution mechanics. Slices retain domain lifecycle, auth
 provider idempotency or reconciliation, retention policy, and safe observability. Every durable
 path that can reach User data carries an explicit `UserId` and only a bounded resume projection.
 
+Production PersistedQueue payloads and identities form an executable compatibility contract in
+`shell/queue-compatibility/`. Every queue has a checked-in fixture for its oldest supported
+encoding, and the tests decode it with the current schema into unchanged ownership and operation
+identity. Additive payload changes use backward-readable defaults or unions. Queue names and
+custom ids stay inside Effect's `VARCHAR(100)`/`VARCHAR(36)` bounds, and an incompatible payload
+change requires a named new queue or an explicit drain/migration plan recorded with its fixture.
+Decode failures consume attempts; exhausted work follows the owning queue's reviewed retirement
+policy where one exists and otherwise stays visible and incomplete, never disappearing silently.
+
 Distributed security and spend admission remains PostgreSQL-backed; process-local Effect limits
 only own restart-safe resource bounds. Best-effort maintenance may delay cleanup but cannot authorize
 expired work. Correctness-critical continuation uses durable execution. No Fidy queue, lease,

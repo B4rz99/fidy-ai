@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { whatsappInboundQueueName } from "./inbound-execution";
 
 /** Clears channel-owned operational state for integration-test isolation. */
 export const truncateWhatsAppChannel = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'whatsapp-inbound-turn'`;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = ${whatsappInboundQueueName}`;
   yield* sql`
     TRUNCATE whatsapp_inbound_jobs, whatsapp_conversation_windows,
       whatsapp_message_evidence, whatsapp_ingress_budgets, whatsapp_ingress_budget_receipts,

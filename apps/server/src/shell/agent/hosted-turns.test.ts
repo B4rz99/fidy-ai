@@ -239,7 +239,9 @@ const whatsAppPayloadDocument: unknown = {
       userId: uuidSchema,
       inboundJobId: uuidSchema,
     },
-    required: ["version", "userId", "inboundJobId"],
+    // ProcessWhatsApp shares the inbound-work schema, whose oldest supported encoding omits
+    // the marker: the codec defaults it on decode while `version: 2` stays rejected.
+    required: ["userId", "inboundJobId"],
     additionalProperties: false,
   },
   definitions: {},
@@ -271,6 +273,8 @@ type HostedTurnContract = Readonly<{
   readonly serverUninterruptible: boolean;
   /** Payload fixture the operation codec must accept. */
   readonly payload: unknown;
+  /** Additional accepted payload mixtures, each encoding back to `payload`; `None` accepts exactly one shape. */
+  readonly acceptedPayloads: Option.Option<ReadonlyArray<unknown>>;
   /** Payloads the operation codec must reject, one per reviewed input constraint. */
   readonly rejectedPayloads: ReadonlyArray<unknown>;
   /** Complete inlined JSON Schema document of the operation's payload codec. */
@@ -305,6 +309,7 @@ const handleContract: HostedTurnContract = {
   clientUninterruptible: true,
   serverUninterruptible: false,
   payload: handlePayload,
+  acceptedPayloads: Option.none(),
   rejectedPayloads: [
     // Dropping an AgentLimits bound would admit this value.
     { ...handlePayload, limits: { ...limits, maxIterations: 33 } },
@@ -341,6 +346,7 @@ const whatsAppContract: HostedTurnContract = {
   clientUninterruptible: true,
   serverUninterruptible: false,
   payload: { version: 1, userId, inboundJobId },
+  acceptedPayloads: Option.some([{ userId, inboundJobId }]),
   rejectedPayloads: [{ version: 2, userId, inboundJobId }],
   payloadDocument: whatsAppPayloadDocument,
   result: undefined,
@@ -356,6 +362,7 @@ const recoverContract: HostedTurnContract = {
   clientUninterruptible: true,
   serverUninterruptible: false,
   payload: { userId, turnId },
+  acceptedPayloads: Option.none(),
   rejectedPayloads: [
     { userId: "not-a-uuid", turnId },
     // Dropping the canonical lowercase UUID filter would admit this value.
@@ -405,6 +412,12 @@ const checkContract = (
     );
     const encodedPayload = yield* Schema.encodeUnknownEffect(request.payloadSchema)(decodedPayload);
     expect(encodedPayload).toEqual(expected.payload);
+    for (const accepted of Option.getOrElse(expected.acceptedPayloads, () => [])) {
+      const decodedAccepted = yield* Schema.decodeUnknownEffect(request.payloadSchema)(accepted);
+      expect(yield* Schema.encodeUnknownEffect(request.payloadSchema)(decodedAccepted)).toEqual(
+        expected.payload
+      );
+    }
     for (const rejected of expected.rejectedPayloads) {
       const attempt = yield* Schema.decodeUnknownEffect(request.payloadSchema)(rejected).pipe(
         Effect.exit

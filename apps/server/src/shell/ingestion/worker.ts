@@ -59,10 +59,10 @@ class StatementIngestionPayloadMismatch extends Schema.Error<StatementIngestionP
   reason: Schema.Literal("routing-identity-mismatch"),
 }) {}
 
-const queueName = "statement-ingestion";
-const maximumAttempts = 3;
+export const statementIngestionQueueName = "statement-ingestion";
+export const maximumStatementIngestionAttempts = 3;
 export const statementIngestionQueue = PersistedQueue.make({
-  name: queueName,
+  name: statementIngestionQueueName,
   schema: StatementIngestionPayload,
 });
 
@@ -293,7 +293,7 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
   const mapping = yield* mappingFor(statement, parsed.value).pipe(
     Effect.asSome,
     Effect.catchTag("StatementColumnMappingFailed", () =>
-      (attempts + 1 >= maximumAttempts
+      (attempts + 1 >= maximumStatementIngestionAttempts
         ? finalizeUnmappedRows(statement, parsed.value)
         : StatementIngestionRetry.make({ reason: "mapping-unavailable" })
       ).pipe(Effect.as(Option.none<{ fingerprint: string; mapping: StatementColumnMapping }>()))
@@ -338,7 +338,7 @@ export const processNextStatement = Effect.fn("processNextStatement")(function* 
   const queue = yield* statementIngestionQueue;
   const takeCurrent = queue
     .take((payload, { id, attempts }) => processQueuedWork(id, payload, attempts), {
-      maxAttempts: maximumAttempts,
+      maxAttempts: maximumStatementIngestionAttempts,
     })
     .pipe(Effect.orElseSucceed(() => "retrying" as const));
   const completed = yield* Effect.gen(function* () {
@@ -370,7 +370,7 @@ const removeTerminalPage = Effect.fn("StatementIngestion.removeTerminalPage")(fu
 ) {
   const terminal = yield* findTerminalStatementExecutions(cursor);
   yield* durableQueueRetention.removeCompleted(
-    queueName,
+    statementIngestionQueueName,
     terminal.map(({ id }) => id)
   );
   return Option.fromUndefinedOr(terminal.at(-1));
@@ -395,7 +395,7 @@ const consumeStatementQueue = Effect.gen(function* () {
   const queue = yield* statementIngestionQueue;
   return yield* queue
     .take((payload, { id, attempts }) => processQueuedWork(id, payload, attempts), {
-      maxAttempts: maximumAttempts,
+      maxAttempts: maximumStatementIngestionAttempts,
     })
     .pipe(
       Effect.catchTag("StatementIngestionRetry", () => Effect.void),

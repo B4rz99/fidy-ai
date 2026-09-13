@@ -14,15 +14,18 @@ import {
   BrowserPairingEmailExpiryWorkflow,
   PairingDeliveryPayload,
   PairingExpiryPayload,
+  pairingDeliveryQueueName,
+  pairingExpiryQueueName,
+  pairingStartQueueName,
 } from "./pairing-email-execution";
 
 const CompletedQueueItem = Schema.Struct({
   sequence: Schema.Int,
   id: Schema.String,
   queueName: Schema.Literals([
-    "browser-pairing-email-start",
-    "browser-pairing-email-delivery",
-    "browser-pairing-email-expiry",
+    pairingStartQueueName,
+    pairingDeliveryQueueName,
+    pairingExpiryQueueName,
   ]),
   element: Schema.String,
 });
@@ -32,13 +35,13 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
   const storage = yield* MessageStorage.MessageStorage;
   const sharding = yield* Sharding.Sharding;
   let address = Option.none<EntityAddress.EntityAddress>();
-  if (row.queueName !== "browser-pairing-email-start") {
+  if (row.queueName !== pairingStartQueueName) {
     const workflow =
-      row.queueName === "browser-pairing-email-delivery"
+      row.queueName === pairingDeliveryQueueName
         ? BrowserPairingEmailDeliveryWorkflow
         : BrowserPairingEmailExpiryWorkflow;
     const executionId =
-      row.queueName === "browser-pairing-email-delivery"
+      row.queueName === pairingDeliveryQueueName
         ? yield* BrowserPairingEmailDeliveryWorkflow.executionId(
             yield* Schema.decodeEffect(jsonStringSchema(PairingDeliveryPayload))(row.element)
           ).pipe(Effect.orDie)
@@ -46,7 +49,7 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
             yield* Schema.decodeEffect(jsonStringSchema(PairingExpiryPayload))(row.element)
           ).pipe(Effect.orDie);
     const terminal =
-      row.queueName === "browser-pairing-email-delivery"
+      row.queueName === pairingDeliveryQueueName
         ? yield* BrowserPairingEmailDeliveryWorkflow.poll(executionId).pipe(
             Effect.map(Option.exists((state) => state._tag === "Complete"))
           )
@@ -95,7 +98,7 @@ export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (aft
     Result: CompletedQueueItem,
     execute: () => sql`SELECT sequence, id, queue_name AS "queueName", element FROM fidy_queue
       WHERE sequence > ${afterSequence} AND completed = TRUE AND updated_at < ${cutoff}
-        AND queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')
+        AND queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
       ORDER BY sequence LIMIT 100`,
   })(undefined).pipe(Effect.orDie);
   for (const row of rows) yield* purgeTerminalQueueItem(row);

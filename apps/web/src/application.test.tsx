@@ -215,10 +215,10 @@ describe("public web application routes", () => {
 describe("signed-in web application routes", () => {
   afterEach(resetApplicationTest);
 
-  it("owns Transactions at /app/transactions and routes malformed canonical data to failure", async () => {
+  it("owns Transactions at /app/transactions and safely presents malformed canonical data", async () => {
     await renderRoute("/app/transactions", malformedFidyClient());
 
-    expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
+    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
   });
 });
 
@@ -361,14 +361,14 @@ describe("signed-in web application data routes", () => {
     await renderRoute("/upgrade", malformedFidyClient());
 
     expect(await screen.findByRole("heading", { name: "Mejora tu suscripción" })).toBeVisible();
-    expect(await screen.findByText("No pudimos cargar las ofertas")).toBeVisible();
+    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
   });
 
-  it("owns the Dashboard at /app/dashboard and routes malformed canonical data to failure", async () => {
+  it("owns the Dashboard at /app/dashboard and safely presents malformed canonical data", async () => {
     await renderRoute("/app/dashboard", malformedFidyClient());
 
     expect(
-      await screen.findByText("No pudimos cargar tu tablero", undefined, { timeout: 3_000 })
+      await screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
     ).toBeVisible();
   });
 
@@ -376,7 +376,7 @@ describe("signed-in web application data routes", () => {
     await renderRoute("/app", malformedFidyClient());
 
     expect(
-      await screen.findByText("No pudimos cargar tu tablero", undefined, { timeout: 3_000 })
+      await screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
     ).toBeVisible();
   });
 });

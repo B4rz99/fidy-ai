@@ -1,10 +1,8 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { DateTime, Effect, Array as EffectArray } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { DateTime, Effect, Array as EffectArray, Option } from "effect";
 import { useState } from "react";
 import type { JSX } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import {
   Card,
@@ -16,6 +14,8 @@ import {
 } from "@/ui/components/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Skeleton } from "@/ui/components/skeleton";
+import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import {
   Table,
   TableBody,
@@ -38,16 +38,27 @@ type PeriodPresentation = Readonly<{
   timeZone: string;
 }>;
 
+type QueryActivity =
+  | Readonly<{ _tag: "Current" }>
+  | Readonly<{ _tag: "Refreshing" }>
+  | Readonly<{ _tag: "RefreshFailure"; onRetry: () => void; waiting: boolean }>;
+
 /** Exhaustive rendering state for the current-month Transaction list. */
 export type TransactionPageState =
+  | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
-  | Readonly<{ _tag: "Empty"; period: PeriodPresentation }>
+  | Readonly<{ _tag: "Empty"; period: PeriodPresentation; query: QueryActivity }>
   | Readonly<{
       _tag: "Ready";
       period: PeriodPresentation;
+      query: QueryActivity;
       rows: EffectArray.NonEmptyReadonlyArray<TransactionListRow>;
     }>
-  | Readonly<{ _tag: "CanonicalError" }>;
+  | Readonly<{
+      _tag: "CanonicalError" | "BoundaryError";
+      onRetry: () => void;
+      waiting: boolean;
+    }>;
 
 const TransactionPeriod = ({ period }: Readonly<{ period: PeriodPresentation }>): JSX.Element => (
   <p className="text-muted-foreground">
@@ -149,36 +160,176 @@ const EmptyTransactions = (): JSX.Element => (
   </Empty>
 );
 
-const CanonicalError = (): JSX.Element => (
-  <Alert variant="destructive">
-    <AlertTitle>No pudimos cargar tus transacciones</AlertTitle>
-    <AlertDescription>Intenta de nuevo en unos momentos.</AlertDescription>
-  </Alert>
+const QueryError = ({
+  boundary,
+  onRetry,
+  waiting,
+}: Readonly<{ boundary: boolean; onRetry: () => void; waiting: boolean }>): JSX.Element => (
+  <CanonicalQueryRetry
+    description="Intenta de nuevo en unos momentos."
+    onRetry={onRetry}
+    retryLabel="Reintentar carga"
+    retryingLabel="Reintentando…"
+    title={boundary ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar tus transacciones"}
+    waiting={waiting}
+  />
 );
+
+const QueryActivityNotice = ({ query }: Readonly<{ query: QueryActivity }>): JSX.Element => {
+  switch (query._tag) {
+    case "Current":
+      return <></>;
+    case "Refreshing":
+      return (
+        <p aria-live="polite" className="text-sm text-muted-foreground">
+          Actualizando transacciones…
+        </p>
+      );
+    case "RefreshFailure":
+      return (
+        <CanonicalQueryRetry
+          description="Mostramos las últimas transacciones disponibles."
+          onRetry={query.onRetry}
+          retryLabel="Reintentar actualización"
+          retryingLabel="Reintentando…"
+          title="No pudimos actualizar las transacciones"
+          waiting={query.waiting}
+        />
+      );
+  }
+};
+
+const TransactionPageContent = ({
+  state,
+}: Readonly<{ state: TransactionPageState }>): JSX.Element => {
+  switch (state._tag) {
+    case "Initial":
+      return <p className="text-muted-foreground">La consulta aún no se ha iniciado.</p>;
+    case "Loading":
+      return <LoadingTransactions />;
+    case "Ready":
+      return (
+        <>
+          <QueryActivityNotice query={state.query} />
+          <ReadyTransactions rows={state.rows} />
+        </>
+      );
+    case "Empty":
+      return (
+        <>
+          <QueryActivityNotice query={state.query} />
+          <EmptyTransactions />
+        </>
+      );
+    case "CanonicalError":
+    case "BoundaryError":
+      return (
+        <QueryError
+          boundary={state._tag === "BoundaryError"}
+          onRetry={state.onRetry}
+          waiting={state.waiting}
+        />
+      );
+  }
+};
 
 /** Renders the current-month Transaction list's presentation state. */
 export const TransactionListView = ({
   state,
-}: Readonly<{ state: TransactionPageState }>): JSX.Element => (
-  <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <header className="flex flex-col gap-2">
-      <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
-      {state._tag === "Ready" || state._tag === "Empty" ? (
-        <TransactionPeriod period={state.period} />
-      ) : (
-        <p className="text-muted-foreground">Movimientos del mes actual.</p>
-      )}
-    </header>
-    {state._tag === "Loading" ? <LoadingTransactions /> : null}
-    {state._tag === "Ready" ? <ReadyTransactions rows={state.rows} /> : null}
-    {state._tag === "Empty" ? <EmptyTransactions /> : null}
-    {state._tag === "CanonicalError" ? <CanonicalError /> : null}
-  </main>
+}: Readonly<{ state: TransactionPageState }>): JSX.Element => {
+  const period =
+    state._tag === "Ready" || state._tag === "Empty" ? Option.some(state.period) : Option.none();
+  return (
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-2">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
+        {Option.match(period, {
+          onNone: () => <p className="text-muted-foreground">Movimientos del mes actual.</p>,
+          onSome: (availablePeriod) => <TransactionPeriod period={availablePeriod} />,
+        })}
+      </header>
+      <TransactionPageContent state={state} />
+    </main>
+  );
+};
+
+const FailedTransactionQuery = ({
+  boundary,
+  onRetry,
+  waiting,
+}: Readonly<{ boundary: boolean; onRetry: () => void; waiting: boolean }>): JSX.Element => (
+  <TransactionListView
+    state={{
+      _tag: boundary ? "BoundaryError" : "CanonicalError",
+      onRetry,
+      waiting,
+    }}
+  />
 );
 
-const TransactionResources = ({
+const queryActivity = ({
+  categoryFailed,
+  categoryWaiting,
+  onRetry,
+  transactionFailed,
+  transactionWaiting,
+}: Readonly<{
+  categoryFailed: boolean;
+  categoryWaiting: boolean;
+  onRetry: () => void;
+  transactionFailed: boolean;
+  transactionWaiting: boolean;
+}>): QueryActivity => {
+  if (categoryFailed || transactionFailed) {
+    return {
+      _tag: "RefreshFailure",
+      onRetry,
+      waiting: categoryWaiting || transactionWaiting,
+    };
+  }
+  if (categoryWaiting || transactionWaiting) return { _tag: "Refreshing" };
+  return { _tag: "Current" };
+};
+
+const TransactionRows = ({
   currentUser,
-}: Readonly<{ currentUser: CurrentUser }>): JSX.Element => {
+  period,
+  query,
+  rows,
+}: Readonly<{
+  currentUser: CurrentUser;
+  period: ReturnType<typeof deriveCurrentMonthPeriod>;
+  query: QueryActivity;
+  rows: ReturnType<typeof presentTransactionRows>;
+}>): JSX.Element => {
+  const periodPresentation = presentPeriod({ locale: currentUser.locale, period });
+  return EffectArray.match(rows, {
+    onEmpty: () => (
+      <TransactionListView state={{ _tag: "Empty", period: periodPresentation, query }} />
+    ),
+    onNonEmpty: (nonEmptyRows) => (
+      <TransactionListView
+        state={{ _tag: "Ready", period: periodPresentation, query, rows: nonEmptyRows }}
+      />
+    ),
+  });
+};
+
+type TransactionPresentationInput = Parameters<typeof presentTransactionRows>[0];
+type TransactionQueries = Readonly<{
+  categoryState: CanonicalQueryState<
+    Readonly<{ data: TransactionPresentationInput["categories"] }>,
+    unknown
+  >;
+  period: ReturnType<typeof deriveCurrentMonthPeriod>;
+  retry: () => void;
+  transactionState: CanonicalQueryState<
+    Readonly<{ data: TransactionPresentationInput["transactions"] }>,
+    unknown
+  >;
+}>;
+
+const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => {
   const router = useRouter();
   const [period] = useState(() =>
     deriveCurrentMonthPeriod({
@@ -194,32 +345,69 @@ const TransactionResources = ({
       query: { from: period.from, to: period.to },
     })
   );
-  const categoryResult = useAtomValue(categories);
-  const transactionResult = useAtomValue(transactions);
-  const periodPresentation = presentPeriod({ locale: currentUser.locale, period });
+  const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
+  const transactionState = useAtomValue(transactions).pipe(presentCanonicalQuery);
+  const refreshCategories = useAtomRefresh(categories);
+  const refreshTransactions = useAtomRefresh(transactions);
+  const retry = (): void => {
+    refreshCategories();
+    refreshTransactions();
+  };
+  return { categoryState, period, retry, transactionState };
+};
 
-  if (AsyncResult.isFailure(categoryResult) || AsyncResult.isFailure(transactionResult)) {
-    return <TransactionListView state={{ _tag: "CanonicalError" }} />;
+const TransactionResources = ({
+  currentUser,
+}: Readonly<{ currentUser: CurrentUser }>): JSX.Element => {
+  const { categoryState, period, retry, transactionState } = useTransactionQueries(currentUser);
+  if (categoryState._tag === "Failure") {
+    return (
+      <FailedTransactionQuery
+        boundary={categoryState.failure._tag !== "DeclaredFailure"}
+        onRetry={retry}
+        waiting={categoryState.waiting}
+      />
+    );
   }
-  if (!AsyncResult.isSuccess(categoryResult) || !AsyncResult.isSuccess(transactionResult)) {
-    return <TransactionListView state={{ _tag: "Loading" }} />;
+  if (transactionState._tag === "Failure") {
+    return (
+      <FailedTransactionQuery
+        boundary={transactionState.failure._tag !== "DeclaredFailure"}
+        onRetry={retry}
+        waiting={transactionState.waiting}
+      />
+    );
+  }
+  if (categoryState._tag !== "Ready") {
+    return <TransactionListView state={{ _tag: categoryState.waiting ? "Loading" : "Initial" }} />;
+  }
+  if (transactionState._tag !== "Ready") {
+    return (
+      <TransactionListView state={{ _tag: transactionState.waiting ? "Loading" : "Initial" }} />
+    );
   }
 
   const rows = presentTransactionRows({
-    categories: categoryResult.value.data,
+    categories: categoryState.value.data,
     counterpartyFallback: "Contraparte no identificada",
     locale: currentUser.locale,
     timeZone: currentUser.timeZone,
-    transactions: transactionResult.value.data,
+    transactions: transactionState.value.data,
   });
-  return EffectArray.match(rows, {
-    onEmpty: () => <TransactionListView state={{ _tag: "Empty", period: periodPresentation }} />,
-    onNonEmpty: (nonEmptyRows) => (
-      <TransactionListView
-        state={{ _tag: "Ready", period: periodPresentation, rows: nonEmptyRows }}
-      />
-    ),
-  });
+  return (
+    <TransactionRows
+      currentUser={currentUser}
+      period={period}
+      query={queryActivity({
+        categoryFailed: Option.isSome(categoryState.refreshFailure),
+        categoryWaiting: categoryState.waiting,
+        onRetry: retry,
+        transactionFailed: Option.isSome(transactionState.refreshFailure),
+        transactionWaiting: transactionState.waiting,
+      })}
+      rows={rows}
+    />
+  );
 };
 
 const CurrentUserQuery = (): JSX.Element => {
@@ -228,14 +416,43 @@ const CurrentUserQuery = (): JSX.Element => {
     router.options.context.apiClient.query("identity", "getCurrentUser", {})
   );
   const result = useAtomValue(currentUser);
-  if (AsyncResult.isFailure(result)) {
-    return <TransactionListView state={{ _tag: "CanonicalError" }} />;
+  const refresh = useAtomRefresh(currentUser);
+  const state = presentCanonicalQuery(result);
+  switch (state._tag) {
+    case "Initial":
+      return <TransactionListView state={{ _tag: state.waiting ? "Loading" : "Initial" }} />;
+    case "Failure":
+      return (
+        <TransactionListView
+          state={{
+            _tag: state.failure._tag === "DeclaredFailure" ? "CanonicalError" : "BoundaryError",
+            onRetry: refresh,
+            waiting: state.waiting,
+          }}
+        />
+      );
+    case "Ready":
+      return (
+        <>
+          {state.waiting ? (
+            <p aria-live="polite" className="text-sm text-muted-foreground">
+              Actualizando perfil de transacciones…
+            </p>
+          ) : null}
+          {Option.isSome(state.refreshFailure) ? (
+            <CanonicalQueryRetry
+              description="Mostramos tus transacciones con el último perfil disponible."
+              onRetry={refresh}
+              retryLabel="Reintentar actualización del perfil"
+              retryingLabel="Reintentando…"
+              title="No pudimos actualizar tu perfil"
+              waiting={state.waiting}
+            />
+          ) : null}
+          <TransactionResources currentUser={state.value.data} />
+        </>
+      );
   }
-  return AsyncResult.isSuccess(result) ? (
-    <TransactionResources currentUser={result.value.data} />
-  ) : (
-    <TransactionListView state={{ _tag: "Loading" }} />
-  );
 };
 
 /** Transaction route whose canonical server state is owned exclusively by Effect Atom queries. */

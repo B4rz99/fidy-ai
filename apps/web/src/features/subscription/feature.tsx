@@ -1,7 +1,13 @@
-import { make as makeScopedAtom, useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
+import {
+  make as makeScopedAtom,
+  useAtom,
+  useAtomRefresh,
+  useAtomSet,
+  useAtomValue,
+} from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option } from "effect";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
@@ -10,8 +16,10 @@ import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
+import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
+import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type PriceId,
   type SubscriptionOfferPresentation,
@@ -30,10 +38,23 @@ import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-st
 
 /** Exhaustive rendering state for the authenticated Subscription offer page. */
 export type SubscriptionOffersPageState =
+  | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
   | Readonly<{ _tag: "Ready"; offers: SubscriptionOffers }>
+  | Readonly<{ _tag: "Refreshing"; offers: SubscriptionOffers }>
+  | Readonly<{
+      _tag: "RefreshFailure";
+      offers: SubscriptionOffers;
+      onRetry: () => void;
+      waiting: boolean;
+    }>
   | Readonly<{ _tag: "AuthenticationRequired" }>
-  | Readonly<{ _tag: "LoadFailure" }>;
+  | Readonly<{
+      _tag: "LoadFailure";
+      boundaryFailure: boolean;
+      onRetry: () => void;
+      waiting: boolean;
+    }>;
 
 const LoadingOffers = (): JSX.Element => (
   <section className="grid gap-4 lg:grid-cols-3" aria-label="Cargando ofertas" aria-live="polite">
@@ -856,11 +877,23 @@ const AuthenticationRequired = (): JSX.Element => (
   </Alert>
 );
 
-const LoadFailure = (): JSX.Element => (
-  <Alert variant="destructive">
-    <AlertTitle>No pudimos cargar las ofertas</AlertTitle>
-    <AlertDescription>Intenta de nuevo en unos momentos.</AlertDescription>
-  </Alert>
+const LoadFailure = ({
+  boundaryFailure,
+  onRetry,
+  waiting,
+}: Readonly<{
+  boundaryFailure: boolean;
+  onRetry: () => void;
+  waiting: boolean;
+}>): JSX.Element => (
+  <CanonicalQueryRetry
+    description="Intenta de nuevo en unos momentos."
+    onRetry={onRetry}
+    retryLabel="Reintentar carga"
+    retryingLabel="Reintentando…"
+    title={boundaryFailure ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar las ofertas"}
+    waiting={waiting}
+  />
 );
 
 const SubscriptionOffersContent = ({
@@ -871,14 +904,45 @@ const SubscriptionOffersContent = ({
   gateway: Option.Option<EnrollmentGateway>;
 }>): JSX.Element => {
   switch (state._tag) {
+    case "Initial":
+      return <p className="text-muted-foreground">La consulta de ofertas aún no se ha iniciado.</p>;
     case "Loading":
       return <LoadingOffers />;
     case "Ready":
       return <ReadyOffers gateway={gateway} offers={state.offers} />;
+    case "Refreshing":
+      return (
+        <>
+          <p aria-live="polite" className="text-sm text-muted-foreground">
+            Actualizando ofertas…
+          </p>
+          <ReadyOffers gateway={gateway} offers={state.offers} />
+        </>
+      );
+    case "RefreshFailure":
+      return (
+        <>
+          <CanonicalQueryRetry
+            description="Mostramos las últimas ofertas disponibles."
+            onRetry={state.onRetry}
+            retryLabel="Reintentar actualización"
+            retryingLabel="Reintentando…"
+            title="No pudimos actualizar las ofertas"
+            waiting={state.waiting}
+          />
+          <ReadyOffers gateway={gateway} offers={state.offers} />
+        </>
+      );
     case "AuthenticationRequired":
       return <AuthenticationRequired />;
     case "LoadFailure":
-      return <LoadFailure />;
+      return (
+        <LoadFailure
+          boundaryFailure={state.boundaryFailure}
+          onRetry={state.onRetry}
+          waiting={state.waiting}
+        />
+      );
   }
 };
 
@@ -903,6 +967,22 @@ const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
 
+const readyOffersState = ({
+  offers,
+  refreshFailure,
+  refreshing,
+  onRetry,
+}: Readonly<{
+  offers: SubscriptionOffers;
+  refreshFailure: boolean;
+  refreshing: boolean;
+  onRetry: () => void;
+}>): SubscriptionOffersPageState => {
+  if (refreshFailure) return { _tag: "RefreshFailure", offers, onRetry, waiting: refreshing };
+  if (refreshing) return { _tag: "Refreshing", offers };
+  return { _tag: "Ready", offers };
+};
+
 /** Authenticated route that displays offers and invokes only the direct enrollment transport. */
 export const SubscriptionOffersFeature = (): JSX.Element => {
   const router = useRouter();
@@ -911,17 +991,44 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
   const [gateway] = useState(() => makeEnrollmentGateway(enrollmentClient));
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
-  if (AsyncResult.isFailure(result)) {
-    const state: SubscriptionOffersPageState =
-      authentication === "expired" ? { _tag: "AuthenticationRequired" } : { _tag: "LoadFailure" };
-    return <SubscriptionOffersView gateway={Option.none()} state={state} />;
+  const refresh = useAtomRefresh(offers);
+  if (authentication === "expired") {
+    return (
+      <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "AuthenticationRequired" }} />
+    );
   }
-  return AsyncResult.isSuccess(result) ? (
-    <SubscriptionOffersView
-      gateway={Option.some(gateway)}
-      state={{ _tag: "Ready", offers: result.value.data }}
-    />
-  ) : (
-    <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Loading" }} />
-  );
+  const queryState = presentCanonicalQuery(result);
+  switch (queryState._tag) {
+    case "Initial":
+      return (
+        <SubscriptionOffersView
+          gateway={Option.none()}
+          state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
+        />
+      );
+    case "Failure":
+      return (
+        <SubscriptionOffersView
+          gateway={Option.none()}
+          state={{
+            _tag: "LoadFailure",
+            boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+            onRetry: refresh,
+            waiting: queryState.waiting,
+          }}
+        />
+      );
+    case "Ready":
+      return (
+        <SubscriptionOffersView
+          gateway={Option.some(gateway)}
+          state={readyOffersState({
+            offers: queryState.value.data,
+            refreshFailure: Option.isSome(queryState.refreshFailure),
+            refreshing: queryState.waiting,
+            onRetry: refresh,
+          })}
+        />
+      );
+  }
 };

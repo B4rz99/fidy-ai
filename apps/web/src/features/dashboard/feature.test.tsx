@@ -3,7 +3,9 @@ import { BigDecimal, Cause, DateTime, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type JSX, type ReactNode, createContext, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { makeFidyClient } from "@/transport/client";
 import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
+import { DashboardRouteContent as DashboardFeatureContent } from "./feature";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
 import { type DashboardEditorError, DashboardRouteContent, DashboardViewComponent } from "./view";
 
@@ -17,6 +19,17 @@ type DashboardCategory = Extract<
 >["category"];
 
 const ChartDataContext = createContext<ReadonlyArray<Record<string, string>>>([]);
+const dashboardFeatureHarness = vi.hoisted(() => ({
+  applyEdit: vi.fn(),
+  catalogResults: new Array<unknown>(),
+  refreshCatalog: vi.fn(),
+}));
+
+vi.mock("@effect/atom-react", () => ({
+  useAtomRefresh: (): (() => void) => dashboardFeatureHarness.refreshCatalog,
+  useAtomSet: (): ReturnType<typeof vi.fn> => dashboardFeatureHarness.applyEdit,
+  useAtomValue: (): unknown => dashboardFeatureHarness.catalogResults[0],
+}));
 
 vi.mock("recharts", () => {
   const Passthrough = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
@@ -318,26 +331,109 @@ const makeView = (options: FixtureOptions): DashboardView => ({
 });
 
 const renderDashboardView = async (data: DashboardView): Promise<void> => {
-  render(<DashboardRouteContent result={AsyncResult.success({ data })} />);
+  render(
+    <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.success({ data })} />
+  );
   await screen.findByLabelText("Diseño responsivo del tablero");
 };
 
+const dashboardFeature = (
+  apiClient: ReturnType<typeof makeFidyClient>,
+  onRefresh: () => void,
+  result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>
+): JSX.Element => (
+  <DashboardFeatureContent apiClient={apiClient} onRefresh={onRefresh} result={result} />
+);
+
 afterEach(cleanup);
 
+describe("Dashboard query notices", () => {
+  it("keeps Dashboard and catalog waiting and retry ownership independent", () => {
+    dashboardFeatureHarness.applyEdit.mockReset();
+    dashboardFeatureHarness.refreshCatalog.mockReset();
+    dashboardFeatureHarness.catalogResults.splice(
+      0,
+      dashboardFeatureHarness.catalogResults.length,
+      AsyncResult.failure(Cause.fail("catalog"), { waiting: true })
+    );
+    const apiClient = makeFidyClient("https://api.test.fidyapp.com");
+    const dashboardSuccess = AsyncResult.success({ data: makeView(standardOptions) });
+    const dashboardFailure = AsyncResult.failure(Cause.fail("dashboard"), {
+      previousSuccess: Option.some(dashboardSuccess),
+    });
+    const onRefresh = vi.fn();
+    const dashboardWaiting = AsyncResult.failure(Cause.fail("dashboard"), {
+      previousSuccess: Option.some(dashboardSuccess),
+      waiting: true,
+    });
+    const { rerender } = render(dashboardFeature(apiClient, onRefresh, dashboardWaiting));
+
+    expect(screen.getByText("Actualizando tablero…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardFailure));
+    expect(screen.getByText("Cargando catálogo del tablero…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reintentando catálogo…" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización del tablero" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(dashboardFeatureHarness.refreshCatalog).not.toHaveBeenCalled();
+
+    dashboardFeatureHarness.catalogResults.splice(
+      0,
+      dashboardFeatureHarness.catalogResults.length,
+      AsyncResult.failure(Cause.fail("catalog"))
+    );
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardSuccess));
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga del catálogo" }));
+    expect(dashboardFeatureHarness.refreshCatalog).toHaveBeenCalledOnce();
+
+    dashboardFeatureHarness.catalogResults.splice(
+      0,
+      dashboardFeatureHarness.catalogResults.length,
+      AsyncResult.initial()
+    );
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardSuccess));
+    expect(screen.getByText("El catálogo del tablero aún no se ha solicitado.")).toBeVisible();
+  });
+});
+
 describe("read-only Dashboard resources", () => {
-  it("renders the loading state for an initial canonical Dashboard snapshot", () => {
-    render(<DashboardRouteContent result={AsyncResult.initial()} />);
+  it("distinguishes an idle query from its initial canonical Dashboard load", () => {
+    const { rerender } = render(
+      <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.initial()} />
+    );
+    expect(screen.getByText("El tablero aún no se ha solicitado.")).toBeVisible();
+
+    rerender(
+      <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.initial(true)} />
+    );
     expect(screen.getByLabelText("Cargando tablero")).toBeVisible();
   });
 
-  it("renders a canonical failure without exposing its cause", async () => {
+  it("renders a declared failure safely and retries the owning query", async () => {
+    const onRefresh = vi.fn();
     render(
       <DashboardRouteContent
+        onRefresh={onRefresh}
         result={AsyncResult.failure(Cause.fail(new Error("canonical failure")))}
       />
     );
     expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
     expect(screen.queryByText("canonical failure")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga del tablero" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["defect", Cause.die("private protocol details")],
+    ["interruption", Cause.interrupt(1)],
+  ])("renders a %s as a safe boundary retry state", async (_label, cause) => {
+    render(
+      <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.failure(cause)} />
+    );
+
+    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
+    expect(screen.queryByText("private protocol details")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar carga del tablero" })).toBeVisible();
   });
 });
 

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { Cause, Array as EffectArray, Exit, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { JSX } from "react";
@@ -15,6 +15,7 @@ const atomHarness: {
 } = vi.hoisted(() => ({ applyEdit: vi.fn(), catalogResults: [], editors: [] }));
 
 vi.mock("@effect/atom-react", () => ({
+  useAtomRefresh: (): (() => void) => () => undefined,
   useAtomSet: (): ReturnType<typeof vi.fn> => atomHarness.applyEdit,
   useAtomValue: (): unknown => Option.getOrThrow(EffectArray.get(atomHarness.catalogResults, 0)),
 }));
@@ -85,13 +86,10 @@ describe("Dashboard route resources", () => {
     const staleResult = AsyncResult.failure(Cause.fail("refresh"), {
       previousSuccess: Option.some(successResult),
     });
-    const onRefresh = vi.fn();
     render(
-      <DashboardRouteContent apiClient={apiClient} onRefresh={onRefresh} result={staleResult} />
+      <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={staleResult} />
     );
     expect(Option.getOrThrow(currentError()).title).toContain("se guardó");
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización del tablero" }));
-    expect(onRefresh).toHaveBeenCalledOnce();
   });
 });
 

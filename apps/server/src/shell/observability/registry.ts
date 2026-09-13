@@ -81,6 +81,7 @@ export const TelemetryRegistry = {
     "provider.request",
     "observability.accountSmoke",
     "browserLogin.redeemPairing",
+    "subscription.processBillingAttempt",
   ],
   trigger: ["api", "kapso_webhook", "queue", "schedule", "cli", "ci"],
   outcome: ["succeeded", "rejected", "failed", "interrupted"],

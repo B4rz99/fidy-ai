@@ -22,7 +22,9 @@ import {
   type RevokeAllActivePATsCommand,
 } from "./management-view";
 
-const readyPATState = (pats: ReadonlyArray<ActivePATMetadata>): ActivePATManagementState => ({
+const readyPATState = (
+  pats: ReadonlyArray<ActivePATMetadata>
+): Extract<ActivePATManagementState, { readonly _tag: "Ready" }> => ({
   _tag: "Ready",
   result: { pats },
   onRetry: () => undefined,

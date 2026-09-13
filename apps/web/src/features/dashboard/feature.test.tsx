@@ -337,6 +337,14 @@ const renderDashboardView = async (data: DashboardView): Promise<void> => {
   await screen.findByLabelText("Diseño responsivo del tablero");
 };
 
+const dashboardFeature = (
+  apiClient: ReturnType<typeof makeFidyClient>,
+  onRefresh: () => void,
+  result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>
+): JSX.Element => (
+  <DashboardFeatureContent apiClient={apiClient} onRefresh={onRefresh} result={result} />
+);
+
 afterEach(cleanup);
 
 describe("Dashboard query notices", () => {
@@ -354,14 +362,15 @@ describe("Dashboard query notices", () => {
       previousSuccess: Option.some(dashboardSuccess),
     });
     const onRefresh = vi.fn();
-    const { rerender } = render(
-      <DashboardFeatureContent
-        apiClient={apiClient}
-        onRefresh={onRefresh}
-        result={dashboardFailure}
-      />
-    );
+    const dashboardWaiting = AsyncResult.failure(Cause.fail("dashboard"), {
+      previousSuccess: Option.some(dashboardSuccess),
+      waiting: true,
+    });
+    const { rerender } = render(dashboardFeature(apiClient, onRefresh, dashboardWaiting));
 
+    expect(screen.getByText("Actualizando tablero…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardFailure));
     expect(screen.getByText("Cargando catálogo del tablero…")).toBeVisible();
     expect(screen.getByRole("button", { name: "Reintentando catálogo…" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización del tablero" }));
@@ -371,15 +380,18 @@ describe("Dashboard query notices", () => {
     dashboardFeatureHarness.catalogResults.splice(
       0,
       dashboardFeatureHarness.catalogResults.length,
+      AsyncResult.failure(Cause.fail("catalog"))
+    );
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardSuccess));
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga del catálogo" }));
+    expect(dashboardFeatureHarness.refreshCatalog).toHaveBeenCalledOnce();
+
+    dashboardFeatureHarness.catalogResults.splice(
+      0,
+      dashboardFeatureHarness.catalogResults.length,
       AsyncResult.initial()
     );
-    rerender(
-      <DashboardFeatureContent
-        apiClient={apiClient}
-        onRefresh={onRefresh}
-        result={dashboardSuccess}
-      />
-    );
+    rerender(dashboardFeature(apiClient, onRefresh, dashboardSuccess));
     expect(screen.getByText("El catálogo del tablero aún no se ha solicitado.")).toBeVisible();
   });
 });

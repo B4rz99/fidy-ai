@@ -345,8 +345,8 @@ const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => 
       query: { from: period.from, to: period.to },
     })
   );
-  const categoryState = presentCanonicalQuery(useAtomValue(categories));
-  const transactionState = presentCanonicalQuery(useAtomValue(transactions));
+  const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
+  const transactionState = useAtomValue(transactions).pipe(presentCanonicalQuery);
   const refreshCategories = useAtomRefresh(categories);
   const refreshTransactions = useAtomRefresh(transactions);
   const retry = (): void => {

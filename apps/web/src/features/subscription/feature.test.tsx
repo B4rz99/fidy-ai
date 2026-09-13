@@ -166,17 +166,38 @@ it("renders distinct idle, loading, and load-failure states", () => {
   );
   expect(screen.getByText("No pudimos cargar las ofertas")).toBeVisible();
   expect(screen.getByText("Intenta de nuevo en unos momentos.")).toBeVisible();
+
+  rerender(
+    <SubscriptionOffersView
+      gateway={Option.none()}
+      state={{
+        _tag: "LoadFailure",
+        boundaryFailure: true,
+        onRetry: () => undefined,
+        waiting: true,
+      }}
+    />
+  );
+  expect(screen.getByText("No pudimos comunicarnos con Fidy")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
 });
 
-it("preserves Subscription offers through refresh failure and retries the query", () => {
+it("preserves Subscription offers through refresh and failure and retries the query", () => {
   const onRetry = vi.fn();
-  render(
+  const { rerender } = render(
+    <SubscriptionOffersView
+      gateway={Option.some(enrollmentGateway)}
+      state={{ _tag: "Refreshing", offers }}
+    />
+  );
+  expect(screen.getByText("Actualizando ofertas…")).toBeVisible();
+
+  rerender(
     <SubscriptionOffersView
       gateway={Option.some(enrollmentGateway)}
       state={{ _tag: "RefreshFailure", offers, onRetry, waiting: false }}
     />
   );
-
   expect(screen.getByText("COP 28.900,00/mes")).toBeVisible();
   expect(screen.getByText("Mostramos las últimas ofertas disponibles.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));

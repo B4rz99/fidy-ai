@@ -7,7 +7,7 @@ import {
 } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option } from "effect";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";

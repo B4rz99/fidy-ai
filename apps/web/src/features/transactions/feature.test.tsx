@@ -1,9 +1,14 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { BigDecimal, Cause, DateTime, Option } from "effect";
+import { BigDecimal, Cause, DateTime, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionListFeature, TransactionListView, type TransactionPageState } from "./feature";
 import type { TransactionListRow } from "./presentation";
+
+const queryKey = (atom: unknown): string => {
+  if (!Predicate.isString(atom)) throw new Error("Expected a query key");
+  return atom;
+};
 
 const queryMocks = vi.hoisted(() => ({
   query: vi.fn((_group: string, operation: string) => operation),
@@ -13,10 +18,11 @@ const queryMocks = vi.hoisted(() => ({
 
 vi.mock("@effect/atom-react", () => ({
   useAtomRefresh:
-    (atom: string): (() => void) =>
-    () =>
-      queryMocks.refresh(atom),
-  useAtomValue: (atom: string): unknown => queryMocks.values.get(atom),
+    (atom: unknown): (() => void) =>
+    () => {
+      queryMocks.refresh(queryKey(atom));
+    },
+  useAtomValue: (atom: unknown): unknown => queryMocks.values.get(queryKey(atom)),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -88,6 +94,24 @@ describe("current-month Transaction list presentation", () => {
     expect(mobile.getByText("El Corral")).toBeVisible();
     expect(mobile.getByText("Gasto")).toBeVisible();
   });
+});
+
+describe("current-month Transaction list states", () => {
+  it("preserves inflow rows while refreshing", () => {
+    render(
+      <TransactionListView
+        state={{
+          _tag: "Ready",
+          period,
+          query: { _tag: "Refreshing" },
+          rows: [{ ...row, direction: "inflow", transactionTypeLabel: "Ingreso" }],
+        }}
+      />
+    );
+
+    expect(screen.getByText("Actualizando transacciones…")).toBeVisible();
+    expect(screen.getAllByText("Ingreso")).toHaveLength(2);
+  });
 
   it("renders the current-month empty state with its applied zone", () => {
     render(<TransactionListView state={{ _tag: "Empty", period, query: idleQuery }} />);
@@ -96,8 +120,8 @@ describe("current-month Transaction list presentation", () => {
     expect(screen.getByText("America/Bogota")).toBeVisible();
   });
 
-  it("renders a canonical error without exposing its cause", () => {
-    render(
+  it("renders canonical and boundary errors without exposing their causes", () => {
+    const { rerender } = render(
       <TransactionListView
         state={{ _tag: "CanonicalError", onRetry: () => undefined, waiting: false }}
       />
@@ -105,6 +129,14 @@ describe("current-month Transaction list presentation", () => {
 
     expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
     expect(screen.getByText("Intenta de nuevo en unos momentos.")).toBeVisible();
+
+    rerender(
+      <TransactionListView
+        state={{ _tag: "BoundaryError", onRetry: () => undefined, waiting: true }}
+      />
+    );
+    expect(screen.getByText("No pudimos comunicarnos con Fidy")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
   });
 });
 
@@ -128,6 +160,10 @@ describe("current-month Transaction resources", () => {
     const { rerender } = render(<TransactionListFeature />);
     expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
 
+    queryMocks.values.set("getCurrentUser", AsyncResult.failure(Cause.die("decoder defect")));
+    rerender(<TransactionListFeature />);
+    expect(screen.getByText("No pudimos comunicarnos con Fidy")).toBeVisible();
+
     queryMocks.values.set(
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
@@ -138,7 +174,14 @@ describe("current-month Transaction resources", () => {
     );
     queryMocks.values.set("listTransactions", AsyncResult.initial());
     rerender(<TransactionListFeature />);
+    expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
 
+    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+    queryMocks.values.set(
+      "listTransactions",
+      AsyncResult.failure(Cause.fail(new Error("canonical failure")))
+    );
+    rerender(<TransactionListFeature />);
     expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
   });
 });
@@ -152,15 +195,26 @@ describe("current-month Transaction refreshes", () => {
       "getCurrentUser",
       AsyncResult.failure(Cause.fail(new Error("User refresh failed")), {
         previousSuccess: Option.some(userSuccess),
+        waiting: true,
       })
     );
     queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
     queryMocks.values.set("listTransactions", AsyncResult.success({ data: [transaction] }));
 
-    render(<TransactionListFeature />);
+    const { rerender } = render(<TransactionListFeature />);
 
     expect(screen.getAllByText("El Corral")).toHaveLength(2);
+    expect(screen.getByText("Actualizando perfil de transacciones…")).toBeVisible();
     expect(screen.getByText("No pudimos actualizar tu perfil")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
+
+    queryMocks.values.set(
+      "getCurrentUser",
+      AsyncResult.failure(Cause.fail(new Error("User refresh failed")), {
+        previousSuccess: Option.some(userSuccess),
+      })
+    );
+    rerender(<TransactionListFeature />);
     fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización del perfil" }));
     expect(queryMocks.refresh).toHaveBeenCalledWith("getCurrentUser");
   });
@@ -195,9 +249,17 @@ describe("current-month Transaction resource successes", () => {
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
     );
-    queryMocks.values.set("listCategories", AsyncResult.initial(true));
-    queryMocks.values.set("listTransactions", AsyncResult.initial(true));
+    queryMocks.values.set("listCategories", AsyncResult.initial());
+    queryMocks.values.set("listTransactions", AsyncResult.initial());
     const { rerender } = render(<TransactionListFeature />);
+    expect(screen.getByText("La consulta aún no se ha iniciado.")).toBeVisible();
+
+    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+    rerender(<TransactionListFeature />);
+    expect(screen.getByText("La consulta aún no se ha iniciado.")).toBeVisible();
+
+    queryMocks.values.set("listTransactions", AsyncResult.initial(true));
+    rerender(<TransactionListFeature />);
     expect(screen.getByLabelText("Cargando transacciones")).toBeVisible();
 
     queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));

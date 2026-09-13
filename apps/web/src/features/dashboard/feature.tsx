@@ -106,12 +106,12 @@ const resolveEditorError = (
   return dashboardFailed ? Option.some(staleDashboardError) : Option.none();
 };
 
-const DashboardQueryNotice = ({
+const DashboardQueryNotice = <E,>({
   onRefresh,
   state,
 }: Readonly<{
   onRefresh: () => void;
-  state: CanonicalQueryState<Readonly<{ data: DashboardView }>>;
+  state: CanonicalQueryState<Readonly<{ data: DashboardView }>, E>;
 }>): JSX.Element => (
   <>
     {state.waiting ? (
@@ -134,12 +134,12 @@ const DashboardQueryNotice = ({
   </>
 );
 
-const CatalogQueryNotice = ({
+const CatalogQueryNotice = <E,>({
   onRefresh,
   state,
 }: Readonly<{
   onRefresh: () => void;
-  state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>>;
+  state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, E>;
 }>): JSX.Element => {
   const failed =
     state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
@@ -171,14 +171,14 @@ const CatalogQueryNotice = ({
 };
 
 /** Renders independent query feedback without decomposing canonical states into illegal booleans. */
-const DashboardQueryNotices = ({
+const DashboardQueryNotices = <CatalogError, DashboardError>({
   catalog,
   dashboard,
   onRefresh,
   refreshCatalog,
 }: Readonly<{
-  catalog: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>>;
-  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>>;
+  catalog: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, CatalogError>;
+  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, DashboardError>;
   onRefresh: () => void;
   refreshCatalog: () => void;
 }>): JSX.Element => (

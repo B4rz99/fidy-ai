@@ -12,6 +12,12 @@ import {
 } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
 import { Activity, DurableDeferred } from "effect/unstable/workflow";
+import {
+  type PersistedQueueFailureDisposition,
+  type PersistedQueueHandlerFailure,
+  type PersistedQueueHandlerOptions,
+  runPersistedQueueHandler,
+} from "~/shell/_shared/persisted-queue-handler";
 import { type PendingConsentExchangeId } from "~/core/consent/model";
 import { TranscriptText } from "~/core/transcript/model";
 import { findPendingConsentExchange, recordConsentDisclosureDelivery } from "~/shell/consent/repo";
@@ -49,6 +55,8 @@ import {
   observeConsentDisclosureResume,
   recordConsentDisclosureOutcome,
 } from "./disclosure-observation";
+import { DisabledTelemetry } from "~/shell/observability/disabled";
+import { Telemetry } from "~/shell/observability/telemetry";
 import { KapsoClient, type KapsoSendFailed, kapsoDestinationFor } from "./kapso-client";
 import type { KapsoDisclosureLifecycleEvidence } from "./kapso-webhook";
 import type { WhatsAppInboundEvent } from "./model";
@@ -446,6 +454,43 @@ const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
 /** Registers the slice-owned execution with the one configured engine. */
 export const ConsentDisclosureWorkflowLive = ConsentDisclosureWorkflow.toLayer(runDisclosure);
 
+const disclosureQueueHandlerOptions = (
+  operation: "whatsapp.disclosureStart" | "whatsapp.disclosureEvidence"
+): PersistedQueueHandlerOptions<never, never, never> => ({
+  descriptor: { component: "whatsapp", operation },
+  // Workflow execution with `discard: true` and deferred publication both have `never` error
+  // channels. Stale and permanent workflow outcomes and already-settled deferreds are successful
+  // handoffs; incompatible decoded payloads never invoke the handler. Only defects can retry here.
+  classify: (failure): PersistedQueueFailureDisposition => failure,
+  recordTerminal: () => Effect.void,
+});
+
+/**
+ * Applies the selected start or evidence operation identity to one Consent Disclosure queue attempt.
+ * Expected failures are impossible for these handoffs; unexpected defects are reported once and
+ * become the shared redacted retry marker, while pure interruption remains interruption. Telemetry
+ * is emitted when configured, otherwise the policy has no observability side effects.
+ */
+export const runDisclosureQueueHandler =
+  (operation: "whatsapp.disclosureStart" | "whatsapp.disclosureEvidence") =>
+  <A, R>(work: Effect.Effect<A, never, R>): Effect.Effect<void, PersistedQueueHandlerFailure, R> =>
+    Effect.serviceOption(Telemetry).pipe(
+      Effect.flatMap((telemetry) =>
+        Option.match(telemetry, {
+          onNone: () =>
+            work.pipe(
+              runPersistedQueueHandler(disclosureQueueHandlerOptions(operation)),
+              Effect.provideService(Telemetry, DisabledTelemetry)
+            ),
+          onSome: (service) =>
+            work.pipe(
+              runPersistedQueueHandler(disclosureQueueHandlerOptions(operation)),
+              Effect.provideService(Telemetry, service)
+            ),
+        })
+      )
+    );
+
 /** Starts one accepted workflow without occupying a consumer while it awaits provider evidence. */
 export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosure")(function* () {
   const queue = yield* consentDisclosureQueue;
@@ -453,7 +498,8 @@ export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosur
     .take((payload) =>
       ConsentDisclosureWorkflow.execute(payload, { discard: true }).pipe(
         Effect.asVoid,
-        observeConsentDisclosureQueue("start")
+        observeConsentDisclosureQueue("start"),
+        runDisclosureQueueHandler("whatsapp.disclosureStart")
       )
     )
     .pipe(
@@ -482,7 +528,10 @@ export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisc
             }),
             value: undefined,
           });
-        }).pipe(observeConsentDisclosureQueue("evidence"))
+        }).pipe(
+          observeConsentDisclosureQueue("evidence"),
+          runDisclosureQueueHandler("whatsapp.disclosureEvidence")
+        )
       )
       .pipe(
         Effect.catchTags({

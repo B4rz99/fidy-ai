@@ -34,8 +34,9 @@ export type TurnFailure = typeof TurnFailure.Type;
 /**
  * The hosted agent's internal Cluster entity, owned here so production handlers, generated clients,
  * and tests all derive from one definition. This is not a service boundary: other shell modules
- * still reach the hosted agent through `AgentService`, and the entity's lifecycle operations are
- * exported only so the runner and the wire-contract tests can address them directly.
+ * still reach the hosted agent through `AgentService`, which also hosts these operations and is
+ * their only production sender; the definition is exported so the wire-contract tests and retention
+ * address the same entity by name.
  */
 export const HostedTurns = Entity.make("HostedTurns", [
   Rpc.make("Handle", {

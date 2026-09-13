@@ -1,0 +1,36 @@
+apps/server/src/shell/observability/registry.ts
+  s_84625b5f795592::t_784f8e1e2fc487 84
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  s_84625b5f795592::t_ab5f76f68a770b 402,424-435,439
+  s_84625b5f795592::t_b58480ca708ee1 9-12
+  s_84625b5f795592::t_4138f424d9e2e4 397-401,403-416,418-423,437-438
+  s_84625b5f795592::t_1ce3ba99e87a42 1,436
+  s_84625b5f795592::t_9bcf9b3a5e0dbd 15,394-396
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_84625b5f795592::t_d30c31fac89bff 44
+  s_84625b5f795592::t_f1e0c7fb809f3a 473-474,476-483,486-494,496,498-500,502-505,513-522,525-538,540-548,550,552-554,556-559,561-573
+  s_84625b5f795592::t_d1650d378d16bc 401-406,475,539
+  s_84625b5f795592::t_618dca07999425 506-512,560
+  s_84625b5f795592::t_50a03c1499f69c 446,495,501,549,555
+  s_84625b5f795592::t_40c241d80142d4 484-485,523-524
+  s_84625b5f795592::t_53cc05d42c2edc 4-5,22,46-49,56
+  s_84625b5f795592::t_281898cdcf432e 19,443,445,448
+  s_84625b5f795592::t_9b3d7953e96fbe 436-442,444,447,449-451
+  s_84625b5f795592::t_6af5af8088b30c 497,551
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "436e20fcaf03b14fe1f920fcadb428a81e4ed340",
+  "prompts": {},
+  "sessions": {
+    "s_84625b5f795592": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09c00-6f40-73b9-86d5-f373b5e9166b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -522,7 +522,7 @@ const registerClusterTopologyScenarios = (): void => {
           yield* Effect.promise(() =>
             survivor.runPromise(
               clusterTopologyProbeWorkflow
-                .execute(probe.payload, { discard: true })
+                .execute(probe.payload)
                 .pipe(Effect.timeout("2 seconds"), Effect.exit)
             )
           );

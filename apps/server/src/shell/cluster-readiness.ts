@@ -41,9 +41,11 @@ export const cacheReadinessProbe = (probes: {
   Effect.cachedWithTTL(Effect.all(probes), readinessProbeCacheTtl);
 
 /** Converts one optional Cluster ability into a deadline-bounded readiness boolean. */
-export const runReadinessAbility = <A, E, R>(
+type RunReadinessAbility = <A, E, R>(
   probe: Option.Option<Effect.Effect<A, E, R>>
-): Effect.Effect<boolean, never, R> =>
+) => Effect.Effect<boolean, never, R>;
+
+export const runReadinessAbility: RunReadinessAbility = (probe) =>
   Option.match(probe, {
     onNone: () => Effect.succeed(false),
     onSome: (effect) =>

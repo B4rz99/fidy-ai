@@ -1,0 +1,21 @@
+docs/research/server-source-architecture-patterns.md
+  s_6ac4a8fa2cd6ff::t_9063add3baf888 164-172,225-236
+  s_6ac4a8fa2cd6ff::t_ab0db6adc510a6 1-163,173-179,181-207,209-218,220-224,237-268
+  s_6ac4a8fa2cd6ff::t_9ceb466f0db73c 180,208,219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1cb767f6aebcc5f6c2818bedb9bc2d5ab33a6b22",
+  "prompts": {},
+  "sessions": {
+    "s_6ac4a8fa2cd6ff": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09d59-8f4f-762b-b12d-8ba8e26d41cf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

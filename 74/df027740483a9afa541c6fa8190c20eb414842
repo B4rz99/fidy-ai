@@ -1,0 +1,235 @@
+apps/server/src/shell/_shared/persisted-queue-handler.test.ts
+  s_e1f10896c22e8f::t_b07578145193ea 10,22-23,25,72
+  s_e1f10896c22e8f::t_f1ba9b0a240be2 29,31,66,68,70,74,86,89
+  s_e1f10896c22e8f::t_ef79795f9b1121 45-55
+  s_e1f10896c22e8f::t_b1e29615d9bb45 93,95-105,108-112
+  s_e1f10896c22e8f::t_85600038ce4045 33,35-44,56-62
+  s_e1f10896c22e8f::t_6ab652bcf64ca3 76
+  s_e1f10896c22e8f::t_c109b1e2db1976 11-13
+  s_e1f10896c22e8f::t_0d0e79f621e4fa 77-79
+  s_e1f10896c22e8f::t_912b687f2bd457 2,34,120-121,124-129,133-138
+  s_e1f10896c22e8f::t_cfa6bb84856a4c 32,71,75,119
+  s_e1f10896c22e8f::t_1f9c8e87f325ae 27,113,117,139
+apps/server/src/shell/queue-compatibility/contracts/email-replacement-delivery.ts
+  s_e1f10896c22e8f::t_672f13e3ca523f 8
+  s_e1f10896c22e8f::t_bb92db3f063cfa 12
+  s_e1f10896c22e8f::t_cde1d73aec148e 1-7,9-11,13-15
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_e1f10896c22e8f::t_85d1883a9f6b75 37,1130-1132,1137-1139
+  s_e1f10896c22e8f::t_95cdb391985c75 1133-1136,1140-1148
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_e1f10896c22e8f::t_0414744359cca0 46,124,736,801-803,852-854
+  s_e1f10896c22e8f::t_dae1d812e67448 612,661
+  s_e1f10896c22e8f::t_95cdb391985c75 457-465,735,804-808
+  s_e1f10896c22e8f::t_b187348f2ac111 466,506
+  s_e1f10896c22e8f::t_34704d787fb84b 496-505,508
+apps/server/src/shell/queue-compatibility/contracts/subscription-billing-attempt.ts
+  s_e1f10896c22e8f::t_b12d9c891f3d07 12
+  s_e1f10896c22e8f::t_d277b86544fe57 8
+  s_e1f10896c22e8f::t_2bb8266b793021 3-5
+  s_e1f10896c22e8f::t_02365024074831 1-2,6-7,9-11,13-15
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_e1f10896c22e8f::t_a9c44232db2c29 44,47,149-156,162-169,224-227,241-246,286-289,316-319,779
+  s_e1f10896c22e8f::t_2bbe013db55d17 352-361,363-364
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_e1f10896c22e8f::t_6f926027a21e33 5,64-67,78-80
+  s_e1f10896c22e8f::t_f2e61889ba1e92 63,68,70-71
+apps/server/src/shell/channels/whatsapp/inbound-execution.ts
+  s_e1f10896c22e8f::t_028e02879e6147 3,22,25
+apps/server/src/shell/onboarding/delivery-workflow.test.ts
+  s_e1f10896c22e8f::t_f8b711d6af7616 10,62,64
+apps/server/src/shell/queue-compatibility/contracts/browser-pairing-email-delivery.ts
+  s_e1f10896c22e8f::t_09dbf42e34a840 8
+  s_e1f10896c22e8f::t_4ed22ab8b8d558 12
+  s_e1f10896c22e8f::t_dd65e265e93255 1-7,9-11,13-15
+apps/server/src/shell/email-authentication/replacement-protocol.ts
+  s_e1f10896c22e8f::t_7afdcca1d0483a 4,65,73
+  s_e1f10896c22e8f::t_0d5858b0db0939 10,60,63-64,66,68,71-72,74
+apps/server/src/shell/queue-compatibility/contracts/forwarded-email-ingestion.ts
+  s_e1f10896c22e8f::t_ffdf8069cf1c49 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_d74437f4dc1532 12
+  s_e1f10896c22e8f::t_b67337c93b0f4e 8
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  s_e1f10896c22e8f::t_c3a6d24f99a733 5,41,44,52,55
+apps/server/ARCHITECTURE.md
+  s_e1f10896c22e8f::t_bf476f65955068 167-168,174
+  s_e1f10896c22e8f::t_1d66d0d37a35fc 172-173
+  s_e1f10896c22e8f::t_f51b0ed99215e1 169-171
+  s_e1f10896c22e8f::t_dc587e23ed347b 165-166,175
+apps/server/src/shell/queue-compatibility/contracts/whatsapp-inbound-turn.ts
+  s_e1f10896c22e8f::t_24bd907cb98398 12
+  s_e1f10896c22e8f::t_0fe5b5e19df38d 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_21e09e93a411ae 8
+apps/server/src/shell/testing/durable-compatibility.ts
+  s_e1f10896c22e8f::t_59582c930b3e3a 327
+.oxlintrc.json
+  s_e1f10896c22e8f::t_760c68107f250f 37
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  s_e1f10896c22e8f::t_0068d0a9546f22 399,404-407
+  s_e1f10896c22e8f::t_6a2f62d6a43797 9-11,395-398,400-403,417
+  s_e1f10896c22e8f::t_f4e2a7589072bb 63,66
+apps/server/src/shell/durable-queue-health.test.ts
+  s_e1f10896c22e8f::t_ec4225faf1f940 36,198
+  s_e1f10896c22e8f::t_cf923f61e1864d 35,42
+apps/server/src/shell/durable-queue-health.ts
+  s_e1f10896c22e8f::t_e153da0cc26f8e 22,55,64
+  s_e1f10896c22e8f::t_de686477ba1943 194
+  s_e1f10896c22e8f::t_2bdea03390c9c9 17,193,195,200,286,291
+apps/server/src/shell/queue-compatibility/contracts/whatsapp-consent-disclosure-evidence.ts
+  s_e1f10896c22e8f::t_221d46ce25d74c 8
+  s_e1f10896c22e8f::t_4549ea417fedd6 12
+  s_e1f10896c22e8f::t_fd0ca86aaf98e7 1-7,9-11,13-15
+apps/server/scripts/check-lint-guards.ts
+  s_e1f10896c22e8f::t_eaf6ebd216cc2b 50-51,53
+  s_e1f10896c22e8f::t_6a58f2a079776d 35-38
+  s_e1f10896c22e8f::t_f613b0dd988497 32
+  s_e1f10896c22e8f::t_6e430f9221d2be 29,34,39,44,49
+  s_e1f10896c22e8f::t_413dd5ad27b5a5 52
+  s_e1f10896c22e8f::t_0391a26c9307c4 40-43
+  s_e1f10896c22e8f::t_7c0fc16b3e1e61 45-48
+  s_e1f10896c22e8f::t_f6d5f3754a38af 30-31,33
+apps/server/src/shell/queue-compatibility/contracts/browser-pairing-email-start.ts
+  s_e1f10896c22e8f::t_06cad83ad9c5b5 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_0663971758ca7e 8
+  s_e1f10896c22e8f::t_74914949764017 12
+apps/server/src/shell/http.test.ts
+  s_e1f10896c22e8f::t_b32e86e65d6a95 6
+apps/server/src/shell/queue-compatibility/contracts/email-replacement-expiry.ts
+  s_e1f10896c22e8f::t_aa2efd17fd6e9e 12
+  s_e1f10896c22e8f::t_98ddd8598d0540 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_9a9b6886cc0806 8
+apps/server/src/shell/durable-queue-policy.ts
+  s_e1f10896c22e8f::t_25814d6d4d1367 34-38
+apps/server/src/shell/queue-compatibility/contracts/onboarding-email-delivery.ts
+  s_e1f10896c22e8f::t_f23d181b3075c5 12
+  s_e1f10896c22e8f::t_3975ada748a953 8
+  s_e1f10896c22e8f::t_a7ac5a65c22dc6 1-7,9-11,13-15
+apps/server/src/shell/ingestion/worker.ts
+  s_e1f10896c22e8f::t_bef74ab939c3ff 359,364-368
+  s_e1f10896c22e8f::t_57d42dfd43833a 29-32,360-363,369,409,477
+  s_e1f10896c22e8f::t_d3dfa284fb949b 103,106
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_e1f10896c22e8f::t_05939f02ff817b 431,434,438,453,456,459
+  s_e1f10896c22e8f::t_7071c5845cb363 378
+  s_e1f10896c22e8f::t_980a8191baabf1 366-369,373-376
+  s_e1f10896c22e8f::t_929ccfc38ea6ce 14-16
+  s_e1f10896c22e8f::t_d69afbf55b3e4b 13,365,370-372,386,404,415,430,432-433,435,437,439
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  s_e1f10896c22e8f::t_5fe7a1f7aad5b2 164-165
+  s_e1f10896c22e8f::t_95cdb391985c75 217-219
+  s_e1f10896c22e8f::t_963ea2f5fd8db0 14,177,199-204,215-216,220
+  s_e1f10896c22e8f::t_49914b4f96500a 178-183,190
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  s_e1f10896c22e8f::t_36952fce207ba9 11,25,28-31,59,62-65,79,82-85
+apps/server/src/shell/queue-compatibility/queue-compatibility.test.ts
+  s_e1f10896c22e8f::t_048075e740d62e 15
+  s_e1f10896c22e8f::t_79d79bcb891ce3 45-46
+  s_e1f10896c22e8f::t_4fc68c69ba35bc 20-26,57
+  s_e1f10896c22e8f::t_4b27a8501f6df0 69-70
+  s_e1f10896c22e8f::t_a7e61b89348834 13,37,40-43
+  s_e1f10896c22e8f::t_308c7545e4b5ce 9,39,44
+  s_e1f10896c22e8f::t_0a39b8144116e8 1-2
+apps/server/src/shell/queue-compatibility/contracts.ts
+  s_e1f10896c22e8f::t_13b2a953ca380b 49-50
+  s_e1f10896c22e8f::t_3d7ef902897f24 39
+  s_e1f10896c22e8f::t_eb50aeaff8db8b 21,28
+  s_e1f10896c22e8f::t_43bef00c1dbf63 4-6,8,11-12,29,41,45-46,48,55-60
+  s_e1f10896c22e8f::t_1d530595e0d740 22-27,37-38,47
+  s_e1f10896c22e8f::t_8e7b5237fa3963 36,52
+  s_e1f10896c22e8f::t_4fbfa17b2b1f82 2,35
+  s_e1f10896c22e8f::t_a017a07cb3a0a9 42-44
+apps/server/src/shell/queue-compatibility/contracts/browser-pairing-email-expiry.ts
+  s_e1f10896c22e8f::t_c53d7c1c6af594 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_b16818c43dcea1 12
+  s_e1f10896c22e8f::t_ca74b2bf77d1e8 8
+apps/server/src/shell/queue-compatibility/contracts/statement-ingestion.ts
+  s_e1f10896c22e8f::t_34c54cf463f034 12
+  s_e1f10896c22e8f::t_cb254e8fc27a8d 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_96eee139aaf962 8
+scripts/oxlint/effect-guards.js
+  s_e1f10896c22e8f::t_a688d4f76c16a3 817,828-829,835-844,886-887
+  s_e1f10896c22e8f::t_5eae982fbf0276 791-800,932-935
+  s_e1f10896c22e8f::t_8090710604881d 949-967
+  s_e1f10896c22e8f::t_3c50f8d7b7e691 981
+  s_e1f10896c22e8f::t_ea91eb8e7fdadf 801-811,824,830,833,852-854
+  s_e1f10896c22e8f::t_8f14330ab8d167 820,823,892-893,899-901,904-906
+  s_e1f10896c22e8f::t_10a4629acd66e0 914-915
+  s_e1f10896c22e8f::t_10fce42edf62d5 907-913,931,936-939,942
+  s_e1f10896c22e8f::t_e81096557a567e 778-790,888-891,894-896
+  s_e1f10896c22e8f::t_a49d08c2dbc244 812,832,834
+  s_e1f10896c22e8f::t_a2ba6e17fafe7d 847-851,855-859
+  s_e1f10896c22e8f::t_0181c4381846fc 745-748,750,757,769
+  s_e1f10896c22e8f::t_eb8b5f1405d0ae 752-756,758-768,770-777,927
+  s_e1f10896c22e8f::t_5ad376b85d2e9f 816,818-819,821-822,825-827
+  s_e1f10896c22e8f::t_a23fbfe8ebf69a 813-815,831,845-846,860-885
+  s_e1f10896c22e8f::t_8fee9877263c40 916-926,928-930
+  s_e1f10896c22e8f::t_c97e7e661953f4 749,751,897-898,902-903,940-941,943-948
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_e1f10896c22e8f::t_95cdb391985c75 468-473,489-503
+  s_e1f10896c22e8f::t_82d9c8f7f13d94 15,453,455-458,474,504
+  s_e1f10896c22e8f::t_ce90cfdc3a89f8 16
+  s_e1f10896c22e8f::t_ba7c09f9c57e31 42-43
+  s_e1f10896c22e8f::t_03e14f4ce2c7d1 454,459,462
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  s_e1f10896c22e8f::t_8f92a541355778 61,64
+  s_e1f10896c22e8f::t_a514b54b3db0cc 90-95,101
+  s_e1f10896c22e8f::t_b83b512ac865b6 13-15,89,106,122,221-224,295-298
+apps/server/src/shell/_shared/persisted-queue-handler.ts
+  s_e1f10896c22e8f::t_9a340725d87251 25-26
+  s_e1f10896c22e8f::t_43db6ddb2cb98c 1
+apps/server/src/shell/_shared/persisted-queue.ts
+  s_e1f10896c22e8f::t_a0b154d1b60052 288-292,294-297,299,304-307,311-314,328-332,336
+  s_e1f10896c22e8f::t_f632ebdd8876b2 244-258,293,298,300-303,344
+  s_e1f10896c22e8f::t_4dda24f286c55b 277
+  s_e1f10896c22e8f::t_2c853fc78a8417 3,10,15,236-243,282,308,310,315,323-324,327,334,337,341,343,345-346,354-356
+  s_e1f10896c22e8f::t_4d9120a4a0c9ff 286
+  s_e1f10896c22e8f::t_6c37a5e350d88e 1-2,4,11-12,14,16-48,50-56,72-235
+  s_e1f10896c22e8f::t_321a819c291a09 284-285
+  s_e1f10896c22e8f::t_54decbfc770ea2 13
+  s_e1f10896c22e8f::t_8f0ddefad978f0 283
+  s_e1f10896c22e8f::t_feaaf40dd121f8 309
+  s_e1f10896c22e8f::t_cd2bca95fc3e1d 333
+  s_e1f10896c22e8f::t_7d34a9fde8daf2 325-326
+  s_e1f10896c22e8f::t_5267e666107620 316
+  s_e1f10896c22e8f::t_69936c126ab513 342
+  s_e1f10896c22e8f::t_604551603655a1 259,281
+  s_e1f10896c22e8f::t_dd8dd0a2328082 287,335
+  s_e1f10896c22e8f::t_253d3646a48c08 5-9
+  s_e1f10896c22e8f::t_a920a4587f5bef 272
+  s_e1f10896c22e8f::t_a6887fe1eb2199 317-322,338-340,357
+  s_e1f10896c22e8f::t_50cb68d825ffe4 260-271,347-353
+  s_e1f10896c22e8f::t_7144cb939390ca 49,57-71
+  s_e1f10896c22e8f::t_ff756209808290 273-276,278-280
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  s_e1f10896c22e8f::t_95cdb391985c75 689
+  s_e1f10896c22e8f::t_5e2ea4840865aa 27,29,563,565-570,572,630-631,639,646-648,650-651
+apps/server/src/shell/queue-compatibility/queue-compatibility.integration.test.ts
+  s_e1f10896c22e8f::t_d98b3404552d26 91-93,123-125,224,234
+  s_e1f10896c22e8f::t_394d60071a48ea 145-147
+  s_e1f10896c22e8f::t_bacf49af3acd0b 7,84-90
+apps/server/src/shell/ingestion/forwarded-email-execution.ts
+  s_e1f10896c22e8f::t_703dff42930698 5,32,35
+apps/server/src/shell/queue-compatibility/contracts/whatsapp-consent-disclosure.ts
+  s_e1f10896c22e8f::t_d3f17d65cb04e8 12
+  s_e1f10896c22e8f::t_e95cf40093e6fa 1-7,9-11,13-15
+  s_e1f10896c22e8f::t_083bede927e4a8 8
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_e1f10896c22e8f::t_ec7c1fae8054ba 34
+  s_e1f10896c22e8f::t_b2bc1c2ecce0b3 186-188,223,264-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "74df027740483a9afa541c6fa8190c20eb414842",
+  "prompts": {},
+  "sessions": {
+    "s_e1f10896c22e8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09428-abba-70d3-aa68-ef54f9642da1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

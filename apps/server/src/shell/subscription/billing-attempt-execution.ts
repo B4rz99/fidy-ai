@@ -1,5 +1,4 @@
 import { Cause, DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import type { SqlClient } from "effect/unstable/sql";
 import { Activity, DurableClock, Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { UserId } from "~/core/identity/reference";
@@ -7,12 +6,11 @@ import { amountInCentsForBilling } from "~/core/subscription/billing-rules";
 import { BillingAttemptId, type WompiEnvironment } from "~/core/subscription/model";
 import { BillingEmail } from "~/core/subscription/enrollment-model";
 import {
-  type PersistedQueueHandlerFailure,
-  runPersistedQueueHandler,
-} from "~/shell/_shared/persisted-queue-handler";
+  type ApplicationPersistedQueueHandlerPolicy,
+  makePersistedQueue,
+} from "~/shell/_shared/persisted-queue";
 import { onboardingConsentStandingInScope, withSubjectLockInScope } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import type { Telemetry } from "~/shell/observability/telemetry";
 import {
   type ArmedCharge,
   type BillingAttemptRecord,
@@ -62,9 +60,10 @@ export const BillingAttemptReconciliationWorkflow = Workflow.make("BillingAttemp
 });
 
 /** Transactional acceptance handoff; one queue item per BillingAttempt identity. */
-export const billingAttemptQueue = PersistedQueue.make({
+export const billingAttemptQueue = makePersistedQueue({
   name: billingAttemptQueueName,
   schema: BillingAttemptReconciliationPayload,
+  descriptor: { component: "api", operation: "subscription.processBillingAttempt" },
 });
 
 /** Stable native queue key from one reconciliation payload. */
@@ -393,19 +392,19 @@ export const BillingAttemptReconciliationWorkflowLive =
 
 const handleBillingAttemptQueuePayload = (
   payload: BillingAttemptReconciliationPayload
-): Effect.Effect<void, PersistedQueueHandlerFailure, Telemetry | WorkflowEngine.WorkflowEngine> =>
-  BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(
-    Effect.asVoid,
-    runPersistedQueueHandler({
-      descriptor: {
-        component: "api",
-        operation: "subscription.processBillingAttempt",
-      },
-      // Submission has no typed failure: every billing disposition is an explicit workflow success.
-      classify: (failure: never) => failure,
-      recordTerminal: () => Effect.void,
-    })
-  );
+): Effect.Effect<void, never, WorkflowEngine.WorkflowEngine> =>
+  BillingAttemptReconciliationWorkflow.execute(payload, { discard: true }).pipe(Effect.asVoid);
+
+/** Submission has no typed failure: every billing disposition is an explicit workflow success. */
+export const billingAttemptQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  BillingAttemptReconciliationPayload,
+  never,
+  never,
+  never
+> = {
+  classify: (failure) => failure,
+  recordTerminal: () => Effect.void,
+};
 
 /**
  * Starts the next transactionally accepted reconciliation without holding its queue lease for the
@@ -415,7 +414,7 @@ const handleBillingAttemptQueuePayload = (
 export const processNextBillingAttempt = Effect.fn("Subscription.processNextBillingAttempt")(
   function* () {
     const queue = yield* billingAttemptQueue;
-    yield* queue.take(handleBillingAttemptQueuePayload, {
+    yield* queue.take(handleBillingAttemptQueuePayload, billingAttemptQueueHandlerPolicy, {
       maxAttempts: maximumBillingAttemptQueueAttempts,
     });
   }

@@ -1,12 +1,13 @@
 import { type DateTime, Effect, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { Workflow } from "effect/unstable/workflow";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import {
   EmailDeliveryIntentId,
   EmailReplacementWorkflowId,
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
+import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
 
 /** Persisted routing facts only; an intent identifier never grants another User's authority. */
 export const ReplacementDeliveryPayload = Schema.Struct({
@@ -56,13 +57,21 @@ export const ReplacementExpiryWorkflow = Workflow.make("EmailReplacementExpiry",
 export const replacementDeliveryQueueName = "email-replacement-delivery";
 export const replacementExpiryQueueName = "email-replacement-expiry";
 
-export const replacementDeliveryQueue = PersistedQueue.make({
+export const replacementDeliveryQueue = makePersistedQueue({
   name: replacementDeliveryQueueName,
   schema: ReplacementDeliveryPayload,
+  descriptor: {
+    component: "api",
+    operation: CanonicalOperationId.make("emailAuthentication.requestEmailReplacement"),
+  },
 });
-export const replacementExpiryQueue = PersistedQueue.make({
+export const replacementExpiryQueue = makePersistedQueue({
   name: replacementExpiryQueueName,
   schema: ReplacementExpiryPayload,
+  descriptor: {
+    component: "api",
+    operation: CanonicalOperationId.make("emailAuthentication.requestEmailReplacement"),
+  },
 });
 
 /** Stable native queue keys from one offered payload; payloads keep the routing identities. */

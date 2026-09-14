@@ -18,7 +18,6 @@ import {
   durableQueueLockExpirationSeconds,
   durableQueueLockRefreshSeconds,
   durableQueueLongestHandlerPauseSeconds,
-  durableQueueNames,
   durableQueueNativeDecodeFailurePrefix,
   durableQueueNativeJsonFailurePrefix,
   hasDurableQueueAttention,
@@ -34,15 +33,6 @@ const healthySignals: DurableQueueSignals = {
   exhaustedCount: 0,
   decodeFailureCount: 0,
 };
-
-it("declares one stable queue name per production queue within the Effect column bound", () => {
-  expect(durableQueueNames.length).toBe(12);
-  expect(new Set(durableQueueNames).size).toBe(durableQueueNames.length);
-  for (const name of durableQueueNames) {
-    expect(name).toMatch(/^[a-z0-9-]+$/u);
-    expect(name.length).toBeLessThanOrEqual(100);
-  }
-});
 
 it("keeps owner-specific retry budgets explicit beside the native ceiling", () => {
   expect(durableQueueDefaultMaxAttempts).toBe(10);

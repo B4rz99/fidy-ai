@@ -11,7 +11,7 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import type { PersistedQueue } from "effect/unstable/persistence";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/_shared/persisted-queue";
 import { type SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import {
@@ -164,7 +164,7 @@ type ForwardedEmailProcessorDependencies =
   | Crypto.Crypto
   | SqlClient.SqlClient
   | ResendReceivingClient
-  | PersistedQueue.PersistedQueueFactory
+  | ApplicationPersistedQueueRequirement
   | WorkflowEngine.WorkflowEngine
   | Telemetry;
 

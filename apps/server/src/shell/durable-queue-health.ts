@@ -14,16 +14,16 @@ import {
   type ScheduledWorkDescriptor,
   runScheduledWork,
 } from "~/shell/observability/scheduled-work";
+import { applicationPersistedQueueNames } from "~/shell/_shared/persisted-queue";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { SupportAccessVerifier } from "~/shell/recovery/access";
 import {
   DurableQueueAttention,
-  type DurableQueueName,
+  DurableQueueName,
   classifyDurableQueueAttention,
   durableQueueDefaultMaxAttempts,
   durableQueueLeaseStallSeconds,
   durableQueueLockExpirationSeconds,
-  durableQueueNames,
   durableQueueNativeDecodeFailurePrefix,
   durableQueueNativeJsonFailurePrefix,
   durableQueueSchemaIncompatibleMarker,
@@ -52,7 +52,7 @@ const DurableQueueHealthCounts = Schema.Struct(durableQueueHealthCountFields);
 
 /** One production queue's bounded health signals. */
 export const DurableQueueHealth = Schema.Struct({
-  queueName: Schema.Literals(durableQueueNames),
+  queueName: DurableQueueName,
   ...durableQueueHealthCountFields,
 });
 export type DurableQueueHealth = typeof DurableQueueHealth.Type;
@@ -61,7 +61,7 @@ export type DurableQueueHealth = typeof DurableQueueHealth.Type;
 export const DurableQueueReadiness = Schema.Struct({
   queues: Schema.Array(
     Schema.Struct({
-      queueName: Schema.Literals(durableQueueNames),
+      queueName: DurableQueueName,
       ...durableQueueHealthCountFields,
       attention: DurableQueueAttention,
     })
@@ -190,12 +190,14 @@ export const getDurableQueueHealthFor = (
 ): Effect.Effect<ReadonlyArray<DurableQueueHealth>, never, SqlClient.SqlClient> =>
   Effect.forEach(queueNames, readDurableQueueHealth);
 
-/** Reads bounded health counts for every stable production queue name. */
+const readApplicationQueueNames = Effect.sync(applicationPersistedQueueNames);
+
+/** Reads bounded health counts for every application queue constructed in this process. */
 export const getDurableQueueHealth: Effect.Effect<
   ReadonlyArray<DurableQueueHealth>,
   never,
   SqlClient.SqlClient
-> = getDurableQueueHealthFor(durableQueueNames);
+> = readApplicationQueueNames.pipe(Effect.flatMap(getDurableQueueHealthFor));
 
 /** The exact bounded annotations a queue-attention warning may carry. */
 export type DurableQueueAttentionLogAnnotations = Readonly<{
@@ -281,12 +283,12 @@ export const observeDurableQueueHealthFor = Effect.fn("DurableQueue.observeHealt
   return queues;
 });
 
-/** Observes every stable production queue name. */
+/** Observes every application queue constructed in this process. */
 export const observeDurableQueueHealth: Effect.Effect<
   ReadonlyArray<DurableQueueHealth>,
   never,
   Telemetry | SqlClient.SqlClient
-> = observeDurableQueueHealthFor(durableQueueNames);
+> = readApplicationQueueNames.pipe(Effect.flatMap(observeDurableQueueHealthFor));
 
 /** Projects health signals into the public readiness contract. */
 export const projectDurableQueueReadiness = (

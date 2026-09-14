@@ -10,10 +10,10 @@ import {
   EmailVerificationPublicCode,
 } from "~/core/email-authentication/model";
 import { proofExpiry } from "~/core/email-authentication/rules";
-import {
-  type PersistedQueueFailureDisposition,
-  type PersistedQueueTerminalReason,
-  runPersistedQueueHandler,
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
+import type {
+  PersistedQueueFailureDisposition,
+  PersistedQueueTerminalReason,
 } from "~/shell/_shared/persisted-queue-handler";
 import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/service";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
@@ -362,23 +362,20 @@ const deliveryTerminalReason: Readonly<
   uncertain: "domain-rejected",
 };
 
-const pairingQueueHandler = (
-  operation:
-    | "emailAuthentication.processPairingStart"
-    | "emailAuthentication.processPairingDelivery"
-    | "emailAuthentication.processPairingExpiry"
-): ReturnType<typeof runPersistedQueueHandler<PairingQueueFailure, never, never>> =>
-  runPersistedQueueHandler<PairingQueueFailure, never, never>({
-    descriptor: { component: "api", operation },
-    classify: classifyPairingQueueFailure,
-    // The work establishes its idempotent domain disposition before exposing the terminal signal.
-    recordTerminal: () => Effect.void,
-  });
+/** Pairing work settles its domain disposition before exposing a terminal queue signal. */
+export const pairingQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolicy<
+  | { readonly requestId: BrowserPairingEmailStartRequestId }
+  | PairingDeliveryPayload
+  | PairingExpiryPayload,
+  PairingQueueFailure,
+  never,
+  never
+> = {
+  classify: classifyPairingQueueFailure,
+  recordTerminal: () => Effect.void,
+};
 
-// PersistedQueue policy already observes bounded attempts, latency, and continuation pressure. These
-// wrappers add no safe operation-specific dimensions, so only their unexpected defects are observed.
-
-/** Processes one start item while exposing only shared redacted queue failure markers. */
+/** Processes one start item; the queue adapter owns failure classification and redaction. */
 export const processPairingStartQueueItem = Effect.fn(function* (payload: {
   readonly requestId: BrowserPairingEmailStartRequestId;
 }) {
@@ -386,8 +383,7 @@ export const processPairingStartQueueItem = Effect.fn(function* (payload: {
     Effect.flatMap((outcome) =>
       outcome === "processed" ? Effect.void : permanentPairingOutcome("identity-rejected")
     ),
-    exposeTransientDatabaseFailure,
-    pairingQueueHandler("emailAuthentication.processPairingStart")
+    exposeTransientDatabaseFailure
   );
 });
 
@@ -405,8 +401,7 @@ export const processPairingDeliveryQueueItem = Effect.fn(function* (
         ? Effect.void
         : permanentPairingOutcome(deliveryTerminalReason[result.outcome])
     ),
-    exposeTransientDatabaseFailure,
-    pairingQueueHandler("emailAuthentication.processPairingDelivery")
+    exposeTransientDatabaseFailure
   );
 });
 
@@ -417,8 +412,7 @@ export const processPairingDeliveryQueueItem = Effect.fn(function* (
  */
 export const processPairingExpiryQueueItem = Effect.fn(function* (payload: PairingExpiryPayload) {
   yield* BrowserPairingEmailExpiryWorkflow.execute(payload, { discard: true }).pipe(
-    exposeTransientDatabaseFailure,
-    pairingQueueHandler("emailAuthentication.processPairingExpiry")
+    exposeTransientDatabaseFailure
   );
 });
 
@@ -433,10 +427,16 @@ export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
     const starts = yield* pairingStartQueue;
     const deliveries = yield* pairingDeliveryQueue;
     const expiries = yield* pairingExpiryQueue;
-    yield* starts.take(processPairingStartQueueItem).pipe(Effect.forever, Effect.forkScoped);
-    yield* deliveries.take(processPairingDeliveryQueueItem).pipe(Effect.forever, Effect.forkScoped);
+    yield* starts
+      .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+      .pipe(Effect.forever, Effect.forkScoped);
+    yield* deliveries
+      .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+      .pipe(Effect.forever, Effect.forkScoped);
     // Expiry is submitted without occupying a worker until the ten-minute deadline.
-    yield* expiries.take(processPairingExpiryQueueItem).pipe(Effect.forever, Effect.forkScoped);
+    yield* expiries
+      .take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
+      .pipe(Effect.forever, Effect.forkScoped);
   })
 );
 
@@ -450,13 +450,13 @@ export const processNextBackgroundStep = Effect.fn("EmailAuthentication.processN
     const deliveries = yield* pairingDeliveryQueue;
     const expiries = yield* pairingExpiryQueue;
     const started = yield* starts
-      .take(processPairingStartQueueItem)
+      .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     const delivered = yield* deliveries
-      .take(processPairingDeliveryQueueItem)
+      .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
     const expired = yield* expiries
-      .take(processPairingExpiryQueueItem)
+      .take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     return {
       _tag:

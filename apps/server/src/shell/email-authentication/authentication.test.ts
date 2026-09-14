@@ -34,6 +34,7 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   BrowserPairingEmailDeliveryWorkerLive,
   BrowserPairingEmailWorkflowLive,
+  pairingQueueHandlerPolicy,
   processPairingDeliveryQueueItem,
   processPairingStartQueueItem,
 } from "./authentication-delivery-worker";
@@ -1126,21 +1127,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const pairing = yield* startPairing;
         yield* requestEmail(pairing, knownEmail);
-        yield* (yield* pairingStartQueue).take(processPairingStartQueueItem).pipe(
-          // Finite start-consumer test entrypoint.
-          // @effect-diagnostics-next-line strictEffectProvide:off
-          Effect.provide(TelemetryDisabled)
-        );
-        yield* (yield* pairingDeliveryQueue).take(processPairingDeliveryQueueItem).pipe(
-          // This test expires the workflow explicitly below, so it drives only the start and
-          // delivery consumer gateways and leaves the queued expiry unclaimed.
-          // @effect-diagnostics-next-line strictEffectProvide:off
-          Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled)),
-          Effect.provideService(
-            EmailDeliveryPort,
-            EmailDeliveryPort.of({ send: () => Effect.void })
-          )
-        );
+        yield* (yield* pairingStartQueue)
+          .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+          .pipe(
+            // Finite start-consumer test entrypoint.
+            // @effect-diagnostics-next-line strictEffectProvide:off
+            Effect.provide(TelemetryDisabled)
+          );
+        yield* (yield* pairingDeliveryQueue)
+          .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+          .pipe(
+            // This test expires the workflow explicitly below, so it drives only the start and
+            // delivery consumer gateways and leaves the queued expiry unclaimed.
+            // @effect-diagnostics-next-line strictEffectProvide:off
+            Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled)),
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({ send: () => Effect.void })
+            )
+          );
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_pairing_email_workflows SET started_at = now() - interval '2 hours',

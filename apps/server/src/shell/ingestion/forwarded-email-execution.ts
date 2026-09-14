@@ -1,8 +1,8 @@
 import { Crypto, Effect, Encoding, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { Workflow } from "effect/unstable/workflow";
 import { UserId } from "~/core/identity/reference";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
 
 /** Identifier-only request retained for one accepted provider receipt. */
 export const ForwardedEmailWorkflowPayload = Schema.Struct({
@@ -29,9 +29,10 @@ export const forwardedEmailQueueName = "forwarded-email-ingestion";
 const durableQueueIdentityLength = 36;
 
 /** Identifier-only durable handoff decoded before any User-scoped execution. */
-export const forwardedEmailWorkflowQueue = PersistedQueue.make({
+export const forwardedEmailWorkflowQueue = makePersistedQueue({
   name: forwardedEmailQueueName,
   schema: ForwardedEmailWorkflowPayload,
+  descriptor: { component: "resend", operation: "resend.forwardedEmailHandoff" },
 });
 
 /** Derives the bounded queue identity from both untrusted routing identifiers. */

@@ -31,24 +31,11 @@ export const durableQueueHandlerSettlementOverheadSeconds = 30;
 /** Longest supported handler pause, including settlement overhead. */
 export const durableQueueLongestHandlerPauseSeconds = 210;
 
-/** Every stable queue name sharing the production table. Queue identity is global, not User-scoped. */
-export const durableQueueNames = [
-  "whatsapp-consent-disclosure",
-  "whatsapp-consent-disclosure-evidence",
-  "onboarding-email-delivery",
-  "whatsapp-inbound-turn",
-  "browser-pairing-email-start",
-  "browser-pairing-email-delivery",
-  "browser-pairing-email-expiry",
-  "subscription-billing-attempt",
-  "email-replacement-delivery",
-  "email-replacement-expiry",
-  "forwarded-email-ingestion",
-  "statement-ingestion",
-] as const;
-
-/** One stable queue identity from the shared production table. */
-export type DurableQueueName = (typeof durableQueueNames)[number];
+/** One non-empty queue identity within Effect's persisted SQL column bound. */
+export const DurableQueueName = Schema.String.check(Schema.isLengthBetween(1, 100)).pipe(
+  Schema.brand("DurableQueueName")
+);
+export type DurableQueueName = typeof DurableQueueName.Type;
 
 /** Native delivery ceiling used by queues without an owner-specific override. */
 export const durableQueueDefaultMaxAttempts = 10;

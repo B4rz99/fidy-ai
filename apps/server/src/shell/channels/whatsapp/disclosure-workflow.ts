@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { Effect, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
+import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
 import { DisclosureDeliveryAttemptId, type DisclosureRevision } from "./disclosure-model";
 
 /** Identifier-only pre-User work. No User exists before verified onboarding completes. */
@@ -38,9 +38,10 @@ export const consentDisclosureQueueName = "whatsapp-consent-disclosure";
 export const consentDisclosureEvidenceQueueName = "whatsapp-consent-disclosure-evidence";
 
 /** Transactional acceptance handoff using the shared SQL client; completion is not delivery evidence. */
-export const consentDisclosureQueue = PersistedQueue.make({
+export const consentDisclosureQueue = makePersistedQueue({
   name: consentDisclosureQueueName,
   schema: ConsentDisclosurePayload,
+  descriptor: { component: "whatsapp", operation: "whatsapp.disclosureStart" },
 });
 
 /** Stable native queue key from one offered payload; the exchange identity stays in the payload. */
@@ -48,9 +49,10 @@ export const consentDisclosureQueueId = (payload: ConsentDisclosurePayload): str
   payload.exchangeId;
 
 /** Identifier-only evidence handoff, committed with Consent facts and completed outside SQL locks. */
-export const consentDisclosureEvidenceQueue = PersistedQueue.make({
+export const consentDisclosureEvidenceQueue = makePersistedQueue({
   name: consentDisclosureEvidenceQueueName,
   schema: ConsentDisclosureEvidencePayload,
+  descriptor: { component: "whatsapp", operation: "whatsapp.disclosureEvidence" },
 });
 
 const queueKeyHexLength = 32;

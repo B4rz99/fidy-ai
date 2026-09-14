@@ -18,7 +18,7 @@ import {
   type HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import { type PersistedQueue } from "effect/unstable/persistence";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/_shared/persisted-queue";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   TelemetryAttempt,
@@ -137,7 +137,7 @@ const enqueueAuthorizedTurn = (
 ): Effect.Effect<
   "duplicate" | "enqueued",
   OnboardingConsentRequired | WhatsAppInboundCapacityExceeded | WhatsAppRateLimitExceeded,
-  Crypto.Crypto | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
+  Crypto.Crypto | ApplicationPersistedQueueRequirement | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     yield* consumeWhatsAppIngressBudget(
@@ -183,7 +183,7 @@ const deliverConsentTurn = (
   | KapsoSendFailed
   | Schema.SchemaError
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | ApplicationPersistedQueueRequirement | SqlClient.SqlClient
 > =>
   Effect.as(
     deliverWhatsAppOnboardingOutcome(event, admission, markWhatsAppReceiptOutboundStarted(claim)),
@@ -204,7 +204,7 @@ const admitInboundEvent = (
   | WhatsAppInboundCapacityExceeded
   | WhatsAppRateLimitExceeded
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | ApplicationPersistedQueueRequirement | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     yield* chargeIngressBudgets(event);
@@ -243,7 +243,7 @@ type KapsoMessageWebhookHandler = (
   | WhatsAppRateLimitExceeded
   | WhatsAppReceiptInProgress
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | ApplicationPersistedQueueRequirement | SqlClient.SqlClient
 >;
 
 const isDisclosureLifecycleEvent = Schema.is(DisclosureLifecycleEventName);

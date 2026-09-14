@@ -94,8 +94,10 @@ const submitStatement = Effect.fn(function* (idempotencyKey: string, header: str
 
 const captureQueueAttempt = Effect.fn(function* (id: string) {
   const sql = yield* MigrationSqlClient;
-  const logs: Array<unknown> = [];
-  const logger = Logger.make((entry) => logs.push(entry));
+  const logs: Array<string> = [];
+  const logger = Logger.make(({ message }) =>
+    logs.push(Array.isArray(message) ? message.map(String).join(" ") : String(message))
+  );
   const recorder = yield* EnvelopeRecorder;
 
   yield* processNextStatement().pipe(Effect.withLogger(logger));

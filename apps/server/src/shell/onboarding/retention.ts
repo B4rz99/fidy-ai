@@ -1,5 +1,5 @@
 import { DateTime, Effect, Layer } from "effect";
-import type { PersistedQueue } from "effect/unstable/persistence";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/_shared/persisted-queue";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import { pruneConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-retention";
 import type { MessageStorage, Sharding } from "effect/unstable/cluster";
@@ -29,7 +29,7 @@ export const runOnboardingRetention = (
   | SqlClient.SqlClient
   | Telemetry
   | WorkflowEngine.WorkflowEngine
-  | PersistedQueue.PersistedQueueFactory
+  | ApplicationPersistedQueueRequirement
 > =>
   runScheduledWork({
     component: "onboarding",

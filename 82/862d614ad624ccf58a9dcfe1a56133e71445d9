@@ -1,0 +1,19 @@
+docs/prototypes/server-module-structures.md
+  s_48c9dd2579884a::t_dda6ffd0f39937 1-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "82862d614ad624ccf58a9dcfe1a56133e71445d9",
+  "prompts": {},
+  "sessions": {
+    "s_48c9dd2579884a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a09d95-a9b7-746d-8b53-611f57c17e54",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

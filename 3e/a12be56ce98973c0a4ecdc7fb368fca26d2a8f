@@ -1,0 +1,175 @@
+.agents/skills/opening-a-pr/SKILL.md
+  s_f26b9f4056e846::t_5ff7256f44b92a 27,32,38,40,225
+README.md
+  s_f26b9f4056e846::t_f71a90b86ec9aa 50
+lefthook.yml
+  s_f26b9f4056e846::t_64ff7d48eff19d 24
+scripts/check-commit-message.ts
+  s_f26b9f4056e846::t_5aabaa83041b70 18,24,154
+apps/server/tools/observability-compatibility/compatibility.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/agent/agent-service.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/schema-codecs/contract.test.ts
+  s_75617f7079bd04::t_eae592aa5dd197 1-5
+apps/server/src/shell/_shared/errors.ts
+  s_75617f7079bd04::t_43d392bff9d333 111,166,176,182,194,203
+  s_75617f7079bd04::t_31d5f66053e8e2 147,188-191
+apps/server/scripts/check-browser-client.ts
+  s_75617f7079bd04::t_4cc546cba84f40 22
+apps/server/src/shell/ingestion/email-worker.ts
+  s_75617f7079bd04::t_9f5cf91661887a 39
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/transactions/operations.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/browser-login/operations.ts
+  s_75617f7079bd04::t_31d5f66053e8e2 21
+  s_75617f7079bd04::t_43d392bff9d333 39
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_75617f7079bd04::t_43d392bff9d333 1,46
+apps/server/src/subscription-enrollment-api.ts
+  s_75617f7079bd04::t_43d392bff9d333 30,35,40,45,50,55
+apps/server/src/shell/recovery/routes.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/browser-login/approval.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/email-authentication/delivery.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/observability/account-policy.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/memory/errors.ts
+  s_75617f7079bd04::t_43d392bff9d333 7
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/ingestion/worker.ts
+  s_75617f7079bd04::t_9f5cf91661887a 15
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  s_75617f7079bd04::t_9f5cf91661887a 11
+apps/server/src/shell/http.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_75617f7079bd04::t_9f5cf91661887a 2
+apps/server/src/shell/audit/audit-log.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/tools/contracts/check.ts
+  s_75617f7079bd04::t_9f5cf91661887a 2
+apps/server/src/shell/ingestion/worker-sanitization.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 5
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_75617f7079bd04::t_9f5cf91661887a 25
+apps/server/src/shell/testing/telemetry-fixtures.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 7
+apps/server/src/shell/agent/openai.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 10
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 2
+apps/server/src/shell/tokens/handlers.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 11
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/memory/memory-policy.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/observability/account-policy.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 3
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 19
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/email-authentication/handlers.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/agent/fixtures/openai.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/scripts/build-metafile.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  s_75617f7079bd04::t_9f5cf91661887a 23
+apps/server/src/shell/subscription/wompi-client.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_75617f7079bd04::t_9f5cf91661887a 54
+apps/server/src/web-auth-api.ts
+  s_75617f7079bd04::t_43d392bff9d333 31,36,56,61,149,203,208,213,218,223,306,310,314,318,322
+apps/server/src/shell/schema-codecs/contract.ts
+  s_75617f7079bd04::t_51e3e55a6d492c 1-10
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/operations/operations.ts
+  s_75617f7079bd04::t_31d5f66053e8e2 51
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 2
+apps/server/src/shell/agent/openai.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/testing/telemetry-envelope-fixtures.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/queue-compatibility/queue-compatibility.integration.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 6
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/tokens/operations.ts
+  s_75617f7079bd04::t_43d392bff9d333 34,55,77,192,210
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/ingestion/repo.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/queue-compatibility/queue-compatibility.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 8
+apps/server/src/pat-pairing-api.ts
+  s_75617f7079bd04::t_43d392bff9d333 19,22,35,40
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/subscription/wompi-webhook.ts
+  s_75617f7079bd04::t_9f5cf91661887a 3
+apps/server/scripts/support-recovery.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_75617f7079bd04::t_43d392bff9d333 104,108
+apps/server/src/shell/ingestion/column-mapper.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_75617f7079bd04::t_9f5cf91661887a 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3ea12be56ce98973c0a4ecdc7fb368fca26d2a8f",
+  "prompts": {},
+  "sessions": {
+    "s_75617f7079bd04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b6-b317-7098-98eb-00e4895e919b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

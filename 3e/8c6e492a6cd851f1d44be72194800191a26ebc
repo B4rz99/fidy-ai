@@ -1,0 +1,64 @@
+apps/server/src/shell/outbound-http/contract.ts
+  s_c8cb832fff7b99::t_7d79c240d8a335 35-50,57
+apps/server/src/shell/agent/openai.test.ts
+  s_c8cb832fff7b99::t_4f9c09e73d540b 48-53
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_c8cb832fff7b99::t_7d427f136a4c39 50-51,54
+  s_c8cb832fff7b99::t_469f834de8d67f 92-145
+  s_c8cb832fff7b99::t_47765837cba09e 52-53
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_c8cb832fff7b99::t_fffb527c447b37 2
+  s_c8cb832fff7b99::t_1ee564429889e4 3
+  s_c8cb832fff7b99::t_0cb68a859a3666 1
+apps/server/src/shell/agent/openai.ts
+  s_c8cb832fff7b99::t_5b2a0e1789478c 529,541,554,557,559,573,576,578,584,587,670,704,709,713,727
+  s_c8cb832fff7b99::t_36239be59f58b4 761,769,785,812,827,837,852,863,869,883,893,895
+  s_45665427179547::t_a585f3a32b7ce6 12,137
+  s_c8cb832fff7b99::t_724c917cd14439 22,33-38,105,107-117,123-136,138-162
+  s_c8cb832fff7b99::t_303400988a31e6 4-11,13,17-21,118-122,555,560,579,674-675,770
+  s_c8cb832fff7b99::t_2f5f983bc5d344 961-966
+  s_c8cb832fff7b99::t_16feaa7756d65d 168,957,977,996,1005
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c8cb832fff7b99::t_fea74898d52a77 3,5,130-131,140,163,165-170,191,194-195
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_c8cb832fff7b99::t_fdc68da4984535 32-33,79-84,86-90,95-111
+  s_c8cb832fff7b99::t_a5b88d0d50ed94 77-78,85,92
+  s_c8cb832fff7b99::t_ee7a8cb129fdcf 1,19,23,31,34-44,52-55,57-59,62-76,91,93-94,112-127,129-130,132-139,141-151
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_c8cb832fff7b99::t_4cdf1f8512d431 1,4,7
+  s_c8cb832fff7b99::t_9a798e7d122471 11
+apps/server/src/shell/outbound-http/operations.ts
+  s_c8cb832fff7b99::t_26c228e963626f 1,25,32-33,36-51
+  s_c8cb832fff7b99::t_fe77d99b71268c 26-29,31,34-35,52-53
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_c8cb832fff7b99::t_7be4253ef9b457 55-58
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_c8cb832fff7b99::t_03c9af779b57a3 5
+  s_c8cb832fff7b99::t_208a9210dfac60 6,24,26,35-36,41-42,53-55,59-61,66-68,107-109,134,139-140
+  s_c8cb832fff7b99::t_7b5897d8da0ad5 123
+  s_c8cb832fff7b99::t_ebae125263647a 3-4,121-122,124-133,135,138,144,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3e8c6e492a6cd851f1d44be72194800191a26ebc",
+  "prompts": {},
+  "sessions": {
+    "s_45665427179547": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b16c-543b-76d7-a54a-87f4595b191f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c8cb832fff7b99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-96a3-737d-933b-d5b8640ab75f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

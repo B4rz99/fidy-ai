@@ -12,6 +12,8 @@ apps/server/src/shell/outbound-http/internal/outbound-http.ts
   s_b491e471383844::t_6fdbdcbfb0c5c2 235-240,259,266-268
   s_b491e471383844::t_3db191a4c95217 113-164,180
   s_b491e471383844::t_fef0b4353d0a3b 248-250,253-258,269-276,282-292,318-320,323-328
+  s_b491e471383844::t_687ab2b4ecc860 251-252,265,300-301,307-308,321-322
+  s_b491e471383844::t_8f0a926631b4f9 241-247,260-264
 apps/server/src/shell/email-authentication/delivery.ts
   s_b491e471383844::t_9268b6f51a3ae4 2,9,80,104,127,130,156,165-166,169,176
   s_b491e471383844::t_f38d00b8ace42f 8
@@ -29,6 +31,7 @@ apps/server/src/shell/outbound-http/contract.ts
   s_b491e471383844::t_944672129fd39b 2,8,52-70
 apps/server/src/shell/email-authentication/authentication.test.ts
   s_b491e471383844::t_dd73b44bfb44a6 33,581-587,592-597,599
+  s_b491e471383844::t_86d05332126039 588-591
 apps/server/src/shell/ingestion/resend-receiving-client.ts
   s_b491e471383844::t_32dc57f48010a1 12-16,44-46
   s_b491e471383844::t_9a798d961b3e72 17,57-59,89,160-161,165-166,170,177-178,181,202,206-207,210,226-230,256,259
@@ -40,6 +43,12 @@ apps/server/src/shell/outbound-http/operations.test.ts
   s_b491e471383844::t_95185140626e4a 3,96-190
   s_b491e471383844::t_9f1dee5cf952e0 53
   s_221d58c93200ac::t_118426720dc0c8 191
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_b491e471383844::t_aa6815f0db3eb5 21-24,27,248,270,328
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_b491e471383844::t_5f14d5e0d69fdd 28-31,35,44,53,62,72
+apps/server/src/shell/outbound-http/operations.ts
+  s_b491e471383844::t_fa8713dae46304 3-8,35-36,49-50
 ---
 {
   "schema_version": "authorship/3.0.0",

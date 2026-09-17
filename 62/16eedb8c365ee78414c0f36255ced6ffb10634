@@ -1,0 +1,40 @@
+apps/server/package.json
+  s_8edf0aea28ddc5::t_21534914c32d36 45
+tools/depcruise/run.mjs
+  s_8edf0aea28ddc5::t_a46c61f15879f0 19,29
+  s_8edf0aea28ddc5::t_44f318e4982f73 20
+apps/server/.dependency-cruiser.mjs
+  s_8edf0aea28ddc5::t_fdeca438ff9d2a 275,328,378
+  s_8edf0aea28ddc5::t_5a99af57bb9168 70-151,153-156
+  s_8edf0aea28ddc5::t_3567c508386982 152
+  s_8edf0aea28ddc5::t_ba38cc0387169f 157-171
+apps/server/scripts/check-dependency-guards.ts
+  s_8edf0aea28ddc5::t_fb850f469a2923 27-29,82-83,93,95-98
+  s_8edf0aea28ddc5::t_ff6ddf40830400 30
+  s_8edf0aea28ddc5::t_4559650d75fb61 109,284
+  s_8edf0aea28ddc5::t_3567c508386982 124-127
+  s_8edf0aea28ddc5::t_fe0f4d4e2e5171 73-81,84-92,100,102-108,110-123,128-283,285-317,380-395,923-926,928-929,931-932
+  s_8edf0aea28ddc5::t_53ea8ae4cb9c0c 910,912
+  s_8edf0aea28ddc5::t_292165000c950a 99,942,945-955
+  s_8edf0aea28ddc5::t_b86853735961e7 318-327,341-379,943-944
+  s_8edf0aea28ddc5::t_389b6acfa34c19 907-909,911,913-915
+  s_8edf0aea28ddc5::t_18ee6ca6b95980 956
+  s_8edf0aea28ddc5::t_27dfc029431501 963-964
+  s_8edf0aea28ddc5::t_34027f04edea60 94,328-340
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6216eedb8c365ee78414c0f36255ced6ffb10634",
+  "prompts": {},
+  "sessions": {
+    "s_8edf0aea28ddc5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b045-5cb7-772d-8b01-3b1ed8da0ef0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

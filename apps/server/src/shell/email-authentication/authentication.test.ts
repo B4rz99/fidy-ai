@@ -30,6 +30,7 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   BrowserPairingEmailDeliveryWorkerLive,
@@ -577,20 +578,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               );
             })
           );
+          const config = ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              NODE_ENV: "production",
+              KAPSO_API_KEY: "test-kapso-key",
+              RESEND_API_KEY: "re_test_only_resend_key_463000000",
+              RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
+              RESEND_FROM_NAME: "Fidy",
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+            })
+          );
+          const outbound = OutboundHttp.layer.pipe(
+            Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+            Layer.provide(config)
+          );
           const provider = yield* Layer.build(
-            EmailDeliveryPort.layer.pipe(
-              Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
-              Layer.provide(
-                ConfigProvider.layer(
-                  ConfigProvider.fromUnknown({
-                    NODE_ENV: "production",
-                    RESEND_API_KEY: "re_test_only_resend_key_463000000",
-                    RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
-                    RESEND_FROM_NAME: "Fidy",
-                  })
-                )
-              )
-            )
+            EmailDeliveryPort.layer.pipe(Layer.provide(outbound), Layer.provide(config))
           );
           yield* processNextBackgroundStep().pipe(
             Effect.provideService(EmailDeliveryPort, Context.get(provider, EmailDeliveryPort))

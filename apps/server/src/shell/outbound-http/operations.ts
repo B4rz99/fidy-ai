@@ -1,6 +1,11 @@
 import { Config, Context, Crypto, Effect, Layer, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { loadWompiIntegritySecret, loadWompiPrivateKey } from "~/shell/secret-material/operations";
+import {
+  loadResendEmailDeliveryApiKey,
+  loadResendReceivingApiKey,
+  loadWompiIntegritySecret,
+  loadWompiPrivateKey,
+} from "~/shell/secret-material/operations";
 import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
 
@@ -27,6 +32,8 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
     this,
     Effect.gen(function* () {
       const kapsoApiKey = yield* Config.redacted("KAPSO_API_KEY");
+      const resendEmailDeliveryApiKey = yield* loadResendEmailDeliveryApiKey;
+      const resendReceivingApiKey = yield* loadResendReceivingApiKey;
       const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const environmentPrefix = wompiEnvironment === "sandbox" ? "test" : "prod";
       const wompiPublicKey = yield* Config.schema(
@@ -39,6 +46,8 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
       const crypto = yield* Crypto.Crypto;
       return makeOutboundHttp({
         kapsoApiKey,
+        resendEmailDeliveryApiKey,
+        resendReceivingApiKey,
         wompi: {
           environment: wompiEnvironment,
           publicKey: wompiPublicKey,

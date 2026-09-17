@@ -18,9 +18,13 @@ import { WompiBillingClient } from "./wompi-billing-client";
 
 const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
 const integritySecretFixture = `test_integrity_${"f1d7c0de".repeat(3)}`;
+const sharedProviderConfig = {
+  KAPSO_API_KEY: "test-kapso-key",
+  RESEND_API_KEY: `re_${"f1d7c0de".repeat(3)}`,
+};
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
     WOMPI_PRIVATE_KEY: privateKeyFixture,
@@ -241,7 +245,7 @@ layer(
 
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "production",
     WOMPI_PUBLIC_KEY: `pub_prod_${"f1d7c0de".repeat(3)}`,
     WOMPI_PRIVATE_KEY: `prv_prod_${"f1d7c0de".repeat(3)}`,
@@ -263,7 +267,7 @@ layer(clientLayer(successResponse, productionConfig), { excludeTestServices: tru
 const invalidConfiguration = (privateKey: string, integritySecret: string): typeof config =>
   ConfigProvider.layer(
     ConfigProvider.fromUnknown({
-      KAPSO_API_KEY: "test-kapso-key",
+      ...sharedProviderConfig,
       WOMPI_ENVIRONMENT: "sandbox",
       WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
       WOMPI_PRIVATE_KEY: privateKey,
@@ -321,7 +325,7 @@ it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
           successResponse,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
-              KAPSO_API_KEY: "test-kapso-key",
+              ...sharedProviderConfig,
               WOMPI_ENVIRONMENT: "sandbox",
               WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
               WOMPI_INTEGRITY_SECRET: integritySecretFixture,

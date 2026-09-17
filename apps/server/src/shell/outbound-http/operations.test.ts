@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { BunCrypto } from "@effect/platform-bun";
+import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
 import { expect, it } from "@effect/vitest";
@@ -49,6 +50,7 @@ const makeTestOutbound = (
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown({
             KAPSO_API_KEY: apiKey,
+            RESEND_API_KEY: "re_test_only_resend_key_324000000",
             WOMPI_ENVIRONMENT: "sandbox",
             WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
             WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
@@ -88,6 +90,102 @@ it.effect("keeps the configured Kapso API key redacted while sending it only as 
       headers: {},
       body: new TextEncoder().encode("response"),
     });
+  })
+);
+
+it.effect("owns Resend destinations, authorization, idempotency, and bodyless retrieval", () =>
+  Effect.gen(function* () {
+    const observed: Array<{
+      readonly url: string;
+      readonly authorization: Option.Option<string>;
+      readonly idempotencyKey: Option.Option<string>;
+      readonly body: string;
+    }> = [];
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) => {
+        const headers = new Headers(request.headers);
+        observed.push({
+          url: request.url,
+          authorization: Option.fromNullishOr(headers.get("authorization")),
+          idempotencyKey: Option.fromNullishOr(headers.get("idempotency-key")),
+          body:
+            request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
+        });
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      })
+    );
+    const receivedEmailId = ResendReceivedEmailId.make("received-1");
+
+    yield* outbound.execute({
+      _tag: "ResendEmailDelivery",
+      idempotencyKey: "delivery-1",
+      body: '{"subject":"bounded"}',
+    });
+    yield* outbound.execute({ _tag: "ResendReceivedEmail", receivedEmailId });
+    yield* outbound.execute({
+      _tag: "ResendAttachment",
+      receivedEmailId,
+      attachmentId: "inline/1",
+    });
+    yield* outbound.execute({
+      _tag: "ResendInboundDownload",
+      downloadUrl: "https://inbound-cdn.resend.com/signed/image?signature=private",
+    });
+
+    expect(observed).toEqual([
+      {
+        url: "https://api.resend.com/emails",
+        authorization: Option.some("Bearer re_test_only_resend_key_324000000"),
+        idempotencyKey: Option.some("delivery-1"),
+        body: '{"subject":"bounded"}',
+      },
+      {
+        url: "https://api.resend.com/emails/receiving/received-1",
+        authorization: Option.some("Bearer re_test_only_resend_key_324000000"),
+        idempotencyKey: Option.none(),
+        body: "",
+      },
+      {
+        url: "https://api.resend.com/emails/receiving/received-1/attachments/inline%2F1",
+        authorization: Option.some("Bearer re_test_only_resend_key_324000000"),
+        idempotencyKey: Option.none(),
+        body: "",
+      },
+      {
+        url: "https://inbound-cdn.resend.com/signed/image?signature=private",
+        authorization: Option.none(),
+        idempotencyKey: Option.none(),
+        body: "",
+      },
+    ]);
+  })
+);
+
+it.effect("rejects an unsafe Resend download destination before transport", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) => {
+        requests += 1;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unused")));
+      })
+    );
+
+    const exit = yield* outbound
+      .execute({ _tag: "ResendInboundDownload", downloadUrl: "http://127.0.0.1/private" })
+      .pipe(Effect.exit);
+
+    assert.deepStrictEqual(
+      exit,
+      Exit.fail(
+        new OutboundHttpFailure({
+          reason: "invalid-destination",
+          responseStatus: Option.none(),
+          responseHeaders: {},
+        })
+      )
+    );
+    expect(requests).toBe(0);
   })
 );
 

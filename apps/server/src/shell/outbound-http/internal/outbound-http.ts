@@ -9,10 +9,12 @@ import {
   type ExternalHttpFailure,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
+import { cloudflareAccessSupportRecoveryUrl } from "./cloudflare-access";
 import {
   OutboundHttpFailure,
   type OutboundHttpRequest,
   type OutboundHttpResponse,
+  type SentryAccountResource,
   type WompiTransactionBody,
 } from "~/shell/outbound-http/contract";
 
@@ -21,6 +23,7 @@ const mistralChatCompletionsUrl = "https://api.mistral.ai/v1/chat/completions";
 const resendApiBaseUrl = "https://api.resend.com";
 const wompiSandboxOrigin = "https://sandbox.wompi.co";
 const wompiProductionOrigin = "https://production.wompi.co";
+const sentryAccountBaseUrl = "https://sentry.io/api/0";
 const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
 const maximumWompiResponseKibibytes = 16;
@@ -31,6 +34,8 @@ const maximumResendInlineImageResponseKibibytes = 1_024;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
 const maximumWompiResponseBytes = maximumWompiResponseKibibytes * bytesPerKibibyte;
 const maximumHostedInferenceResponseBytes = 1_000_000;
+const maximumSentryResponseBytes = 65_536;
+const maximumCloudflareAccessResponseBytes = 1_024;
 const maximumResendDeliveryResponseBytes =
   maximumResendDeliveryResponseKibibytes * bytesPerKibibyte;
 const maximumResendMetadataResponseBytes =
@@ -88,6 +93,9 @@ const unavailableTransport = (): OutboundHttpFailure =>
     responseStatus: Option.none(),
     responseHeaders: {},
   });
+
+const rejectRequest = (): Effect.Effect<never, OutboundHttpFailure> =>
+  Effect.fail(unavailableTransport());
 
 const invalidDestination = (): OutboundHttpFailure =>
   new OutboundHttpFailure({
@@ -245,6 +253,41 @@ const makeWompiRequest = (
   }
 };
 
+const sentryResourcePath = (resource: SentryAccountResource): string => {
+  switch (resource._tag) {
+    case "Organization":
+      return `/organizations/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/`;
+    case "OrganizationProjects":
+      return `/organizations/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/projects/`;
+    case "ProjectKeys":
+      return `/projects/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/${encodeURIComponent(Redacted.value(resource.projectSlug))}/keys/`;
+    case "ProjectEnvironments":
+      return `/projects/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/${encodeURIComponent(Redacted.value(resource.projectSlug))}/environments/`;
+  }
+};
+
+const makeSentryRequest = (
+  request: Extract<OutboundHttpRequest, { readonly _tag: "SentryAccount" }>,
+  authToken: Redacted.Redacted<string>
+): Omit<PreparedRequest, "http"> => ({
+  request: HttpClientRequest.get(
+    `${sentryAccountBaseUrl}${sentryResourcePath(request.resource)}`
+  ).pipe(HttpClientRequest.setHeaders({ authorization: `Bearer ${Redacted.value(authToken)}` })),
+  maximumResponseBytes: maximumSentryResponseBytes,
+  redirect: "error",
+});
+
+const makeCloudflareAccessRequest = (
+  request: Extract<OutboundHttpRequest, { readonly _tag: "CloudflareAccessSupportRecovery" }>,
+  accessToken: Redacted.Redacted<string>
+): Omit<PreparedRequest, "http"> => ({
+  request: jsonRequest(cloudflareAccessSupportRecoveryUrl, request.body, {
+    "cf-access-token": Redacted.value(accessToken),
+  }),
+  maximumResponseBytes: maximumCloudflareAccessResponseBytes,
+  redirect: "error",
+});
+
 type RequestPreparationContext = Readonly<{
   config: OutboundHttpConfig;
   kapsoHttp: PreparedRequest["http"];
@@ -343,6 +386,9 @@ const prepareNonProviderGroup = (
             redirect: "error" as const,
           }),
       });
+    case "SentryAccount":
+    case "CloudflareAccessSupportRecovery":
+      return rejectRequest();
   }
 };
 
@@ -356,6 +402,8 @@ const prepareRequest = (
       OpenAiResponses: (value) => prepareNonProviderGroup(value, context),
       OpenAiInputTokens: (value) => prepareNonProviderGroup(value, context),
       MistralChatCompletions: (value) => prepareNonProviderGroup(value, context),
+      SentryAccount: (value) => prepareNonProviderGroup(value, context),
+      CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
       ResendReceivedEmail: (value) => prepareResend(value, context),
       ResendAttachment: (value) => prepareResend(value, context),
@@ -367,6 +415,27 @@ const prepareRequest = (
       WompiFindTransaction: (value) => prepareWompi(value, context),
     })
   );
+
+const makeService = (
+  prepare: (request: OutboundHttpRequest) => Effect.Effect<PreparedRequest, OutboundHttpFailure>
+): PrivateOutboundHttpService => ({
+  execute: (request) =>
+    prepare(request).pipe(
+      Effect.flatMap(({ http, maximumResponseBytes, request: providerRequest, redirect }) =>
+        http
+          .execute(providerRequest, maximumResponseBytes)
+          .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect }))
+      ),
+      Effect.map((response) => ({
+        status: response.status,
+        headers: { ...response.headers },
+        body: response.body,
+      })),
+      Effect.mapError((failure) =>
+        failure._tag === "OutboundHttpFailure" ? failure : projectFailure(failure)
+      )
+    ),
+});
 
 /**
  * Creates fixed-destination provider transport that owns credentials, rejects redirects, suppresses
@@ -381,22 +450,35 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
     resendHttp: makeBoundedExternalHttpClient("resend")(config.httpClient),
     wompiHttp: makeBoundedExternalHttpClient("wompi")(config.httpClient),
   };
-  return {
-    execute: (request) =>
-      prepareRequest(request, context).pipe(
-        Effect.flatMap(({ http, maximumResponseBytes, request: providerRequest, redirect }) =>
-          http
-            .execute(providerRequest, maximumResponseBytes)
-            .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect }))
-        ),
-        Effect.map((response) => ({
-          status: response.status,
-          headers: { ...response.headers },
-          body: response.body,
-        })),
-        Effect.mapError((failure) =>
-          failure._tag === "OutboundHttpFailure" ? failure : projectFailure(failure)
-        )
-      ),
-  };
+  return makeService((request) => prepareRequest(request, context));
+};
+
+export const makeSentryOutboundHttp = ({
+  authToken,
+  httpClient,
+}: Readonly<{
+  authToken: Redacted.Redacted<string>;
+  httpClient: HttpClient.HttpClient;
+}>): PrivateOutboundHttpService => {
+  const http = makeBoundedExternalHttpClient("sentry")(httpClient);
+  return makeService((request) =>
+    request._tag === "SentryAccount"
+      ? Effect.succeed({ ...makeSentryRequest(request, authToken), http })
+      : rejectRequest()
+  );
+};
+
+export const makeCloudflareAccessOutboundHttp = ({
+  accessToken,
+  httpClient,
+}: Readonly<{
+  accessToken: Redacted.Redacted<string>;
+  httpClient: HttpClient.HttpClient;
+}>): PrivateOutboundHttpService => {
+  const http = makeBoundedExternalHttpClient("cloudflare-access")(httpClient);
+  return makeService((request) =>
+    request._tag === "CloudflareAccessSupportRecovery"
+      ? Effect.succeed({ ...makeCloudflareAccessRequest(request, accessToken), http })
+      : rejectRequest()
+  );
 };

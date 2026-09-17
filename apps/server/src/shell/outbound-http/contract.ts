@@ -1,34 +1,29 @@
-import { Data, type Option } from "effect";
+import { Data, type Option, type Redacted } from "effect";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import type { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
 
-/** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =
   | "response-body-failed"
   | "invalid-destination"
   | "response-too-large"
   | "transport-failed";
 
-/**
- * Transport failure containing only response facts an adapter may safely use for provider
- * interpretation. It never carries a destination, credential, request, response body, or cause.
- */
 export class OutboundHttpFailure extends Data.TaggedError("OutboundHttpFailure")<{
   readonly reason: OutboundHttpFailureReason;
   readonly responseStatus: Option.Option<number>;
-  /** Only the destination policy's explicitly retained protocol headers. */
   readonly responseHeaders: Readonly<Record<string, string>>;
 }> {}
 
-/** Response whose body has passed the destination policy's actual streamed-byte bound. */
+export class OutboundHttpSetupError extends Data.TaggedError("OutboundHttpSetupError")<{
+  readonly reason: "unavailable";
+}> {}
+
 export type OutboundHttpResponse = Readonly<{
   readonly status: number;
-  /** Only the destination policy's explicitly retained protocol headers. */
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 }>;
 
-/** Values needed to encode and sign one Wompi transaction without exposing signing authority. */
 export type WompiTransactionBody = Readonly<{
   readonly amountInCents: number;
   readonly currency: string;
@@ -36,6 +31,26 @@ export type WompiTransactionBody = Readonly<{
   readonly sourceId: number;
   readonly reference: string;
 }>;
+
+export type SentryAccountResource =
+  | Readonly<{
+      readonly _tag: "Organization";
+      readonly organizationSlug: Redacted.Redacted<string>;
+    }>
+  | Readonly<{
+      readonly _tag: "OrganizationProjects";
+      readonly organizationSlug: Redacted.Redacted<string>;
+    }>
+  | Readonly<{
+      readonly _tag: "ProjectKeys";
+      readonly organizationSlug: Redacted.Redacted<string>;
+      readonly projectSlug: Redacted.Redacted<string>;
+    }>
+  | Readonly<{
+      readonly _tag: "ProjectEnvironments";
+      readonly organizationSlug: Redacted.Redacted<string>;
+      readonly projectSlug: Redacted.Redacted<string>;
+    }>;
 
 /**
  * One provider call accepted by Outbound HTTP. Its tag selects a fixed method, origin, credentials,
@@ -51,7 +66,6 @@ export type OutboundHttpRequest =
     }>
   | Readonly<{
       readonly _tag: "ResendEmailDelivery";
-      /** Stable provider replay identity that makes a repeated delivery request safe. */
       readonly idempotencyKey: string;
       readonly body: string;
     }>
@@ -66,26 +80,15 @@ export type OutboundHttpRequest =
     }>
   | Readonly<{
       readonly _tag: "ResendInboundDownload";
-      /** Provider-issued URL accepted only when it names Resend's direct inbound CDN. */
       readonly downloadUrl: string;
     }>
   | Readonly<{ readonly _tag: "OpenAiResponses"; readonly body: string }>
   | Readonly<{ readonly _tag: "OpenAiInputTokens"; readonly body: string }>
   | Readonly<{ readonly _tag: "MistralChatCompletions"; readonly body: string }>
   | Readonly<{ readonly _tag: "WompiMerchant" }>
-  | Readonly<{
-      readonly _tag: "WompiCreatePaymentSource";
-      readonly body: string;
-    }>
-  | Readonly<{
-      readonly _tag: "WompiVerifyPaymentSource";
-      readonly sourceId: number;
-    }>
-  | Readonly<{
-      readonly _tag: "WompiCreateTransaction";
-      readonly body: WompiTransactionBody;
-    }>
-  | Readonly<{
-      readonly _tag: "WompiFindTransaction";
-      readonly transactionId: string;
-    }>;
+  | Readonly<{ readonly _tag: "WompiCreatePaymentSource"; readonly body: string }>
+  | Readonly<{ readonly _tag: "WompiVerifyPaymentSource"; readonly sourceId: number }>
+  | Readonly<{ readonly _tag: "WompiCreateTransaction"; readonly body: WompiTransactionBody }>
+  | Readonly<{ readonly _tag: "WompiFindTransaction"; readonly transactionId: string }>
+  | Readonly<{ readonly _tag: "SentryAccount"; readonly resource: SentryAccountResource }>
+  | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>;

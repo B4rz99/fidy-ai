@@ -1,13 +1,10 @@
-import { jsonStringSchema } from "../src/shell/schema-codecs/contract";
+import { UnknownJsonString, jsonStringSchema } from "../src/shell/schema-codecs/contract";
 import { BunHttpClient, BunRuntime } from "@effect/platform-bun";
-import { Data, Effect, Option, Schema } from "effect";
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
+import { Context, Data, Effect, Layer, Option, Schema } from "effect";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 
-const supportUrl = "https://api.fidyapp.com/internal/support-recovery";
 const maximumPairingCharacters = 16;
 const maximumRecoveryCharacters = 40;
-const maximumResponseBytes = 1_024;
 const failureExitCode = 1;
 const refusalExitCode = 2;
 const successMessage =
@@ -111,40 +108,6 @@ const readBoundedLine = Effect.fn("SupportRecoveryCli.readBoundedLine")(
     })
 );
 
-const runCloudflared = Effect.fn("SupportRecoveryCli.runCloudflared")(function* (
-  arguments_: ReadonlyArray<string>
-) {
-  const child = yield* Effect.sync(() =>
-    Bun.spawn(["cloudflared", "access", ...arguments_], {
-      stdin: "inherit",
-      stdout: "pipe",
-      stderr: "ignore",
-    })
-  );
-  const unavailable = (): SupportCliFailure =>
-    new SupportCliFailure({ message: "Cloudflare Access no respondió." });
-  const output = yield* Effect.tryPromise({
-    try: () => new Response(child.stdout).text(),
-    catch: unavailable,
-  });
-  const exitCode = yield* Effect.tryPromise({ try: () => child.exited, catch: unavailable });
-  if (exitCode !== 0) {
-    return yield* new SupportCliFailure({
-      message: "No pudimos autenticar al operador con Cloudflare Access.",
-    });
-  }
-  return output.trim();
-});
-
-const authenticateOperator = Effect.fn("SupportRecoveryCli.authenticate")(function* () {
-  yield* runCloudflared(["login", supportUrl]);
-  const accessToken = yield* runCloudflared(["token", `--app=${supportUrl}`]);
-  if (accessToken.length > 0) return accessToken;
-  return yield* new SupportCliFailure({
-    message: "Cloudflare Access no entregó una sesión de operador.",
-  });
-});
-
 const requireInteractiveTerminal = Effect.fn("SupportRecoveryCli.requireInteractiveTerminal")(
   function* () {
     if (process.stdin.isTTY && process.stdout.isTTY) return;
@@ -168,20 +131,15 @@ const readRecoveryInput = Effect.fn("SupportRecoveryCli.readInput")(function* ()
 });
 
 const callSupportRecovery = Effect.fn("SupportRecoveryCli.callTransport")(function* (
-  accessToken: string,
   input: Effect.Success<ReturnType<typeof readRecoveryInput>>
 ) {
-  const client = (yield* HttpClient.HttpClient).pipe(
-    makeBoundedExternalHttpClient("cloudflare-access")
-  );
-  const response = yield* client
-    .execute(
-      HttpClientRequest.post(supportUrl, {
-        headers: { "cf-access-token": accessToken, "content-type": "application/json" },
-        body: HttpBody.jsonUnsafe(input),
-      }),
-      maximumResponseBytes
+  const body = yield* Schema.encodeEffect(UnknownJsonString)(input).pipe(
+    Effect.mapError(
+      () => new SupportCliFailure({ message: "La operación de soporte no está disponible." })
     )
+  );
+  const response = yield* (yield* OutboundHttp)
+    .execute({ _tag: "CloudflareAccessSupportRecovery", body })
     .pipe(
       Effect.mapError(
         () => new SupportCliFailure({ message: "La operación de soporte no está disponible." })
@@ -211,9 +169,17 @@ const displayResult = Effect.fn("SupportRecoveryCli.displayResult")(function* (
 
 const program = Effect.gen(function* () {
   yield* requireInteractiveTerminal();
-  const accessToken = yield* authenticateOperator();
+  const outboundContext = yield* Layer.build(OutboundHttp.cloudflareAccessLayer).pipe(
+    Effect.mapError(
+      () => new SupportCliFailure({ message: "La operación de soporte no está disponible." })
+    )
+  );
+  const outboundHttp = Context.get(outboundContext, OutboundHttp);
   const input = yield* readRecoveryInput();
-  yield* displayResult(yield* callSupportRecovery(accessToken, input));
+  const response = yield* callSupportRecovery(input).pipe(
+    Effect.provideService(OutboundHttp, outboundHttp)
+  );
+  yield* displayResult(response);
 }).pipe(
   Effect.catchTag("SupportCliFailure", () =>
     writeLine(process.stderr, unavailableMessage).pipe(
@@ -225,4 +191,4 @@ const program = Effect.gen(function* () {
   Effect.provide(BunHttpClient.layer)
 );
 
-BunRuntime.runMain(program);
+BunRuntime.runMain(Effect.scoped(program));

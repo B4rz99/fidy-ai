@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Option, Redacted } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Option, Redacted } from "effect";
 import {
   HttpClient,
   type HttpClientError,
   type HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import {
   SentryAccountReadError,
   type SentryAccountReaderConfig,
@@ -39,6 +40,28 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
+const outboundLayer = (
+  client: HttpClient.HttpClient,
+  authToken = "private-token"
+): Layer.Layer<OutboundHttp> =>
+  Layer.orDie(OutboundHttp.sentryLayer).pipe(
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(
+      Layer.succeed(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromUnknown({ SENTRY_AUTH_TOKEN: authToken })
+      )
+    )
+  );
+
+const provideOutbound = (
+  client: HttpClient.HttpClient,
+  authToken = "private-token"
+): (<A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, OutboundHttp>>) =>
+  // Each test invocation is the entry point that owns its Outbound HTTP test layer lifetime.
+  // @effect-diagnostics-next-line strictEffectProvide:off
+  Effect.provide(outboundLayer(client, authToken));
+
 const unauthorizedStatus = 401;
 const forbiddenStatus = 403;
 const rateLimitedStatus = 429;
@@ -59,27 +82,23 @@ const assertReadFailure =
 
 const readerConfig = (
   input: {
-    readonly token: string;
     readonly organization: string;
     readonly production: string;
     readonly nonProduction: string;
   } = {
-    token: "private-token",
     organization: "private-organization",
     production: "private-production",
     nonProduction: "private-non-production",
   }
 ): SentryAccountReaderConfig => ({
-  authToken: Redacted.make(input.token),
   organizationSlug: Redacted.make(input.organization),
   productionProjectSlug: Redacted.make(input.production),
   nonProductionProjectSlug: Redacted.make(input.nonProduction),
 });
 
-it.effect("loads all operator Sentry account credentials as redacted values", () =>
+it.effect("loads operator Sentry account locators as redacted values", () =>
   Effect.gen(function* () {
     const config = yield* sentryAccountConfig;
-    expect(Redacted.value(config.authToken)).toBe("account-token");
     expect(Redacted.value(config.organizationSlug)).toBe("account-organization");
     expect(Redacted.value(config.productionProjectSlug)).toBe("account-production");
     expect(Redacted.value(config.nonProductionProjectSlug)).toBe("account-non-production");
@@ -87,7 +106,6 @@ it.effect("loads all operator Sentry account credentials as redacted values", ()
     Effect.provideService(
       ConfigProvider.ConfigProvider,
       ConfigProvider.fromUnknown({
-        SENTRY_AUTH_TOKEN: "account-token",
         SENTRY_ORGANIZATION_SLUG: "account-organization",
         SENTRY_PRODUCTION_PROJECT_SLUG: "account-production",
         SENTRY_NON_PRODUCTION_PROJECT_SLUG: "account-non-production",
@@ -131,8 +149,8 @@ it.effect("reads only the account facts needed by policy and returns no account 
     });
 
     const observation = yield* inspectSentryAccount(
-      readerConfig({ token, organization, production, nonProduction })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+      readerConfig({ organization, production, nonProduction })
+    ).pipe(provideOutbound(client, token));
 
     expect(requests).toHaveLength(6);
     expect(requests.every((request) => request.method === "GET")).toBe(true);
@@ -184,9 +202,8 @@ it.effect("accepts an organization response with no data region", () =>
         organization,
         production: "private-production",
         nonProduction: "private-non-production",
-        token: "private-token",
       })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    ).pipe(provideOutbound(client));
 
     expect(observation._tag).toBe("available");
     if (observation._tag !== "available") throw new Error("expected available observation");
@@ -226,9 +243,8 @@ it.effect("normalizes European and unknown organization regions", () =>
           organization,
           production: "private-production",
           nonProduction: "private-non-production",
-          token: "private-token",
         })
-      ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+      ).pipe(provideOutbound(client));
 
       expect(observation._tag).toBe("available");
       if (observation._tag !== "available") throw new Error("expected available observation");
@@ -266,9 +282,8 @@ it.effect("derives the organization region from the current region link", () =>
         organization,
         production: "private-production",
         nonProduction: "private-non-production",
-        token: "private-token",
       })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    ).pipe(provideOutbound(client));
 
     expect(observation._tag).toBe("available");
     if (observation._tag !== "available") throw new Error("expected available observation");
@@ -298,17 +313,49 @@ it.effect("marks identical project roles as not separated without exposing the s
 
     const observation = yield* inspectSentryAccount(
       readerConfig({
-        token: "private-token",
         organization,
         production: sharedProject,
         nonProduction: sharedProject,
       })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    ).pipe(provideOutbound(client));
 
     expect(observation._tag).toBe("available");
     if (observation._tag !== "available") throw new Error("expected available observation");
     expect(observation.projectsAreDistinct).toBe(false);
     expect(Object.values(observation)).not.toContain(sharedProject);
+  })
+);
+
+it.effect("returns no project observation when the configured project does not exist", () =>
+  Effect.gen(function* () {
+    const organization = "private-organization";
+    const production = "private-production";
+    const client = makeHttpClient((request) => {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith(`/organizations/${organization}/`)) {
+        return Effect.succeed(responseJson(request, { dataRegion: { name: "us" } }));
+      }
+      if (path.endsWith(`/organizations/${organization}/projects/`)) {
+        return Effect.succeed(responseJson(request, [{ slug: production }]));
+      }
+      if (path.endsWith("/keys/")) {
+        return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
+      }
+      return Effect.succeed(responseJson(request, [{ name: "production" }]));
+    });
+
+    const observation = yield* inspectSentryAccount(
+      readerConfig({
+        organization,
+        production,
+        nonProduction: "private-missing-project",
+      })
+    ).pipe(provideOutbound(client));
+
+    expect(observation._tag).toBe("available");
+    if (observation._tag !== "available") throw new Error("expected available observation");
+    expect(Option.isSome(observation.production)).toBe(true);
+    expect(Option.isNone(observation.nonProduction)).toBe(true);
   })
 );
 
@@ -323,7 +370,7 @@ it.effect("rejects incomplete paginated account observations", () =>
     );
 
     const exit = yield* inspectSentryAccount(readerConfig()).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
+      provideOutbound(client),
       Effect.exit
     );
 
@@ -341,7 +388,7 @@ it.effect("rejects oversized provider responses before decoding them", () =>
     );
 
     const exit = yield* inspectSentryAccount(readerConfig()).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
+      provideOutbound(client),
       Effect.exit
     );
 
@@ -364,18 +411,16 @@ it.effect("classifies management API failures without retaining provider respons
     yield* Effect.forEach(
       cases,
       ({ reason, status }) =>
-        inspectSentryAccount(
-          readerConfig({
-            token: "private-token",
-            organization: "private-organization",
-            production: "private-production",
-            nonProduction: "private-non-production",
-          })
-        ).pipe(
-          Effect.provideService(HttpClient.HttpClient, statusClient(status)),
-          Effect.exit,
-          Effect.tap(assertReadFailure(reason))
-        ),
+        Effect.gen(function* () {
+          const exit = yield* inspectSentryAccount(
+            readerConfig({
+              organization: "private-organization",
+              production: "private-production",
+              nonProduction: "private-non-production",
+            })
+          ).pipe(provideOutbound(statusClient(status)), Effect.exit);
+          yield* assertReadFailure(reason)(exit);
+        }),
       { discard: true }
     );
   })
@@ -401,12 +446,11 @@ it.effect("bounds malformed authenticated success responses and stops inspection
 
     const exit = yield* inspectSentryAccount(
       readerConfig({
-        token: "private-token-sentinel",
         organization,
         production: "private-production-sentinel",
         nonProduction: "private-non-production-sentinel",
       })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client), Effect.exit);
+    ).pipe(provideOutbound(client), Effect.exit);
 
     expect(requests).toHaveLength(1);
     assert.deepStrictEqual(
@@ -431,12 +475,11 @@ it.effect("returns a bounded failure instead of an authenticated provider respon
 
     const exit = yield* inspectSentryAccount(
       readerConfig({
-        token: "private-token-sentinel",
         organization: "private-organization-sentinel",
         production: "private-production-sentinel",
         nonProduction: "private-non-production-sentinel",
       })
-    ).pipe(Effect.provideService(HttpClient.HttpClient, client), Effect.exit);
+    ).pipe(provideOutbound(client), Effect.exit);
 
     assert.deepStrictEqual(
       exit,

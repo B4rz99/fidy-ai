@@ -50,6 +50,8 @@ const makeTestOutbound = (
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown({
             KAPSO_API_KEY: apiKey,
+            OPENAI_API_KEY: "private-openai-key",
+            MISTRAL_API_KEY: "private-mistral-key",
             RESEND_API_KEY: "re_test_only_resend_key_324000000",
             WOMPI_ENVIRONMENT: "sandbox",
             WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
@@ -158,6 +160,58 @@ it.effect("owns Resend destinations, authorization, idempotency, and bodyless re
         body: "",
       },
     ]);
+  })
+);
+
+it.effect("owns hosted-inference destinations, credentials, and retained headers", () =>
+  Effect.gen(function* () {
+    const observed: Array<Readonly<{ url: string; authorization: string; body: string }>> = [];
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) => {
+        const body =
+          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+        observed.push({
+          url: request.url,
+          authorization: new Headers(request.headers).get("authorization") ?? "",
+          body,
+        });
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("{}", {
+              status: 429,
+              headers: { "retry-after": "5", "x-private-coordinate": "private" },
+            })
+          )
+        );
+      })
+    );
+
+    const openAi = yield* outbound.execute({
+      _tag: "OpenAiInputTokens",
+      body: '{"model":"test"}',
+    });
+    const mistral = yield* outbound.execute({
+      _tag: "MistralChatCompletions",
+      body: '{"messages":[]}',
+    });
+
+    expect(observed).toEqual([
+      {
+        url: "https://api.openai.com/v1/responses/input_tokens",
+        authorization: "Bearer private-openai-key",
+        body: '{"model":"test"}',
+      },
+      {
+        url: "https://api.mistral.ai/v1/chat/completions",
+        authorization: "Bearer private-mistral-key",
+        body: '{"messages":[]}',
+      },
+    ]);
+    expect(openAi.headers).toEqual({ "retry-after": "5" });
+    expect(mistral.headers).toEqual({});
+    expectNotInspected(outbound, "private-openai-key");
+    expectNotInspected(outbound, "private-mistral-key");
   })
 );
 

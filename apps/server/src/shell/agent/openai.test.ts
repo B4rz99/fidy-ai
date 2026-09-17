@@ -45,7 +45,12 @@ import {
 import { agentOperationBindings } from "./toolkit";
 
 const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.Layer<never> =>
-  ConfigProvider.layer(ConfigProvider.fromUnknown(Object.fromEntries(entries)));
+  ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      KAPSO_API_KEY: "unused-kapso-test-key",
+      ...Object.fromEntries(entries),
+    })
+  );
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
 

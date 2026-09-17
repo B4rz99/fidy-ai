@@ -1,0 +1,25 @@
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_dc7dcb2f98bcc7::t_e60922bdb575ec 15-20
+apps/server/src/shell/onboarding/onboarding-turn.test.ts
+  s_dc7dcb2f98bcc7::t_073115f21793b2 76-80
+apps/server/src/shell/observability/web-auth.test.ts
+  s_dc7dcb2f98bcc7::t_d8b5929f0f889d 16-21
+apps/server/src/shell/browser-login/approval.test.ts
+  s_dc7dcb2f98bcc7::t_9fadb1c108df26 63-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "81f1960f633f80856fac65cac9bef03a16f14290",
+  "prompts": {},
+  "sessions": {
+    "s_dc7dcb2f98bcc7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b14c-4960-7205-9814-1e3c5b28ae21",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

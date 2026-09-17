@@ -1,0 +1,20 @@
+.agents/skills/opening-a-pr/SKILL.md
+  s_8e8a0a3033f774::t_569cdf1e56f83b 3-13,39-192
+  s_8e8a0a3033f774::t_4b72b63396e376 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f0421dc1bb38b1e2d9d2c034cea7d99d8a03bb67",
+  "prompts": {},
+  "sessions": {
+    "s_8e8a0a3033f774": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b05c-621e-77bc-9f8c-654205603fe6",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

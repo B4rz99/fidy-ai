@@ -1,0 +1,22 @@
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_f26b9f4056e846::t_772d138e8729a2 632,2902,2915,2949
+  s_f26b9f4056e846::t_fcfc8838ad3955 607-631,633
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_f26b9f4056e846::t_46bc8abf5e7ccf 91,145,453
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ea12c495f577160a2e9257d10116b4894e061519",
+  "prompts": {},
+  "sessions": {
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

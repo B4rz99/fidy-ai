@@ -1,0 +1,61 @@
+apps/server/src/shell/agent/openai.test.ts
+  s_c8cb832fff7b99::t_4f9c09e73d540b 48-53
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_c8cb832fff7b99::t_7d427f136a4c39 50-51,58
+  s_c8cb832fff7b99::t_469f834de8d67f 96-122,124-126,128-149
+  s_c8cb832fff7b99::t_47765837cba09e 52-53
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_c8cb832fff7b99::t_fffb527c447b37 2
+  s_c8cb832fff7b99::t_1ee564429889e4 3
+  s_c8cb832fff7b99::t_0cb68a859a3666 1
+apps/server/src/shell/agent/openai.ts
+  s_c8cb832fff7b99::t_5b2a0e1789478c 529,541,554,557,559,573,576,578,584,587,670,704,709,713,727
+  s_c8cb832fff7b99::t_36239be59f58b4 761,769,785,812,827,837,852,863,869,883,893,895
+  s_45665427179547::t_a585f3a32b7ce6 12,137
+  s_c8cb832fff7b99::t_724c917cd14439 22,33-38,105,107-117,123-136,138-141,143-162
+  s_c8cb832fff7b99::t_303400988a31e6 4-11,13,17-21,118-122,555,560,674
+  s_c8cb832fff7b99::t_2f5f983bc5d344 961-966
+  s_c8cb832fff7b99::t_16feaa7756d65d 957,996,1005
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c8cb832fff7b99::t_fea74898d52a77 3,5,130-131,140,163,165-167,169-170,191,194-195
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_c8cb832fff7b99::t_fdc68da4984535 44-45,180,182-185,187-191,195,197-202,204-209
+  s_c8cb832fff7b99::t_ee7a8cb129fdcf 20,28,43,46-47,49,51-53,55-58,73-76,78-80,83-85,173-177,192,193-194,210-212,214-222,229-231,233-234,236-243,245-255
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_c8cb832fff7b99::t_4cdf1f8512d431 1,4,7
+  s_c8cb832fff7b99::t_9a798e7d122471 11
+apps/server/src/shell/outbound-http/operations.ts
+  s_c8cb832fff7b99::t_26c228e963626f 92,94-108
+  s_c8cb832fff7b99::t_fe77d99b71268c 38-41,60,63-64,110,112
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_c8cb832fff7b99::t_7be4253ef9b457 57-59,64
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_c8cb832fff7b99::t_03c9af779b57a3 5
+  s_c8cb832fff7b99::t_208a9210dfac60 6,24,29,38-39,44-45,56-58,62-64,108-110,135,140-141
+  s_c8cb832fff7b99::t_7b5897d8da0ad5 124
+  s_c8cb832fff7b99::t_ebae125263647a 3-4,122-123,125-134,136,139,145,151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "04de32e32ad494c2659bbe43154ddfb1e2d3fd98",
+  "prompts": {},
+  "sessions": {
+    "s_45665427179547": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b16c-543b-76d7-a54a-87f4595b191f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c8cb832fff7b99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-96a3-737d-933b-d5b8640ab75f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

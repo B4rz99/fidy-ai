@@ -15,13 +15,13 @@ import { Option } from "effect";
 
 const TYPES_MARKER = "<!-- commit-types -->";
 
-const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): \(#[1-9][0-9]*\) (.+)$/;
+const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): #[1-9][0-9]* (.+)$/;
 
 // A data row of a scope table: the scope in a code span, then its "when to use"
 // cell. The header and separator rows carry no code span, so they never match.
 const SCOPE_ROW_PATTERN = /^\|\s*`([a-z0-9-]+)`\s*\|\s*(\S[^|]*?)\s*\|$/;
 
-const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): (#123) message";
+const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): #123 message";
 
 const NAME_COLUMN = 14;
 
@@ -151,7 +151,7 @@ const formatScopeGroup = (group: ScopeGroup): string =>
 
 const formatAllowlist = (allowlist: Allowlist): string =>
   `Required commit message format:
-type(scope): (#123) message
+type(scope): #123 message
 
 - concise body bullet
 - another body bullet

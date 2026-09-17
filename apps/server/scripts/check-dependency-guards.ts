@@ -3,6 +3,25 @@
 import { Option } from "effect";
 
 const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
+const sharedKernelRoot = `${serverRoot}/src/core/_shared`;
+const sharedKernelFiles = new Set([
+  "context.test.ts",
+  "context.ts",
+  "money.test.ts",
+  "money.ts",
+  "time.test.ts",
+  "time.ts",
+]);
+const unexpectedSharedKernelFiles = Array.from(
+  new Bun.Glob("**/*.{ts,tsx}").scanSync({ cwd: sharedKernelRoot })
+).filter((file) => !sharedKernelFiles.has(file));
+if (unexpectedSharedKernelFiles.length > 0) {
+  throw new Error(
+    "The functional-core Shared Kernel contains values beyond Money, product context, and time: " +
+      unexpectedSharedKernelFiles.join(", ")
+  );
+}
+
 const PROBE_PARENT = "src/core/audit";
 const PROBE_PREFIX = `__probe-${process.pid}-`;
 
@@ -72,12 +91,15 @@ const CONTINUITY_RUNTIME_TEST = `src/shell/agent/${PROBE_PREFIX}continuity-runti
 const ownInternal = `src/core/${PROBE_PREFIX}own-internal`;
 const foreignInternalSource = `src/core/${PROBE_PREFIX}foreign-internal-source`;
 const foreignInternalTarget = `src/core/${PROBE_PREFIX}foreign-internal-target`;
+const nestedForeignInternalSource = `src/shell/channels/${PROBE_PREFIX}foreign-internal-source`;
+const nestedForeignInternalTarget = `src/shell/channels/${PROBE_PREFIX}foreign-internal-target`;
 const typeInternalSource = `src/shell/${PROBE_PREFIX}type-internal-source`;
 const typeInternalTarget = `src/shell/${PROBE_PREFIX}type-internal-target`;
 const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
 const internalDirection = `src/core/${PROBE_PREFIX}internal-direction`;
 const operationsDirection = `src/core/${PROBE_PREFIX}operations-direction`;
 const reexportInternal = `src/core/${PROBE_PREFIX}reexport-internal`;
+const reexportInternalAlias = `src/core/${PROBE_PREFIX}reexport-internal-alias`;
 const reexportInternalType = `src/core/${PROBE_PREFIX}reexport-internal-type`;
 const publishedSource = `src/shell/${PROBE_PREFIX}published-source`;
 const publishedTarget = `src/shell/${PROBE_PREFIX}published-target`;
@@ -128,6 +150,25 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "a module cannot import another module's visible internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: ${nestedForeignInternalSource}/operations.ts → ${nestedForeignInternalTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${nestedForeignInternalTarget}/internal/value.ts`,
+        source: "export const value = true;\n",
+      },
+      {
+        path: `${nestedForeignInternalSource}/operations.ts`,
+        source: `import { value } from "~/${nestedForeignInternalTarget.replace("src/", "")}/internal/value";\n\nexport const operation = (): boolean => value;\n`,
+      },
+    ],
+    name: "nested modules cannot import another module's visible internals",
   },
   {
     expect: {
@@ -227,6 +268,28 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "published interfaces cannot launder imported internals through aliases or re-exports",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${reexportInternalAlias}/operations.ts → ./internal/value`,
+      ],
+    },
+    files: [
+      {
+        path: `${reexportInternalAlias}/internal/value.ts`,
+        source: "export const value = true;\n",
+      },
+      {
+        path: `${reexportInternalAlias}/operations.ts`,
+        source:
+          'import { value } from "./internal/value";\n\n' +
+          "const leakedValue = value;\n" +
+          "export { leakedValue };\n",
+      },
+    ],
+    name: "published interfaces cannot launder internals through local alias chains",
   },
   {
     expect: {

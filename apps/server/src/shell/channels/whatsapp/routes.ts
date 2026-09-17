@@ -25,8 +25,8 @@ import {
   TelemetryCount,
   TelemetryDuration,
   TelemetryHttpStatus,
-} from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+} from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import type { OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";

@@ -35,7 +35,7 @@ import {
   ApiHarnessClient,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { getTransactionUserDecisions, transactionPayload } from "~/shell/transactions/fixtures";
 import { StatementColumnMapper, StatementColumnMappingFailed } from "./column-mapper";
 import { truncateStatementIngestion } from "./fixtures";

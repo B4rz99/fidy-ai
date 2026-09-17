@@ -62,13 +62,20 @@ import {
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { errorEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
 import {
-  EnvelopeRecorder,
-  telemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import { ProjectedTransaction } from "~/shell/observability/projectors";
-import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
+  DisabledTelemetryResource,
+  Telemetry,
+  TelemetryDisabled,
+  makeTelemetryService,
+} from "~/shell/observability/operations";
+import { EnvelopeRecorder, telemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import {
+  DurableTraceContext,
+  ProjectedTransaction,
+  TelemetryAttempt,
+  TelemetryHttpStatus,
+} from "~/shell/observability/contract";
+
 import { findConsentDisclosureDeliveryState } from "./disclosure-store";
 import { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 import { ConsentDisclosureWorkflow } from "./disclosure-workflow";
@@ -79,11 +86,7 @@ import {
   performConsentDisclosureAttempt,
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
-import {
-  DurableTraceContext,
-  TelemetryAttempt,
-  TelemetryHttpStatus,
-} from "~/shell/observability/protocol";
+
 import {
   appendConsentRecord,
   findPendingConsentExchange,

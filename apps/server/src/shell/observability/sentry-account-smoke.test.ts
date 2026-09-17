@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
-import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./envelope-recorder";
-import { recordSentryAccountSmoke } from "./sentry-account-smoke";
-import { Telemetry } from "./telemetry";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { recordSentryAccountSmoke } from "./runtime";
+import { Telemetry } from "./operations";
 
 it.effect("emits one metadata-only defect through the ordinary Telemetry boundary", () =>
   Effect.gen(function* () {

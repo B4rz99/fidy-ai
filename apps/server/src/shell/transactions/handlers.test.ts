@@ -7,7 +7,7 @@ import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import { defaultUserId } from "~/shell/db/development-seed";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";

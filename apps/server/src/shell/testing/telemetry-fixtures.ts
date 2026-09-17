@@ -1,6 +1,6 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Schema } from "effect";
-import type { SpanDescriptor } from "~/shell/observability/protocol";
+import type { SpanDescriptor } from "~/shell/observability/contract";
 
 const hostedTurnIdentity = {
   component: "agent",

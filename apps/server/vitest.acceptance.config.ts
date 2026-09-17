@@ -6,17 +6,12 @@ const acceptanceExclude = [
   ...SOURCE_EXCLUDE,
   // Acceptance runs with disabled telemetry; enabled SDK behavior has its own integration suite.
   // Sentry account verification is outside WhatsApp acceptance scope.
-  "src/shell/observability/account-policy.ts",
-  "src/shell/observability/canonical-api.ts",
-  "src/shell/observability/sentry-account-reader.ts",
-  "src/shell/observability/sentry-account-smoke.ts",
-  "src/shell/observability/envelope-recorder.ts",
-  "src/shell/observability/projectors.ts",
-  "src/shell/observability/scheduled-work.ts",
-  "src/shell/observability/sentry-adapter.ts",
-  "src/shell/observability/sentry-live.ts",
-  "src/shell/observability/telemetry-bootstrap.ts",
-  "src/shell/observability/telemetry-config.ts",
+  "src/shell/observability/internal/account-policy.ts",
+  "src/shell/observability/internal/sentry-account-reader.ts",
+  "src/shell/observability/internal/projectors.ts",
+  "src/shell/observability/internal/sentry-adapter.ts",
+  "src/shell/observability/internal/telemetry-bootstrap.ts",
+  "src/shell/observability/internal/telemetry-config.ts",
   // Acceptance substitutes provider transport; exact OpenAI behavior is covered by adapter tests.
   "src/shell/agent/openai.ts",
   // Hosted Turn orchestration is covered by its real-PostgreSQL integration suite; acceptance

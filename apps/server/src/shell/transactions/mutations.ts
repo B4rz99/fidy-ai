@@ -39,8 +39,8 @@ import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors"
 import { findCategory } from "~/shell/categories/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { findUserInScope } from "~/shell/identity/repo";
-import type { SpanDescriptor } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import type { SpanDescriptor } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import { type TransactionApiFailure, mapTransactionFailure } from "./errors";
 import {
   type NotificationEmailAttestationInput,

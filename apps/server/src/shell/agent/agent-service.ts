@@ -82,8 +82,8 @@ import {
   TelemetryCount,
   TelemetryDuration,
   boundedTelemetryCount,
-} from "~/shell/observability/protocol";
-import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+} from "~/shell/observability/contract";
+import { Telemetry, type TelemetryService } from "~/shell/observability/operations";
 import { atomicBatchOperation } from "~/shell/operations/operations";
 import {
   type AdmittedTurn,

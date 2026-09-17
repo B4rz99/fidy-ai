@@ -10,7 +10,8 @@ import {
   References,
   Result,
 } from "effect";
-import { RuntimeLoggingLive, serverConfig } from "./runtime";
+import { RuntimeLoggingLive } from "~/shell/observability/runtime";
+import { serverConfig } from "./runtime";
 
 const configLayer = (entries: Readonly<Record<string, string>>): Layer.Layer<never> =>
   ConfigProvider.layer(ConfigProvider.fromUnknown(entries));

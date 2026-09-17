@@ -8,12 +8,9 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import { TelemetryAttempt, TelemetryHttpStatus } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { TelemetryAttempt, TelemetryHttpStatus } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
 import { type ExternalHttpProvider, makeBoundedExternalHttpClient } from "./bounded-external-http";
 

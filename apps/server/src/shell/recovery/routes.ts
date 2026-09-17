@@ -4,8 +4,8 @@ import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/u
 import { BrowserLoginPublicCodeInput } from "~/core/browser-login/rules";
 import { BackupRecoveryCode } from "~/core/recovery/model";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import { SupportAccessUnauthorized, SupportAccessVerifier } from "./access";
 import { admitSupportRecoveryInvocation } from "./repo";
 import { approveSupportRecovery } from "./service";

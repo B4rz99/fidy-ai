@@ -5,11 +5,11 @@ import {
   getTelemetryBootstrap,
   installTelemetryBootstrap,
   makeTelemetryBootstrap,
-} from "./telemetry-bootstrap";
+} from "~/shell/observability/internal/telemetry-bootstrap";
 import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
-import type { TelemetryConfig } from "./telemetry-config";
-import { DisabledTelemetryResource } from "./disabled";
-import { SentryLive } from "./sentry-live";
+import type { TelemetryConfig } from "~/shell/observability/internal/telemetry-config";
+import { DisabledTelemetryResource } from "./operations";
+import { SentryLive } from "./runtime";
 
 const disabledConfig = {
   _tag: "Disabled",
@@ -43,7 +43,7 @@ plugin({
           "--preload",
           sentryImportGuard,
           "--preload",
-          "./src/shell/observability/preload.ts",
+          "./src/shell/observability/internal/preload.ts",
           "-e",
           'console.log("application-imported")',
         ],
@@ -139,8 +139,8 @@ describe("telemetry preload handoff", () => {
       const fixtureRoot = `${process.cwd()}/.tmp/fidy-telemetry-bundle-${yield* Random.nextInt}`;
       const preloadEntry = `${fixtureRoot}/preload.ts`;
       const applicationEntry = `${fixtureRoot}/application.ts`;
-      const bootstrapModule = `${process.cwd()}/src/shell/observability/telemetry-bootstrap.ts`;
-      const disabledModule = `${process.cwd()}/src/shell/observability/disabled.ts`;
+      const bootstrapModule = `${process.cwd()}/src/shell/observability/internal/telemetry-bootstrap.ts`;
+      const disabledModule = `${process.cwd()}/src/shell/observability/operations.ts`;
       yield* Effect.promise(() =>
         Promise.all([
           Bun.write(

@@ -12,7 +12,7 @@ import {
 } from "~/shell/agent/openai";
 import { hostedOutputTokenReserve } from "~/shell/agent/hosted-inference";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
 import { requestBudgetLayer } from "~/shell/testing/evaluation/request-budget";

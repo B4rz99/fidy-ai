@@ -11,10 +11,7 @@ import {
 } from "~/shell/agent/agent-service";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { TestPublicNamespace } from "~/shell/testing/test-config";

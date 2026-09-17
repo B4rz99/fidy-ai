@@ -13,7 +13,7 @@ import {
 } from "effect";
 import { TestConsole } from "effect/testing";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { ProjectedErrorEvent, TelemetryHttpStatus } from "~/shell/observability/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
@@ -21,11 +21,8 @@ import { TranscriptText } from "~/core/transcript/model";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
-import {
-  EnvelopeRecorder,
-  type EnvelopeRecorderService,
-} from "~/shell/observability/envelope-recorder";
-import { ProjectedErrorEvent } from "~/shell/observability/projectors";
+import { EnvelopeRecorder, type EnvelopeRecorderService } from "~/shell/testing/telemetry-harness";
+
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {

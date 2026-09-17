@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { TelemetryCode } from "~/shell/observability/registry";
+import type { TelemetryCode } from "~/shell/observability/contract";
 
 /** The only retry causes that this boundary permits PersistedQueue to render durably. */
 export const PersistedQueueHandlerFailure = Schema.TaggedStruct("PersistedQueueHandlerFailure", {

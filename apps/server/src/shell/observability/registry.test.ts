@@ -3,7 +3,7 @@ import { HttpApi } from "effect/unstable/httpapi";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { ErrorCode } from "~/shell/public-http/contract";
 import { FidyApi, operationCatalog } from "~/shell/api";
-import { TelemetryRegistry } from "./registry";
+import { TelemetryRegistry } from "./contract";
 
 it("derives every canonical operation exactly once from the assembled API", () => {
   const canonical = operationCatalog.operations.map(({ id }) => id);

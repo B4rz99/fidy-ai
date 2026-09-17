@@ -13,8 +13,8 @@ import {
   type ApplicationPersistedQueueHandlerPolicy,
   makePersistedQueue,
 } from "~/shell/_shared/persisted-queue";
-import { TelemetryAttempt, TelemetryCount } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { TelemetryAttempt, TelemetryCount } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import {
   attemptEmailDelivery,

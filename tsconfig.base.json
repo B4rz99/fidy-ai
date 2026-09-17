@@ -189,7 +189,10 @@
             }
           },
           {
-            "include": ["./apps/server/src/shell/observability/release-preparation*.ts"],
+            "include": [
+              "./apps/server/src/shell/observability/internal/release-preparation*.ts",
+              "./apps/server/src/shell/observability/release-preparation*.test.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "asyncFunction": "off",

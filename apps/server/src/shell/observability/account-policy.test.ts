@@ -8,7 +8,7 @@ import {
   SentryVerificationReport,
   renderSentryVerificationReport,
   verifySentryAccount,
-} from "./account-policy";
+} from "~/shell/observability/internal/account-policy";
 
 const makeProjectObservation = (
   overrides: Partial<SentryProjectObservation> = {}

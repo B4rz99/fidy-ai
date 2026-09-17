@@ -26,7 +26,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 import { ApiHarness, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import { requestEmailReplacement } from "./replacement-transition";

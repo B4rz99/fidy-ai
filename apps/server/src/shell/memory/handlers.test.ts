@@ -5,7 +5,7 @@ import { MemoryText, RememberInput } from "~/core/memory/model";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { defaultUserId } from "~/shell/db/development-seed";
-import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import {
   ApiHarness,

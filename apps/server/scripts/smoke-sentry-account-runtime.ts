@@ -2,11 +2,8 @@
 
 import { BunRuntime } from "@effect/platform-bun";
 import { Console, Effect, Layer } from "effect";
-import {
-  SentryAccountSmokeLive,
-  recordSentryAccountSmoke,
-} from "~/shell/observability/sentry-account-smoke";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { SentryAccountSmokeLive, recordSentryAccountSmoke } from "~/shell/observability/runtime";
+import { Telemetry } from "~/shell/observability/operations";
 
 const smoke = Effect.gen(function* () {
   yield* recordSentryAccountSmoke(yield* Telemetry);

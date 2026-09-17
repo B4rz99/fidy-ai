@@ -2,28 +2,30 @@ import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contr
 import { Cause, Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { PgLive } from "~/shell/db/client";
-import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/projectors";
 import {
   type DurableTraceContext,
+  ProjectedErrorEvent,
+  ProjectedTransaction,
   TelemetryAttempt,
   TelemetryHttpStatus,
   TelemetrySpanId,
   TelemetryTraceId,
-} from "~/shell/observability/protocol";
+} from "~/shell/observability/contract";
+
 import {
+  SentryLive,
+  type TelemetryBootstrap,
+  getTelemetryBootstrap,
   isCurrentSentryClient,
   sentryClientInitializationCount,
-} from "~/shell/observability/sentry-adapter";
-import { SentryLive } from "~/shell/observability/sentry-live";
-import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+} from "~/shell/testing/telemetry-harness";
+
+import { Telemetry, type TelemetryService } from "~/shell/observability/operations";
 import {
   type DecodedEnvelopeItem,
   decodeEnvelopeItems,
 } from "~/shell/testing/telemetry-envelope-fixtures";
-import {
-  type TelemetryBootstrap,
-  getTelemetryBootstrap,
-} from "~/shell/observability/telemetry-bootstrap";
+
 import { getCompatibilityRecorder, requireInstalled } from "./handoff";
 
 const expectedBunVersion = "1.4.1";

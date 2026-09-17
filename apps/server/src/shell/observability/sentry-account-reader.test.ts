@@ -13,7 +13,7 @@ import {
   type SentryAccountReaderConfig,
   inspectSentryAccount,
   sentryAccountConfig,
-} from "./sentry-account-reader";
+} from "~/shell/observability/internal/sentry-account-reader";
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,

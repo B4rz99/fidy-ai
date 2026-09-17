@@ -1,7 +1,14 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
-import { TelemetryDisabled } from "./disabled";
+import {
+  Telemetry,
+  type TelemetryAdapter,
+  TelemetryDisabled,
+  type TelemetrySpan,
+  decodeTraceParent,
+  encodeTraceParent,
+} from "./operations";
 import {
   DurableTraceContext,
   TelemetryAttempt,
@@ -9,14 +16,7 @@ import {
   TelemetryHttpStatus,
   TelemetrySpanId,
   TelemetryTraceId,
-} from "./protocol";
-import {
-  Telemetry,
-  type TelemetryAdapter,
-  type TelemetrySpan,
-  decodeTraceParent,
-  encodeTraceParent,
-} from "./telemetry";
+} from "./contract";
 
 const telemetryLayer = (adapter: TelemetryAdapter): Layer.Layer<Telemetry> =>
   Telemetry.layer(Effect.succeed({ adapter, close: Effect.void }));
@@ -49,6 +49,9 @@ it("round-trips strict W3C loopback trace coordinates without baggage", () => {
   const traceparent = encodeTraceParent(context);
 
   expect(traceparent).toBe("00-0123456789abcdef0123456789abcdef-0123456789abcdef-00");
+  expect(encodeTraceParent(DurableTraceContext.make({ ...context, sampled: true }))).toBe(
+    "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+  );
   expect(
     decodeTraceParent({
       value: Option.some(traceparent),

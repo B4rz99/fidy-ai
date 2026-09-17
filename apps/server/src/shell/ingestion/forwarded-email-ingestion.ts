@@ -21,7 +21,7 @@ import {
 import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion/reference";
 import { externalEndpoints } from "~/shell/public-http/operations";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
-import type { Telemetry } from "~/shell/observability/telemetry";
+import type { Telemetry } from "~/shell/observability/operations";
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { forwardingLocalPartForDomain } from "./email-address";
 import {

@@ -9,7 +9,7 @@ import {
 } from "~/core/email-authentication/model";
 import { E164PhoneNumber, whatsAppCallerReference } from "~/core/identity/reference";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";

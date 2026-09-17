@@ -20,7 +20,7 @@ import { ReceivedEmailContent } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   grantCurrentOnboardingConsentForTesting,

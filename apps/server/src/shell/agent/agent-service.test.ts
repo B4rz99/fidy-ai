@@ -54,13 +54,9 @@ import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import type { ProjectedTransaction } from "~/shell/observability/projectors";
-import type { SpanDescriptor } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import type { ProjectedTransaction, SpanDescriptor } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import {
   errorEnvelopePayloads,
   transactionEnvelopePayloads,

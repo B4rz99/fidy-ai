@@ -1,112 +1,33 @@
-import { Clock, Context, Duration, Effect, type Exit, Layer, Option, Schema } from "effect";
-import { strictDecoding } from "./decoding";
+import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Option, Schema } from "effect";
+import { dual } from "effect/Function";
 import {
-  type ClassifiedFailure,
   type DeclaredOutcome,
+  DisabledTelemetryResource,
   DurableTraceContext,
   type SpanDescriptor,
-  type TelemetryBreadcrumb,
-  type TelemetryHttpStatus,
-  type TelemetryModelUsage,
-} from "./protocol";
+  type TelemetryAdapter,
+  TelemetryAttempt,
+  type TelemetryCode,
+  TelemetryCodeSchema,
+  type TelemetryResource,
+  type TelemetryService,
+  TelemetrySpan,
+  TelemetryStrictDecoding as strictDecoding,
+} from "./contract";
 
-/** Opaque adapter-owned state plus the only validated trace coordinates the service may read. */
-export const TelemetrySpan = Schema.Struct({
-  traceId: DurableTraceContext.fields.traceId,
-  spanId: DurableTraceContext.fields.parentSpanId,
-  sampled: Schema.Boolean,
-  state: Schema.Unknown,
-});
-export type TelemetrySpan = typeof TelemetrySpan.Type;
+export { DisabledTelemetryResource } from "./contract";
+export type { TelemetryAdapter, TelemetryService, TelemetrySpan } from "./contract";
 
-/**
- * Best-effort adapter contract used to construct a Telemetry layer. Implementations may perform side
- * effects, but the service validates returned spans and contains synchronous throws and failed Effects.
- */
-export type TelemetryAdapter = {
-  /** Allocates adapter state for a root or child; none means the caller's work runs unobserved. */
-  readonly startSpan: (
-    descriptor: SpanDescriptor,
-    parent: Option.Option<DurableTraceContext>
-  ) => Effect.Effect<Option.Option<TelemetrySpan>>;
-  /** Completes a span exactly once after its wrapped work exits, using that unchanged Exit. */
-  readonly finishSpan: (
-    span: TelemetrySpan,
-    exit: Exit.Exit<unknown, unknown>
-  ) => Effect.Effect<void>;
-  /** Replaces the declared outcome retained by an active adapter span. */
-  readonly recordOutcome: (span: TelemetrySpan, outcome: DeclaredOutcome) => Effect.Effect<void>;
-  /** Adds a validated HTTP response status to an active HTTP or provider span. */
-  readonly recordResponseStatus: (
-    span: TelemetrySpan,
-    status: TelemetryHttpStatus
-  ) => Effect.Effect<void>;
-  /** Emits one already-classified failure, optionally attached to the supplied active span. */
-  readonly captureFailure: (
-    span: Option.Option<TelemetrySpan>,
-    failure: ClassifiedFailure
-  ) => Effect.Effect<void>;
-  /** Retains one approved breadcrumb on the supplied active span. */
-  readonly addBreadcrumb: (
-    span: TelemetrySpan,
-    breadcrumb: TelemetryBreadcrumb
-  ) => Effect.Effect<void>;
-  /** Retains final bounded usage on an active approved model span. */
-  readonly recordModelUsage: (
-    span: TelemetrySpan,
-    usage: TelemetryModelUsage
-  ) => Effect.Effect<void>;
-};
-
-/**
- * The sole application-facing observability capability. Methods accept closed diagnostic values,
- * are best effort, and span wrappers preserve the wrapped Effect's success, error, and requirements.
- */
-export type TelemetryService = {
-  /** Starts a root or child span; adapter failure runs work unobserved and never changes its exit. */
-  readonly span: <A, E, R>(
-    descriptor: SpanDescriptor,
-    work: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E, R>;
-  /** Starts an isolated root even when the calling fiber is already inside unrelated observed work. */
-  readonly rootSpan: <A, E, R>(
-    descriptor: SpanDescriptor,
-    work: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E, R>;
-  /** Continues context no older than 24 hours; malformed, future, or stale input starts a safe root. */
-  readonly continueSpan: <A, E, R>(
-    savedContext: unknown,
-    descriptor: SpanDescriptor,
-    work: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E, R>;
-  /** Replaces the active span's declared outcome; the latest declaration wins. Outside a span, no-op. */
-  readonly recordOutcome: (outcome: DeclaredOutcome) => Effect.Effect<void>;
-  /** Adds a bounded response status to the active HTTP or provider span. Outside a span, no-op. */
-  readonly recordResponseStatus: (status: TelemetryHttpStatus) => Effect.Effect<void>;
-  /** Captures a classified failure, attaching active trace coordinates when a span exists. */
-  readonly captureFailure: (failure: ClassifiedFailure) => Effect.Effect<void>;
-  /** Adds an approved breadcrumb to the active span. Outside a span, no-op. */
-  readonly addBreadcrumb: (breadcrumb: TelemetryBreadcrumb) => Effect.Effect<void>;
-  /** Records final bounded counters on the active approved model span. Outside a span, no-op. */
-  readonly recordModelUsage: (usage: TelemetryModelUsage) => Effect.Effect<void>;
-  /** Returns only durable trace coordinates for the active span, or none outside a span. */
-  readonly captureDurableContext: Effect.Effect<Option.Option<DurableTraceContext>>;
-  /** Proves that coordinates name a currently active in-process span with the expected operation. */
-  readonly isActiveSpan: (
-    context: DurableTraceContext,
-    operation: SpanDescriptor["operation"]
-  ) => Effect.Effect<boolean>;
-};
-
-/** A telemetry adapter together with the shutdown effect that drains its accepted work. */
-export type TelemetryResource = Readonly<{
-  adapter: TelemetryAdapter;
-  close: Effect.Effect<void>;
-}>;
+export {
+  projectExternalHttpOutcome,
+  projectExternalHttpRequest,
+  projectExternalHttpResponse,
+  projectStack,
+} from "./contract";
 
 /** The shell-owned metadata-only observability seam. */
 export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
-  "@fidy/server/shell/observability/telemetry"
+  "@fidy/server/shell/observability/operations/Telemetry"
 ) {
   /** Builds the service from a scoped adapter resource and drains it when the layer shuts down. */
   static readonly layer = <E, R>(
@@ -121,7 +42,7 @@ export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
 }
 
 const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(
-  "@fidy/server/shell/observability/telemetry/CurrentTelemetrySpan",
+  "@fidy/server/shell/observability/operations/CurrentTelemetrySpan",
   { defaultValue: Option.none }
 );
 
@@ -271,7 +192,13 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
       ),
     rootSpan: (descriptor, work) =>
       Effect.provideService(
-        observeWith({ adapter, activeSpans, parent: Option.none(), descriptor, work }),
+        observeWith({
+          adapter,
+          activeSpans,
+          parent: Option.none(),
+          descriptor,
+          work,
+        }),
         CurrentTelemetrySpan,
         Option.none()
       ),
@@ -308,3 +235,142 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
       ),
   });
 };
+
+/** Side-effect-free telemetry service for narrow optional-observability boundaries. */
+export const DisabledTelemetry: TelemetryService = makeTelemetryService(
+  DisabledTelemetryResource.adapter
+);
+
+/** Makes every telemetry operation a side-effect-free no-op while preserving wrapped Work. */
+export const TelemetryDisabled: Layer.Layer<Telemetry> = Telemetry.layer(
+  Effect.succeed(DisabledTelemetryResource)
+);
+
+const ExpectedFailure = Schema.Struct({
+  error: Schema.Struct({ code: TelemetryCodeSchema.error }),
+});
+
+/** Reads the declared error contract out of one canonical failure, ignoring undeclared shapes. */
+export const expectedOutcome = (failure: unknown): Option.Option<DeclaredOutcome> =>
+  Option.map(Schema.decodeUnknownOption(ExpectedFailure)(failure), ({ error }) => ({
+    outcome: "rejected",
+    error: Option.some(error.code),
+    retryable: false,
+  }));
+
+/**
+ * The canonical operation span shared by HTTP-dispatched and hosted in-process execution, so both
+ * paths remain observable through the same descriptor.
+ */
+export const operationDescriptor = (operation: TelemetryCode<"operation">): SpanDescriptor => ({
+  component: "api",
+  operation,
+  trigger: "api",
+  spanOperation: "fidy.operation",
+  workKind: "canonical_operation",
+  metadata: { _tag: "None" },
+});
+
+/** Records a declared canonical rejection as an outcome rather than an unexpected failure. */
+export const recordExpectedOutcome =
+  (telemetry: TelemetryService) =>
+  (failure: unknown): Effect.Effect<void> =>
+    Option.match(expectedOutcome(failure), {
+      onNone: () => Effect.void,
+      onSome: telemetry.recordOutcome,
+    });
+
+/** A checked-in schedule identity and its fixed exhausted-failure classification. */
+export type ScheduledWorkDescriptor = Readonly<{
+  component: TelemetryCode<"component">;
+  schedule: Extract<TelemetryCode<"operation">, `task.${string}`>;
+  operationalError: TelemetryCode<"error">;
+}>;
+
+const recordScheduledWorkExit = (
+  telemetry: TelemetryService,
+  descriptor: ScheduledWorkDescriptor,
+  exit: Exit.Exit<unknown, unknown>
+): Effect.Effect<void> => {
+  if (Exit.isSuccess(exit)) return Effect.void;
+  const cause = exit.cause;
+  if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
+    return telemetry.recordOutcome({
+      outcome: "interrupted",
+      error: Option.none(),
+      retryable: false,
+    });
+  }
+  if (Cause.hasDies(cause)) {
+    return Effect.all(
+      [
+        telemetry.recordOutcome({
+          outcome: "failed",
+          error: Option.some("unexpected_defect"),
+          retryable: false,
+        }),
+        telemetry.captureFailure({
+          _tag: "Defect",
+          component: descriptor.component,
+          operation: descriptor.schedule,
+          error: "unexpected_defect",
+          cause,
+        }),
+      ],
+      { discard: true }
+    );
+  }
+  return Effect.all(
+    [
+      telemetry.recordOutcome({
+        outcome: "failed",
+        error: Option.some(descriptor.operationalError),
+        retryable: true,
+      }),
+      telemetry.captureFailure({
+        _tag: "ExhaustedOperationalFailure",
+        component: descriptor.component,
+        operation: descriptor.schedule,
+        error: descriptor.operationalError,
+        provider: Option.none(),
+        retryable: true,
+        cause,
+      }),
+    ],
+    { discard: true }
+  );
+};
+
+const observeScheduledWork = <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+  descriptor: ScheduledWorkDescriptor
+): Effect.Effect<A, E, R | Telemetry> =>
+  Effect.gen(function* () {
+    const telemetry = yield* Telemetry;
+    return yield* telemetry.rootSpan(
+      {
+        component: descriptor.component,
+        operation: descriptor.schedule,
+        trigger: "schedule",
+        spanOperation: "task.scheduled",
+        workKind: "scheduled_execution",
+        metadata: { _tag: "Schedule", attempt: TelemetryAttempt.make(1) },
+      },
+      Effect.onExit(work, (exit) => recordScheduledWorkExit(telemetry, descriptor, exit))
+    );
+  });
+
+/**
+ * Observes one independently triggered execution as an isolated root. The wrapped exit is unchanged;
+ * expected outcomes may be declared by the work, pure shutdown interruption is not captured, and an
+ * exhausted failure is captured once with only the descriptor's fixed diagnostic codes.
+ */
+export const runScheduledWork: {
+  (
+    descriptor: ScheduledWorkDescriptor
+  ): <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R | Telemetry>;
+  <A, E, R>(
+    work: Effect.Effect<A, E, R>,
+    descriptor: ScheduledWorkDescriptor
+  ): Effect.Effect<A, E, R | Telemetry>;
+} = dual(2, observeScheduledWork);

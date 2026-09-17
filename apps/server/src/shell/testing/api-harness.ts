@@ -75,14 +75,14 @@ import {
   ShardingConfig,
 } from "effect/unstable/cluster";
 import { ClusterReadiness } from "~/shell/cluster-readiness";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultPatBearer } from "./identity-fixtures";
 import { TestPublicNamespace, testResendWebhookSecret } from "./test-config";
 import { HttpLive } from "~/shell/http";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import type { Telemetry } from "~/shell/observability/telemetry";
-import { TelemetryEnvelopeRecording } from "~/shell/observability/envelope-recorder";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import type { Telemetry } from "~/shell/observability/operations";
+import { TelemetryEnvelopeRecording } from "./telemetry-harness";
 import type { SupportAccessVerifier } from "~/shell/recovery/access";
 import { SupportRecoveryTestAccess } from "~/shell/recovery/routes";
 

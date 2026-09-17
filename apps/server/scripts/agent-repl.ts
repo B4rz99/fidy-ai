@@ -6,7 +6,7 @@ import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { DurableExecutionClientLive } from "~/shell/durable-execution";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 
 const program = Effect.gen(function* () {
   const phoneNumber = yield* Config.string("FIDY_REPL_PHONE_NUMBER").pipe(

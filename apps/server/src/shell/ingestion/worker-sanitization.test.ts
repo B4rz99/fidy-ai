@@ -5,7 +5,7 @@ import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/mod
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
-import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 import { ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { StatementColumnMapper, StatementColumnMappingFailed } from "./column-mapper";
 import { truncateStatementIngestion } from "./fixtures";

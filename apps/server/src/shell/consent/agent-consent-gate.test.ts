@@ -7,7 +7,7 @@ import { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";

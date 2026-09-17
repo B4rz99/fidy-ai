@@ -13,10 +13,9 @@ import {
   Schema,
 } from "effect";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
-import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./envelope-recorder";
-import { ProjectedErrorEvent, ProjectedTransaction } from "./projectors";
-import { runScheduledWork } from "./scheduled-work";
-import { Telemetry } from "./telemetry";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { ProjectedErrorEvent, ProjectedTransaction } from "./contract";
+import { Telemetry, runScheduledWork } from "./operations";
 
 const payloadsOf = <Decoded, Encoded>(
   schema: Schema.Codec<Decoded, Encoded>,

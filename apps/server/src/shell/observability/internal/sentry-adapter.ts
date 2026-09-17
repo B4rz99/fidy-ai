@@ -1,11 +1,7 @@
 import * as Sentry from "@sentry/bun";
 import { Cause, Clock, Effect, Encoding, Exit, Option, Predicate, Schema } from "effect";
-import { strictDecoding } from "./decoding";
 import {
   type ActiveTraceCoordinates,
-  type ProjectedBreadcrumb,
-  ProjectedErrorEvent,
-  ProjectedTransaction,
   projectBreadcrumb,
   projectErrorEvent,
   projectFinalBreadcrumb,
@@ -16,19 +12,27 @@ import {
   type ClassifiedFailure,
   DeclaredOutcome,
   type DurableTraceContext,
+  type ProjectedBreadcrumb,
+  ProjectedErrorEvent,
+  ProjectedTransaction,
   SpanDescriptor,
   type TelemetryBreadcrumb,
   type TelemetryHttpStatus,
   type TelemetryModelUsage,
   TelemetrySpanId,
   TelemetryTraceId,
-} from "./protocol";
+  TelemetryStrictDecoding as strictDecoding,
+} from "~/shell/observability/contract";
 import type {
   EnabledCapture,
   NonProductionTelemetryConfig,
   ProductionTelemetryConfig,
 } from "./telemetry-config";
-import type { TelemetryAdapter, TelemetryResource, TelemetrySpan } from "./telemetry";
+import type {
+  TelemetryAdapter,
+  TelemetryResource,
+  TelemetrySpan,
+} from "~/shell/observability/contract";
 
 const recordingDsn = "https://public@example.invalid/1";
 const recordingRelease = "fidy@0000000000000000000000000000000000000000";
@@ -670,8 +674,7 @@ const makeNetworkTransport: SentryTransport = (options) => {
 };
 
 /** Reports whether runtime assembly still sees the exact client bound by early preload. */
-export const isCurrentSentryClient = (client: Sentry.BunClient): boolean =>
-  Sentry.getClient() === client;
+export const isCurrentSentryClient = (client: unknown): boolean => Sentry.getClient() === client;
 
 /** Validated enabled configuration accepted by the Sentry telemetry adapter. */
 export type SentryTelemetryConfig = ProductionTelemetryConfig | NonProductionTelemetryConfig;

@@ -9,7 +9,7 @@ import {
   transactionEnvelopePayloads as transactionPayloads,
 } from "~/shell/testing/telemetry-envelope-fixtures";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
-import { EnvelopeRecorder } from "./envelope-recorder";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 
 layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "canonical API telemetry",

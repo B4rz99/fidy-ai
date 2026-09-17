@@ -29,11 +29,8 @@ import {
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";

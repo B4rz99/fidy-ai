@@ -1,8 +1,5 @@
 import { Option, Result, Schema } from "effect";
-import type {
-  RecordingClient,
-  RecordingTransportOutcome,
-} from "~/shell/observability/sentry-adapter";
+import type { RecordingClient, RecordingTransportOutcome } from "~/shell/testing/telemetry-harness";
 
 let compatibilityRecorder = Option.none<RecordingClient>();
 

@@ -29,8 +29,9 @@ const makeHarness = async (): Promise<Readonly<{ root: string; calls: string }>>
   const root = await mkdtemp(join(tmpdir(), "fidy-release-"));
   temporaryRoots.push(root);
   const build = await Bun.build({
-    entrypoints: [`${process.cwd()}/scripts/prepare-sentry-release.ts`],
+    entrypoints: [`${process.cwd()}/scripts/prepare-sentry-release-runtime.ts`],
     outdir: `${root}/dist/commands`,
+    naming: "prepare-sentry-release.js",
     target: "bun",
     sourcemap: "external",
   });

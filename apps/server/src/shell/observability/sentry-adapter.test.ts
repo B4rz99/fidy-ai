@@ -1,8 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { Data, Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { closeTelemetryClient, makeSentryTelemetry, projectSdkSpan } from "./sentry-adapter";
-import type { NonProductionTelemetryConfig } from "./telemetry-config";
+import {
+  closeTelemetryClient,
+  makeSentryTelemetry,
+  projectSdkSpan,
+} from "~/shell/observability/internal/sentry-adapter";
+import type { NonProductionTelemetryConfig } from "~/shell/observability/internal/telemetry-config";
 
 class TestTransportFailure extends Data.TaggedError("TestTransportFailure") {}
 
@@ -24,7 +28,11 @@ it.effect("pins collection policy and fails malformed final hooks closed", () =>
       ({ resource }) => resource.close
     );
     const options = telemetry.client.getOptions();
+    const beforeSend = Option.getOrThrow(Option.fromNullishOr(options.beforeSend));
     const beforeSendSpan = Option.getOrThrow(Option.fromNullishOr(options.beforeSendSpan));
+    const beforeSendTransaction = Option.getOrThrow(
+      Option.fromNullishOr(options.beforeSendTransaction)
+    );
     const beforeBreadcrumb = Option.getOrThrow(Option.fromNullishOr(options.beforeBreadcrumb));
     const beforeSendLog = Option.getOrThrow(Option.fromNullishOr(options.beforeSendLog));
     const beforeSendMetric = Option.getOrThrow(Option.fromNullishOr(options.beforeSendMetric));
@@ -52,6 +60,8 @@ it.effect("pins collection policy and fails malformed final hooks closed", () =>
     expect(projectSdkSpan({})).toEqual(emptySpan);
     expect(projectSdkSpan(null)).toEqual(emptySpan);
     expect(beforeBreadcrumb({})).toBeNull();
+    expect(beforeSend({ type: undefined }, { attachments: [] })).toBeNull();
+    expect(beforeSendTransaction({ type: "transaction" }, { attachments: [] })).toBeNull();
     expect(beforeSendLog({ level: "info", message: "sentinel" })).toBeNull();
     expect(beforeSendMetric({ name: "sentinel", value: 1, type: "counter" })).toBeNull();
     expect(beforeSendSpan(emptySpan)).toEqual(emptySpan);

@@ -10,8 +10,8 @@ import {
   projectExternalHttpOutcome,
   projectExternalHttpRequest,
   projectExternalHttpResponse,
-} from "~/shell/observability/projectors";
-import type { TelemetryCode } from "~/shell/observability/registry";
+} from "~/shell/observability/operations";
+import type { TelemetryCode } from "~/shell/observability/contract";
 import { collectBoundedBytes } from "./bounded-bytes";
 import { protectHttpClient } from "./protected-http-client";
 import { retainedResponseHeaders } from "./projected-http-client-error";

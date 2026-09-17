@@ -93,6 +93,7 @@ const foreignInternalSource = `src/core/${PROBE_PREFIX}foreign-internal-source`;
 const foreignInternalTarget = `src/core/${PROBE_PREFIX}foreign-internal-target`;
 const nestedForeignInternalSource = `src/shell/channels/${PROBE_PREFIX}foreign-internal-source`;
 const nestedForeignInternalTarget = `src/shell/channels/${PROBE_PREFIX}foreign-internal-target`;
+const nestedInterfaceDirection = `src/shell/channels/${PROBE_PREFIX}interface-direction`;
 const typeInternalSource = `src/shell/${PROBE_PREFIX}type-internal-source`;
 const typeInternalTarget = `src/shell/${PROBE_PREFIX}type-internal-target`;
 const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
@@ -169,6 +170,30 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "nested modules cannot import another module's visible internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error operations-imports-runtime: ${nestedInterfaceDirection}/operations.ts → ${nestedInterfaceDirection}/runtime.ts`,
+        `error published-interface-reexports-internal: ${nestedInterfaceDirection}/operations.ts → ${nestedInterfaceDirection}/internal/value.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${nestedInterfaceDirection}/internal/value.ts`,
+        source: "export const value = true;\n",
+      },
+      { path: `${nestedInterfaceDirection}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${nestedInterfaceDirection}/operations.ts`,
+        source:
+          'import { runtime } from "./runtime";\n' +
+          'export { value } from "./internal/value";\n\n' +
+          "export const operation = (): boolean => runtime;\n",
+      },
+    ],
+    name: "nested Published Trio interfaces keep direction and internal publication rules",
   },
   {
     expect: {

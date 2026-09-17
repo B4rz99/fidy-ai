@@ -1,7 +1,7 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { TokenAuthorization } from "~/shell/_shared/authz";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
-import { ValidationGate } from "~/shell/_shared/errors";
+import { ValidationGate } from "~/shell/public-http/contract";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 import { BudgetsGroup } from "~/shell/budgets/operations";

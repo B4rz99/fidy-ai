@@ -8,7 +8,7 @@ import {
   StatementIdempotencyKey,
   type SubmitForExtractionInput,
 } from "~/core/ingestion/model";
-import { PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
+import { PaywallRequired, ValidationFailed } from "~/shell/public-http/contract";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";

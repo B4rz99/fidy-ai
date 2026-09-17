@@ -2,10 +2,14 @@ import * as Arr from "effect/Array";
 import { type Effect, Option, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { ErrorCode, FieldIssue } from "~/shell/_shared/errors";
+import {
+  ErrorCode,
+  FieldIssue,
+  NextOperations,
+  OperationResponse,
+} from "~/shell/public-http/contract";
 import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
 import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";
-import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 const operationsGroupName = "operations";
 const atomicBatchEndpointName = "executeAtomicBatch";

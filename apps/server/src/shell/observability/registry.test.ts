@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { HttpApi } from "effect/unstable/httpapi";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
-import { ErrorCode } from "~/shell/_shared/errors";
+import { ErrorCode } from "~/shell/public-http/contract";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { TelemetryRegistry } from "./registry";
 

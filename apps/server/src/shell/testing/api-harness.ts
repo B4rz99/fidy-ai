@@ -35,16 +35,16 @@ import { type TokenBearer } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
 import { makeTokenAuthorizationClientLive } from "~/shell/_shared/authz";
-import { okStatus } from "~/shell/_shared/http-status";
-import type {
-  ConsentRequired,
-  NotFound,
-  PaywallRequired,
-  ScopeMissing,
-  Unauthenticated,
-  UserActionRequired,
-  ValidationFailed,
-} from "~/shell/_shared/errors";
+import {
+  type ConsentRequired,
+  type NotFound,
+  type PaywallRequired,
+  type ScopeMissing,
+  type Unauthenticated,
+  type UserActionRequired,
+  type ValidationFailed,
+  okStatus,
+} from "~/shell/public-http/contract";
 import { FidyApi } from "~/shell/api";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";

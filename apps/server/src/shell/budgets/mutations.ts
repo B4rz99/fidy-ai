@@ -11,8 +11,11 @@ import { CategoryNotFound } from "~/core/categories/errors";
 import { type CategoryId } from "~/core/categories/reference";
 import type { UserId } from "~/core/identity/reference";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import type { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import type { OperationResponse } from "~/shell/_shared/response";
+import {
+  type NotFound,
+  type OperationResponse,
+  type ValidationFailed,
+} from "~/shell/public-http/contract";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { findCategory } from "~/shell/categories/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";

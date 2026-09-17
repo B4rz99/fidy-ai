@@ -26,7 +26,7 @@ import {
   executeHostedCanonicalOperation,
 } from "~/shell/_shared/canonical-operation-executor";
 import { immediatePermit, makeTurnConfirmation } from "~/shell/agent/tool-confirmation";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 import { agentOperationBindings } from "~/shell/agent/toolkit";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { TelemetryDisabled } from "~/shell/observability/disabled";

@@ -2,8 +2,7 @@ import { Option } from "effect";
 import { type InsightFailure } from "~/core/insights/errors";
 import { type InsightEventId, type InsightLifecycleState } from "~/core/insights/model";
 import { allowedInsightTransitions } from "~/core/insights/rules";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import { type SuggestedOperation } from "~/shell/_shared/response";
+import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   type SuggestedOperationCandidate,

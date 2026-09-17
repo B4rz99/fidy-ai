@@ -19,8 +19,7 @@ import { TokenBearer } from "~/core/tokens/model";
 import { defaultUserId, seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { ValidationFailed } from "~/shell/_shared/errors";
-import { type SuggestedOperation } from "~/shell/_shared/response";
+import { type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import {
   type ApiClient,

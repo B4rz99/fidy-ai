@@ -1,6 +1,6 @@
 import * as Arr from "effect/Array";
 import { Option, Schema } from "effect";
-import { ErrorCode } from "~/shell/_shared/errors";
+import { ErrorCode } from "~/shell/public-http/contract";
 import { operationCatalog } from "~/shell/api";
 
 type RequireNonEmpty = <Value>(

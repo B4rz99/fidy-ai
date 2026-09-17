@@ -567,7 +567,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-imports-shell: ${CORE_TO_SHELL}/probe.ts → src/shell/_shared/errors.ts`,
+        `error core-imports-shell: ${CORE_TO_SHELL}/probe.ts → src/shell/public-http/contract.ts`,
       ],
     },
     files: [
@@ -575,7 +575,7 @@ const PROBES: readonly Probe[] = [
         path: `${CORE_TO_SHELL}/probe.ts`,
         source:
           'import { UserId } from "~/core/identity/reference";\n' +
-          'import "~/shell/_shared/errors";\n\n' +
+          'import "~/shell/public-http/contract";\n\n' +
           "export const coreImportsShellProbe = UserId;\n",
       },
     ],

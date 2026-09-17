@@ -20,8 +20,8 @@ proves it never queries or mutates a root MX record.
 
 ## Runtime configuration
 
-The shared `externalEndpoints` configuration in
-[`apps/server/src/shell/_shared/external-endpoints.ts`](../../apps/server/src/shell/_shared/external-endpoints.ts)
+The Public HTTP module's `externalEndpoints` operation in
+[`apps/server/src/shell/public-http/operations.ts`](../../apps/server/src/shell/public-http/operations.ts)
 derives all stable paths from these variables. The web build validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT management uses
 `/settings/pats`. The former `/auth/magic` entry is retired by ADR 0015:
 

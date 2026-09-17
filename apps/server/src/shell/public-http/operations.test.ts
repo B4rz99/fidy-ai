@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
-import { externalEndpoints } from "./external-endpoints";
+import { externalEndpoints } from "./operations";
 
 const configuredNamespace = (webOrigin: string): ConfigProvider.ConfigProvider =>
   ConfigProvider.fromEnv({

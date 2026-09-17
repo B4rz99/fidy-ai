@@ -3,7 +3,7 @@ import type { ProviderMessageEvidence } from "~/core/provider-evidence/contract"
 import type { PendingConsentExchangeId } from "~/core/consent/model";
 import { findPendingConsentDisclosureRetry } from "~/shell/consent/repo";
 import { TranscriptText } from "~/core/transcript/model";
-import { okStatus } from "~/shell/_shared/http-status";
+import { okStatus } from "~/shell/public-http/contract";
 import {
   applyConsentDisclosureLifecycle,
   performConsentDisclosureAttempt,

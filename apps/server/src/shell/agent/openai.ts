@@ -12,7 +12,7 @@ import {
   boundedProviderLibraryHttpClientLayer,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
-import { isTransientHttpStatus } from "~/shell/_shared/http-status";
+import { isTransientHttpStatus } from "~/shell/public-http/contract";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
   defaultCompactionMaximumTokens,

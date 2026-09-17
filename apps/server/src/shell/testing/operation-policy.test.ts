@@ -2,12 +2,11 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { HttpApi } from "effect/unstable/httpapi";
 import { TokenAuthorization } from "~/shell/_shared/authz";
-import { ValidationGate } from "~/shell/_shared/errors";
+import { ValidationGate, isOperationResponse } from "~/shell/public-http/contract";
 import {
   type AgentConfirmation,
   type CanonicalOperationKind,
 } from "~/shell/_shared/operation-policy";
-import { isOperationResponse } from "~/shell/_shared/response";
 import { FidyApi, type OperationId } from "~/shell/api";
 import { ApiHarness } from "./api-harness";
 import { publishedOperations } from "./openapi";

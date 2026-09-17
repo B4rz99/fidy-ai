@@ -23,8 +23,12 @@ import {
 } from "~/core/transactions/user-decisions";
 import { type UserId } from "~/core/identity/reference";
 import { type CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import { type NotFound, type ValidationFailed } from "~/shell/_shared/errors";
-import { type OperationResponse, type SuggestedOperation } from "~/shell/_shared/response";
+import {
+  type NotFound,
+  type OperationResponse,
+  type SuggestedOperation,
+  type ValidationFailed,
+} from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,

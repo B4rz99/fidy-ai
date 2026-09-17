@@ -23,9 +23,8 @@ import {
   makeLayoutNodeSchema,
 } from "~/core/dashboard/model";
 import { Transaction } from "~/core/transactions/model";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
 
 const LocalCalendarDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)

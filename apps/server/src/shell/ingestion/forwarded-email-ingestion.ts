@@ -19,7 +19,7 @@ import {
   maximumEmailRecipients,
 } from "~/core/ingestion/email-policy";
 import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion/reference";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";

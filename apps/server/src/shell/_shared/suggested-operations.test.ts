@@ -10,7 +10,7 @@ import {
   suggestOperation,
 } from "./suggested-operations";
 import { patScopeCapability, patScoped, webOrHosted } from "./operation-policy";
-import { SuggestedOperation } from "./response";
+import { SuggestedOperation } from "~/shell/public-http/contract";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;
 const freeCaller = freePatCaller(allCapabilities);

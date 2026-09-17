@@ -2,7 +2,7 @@ import { Option, Schema } from "effect";
 import { ClusterError } from "effect/unstable/cluster";
 import { HttpClientError } from "effect/unstable/http";
 import type { RpcClientError } from "effect/unstable/rpc";
-import { isTransientHttpStatus } from "./http-status";
+import { isTransientHttpStatus } from "~/shell/public-http/contract";
 
 /** Closed transport-versus-protocol classification shared by shell RPC consumers. */
 export type RpcFailureKind = "transient" | "incompatible";

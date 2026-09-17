@@ -5,7 +5,7 @@ import {
   freshWebSessionOnly,
   operationPolicy,
 } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 
 const rotateBackupRecoveryCode = HttpApiEndpoint.post(
   "rotateBackupRecoveryCode",

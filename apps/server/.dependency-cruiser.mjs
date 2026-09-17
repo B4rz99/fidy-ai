@@ -175,16 +175,17 @@ export default {
       to: { path: "^src/(core|shell)/[^/]+/runtime\\.ts$" },
     },
     {
-      // Two things under src/ are in reach of the assembly, and nothing else
-      // is: a slice's operations.ts, which is what it composes, and
-      // shell/_shared, which holds what the assembly is itself built from —
-      // the ValidationGate it fixes across every group. Core is out with the
-      // rest, so an import of `src/core/**` from here trips this too.
+      // Three things under src/ are in reach of the assembly, and nothing else
+      // is: a slice's operations.ts, which is what it composes; shell/_shared,
+      // which still holds canonical declaration assembly; and Public HTTP's
+      // contract, which declares the ValidationGate fixed across every group.
+      // Core is out with the rest, so an import of `src/core/**` from here trips this too.
       name: "api-assembly-imports-beyond-operations",
       severity: "error",
       comment:
-        "src/shell/api.ts imported something other than a slice's operations.ts or " +
-        "shell/_shared. The assembly composes operation definitions and nothing else. A slice's " +
+        "src/shell/api.ts imported something other than a slice's operations.ts, " +
+        "shell/_shared, or the Public HTTP contract. The assembly composes operation definitions " +
+        "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
         "api.ts imports operation definitions, implementations import api.ts, and the layer assembly that " +
@@ -192,7 +193,11 @@ export default {
       from: { path: "^src/shell/api\\.ts$" },
       to: {
         path: "^src/",
-        pathNot: ["^src/shell/_shared/", "^src/shell/[^/]+/operations\\.ts$"],
+        pathNot: [
+          "^src/shell/_shared/",
+          "^src/shell/public-http/contract\\.ts$",
+          "^src/shell/[^/]+/operations\\.ts$",
+        ],
       },
     },
     {

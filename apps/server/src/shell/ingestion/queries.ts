@@ -3,8 +3,8 @@ import { freeForwardedEmailDeferredCap } from "~/core/ingestion/email-policy";
 import { emailAllowancePeriod, forwardedEmailAllowanceRemaining } from "~/core/ingestion/rules";
 import type { UserId } from "~/core/identity/reference";
 import type { StatementSubmissionId } from "~/core/ingestion/reference";
-import { NotFound } from "~/shell/_shared/errors";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { NotFound } from "~/shell/public-http/contract";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {

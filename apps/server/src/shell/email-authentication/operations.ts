@@ -5,7 +5,7 @@ import {
   freshWebOrVerifiedWhatsAppHosted,
   operationPolicy,
 } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 
 /** Candidate mailbox supplied for one verified-email replacement request. */
 export const RequestEmailReplacementPayload = Schema.Struct({

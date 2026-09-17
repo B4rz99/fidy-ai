@@ -38,7 +38,12 @@ import {
   executeCanonicalEffect,
   findCanonicalCallRejected,
 } from "./canonical-operation-executor";
-import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
+import {
+  ConsentRequired,
+  ScopeMissing,
+  Unauthenticated,
+  UserActionRequired,
+} from "~/shell/public-http/contract";
 import {
   type CanonicalCaller,
   type ChildOperationAudit,

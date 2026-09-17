@@ -21,16 +21,17 @@ import {
   TokenBearer,
   TokenShortId,
 } from "~/core/tokens/model";
-import { NotFound, ScopeMissing } from "~/shell/_shared/errors";
+import {
+  NotFound,
+  ScopeMissing,
+  SuggestedOperation,
+  type SuggestedOperation as SuggestedOperationValue,
+} from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   canCallOperation,
 } from "~/shell/_shared/suggested-operations";
 import { patScopeCapability } from "~/shell/_shared/operation-policy";
-import {
-  SuggestedOperation,
-  type SuggestedOperation as SuggestedOperationValue,
-} from "~/shell/_shared/response";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";

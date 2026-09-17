@@ -26,7 +26,7 @@ import {
   CanonicalPreTransactions,
 } from "./canonical-pre-transaction";
 import { canonicalTransactionIsolation, retryCanonicalSnapshot } from "./canonical-snapshot";
-import { isCanonicalRejectedFailure } from "./errors";
+import { isCanonicalRejectedFailure } from "~/shell/public-http/contract";
 import { getBoundOperationCatalog } from "./operation-catalog";
 import { type OperationPolicyValue, decideOperationAccess } from "./operation-policy";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";

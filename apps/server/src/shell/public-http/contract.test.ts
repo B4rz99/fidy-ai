@@ -8,8 +8,8 @@ import {
   HttpApiGroup,
   HttpApiTest,
 } from "effect/unstable/httpapi";
-import { Unauthenticated, ValidationGate } from "./errors";
-import { ValidationGateLive } from "./errors-live";
+import { Unauthenticated, ValidationGate } from "./contract";
+import { ValidationGateLive } from "./runtime";
 
 const CheckedSuccess = Schema.Struct({
   value: Schema.Finite.check(Schema.isGreaterThan(0)),
@@ -39,7 +39,10 @@ const EncodeFailureHarness = EncodeFailureLive.pipe(
 it.effect("keeps API failures taggable in-process without publishing the tag", () =>
   Effect.gen(function* () {
     const failure = Unauthenticated.make({
-      error: { code: "unauthenticated", message: "Supply a known TokenBearer." },
+      error: {
+        code: "unauthenticated",
+        message: "Supply a known TokenBearer.",
+      },
       next: [],
     });
     const recovered = yield* Effect.fail(failure).pipe(
@@ -49,7 +52,10 @@ it.effect("keeps API failures taggable in-process without publishing the tag", (
 
     expect(recovered).toBe("Supply a known TokenBearer.");
     expect(encoded).toEqual({
-      error: { code: "unauthenticated", message: "Supply a known TokenBearer." },
+      error: {
+        code: "unauthenticated",
+        message: "Supply a known TokenBearer.",
+      },
       next: [],
     });
   })
@@ -60,7 +66,9 @@ layer(EncodeFailureHarness)("validation gate", (it) => {
     Effect.gen(function* () {
       const client = yield* HttpApiTest.groups(EncodeFailureApi, ["probe"]);
 
-      const response = yield* client.probe.read({ responseMode: "response-only" });
+      const response = yield* client.probe.read({
+        responseMode: "response-only",
+      });
       const decodedFailure = yield* Effect.flip(client.probe.read());
 
       expect(response.status).toBe(500);

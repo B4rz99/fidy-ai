@@ -1,0 +1,64 @@
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_85e12338bd3f56::t_14047efe906dba 13,31,35,40,44,49,53,58,62,68,72,108-111
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_85e12338bd3f56::t_a7294562946ffc 7,23,25,50,52,60-61,63,244,246,266,268,324,326
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_85e12338bd3f56::t_96dea5f0dd6375 251-252
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_85e12338bd3f56::t_2cfff14b05e60c 330
+apps/server/src/main.ts
+  s_85e12338bd3f56::t_8b80b0482709e9 1,19
+apps/server/scripts/reconcile-wompi-enrollment.ts
+  s_85e12338bd3f56::t_b07f85d3377c12 9,44
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  s_85e12338bd3f56::t_b49296a6c756f6 18
+  s_85e12338bd3f56::t_7d8fac81ac741e 19-20,100,104-105,107-108,110-111,113-114,138,142-143,146,160,164-165
+  s_85e12338bd3f56::t_001bd377e11e7a 106,144-145
+apps/server/src/shell/outbound-http/contract.ts
+  s_85e12338bd3f56::t_62ec3e7b1a5ab1 39-42,46-47,50,52,56-57,60,64-65
+  s_85e12338bd3f56::t_5619f8f462e50e 29-35,44-45,48-49,51,53-55,58-59,61-63,66
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_85e12338bd3f56::t_f5fa466a6292dd 137-173
+  s_85e12338bd3f56::t_c9905740d4d86c 34-35,341-342
+  s_85e12338bd3f56::t_de8ceb063f4225 50-56
+  s_85e12338bd3f56::t_6927d912df3b0b 2,46
+apps/server/src/shell/subscription/wompi-credentials.ts
+  s_85e12338bd3f56::t_961426c7905217 3,21-22
+apps/server/src/shell/subscription/wompi-client.ts
+  s_85e12338bd3f56::t_c63b0e16dfc5b3 23,236-255,258,260-278,297
+  s_85e12338bd3f56::t_c900a34b77477f 24-25,112,227,231,281,285,299-300,302-307,309,340,350-352
+  s_85e12338bd3f56::t_fcad7c342b6b04 301
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_85e12338bd3f56::t_bcf05170bcd433 57-63
+  s_85e12338bd3f56::t_1cec55cd866216 1,53
+  s_85e12338bd3f56::t_b0aa0bc71e501f 136-137,174-176
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_85e12338bd3f56::t_7acaa72effe1f8 56,60,84,90,105,132,160
+  s_85e12338bd3f56::t_342bd0bf40b191 1,24,26
+  s_85e12338bd3f56::t_c63b0e16dfc5b3 88,93
+  s_85e12338bd3f56::t_7bd2a06d659e00 16,20-21,28-33,48-52,69-83,85-87,89,91-92,94-104,106-131,133-138,140-142,146,148,151,153,155-156,158-159,161-176,183-187
+  s_85e12338bd3f56::t_27f1870a1951c0 27
+  s_85e12338bd3f56::t_a768567416e188 53-54
+apps/server/scripts/verify-wompi-sandbox-source.ts
+  s_85e12338bd3f56::t_930f1e6c95e0b6 7,32
+apps/server/src/shell/outbound-http/operations.ts
+  s_85e12338bd3f56::t_03ca8ace36867a 1,60-61
+  s_85e12338bd3f56::t_fbb02879fecbff 3,7-17,20-21,37-49,51-52,54-59,62-65
+  s_85e12338bd3f56::t_c63b0e16dfc5b3 50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f3caad90e8607eaafcc3010d0a31ede8de1dd65c",
+  "prompts": {},
+  "sessions": {
+    "s_85e12338bd3f56": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b158-35a1-76f3-95ae-f16194f69e30",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

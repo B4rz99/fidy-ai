@@ -1,0 +1,25 @@
+tools/depcruise/run.mjs
+  s_3c0c97143ed6a8::t_02197053afc488 95-120,175,184,198-202,204-215,244,246
+  s_3c0c97143ed6a8::t_25f02d5069a3b7 203
+apps/server/scripts/check-dependency-guards.ts
+  s_3c0c97143ed6a8::t_2b4aef7edeb249 16
+  s_3c0c97143ed6a8::t_9a287ba9310beb 94-95
+  s_3c0c97143ed6a8::t_d9ee72a6bdcd26 102,154-157,272-292
+  s_3c0c97143ed6a8::t_b5186d1390b430 158-172,293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1d2eab01117ce34d39fb7b8a17f55c71963fca2c",
+  "prompts": {},
+  "sessions": {
+    "s_3c0c97143ed6a8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b5-bc61-7733-abf7-80cf5c3ecb93",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

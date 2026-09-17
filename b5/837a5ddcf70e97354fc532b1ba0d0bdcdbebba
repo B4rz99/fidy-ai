@@ -1,0 +1,297 @@
+.agents/skills/opening-a-pr/SKILL.md
+  s_f26b9f4056e846::t_5ff7256f44b92a 27,32,38,40,225
+README.md
+  s_f26b9f4056e846::t_f71a90b86ec9aa 50
+lefthook.yml
+  s_f26b9f4056e846::t_64ff7d48eff19d 24
+scripts/check-commit-message.ts
+  s_f26b9f4056e846::t_5aabaa83041b70 18,24,154
+apps/server/scripts/check-dependency-guards.ts
+  s_8edf0aea28ddc5::t_fbeddfe3b087d3 212,222-225,232
+  s_8edf0aea28ddc5::t_fe0f4d4e2e5171 99,102-103,105,108-115,117-120,127-134,136-138,140,143-150,154-156,160,162-174,177-179,182,184-195,197-199,201,203-211,214-216,218,230-231,233-236,239,241,244-252,254-256,258,261-267,269,272-278,280,283-290,292-294,296,299-305,307,310-313,372-374,376-378,380,383,873,882,887-888,890
+  s_aee6af8a5ba362::t_2e61bf8f0e7081 874,883,885
+  s_8edf0aea28ddc5::t_c971d8b1da10ae 868-872,901-902,922-923
+  s_8edf0aea28ddc5::t_affc3d4e46adf6 72-90,92,95-96,98,104,106,116,121,125-126,135,139,141-142,151-153,157-159,161,175-176,180-181,183,196,200,202,217,219,237-238,240,242-243,253,257,259-260,268,270-271,279,281-282,291,295,297-298,306,308-309,317,320,346,365,381,906,913
+  s_8edf0aea28ddc5::t_d0fa417f2ad56a 213,226-227,229
+  s_8edf0aea28ddc5::t_fb850f469a2923 26-28
+  s_8edf0aea28ddc5::t_fecb2d443eaee2 91,93-94,97,328,330-331,344,347,356,361,366,375,379,382
+  s_8edf0aea28ddc5::t_34027f04edea60 323-327,329,332-334
+  s_8edf0aea28ddc5::t_ff6ddf40830400 29
+  s_8edf0aea28ddc5::t_3567c508386982 122-124
+  s_8edf0aea28ddc5::t_b86853735961e7 314-316,318,321-322,335-339,341-343,345,348-355,357-360,362-364,367-371,907
+  s_8edf0aea28ddc5::t_b5a48fc5c99e5f 319,340
+  s_8edf0aea28ddc5::t_0c2a890841d0f4 867,903-904
+  s_8edf0aea28ddc5::t_292165000c950a 866,884,891,905,908-912,914-915
+  s_3c0c97143ed6a8::t_b9d9afc145c075 107
+  s_3c0c97143ed6a8::t_e34d70aa13948e 220,228
+  s_3c0c97143ed6a8::t_8cd537d6c53021 221
+apps/server/package.json
+  s_8edf0aea28ddc5::t_21534914c32d36 45
+apps/server/.dependency-cruiser.mjs
+  s_8edf0aea28ddc5::t_fdeca438ff9d2a 281,334,384
+  s_8edf0aea28ddc5::t_090dad71a42d19 68-72,165,168-169,172
+  s_8edf0aea28ddc5::t_e79a25214f50a9 59-63
+  s_8edf0aea28ddc5::t_ba38cc0387169f 73-74,162-164,166-167,170-171,173,175
+  s_8edf0aea28ddc5::t_5a99af57bb9168 75-156,158-161
+  s_8edf0aea28ddc5::t_3567c508386982 157
+  s_8edf0aea28ddc5::t_c360625036b5c5 232
+apps/server/ARCHITECTURE.md
+  s_8edf0aea28ddc5::t_f120cf10a7249c 53-58
+tools/depcruise/run.mjs
+  s_8edf0aea28ddc5::t_171d9447c56833 70
+  s_8edf0aea28ddc5::t_6550ec80e58ddb 78-88,90-92,95-106,108-111,113,189-191
+  s_8edf0aea28ddc5::t_e1dd9855f15800 69
+  s_8edf0aea28ddc5::t_f6773781dd5bf3 72-76
+  s_8edf0aea28ddc5::t_0395c67900f117 13,18,71,77,89,93-94,107,112,133-159,187
+  s_8edf0aea28ddc5::t_a46c61f15879f0 21,31
+  s_8edf0aea28ddc5::t_44f318e4982f73 22
+  s_3c0c97143ed6a8::t_ff6f26335052fe 114-132
+apps/server/src/shell/search/operations.ts
+  s_3c0c97143ed6a8::t_3e0c46aea5733b 2-3
+apps/server/src/core/search/operations.ts
+  s_3c0c97143ed6a8::t_edb275bb19f954 1-6
+apps/server/src/shell/browser-login/service.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/ingestion/email-interpretation/catalog-validation.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4,7
+  s_3c0c97143ed6a8::t_eb55a1cc8047db 5-6
+apps/server/src/shell/ingestion/email-interpretation/format-support.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/operations/operations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/ingestion/email-interpretation/interpret.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/browser-login/operations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/tokens/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/ingestion/email-anonymization-approval.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/onboarding/types.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/_shared/authz.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 9
+  s_3c0c97143ed6a8::t_2e1c78408f1679 5
+  s_3c0c97143ed6a8::t_69fe63f18dbc93 6-8
+apps/server/src/core/credential-proof/operations.test.ts
+  s_3c0c97143ed6a8::t_0179d50c499e6c 2
+apps/server/src/shell/ingestion/email-interpretation/interpret.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2-3
+apps/server/src/shell/agent/hosted-inference.ts
+  s_3c0c97143ed6a8::t_2e1c78408f1679 4
+apps/server/src/core/consent/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/agent/model-boundary.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/access-tier/operations.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/email-authentication/replacement-protocol.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/format.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/ingestion/worker.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 15-16
+apps/server/src/core/access-tier/operations.ts
+  s_3c0c97143ed6a8::t_832e7ec5108128 1
+apps/server/src/core/insights/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/identity/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/transcript/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/transactions/mutations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 6
+apps/server/src/core/transcript/model.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/agent/toolkit.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 10
+apps/server/src/core/provider-evidence/contract.ts
+  s_3c0c97143ed6a8::t_a368445cdb6096 1-35
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4,7,9
+  s_3c0c97143ed6a8::t_e6176be467f4cb 5-6
+apps/server/src/shell/dashboard/view.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 18
+apps/server/src/shell/ingestion/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 8
+  s_3c0c97143ed6a8::t_4ff0306941899e 7
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/transactions/rows.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4-5
+apps/server/src/core/canonical-operations/contract.test.ts
+  s_3c0c97143ed6a8::t_445e11b6e01038 8
+apps/server/src/core/access-tier/operations.test.ts
+  s_3c0c97143ed6a8::t_3b7d837ef2ffc1 3-4
+apps/server/src/shell/transactions/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3-4
+apps/server/src/shell/operations/atomic-batch.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/agent/agent-service.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 23
+apps/server/src/shell/ingestion/email-interpretation/format-support.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/onboarding/onboarding-turn.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/categories/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/audit/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/categories/rules.ts
+  s_3c0c97143ed6a8::t_b6389401804413 46,64-65,72
+apps/server/src/shell/agent/agent-service.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 36
+apps/server/src/shell/_shared/suggested-operations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2-3
+apps/server/src/shell/ingestion/email-worker.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 13
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/ingestion/rules.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/core/audit/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/ingestion/mutations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2-3
+apps/server/src/shell/search/operations.test.ts
+  s_3c0c97143ed6a8::t_1404a7756a87b8 2
+apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/format.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/core/transactions/model.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/ingestion/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3,6,8
+  s_3c0c97143ed6a8::t_be10270775382f 4-5
+apps/server/src/shell/_shared/operation-policy.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3-4
+apps/server/src/shell/browser-login/approval.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 17
+  s_3c0c97143ed6a8::t_8cd537d6c53021 63
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_3c0c97143ed6a8::t_2e1c78408f1679 4
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/format.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 23
+apps/server/src/core/budgets/rules.ts
+  s_3c0c97143ed6a8::t_6a01f03fcd0916 23
+apps/server/src/shell/audit/retention.test.ts
+  s_3c0c97143ed6a8::t_2e1c78408f1679 3
+apps/server/src/core/canonical-operations/contract.ts
+  s_3c0c97143ed6a8::t_88a7161cc1b622 1-2,11-33
+apps/server/src/core/audit/model.test.ts
+  s_3c0c97143ed6a8::t_853c6368d9e034 3-4
+apps/server/src/shell/_shared/authz-live.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 24
+  s_3c0c97143ed6a8::t_ab923bd16ada5f 21
+apps/server/src/shell/consent/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 6
+apps/server/src/shell/agent/hosted-execution-boundary.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 5
+apps/server/src/shell/web-session/service.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/_shared/canonical-pre-transaction.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3-4
+apps/server/src/core/transactions/rules.ts
+  s_3c0c97143ed6a8::t_9a1e444b1efdea 28-29
+apps/server/src/shell/ingestion/email-interpretation/format-definition.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2,5
+  s_3c0c97143ed6a8::t_b281c9b1bbbd2a 3-4
+apps/server/src/shell/access-tier/operations.ts
+  s_3c0c97143ed6a8::t_054dc3a784d431 2
+apps/server/src/core/interpretation-evidence/contract.ts
+  s_3c0c97143ed6a8::t_011ea90c5d8044 1-21
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 26
+apps/server/src/shell/_shared/canonical-snapshot.ts
+  s_3c0c97143ed6a8::t_2e1c78408f1679 3
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 14
+apps/server/src/shell/audit/audit-log.test.ts
+  s_3c0c97143ed6a8::t_2e1c78408f1679 8
+apps/server/src/shell/agent/model-boundary.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 16
+  s_3c0c97143ed6a8::t_2e1c78408f1679 17
+apps/server/src/core/transactions/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3,6,8
+  s_3c0c97143ed6a8::t_c2d117dad35d10 4-5
+apps/server/src/shell/transactions/read-statements.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 6
+apps/server/src/shell/categories/repo.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/channels/whatsapp/disclosure-model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 2,5
+apps/server/src/core/access-tier/contract.ts
+  s_3c0c97143ed6a8::t_68a4fbcd6c58fb 1-2,4-7
+apps/server/src/shell/channels/whatsapp/model.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/testing/openapi.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 4
+apps/server/src/shell/tokens/operations.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 14
+apps/server/src/core/transcript/rules.test.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/shell/agent/agent-operation-binding.ts
+  s_3c0c97143ed6a8::t_c9dae862a25ad9 3
+apps/server/src/core/provider-evidence/contract.test.ts
+  s_3c0c97143ed6a8::t_d947b33ffaad4f 3
+apps/server/src/shell/observability/web-auth.test.ts
+  s_3c0c97143ed6a8::t_8cd537d6c53021 16
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_3c0c97143ed6a8::t_8cd537d6c53021 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b5837a5ddcf70e97354fc532b1ba0d0bdcdbebba",
+  "prompts": {},
+  "sessions": {
+    "s_3c0c97143ed6a8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b5-bc61-7733-abf7-80cf5c3ecb93",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8edf0aea28ddc5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b045-5cb7-772d-8b01-3b1ed8da0ef0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_aee6af8a5ba362": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbda8-2d1f-799b-830b-a84b9d254678",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

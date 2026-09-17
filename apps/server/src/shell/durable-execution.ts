@@ -1,7 +1,7 @@
-import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option, Schema } from "effect";
+import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option } from "effect";
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import { configuredSecret } from "~/shell/_shared/configured-secret";
+import { loadClusterAuthenticationToken } from "~/shell/secret-material/operations";
 import {
   maximumHostedTurnIterations,
   maximumModelRoundMillis,
@@ -15,13 +15,6 @@ import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 import { ClusterObservationLive } from "./cluster-observation";
 import { ClusterReadinessVolatile } from "./cluster-readiness";
 import { clientClusterTopology, productionRunnerTopology } from "./cluster-topology";
-
-const ClusterAuthenticationToken = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
-const clusterAuthenticationToken = configuredSecret({
-  name: "FIDY_CLUSTER_AUTH_TOKEN",
-  schema: ClusterAuthenticationToken,
-  requirement: "must be a 32-byte lowercase hexadecimal key",
-});
 
 const workDeadlineMarginMinutes = 10;
 const runnerConnectDeadlineSeconds = 5;
@@ -103,7 +96,7 @@ const ProductionClusterLive = Layer.unwrap(
     const listenHost = yield* Config.string("FIDY_CLUSTER_LISTEN_HOST").pipe(
       Config.withDefault("0.0.0.0")
     );
-    const authenticationToken = yield* clusterAuthenticationToken;
+    const authenticationToken = yield* loadClusterAuthenticationToken;
     return authenticatedClusterHttp.layerSql(
       authenticationToken,
       productionRunnerTopology({ advertisedHost, listenHost, port }).sharding,
@@ -130,7 +123,7 @@ export const DurableExecutionLive = ClusterObservationLive.pipe(
 /** CLI routes through production owners without acquiring shards or creating another local mailbox. */
 export const DurableExecutionClientLive = Layer.unwrap(
   Effect.gen(function* () {
-    const token = yield* clusterAuthenticationToken;
+    const token = yield* loadClusterAuthenticationToken;
     const hosts = yield* clientRunnerHosts;
     const port = yield* runnerPort;
     return Layer.mergeAll(

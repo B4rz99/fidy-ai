@@ -52,7 +52,7 @@ import {
   webSessionSecurity,
 } from "./authz";
 import { getOperationPolicy } from "./operation-policy";
-import { hashTokenBearer } from "./token-digest";
+import { derivePATBearerDigest } from "~/shell/secret-material/operations";
 
 const decodeBearer = Schema.decodeUnknownOption(TokenBearer);
 
@@ -160,7 +160,7 @@ export const authenticateTokenBearer: {
   ): Effect.Effect<Option.Option<ResolvedToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
 } = Function.dual(2, (self: TokenBearer, usedAt: DateTime.Utc) =>
   Effect.gen(function* () {
-    const tokenHash = yield* hashTokenBearer(self);
+    const tokenHash = yield* derivePATBearerDigest(self);
     return yield* useToken({ tokenHash, usedAt });
   })
 );

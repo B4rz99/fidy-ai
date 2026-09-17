@@ -5,17 +5,12 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ActivePATMetadata, ManualPATRequestId, PAT, ResolvedToken } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
 import { PATPairingId } from "~/core/tokens/pairing";
-
-/** A lowercase SHA-256 digest used only at the token storage boundary. */
-export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
-  Schema.brand("TokenHash")
-);
-export type TokenHash = typeof TokenHash.Type;
+import { PATBearerDigest } from "~/shell/secret-material/operations";
 
 const PATGrant = PAT.mapFields(Struct.omit(["_tag", "lastUsedAt", "createdAt"]));
 const SeedPATGrant = Schema.Struct({
   ...PATGrant.fields,
-  tokenHash: TokenHash,
+  tokenHash: PATBearerDigest,
   expiresAt: Schema.DateTimeUtcFromDate,
   revokedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
@@ -25,7 +20,7 @@ const SeedPATRow = Schema.Struct({
   ...SeedPATGrant.fields,
 });
 
-const TokenLookup = Schema.Struct({ tokenHash: TokenHash });
+const TokenLookup = Schema.Struct({ tokenHash: PATBearerDigest });
 const LockedPATPairing = Schema.Struct({ id: PATPairingId });
 const ManualPATInsert = Schema.Struct({
   subjectUserId: UserId,
@@ -72,7 +67,7 @@ const ActivePATMetadataRow = Schema.Struct({
 const LockedPATForRevocation = Schema.Struct({
   id: PATId,
   shortId: ActivePATMetadata.fields.shortId,
-  tokenHash: Schema.OptionFromNullOr(TokenHash),
+  tokenHash: Schema.OptionFromNullOr(PATBearerDigest),
   revokedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
 });
 export type LockedPATForRevocation = typeof LockedPATForRevocation.Type;
@@ -223,7 +218,7 @@ export const upsertPAT = Effect.fn("upsertPAT")(function* (
     subjectUserId,
     SqlSchema.findOne({
       Request: SeedPATRow,
-      Result: Schema.Struct({ tokenHash: TokenHash }),
+      Result: Schema.Struct({ tokenHash: PATBearerDigest }),
       execute: (row) => sql`
       INSERT INTO tokens (
         id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days, last_used_at,

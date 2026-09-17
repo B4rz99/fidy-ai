@@ -11,7 +11,7 @@ import {
   type ExternalHttpFailure,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
-import { configuredSecret } from "~/shell/_shared/configured-secret";
+import { loadResendEmailDeliveryApiKey } from "~/shell/secret-material/operations";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -77,9 +77,6 @@ export type EmailDeliveryPortService = {
 
 const maximumResendResponseBytes = 4096;
 const maximumResendMessageIdLength = 128;
-const ResendApiKey = Schema.String.check(Schema.isPattern(/^re_[A-Za-z0-9_-]{20,253}$/u)).annotate({
-  identifier: "ResendApiKey",
-});
 const ResendSuccess = Schema.Struct({
   id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumResendMessageIdLength)),
 });
@@ -165,11 +162,7 @@ export class EmailDeliveryPort extends Context.Service<
           send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),
         });
       }
-      const apiKey = yield* configuredSecret({
-        name: "RESEND_API_KEY",
-        schema: ResendApiKey,
-        requirement: "must be a Resend API key",
-      });
+      const apiKey = yield* loadResendEmailDeliveryApiKey;
       const fromEmail = yield* Config.schema(
         Schema.Literal("obarboza@fidyapp.com"),
         "RESEND_FROM_EMAIL"

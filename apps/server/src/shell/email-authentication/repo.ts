@@ -25,7 +25,7 @@ import {
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
 } from "~/core/identity/reference";
-import { emailCredentialLookupKey } from "./admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 
 /** Acquires one transaction-scoped verification-capacity slot without waiting. */
 export const acquireEmailVerificationAdmissionInScope = Effect.fn(
@@ -441,7 +441,7 @@ export const installVerifiedEmailCredentialInScope = Effect.fn(
   }>
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const lookupKey = yield* emailCredentialLookupKey(input.email).pipe(Effect.orDie);
+  const lookupKey = yield* deriveEmailCredentialLookupKey(input.email).pipe(Effect.orDie);
   const inserted = yield* sql`
     WITH credential AS (
       INSERT INTO verified_email_credentials (user_id, email_address, verified_at)

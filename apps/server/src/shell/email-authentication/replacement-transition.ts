@@ -25,7 +25,8 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { lockFreshWebSessionInScope } from "~/shell/web-session/repo";
-import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
+import { admitEmailDeliveryInScope } from "./admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import type { RequestEmailReplacementPayload } from "./operations";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
 import { publishReplacementDelivery, publishReplacementExpiry } from "./replacement-protocol";
@@ -361,7 +362,7 @@ const commitReplacement = Effect.fn(function* (
   input: CompleteReplacementInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const lookupKey = yield* emailCredentialLookupKey(workflow.candidateEmailAddress).pipe(
+  const lookupKey = yield* deriveEmailCredentialLookupKey(workflow.candidateEmailAddress).pipe(
     Effect.orDie
   );
   const credentialUpdated = yield* sql

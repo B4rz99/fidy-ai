@@ -26,8 +26,7 @@ import {
 import { WompiSourceId } from "~/core/subscription/enrollment-model";
 import type { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { configuredSecret } from "~/shell/_shared/configured-secret";
-import { wompiCredentialPrefixes } from "./wompi-credentials";
+import { loadWompiEventSecret } from "~/shell/secret-material/operations";
 import { activatePaidProInScope } from "./access-repo";
 import { WompiBillingClient, type WompiTransaction } from "./wompi-billing-client";
 import {
@@ -49,9 +48,6 @@ const settlementProperties = [
   "transaction.status",
   "transaction.amount_in_cents",
 ] as const;
-const EventSecret = Schema.String.check(
-  Schema.isPattern(/^test_events_[A-Za-z0-9_-]{8,}$|^prod_events_[A-Za-z0-9_-]{8,}$/u)
-);
 const WompiEvent = Schema.Struct({
   event: Schema.Literal("transaction.updated"),
   data: Schema.Struct({
@@ -124,12 +120,7 @@ const authenticateEvent = Effect.fn("Subscription.authenticateWompiEvent")(funct
   event: Event
 ) {
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-  const eventSecretPrefix = wompiCredentialPrefixes(environment).eventSecret;
-  const secret = yield* configuredSecret({
-    name: "WOMPI_EVENT_SECRET",
-    schema: EventSecret.check(Schema.isStartsWith(eventSecretPrefix)),
-    requirement: `must be a ${environment} Wompi event secret`,
-  });
+  const secret = yield* loadWompiEventSecret(environment);
   const checksumValid = yield* checksumMatches(event, secret);
   const signedProperties = new Set(event.signature.properties);
   if (

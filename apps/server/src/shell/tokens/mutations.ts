@@ -32,7 +32,7 @@ import { computePATExpiration } from "~/core/tokens/rules";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import { NotFound, type OperationResponse } from "~/shell/public-http/contract";
-import { hashTokenBearer } from "~/shell/_shared/token-digest";
+import { derivePATBearerDigest } from "~/shell/secret-material/operations";
 import {
   appendConsentRecordInScope,
   findPATGrantInScope,
@@ -143,7 +143,7 @@ const createManualPATInScope = Effect.fn("createManualPATInScope")(function* ({
     Encoding.encodeBase64Url(yield* crypto.randomBytes(bearerSecretBytes).pipe(Effect.orDie))
   );
   const bearer = yield* makeTokenBearer({ shortId, secret });
-  const tokenHash = yield* hashTokenBearer(bearer);
+  const tokenHash = yield* derivePATBearerDigest(bearer);
   const pat = PAT.make({
     _tag: "PAT",
     id: tokenId,

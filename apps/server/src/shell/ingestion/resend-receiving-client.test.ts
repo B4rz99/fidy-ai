@@ -1,4 +1,4 @@
-import { expect, layer } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -10,7 +10,12 @@ import {
 } from "effect/unstable/http";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { receivedEmailFixture } from "~/shell/ingestion/fixtures/resend-received-email";
-import { expectNotInspected } from "~/shell/testing/credential-failure";
+import {
+  buildLayerExit,
+  exitFailure,
+  expectNotInspected,
+  renderedFailure,
+} from "~/shell/testing/credential-failure";
 import { ResendReceivingClient } from "./resend-receiving-client";
 
 const testResendApiKey = `re_${"f1d7c0de".repeat(3)}`;
@@ -41,6 +46,33 @@ const mockClient = (
     HttpClientError.HttpClientError,
     never
   >((request) => Effect.flatMap(request, handler), Effect.succeed);
+
+it.effect("rejects a malformed receiving API key without exposing its value", () =>
+  Effect.gen(function* () {
+    const malformedCandidate = `CANARY-resend-receiving-${"f1d7c0de".repeat(2)}`;
+    const http = mockClient((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 200 })))
+    );
+    const failure = yield* exitFailure(
+      yield* buildLayerExit(
+        ResendReceivingClient.layer.pipe(
+          Layer.provide(
+            Layer.merge(
+              Layer.succeed(HttpClient.HttpClient, http),
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({ RESEND_API_KEY: malformedCandidate })
+              )
+            )
+          )
+        )
+      )
+    );
+    const rendered = yield* renderedFailure(failure);
+
+    expect(rendered).toContain("RESEND_API_KEY");
+    expect(rendered).not.toContain(malformedCandidate);
+  })
+);
 
 const pngImage = (width: number, height: number): Uint8Array =>
   new Uint8Array([

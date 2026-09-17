@@ -35,14 +35,14 @@ import {
   makeTokenBearer,
 } from "~/core/tokens/model";
 import { computePATExpiration } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/token-digest";
+import { type PATBearerDigest, derivePATBearerDigest } from "~/shell/secret-material/operations";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, upsertDevelopmentUser } from "~/shell/identity/repo";
 import { installVerifiedEmailCredentialInScope } from "~/shell/email-authentication/repo";
 import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
 import { upsertDevelopmentSubscriptionInScope } from "~/shell/subscription/access-repo";
-import { type TokenHash, upsertPAT } from "~/shell/tokens/repo";
+import { upsertPAT } from "~/shell/tokens/repo";
 import { withUserTransaction } from "./user-transaction";
 import { MigrationPgLive, MigratorLive } from "./client";
 
@@ -114,7 +114,7 @@ export const seedOnboardingConsent = (
     );
   });
 
-const tokenIdFromHash = (tokenHash: TokenHash): PATId =>
+const tokenIdFromHash = (tokenHash: PATBearerDigest): PATId =>
   PATId.make(
     `${tokenHash.slice(0, uuidTimeLowEnd)}-${tokenHash.slice(uuidTimeLowEnd, uuidTimeMidEnd)}-4${tokenHash.slice(uuidTimeHighStart, uuidTimeHighEnd)}-8${tokenHash.slice(uuidClockSequenceStart, uuidClockSequenceEnd)}-${tokenHash.slice(uuidClockSequenceEnd, uuidNodeEnd)}`
   );
@@ -183,7 +183,7 @@ const installDevelopmentIdentityState = Effect.fn("installDevelopmentIdentitySta
 export const seedConsentedPatIdentity = (
   overrides: SeededPatIdentityOverrides
 ): Effect.Effect<
-  { user: User; tokenHash: TokenHash },
+  { user: User; tokenHash: PATBearerDigest },
   Config.ConfigError,
   Crypto.Crypto | SqlClient.SqlClient
 > =>
@@ -208,7 +208,7 @@ export const seedConsentedPatIdentity = (
         if (!(yield* hasCurrentOnboardingConsent(userId))) yield* seedOnboardingConsent(userId);
         yield* installDevelopmentIdentityState(userId);
 
-        const tokenHash = yield* hashTokenBearer(bearer);
+        const tokenHash = yield* derivePATBearerDigest(bearer);
         yield* upsertPAT(userId, {
           id: overrides.tokenId ?? tokenIdFromHash(tokenHash),
           shortId: yield* getTokenShortId(bearer),
@@ -233,7 +233,7 @@ export const seedConsentedPatIdentity = (
 export const seedDevelopmentIdentity = (
   bearer: TokenBearer
 ): Effect.Effect<
-  { user: User; tokenHash: TokenHash },
+  { user: User; tokenHash: PATBearerDigest },
   Config.ConfigError,
   Crypto.Crypto | SqlClient.SqlClient
 > =>

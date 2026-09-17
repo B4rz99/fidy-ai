@@ -42,11 +42,11 @@ import {
   checkBrowserLoginPrivateVerifierInScope,
   lockPendingBrowserLoginPairingInScope,
 } from "~/shell/browser-login/service";
+import { admitEmailDeliveryInScope } from "./admission";
 import {
-  admitEmailDeliveryInScope,
-  emailAuthenticationHmacKey,
-  emailCredentialLookupKey,
-} from "./admission";
+  deriveEmailAuthenticationAdmissionKey,
+  deriveEmailCredentialLookupKey,
+} from "~/shell/secret-material/operations";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
 import {
   publishPairingDelivery,
@@ -200,13 +200,13 @@ const admitBrowserPairingEmailStart = Effect.fn(function* (input: {
   sourceAddress: string;
   attemptedAt: DateTime.Utc;
 }) {
-  const addressKey = yield* emailAuthenticationHmacKey(
+  const addressKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-address:${input.normalizedAddress}`
   ).pipe(Effect.orDie);
-  const sourceKey = yield* emailAuthenticationHmacKey(
+  const sourceKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-source:${input.sourceAddress}`
   ).pipe(Effect.orDie);
-  const pairingKey = yield* emailAuthenticationHmacKey(
+  const pairingKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-id:${input.pairingId}`
   ).pipe(Effect.orDie);
   return yield* consumeAdmissionEvidence({
@@ -254,13 +254,13 @@ const admitBrowserPairingEmailCompletionIngress = Effect.fn(function* (input: {
   sourceAddress: string;
   attemptedAt: DateTime.Utc;
 }) {
-  const sourceKey = yield* emailAuthenticationHmacKey(
+  const sourceKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-completion-source:${input.sourceAddress}`
   ).pipe(Effect.orDie);
-  const pairingKey = yield* emailAuthenticationHmacKey(
+  const pairingKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-completion-id:${input.pairingId}`
   ).pipe(Effect.orDie);
-  const unresolvedAddressKey = yield* emailAuthenticationHmacKey(
+  const unresolvedAddressKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-completion-unresolved-address:${input.pairingId}`
   ).pipe(Effect.orDie);
   const expiresAt = DateTime.add(input.attemptedAt, { minutes: 10 });
@@ -302,7 +302,7 @@ const admitBrowserPairingEmailCompletionOwner = Effect.fn(function* (
 ) {
   // One VerifiedEmailCredential exists per User; this HMAC closes the real per-address budget
   // without projecting the mailbox out of its User-scoped workflow.
-  const addressKey = yield* emailAuthenticationHmacKey(
+  const addressKey = yield* deriveEmailAuthenticationAdmissionKey(
     `browser-pairing-completion-address-owner:${owner.userId}`
   ).pipe(Effect.orDie);
   return yield* consumeAdmissionEvidence({
@@ -521,7 +521,7 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
       const requestId = BrowserPairingEmailStartRequestId.make(
         yield* crypto.randomUUIDv7.pipe(Effect.orDie)
       );
-      const addressLookupKey = yield* emailCredentialLookupKey(decodedEmail.success).pipe(
+      const addressLookupKey = yield* deriveEmailCredentialLookupKey(decodedEmail.success).pipe(
         Effect.orDie
       );
       yield* publishPairingStart({

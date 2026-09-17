@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import { Data, Effect, Option, Redacted, Schema } from "effect";
 import type { JsonSchema } from "effect";

@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";

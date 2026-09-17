@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { UnknownJsonString } from "../../src/schema-compatibility";
+import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
 
 import { type Cause, Data, type Duration, Effect, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, type HttpClientError } from "effect/unstable/http";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, layer } from "@effect/vitest";
 import {
   Cause,

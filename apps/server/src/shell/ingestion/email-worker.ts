@@ -36,7 +36,7 @@ import {
 } from "~/shell/consent/repo";
 import { withConsentExternalEffectLock } from "~/shell/db/advisory-lock";
 import { captureNotificationEmailTransactionInScope } from "~/shell/transactions/mutations";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { normalizedMailbox } from "./email-address";
 import {
   type ForwardedEmailExecutionContext,

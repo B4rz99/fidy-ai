@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "../src/schema-compatibility";
+import { jsonStringSchema } from "../src/shell/schema-codecs/contract";
 import { BunHttpClient, BunRuntime } from "@effect/platform-bun";
 import { Data, Effect, Option, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";

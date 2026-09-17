@@ -12,7 +12,7 @@ import {
   Schema,
 } from "effect";
 import { SqlError } from "effect/unstable/sql";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import type {

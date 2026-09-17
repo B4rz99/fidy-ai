@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, layer } from "@effect/vitest";

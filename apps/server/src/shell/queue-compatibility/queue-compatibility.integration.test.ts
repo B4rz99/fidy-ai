@@ -3,7 +3,7 @@ import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import {
   WhatsAppInboundWork,

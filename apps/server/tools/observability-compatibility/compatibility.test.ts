@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "../../src/schema-compatibility";
+import { jsonStringSchema } from "../../src/shell/schema-codecs/contract";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {

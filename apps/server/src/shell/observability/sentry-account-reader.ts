@@ -1,4 +1,4 @@
-import { TaggedSerializableError, jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import {
@@ -43,7 +43,7 @@ const EnvironmentsResponse = Schema.Array(Schema.Struct({ name: providerString }
 );
 
 /** A bounded management-API failure that cannot retain authenticated response data or locators. */
-export class SentryAccountReadError extends TaggedSerializableError<SentryAccountReadError>()(
+export class SentryAccountReadError extends Schema.TaggedError<SentryAccountReadError>()(
   "SentryAccountReadError",
   {
     reason: Schema.Literals([

@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { StatementColumnMapping, type StatementMappingSample } from "~/core/ingestion/model";

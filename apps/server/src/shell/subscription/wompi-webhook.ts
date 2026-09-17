@@ -1,6 +1,6 @@
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 import { receiveWompiSettlement } from "./wompi-settlement";
 

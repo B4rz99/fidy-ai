@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { BrowserLoginPublicCodeInput } from "~/core/browser-login/rules";

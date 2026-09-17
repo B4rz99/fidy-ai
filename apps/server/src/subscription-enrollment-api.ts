@@ -1,4 +1,3 @@
-import { SchemaSerializableError } from "./schema-compatibility";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
@@ -28,32 +27,32 @@ const InvalidFields = {
 };
 
 /** Generic direct-browser refusal that never reflects a transient token or provider response. */
-export class CardEnrollmentInvalidApi extends SchemaSerializableError<CardEnrollmentInvalidApi>(
+export class CardEnrollmentInvalidApi extends Schema.Error<CardEnrollmentInvalidApi>(
   "CardEnrollmentInvalidApi"
 )(InvalidFields, { httpApiStatus: 400 }) {}
 
 /** Missing or expired WebSession authority at the dedicated enrollment boundary. */
-export class CardEnrollmentUnauthenticatedApi extends SchemaSerializableError<CardEnrollmentUnauthenticatedApi>(
+export class CardEnrollmentUnauthenticatedApi extends Schema.Error<CardEnrollmentUnauthenticatedApi>(
   "CardEnrollmentUnauthenticatedApi"
 )(InvalidFields, { httpApiStatus: 401 }) {}
 
 /** Cross-origin enrollment attempt rejected before any provider or persistence effect. */
-export class CardEnrollmentOriginRejectedApi extends SchemaSerializableError<CardEnrollmentOriginRejectedApi>(
+export class CardEnrollmentOriginRejectedApi extends Schema.Error<CardEnrollmentOriginRejectedApi>(
   "CardEnrollmentOriginRejectedApi"
 )(InvalidFields, { httpApiStatus: 403 }) {}
 
 /** Bounded-body rejection that does not parse or report the rejected secret-bearing body. */
-export class CardEnrollmentPayloadTooLargeApi extends SchemaSerializableError<CardEnrollmentPayloadTooLargeApi>(
+export class CardEnrollmentPayloadTooLargeApi extends Schema.Error<CardEnrollmentPayloadTooLargeApi>(
   "CardEnrollmentPayloadTooLargeApi"
 )(InvalidFields, { httpApiStatus: 413 }) {}
 
 /** Non-JSON secret-bearing submission rejected without provider work. */
-export class CardEnrollmentUnsupportedMediaTypeApi extends SchemaSerializableError<CardEnrollmentUnsupportedMediaTypeApi>(
+export class CardEnrollmentUnsupportedMediaTypeApi extends Schema.Error<CardEnrollmentUnsupportedMediaTypeApi>(
   "CardEnrollmentUnsupportedMediaTypeApi"
 )(InvalidFields, { httpApiStatus: 415 }) {}
 
 /** Bounded provider/configuration outage response carrying no provider details. */
-export class CardEnrollmentUnavailableApi extends SchemaSerializableError<CardEnrollmentUnavailableApi>(
+export class CardEnrollmentUnavailableApi extends Schema.Error<CardEnrollmentUnavailableApi>(
   "CardEnrollmentUnavailableApi"
 )(
   {

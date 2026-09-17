@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Option, Schema } from "effect";
 
 /** The bounded storage-region codes returned by Sentry's read-only organization API. */

@@ -1,0 +1,58 @@
+apps/server/.dependency-cruiser.mjs
+  s_8edf0aea28ddc5::t_3567c508386982 156
+  s_8edf0aea28ddc5::t_fdeca438ff9d2a 280,333,383
+  s_8edf0aea28ddc5::t_090dad71a42d19 67-71,164,167-168,171
+  s_8edf0aea28ddc5::t_5a99af57bb9168 74-155,157-160
+  s_8edf0aea28ddc5::t_ba38cc0387169f 72-73,161-163,165-166,169-170,172,174
+  s_8edf0aea28ddc5::t_c360625036b5c5 231
+apps/server/ARCHITECTURE.md
+  s_8edf0aea28ddc5::t_e3b2334b968e51 53-57
+apps/server/scripts/check-dependency-guards.ts
+  s_8edf0aea28ddc5::t_34027f04edea60 320-324,326,329-331
+  s_8edf0aea28ddc5::t_fe0f4d4e2e5171 99,102-103,105,108-115,117-120,127-134,136-138,140,143-150,154-156,160,162-174,177-179,182,184-195,197-199,201,203-211,214-216,218,227-228,230-233,236,238,241-249,251-253,255,258-264,266,269-275,277,280-287,289-291,293,296-302,304,307-310,369-371,373-375,377,380-382,883-884,886-887,889
+  s_8edf0aea28ddc5::t_3567c508386982 122-124
+  s_aee6af8a5ba362::t_2e61bf8f0e7081 882
+  s_8edf0aea28ddc5::t_fecb2d443eaee2 91,93-94,97,325,327-328,341,344,353,358,363,372,376,379
+  s_8edf0aea28ddc5::t_b86853735961e7 311-313,315,318-319,332-336,338-340,342,345-352,354-357,359-361,364-368,904
+  s_8edf0aea28ddc5::t_389b6acfa34c19 865-866
+  s_8edf0aea28ddc5::t_292165000c950a 872,881,902,905-909,911-913
+  s_8edf0aea28ddc5::t_affc3d4e46adf6 72-90,92,95-96,98,104,106-107,116,121,125-126,135,139,141-142,151-153,157-159,161,175-176,180-181,183,196,200,202,217,219,234-235,237,239-240,250,254,256-257,265,267-268,276,278-279,288,292,294-295,303,305-306,314,317,343,362,378,903,910,914
+  s_8edf0aea28ddc5::t_fb850f469a2923 26-28
+  s_8edf0aea28ddc5::t_d0fa417f2ad56a 213,223-226
+  s_8edf0aea28ddc5::t_fbeddfe3b087d3 212,220-222,229
+  s_8edf0aea28ddc5::t_b5a48fc5c99e5f 316,337
+  s_8edf0aea28ddc5::t_ff6ddf40830400 29
+  s_8edf0aea28ddc5::t_0c2a890841d0f4 867-871,873,890,900-901,921-922
+tools/depcruise/run.mjs
+  s_8edf0aea28ddc5::t_0395c67900f117 13,18,71-75,87,91-92,105,110,113-139,167
+  s_8edf0aea28ddc5::t_44f318e4982f73 22
+  s_8edf0aea28ddc5::t_6550ec80e58ddb 76-86,88-90,93-104,106-109,111-112,169-171
+  s_8edf0aea28ddc5::t_a46c61f15879f0 21,31
+  s_8edf0aea28ddc5::t_171d9447c56833 69-70
+apps/server/package.json
+  s_8edf0aea28ddc5::t_21534914c32d36 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9f6fde7eecbfcb68d1db1d90eae9eb9bc5940739",
+  "prompts": {},
+  "sessions": {
+    "s_8edf0aea28ddc5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b045-5cb7-772d-8b01-3b1ed8da0ef0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_aee6af8a5ba362": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbda8-2d1f-799b-830b-a84b9d254678",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

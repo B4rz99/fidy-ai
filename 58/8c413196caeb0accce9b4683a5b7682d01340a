@@ -1,0 +1,123 @@
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_a3914047cb299e::t_958062ce284e21 19,37-41,62,84-85
+  s_a3914047cb299e::t_e05c28f561f480 148,182,210,240-243,257-264
+  s_a3914047cb299e::t_22f47f7b5e6e39 13-16,29-36
+  s_a3914047cb299e::t_ffcc0a6a7598d9 18,46-49,78
+  s_c9720a58ac9654::t_5b9a69de614b64 256
+  s_a3914047cb299e::t_0be13980b84ffb 221,223-232,234-237
+  s_c9720a58ac9654::t_da5a1bb93ba6c8 255
+  s_a3914047cb299e::t_5738c3f50ca6fa 238-239,244-254
+apps/server/scripts/verify-sentry-account.ts
+  s_a3914047cb299e::t_5ac2895790ce5c 6,28,30-31
+  s_a3914047cb299e::t_7bdf76ec74f8e7 29
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_a3914047cb299e::t_bbf3d6b3445589 3-4,100-101,107-108,150-152,158-163,167-172,195,201-202,206-207,212-214,218-220,245
+  s_a3914047cb299e::t_14637aade780b2 111
+  s_a3914047cb299e::t_a30f66b7487ad2 246-247
+apps/server/src/shell/outbound-http/contract.ts
+  s_a3914047cb299e::t_3241955d2fb728 69-70
+  s_a3914047cb299e::t_10f1c2412c36c7 22-24
+  s_a3914047cb299e::t_df836a5e4620cc 64
+  s_a3914047cb299e::t_bbfa4005602378 21,25
+  s_a3914047cb299e::t_a30f66b7487ad2 49-50,52
+  s_a3914047cb299e::t_7ac89dda6f85f6 1,43-44,53-54,57-59,62-63
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_a3914047cb299e::t_bb7b1f800cac53 251-252
+apps/server/src/shell/outbound-http/internal/cloudflare-access.ts
+  s_a3914047cb299e::t_38eaf6a207a8cf 12-13
+  s_a3914047cb299e::t_d98f9c7811f69b 9
+  s_a3914047cb299e::t_712ea4873c800b 7-8,22,46,48-56,71
+  s_a3914047cb299e::t_ea09d782adec42 1-3,6,14,45,82-85,92-93
+  s_a3914047cb299e::t_601a28de6b4fd7 4-5,10-11,15-18,20-21,23-27,30-32,36-37,41-42,44,47,57-70,72-77,79-81,86-90
+  s_a3914047cb299e::t_c2352c0cf276cf 78,91
+  s_a3914047cb299e::t_ce4115661815d5 19,28-29,33-35,38-40,43
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_a3914047cb299e::t_0f9fd77f97a263 114
+  s_a3914047cb299e::t_bc52bd2ecfa606 152-189
+  s_a3914047cb299e::t_7211bead314415 112-113,115-131,137-151
+  s_a3914047cb299e::t_bb8664512b5d96 111
+  s_a3914047cb299e::t_7423bca278f1fd 63-78
+  s_a3914047cb299e::t_826737ce6e2427 35-36,132-136,470-471
+  s_a3914047cb299e::t_64f6ee3b4e2d8a 17
+  s_a3914047cb299e::t_43a4e1d6b32f39 420-452
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_a3914047cb299e::t_6c99432834713c 137,174,176
+apps/server/src/shell/outbound-http/operations.ts
+  s_a3914047cb299e::t_e8728edeb8715c 64-65,67,69,73
+  s_221d58c93200ac::t_f7bae03bd0b3d0 61,71
+  s_a3914047cb299e::t_f2463d87a4a4b1 68,70
+  s_a3914047cb299e::t_dee51167daf26a 3,6-11,74-87
+  s_a3914047cb299e::t_18f63def9f1130 62-63,66,72
+scripts/check-credential-evidence.ts
+  s_a3914047cb299e::t_fbdff9b2f158c3 119
+  s_a3914047cb299e::t_caa49ca560649a 125,130,135
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_a3914047cb299e::t_1a88852607b1b5 43-46,57-60
+  s_a3914047cb299e::t_2a30df8aaf8afa 3,10,55
+  s_a3914047cb299e::t_95dca1b0b6ad75 47
+  s_86d71f5360f2a6::t_9a09a4aa4a3c46 56
+  s_a3914047cb299e::t_d4927e5a45fe7e 64
+  s_a3914047cb299e::t_f0c3caf0b38c3c 48-54,63,153
+  s_a3914047cb299e::t_fe19a9982221ff 152
+  s_a3914047cb299e::t_e6b0f27e5c3a76 206,247,286,320,340,358,420,449
+  s_a3914047cb299e::t_d4425e23c0f882 381-383,385-390
+  s_a3914047cb299e::t_14637aade780b2 384
+  s_a3914047cb299e::t_3695edb1d8bb75 99
+  s_a3914047cb299e::t_922e6821a6c605 61-62
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_a3914047cb299e::t_84bd78d71d66c2 11,19,26,32-33,66,68-71,94,96,104-107,178,179-180,182,184,186,188-190,199-202,205,208,210,213-215,241-242,256-257
+  s_a3914047cb299e::t_70083ba496c299 191,193-194,204,209,216
+  s_a3914047cb299e::t_14637aade780b2 196-197
+  s_a3914047cb299e::t_b50ea77e3be0c4 240
+  s_a3914047cb299e::t_52152b328752b0 211
+  s_a3914047cb299e::t_9df3e22d2f84e9 14,207
+  s_a3914047cb299e::t_ae283e6a42e957 42,49-54,88,90,97,212,243,245,248-255,272,275,281-282
+  s_a3914047cb299e::t_e8ff23d27ddf25 244
+  s_221d58c93200ac::t_0f56a88f1796e7 287
+apps/server/scripts/support-recovery.ts
+  s_a3914047cb299e::t_7fd5231d50bfc8 179,181-182
+  s_a3914047cb299e::t_538a61d2bf1022 4,136-138,140-141
+  s_a3914047cb299e::t_b267b5b5e6ffe7 3,172-177,180,194
+  s_a3914047cb299e::t_a30f66b7487ad2 1
+  s_a3914047cb299e::t_c0cc79fb4574f0 142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "588c413196caeb0accce9b4683a5b7682d01340a",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_86d71f5360f2a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b172-6204-71a7-bc85-e244ef2b03ea",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a3914047cb299e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b158-73ca-7681-8aa3-cd10b5594a13",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

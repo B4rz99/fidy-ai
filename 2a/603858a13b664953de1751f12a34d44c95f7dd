@@ -1,0 +1,86 @@
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_c8cb832fff7b99::t_ee7a8cb129fdcf 20,28,43,46-47,49,51-53,55-58,78-81,83-85,88-90,178-182,200-202,218-220,222-233,236,238-244,246-257
+  s_c8cb832fff7b99::t_fa805c5f351886 48,50,54,161,163-177,186-187,189,194,204,211,221
+  s_c8cb832fff7b99::t_fdc68da4984535 44-45,188,190-193,195-199,203,205-210,212-217
+  s_c8cb832fff7b99::t_6d9c3bb5595870 59-63,106,162,183-185
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_c8cb832fff7b99::t_59545fc8fbaadd 148
+  s_c8cb832fff7b99::t_469f834de8d67f 96-120,122-147
+  s_c8cb832fff7b99::t_47765837cba09e 52-53
+  s_c8cb832fff7b99::t_ff33736e6c090d 121
+  s_c8cb832fff7b99::t_45aeb5ab5b5f68 149
+apps/server/src/shell/outbound-http/operations.ts
+  s_c8cb832fff7b99::t_26c228e963626f 92,94-108
+  s_c8cb832fff7b99::t_1c641c427ad4cb 1,65,70-72,109,111
+  s_c8cb832fff7b99::t_d7c71b3365018f 36-37,62
+  s_c8cb832fff7b99::t_fe77d99b71268c 38-41,63-64
+  s_c8cb832fff7b99::t_9ac8eb98e7a252 73-91,93
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c8cb832fff7b99::t_23b515549ae68b 168
+  s_c8cb832fff7b99::t_fea74898d52a77 3,5,130-131,140,163,165-167,169-170,191,194-195
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_c8cb832fff7b99::t_1ee564429889e4 3
+  s_c8cb832fff7b99::t_fffb527c447b37 2
+  s_c8cb832fff7b99::t_0cb68a859a3666 1
+apps/server/src/shell/agent/openai.test.ts
+  s_c8cb832fff7b99::t_4f9c09e73d540b 48-53
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_c8cb832fff7b99::t_4cdf1f8512d431 1,4,7
+  s_c8cb832fff7b99::t_9a798e7d122471 11
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_c8cb832fff7b99::t_7be4253ef9b457 59
+apps/server/src/shell/outbound-http/contract.ts
+  s_c8cb832fff7b99::t_e0611a8241f279 50-52
+apps/server/src/shell/agent/openai.ts
+  s_c8cb832fff7b99::t_ac440de33c6f5e 170,979
+  s_c8cb832fff7b99::t_724c917cd14439 22,33-38,105,107-115,121-122,125-138,140-143,145-164
+  s_c8cb832fff7b99::t_f0526f3954c0cc 144,581,677,772
+  s_c8cb832fff7b99::t_2f5f983bc5d344 963-968
+  s_c8cb832fff7b99::t_303400988a31e6 4-11,13,17-21,557,562,676
+  s_c8cb832fff7b99::t_abbf605ff5a85f 117-120,123
+  s_c8cb832fff7b99::t_36239be59f58b4 763,771,787,814,829,839,854,865,871,885,895,897
+  s_c8cb832fff7b99::t_5b2a0e1789478c 531,543,556,559,561,575,578,580,586,589,672,706,711,715,729
+  s_c8cb832fff7b99::t_16feaa7756d65d 959,998,1007
+  s_45665427179547::t_a585f3a32b7ce6 12,139
+  s_c8cb832fff7b99::t_5bc24262f65cff 124
+  s_221d58c93200ac::t_9af9ad4440e86f 116
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_c8cb832fff7b99::t_ebae125263647a 3-4,122-123,125-134,136,139,145,151
+  s_c8cb832fff7b99::t_03c9af779b57a3 5
+  s_c8cb832fff7b99::t_7439f98fe014ab 69
+  s_c8cb832fff7b99::t_7b5897d8da0ad5 124
+  s_c8cb832fff7b99::t_208a9210dfac60 6,24,29,38-39,44-45,56-58,62-64,108-110,135,140-141
+  s_c8cb832fff7b99::t_e052e3eb809135 26-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a603858a13b664953de1751f12a34d44c95f7dd",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_45665427179547": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b16c-543b-76d7-a54a-87f4595b191f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c8cb832fff7b99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-96a3-737d-933b-d5b8640ab75f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

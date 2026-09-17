@@ -1,0 +1,24 @@
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_f26b9f4056e846::t_949209441b9220 230
+  s_f26b9f4056e846::t_e3cbb73afd1930 215,218,234
+  s_f26b9f4056e846::t_dc7af7af0ac7b4 172
+  s_f26b9f4056e846::t_4ad8272fd6439b 9,164-171,173-179,444-449,472
+  s_f26b9f4056e846::t_55f680bf1c3819 237,241-244,471
+  s_f26b9f4056e846::t_d166822cb367c3 238-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3a986e90ed7ac2889d62fa584cbe43825545e3ad",
+  "prompts": {},
+  "sessions": {
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

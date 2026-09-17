@@ -21,7 +21,7 @@ commit-msg:
   commands:
     commit-message-convention:
       run: bun scripts/check-commit-message.ts {1}
-      fail_text: "Commit titles must put the issue reference after the colon, for example: type(scope): (#123) summary."
+      fail_text: "Commit titles must put the issue reference after the colon, for example: type(scope): #123 summary."
 
 pre-push:
   commands:

@@ -17,6 +17,7 @@ apps/server/src/shell/outbound-http/operations.ts
   s_c8cb832fff7b99::t_1c641c427ad4cb 1,60,65-67,108,110
   s_c8cb832fff7b99::t_26c228e963626f 89,91-105
   s_c8cb832fff7b99::t_d7c71b3365018f 35-36,55
+  s_c8cb832fff7b99::t_39b60770196681 16,58-59,86-87,106-107
 apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
   s_c8cb832fff7b99::t_7be4253ef9b457 59
 apps/server/src/shell/browser-login/approval.test.ts
@@ -45,12 +46,15 @@ apps/server/src/shell/outbound-http/internal/outbound-http.ts
   s_c8cb832fff7b99::t_ee7a8cb129fdcf 20,33,63,66-67,71,73-74,99-102,104-106,109-111,298,302,319-321,338-340,342-343,345-348,350-354,366,393
   s_c8cb832fff7b99::t_fdc68da4984535 64-65,306,308-309,311,313-316,318,322,324-325,327-329,331-335,337
   s_c8cb832fff7b99::t_6d9c3bb5595870 76-77,193,281
+  s_c8cb832fff7b99::t_119160b410f8bb 68-69,75,92-98,103,107-108,249,251-252,255,257-258,263-264,267-279,282,284,290,292-293,299-301,303,310,317,326,336,344,349,359-361,368-376,378-379
 apps/server/src/shell/outbound-http/operations.test.ts
   s_c8cb832fff7b99::t_469f834de8d67f 166-170,173-188,190-215
   s_c8cb832fff7b99::t_45aeb5ab5b5f68 217
   s_c8cb832fff7b99::t_ff33736e6c090d 189
   s_c8cb832fff7b99::t_47765837cba09e 53-54
   s_c8cb832fff7b99::t_59545fc8fbaadd 216
+  s_c8cb832fff7b99::t_8c4b6d6727468b 172
+  s_c8cb832fff7b99::t_6d88a79d9c3a3c 171
 apps/server/src/shell/agent/openai.test.ts
   s_c8cb832fff7b99::t_4f9c09e73d540b 48-53
 apps/server/src/shell/onboarding/onboarding-turn.test.ts

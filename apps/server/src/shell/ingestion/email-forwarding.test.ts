@@ -1381,7 +1381,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(pendingReplays.every((response) => response.status === 429)).toBe(true);
         expect(budgetAfterReplay).toEqual(budgetBeforeReplay);
-      })
+      }).pipe(
+        Effect.ensuring(
+          Effect.flatMap(MigrationSqlClient, (sql) =>
+            cleanupForwardedEmailFixtures(sql).pipe(Effect.orDie)
+          )
+        )
+      )
     );
   }
 );

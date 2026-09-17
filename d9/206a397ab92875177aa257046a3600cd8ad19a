@@ -1,0 +1,86 @@
+apps/server/src/shell/secret-material/operations.test.ts
+  s_dc7dcb2f98bcc7::t_a80587fdbfded8 1-2
+  s_221d58c93200ac::t_0421be2a99fa0b 4-8,11-18,21,30,47-79,192-280
+apps/server/src/shell/_shared/authz-live.ts
+  s_dc7dcb2f98bcc7::t_f6bb10861aa002 55,163
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_dc7dcb2f98bcc7::t_4474a0fc4451cb 8,513
+apps/server/src/shell/browser-login/service.ts
+  s_dc7dcb2f98bcc7::t_e4d87572acee5e 26,123-126
+apps/server/src/shell/db/development-seed.ts
+  s_dc7dcb2f98bcc7::t_1ed420f62d6b9c 38,45,117,186,211,236
+apps/server/src/shell/db/migrations/0039-verified-email-login.ts
+  s_dc7dcb2f98bcc7::t_6dae70ec9aa714 4,165
+apps/server/src/shell/db/migrations/0060-hmac-key-byte-semantics.ts
+  s_dc7dcb2f98bcc7::t_4b01d7a5b0c108 5,35
+apps/server/src/shell/durable-execution.ts
+  s_dc7dcb2f98bcc7::t_729476cd887b8e 1,4,99,126
+apps/server/src/shell/email-authentication/admission.ts
+  s_dc7dcb2f98bcc7::t_31cde4522671f5 12,46,49
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_dc7dcb2f98bcc7::t_e00a4b5e3c3537 42-45,84,527-530,1049
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_dc7dcb2f98bcc7::t_17d5f0588bebb5 47,49-51,205,208,211,259,262,265,307,526
+apps/server/src/shell/email-authentication/delivery.ts
+  s_dc7dcb2f98bcc7::t_e6978bef0c8961 14,165
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_dc7dcb2f98bcc7::t_3da0dbea7a24f5 43,79
+apps/server/src/shell/email-authentication/replacement-transition.ts
+  s_dc7dcb2f98bcc7::t_258f15964e7bec 30-31,367
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_dc7dcb2f98bcc7::t_09b0fad5153380 30-31,752,763
+apps/server/src/shell/email-authentication/repo.ts
+  s_dc7dcb2f98bcc7::t_355015f1ddeb60 28,444
+apps/server/src/shell/ingestion/resend-receiving-client.test.ts
+  s_dc7dcb2f98bcc7::t_66c99ef7a8feeb 1,13-18,50-76
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_dc7dcb2f98bcc7::t_0d6c50f8985e36 2,18,280
+apps/server/src/shell/outbound-http/operations.ts
+  s_dc7dcb2f98bcc7::t_07f05e7c69e9ee 3,36-37
+apps/server/src/shell/secret-material/internal/keyed-digest.ts
+  s_dc7dcb2f98bcc7::t_09fe7dc87cc06a 16-17,20,27-28,30-31,38-43
+apps/server/src/shell/secret-material/operations.ts
+  s_dc7dcb2f98bcc7::t_fcd5e027717689 1-2,4-6,8-23,26-27,31,34-35,40-41,46-115,117-119,121-166
+apps/server/src/shell/subscription/wompi-client.ts
+  s_dc7dcb2f98bcc7::t_5649b414fdd4cd 25
+apps/server/src/shell/subscription/wompi-settlement.ts
+  s_dc7dcb2f98bcc7::t_574cd5b16a3522 31,125
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_dc7dcb2f98bcc7::t_6252accec573bd 13,78
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_dc7dcb2f98bcc7::t_2e5fa4856aa662 23,500
+apps/server/src/shell/tokens/mutations.ts
+  s_dc7dcb2f98bcc7::t_8ae2e7ef1076c5 35,146
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  s_dc7dcb2f98bcc7::t_ad04474cee1e7d 12,655,672
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_dc7dcb2f98bcc7::t_493bd55a2c65fe 51-54,172-175,210,329-332
+apps/server/src/shell/tokens/repo.ts
+  s_dc7dcb2f98bcc7::t_f01be0acb2f3bf 8,13,23,70,221
+scripts/check-credential-evidence.ts
+  s_dc7dcb2f98bcc7::t_66e64b4390f0eb 44,431-440
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d9206a397ab92875177aa257046a3600cd8ad19a",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_dc7dcb2f98bcc7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b14c-4960-7205-9814-1e3c5b28ae21",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

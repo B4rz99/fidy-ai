@@ -253,43 +253,44 @@ it.effect("normalizes European and unknown organization regions", () =>
   })
 );
 
-it.effect("derives the organization region from the current region link", () =>
+it.effect("accepts only an HTTPS organization region link", () =>
   Effect.gen(function* () {
     const organization = "private-organization";
-    const client = makeHttpClient((request) => {
-      const path = new URL(request.url).pathname;
-      if (path.endsWith(`/organizations/${organization}/`)) {
-        return Effect.succeed(
-          responseJson(request, { links: { regionUrl: "https://us.sentry.io" } })
-        );
-      }
-      if (path.endsWith(`/organizations/${organization}/projects/`)) {
-        return Effect.succeed(
-          responseJson(request, [
-            { slug: "private-production" },
-            { slug: "private-non-production" },
-          ])
-        );
-      }
-      if (path.endsWith("/keys/")) {
-        return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
-      }
-      return Effect.succeed(responseJson(request, [{ name: "production" }]));
-    });
+    for (const [regionUrl, expectedRegion] of [
+      ["https://us.sentry.io", Option.some("us" as const)],
+      ["http://us.sentry.io", Option.none()],
+    ] as const) {
+      const client = makeHttpClient((request) => {
+        const path = new URL(request.url).pathname;
+        if (path.endsWith(`/organizations/${organization}/`)) {
+          return Effect.succeed(responseJson(request, { links: { regionUrl } }));
+        }
+        if (path.endsWith(`/organizations/${organization}/projects/`)) {
+          return Effect.succeed(
+            responseJson(request, [
+              { slug: "private-production" },
+              { slug: "private-non-production" },
+            ])
+          );
+        }
+        if (path.endsWith("/keys/")) {
+          return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
+        }
+        return Effect.succeed(responseJson(request, [{ name: "production" }]));
+      });
 
-    const observation = yield* inspectSentryAccount(
-      readerConfig({
-        organization,
-        production: "private-production",
-        nonProduction: "private-non-production",
-      })
-    ).pipe(provideOutbound(client));
+      const observation = yield* inspectSentryAccount(
+        readerConfig({
+          organization,
+          production: "private-production",
+          nonProduction: "private-non-production",
+        })
+      ).pipe(provideOutbound(client));
 
-    expect(observation._tag).toBe("available");
-    if (observation._tag !== "available") throw new Error("expected available observation");
-    expect(Option.isSome(observation.storageRegion)).toBe(true);
-    if (Option.isNone(observation.storageRegion)) throw new Error("expected a storage region");
-    expect(observation.storageRegion.value).toBe("us");
+      expect(observation._tag).toBe("available");
+      if (observation._tag !== "available") throw new Error("expected available observation");
+      expect(observation.storageRegion).toEqual(expectedRegion);
+    }
   })
 );
 

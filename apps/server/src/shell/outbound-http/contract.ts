@@ -2,28 +2,33 @@ import { Data, type Option, type Redacted } from "effect";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import type { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
 
+/** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =
   | "response-body-failed"
   | "invalid-destination"
   | "response-too-large"
   | "transport-failed";
 
+/** Failure facts safe for provider interpretation, without coordinates, credentials, or causes. */
 export class OutboundHttpFailure extends Data.TaggedError("OutboundHttpFailure")<{
   readonly reason: OutboundHttpFailureReason;
   readonly responseStatus: Option.Option<number>;
   readonly responseHeaders: Readonly<Record<string, string>>;
 }> {}
 
+/** Coordinate-free failure to acquire short-lived operational provider authority. */
 export class OutboundHttpSetupError extends Data.TaggedError("OutboundHttpSetupError")<{
   readonly reason: "unavailable";
 }> {}
 
+/** Response whose body has passed its destination policy's streamed-byte bound. */
 export type OutboundHttpResponse = Readonly<{
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 }>;
 
+/** Values needed to encode and sign one Wompi transaction without exposing signing authority. */
 export type WompiTransactionBody = Readonly<{
   readonly amountInCents: number;
   readonly currency: string;
@@ -32,6 +37,7 @@ export type WompiTransactionBody = Readonly<{
   readonly reference: string;
 }>;
 
+/** Fixed Sentry management API resource selected without exposing a complete URL. */
 export type SentryAccountResource =
   | Readonly<{
       readonly _tag: "Organization";

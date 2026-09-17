@@ -53,14 +53,14 @@
     "@effect/ai-openai": "4.0.0-rc.112",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/sql-pg": "4.0.0-rc.112",
-    "@sentry/bun": "10.73.0",
+    "@sentry/bun": "10.74.0",
     "csv-parse": "7.0.2",
     "effect": "4.0.0-rc.112",
     "jose": "6.2.12",
     "js-tiktoken": "1.0.21",
     "parse5": "8.0.1",
     "sharp": "0.35.4",
-    "svix": "2.3.0",
+    "svix": "2.4.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

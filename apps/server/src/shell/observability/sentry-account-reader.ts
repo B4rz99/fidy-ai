@@ -192,7 +192,7 @@ const inspectProject = (input: {
           environments: environments.map((environment) => environment.name),
         });
       })
-    : Effect.succeed(Option.none());
+    : Effect.succeedNone;
 
 /** Sanitized observation used when the management API itself cannot be inspected. */
 export const unavailableSentryAccountObservation: SentryAccountObservation = {

@@ -94,17 +94,17 @@ it.effect(
     })
 );
 
-it.effect("keeps every derived custom queue id within the SQL column limit", () =>
-  Effect.sync(() => {
-    const evidenceId = disclosureEvidenceQueueId({
-      attemptId: DisclosureDeliveryAttemptId.make("f1d1a000-0000-4000-8000-00000000c003"),
-      evidenceRevision: 0,
-    });
-    expect(evidenceId.length).toBeLessThanOrEqual(maximumQueueIdLength);
-  })
-);
-
 layer(BunCrypto.layer)("queue compatibility hashed identities", (it) => {
+  it.effect("keeps every derived custom queue id within the SQL column limit", () =>
+    Effect.gen(function* () {
+      const evidenceId = yield* disclosureEvidenceQueueId({
+        attemptId: DisclosureDeliveryAttemptId.make("f1d1a000-0000-4000-8000-00000000c003"),
+        evidenceRevision: 0,
+      });
+      expect(evidenceId.length).toBeLessThanOrEqual(maximumQueueIdLength);
+    })
+  );
+
   it.effect("derives hashed queue identities within the SQL column limit", () =>
     Effect.gen(function* () {
       const identity = {

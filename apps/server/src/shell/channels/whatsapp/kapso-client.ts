@@ -278,8 +278,10 @@ export const makeKapsoClientService = ({
   return KapsoClient.of({
     sendText: (input) =>
       sendText(input).pipe(
-        Effect.timeout(`${kapsoRequestTimeoutMilliseconds} millis`),
-        Effect.catchTag("TimeoutError", () => Effect.fail(ambiguous("timeout")))
+        Effect.timeoutOrElse({
+          duration: `${kapsoRequestTimeoutMilliseconds} millis`,
+          orElse: () => Effect.fail(ambiguous("timeout")),
+        })
       ),
   });
 };

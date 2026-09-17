@@ -167,9 +167,8 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             evidenceRevision: 0,
           };
           const queue = yield* consentDisclosureEvidenceQueue;
-          yield* queue
-            .offer(evidence, { id: disclosureEvidenceQueueId(evidence) })
-            .pipe(Effect.orDie);
+          const queueId = yield* disclosureEvidenceQueueId(evidence);
+          yield* queue.offer(evidence, { id: queueId }).pipe(Effect.orDie);
           yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
           expect(yield* retained(payload.exchangeId)).toBe(true);
           const engine = yield* WorkflowEngine.WorkflowEngine;

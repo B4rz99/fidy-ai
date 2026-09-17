@@ -1,3 +1,5 @@
+// Node crypto keeps this focused expected-value fixture synchronous and independent.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";

@@ -823,7 +823,7 @@ export const prepareWhatsAppTurn = Effect.fn("WhatsApp.prepareTurn")(function* (
         const command = jobs.map(({ text }) => text).join("\n");
         const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
           Option.match({
-            onNone: () => Effect.succeed(Option.none()),
+            onNone: () => Effect.succeedNone,
             onSome: (digest) => loadConfirmationOutboundEvidence(sql, work.userId, digest),
           })
         );

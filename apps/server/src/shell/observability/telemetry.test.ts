@@ -24,7 +24,7 @@ const telemetryLayer = (adapter: TelemetryAdapter): Layer.Layer<Telemetry> =>
 const descriptor = makeSpanDescriptor();
 
 const unobservedAdapter: TelemetryAdapter = {
-  startSpan: () => Effect.succeed(Option.none()),
+  startSpan: () => Effect.succeedNone,
   finishSpan: () => Effect.void,
   recordOutcome: () => Effect.void,
   recordResponseStatus: () => Effect.void,
@@ -123,14 +123,12 @@ it.effect("proves only currently active in-process span coordinates", () =>
   Effect.gen(function* () {
     const adapter = makeTelemetryAdapter({
       startSpan: () =>
-        Effect.succeed(
-          Option.some({
-            traceId: TelemetryTraceId.make("1".repeat(32)),
-            spanId: TelemetrySpanId.make("2".repeat(16)),
-            sampled: true,
-            state: {},
-          })
-        ),
+        Effect.succeedSome({
+          traceId: TelemetryTraceId.make("1".repeat(32)),
+          spanId: TelemetrySpanId.make("2".repeat(16)),
+          sampled: true,
+          state: {},
+        }),
     });
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
@@ -212,7 +210,7 @@ it.effect("a malformed adapter span runs nested application work unobserved", ()
       state: {},
     };
     const adapter = makeTelemetryAdapter({
-      startSpan: () => Effect.succeed(Option.some(hostileSpan)),
+      startSpan: () => Effect.succeedSome(hostileSpan),
     });
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
@@ -230,14 +228,12 @@ it.effect("synchronous adapter defects never alter work or escape observation me
   Effect.gen(function* () {
     const adapter = makeTelemetryAdapter({
       startSpan: () =>
-        Effect.succeed(
-          Option.some({
-            traceId: TelemetryTraceId.make("1".repeat(32)),
-            spanId: TelemetrySpanId.make("2".repeat(16)),
-            sampled: true,
-            state: {},
-          })
-        ),
+        Effect.succeedSome({
+          traceId: TelemetryTraceId.make("1".repeat(32)),
+          spanId: TelemetrySpanId.make("2".repeat(16)),
+          sampled: true,
+          state: {},
+        }),
       finishSpan: () => {
         throw new Error("finish-adapter-sentinel");
       },

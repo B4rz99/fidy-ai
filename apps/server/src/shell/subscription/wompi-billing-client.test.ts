@@ -1,3 +1,5 @@
+// Node crypto keeps this focused provider-signature fixture synchronous and independent.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash } from "node:crypto";
 import { BunServices } from "@effect/platform-bun";
 import { expect, it, layer } from "@effect/vitest";

@@ -292,6 +292,7 @@ export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosu
         const applied = yield* applyLifecycleEvidence(attempt, evidence);
         if (!applied) return "ignored" as const;
         const queue = yield* consentDisclosureEvidenceQueue;
+        const queueId = yield* disclosureEvidenceQueueId(attempt);
         yield* queue
           .offer(
             {
@@ -300,7 +301,7 @@ export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosu
               attemptId: attempt.attemptId,
               evidenceRevision: attempt.evidenceRevision,
             },
-            { id: disclosureEvidenceQueueId(attempt) }
+            { id: queueId }
           )
           .pipe(Effect.orDie);
         return "applied" as const;

@@ -1,6 +1,5 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { describe, expect, it, layer } from "@effect/vitest";
 import {
   Array as Arr,
@@ -2519,7 +2518,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
             fresh: true,
           },
           payload: {
-            requestId: ManualPATRequestId.make(randomUUID()),
+            requestId: ManualPATRequestId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
             grant: {
               recipientLabel: PATRecipientLabel.make("Hosted revocation robot"),
               scopes: ["read"],

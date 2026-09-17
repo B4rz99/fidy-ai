@@ -106,7 +106,7 @@ const collectBoundedResponseBytes = Effect.fn(function* (
   return yield* read.pipe(
     Effect.catchIf(
       (error: HttpClientError.HttpClientError) => error.reason._tag === "EmptyBodyError",
-      () => Effect.succeed(Option.some<Uint8Array>(new Uint8Array(0)))
+      () => Effect.succeedSome<Uint8Array>(new Uint8Array(0))
     )
   );
 });

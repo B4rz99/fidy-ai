@@ -389,7 +389,7 @@ export const findStatementMappingInScope = Effect.fn("findStatementMappingInScop
   })({ userId, fingerprint }).pipe(
     Effect.flatMap(
       Option.match({
-        onNone: () => Effect.succeed(Option.none()),
+        onNone: () => Effect.succeedNone,
         onSome: ({ mapping }) =>
           Schema.decodeUnknownEffect(StatementColumnMapping)(mapping).pipe(
             Effect.asSome,

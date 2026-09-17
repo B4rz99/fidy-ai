@@ -386,14 +386,12 @@ layer(OnboardingHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const outcomes = yield* Ref.make<ReadonlyArray<DeclaredOutcome>>([]);
         const recordingTelemetry = makeTelemetryService({
           startSpan: () =>
-            Effect.succeed(
-              Option.some({
-                traceId: TelemetryTraceId.make("0".repeat(32)),
-                spanId: TelemetrySpanId.make("0".repeat(16)),
-                sampled: true,
-                state: undefined,
-              })
-            ),
+            Effect.succeedSome({
+              traceId: TelemetryTraceId.make("0".repeat(32)),
+              spanId: TelemetrySpanId.make("0".repeat(16)),
+              sampled: true,
+              state: undefined,
+            }),
           finishSpan: () => Effect.void,
           recordOutcome: (_span, outcome) => Ref.update(outcomes, (values) => [...values, outcome]),
           recordResponseStatus: () => Effect.void,

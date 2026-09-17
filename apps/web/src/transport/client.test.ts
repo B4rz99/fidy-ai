@@ -522,11 +522,11 @@ describe("canonical browser transport", () => {
     const unmountTransport = transportRegistry.mount(transportAtom);
 
     try {
-      const malformedExit = await Effect.runPromise(
-        Effect.exit(AtomRegistry.getResult(malformedRegistry, malformedAtom))
+      const malformedExit = await Effect.runPromiseExit(
+        AtomRegistry.getResult(malformedRegistry, malformedAtom)
       );
-      const transportExit = await Effect.runPromise(
-        Effect.exit(AtomRegistry.getResult(transportRegistry, transportAtom))
+      const transportExit = await Effect.runPromiseExit(
+        AtomRegistry.getResult(transportRegistry, transportAtom)
       );
       expect(Exit.isFailure(malformedExit)).toBe(true);
       expect(Exit.isFailure(transportExit)).toBe(true);
@@ -564,7 +564,7 @@ describe("canonical browser transport", () => {
     const unmount = registry.mount(atom);
 
     try {
-      const exit = await Effect.runPromise(Effect.exit(AtomRegistry.getResult(registry, atom)));
+      const exit = await Effect.runPromiseExit(AtomRegistry.getResult(registry, atom));
       expect(boundaryExitKind(exit)).toBe("typed-failure");
     } finally {
       unmount();

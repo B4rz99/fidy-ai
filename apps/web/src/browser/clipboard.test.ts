@@ -17,15 +17,13 @@ it("writes text through an available browser clipboard", async () => {
 it("reports clipboard rejection through the typed failure channel", async () => {
   const writeText = vi.fn(() => Promise.reject(new Error("permission denied")));
 
-  const exit = await Effect.runPromise(
-    Effect.exit(writeClipboardText(Option.some({ writeText }), "texto"))
-  );
+  const exit = await Effect.runPromiseExit(writeClipboardText(Option.some({ writeText }), "texto"));
 
   assert.deepStrictEqual(exit, Exit.fail(new ClipboardAccessFailed()));
 });
 
 it("reports an unavailable clipboard through the typed failure channel", async () => {
-  const exit = await Effect.runPromise(Effect.exit(writeClipboardText(Option.none(), "texto")));
+  const exit = await Effect.runPromiseExit(writeClipboardText(Option.none(), "texto"));
 
   assert.deepStrictEqual(exit, Exit.fail(new ClipboardAccessFailed()));
 });

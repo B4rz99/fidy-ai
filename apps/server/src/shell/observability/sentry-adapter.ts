@@ -515,7 +515,7 @@ const startTelemetrySpan = (
         sink.knownStates.set(state, state);
         return Option.some({ traceId, spanId, sampled, state });
       })
-    : Effect.succeed(Option.none());
+    : Effect.succeedNone;
 
 const finishTelemetrySpan = (
   sink: TelemetrySink,

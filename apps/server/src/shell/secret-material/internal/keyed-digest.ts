@@ -1,3 +1,5 @@
+// Node crypto is required because Effect Crypto does not expose HMAC.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHmac } from "node:crypto";
 import { Config, ConfigProvider, Effect, Encoding, Redacted, Result } from "effect";
 

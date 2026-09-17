@@ -721,8 +721,10 @@ const countStructuredInputTokens = (
         ? error
         : invalidProviderOutput("Hosted provider response was invalid")
     ),
-    Effect.timeout(policy.timeout),
-    Effect.catchTag("TimeoutError", () => Effect.fail(structuredOutputTimedOut()))
+    Effect.timeoutOrElse({
+      duration: policy.timeout,
+      orElse: () => Effect.fail(structuredOutputTimedOut()),
+    })
   );
 
 const readStructuredResponse = (
@@ -778,8 +780,10 @@ const executeStructuredRequest = function <Output>(
         Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
       )
     ),
-    Effect.timeout(prepared.policy.timeout),
-    Effect.catchTag("TimeoutError", () => Effect.fail(structuredOutputTimedOut()))
+    Effect.timeoutOrElse({
+      duration: prepared.policy.timeout,
+      orElse: () => Effect.fail(structuredOutputTimedOut()),
+    })
   );
 };
 

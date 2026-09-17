@@ -46,10 +46,10 @@ const getDeploymentResponse = (
   HttpClient.HttpClient
 > =>
   HttpClient.get(new URL(path, origin).toString()).pipe(
-    Effect.flatMap((response) =>
-      response.status >= firstSuccessStatus && response.status < firstRedirectionStatus
-        ? Effect.succeed(response)
-        : Effect.fail(new SmokeFailed({ message: `${path} returned HTTP ${response.status}.` }))
+    Effect.filterOrFail(
+      (response) =>
+        response.status >= firstSuccessStatus && response.status < firstRedirectionStatus,
+      (response) => new SmokeFailed({ message: `${path} returned HTTP ${response.status}.` })
     ),
     Effect.timeout("10 seconds")
   );

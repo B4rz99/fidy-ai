@@ -1,5 +1,8 @@
+// Node crypto is the focused synchronous digest implementation for this deterministic fixture.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Crypto, Effect, Schema } from "effect";
 import { describe } from "vitest";
 import {
   DisclosureDeliveryAttemptId,
@@ -33,6 +36,11 @@ import {
   durableRaceAllDeferredSpec,
   loadDurableWorkflowFixture,
 } from "~/shell/testing/durable-compatibility";
+
+const queueCrypto = Crypto.make({
+  randomBytes: (size) => new Uint8Array(size),
+  digest: (algorithm, data) => Effect.sync(() => createHash(algorithm).update(data).digest()),
+});
 
 const attemptId = DisclosureDeliveryAttemptId.make("019cda32-1250-7000-8000-000000000465");
 const attemptNumber = DisclosureDeliveryAttemptNumber.make(1);
@@ -79,7 +87,8 @@ const spec: DurableWorkflowSpec = {
       key: "evidence",
       name: consentDisclosureEvidenceQueueName,
       schema: ConsentDisclosureEvidencePayload,
-      queueId: (payload) => Effect.succeed(disclosureEvidenceQueueId(payload)),
+      queueId: (payload) =>
+        disclosureEvidenceQueueId(payload).pipe(Effect.provideService(Crypto.Crypto, queueCrypto)),
     }),
   ],
 };

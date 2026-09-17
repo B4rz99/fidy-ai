@@ -8,11 +8,12 @@ import { BrowserLoginUnavailableApi, WebAuthApi } from "~/web-auth-api";
 import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { deleteBrowserSessionConsentEvidence } from "~/shell/testing/browser-session-fixtures";
 import { purgeBrowserLoginAnonymousEvidence, startBrowserLoginPairing } from "./service";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM consent_records WHERE web_session_id IS NOT NULL`;
+  yield* deleteBrowserSessionConsentEvidence(sql);
   yield* sql`DELETE FROM web_sessions`;
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* sql`DELETE FROM browser_login_pairings`;

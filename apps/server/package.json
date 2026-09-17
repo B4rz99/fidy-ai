@@ -42,7 +42,7 @@
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:production-image": "bash scripts/check-production-image.sh",
     "check:browser-client": "bun scripts/check-browser-client.ts",
-    "lint:deps": "bun ../../tools/depcruise/run.mjs",
+    "lint:deps": "bun ../../tools/depcruise/run.mjs . src scripts tools",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "check:lint-guards": "bun scripts/check-lint-guards.ts",
     "check:migration-ids": "bun scripts/check-migration-ids.ts",

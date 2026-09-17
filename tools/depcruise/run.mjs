@@ -10,12 +10,16 @@
 // failure this repo already had once, so `assertCruisedSomething` below turns
 // it into an error.
 
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cruise } from "dependency-cruiser";
 import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcruise-config";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
+import ts from "typescript";
 
 const packageRoot = resolve(process.argv[2] ?? process.cwd());
+const graphRoots = process.argv.slice(3);
+const sourceRoots = graphRoots.length > 0 ? graphRoots : ["src"];
 
 // The cruiser resolves every path against the cwd, and the reported module
 // names are what the rule patterns match, so both must be package-root-relative.
@@ -24,7 +28,7 @@ process.chdir(packageRoot);
 const ruleSet = await extractDepcruiseConfig(resolve(packageRoot, ".dependency-cruiser.mjs"));
 const tsConfig = extractTSConfig(resolve(packageRoot, ruleSet.options.tsConfig.fileName));
 
-const cruiseSource = (options) => cruise(["src"], { ruleSet, ...options }, null, { tsConfig });
+const cruiseSource = (options) => cruise(sourceRoots, { ruleSet, ...options }, null, { tsConfig });
 
 const cruiseReport = async (options) =>
   JSON.parse((await cruiseSource({ outputType: "json", ...options })).output);
@@ -62,6 +66,79 @@ const ruleReason = (ruleName) => {
 
 const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
 
+// Dependency-cruiser marks direct `export ... from` edges, but a local `export { imported }`
+// loses that provenance. Inspect only Published Trio interfaces to close that laundering form.
+const isInternalSpecifier = (specifier) =>
+  [
+    specifier.startsWith("./internal/"),
+    specifier.startsWith("../internal/"),
+    specifier.includes("/internal/"),
+  ].includes(true);
+
+const importNames = (clause) => {
+  const names = clause.name === undefined ? [] : [clause.name.text];
+  const named = clause.namedBindings;
+  if (named === undefined) return names;
+  if (ts.isNamespaceImport(named)) return [...names, named.name.text];
+  return [...names, ...named.elements.map((element) => element.name.text)];
+};
+
+const internalImport = (statement) => {
+  if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+    return [];
+  }
+  const specifier = statement.moduleSpecifier.text;
+  if (!isInternalSpecifier(specifier) || statement.importClause === undefined) return [];
+  return importNames(statement.importClause).map((name) => [name, specifier]);
+};
+
+const importedBindings = (sourceFile) => new Map(sourceFile.statements.flatMap(internalImport));
+
+const localExportNames = (statement) => {
+  if (
+    ts.isExportDeclaration(statement) &&
+    statement.moduleSpecifier === undefined &&
+    statement.exportClause !== undefined &&
+    ts.isNamedExports(statement.exportClause)
+  ) {
+    return statement.exportClause.elements.map(
+      (element) => (element.propertyName ?? element.name).text
+    );
+  }
+  if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
+    return [statement.expression.text];
+  }
+  return [];
+};
+
+const locallyExportedBindings = (sourceFile) => sourceFile.statements.flatMap(localExportNames);
+
+const reportLaunderedInternals = (report) => {
+  let violations = 0;
+  for (const module of report.modules) {
+    if (!/^src\/(core|shell)\/[^/]+\/(contract|operations|runtime)\.ts$/u.test(module.source)) {
+      continue;
+    }
+    const sourceFile = ts.createSourceFile(
+      module.source,
+      readFileSync(module.source, "utf8"),
+      ts.ScriptTarget.Latest,
+      true
+    );
+    const imports = importedBindings(sourceFile);
+    for (const binding of locallyExportedBindings(sourceFile)) {
+      const specifier = imports.get(binding);
+      if (specifier === undefined) continue;
+      violations += 1;
+      console.error(
+        `error published-interface-reexports-internal: ${module.source} → ${specifier}`
+      );
+      console.error(`  ${ruleReason("published-interface-reexports-internal")}\n`);
+    }
+  }
+  return violations;
+};
+
 const reportViolations = (report) => {
   for (const violation of report.summary.violations) {
     const path = violation.cycle
@@ -89,4 +166,8 @@ const reportViolations = (report) => {
 
 const report = await cruiseReport({ validate: true });
 assertCruisedSomething(report);
+const launderedInternals = reportLaunderedInternals(report);
 reportViolations(report);
+if (launderedInternals > 0) {
+  process.exit(1);
+}

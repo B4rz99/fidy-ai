@@ -16,7 +16,6 @@ type Expectation =
   | { readonly kind: "rejected"; readonly mustContain: readonly string[] };
 
 type Probe = {
-  readonly directory: string;
   readonly expect: Expectation;
   readonly files: readonly ProbeFile[];
   readonly name: string;
@@ -24,8 +23,10 @@ type Probe = {
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
-const runGraph = (): { readonly exitCode: Option.Option<number>; readonly report: string } => {
-  const spawned = Bun.spawnSync(["bun", "../../tools/depcruise/run.mjs"], {
+const runGraph = (
+  sourceRoots: readonly string[] = ["src", "scripts", "tools"]
+): { readonly exitCode: Option.Option<number>; readonly report: string } => {
+  const spawned = Bun.spawnSync(["bun", "../../tools/depcruise/run.mjs", ".", ...sourceRoots], {
     cwd: serverRoot,
     stdout: "pipe",
     stderr: "pipe",
@@ -68,9 +69,317 @@ const CONTINUITY_TYPE_ONLY = `src/shell/agent/${PROBE_PREFIX}continuity-type-onl
 const CONTINUITY_OUTSIDE_TEST = `src/shell/audit/${PROBE_PREFIX}continuity-outside-test`;
 const CONTINUITY_RUNTIME_TEST = `src/shell/agent/${PROBE_PREFIX}continuity-runtime-test`;
 
+const ownInternal = `src/core/${PROBE_PREFIX}own-internal`;
+const foreignInternalSource = `src/core/${PROBE_PREFIX}foreign-internal-source`;
+const foreignInternalTarget = `src/core/${PROBE_PREFIX}foreign-internal-target`;
+const typeInternalSource = `src/shell/${PROBE_PREFIX}type-internal-source`;
+const typeInternalTarget = `src/shell/${PROBE_PREFIX}type-internal-target`;
+const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
+const internalDirection = `src/core/${PROBE_PREFIX}internal-direction`;
+const operationsDirection = `src/core/${PROBE_PREFIX}operations-direction`;
+const reexportInternal = `src/core/${PROBE_PREFIX}reexport-internal`;
+const publishedSource = `src/shell/${PROBE_PREFIX}published-source`;
+const publishedTarget = `src/shell/${PROBE_PREFIX}published-target`;
+const runtimeSource = `src/shell/${PROBE_PREFIX}runtime-source`;
+const runtimeTarget = `src/shell/${PROBE_PREFIX}runtime-target`;
+const runtimeComposer = `src/shell/${PROBE_PREFIX}runtime-composer`;
+const localTestInternal = `src/shell/${PROBE_PREFIX}local-test-internal`;
+const foreignTestSource = `src/shell/${PROBE_PREFIX}foreign-test-source`;
+const foreignTestTarget = `src/shell/${PROBE_PREFIX}foreign-test-target`;
+const scriptPublication = `scripts/${PROBE_PREFIX}publication`;
+const toolInternal = `tools/${PROBE_PREFIX}internal`;
+const toolInternalTarget = `src/shell/${PROBE_PREFIX}tool-internal-target`;
+const toolRuntime = `tools/${PROBE_PREFIX}runtime-access`;
+const toolRuntimeAllowed = `tools/${PROBE_PREFIX}runtime-composition`;
+const toolRuntimeTarget = `src/shell/${PROBE_PREFIX}tool-runtime-target`;
+const scriptRuntime = `scripts/${PROBE_PREFIX}runtime-composition`;
+const landmarkInternal = `src/${PROBE_PREFIX}landmark-internal`;
+const landmarkInternalTarget = `src/shell/${PROBE_PREFIX}landmark-internal-target`;
+const emptyGraph = `tools/${PROBE_PREFIX}empty-graph`;
+
 const PROBES: readonly Probe[] = [
   {
-    directory: SIBLING_REFERENCE,
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${ownInternal}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${ownInternal}/operations.ts`,
+        source: `import { value } from "~/${ownInternal.replace("src/", "")}/internal/value";\n\nexport const operation = value;\n`,
+      },
+    ],
+    name: "a module may import its own visible internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: ${foreignInternalSource}/operations.ts → ${foreignInternalTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${foreignInternalTarget}/internal/value.ts`,
+        source: "export const value = true;\n",
+      },
+      {
+        path: `${foreignInternalSource}/operations.ts`,
+        source: `import { value } from "~/${foreignInternalTarget.replace("src/", "")}/internal/value";\n\nexport const operation = value;\n`,
+      },
+    ],
+    name: "a module cannot import another module's visible internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: ${typeInternalSource}/operations.ts → ${typeInternalTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      { path: `${typeInternalTarget}/internal/value.ts`, source: "export type Value = true;\n" },
+      {
+        path: `${typeInternalSource}/operations.ts`,
+        source: `import type { Value } from "~/${typeInternalTarget.replace("src/", "")}/internal/value";\n\nexport type Operation = Value;\n`,
+      },
+    ],
+    name: "type-only imports cannot cross into foreign internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error contract-imports-implementation: ${interfaceDirection}/contract.ts → ${interfaceDirection}/internal/value.ts`,
+        `error contract-imports-implementation: ${interfaceDirection}/contract.ts → ${interfaceDirection}/operations.ts`,
+        `error contract-imports-implementation: ${interfaceDirection}/contract.ts → ${interfaceDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      { path: `${interfaceDirection}/internal/value.ts`, source: "export const value = true;\n" },
+      { path: `${interfaceDirection}/operations.ts`, source: "export const operation = true;\n" },
+      { path: `${interfaceDirection}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${interfaceDirection}/contract.ts`,
+        source:
+          'import { value } from "./internal/value";\n' +
+          'import { operation } from "./operations";\n' +
+          'import { runtime } from "./runtime";\n\n' +
+          "export const contract = [value, operation, runtime];\n",
+      },
+    ],
+    name: "contract.ts cannot depend on implementation or outward interfaces",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error internal-imports-outward-interface: ${internalDirection}/internal/value.ts → ${internalDirection}/operations.ts`,
+        `error internal-imports-outward-interface: ${internalDirection}/internal/value.ts → ${internalDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      { path: `${internalDirection}/operations.ts`, source: "export const operation = true;\n" },
+      { path: `${internalDirection}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${internalDirection}/internal/value.ts`,
+        source:
+          'import { operation } from "../operations";\n' +
+          'import { runtime } from "../runtime";\n\n' +
+          "export const value = [operation, runtime];\n",
+      },
+    ],
+    name: "internal implementation cannot depend backward on operations or runtime",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error operations-imports-runtime: ${operationsDirection}/operations.ts → ${operationsDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      { path: `${operationsDirection}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${operationsDirection}/operations.ts`,
+        source: 'import { runtime } from "./runtime";\n\nexport const operation = runtime;\n',
+      },
+    ],
+    name: "operations.ts cannot depend backward on runtime.ts",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${reexportInternal}/operations.ts → ./internal/value`,
+        `error published-interface-reexports-internal: ${reexportInternal}/runtime.ts → ${reexportInternal}/internal/value.ts`,
+      ],
+    },
+    files: [
+      { path: `${reexportInternal}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${reexportInternal}/operations.ts`,
+        source: 'import { value } from "./internal/value";\n\n' + "export { value };\n",
+      },
+      {
+        path: `${reexportInternal}/runtime.ts`,
+        source: 'export { value } from "./internal/value";\n',
+      },
+    ],
+    name: "published interfaces cannot launder imported internals through local re-exports",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${publishedTarget}/contract.ts`, source: "export const contract = true;\n" },
+      { path: `${publishedTarget}/operations.ts`, source: "export const operation = true;\n" },
+      {
+        path: `${publishedSource}/operations.ts`,
+        source:
+          `import { contract } from "~/${publishedTarget.replace("src/", "")}/contract";\n` +
+          `import { operation } from "~/${publishedTarget.replace("src/", "")}/operations";\n\n` +
+          "export const published = [contract, operation];\n",
+      },
+    ],
+    name: "foreign contract.ts and operations.ts are published interfaces",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-runtime-imported-outside-composition: ${runtimeSource}/operations.ts → ${runtimeTarget}/runtime.ts`,
+      ],
+    },
+    files: [
+      { path: `${runtimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${runtimeSource}/operations.ts`,
+        source: `import { runtime } from "~/${runtimeTarget.replace("src/", "")}/runtime";\n\nexport const operation = runtime;\n`,
+      },
+    ],
+    name: "ordinary modules cannot import a foreign runtime.ts",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${runtimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${runtimeComposer}/runtime.ts`,
+        source: `import { runtime } from "~/${runtimeTarget.replace("src/", "")}/runtime";\n\nexport const composed = runtime;\n`,
+      },
+    ],
+    name: "runtime.ts may compose another module's runtime.ts",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${localTestInternal}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${localTestInternal}/value.test.ts`,
+        source: `import { value } from "~/${localTestInternal.replace("src/", "")}/internal/value";\n\nexport const tested = value;\n`,
+      },
+    ],
+    name: "an owner-local test may import its own internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: ${foreignTestSource}/value.test.ts → ${foreignTestTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      { path: `${foreignTestTarget}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${foreignTestSource}/value.test.ts`,
+        source: `import { value } from "~/${foreignTestTarget.replace("src/", "")}/internal/value";\n\nexport const tested = value;\n`,
+      },
+    ],
+    name: "a foreign test receives no exemption from visible-internal privacy",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${publishedTarget}/operations.ts`, source: "export const operation = true;\n" },
+      {
+        path: `${scriptPublication}/probe.ts`,
+        source: `import { operation } from "~/${publishedTarget.replace("src/", "")}/operations";\n\nexport const script = operation;\n`,
+      },
+    ],
+    name: "scripts may use published operations",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${runtimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${scriptRuntime}/probe-runtime.ts`,
+        source: `import { runtime } from "~/${runtimeTarget.replace("src/", "")}/runtime";\n\nexport const script = runtime;\n`,
+      },
+    ],
+    name: "a script may compose a published runtime",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      { path: `${toolRuntimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${toolRuntimeAllowed}/probe-runtime.ts`,
+        source: `import { runtime } from "~/${toolRuntimeTarget.replace("src/", "")}/runtime";\n\nexport const tool = runtime;\n`,
+      },
+    ],
+    name: "an explicitly named tool runtime may compose published runtime authority",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error tooling-imports-runtime-without-composition-role: ${toolRuntime}/probe.ts → ${toolRuntimeTarget}/runtime.ts`,
+      ],
+    },
+    files: [
+      { path: `${toolRuntimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
+      {
+        path: `${toolRuntime}/probe.ts`,
+        source: `import { runtime } from "~/${toolRuntimeTarget.replace("src/", "")}/runtime";\n\nexport const tool = runtime;\n`,
+      },
+    ],
+    name: "a tool without an explicit composition role cannot import runtime authority",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error landmark-imports-internal: ${landmarkInternal}/probe.ts → ${landmarkInternalTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${landmarkInternalTarget}/internal/value.ts`,
+        source: "export const value = true;\n",
+      },
+      {
+        path: `${landmarkInternal}/probe.ts`,
+        source: `import { value } from "~/${landmarkInternalTarget.replace("src/", "")}/internal/value";\n\nexport const landmark = value;\n`,
+      },
+    ],
+    name: "source landmarks cannot bypass visible-internal privacy",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error tooling-imports-internal: ${toolInternal}/probe.ts → ${toolInternalTarget}/internal/value.ts`,
+      ],
+    },
+    files: [
+      { path: `${toolInternalTarget}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${toolInternal}/probe.ts`,
+        source: `import { value } from "~/${toolInternalTarget.replace("src/", "")}/internal/value";\n\nexport const tool = value;\n`,
+      },
+    ],
+    name: "tools cannot bypass visible-internal privacy",
+  },
+  {
     expect: { kind: "allowed" },
     files: [
       {
@@ -84,7 +393,6 @@ const PROBES: readonly Probe[] = [
     name: "a core slice may import a sibling's published reference.ts",
   },
   {
-    directory: SIBLING_IMPLEMENTATION,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -109,7 +417,6 @@ const PROBES: readonly Probe[] = [
     name: "core-slice-reaches-sibling-slice rejects a sibling's implementation",
   },
   {
-    directory: TYPE_ONLY,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -127,7 +434,6 @@ const PROBES: readonly Probe[] = [
     name: "an `import type` is an edge the graph can see (tsPreCompilationDeps)",
   },
   {
-    directory: CORE_TO_SHELL,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -146,7 +452,6 @@ const PROBES: readonly Probe[] = [
     name: "core-imports-shell rejects a core module reaching into shell",
   },
   {
-    directory: CORE_TO_WORLD,
     expect: {
       kind: "rejected",
       mustContain: [`error core-imports-the-world: ${CORE_TO_WORLD}/probe.ts → fs`],
@@ -162,7 +467,6 @@ const PROBES: readonly Probe[] = [
     name: "core-imports-the-world rejects a core module importing an I/O builtin",
   },
   {
-    directory: ENTRYPOINT,
     expect: {
       kind: "rejected",
       mustContain: [`error entrypoint-is-imported: ${ENTRYPOINT}/probe.ts → src/main.ts`],
@@ -176,7 +480,6 @@ const PROBES: readonly Probe[] = [
     name: "entrypoint-is-imported rejects importing src/main.ts",
   },
   {
-    directory: CLIENT_SEAM_ALLOWED,
     expect: { kind: "allowed" },
     files: [
       {
@@ -187,7 +490,6 @@ const PROBES: readonly Probe[] = [
     name: "browser-facing code may import the package-level client facade",
   },
   {
-    directory: CLIENT_SEAM_BYPASS,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -204,7 +506,6 @@ const PROBES: readonly Probe[] = [
     name: "browser-facing code cannot bypass the package-level client facade",
   },
   {
-    directory: CONTINUITY_OUTSIDE,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -222,7 +523,6 @@ const PROBES: readonly Probe[] = [
     name: "continuity is unreachable from outside the hosted agent runtime",
   },
   {
-    directory: CONTINUITY_SIBLING,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -240,7 +540,6 @@ const PROBES: readonly Probe[] = [
     name: "continuity is unreachable even from a sibling of the hosted agent runtime",
   },
   {
-    directory: CONTINUITY_TYPE_ONLY,
     expect: { kind: "allowed" },
     files: [
       {
@@ -254,7 +553,6 @@ const PROBES: readonly Probe[] = [
     name: "a type carries no capability, so a type-only continuity import stays legal",
   },
   {
-    directory: CONTINUITY_OUTSIDE_TEST,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -272,7 +570,6 @@ const PROBES: readonly Probe[] = [
     name: "a test outside the hosted agent runtime buys no continuity exemption",
   },
   {
-    directory: CONTINUITY_RUNTIME_TEST,
     expect: { kind: "allowed" },
     files: [
       {
@@ -285,7 +582,6 @@ const PROBES: readonly Probe[] = [
     name: "a test inside the hosted agent runtime may build continuity directly",
   },
   {
-    directory: ADAPTER_TO_HANDLER,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -303,7 +599,6 @@ const PROBES: readonly Probe[] = [
     name: "an HTTP handler cannot import another HTTP handler adapter",
   },
   {
-    directory: REGISTRY_TO_HANDLER,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -321,7 +616,6 @@ const PROBES: readonly Probe[] = [
     name: "a canonical registry cannot import an HTTP handler adapter",
   },
   {
-    directory: ADAPTER_TO_COORDINATION,
     expect: { kind: "allowed" },
     files: [
       {
@@ -334,7 +628,6 @@ const PROBES: readonly Probe[] = [
     name: "an HTTP handler may delegate to the atomic batch coordination module",
   },
   {
-    directory: REGISTRY_TO_COORDINATION,
     expect: { kind: "allowed" },
     files: [
       {
@@ -347,7 +640,6 @@ const PROBES: readonly Probe[] = [
     name: "a canonical registry may delegate to the atomic batch coordination module",
   },
   {
-    directory: ADAPTER_TO_REPO,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -365,7 +657,6 @@ const PROBES: readonly Probe[] = [
     name: "an adapter cannot reach a slice repo around its one operation implementation",
   },
   {
-    directory: ADAPTER_TO_QUERIES,
     expect: { kind: "allowed" },
     files: [
       {
@@ -384,7 +675,6 @@ const PROBES: readonly Probe[] = [
     name: "an adapter delegating to its slice queries module is how persistence is reached",
   },
   {
-    directory: SENTRY_OUTSIDE_OBSERVABILITY,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -402,7 +692,6 @@ const PROBES: readonly Probe[] = [
     name: "sentry-imported-outside-observability rejects direct SDK access",
   },
   {
-    directory: CYCLE,
     expect: {
       kind: "rejected",
       mustContain: ["error cycle:", `${CYCLE}/a.ts`, `${CYCLE}/b.ts`],
@@ -422,7 +711,6 @@ const PROBES: readonly Probe[] = [
     name: "cycle rejects a type-only circular import",
   },
   {
-    directory: BARREL,
     expect: {
       kind: "rejected",
       mustContain: [`error barrel-file: ${BARREL}/probe.ts → ${BARREL}/index.ts`],
@@ -438,7 +726,6 @@ const PROBES: readonly Probe[] = [
     name: "barrel-file rejects importing an index module",
   },
   {
-    directory: ALIAS_SAME_DIRECTORY,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -457,7 +744,6 @@ const PROBES: readonly Probe[] = [
     name: "same-directory-import-is-aliased rejects `~/` within one directory",
   },
   {
-    directory: RELATIVE_CROSS_DIRECTORY,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -475,7 +761,6 @@ const PROBES: readonly Probe[] = [
     name: "cross-directory-import-is-relative rejects `../` across directories",
   },
   {
-    directory: HOSTED_TOKENIZER,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -493,7 +778,6 @@ const PROBES: readonly Probe[] = [
     name: "hosted inference orchestration rejects tokenizer imports",
   },
   {
-    directory: HOSTED_JS_TOKENIZER,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -511,7 +795,6 @@ const PROBES: readonly Probe[] = [
     name: "hosted inference orchestration rejects js-tiktoken imports",
   },
   {
-    directory: HOSTED_PROVIDER,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -529,7 +812,6 @@ const PROBES: readonly Probe[] = [
     name: "hosted inference orchestration rejects provider-specific imports",
   },
   {
-    directory: HOSTED_MODEL,
     expect: {
       kind: "rejected",
       mustContain: [
@@ -580,6 +862,15 @@ const assertProbeBatch = (probes: readonly Probe[], expectation: Expectation["ki
   }
 };
 
+const probeRoot = ({ path }: ProbeFile): string => {
+  const marker = path.indexOf("/__probe-");
+  const end = path.indexOf("/", marker + 1);
+  if (marker < 0 || end < 0) {
+    throw new Error(`Probe file is not under a generated directory: ${path}`);
+  }
+  return path.slice(0, end);
+};
+
 const remove = (path: string): void => {
   const result = Bun.spawnSync(["rm", "-rf", path], { stderr: "pipe" });
   if (result.exitCode !== 0) {
@@ -587,28 +878,16 @@ const remove = (path: string): void => {
   }
 };
 
-const stale = Array.from(
-  new Bun.Glob("__probe-*").scanSync({ cwd: `${serverRoot}${PROBE_PARENT}`, onlyFiles: false })
+const stale = ["src", "scripts", "tools"].flatMap((root) =>
+  Array.from(
+    new Bun.Glob("**/__probe-*").scanSync({ cwd: `${serverRoot}/${root}`, onlyFiles: false })
+  ).map((entry) => `${root}/${entry}`)
 );
-const staleSource = Array.from(
-  new Bun.Glob("__probe-*").scanSync({ cwd: `${serverRoot}/src`, onlyFiles: false })
-);
-const staleShared = Array.from(
-  new Bun.Glob("__probe-*").scanSync({ cwd: `${serverRoot}/src/shell/_shared`, onlyFiles: false })
-);
-for (const entry of stale) {
-  remove(`${serverRoot}${PROBE_PARENT}/${entry}`);
+for (const entry of stale.sort((left, right) => right.length - left.length)) {
+  remove(`${serverRoot}/${entry}`);
 }
-for (const entry of staleSource) {
-  remove(`${serverRoot}/src/${entry}`);
-}
-for (const entry of staleShared) {
-  remove(`${serverRoot}/src/shell/_shared/${entry}`);
-}
-if (stale.length > 0 || staleSource.length > 0 || staleShared.length > 0) {
-  process.stderr.write(
-    `swept ${stale.length + staleSource.length + staleShared.length} probe directory(ies) from an interrupted run\n`
-  );
+if (stale.length > 0) {
+  process.stderr.write(`swept ${stale.length} probe directory(ies) from an interrupted run\n`);
 }
 
 const writeProbeBatch = (probes: readonly Probe[]): Promise<void> =>
@@ -618,13 +897,29 @@ const writeProbeBatch = (probes: readonly Probe[]): Promise<void> =>
     )
   ).then(() => undefined);
 
+const assertEmptyGraphFailsClosed = (): void => {
+  const { exitCode, report } = runGraph([emptyGraph]);
+  if (Option.contains(exitCode, 0) || !report.includes("dependency-cruiser cruised 0 modules")) {
+    throw new Error(`The graph did not fail closed when no modules resolved.\n${report}`);
+  }
+};
+
+try {
+  await Bun.write(`${serverRoot}/${emptyGraph}/.keep`, "");
+  assertEmptyGraphFailsClosed();
+  process.stdout.write("ok  a graph that resolves no modules fails closed\n");
+} finally {
+  remove(`${serverRoot}/${emptyGraph}`);
+}
+
 for (const expectation of ["allowed", "rejected"] as const) {
   const probes = PROBES.filter((probe) => probe.expect.kind === expectation);
   try {
     await writeProbeBatch(probes);
     assertProbeBatch(probes, expectation);
   } finally {
-    for (const probe of probes) remove(`${serverRoot}${probe.directory}`);
+    const cleanupPaths = new Set(probes.flatMap(({ files }) => files.map(probeRoot)));
+    for (const path of cleanupPaths) remove(`${serverRoot}/${path}`);
   }
   for (const probe of probes) process.stdout.write(`ok  ${probe.name}\n`);
 }

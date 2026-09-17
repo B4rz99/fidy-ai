@@ -1,0 +1,82 @@
+apps/server/src/shell/outbound-http/contract.ts
+  s_a3914047cb299e::t_83e2273fd0eec6 69-73
+  s_a3914047cb299e::t_7ac89dda6f85f6 1,35-37,42-63,65-66
+  s_a3914047cb299e::t_a30f66b7487ad2 38-41
+apps/server/scripts/verify-sentry-account.ts
+  s_a3914047cb299e::t_7bdf76ec74f8e7 29
+  s_a3914047cb299e::t_5ac2895790ce5c 6,28,30-31
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_a3914047cb299e::t_d4927e5a45fe7e 64
+  s_a3914047cb299e::t_1a88852607b1b5 43-46,57-60
+  s_a3914047cb299e::t_f0c3caf0b38c3c 48-54,63,156
+  s_a3914047cb299e::t_2a30df8aaf8afa 3,10,55
+  s_a3914047cb299e::t_e6b0f27e5c3a76 210,252,292,327,347,365,429,459
+  s_a3914047cb299e::t_d4425e23c0f882 388-398
+  s_a3914047cb299e::t_922e6821a6c605 61-62
+  s_a3914047cb299e::t_95dca1b0b6ad75 47
+  s_86d71f5360f2a6::t_9a09a4aa4a3c46 56
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_a3914047cb299e::t_0f9fd77f97a263 118
+  s_a3914047cb299e::t_a30f66b7487ad2 159-176,178-181,183-189
+  s_a3914047cb299e::t_bb8664512b5d96 115
+  s_a3914047cb299e::t_7423bca278f1fd 57-82
+  s_a3914047cb299e::t_64f6ee3b4e2d8a 16
+  s_a3914047cb299e::t_59d87cb8284673 144
+  s_a3914047cb299e::t_7211bead314415 116-117,119-143,145-158,177,182,190-191
+apps/server/src/shell/outbound-http/operations.ts
+  s_a3914047cb299e::t_18f63def9f1130 37-38,41
+  s_a3914047cb299e::t_e8728edeb8715c 1,17-18,28-35,39-40,42-52,55-73
+  s_221d58c93200ac::t_f7bae03bd0b3d0 36
+scripts/check-credential-evidence.ts
+  s_a3914047cb299e::t_fbdff9b2f158c3 119
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_a3914047cb299e::t_bbf3d6b3445589 3-4,100-101,107-108,155-157,163-168,172-177,200,206-207,211-212,217-219,223-225,250
+  s_a3914047cb299e::t_a30f66b7487ad2 111-129,251-252
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_a3914047cb299e::t_84bd78d71d66c2 10,20,24-25,29-30,38-43,55-57,65-82,87-88,91-94,98-101,103,106-108,125-126,129,152-154,156-157,165,174-178,181
+  s_a3914047cb299e::t_70083ba496c299 83-86,95-97,102,109-122,127,132-133,139-140,142,146-148,150,160,163,167
+  s_a3914047cb299e::t_a30f66b7487ad2 90,134
+  s_a3914047cb299e::t_3b4faab8021cf8 170-172,179
+  s_a3914047cb299e::t_e8ff23d27ddf25 1,128,135,166,168-169,173,180
+  s_a3914047cb299e::t_9ba703d28f186f 137-138,141,143-145,149,151
+  s_a3914047cb299e::t_d8543137137f2d 14-15,19,52-53,58,64,89,105
+  s_a3914047cb299e::t_fa6e676589db39 130-131,136
+  s_a3914047cb299e::t_52152b328752b0 104
+apps/server/scripts/support-recovery.ts
+  s_a3914047cb299e::t_a30f66b7487ad2 1
+  s_a3914047cb299e::t_7fd5231d50bfc8 178,212-217
+  s_a3914047cb299e::t_538a61d2bf1022 4,140,171-173,175-177,179-180
+  s_a3914047cb299e::t_39f2367b0e336f 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1dff579f56c56a57b44f4196cc9f97a4a9aebd86",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_86d71f5360f2a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b172-6204-71a7-bc85-e244ef2b03ea",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a3914047cb299e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b158-73ca-7681-8aa3-cd10b5594a13",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

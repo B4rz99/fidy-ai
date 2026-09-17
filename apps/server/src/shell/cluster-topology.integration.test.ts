@@ -6,6 +6,7 @@ import { describe } from "vitest";
 import {
   type Cause,
   Clock,
+  Deferred,
   type Duration,
   Effect,
   Exit,
@@ -160,6 +161,22 @@ const makeWorkRuntime = (
   overrides?: Partial<ShardingConfig.ShardingConfig["Service"]>
 ): WorkRuntime => ManagedRuntime.make(workRuntimeLayer(port, overrides));
 
+/** A runner whose probe stays in flight, making resident Work explicit until shutdown forces it out. */
+const makeHeldProbeRuntime = (
+  port: number,
+  started: Deferred.Deferred<void>,
+  overrides: Partial<ShardingConfig.ShardingConfig["Service"]>
+): WorkRuntime =>
+  ManagedRuntime.make(
+    clusterTopologyProbeWorkflow
+      .toLayer(() => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)))
+      .pipe(
+        Layer.provideMerge(
+          ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(runtimeLayer(port, overrides)))
+        )
+      )
+  );
+
 type SerialProbeControl = Readonly<{
   readonly activeHandlers: Ref.Ref<number>;
   readonly maximumConcurrentHandlers: Ref.Ref<number>;
@@ -195,10 +212,10 @@ const makeSerialProbeRuntime = (
 const probeCompleted = (state: Option.Option<Workflow.Result<string, never>>): boolean =>
   Option.exists(state, (result) => result._tag === "Complete");
 
-/** Selects a probe whose Workflow execution shard is held by the doomed runner. */
+/** Selects a probe whose Workflow execution shard is held by the requested owner. */
 const selectProbe = (
   probeBase: string,
-  lockedShardIds: ReadonlySet<string>
+  owner: "local" | ReadonlySet<string>
 ): Effect.Effect<
   { readonly payload: { readonly probe: string }; readonly executionId: string },
   never,
@@ -210,12 +227,20 @@ const selectProbe = (
       const payload = { probe: `${probeBase}-${index}` };
       const executionId = yield* clusterTopologyProbeWorkflow.executionId(payload);
       const shardId = sharding.getShardId(EntityId.make(executionId), "default");
-      if (lockedShardIds.has(PrimaryKey.value(shardId))) {
+      if (owner === "local" ? sharding.hasShardId(shardId) : owner.has(PrimaryKey.value(shardId))) {
         return { payload, executionId };
       }
     }
-    return yield* Effect.die("the crash runner held no shard that accepts a probe");
+    return yield* Effect.die("the selected runner held no shard that accepts a probe");
   });
+
+/** Selects and dispatches a probe against one runner's live assignment map without a stale seam. */
+const dispatchLocalProbe = (
+  probeBase: string
+): Effect.Effect<string, never, Sharding.Sharding | WorkflowEngine.WorkflowEngine> =>
+  Effect.flatMap(selectProbe(probeBase, "local"), ({ payload }) =>
+    clusterTopologyProbeWorkflow.execute(payload, { discard: true })
+  );
 
 const startRuntimes = (runtimes: ReadonlyArray<ClusterRuntime>): Effect.Effect<void> =>
   Effect.forEach(runtimes, (runtime) => Effect.promise(() => runtime.runPromise(Effect.void)), {
@@ -416,7 +441,12 @@ const registerClusterTopologyScenarios = (): void => {
           // The production lease window is a different deployment topology than the tightened
           // scenarios, so this scenario publishes its own identity.
           yield* resetClusterTopologyState;
-          const first = makeWorkRuntime(gracefulFirstPort, productionCadence);
+          const firstProbeStarted = yield* Deferred.make<void>();
+          const first = makeHeldProbeRuntime(
+            gracefulFirstPort,
+            firstProbeStarted,
+            productionCadence
+          );
           const second = makeWorkRuntime(gracefulSecondPort, productionCadence);
           yield* Effect.addFinalizer(() => disposeRuntimes([first, second]));
           yield* Effect.all(
@@ -437,17 +467,9 @@ const registerClusterTopologyScenarios = (): void => {
 
           const sql = yield* MigrationSqlClient;
           const firstAddress = `127.0.0.1:${gracefulFirstPort}`;
-          const lockedShards = yield* sql`SELECT shard_id AS "shardId"
-            FROM fidy_durable.${sql(clusterLocksTable)} WHERE address = ${firstAddress}`;
           const gracefulProbeBase = `graceful-${yield* Clock.currentTimeMillis}`;
-          const lockedShardIds = new Set<string>();
-          for (const row of lockedShards) lockedShardIds.add(String(row.shardId));
-          const probe = yield* Effect.promise(() =>
-            first.runPromise(selectProbe(gracefulProbeBase, lockedShardIds))
-          );
-          yield* Effect.promise(() =>
-            first.runPromise(clusterTopologyProbeWorkflow.execute(probe.payload))
-          );
+          yield* Effect.promise(() => first.runPromise(dispatchLocalProbe(gracefulProbeBase)));
+          yield* Deferred.await(firstProbeStarted).pipe(Effect.timeout("10 seconds"));
           expect(
             (yield* Effect.promise(() => first.runPromise(sampleClusterObservation)))
               .residentEntities

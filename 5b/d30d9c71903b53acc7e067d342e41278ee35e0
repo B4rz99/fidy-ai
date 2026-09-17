@@ -1,0 +1,19 @@
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_3c0c97143ed6a8::t_20d802ab15c488 1384-1390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5bd30d9c71903b53acc7e067d342e41278ee35e0",
+  "prompts": {},
+  "sessions": {
+    "s_3c0c97143ed6a8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b5-bc61-7733-abf7-80cf5c3ecb93",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

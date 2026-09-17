@@ -5,8 +5,7 @@ import {
   type BudgetNotFound,
 } from "~/core/budgets/errors";
 import { type CategoryNotFound } from "~/core/categories/errors";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import type { SuggestedOperation } from "~/shell/_shared/response";
+import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,

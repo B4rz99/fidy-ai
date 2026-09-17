@@ -11,7 +11,7 @@ import { makeDefaultDashboard } from "~/core/dashboard/catalog";
 import { applyDashboardEdit as decideDashboardEdit } from "~/core/dashboard/rules";
 import { type UserId } from "~/core/identity/reference";
 import { type CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import { type OperationResponse } from "~/shell/_shared/response";
+import { type OperationResponse } from "~/shell/public-http/contract";
 import { type SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { findCategory } from "~/shell/categories/repo";
 import { type DashboardApiFailure, DashboardCategoryNotFound, toApiFailure } from "./errors";

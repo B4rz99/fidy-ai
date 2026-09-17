@@ -1,10 +1,8 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import { Memory, MemoryId, RecallOutput, RememberInput, ReviseInput } from "~/core/memory/model";
-import { NotFound } from "~/shell/_shared/errors";
-import { createdStatus } from "~/shell/_shared/http-status";
+import { NotFound, OperationResponse, createdStatus } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
 import { MemoryCapacityExceededApi } from "./errors";
 
 const rememberPolicy = operationPolicy({

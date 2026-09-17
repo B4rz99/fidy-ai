@@ -11,7 +11,7 @@ import { computePATExpiration } from "~/core/tokens/rules";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { appendConsentRecord, observeConsentRecords } from "~/shell/consent/repo";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 import { manualPATIssuanceLimit } from "./errors";
 import { bearerSecret } from "./fixtures";
 import { IssuedManualPATResponse, ManualPATReviewExpired } from "./operations";

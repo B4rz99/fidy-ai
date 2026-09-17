@@ -9,7 +9,12 @@ import type {
 } from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/reference";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
-import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
+import {
+  ConsentRequired,
+  ScopeMissing,
+  Unauthenticated,
+  UserActionRequired,
+} from "~/shell/public-http/contract";
 import type { CanonicalAuthorityRoot, OperationAccessCaller } from "./operation-policy";
 
 /** Host-only cookie name published as part of the declaration-only browser authorization scheme. */

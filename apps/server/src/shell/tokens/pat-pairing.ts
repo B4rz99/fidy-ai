@@ -54,7 +54,7 @@ import {
   takeCanonicalPreTransactionState,
   withCanonicalPreTransaction,
 } from "~/shell/_shared/canonical-pre-transaction";
-import type { OperationResponse } from "~/shell/_shared/response";
+import type { OperationResponse } from "~/shell/public-http/contract";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import {
   appendConsentRecordInScope,

@@ -31,8 +31,7 @@ import { PATId } from "~/core/tokens/reference";
 import { computePATExpiration } from "~/core/tokens/rules";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import { NotFound } from "~/shell/_shared/errors";
-import type { OperationResponse } from "~/shell/_shared/response";
+import { NotFound, type OperationResponse } from "~/shell/public-http/contract";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import {
   appendConsentRecordInScope,

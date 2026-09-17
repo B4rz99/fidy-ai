@@ -1,7 +1,7 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { SubscriptionOffers, UpgradeDestination } from "~/core/subscription/model";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
   success: OperationResponse(UpgradeDestination),

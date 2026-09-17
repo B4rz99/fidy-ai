@@ -9,7 +9,7 @@ import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";

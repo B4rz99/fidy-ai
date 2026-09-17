@@ -27,7 +27,7 @@ import {
   TransactionExtraction,
   type TransactionExtraction as TransactionExtractionType,
 } from "~/core/transactions/model";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {
   hasCurrentOnboardingConsent,

@@ -72,7 +72,7 @@ import {
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
-import { ValidationFailed } from "~/shell/_shared/errors";
+import { ValidationFailed } from "~/shell/public-http/contract";
 import { findUser } from "~/shell/identity/repo";
 import {
   type DeclaredOutcome,

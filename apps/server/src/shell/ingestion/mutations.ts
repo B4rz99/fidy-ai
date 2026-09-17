@@ -14,13 +14,13 @@ import {
 import type { SubmitForExtractionInput } from "~/core/ingestion/model";
 import type { UserId } from "~/core/identity/reference";
 import type { TransactionExtraction } from "~/core/transactions/model";
-import { NotFound, PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
+import { NotFound, PaywallRequired, ValidationFailed } from "~/shell/public-http/contract";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import {
   checkpointSuggestedOperations,
   suggestOperation,
 } from "~/shell/_shared/suggested-operations";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUserInScope } from "~/shell/identity/repo";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";

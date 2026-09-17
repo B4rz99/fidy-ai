@@ -8,7 +8,7 @@ import {
   type TransactionNotYetOccurred,
   type TransactionPairNotLinked,
 } from "~/core/transactions/errors";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,

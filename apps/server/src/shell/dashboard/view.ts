@@ -20,7 +20,7 @@ import type { Category } from "~/core/categories/model";
 import type { CategoryId } from "~/core/categories/reference";
 import type { UserId } from "~/core/identity/reference";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import type { OperationResponse } from "~/shell/_shared/response";
+import type { OperationResponse } from "~/shell/public-http/contract";
 import { selectBudgetStatusesInScope } from "~/shell/budgets/repo";
 import { selectCategoriesByIds, selectCategoriesMatching } from "~/shell/categories/repo";
 import { findUserInScope } from "~/shell/identity/repo";

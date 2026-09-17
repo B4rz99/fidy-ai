@@ -12,7 +12,7 @@ import { MemoryText } from "~/core/memory/model";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
-import { ScopeMissing } from "~/shell/_shared/errors";
+import { ScopeMissing } from "~/shell/public-http/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";

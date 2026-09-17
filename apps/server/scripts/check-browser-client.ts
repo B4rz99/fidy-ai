@@ -18,8 +18,7 @@ const entrypoint = "src/client.ts";
  */
 const safeSource = [
   /^src\/client\.ts$/u,
-  /^src\/http-origin\.ts$/u,
-  /^src\/shell\/schema-codecs\/contract\.ts$/u,
+  /^src\/shell\/(?:public-http|schema-codecs)\/contract\.ts$/u,
   /^src\/web-auth-api\.ts$/u,
   /^src\/subscription-enrollment-api\.ts$/u,
   /^src\/core\//u,
@@ -27,7 +26,7 @@ const safeSource = [
   /^src\/shell\/[^/]+\/operations\.ts$/u,
   /^src\/shell\/ingestion\/input\.ts$/u,
   /^src\/shell\/memory\/errors\.ts$/u,
-  /^src\/shell\/_shared\/(?:authz|canonical-telemetry|errors|http-status|operation-catalog|operation-policy|partial-input|response)\.ts$/u,
+  /^src\/shell\/_shared\/(?:authz|canonical-telemetry|operation-catalog|operation-policy|partial-input)\.ts$/u,
   /^src\/shell\/_shared\/canonical-input\.ts$/u,
 ] as const;
 

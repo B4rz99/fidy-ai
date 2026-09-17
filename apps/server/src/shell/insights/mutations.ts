@@ -10,7 +10,7 @@ import {
 } from "~/core/insights/model";
 import { transitionInsight } from "~/core/insights/rules";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import type { OperationResponse } from "~/shell/_shared/response";
+import type { OperationResponse } from "~/shell/public-http/contract";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { type InsightApiFailure, nextLifecycleOperations, toApiFailure } from "./errors";
 import type { DeliveredInsight } from "./operations";

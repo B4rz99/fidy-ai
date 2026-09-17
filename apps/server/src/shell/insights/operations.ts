@@ -6,9 +6,8 @@ import {
   InsightEvent,
   InsightEventId,
 } from "~/core/insights/model";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
 
 /** Canonical operations over the caller's shared InsightEvent stream. */
 const InsightParams = Schema.Struct({ id: InsightEventId });

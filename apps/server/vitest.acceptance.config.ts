@@ -89,7 +89,7 @@ const acceptanceExclude = [
   "src/shell/ingestion/**",
   // Exact-origin CORS belongs to the browser/API boundary and has focused HTTP-edge tests; the
   // WhatsApp webhook acceptance surface sends no browser Origin and does not own that policy.
-  "src/shell/_shared/exact-origin-cors.ts",
+  "src/shell/public-http/runtime.ts",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production

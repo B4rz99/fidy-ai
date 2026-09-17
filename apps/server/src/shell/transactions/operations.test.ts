@@ -2,7 +2,7 @@ import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { ValidationFailed } from "~/shell/_shared/errors";
+import { ValidationFailed } from "~/shell/public-http/contract";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { publishedOperationIds } from "~/shell/testing/openapi";

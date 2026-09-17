@@ -14,7 +14,7 @@ import {
   WidgetId,
   collectLayoutWidgets,
 } from "~/core/dashboard/model";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";

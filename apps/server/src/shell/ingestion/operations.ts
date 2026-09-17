@@ -9,10 +9,14 @@ import {
 } from "~/core/ingestion/model";
 import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
 import { Transaction } from "~/core/transactions/model";
-import { NotFound, PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
-import { acceptedStatus } from "~/shell/_shared/http-status";
+import {
+  NotFound,
+  OperationResponse,
+  PaywallRequired,
+  ValidationFailed,
+  acceptedStatus,
+} from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
 import { ResolveNeedsReviewItemInput } from "./input";
 
 const read = operationPolicy({

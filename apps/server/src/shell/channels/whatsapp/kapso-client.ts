@@ -15,7 +15,7 @@ import {
   requestTimeoutStatus,
   tooManyRequestsStatus,
   unauthorizedStatus,
-} from "~/shell/_shared/http-status";
+} from "~/shell/public-http/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";

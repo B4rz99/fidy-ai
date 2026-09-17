@@ -13,7 +13,7 @@ import { PATPairingReview, StartedPATPairing } from "~/core/tokens/pairing";
 import { computePATExpiration } from "~/core/tokens/rules";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
-import { OperationResponse } from "~/shell/_shared/response";
+import { OperationResponse } from "~/shell/public-http/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";

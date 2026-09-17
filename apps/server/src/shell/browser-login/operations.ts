@@ -3,9 +3,12 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
-import type { CanonicalRejectedFailure } from "~/shell/_shared/errors";
+import {
+  type CanonicalRejectedFailure,
+  NextOperations,
+  OperationResponse,
+} from "~/shell/public-http/contract";
 import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/_shared/operation-policy";
-import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 /** Stable canonical identity of hosted browser-pairing approval. */
 export const browserLoginApprovalOperation = CanonicalOperationId.make(

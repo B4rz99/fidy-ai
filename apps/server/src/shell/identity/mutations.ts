@@ -2,7 +2,7 @@ import { Effect, type Schema } from "effect";
 import { type User, type UserPreferences } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import { type OperationResponse } from "~/shell/_shared/response";
+import { type OperationResponse } from "~/shell/public-http/contract";
 import { updateUserPreferencesInScope } from "./repo";
 
 type MutationResponse<Data extends Schema.Top> = ReturnType<typeof OperationResponse<Data>>["Type"];

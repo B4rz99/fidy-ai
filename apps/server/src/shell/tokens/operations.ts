@@ -17,14 +17,18 @@ import {
   ApprovedPATPairing,
   PATPairingReview,
 } from "~/core/tokens/pairing";
-import { type CanonicalRejectedFailure, NotFound } from "~/shell/_shared/errors";
+import {
+  type CanonicalRejectedFailure,
+  NextOperations,
+  NotFound,
+  OperationResponse,
+} from "~/shell/public-http/contract";
 import {
   freshWebOrVerifiedWhatsAppHosted,
   freshWebSessionOnly,
   operationPolicy,
   webOrHosted,
 } from "~/shell/_shared/operation-policy";
-import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 export const issuanceConsumedMessage =
   "This manual PAT issuance request was already consumed. Start a new reviewed request.";

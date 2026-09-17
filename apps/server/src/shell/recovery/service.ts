@@ -17,7 +17,7 @@ import {
   withUserLockInScope,
 } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { UserActionRequired } from "~/shell/_shared/errors";
+import { UserActionRequired } from "~/shell/public-http/contract";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import {
   approveBrowserLoginPairingForExistingUserInScope,

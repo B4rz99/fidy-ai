@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Ref } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { makeExactOriginCors } from "./exact-origin-cors";
+import { makeExactOriginCors } from "./runtime";
 
 const applyCors = (
   request: Request,

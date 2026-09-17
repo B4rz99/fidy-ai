@@ -1,6 +1,6 @@
 import { Config, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/model";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 
 /** Exact aviso de privacidad sent before Fidy creates a User. */
 export const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta necesito tu autorización previa, expresa e informada para tratar tus datos personales.

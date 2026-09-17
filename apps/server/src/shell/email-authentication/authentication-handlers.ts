@@ -4,7 +4,7 @@ import { type HttpServerRequest, HttpServerResponse } from "effect/unstable/http
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { anonymousRequestSource } from "~/shell/_shared/anonymous-source";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import {
   BrowserLoginPairingInvalidApi,
   BrowserPairingEmailAuthenticationInvalidApi,

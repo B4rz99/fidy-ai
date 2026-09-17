@@ -7,10 +7,13 @@ import {
   KeywordRuleId,
   UpdateKeywordRuleInput,
 } from "~/core/categories/model";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import { createdStatus } from "~/shell/_shared/http-status";
+import {
+  NotFound,
+  OperationResponse,
+  ValidationFailed,
+  createdStatus,
+} from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/_shared/response";
 
 const read = operationPolicy({
   access: patScoped("read"),

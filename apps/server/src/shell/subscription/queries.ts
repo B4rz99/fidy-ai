@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { UpgradeDestination } from "~/core/subscription/model";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { selectSubscriptionOffers } from "./repo";
 
 /** Reads the configured upgrade destination. Misconfiguration is a defect, not a caller failure. */

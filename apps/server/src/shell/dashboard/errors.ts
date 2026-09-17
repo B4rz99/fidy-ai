@@ -1,8 +1,7 @@
 import { Data, Option } from "effect";
 import { type CategoryId } from "~/core/categories/reference";
 import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/errors";
-import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import type { SuggestedOperation } from "~/shell/_shared/response";
+import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,

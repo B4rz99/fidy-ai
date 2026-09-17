@@ -20,7 +20,7 @@ import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 import { completeVerifiedOnboarding } from "~/shell/onboarding/onboarding";
 import { EmailVerificationCode } from "~/core/email-authentication/model";
 import { webSessionCookieName } from "~/shell/_shared/authz";
-import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { externalEndpoints } from "~/shell/public-http/operations";
 import { authenticateWebSession } from "~/shell/web-session/service";
 import { completeEmailReplacement } from "./replacement-transition";
 

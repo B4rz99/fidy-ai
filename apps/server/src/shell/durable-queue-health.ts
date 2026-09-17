@@ -1,7 +1,7 @@
 import { Duration, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { serviceUnavailableStatus, unauthorizedStatus } from "~/shell/_shared/http-status";
+import { serviceUnavailableStatus, unauthorizedStatus } from "~/shell/public-http/contract";
 import {
   maximumStatementIngestionAttempts,
   statementIngestionQueueName,

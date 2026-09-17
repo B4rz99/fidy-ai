@@ -15,7 +15,7 @@ import {
   NextOperations,
   SuggestedOperation,
   type SuggestedOperation as SuggestedOperationValue,
-} from "./response";
+} from "~/shell/public-http/contract";
 
 type CandidateArgs<Id extends OperationId> = keyof CanonicalInput<Id> extends never
   ? Record<never, never>

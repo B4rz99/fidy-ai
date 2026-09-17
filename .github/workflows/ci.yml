@@ -90,6 +90,7 @@ jobs:
           path: apps/server/coverage/coverage-final.json
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
   browser:
     name: Web browser and accessibility checks
@@ -181,6 +182,7 @@ jobs:
             apps/server/reports/server-tests.xml
           if-no-files-found: warn
           retention-days: 7
+          overwrite: true
 
   quality:
     name: Quality thresholds

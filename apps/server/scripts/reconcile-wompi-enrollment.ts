@@ -6,6 +6,7 @@ import { Config, Console, Data, DateTime, Effect, Layer, Redacted, Schema } from
 import { UserId } from "~/core/identity/reference";
 import { CardEnrollmentId, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { reconcileCardEnrollment } from "~/shell/subscription/card-enrollment";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
 
@@ -40,6 +41,7 @@ const ReconcileLive = Layer.effectDiscard(reconcile).pipe(
   Layer.provide(PgLive),
   Layer.provide(
     WompiEnrollmentClient.layer.pipe(
+      Layer.provide(OutboundHttp.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(BunServices.layer)
     )

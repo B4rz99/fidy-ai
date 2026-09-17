@@ -10,6 +10,7 @@ import {
   Redacted,
 } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import {
@@ -27,38 +28,48 @@ const productionPrivateKey = exampleKey("prv", "prod");
 
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: sandboxPrivateKey,
+    WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "production",
     WOMPI_PUBLIC_KEY: productionPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
+    WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 const mismatchedPublicConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "production",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
+    WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 const mismatchedPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
+    WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 const invalidPrivateKeyCandidate = `CANARY-wompi-private-${"f1d7c0de".repeat(2)}`;
 const invalidPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: invalidPrivateKeyCandidate,
+    WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
   })
 );
 const sha256HexCharacters = 64;
@@ -94,8 +105,10 @@ const clientLayerWithConfig = (
     )
   );
   return WompiEnrollmentClient.layer.pipe(
-    Layer.provide(Layer.merge(Layer.succeed(HttpClient.HttpClient, client), configLayer)),
-    Layer.provide(BunServices.layer)
+    Layer.provide(OutboundHttp.layer),
+    Layer.provide(
+      Layer.mergeAll(Layer.succeed(HttpClient.HttpClient, client), configLayer, BunServices.layer)
+    )
   );
 };
 

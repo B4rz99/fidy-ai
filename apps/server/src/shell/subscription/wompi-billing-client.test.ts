@@ -4,6 +4,7 @@ import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
 import type { HttpClientRequest } from "effect/unstable/http";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { WompiTransactionId, WompiTransactionReference } from "~/core/subscription/model";
@@ -19,7 +20,9 @@ const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
 const integritySecretFixture = `test_integrity_${"f1d7c0de".repeat(3)}`;
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "sandbox",
+    WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
     WOMPI_PRIVATE_KEY: privateKeyFixture,
     WOMPI_INTEGRITY_SECRET: integritySecretFixture,
   })
@@ -44,8 +47,9 @@ const clientLayer = (
   observeRequest?: (request: HttpClientRequest.HttpClientRequest) => void
 ): Layer.Layer<WompiBillingClient, Config.ConfigError> =>
   WompiBillingClient.layer.pipe(
+    Layer.provide(OutboundHttp.layer),
     Layer.provide(
-      Layer.merge(
+      Layer.mergeAll(
         Layer.succeed(
           HttpClient.HttpClient,
           HttpClient.make((request) => {
@@ -53,10 +57,10 @@ const clientLayer = (
             return Effect.succeed(HttpClientResponse.fromWeb(request, response(request.method)));
           })
         ),
-        configLayer
+        configLayer,
+        BunServices.layer
       )
-    ),
-    Layer.provide(BunServices.layer)
+    )
   );
 const TestLayer = clientLayer(successResponse);
 const creationInput = {
@@ -237,7 +241,9 @@ layer(
 
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
+    KAPSO_API_KEY: "test-kapso-key",
     WOMPI_ENVIRONMENT: "production",
+    WOMPI_PUBLIC_KEY: `pub_prod_${"f1d7c0de".repeat(3)}`,
     WOMPI_PRIVATE_KEY: `prv_prod_${"f1d7c0de".repeat(3)}`,
     WOMPI_INTEGRITY_SECRET: `prod_integrity_${"f1d7c0de".repeat(3)}`,
   })
@@ -257,7 +263,9 @@ layer(clientLayer(successResponse, productionConfig), { excludeTestServices: tru
 const invalidConfiguration = (privateKey: string, integritySecret: string): typeof config =>
   ConfigProvider.layer(
     ConfigProvider.fromUnknown({
+      KAPSO_API_KEY: "test-kapso-key",
       WOMPI_ENVIRONMENT: "sandbox",
+      WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
       WOMPI_PRIVATE_KEY: privateKey,
       WOMPI_INTEGRITY_SECRET: integritySecret,
     })
@@ -313,7 +321,9 @@ it.effect("rejects missing Wompi credentials with value-safe diagnostics", () =>
           successResponse,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
+              KAPSO_API_KEY: "test-kapso-key",
               WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
               WOMPI_INTEGRITY_SECRET: integritySecretFixture,
             })
           )

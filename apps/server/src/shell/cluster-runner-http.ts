@@ -7,27 +7,16 @@ import {
   HttpClientRequest,
 } from "effect/unstable/http";
 import { type RpcClient, RpcClientError } from "effect/unstable/rpc";
-import { protectHttpClient } from "~/shell/_shared/protected-http-client";
 import {
-  type HttpClientErrorProjection,
-  isHttpClientErrorReason,
-  projectHttpClientError,
-} from "~/shell/_shared/projected-http-client-error";
+  clusterAuthorizationHeader,
+  clusterRunnerPath,
+  isClusterHttpClientErrorReason,
+  projectClusterHttpClientError,
+  projectedClusterRunnerRequestUrl,
+  protectClusterHttpClient,
+} from "./cluster-runner-http-policy";
 
-/** The one private Cluster runner route shared by runner ingress and egress. */
-export const clusterRunnerPath = "/_fidy/cluster";
-
-const authorizationHeader = "authorization";
-const projectedRunnerRequestUrl = `http://cluster.invalid${clusterRunnerPath}`;
-
-/**
- * The one coordinate and header policy every projected runner failure is rebuilt over. No runner
- * response header is part of the RPC caller contract, so none survives projection.
- */
-const runnerHttpErrorProjection = {
-  retainedResponseHeaders: [],
-  projectedRequestUrl: projectedRunnerRequestUrl,
-} as const satisfies HttpClientErrorProjection;
+export { clusterRunnerPath } from "./cluster-runner-http-policy";
 
 /** Opaque Cluster bearer token; unwrapped only for the wire header and the ingress comparison. */
 export type ClusterToken = Redacted.Redacted<string>;
@@ -113,15 +102,14 @@ export const isConfiguredRunnerDestination =
 
 const projectedRequest = (
   method: HttpClientRequest.HttpClientRequest["method"]
-): HttpClientRequest.HttpClientRequest => HttpClientRequest.make(method)(projectedRunnerRequestUrl);
+): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.make(method)(projectedClusterRunnerRequestUrl);
 
 /** Rebuilds any runner failure over the one constant coordinate, preserving only its reason kind. */
 const runnerHttpClientError = (
   reason: HttpClientError.HttpClientErrorReason
 ): HttpClientError.HttpClientError =>
-  projectHttpClientError(runnerHttpErrorProjection)(
-    new HttpClientError.HttpClientError({ reason })
-  );
+  projectClusterHttpClientError(new HttpClientError.HttpClientError({ reason }));
 
 const destinationRefused = (
   request: HttpClientRequest.HttpClientRequest
@@ -181,7 +169,7 @@ const projectedRunnerRpcError = (
     return RpcClientError.RpcClientError.make({ reason: projectedRpcDefect() });
   }
   const cause = reason.cause;
-  if (!isHttpClientErrorReason(cause)) {
+  if (!isClusterHttpClientErrorReason(cause)) {
     // Fail closed: an unrecognized cause could carry anything, so only the safe kind survives.
     return RpcClientError.RpcClientError.make({
       reason: HttpClientError.HttpClientErrorSchema.make({
@@ -239,7 +227,7 @@ export const makeClusterRunnerHttpClient = (
   const authenticated = HttpClient.mapRequest(input.client, (request) =>
     HttpClientRequest.setHeader(
       runnerRequest(input.address, request),
-      authorizationHeader,
+      clusterAuthorizationHeader,
       clusterBearerValue(input.token)
     )
   );
@@ -248,15 +236,7 @@ export const makeClusterRunnerHttpClient = (
       ? Effect.succeed(request)
       : Effect.fail(destinationRefused(request))
   );
-  const protectedClient = protectHttpClient({
-    ...runnerHttpErrorProjection,
-    redactedHeaders: [authorizationHeader],
-    // Runner RPC tracing is disabled (`Runners.makeRpcClient`) and the private listener extracts no
-    // HTTP trace headers, so propagating Fidy trace coordinates would link no receiving trace;
-    // hosted Work stays observed by its `agent.turn` Work span and runner health by runner
-    // availability.
-    propagateTrace: false,
-  })(destinationChecked);
+  const protectedClient = protectClusterHttpClient(destinationChecked);
   return HttpClient.transform(protectedClient, (responseEffect) =>
     responseEffect.pipe(
       // The runtime refuses any 3xx itself: no redirect target can receive the bearer header.

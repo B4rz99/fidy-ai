@@ -57,9 +57,9 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.4",
-    "@babel/traverse": "8.0.4",
-    "@babel/types": "8.0.4",
+    "@babel/parser": "8.0.5",
+    "@babel/traverse": "8.0.5",
+    "@babel/types": "8.0.5",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/tsgo": "0.38.0",
     "@types/istanbul-lib-coverage": "2.0.6",

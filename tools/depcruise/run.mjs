@@ -92,7 +92,32 @@ const internalImport = (statement) => {
   return importNames(statement.importClause).map((name) => [name, specifier]);
 };
 
-const importedBindings = (sourceFile) => new Map(sourceFile.statements.flatMap(internalImport));
+const localAliases = (statement) => {
+  if (!ts.isVariableStatement(statement)) return [];
+  return statement.declarationList.declarations.flatMap((declaration) =>
+    ts.isIdentifier(declaration.name) &&
+    declaration.initializer !== undefined &&
+    ts.isIdentifier(declaration.initializer)
+      ? [[declaration.name.text, declaration.initializer.text]]
+      : []
+  );
+};
+
+const internalBindings = (sourceFile) => {
+  const bindings = new Map(sourceFile.statements.flatMap(internalImport));
+  const aliases = sourceFile.statements.flatMap(localAliases);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [alias, source] of aliases) {
+      const specifier = bindings.get(source);
+      if (specifier === undefined || bindings.has(alias)) continue;
+      bindings.set(alias, specifier);
+      changed = true;
+    }
+  }
+  return bindings;
+};
 
 const localExportNames = (statement) => {
   if (
@@ -111,12 +136,43 @@ const localExportNames = (statement) => {
   return [];
 };
 
-const locallyExportedBindings = (sourceFile) => sourceFile.statements.flatMap(localExportNames);
+const isExported = (statement) =>
+  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+
+const exportedVariableAliases = (statement) => {
+  if (!ts.isVariableStatement(statement) || !isExported(statement)) return [];
+  return statement.declarationList.declarations.flatMap((declaration) =>
+    declaration.initializer !== undefined && ts.isIdentifier(declaration.initializer)
+      ? [declaration.initializer.text]
+      : []
+  );
+};
+
+const exportedTypeReferences = (statement) => {
+  if (!(ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))) return [];
+  if (!isExported(statement)) return [];
+  const names = [];
+  const visit = (node) => {
+    if (ts.isIdentifier(node)) names.push(node.text);
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(statement, visit);
+  return names;
+};
+
+const locallyExportedBindings = (sourceFile) =>
+  new Set(
+    sourceFile.statements.flatMap((statement) => [
+      ...localExportNames(statement),
+      ...exportedVariableAliases(statement),
+      ...exportedTypeReferences(statement),
+    ])
+  );
 
 const reportLaunderedInternals = (report) => {
   let violations = 0;
   for (const module of report.modules) {
-    if (!/^src\/(core|shell)\/[^/]+\/(contract|operations|runtime)\.ts$/u.test(module.source)) {
+    if (!/^src\/(core|shell)\/.+\/(contract|operations|runtime)\.ts$/u.test(module.source)) {
       continue;
     }
     const sourceFile = ts.createSourceFile(
@@ -125,7 +181,7 @@ const reportLaunderedInternals = (report) => {
       ts.ScriptTarget.Latest,
       true
     );
-    const imports = importedBindings(sourceFile);
+    const imports = internalBindings(sourceFile);
     for (const binding of locallyExportedBindings(sourceFile)) {
       const specifier = imports.get(binding);
       if (specifier === undefined) continue;
@@ -134,6 +190,24 @@ const reportLaunderedInternals = (report) => {
         `error published-interface-reexports-internal: ${module.source} → ${specifier}`
       );
       console.error(`  ${ruleReason("published-interface-reexports-internal")}\n`);
+    }
+  }
+  return violations;
+};
+
+const reportNestedForeignInternals = (report) => {
+  let violations = 0;
+  for (const module of report.modules) {
+    for (const dependency of module.dependencies) {
+      const target = dependency.resolved;
+      if (typeof target !== "string") continue;
+      const match = /^src\/(core|shell)\/(.+)\/internal\//u.exec(target);
+      if (match === null || !match[2].includes("/")) continue;
+      const owner = `src/${match[1]}/${match[2]}`;
+      if (module.source.startsWith(`${owner}/`)) continue;
+      violations += 1;
+      console.error(`error foreign-module-imports-internal: ${module.source} → ${target}`);
+      console.error(`  ${ruleReason("foreign-module-imports-internal")}\n`);
     }
   }
   return violations;
@@ -167,7 +241,8 @@ const reportViolations = (report) => {
 const report = await cruiseReport({ validate: true });
 assertCruisedSomething(report);
 const launderedInternals = reportLaunderedInternals(report);
+const nestedForeignInternals = reportNestedForeignInternals(report);
 reportViolations(report);
-if (launderedInternals > 0) {
+if (launderedInternals + nestedForeignInternals > 0) {
   process.exit(1);
 }

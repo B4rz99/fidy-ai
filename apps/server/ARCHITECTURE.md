@@ -50,12 +50,16 @@ and [ADR 0010](../../docs/adr/0010-whatsapp-channel-operational-slice.md).
 
 ### Core references
 
-Core may import ownerless values from `core/_shared` or a sibling's published interface. The
-Published Trio consists of `contract.ts`, `operations.ts`, and `runtime.ts`; core may use the first
-two because runtime authority remains in shell composition. Modules not migrated to the trio publish
-through `reference.ts`. Core may not import a sibling's model, rules, errors, taxonomy, private
-`internal/` implementation, or other unpublished file. Shell loads data and passes plain values to
-core decisions.
+The functional core's Shared Kernel contains only Money, product context, and time. Core imports
+those values from `core/_shared`; every other cross-module dependency uses a published interface.
+The Published Trio consists of `contract.ts`, `operations.ts`, and `runtime.ts`; core may use the
+first two because runtime authority remains in shell composition. Modules not migrated to the trio
+publish through `reference.ts`.
+
+A published interface may use its own `internal/` implementation but must not expose it. Transitive
+exposure that cannot be deterministically gated is review-only. Core may not import a sibling's
+model, rules, errors, taxonomy, `internal/`, or other unpublished file. Shell loads data and passes
+plain values to core decisions.
 
 ## 3. The functional core
 

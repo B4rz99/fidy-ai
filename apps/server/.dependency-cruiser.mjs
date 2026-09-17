@@ -110,8 +110,8 @@ export default {
       comment:
         "contract.ts is the independent declaration interface. It may depend on contracts, but not " +
         "on private implementation, substantive operations, or runtime composition.",
-      from: { path: "^src/(core|shell)/[^/]+/contract\\.ts$" },
-      to: { path: "^src/(core|shell)/[^/]+/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      from: { path: "^src/(core|shell)/(.+)/contract\\.ts$" },
+      to: { path: "^src/(core|shell)/.+/(internal/|operations\\.ts$|runtime\\.ts$)" },
     },
     {
       name: "internal-imports-outward-interface",
@@ -120,7 +120,7 @@ export default {
         "Private implementation depended backward on its module's outward operations.ts or " +
         "runtime.ts interface. Internals may depend on their contract and sibling internals; the " +
         "published facades depend inward, never the reverse.",
-      from: { path: "^src/(core|shell)/([^/]+)/internal/" },
+      from: { path: "^src/(core|shell)/(.+)/internal/" },
       to: { path: "^src/$1/$2/(operations|runtime)\\.ts$" },
     },
     {
@@ -129,7 +129,7 @@ export default {
       comment:
         "operations.ts depended backward on its module's runtime.ts. Runtime composition may " +
         "assemble operations, but substantive operations do not acquire construction or startup authority.",
-      from: { path: "^src/(core|shell)/([^/]+)/operations\\.ts$" },
+      from: { path: "^src/(core|shell)/(.+)/operations\\.ts$" },
       to: { path: "^src/$1/$2/runtime\\.ts$" },
     },
     {
@@ -139,7 +139,7 @@ export default {
         "A published interface re-exported private implementation. contract.ts, operations.ts, and " +
         "runtime.ts may use internals in their permitted direction, but must declare the interface " +
         "they publish instead of laundering internal exports.",
-      from: { path: "^src/(core|shell)/([^/]+)/(contract|operations|runtime)\\.ts$" },
+      from: { path: "^src/(core|shell)/(.+)/(contract|operations|runtime)\\.ts$" },
       to: {
         path: "^src/$1/$2/internal/",
         dependencyTypes: ["export"],

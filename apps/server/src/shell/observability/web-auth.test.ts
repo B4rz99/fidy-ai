@@ -7,14 +7,13 @@ import { makeColombianUser } from "~/core/identity/rules";
 import { WebSessionBearer } from "~/core/web-session/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
-import { deleteBrowserSessionConsentEvidence } from "~/shell/testing/browser-session-fixtures";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
 import { EnvelopeRecorder } from "./envelope-recorder";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* deleteBrowserSessionConsentEvidence(sql);
+  yield* sql`DELETE FROM consent_records WHERE web_session_id IS NOT NULL`;
   yield* sql`DELETE FROM web_sessions`;
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* sql`DELETE FROM browser_login_pairings`;

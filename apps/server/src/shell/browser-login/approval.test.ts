@@ -31,7 +31,6 @@ import { agentOperationBindings } from "~/shell/agent/toolkit";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { deleteBrowserSessionConsentEvidence } from "~/shell/testing/browser-session-fixtures";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import {
   BrowserLoginPairingApproval,
@@ -61,7 +60,7 @@ const secondCaller = caller(secondUserId, "b2");
 
 const prepare = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* deleteBrowserSessionConsentEvidence(sql);
+  yield* sql`DELETE FROM consent_records WHERE web_session_id IS NOT NULL`;
   yield* sql`DELETE FROM web_sessions`;
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* sql`DELETE FROM browser_login_pairings`;

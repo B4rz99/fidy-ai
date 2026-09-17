@@ -47,7 +47,7 @@ context:
 
 ## Commit messages
 
-Use `type(scope): summary` followed by one or more `-` body bullets.
+Use `type(scope): summary (#123)` followed by one or more `-` body bullets. The final `(#123)` is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description when merging should close the issue.
 
 Allowed types:
 

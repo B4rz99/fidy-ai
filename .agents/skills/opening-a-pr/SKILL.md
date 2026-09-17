@@ -24,19 +24,20 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 ## 2. Branch and commit
 
 - Branch off `trunk`: `git checkout -b <type>/<short-name> trunk`.
-- Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary` header, then `- ` bullet body lines only. Trailers (`Co-Authored-By`, etc.) are rejected.
+- Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary (#123)` header, then `- ` bullet body lines only. Put the originating GitHub issue number in the final parenthesized suffix. Trailers (`Co-Authored-By`, etc.) are rejected.
   - **type** and **scope** come from the allowlist published in README.md's "Commit convention"
     section, which the hooks and the `PR Title` check parse directly. Read it there rather than
     from a copy here — a copy is exactly what drifts. For server domain work, use the owning slice
     (`apps/server/ARCHITECTURE.md` §2); otherwise use the matching cross-cutting scope.
+  - `(#123)` links the commit to issue #123 but does not close it. Add `- Fixes #123` to the commit body or PR description when the work resolves that issue.
   - Print the current list without leaving the terminal:
     `bun scripts/check-commit-message.ts /dev/null`
 
 ## 3. Create the PR
 
-- **Title** must follow `type(scope): summary` — the `PR Title` CI check enforces it, because the squashed `trunk` subject is taken from the PR title.
+- **Title** must follow `type(scope): summary (#123)` with the originating issue reference — the `PR Title` CI check enforces it, because the squashed `trunk` subject is taken from the PR title.
 - **Body** must follow the template and guidance below.
-- Create it with `gh pr create --base trunk --title "type(scope): summary" --body-file - <<'EOF'`, followed by the body and a closing `EOF`.
+- Create it with `gh pr create --base trunk --title "type(scope): summary (#123)" --body-file - <<'EOF`, followed by the body and a closing `EOF`.
 
 ### PR body
 
@@ -221,7 +222,7 @@ gh pr checks "$PR_NUMBER" --json name,state,bucket,link
   every dependency must report `success`. Read the failing sibling job for its focused verdict.
 - **0 approvals required** — solo self-merge is allowed.
 - **Squash only**: `gh pr merge <n> --squash --delete-branch`. Merge commits and rebase are disabled.
-- Resulting `trunk` commit reads `type(scope): summary (#N)`.
+- Resulting `trunk` commit reads `type(scope): summary (#123) (#N)`, with the issue reference followed by GitHub's appended pull-request number.
 
 ## 6. After merge
 

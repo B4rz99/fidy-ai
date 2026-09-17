@@ -84,6 +84,11 @@ apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
 apps/server/src/shell/email-authentication/replacement.test.ts
   s_a13a2c1e579622::t_96aca29496d819 30-31
   s_a13a2c1e579622::t_5812995f9ae1d5 752,763
+apps/server/src/shell/outbound-http/operations.ts
+  s_a13a2c1e579622::t_c94ec5f2068ffd 36-37
+  s_a13a2c1e579622::t_d4b5a50dbaeab5 3
+apps/server/src/shell/subscription/wompi-client.ts
+  s_a13a2c1e579622::t_39cf172e4cc6cd 25
 ---
 {
   "schema_version": "authorship/3.0.0",

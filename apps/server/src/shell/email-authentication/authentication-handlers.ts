@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Effect, Option, Redacted, Result, Schema, Semaphore } from "effect";
 import { type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";

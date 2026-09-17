@@ -7,7 +7,7 @@ import { ClaimedPATPairing, PATPairingReview, StartedPATPairing } from "~/core/t
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { OperationResponse } from "~/shell/_shared/response";
 import { MigrationSqlClient } from "~/shell/db/client";

@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, layer } from "@effect/vitest";
 import assert from "node:assert/strict";
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";

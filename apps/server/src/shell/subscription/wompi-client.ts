@@ -1,4 +1,4 @@
-import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
+import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
 import {
   Config,
   Context,

@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Schema, Struct } from "effect";
 import { Memory } from "~/core/memory/model";
 import { admitMemory } from "~/core/memory/rules";

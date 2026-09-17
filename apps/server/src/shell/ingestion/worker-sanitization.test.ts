@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Encoding, Layer, Logger, Schema } from "effect";
 import { SqlError } from "effect/unstable/sql";
 import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";

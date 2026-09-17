@@ -1,4 +1,3 @@
-import { SchemaSerializableError } from "~/schema-compatibility";
 import { Schema } from "effect";
 import { HttpApiMiddleware } from "effect/unstable/httpapi";
 import { NextOperations } from "./response";
@@ -109,7 +108,7 @@ export const FieldIssue = Schema.Struct({
  * classes below differ only in the detail they hand it.
  *
  * Returns struct *fields*, not a schema, so the result cannot be piped or
- * annotated: its one use is the first argument to `SchemaSerializableError`, which
+ * annotated: its one use is the first argument to `Schema.Error`, which
  * takes fields or a struct and normalises either. `OperationResponse` on the success
  * side has to return a schema because its results are piped through
  * `HttpApiSchema.status`; a failure takes its status from the annotation
@@ -145,9 +144,7 @@ const notFoundTag = "NotFound";
  * gate could attribute to individual values rather than the parser's own
  * rendering of the failure.
  */
-export class ValidationFailed extends SchemaSerializableError<ValidationFailed>(
-  validationFailedTag
-)(
+export class ValidationFailed extends Schema.Error<ValidationFailed>(validationFailedTag)(
   errorResponse(
     validationFailedTag,
     Schema.Struct({
@@ -166,7 +163,7 @@ export class ValidationFailed extends SchemaSerializableError<ValidationFailed>(
  * The request named no caller, or one that could not be resolved to a user.
  * Carries no suggested operation: nothing the API offers changes a PAT.
  */
-export class Unauthenticated extends SchemaSerializableError<Unauthenticated>(unauthenticatedTag)(
+export class Unauthenticated extends Schema.Error<Unauthenticated>(unauthenticatedTag)(
   errorResponse(unauthenticatedTag, detail("unauthenticated")),
   { httpApiStatus: 401 }
 ) {}
@@ -176,24 +173,25 @@ export class Unauthenticated extends SchemaSerializableError<Unauthenticated>(un
  * changes happen at `/settings/pats`, outside this canonical API, so the failure carries no
  * suggested operation.
  */
-export class ScopeMissing extends SchemaSerializableError<ScopeMissing>(scopeMissingTag)(
+export class ScopeMissing extends Schema.Error<ScopeMissing>(scopeMissingTag)(
   errorResponse(scopeMissingTag, detail("scope_missing")),
   { httpApiStatus: 403 }
 ) {}
 
 /** The stable User has no current onboarding grant, so no canonical operation may run. */
-export class ConsentRequired extends SchemaSerializableError<ConsentRequired>(consentRequiredTag)(
+export class ConsentRequired extends Schema.Error<ConsentRequired>(consentRequiredTag)(
   errorResponse(consentRequiredTag, detail("consent_required")),
   { httpApiStatus: 403 }
 ) {}
 
 /** Explicit revocation requires the User to return to a Fidy-owned surface before PAT work. */
-export class UserActionRequired extends SchemaSerializableError<UserActionRequired>(
-  userActionRequiredTag
-)(errorResponse(userActionRequiredTag, detail("user_action_required")), { httpApiStatus: 403 }) {}
+export class UserActionRequired extends Schema.Error<UserActionRequired>(userActionRequiredTag)(
+  errorResponse(userActionRequiredTag, detail("user_action_required")),
+  { httpApiStatus: 403 }
+) {}
 
 /** The User has exhausted Free access to a capability that remains available in Pro. */
-export class PaywallRequired extends SchemaSerializableError<PaywallRequired>(paywallRequiredTag)(
+export class PaywallRequired extends Schema.Error<PaywallRequired>(paywallRequiredTag)(
   errorResponse(paywallRequiredTag, detail("paywall_required")),
   { httpApiStatus: 402 }
 ) {}
@@ -202,7 +200,7 @@ export class PaywallRequired extends SchemaSerializableError<PaywallRequired>(pa
  * The record the caller asked for is not theirs to see. Slices raise this
  * through their own mapper, which supplies a message naming what was missing.
  */
-export class NotFound extends SchemaSerializableError<NotFound>(notFoundTag)(
+export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   errorResponse(notFoundTag, detail("not_found")),
   { httpApiStatus: 404 }
 ) {}

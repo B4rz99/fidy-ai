@@ -51,7 +51,7 @@ import {
   type StatementCase,
 } from "./model";
 import { check, sameFinancialFacts, scoreObservation } from "./scoring";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 
 /** New User and PAT per case/repetition: no prior Transcript, mapping cache, quota or replay state. */
 export const makeScenario = Effect.fn("Evaluation.makeScenario")(function* () {

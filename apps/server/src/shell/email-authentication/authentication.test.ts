@@ -16,7 +16,7 @@ import {
 } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { TestClock } from "effect/testing";
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import {
   EmailAddress,

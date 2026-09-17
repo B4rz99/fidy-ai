@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";

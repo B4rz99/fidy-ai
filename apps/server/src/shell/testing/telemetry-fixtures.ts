@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Schema } from "effect";
 import type { SpanDescriptor } from "~/shell/observability/protocol";
 

@@ -1,4 +1,4 @@
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-openai";
 import * as Generated from "@effect/ai-openai/Generated";
 import { Config, DateTime, Duration, Effect, type JsonSchema, Layer, Option, Schema } from "effect";

@@ -4,7 +4,7 @@ import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
 import type { HttpClientRequest } from "effect/unstable/http";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { WompiTransactionId, WompiTransactionReference } from "~/core/subscription/model";
 import {

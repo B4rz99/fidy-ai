@@ -8,7 +8,7 @@ import {
 } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { Workflow } from "effect/unstable/workflow";
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { durableQueueTableName } from "~/shell/durable-queue-policy";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import {

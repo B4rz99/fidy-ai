@@ -8,7 +8,7 @@ import { TokenBearer, defaultPATLifetimeDays } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { computePATExpiration } from "~/core/tokens/rules";
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { appendConsentRecord, observeConsentRecords } from "~/shell/consent/repo";
 import { OperationResponse } from "~/shell/_shared/response";

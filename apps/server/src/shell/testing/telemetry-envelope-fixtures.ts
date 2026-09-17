@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Option, Schema } from "effect";
 import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/projectors";
 

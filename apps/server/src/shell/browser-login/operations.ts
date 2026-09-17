@@ -1,4 +1,3 @@
-import { SchemaSerializableError } from "~/schema-compatibility";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
@@ -19,9 +18,7 @@ export const browserLoginApprovalGenericMessage =
 
 /** Generic rejection for any public code that cannot be approved without revealing why. */
 export class BrowserLoginPairingApprovalRejected
-  extends SchemaSerializableError<BrowserLoginPairingApprovalRejected>(
-    "BrowserLoginPairingApprovalRejected"
-  )(
+  extends Schema.Error<BrowserLoginPairingApprovalRejected>("BrowserLoginPairingApprovalRejected")(
     {
       _tag: Schema.tagDefaultOmit("BrowserLoginPairingApprovalRejected"),
       error: Schema.Struct({
@@ -39,7 +36,7 @@ export class BrowserLoginPairingApprovalRejected
 
 /** Generic rejection carrying the stable delay before this User may try another code. */
 export class BrowserLoginPairingApprovalRateLimited
-  extends SchemaSerializableError<BrowserLoginPairingApprovalRateLimited>(
+  extends Schema.Error<BrowserLoginPairingApprovalRateLimited>(
     "BrowserLoginPairingApprovalRateLimited"
   )(
     {

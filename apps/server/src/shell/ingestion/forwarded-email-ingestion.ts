@@ -22,7 +22,7 @@ import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import type { Telemetry } from "~/shell/observability/telemetry";
-import { jsonStringSchema } from "~/schema-compatibility";
+import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { forwardingLocalPartForDomain } from "./email-address";
 import {
   admitAuthenticatedResendWebhookEvent,

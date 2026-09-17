@@ -20,7 +20,7 @@ import {
   WompiTransactionReference,
 } from "~/core/subscription/model";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
-import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
+import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
 import { configuredSecret } from "~/shell/_shared/configured-secret";
 import { wompiCredentialPrefixes, wompiPrivateKey } from "./wompi-credentials";

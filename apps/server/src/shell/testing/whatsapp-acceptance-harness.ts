@@ -1,4 +1,4 @@
-import { UnknownJsonString } from "~/schema-compatibility";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import {
   Clock,

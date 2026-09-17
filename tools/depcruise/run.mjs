@@ -111,7 +111,25 @@ const localExportNames = (statement) => {
   return [];
 };
 
-const locallyExportedBindings = (sourceFile) => sourceFile.statements.flatMap(localExportNames);
+const exportedVariableAliases = (statement) => {
+  if (
+    !ts.isVariableStatement(statement) ||
+    !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+  ) {
+    return [];
+  }
+  return statement.declarationList.declarations.flatMap((declaration) =>
+    declaration.initializer !== undefined && ts.isIdentifier(declaration.initializer)
+      ? [declaration.initializer.text]
+      : []
+  );
+};
+
+const locallyExportedBindings = (sourceFile) =>
+  sourceFile.statements.flatMap((statement) => [
+    ...localExportNames(statement),
+    ...exportedVariableAliases(statement),
+  ]);
 
 const reportLaunderedInternals = (report) => {
   let violations = 0;

@@ -104,7 +104,7 @@ const PROBES: readonly Probe[] = [
       { path: `${ownInternal}/internal/value.ts`, source: "export const value = true;\n" },
       {
         path: `${ownInternal}/operations.ts`,
-        source: `import { value } from "~/${ownInternal.replace("src/", "")}/internal/value";\n\nexport const operation = value;\n`,
+        source: `import { value } from "~/${ownInternal.replace("src/", "")}/internal/value";\n\nexport const operation = (): boolean => value;\n`,
       },
     ],
     name: "a module may import its own visible internals",
@@ -217,14 +217,15 @@ const PROBES: readonly Probe[] = [
       { path: `${reexportInternal}/internal/value.ts`, source: "export const value = true;\n" },
       {
         path: `${reexportInternal}/operations.ts`,
-        source: 'import { value } from "./internal/value";\n\n' + "export { value };\n",
+        source:
+          'import { value } from "./internal/value";\n\n' + "export const leakedValue = value;\n",
       },
       {
         path: `${reexportInternal}/runtime.ts`,
         source: 'export { value } from "./internal/value";\n',
       },
     ],
-    name: "published interfaces cannot launder imported internals through local re-exports",
+    name: "published interfaces cannot launder imported internals through aliases or re-exports",
   },
   {
     expect: { kind: "allowed" },

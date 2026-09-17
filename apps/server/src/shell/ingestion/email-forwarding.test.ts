@@ -1259,7 +1259,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const http = yield* HttpClient.HttpClient;
         const sql = yield* MigrationSqlClient;
         yield* cleanupForwardedEmailFixtures(sql);
-        yield* Effect.addFinalizer(() => cleanupForwardedEmailFixtures(sql).pipe(Effect.orDie));
         const firstUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000b1");
         const secondUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000b3");
         for (const [userId, grantId] of [

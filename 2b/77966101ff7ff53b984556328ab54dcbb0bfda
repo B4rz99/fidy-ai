@@ -1,0 +1,37 @@
+apps/server/scripts/check-dependency-guards.ts
+  s_8edf0aea28ddc5::t_fe0f4d4e2e5171 74-93,95,97-103,105-118,123-278,280-329,857-860,862-863,865-866
+  s_8edf0aea28ddc5::t_4752f0dee645fa 31-32
+  s_8edf0aea28ddc5::t_389b6acfa34c19 841-843,845,847-849
+  s_8edf0aea28ddc5::t_53ea8ae4cb9c0c 844,846
+  s_8edf0aea28ddc5::t_8c73435a220569 28-30,33-35
+  s_8edf0aea28ddc5::t_27dfc029431501 902-903
+  s_8edf0aea28ddc5::t_4559650d75fb61 104,279
+  s_8edf0aea28ddc5::t_292165000c950a 94,876,882-894
+  s_8edf0aea28ddc5::t_3567c508386982 119-122,877-881
+  s_8edf0aea28ddc5::t_18ee6ca6b95980 895
+apps/server/.dependency-cruiser.mjs
+  s_8edf0aea28ddc5::t_3567c508386982 156
+  s_8edf0aea28ddc5::t_5a99af57bb9168 67-155,157-160
+  s_8edf0aea28ddc5::t_fdeca438ff9d2a 266,319,369
+apps/server/package.json
+  s_8edf0aea28ddc5::t_21534914c32d36 45
+tools/depcruise/run.mjs
+  s_8edf0aea28ddc5::t_44f318e4982f73 20
+  s_8edf0aea28ddc5::t_a46c61f15879f0 19,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2b77966101ff7ff53b984556328ab54dcbb0bfda",
+  "prompts": {},
+  "sessions": {
+    "s_8edf0aea28ddc5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b045-5cb7-772d-8b01-3b1ed8da0ef0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

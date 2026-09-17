@@ -1,0 +1,250 @@
+.agents/skills/opening-a-pr/SKILL.md
+  s_f26b9f4056e846::t_5ff7256f44b92a 27,32,38,40,225
+README.md
+  s_f26b9f4056e846::t_f71a90b86ec9aa 50
+lefthook.yml
+  s_f26b9f4056e846::t_64ff7d48eff19d 24
+scripts/check-commit-message.ts
+  s_f26b9f4056e846::t_5aabaa83041b70 18,24,154
+apps/server/src/core/categories/rules.ts
+  s_f58a1c084f28a1::t_577e202b6594c0 46,64-65,72
+apps/server/src/core/budgets/model.ts
+  s_f58a1c084f28a1::t_e1070901b24f44 98-101
+  s_f58a1c084f28a1::t_5cf3e3df00daac 130
+apps/server/src/shell/agent/hosted-execution-boundary.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 5
+apps/server/src/shell/ingestion/queries.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 9
+apps/server/src/shell/search/operations.ts
+  s_f58a1c084f28a1::t_b5ce5817e3e730 1-3
+apps/server/src/shell/agent/hosted-inference.ts
+  s_f58a1c084f28a1::t_6a87a3e50335c0 4
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 14
+apps/server/src/core/transactions/rules.ts
+  s_f58a1c084f28a1::t_6e248e49b77b62 28-29,48
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/core/credential-proof/operations.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-32
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 26
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/_shared/suggested-operations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2-3
+  s_f58a1c084f28a1::t_9fa40006ae4de0 6
+apps/server/src/shell/web-session/service.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/onboarding/types.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/transactions/rows.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4-5
+apps/server/src/core/dashboard/calculation.ts
+  s_f58a1c084f28a1::t_251335c279cb47 24-25,118,139,154
+apps/server/src/shell/ingestion/mutations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2-3,26
+apps/server/src/shell/search/operations.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-6
+apps/server/src/core/categories/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/_shared/canonical-pre-transaction.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3-4
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 16
+  s_f58a1c084f28a1::t_bd58adb273e816 17
+apps/server/src/core/transcript/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/core/transactions/model.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/onboarding/onboarding-turn.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/core/credential-proof/operations.ts
+  s_f58a1c084f28a1::t_e788343f85b3be 1-13
+apps/server/src/shell/_shared/authz-live.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 24
+  s_f58a1c084f28a1::t_d81e515b61915d 21
+  s_f58a1c084f28a1::t_bc34b7376b9c69 19
+apps/server/src/shell/audit/retention.test.ts
+  s_f58a1c084f28a1::t_30f6ac42fa03f8 3
+apps/server/src/core/transactions/model.ts
+  s_f58a1c084f28a1::t_48db90a361322e 3-6
+  s_f58a1c084f28a1::t_7500b21afbfad2 8
+apps/server/src/core/budgets/rules.ts
+  s_f58a1c084f28a1::t_8b12a487462fcd 23
+apps/server/src/shell/operations/atomic-batch.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/agent/agent-service.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 23,73
+apps/server/src/shell/testing/openapi.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/shell/categories/repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/tokens/operations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 14
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_f58a1c084f28a1::t_af2ad340262f60 32
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+  s_f58a1c084f28a1::t_801b7d8664f68d 4
+apps/server/src/core/audit/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/core/insights/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/shell/operations/operations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/shell/browser-login/operations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/ingestion/worker.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 15-16,27
+apps/server/src/shell/ingestion/email-interpretation/catalog-validation.test.ts
+  s_f58a1c084f28a1::t_bac8a350a0a030 4-7
+apps/server/src/shell/ingestion/email-interpretation/format-definition.ts
+  s_f58a1c084f28a1::t_23ab964157759c 2-5
+apps/server/src/shell/ingestion/email-interpretation/interpret.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/core/access-tier/operations.ts
+  s_f58a1c084f28a1::t_04aac10a0717f4 1-12
+apps/server/src/core/canonical-operations/contract.test.ts
+  s_f58a1c084f28a1::t_cd610410c66399 5,10-11
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-4,6-9,12-23
+apps/server/src/shell/transactions/repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3-4
+apps/server/src/core/access-tier/operations.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-18
+apps/server/src/shell/email-authentication/replacement-protocol.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/shell/ingestion/email-anonymization-approval.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/agent/toolkit.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 10
+apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/format.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/audit/repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/operations/handlers.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/core/transcript/rules.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/identity/repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/core/transcript/model.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/core/canonical-operations/contract.ts
+  s_f58a1c084f28a1::t_185d3ea9bd43fd 1-33
+apps/server/src/core/consent/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/_shared/canonical-snapshot.ts
+  s_f58a1c084f28a1::t_239b556b8719dd 3
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/core/interpretation-evidence/contract.ts
+  s_f58a1c084f28a1::t_bae8b5d5510ba1 1-21
+apps/server/src/shell/agent/agent-operation-binding.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/format.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/access-tier/operations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-7,9-17
+  s_f58a1c084f28a1::t_0343525c5f1f9f 8
+apps/server/src/core/access-tier/contract.ts
+  s_f58a1c084f28a1::t_7a041fcb30a5e1 1-7
+apps/server/src/shell/ingestion/repo.ts
+  s_f58a1c084f28a1::t_55b786b70255a3 7
+  s_f58a1c084f28a1::t_7500b21afbfad2 8
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 23
+apps/server/src/shell/_shared/authz.ts
+  s_f58a1c084f28a1::t_b3f40cb012e904 6-9
+  s_f58a1c084f28a1::t_fd31b087a7af57 5
+apps/server/src/core/provider-evidence/contract.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-21
+apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/format.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/core/search/operations.ts
+  s_f58a1c084f28a1::t_78867b663a57d2 1-6
+apps/server/src/shell/ingestion/email-interpretation/format-support.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/channels/whatsapp/disclosure-model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2,5
+apps/server/src/shell/transactions/read-statements.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 6
+apps/server/src/shell/dashboard/view.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 18
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/_shared/operation-policy.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3-4
+apps/server/src/core/ingestion/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 8
+  s_f58a1c084f28a1::t_4533cd5127098f 3-6
+apps/server/src/shell/agent/agent-service.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 36
+apps/server/src/shell/ingestion/email-worker.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 13,31
+apps/server/src/core/tokens/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/shell/browser-login/service.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 4
+apps/server/src/core/search/operations.test.ts
+  s_f58a1c084f28a1::t_d80defec298e6c 1-6
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/agent/model-boundary.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/ingestion/email-interpretation/format-support.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/access-tier/operations.test.ts
+  s_f58a1c084f28a1::t_06d08311178538 10-12
+  s_f58a1c084f28a1::t_7500b21afbfad2 1-9,13-146
+apps/server/src/core/audit/model.test.ts
+  s_f58a1c084f28a1::t_7468a91a9fe717 3-4
+apps/server/src/shell/consent/repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 6
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 9,36
+  s_f58a1c084f28a1::t_be228a4a40eed8 4-7
+apps/server/src/shell/agent/model-boundary.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/channels/whatsapp/model.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 3
+apps/server/src/shell/transactions/mutations.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 6
+apps/server/src/core/ingestion/rules.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2
+apps/server/src/shell/ingestion/email-interpretation/interpret.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 2-3
+apps/server/src/shell/audit/audit-log.test.ts
+  s_f58a1c084f28a1::t_d6e3445d7ad1f7 7-8
+apps/server/src/shell/browser-login/approval.test.ts
+  s_f58a1c084f28a1::t_7500b21afbfad2 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "28673f8bdf68723890e35bfb9444126850aaf805",
+  "prompts": {},
+  "sessions": {
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f58a1c084f28a1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b6-3bca-74b5-a786-b17da2953bd9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

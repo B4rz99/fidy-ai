@@ -1,0 +1,23 @@
+apps/server/src/core/dashboard/calculation.ts
+  s_f58a1c084f28a1::t_8b59a42c06b10d 24-25,29,47-48,54-55,61-62,68-69,75-76,82-83
+apps/server/src/core/budgets/model.ts
+  s_f58a1c084f28a1::t_e0d679bb1b98d4 99-115
+apps/server/src/core/budgets/rules.ts
+  s_f58a1c084f28a1::t_2ad3f066cbd9cc 24-30,32-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b49a0ebe61a881e0f89abcbb651aa65ee1463c9a",
+  "prompts": {},
+  "sessions": {
+    "s_f58a1c084f28a1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b6-3bca-74b5-a786-b17da2953bd9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -21,6 +21,7 @@ apps/server/src/shell/outbound-http/contract.ts
   s_a3914047cb299e::t_bbfa4005602378 21,25
   s_a3914047cb299e::t_a30f66b7487ad2 49-50,52
   s_a3914047cb299e::t_7ac89dda6f85f6 1,43-44,53-54,57-59,62-63
+  s_a3914047cb299e::t_43e7845c7e892b 45-48,51,55-56,60-61,92-99
 apps/server/src/shell/channels/whatsapp/kapso-client.ts
   s_a3914047cb299e::t_bb7b1f800cac53 251-252
 apps/server/src/shell/outbound-http/internal/cloudflare-access.ts
@@ -48,6 +49,7 @@ apps/server/src/shell/outbound-http/operations.ts
   s_a3914047cb299e::t_f2463d87a4a4b1 68,70
   s_a3914047cb299e::t_dee51167daf26a 3,6-11,74-87
   s_a3914047cb299e::t_18f63def9f1130 62-63,66,72
+  s_a3914047cb299e::t_72baa20fcd43ae 5,17,48-57
 scripts/check-credential-evidence.ts
   s_a3914047cb299e::t_fbdff9b2f158c3 119
   s_a3914047cb299e::t_caa49ca560649a 125,130,135
@@ -74,6 +76,9 @@ apps/server/src/shell/outbound-http/internal/outbound-http.ts
   s_a3914047cb299e::t_ae283e6a42e957 42,49-54,88,90,97,212,243,245,248-255,272,275,281-282
   s_a3914047cb299e::t_e8ff23d27ddf25 244
   s_221d58c93200ac::t_0f56a88f1796e7 287
+  s_a3914047cb299e::t_a8731b8a802d99 229-235
+  s_a3914047cb299e::t_c4d9a9bc95f54f 9,43-48,89,95,123,181,183,185,192,195,198,203,206,217-228,236-239,246-247,258-265,278,280,283-286
+  s_a3914047cb299e::t_3e100ca7d3c505 61-65,67,72,187
 apps/server/scripts/support-recovery.ts
   s_a3914047cb299e::t_7fd5231d50bfc8 179,181-182
   s_a3914047cb299e::t_538a61d2bf1022 4,136-138,140-141

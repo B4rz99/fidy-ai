@@ -1,0 +1,85 @@
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_b491e471383844::t_3db191a4c95217 113-164,180
+  s_b491e471383844::t_8f0a926631b4f9 241-247
+  s_b491e471383844::t_f7256cb1c9d0ab 248-269,271-293,321
+  s_b491e471383844::t_44a90a5e488c88 42
+  s_b491e471383844::t_fef0b4353d0a3b 270,294-295,322,325-330
+  s_b491e471383844::t_e546c4dd53abb8 26-29,32-41,43-46
+  s_b491e471383844::t_6fdbdcbfb0c5c2 235-240
+  s_b491e471383844::t_f4c31b30d76e21 75-98
+  s_b491e471383844::t_eaf1624b3d8635 1,20
+  s_b491e471383844::t_687ab2b4ecc860 303-304,310-311,323-324
+  s_b491e471383844::t_1b0a1c42076a51 317,332-335
+apps/server/src/shell/outbound-http/contract.ts
+  s_b491e471383844::t_f38d00b8ace42f 71
+  s_b491e471383844::t_944672129fd39b 2,8,52-70
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_b491e471383844::t_aa6815f0db3eb5 21-24,27,248,270,328
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_b491e471383844::t_561302b86e39f6 59
+apps/server/src/shell/outbound-http/operations.ts
+  s_b491e471383844::t_fa8713dae46304 3-8,35-36,49-50
+apps/server/src/shell/email-authentication/delivery.ts
+  s_b491e471383844::t_9268b6f51a3ae4 2,9,80,104,127,130,156,165-166,169,176
+  s_b491e471383844::t_3d2c5ebebb1d2a 167-168
+  s_b491e471383844::t_f38d00b8ace42f 8
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_b491e471383844::t_95185140626e4a 3,96-190
+  s_b491e471383844::t_9f1dee5cf952e0 53
+  s_221d58c93200ac::t_118426720dc0c8 191
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_b491e471383844::t_dd73b44bfb44a6 33,581-587,592-597,599
+  s_b491e471383844::t_86d05332126039 588-591
+apps/server/src/shell/ingestion/resend-receiving-client.test.ts
+  s_b491e471383844::t_e07aabaf101bb7 658,665-668
+  s_b491e471383844::t_e045708ad7017d 1,25,32-35
+  s_b491e471383844::t_c6bceaabd4e83a 14-15,22-24,27-31,36,40-41,656,662-664,669,674
+  s_221d58c93200ac::t_668b98d401384e 2
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_b491e471383844::t_5f14d5e0d69fdd 28-31,35,44,53,62,72
+apps/server/src/shell/email-authentication/delivery.test.ts
+  s_b491e471383844::t_637e7e7ebcb8c9 120,143
+  s_b491e471383844::t_d5666d1af63576 10,89,117-119,121,140-142,144,180-182,184-185,187-188,312-313,315-318,335,361
+  s_b491e471383844::t_8be3d9ba7de456 2,93-96,314
+  s_b491e471383844::t_f38d00b8ace42f 123,146
+  s_b491e471383844::t_cb7ae324202d7d 183
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_b491e471383844::t_f58f055fe6509d 47-55,60-62
+  s_b491e471383844::t_9a798d961b3e72 17,57-59,89,160-161,165-166,170,177-178,181,202,206-207,210,226-230,256,259
+  s_b491e471383844::t_1517642abc7780 85
+  s_9466f16d22ab04::t_74c1dc928e545d 2
+  s_b491e471383844::t_32dc57f48010a1 12-16,44-46
+  s_b491e471383844::t_5e8adc6cdff5fa 167-169,179-180,208-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e704361e4f094be97d68ef19d56c3297e9e50f64",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_b491e471383844": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-ea50-7306-8031-969ef7c3df98",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

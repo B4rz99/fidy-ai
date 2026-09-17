@@ -1,0 +1,84 @@
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 6
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 25
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_9466f16d22ab04::t_00f12b6fb8e118 287
+  s_9466f16d22ab04::t_a200e82804c69f 14
+  s_9466f16d22ab04::t_623ee7980d5a43 28
+apps/server/src/shell/email-authentication/delivery.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 13
+apps/server/src/shell/subscription/wompi-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 29
+apps/server/src/shell/email-authentication/handlers.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 19
+apps/server/src/shell/agent/openai.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 14
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 6
+apps/server/src/shell/ingestion/resend-webhook.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 3
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 8
+apps/server/src/shell/recovery/routes.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 6
+apps/server/src/shell/outbound-http/operations.ts
+  s_9466f16d22ab04::t_b04d257e354996 16-17
+  s_9466f16d22ab04::t_4f755b8cfe38ab 116
+  s_9466f16d22ab04::t_443c6f3f71e563 227-228
+  s_9466f16d22ab04::t_4e05051fca5933 239
+  s_9466f16d22ab04::t_4e680967234920 3,93
+  s_9466f16d22ab04::t_25485b3bb38fd0 18,23-24,26-27,30-31,54,56,58,63,65,70,72,77,79,84,86-91,98,100,105,107,114,234,236-238,240,244,270
+  s_f26b9f4056e846::t_ce2d6b0c02c91d 92
+apps/server/src/shell/subscription/wompi-webhook.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 4
+apps/server/src/shell/outbound-http/internal/same-origin-redirects.ts
+  s_9466f16d22ab04::t_6f76d29a312092 41
+  s_9466f16d22ab04::t_53871ceec9617b 1,3-4,6-8,10,17-22,25-29,31-40,42-44,47-57,59-61
+  s_9466f16d22ab04::t_884654b78f32f0 5,11-15,23-24,45-46
+apps/server/src/shell/cluster-runner-http.ts
+  s_9466f16d22ab04::t_c073c69f2a4145 13-14,109-113,246-251
+  s_f26b9f4056e846::t_6287f91a40d194 252
+apps/server/scripts/support-recovery.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 5
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 24
+apps/server/src/shell/outbound-http/bounded-body.test.ts
+  s_9466f16d22ab04::t_5cc7b4c1e9ba12 8
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_9466f16d22ab04::t_84484c04f77f8a 21
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_9466f16d22ab04::t_e88061486ade79 121-135,138,141
+  s_9466f16d22ab04::t_7ce70cab6f6259 18
+  s_9466f16d22ab04::t_8735f73d77598f 118-120,136-137,139-140,142-160
+apps/server/src/shell/http-client-policy/operations.ts
+  s_9466f16d22ab04::t_f8dcf409b82eb3 1,4,19,54,108-134
+CODING_STANDARDS.md
+  s_9466f16d22ab04::t_adf81386438065 213
+apps/server/src/shell/bounded-body/operations.ts
+  s_9466f16d22ab04::t_86a43746a8e34a 4-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "307b5d516d3619683b200f5d9136006d9ece2f8a",
+  "prompts": {},
+  "sessions": {
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

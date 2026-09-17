@@ -1,0 +1,19 @@
+apps/server/src/shell/secret-material/operations.test.ts
+  s_dc7dcb2f98bcc7::t_40b06cd27e13ae 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a0c0f7b89dc4c207a712a1cc8b45ff02c9bfec90",
+  "prompts": {},
+  "sessions": {
+    "s_dc7dcb2f98bcc7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b14c-4960-7205-9814-1e3c5b28ae21",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

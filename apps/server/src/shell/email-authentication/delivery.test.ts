@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BunCrypto } from "@effect/platform-bun";
 import { expect, it } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Ref } from "effect";
 import {
@@ -6,6 +7,7 @@ import {
   type EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { buildLayerExit, exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http";
@@ -84,9 +86,14 @@ const configLayer = (nodeEnv: "development" | "production"): Layer.Layer<never> 
   ConfigProvider.layer(
     ConfigProvider.fromUnknown({
       NODE_ENV: nodeEnv,
+      KAPSO_API_KEY: "test-kapso-key",
       RESEND_API_KEY: "re_test_only_resend_key_324000000",
       RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
       RESEND_FROM_NAME: "Fidy",
+      WOMPI_ENVIRONMENT: "sandbox",
+      WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
     })
   );
 
@@ -107,12 +114,13 @@ const senderLayer = (
       )
     );
   });
-  return EmailDeliveryPort.layer.pipe(
-    Layer.provide(
-      Layer.merge(Layer.succeed(HttpClient.HttpClient, client), configLayer("production"))
-    ),
-    Layer.orDie
+  const config = configLayer("production");
+  const outbound = OutboundHttp.layer.pipe(
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(BunCrypto.layer),
+    Layer.provide(config)
   );
+  return EmailDeliveryPort.layer.pipe(Layer.provide(outbound), Layer.provide(config), Layer.orDie);
 };
 
 const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort> => {
@@ -129,12 +137,13 @@ const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort>
       )
     )
   );
-  return EmailDeliveryPort.layer.pipe(
-    Layer.provide(
-      Layer.merge(Layer.succeed(HttpClient.HttpClient, client), configLayer("production"))
-    ),
-    Layer.orDie
+  const config = configLayer("production");
+  const outbound = OutboundHttp.layer.pipe(
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(BunCrypto.layer),
+    Layer.provide(config)
   );
+  return EmailDeliveryPort.layer.pipe(Layer.provide(outbound), Layer.provide(config), Layer.orDie);
 };
 
 const sendPurpose = (
@@ -168,10 +177,15 @@ it.effect("does not contact Resend outside production", () =>
         HttpClientResponse.fromWeb(request, new Response(null, { status: 200 }))
       );
     });
+    const config = configLayer("development");
+    const outbound = OutboundHttp.layer.pipe(
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+      Layer.provide(BunCrypto.layer),
+      Layer.provide(config)
+    );
     const layer = EmailDeliveryPort.layer.pipe(
-      Layer.provide(
-        Layer.merge(Layer.succeed(HttpClient.HttpClient, client), configLayer("development"))
-      ),
+      Layer.provide(outbound),
+      Layer.provide(config),
       Layer.orDie
     );
 
@@ -295,8 +309,13 @@ const buildDeliveryLayerExit = (
   buildLayerExit(
     EmailDeliveryPort.layer.pipe(
       Layer.provide(
-        Layer.merge(Layer.succeed(HttpClient.HttpClient, client), ConfigProvider.layer(config))
-      )
+        OutboundHttp.layer.pipe(
+          Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+          Layer.provide(BunCrypto.layer),
+          Layer.provide(ConfigProvider.layer(config))
+        )
+      ),
+      Layer.provide(ConfigProvider.layer(config))
     )
   );
 
@@ -313,6 +332,7 @@ it.effect("fails closed with value-safe diagnostics on malformed production Rese
         client,
         ConfigProvider.fromUnknown({
           NODE_ENV: "production",
+          KAPSO_API_KEY: "test-kapso-key",
           RESEND_API_KEY: malformedCandidate,
           RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
           RESEND_FROM_NAME: "Fidy",
@@ -338,6 +358,7 @@ it.effect("fails closed with value-safe diagnostics on a missing production Rese
         client,
         ConfigProvider.fromUnknown({
           NODE_ENV: "production",
+          KAPSO_API_KEY: "test-kapso-key",
           RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
           RESEND_FROM_NAME: "Fidy",
         })

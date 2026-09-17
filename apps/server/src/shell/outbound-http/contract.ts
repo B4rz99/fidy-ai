@@ -1,9 +1,11 @@
 import { Data, type Option } from "effect";
+import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import type { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
 
 /** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =
   | "response-body-failed"
+  | "invalid-destination"
   | "response-too-large"
   | "transport-failed";
 
@@ -46,6 +48,26 @@ export type OutboundHttpRequest =
       readonly _tag: "KapsoMessages";
       readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
       readonly body: string;
+    }>
+  | Readonly<{
+      readonly _tag: "ResendEmailDelivery";
+      /** Stable provider replay identity that makes a repeated delivery request safe. */
+      readonly idempotencyKey: string;
+      readonly body: string;
+    }>
+  | Readonly<{
+      readonly _tag: "ResendReceivedEmail";
+      readonly receivedEmailId: ResendReceivedEmailId;
+    }>
+  | Readonly<{
+      readonly _tag: "ResendAttachment";
+      readonly receivedEmailId: ResendReceivedEmailId;
+      readonly attachmentId: string;
+    }>
+  | Readonly<{
+      readonly _tag: "ResendInboundDownload";
+      /** Provider-issued URL accepted only when it names Resend's direct inbound CDN. */
+      readonly downloadUrl: string;
     }>
   | Readonly<{ readonly _tag: "WompiMerchant" }>
   | Readonly<{

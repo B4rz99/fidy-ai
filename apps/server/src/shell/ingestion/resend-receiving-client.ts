@@ -1,6 +1,5 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { Context, Data, DateTime, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Context, Data, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import sharp, { type Metadata } from "sharp";
 import {
   forwardedEmailRetrievalDeadline,
@@ -10,12 +9,12 @@ import {
 } from "~/core/ingestion/email-policy";
 import { ReceivedEmailContent, ReceivedInlineImage } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import {
-  type BoundedExternalHttpClient,
-  type BoundedExternalHttpResponse,
-  makeBoundedExternalHttpClient,
-} from "~/shell/_shared/bounded-external-http";
-import { loadResendReceivingApiKey } from "~/shell/secret-material/operations";
+import type {
+  OutboundHttpFailure,
+  OutboundHttpRequest,
+  OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
+import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 
 /** Closed bounded failure set exposed by direct Resend retrieval. */
 export class ResendReceivingFailed extends Data.TaggedError("ResendReceivingFailed")<{
@@ -31,8 +30,6 @@ export type ResendReceivingClientService = Readonly<{
 
 // Three minutes covers the bounded worst case of metadata plus eight two-at-a-time inline-image
 // descriptor/download pairs and leaves margin around their individual 14-second request deadlines.
-const maximumMetadataBytes = 1_048_576;
-const maximumAttachmentDescriptorBytes = 4_096;
 const firstSuccessfulStatus = 200;
 const firstRedirectStatus = 300;
 const tooManyRequestsStatus = 429;
@@ -44,36 +41,25 @@ const providerHttpFailureReason = (status: number): ResendReceivingFailed["reaso
     ? "provider-unavailable"
     : "invalid-provider-response";
 
+const mapOutboundFailure = (
+  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
+): ResendReceivingFailed => {
+  if (failure._tag !== "OutboundHttpFailure" || failure.reason === "transport-failed") {
+    return new ResendReceivingFailed({ reason: "provider-unavailable" });
+  }
+  return new ResendReceivingFailed({
+    reason:
+      failure.reason === "invalid-destination" ? "invalid-provider-response" : "resource-limit",
+  });
+};
+
 const getProviderResponse = (input: {
-  client: BoundedExternalHttpClient;
-  url: string;
-  apiKey: Option.Option<Redacted.Redacted<string>>;
-  maximumResponseBytes: number;
-}): Effect.Effect<BoundedExternalHttpResponse, ResendReceivingFailed> =>
-  input.client
-    .execute(
-      HttpClientRequest.get(
-        input.url,
-        Option.match(input.apiKey, {
-          onNone: () => undefined,
-          onSome: (value) => ({ headers: { authorization: `Bearer ${Redacted.value(value)}` } }),
-        })
-      ),
-      input.maximumResponseBytes
-    )
-    .pipe(
-      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-      Effect.timeout("14 seconds"),
-      Effect.mapError(
-        (failure) =>
-          new ResendReceivingFailed({
-            reason:
-              failure._tag === "ExternalHttpFailure" && failure.reason !== "transport-failed"
-                ? "resource-limit"
-                : "provider-unavailable",
-          })
-      )
-    );
+  outboundHttp: OutboundHttpService;
+  request: OutboundHttpRequest;
+}): Effect.Effect<OutboundHttpResponse, ResendReceivingFailed> =>
+  input.outboundHttp
+    .execute(input.request)
+    .pipe(Effect.timeout("14 seconds"), Effect.mapError(mapOutboundFailure));
 
 const AttachmentMetadata = Schema.Struct({
   id: Schema.NonEmptyString,
@@ -95,24 +81,12 @@ const ReceivedEmailResponse = Schema.Struct({
   attachments: Schema.Array(AttachmentMetadata),
 });
 
-const ResendInboundDownloadUrl = Schema.URLFromString.check(
-  Schema.makeFilter((url) =>
-    url.protocol === "https:" &&
-    url.hostname === "inbound-cdn.resend.com" &&
-    url.port === "" &&
-    url.username === "" &&
-    url.password === ""
-      ? undefined
-      : "Expected a direct Resend inbound CDN URL"
-  )
-);
-
 const AttachmentResponse = Schema.Struct({
-  download_url: ResendInboundDownloadUrl,
+  download_url: Schema.String,
 });
 
 const parseJsonResponse = Effect.fn(function* <A>(
-  response: BoundedExternalHttpResponse,
+  response: OutboundHttpResponse,
   decode: (input: unknown) => Effect.Effect<A, Schema.SchemaError>
 ) {
   if (!successful(response.status)) {
@@ -183,26 +157,28 @@ const isSupportedInlineAttachment = (attachment: InlineAttachment): boolean =>
   ].every(Boolean);
 
 const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (input: {
-  client: BoundedExternalHttpClient;
-  baseUrl: string;
-  apiKey: Redacted.Redacted<string>;
+  outboundHttp: OutboundHttpService;
+  receivedEmailId: ResendReceivedEmailId;
   attachment: InlineAttachment;
 }) {
   const descriptorResponse = yield* getProviderResponse({
-    client: input.client,
-    url: `${input.baseUrl}/attachments/${encodeURIComponent(input.attachment.id)}`,
-    apiKey: Option.some(input.apiKey),
-    maximumResponseBytes: maximumAttachmentDescriptorBytes,
+    outboundHttp: input.outboundHttp,
+    request: {
+      _tag: "ResendAttachment",
+      receivedEmailId: input.receivedEmailId,
+      attachmentId: input.attachment.id,
+    },
   });
   const descriptor = yield* parseJsonResponse(
     descriptorResponse,
     Schema.decodeUnknownEffect(AttachmentResponse)
   );
   const imageResponse = yield* getProviderResponse({
-    client: input.client,
-    url: descriptor.download_url.href,
-    apiKey: Option.none(),
-    maximumResponseBytes: maximumEmailInlineImageBytes,
+    outboundHttp: input.outboundHttp,
+    request: {
+      _tag: "ResendInboundDownload",
+      downloadUrl: descriptor.download_url,
+    },
   });
   if (!successful(imageResponse.status)) {
     return yield* new ResendReceivingFailed({
@@ -223,16 +199,15 @@ const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (i
 });
 
 const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function* (input: {
-  client: BoundedExternalHttpClient;
-  apiKey: Redacted.Redacted<string>;
+  outboundHttp: OutboundHttpService;
   receivedEmailId: ResendReceivedEmailId;
 }) {
-  const baseUrl = `https://api.resend.com/emails/receiving/${encodeURIComponent(input.receivedEmailId)}`;
   const response = yield* getProviderResponse({
-    client: input.client,
-    url: baseUrl,
-    apiKey: Option.some(input.apiKey),
-    maximumResponseBytes: maximumMetadataBytes,
+    outboundHttp: input.outboundHttp,
+    request: {
+      _tag: "ResendReceivedEmail",
+      receivedEmailId: input.receivedEmailId,
+    },
   });
   const email = yield* parseJsonResponse(
     response,
@@ -248,7 +223,11 @@ const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function
   const inlineImages = yield* Effect.forEach(
     inline,
     (attachment) =>
-      retrieveInlineImage({ client: input.client, baseUrl, apiKey: input.apiKey, attachment }),
+      retrieveInlineImage({
+        outboundHttp: input.outboundHttp,
+        receivedEmailId: input.receivedEmailId,
+        attachment,
+      }),
     { concurrency: inlineImageDownloadConcurrency }
   );
   return yield* Schema.decodeEffect(ReceivedEmailContent)({
@@ -274,13 +253,10 @@ export class ResendReceivingClient extends Context.Service<
   static readonly layer = Layer.effect(
     ResendReceivingClient,
     Effect.gen(function* () {
-      const httpClient = (yield* HttpClient.HttpClient).pipe(
-        makeBoundedExternalHttpClient("resend")
-      );
-      const apiKey = yield* loadResendReceivingApiKey;
+      const outboundHttp = yield* OutboundHttp;
       return ResendReceivingClient.of({
         retrieveEmail: (receivedEmailId) =>
-          retrieveReceivedEmail({ client: httpClient, apiKey, receivedEmailId }).pipe(
+          retrieveReceivedEmail({ outboundHttp, receivedEmailId }).pipe(
             withResendRetrievalDeadline
           ),
       });

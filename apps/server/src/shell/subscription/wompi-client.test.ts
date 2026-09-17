@@ -25,10 +25,14 @@ const sandboxPublicKey = exampleKey("pub", "test");
 const sandboxPrivateKey = exampleKey("prv", "test");
 const productionPublicKey = exampleKey("pub", "prod");
 const productionPrivateKey = exampleKey("prv", "prod");
+const sharedProviderConfig = {
+  KAPSO_API_KEY: "test-kapso-key",
+  RESEND_API_KEY: `re_${"f1d7c0de".repeat(3)}`,
+};
 
 const config = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: sandboxPrivateKey,
@@ -37,7 +41,7 @@ const config = ConfigProvider.layer(
 );
 const productionConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "production",
     WOMPI_PUBLIC_KEY: productionPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
@@ -46,7 +50,7 @@ const productionConfig = ConfigProvider.layer(
 );
 const mismatchedPublicConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "production",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
@@ -55,7 +59,7 @@ const mismatchedPublicConfig = ConfigProvider.layer(
 );
 const mismatchedPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: productionPrivateKey,
@@ -65,7 +69,7 @@ const mismatchedPrivateConfig = ConfigProvider.layer(
 const invalidPrivateKeyCandidate = `CANARY-wompi-private-${"f1d7c0de".repeat(2)}`;
 const invalidPrivateConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    KAPSO_API_KEY: "test-kapso-key",
+    ...sharedProviderConfig,
     WOMPI_ENVIRONMENT: "sandbox",
     WOMPI_PUBLIC_KEY: sandboxPublicKey,
     WOMPI_PRIVATE_KEY: invalidPrivateKeyCandidate,

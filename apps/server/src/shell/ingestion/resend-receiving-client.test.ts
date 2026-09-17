@@ -1,4 +1,5 @@
-import { expect, it, layer } from "@effect/vitest";
+import { BunCrypto } from "@effect/platform-bun";
+import { expect, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -10,30 +11,34 @@ import {
 } from "effect/unstable/http";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { receivedEmailFixture } from "~/shell/ingestion/fixtures/resend-received-email";
-import {
-  buildLayerExit,
-  exitFailure,
-  expectNotInspected,
-  renderedFailure,
-} from "~/shell/testing/credential-failure";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
+import { expectNotInspected } from "~/shell/testing/credential-failure";
 import { ResendReceivingClient } from "./resend-receiving-client";
 
 const testResendApiKey = `re_${"f1d7c0de".repeat(3)}`;
 
 const testLayer = (
   http: HttpClient.HttpClient
-): Layer.Layer<ResendReceivingClient, Config.ConfigError> =>
-  ResendReceivingClient.layer.pipe(
+): Layer.Layer<ResendReceivingClient, Config.ConfigError> => {
+  const outbound = OutboundHttp.layer.pipe(
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, http)),
+    Layer.provide(BunCrypto.layer),
     Layer.provide(
-      Layer.merge(
-        Layer.succeed(HttpClient.HttpClient, http),
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ RESEND_API_KEY: testResendApiKey })
-        )
+      Layer.succeed(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromUnknown({
+          KAPSO_API_KEY: "test-kapso-key",
+          RESEND_API_KEY: testResendApiKey,
+          WOMPI_ENVIRONMENT: "sandbox",
+          WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+        })
       )
     )
   );
+  return ResendReceivingClient.layer.pipe(Layer.provide(outbound));
+};
 
 const mockClient = (
   handler: (
@@ -46,33 +51,6 @@ const mockClient = (
     HttpClientError.HttpClientError,
     never
   >((request) => Effect.flatMap(request, handler), Effect.succeed);
-
-it.effect("rejects a malformed receiving API key without exposing its value", () =>
-  Effect.gen(function* () {
-    const malformedCandidate = `CANARY-resend-receiving-${"f1d7c0de".repeat(2)}`;
-    const http = mockClient((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 200 })))
-    );
-    const failure = yield* exitFailure(
-      yield* buildLayerExit(
-        ResendReceivingClient.layer.pipe(
-          Layer.provide(
-            Layer.merge(
-              Layer.succeed(HttpClient.HttpClient, http),
-              ConfigProvider.layer(
-                ConfigProvider.fromUnknown({ RESEND_API_KEY: malformedCandidate })
-              )
-            )
-          )
-        )
-      )
-    );
-    const rendered = yield* renderedFailure(failure);
-
-    expect(rendered).toContain("RESEND_API_KEY");
-    expect(rendered).not.toContain(malformedCandidate);
-  })
-);
 
 const pngImage = (width: number, height: number): Uint8Array =>
   new Uint8Array([
@@ -675,16 +653,25 @@ const redirectObservingFetch: typeof globalThis.fetch = Object.assign(redirectFe
   preconnect: (): void => undefined,
 });
 
-const redirectLayer = ResendReceivingClient.layer.pipe(
+const redirectOutboundLayer = OutboundHttp.layer.pipe(
   Layer.provide(FetchHttpClient.layer),
+  Layer.provide(BunCrypto.layer),
   Layer.provide(
     Layer.succeed(
       ConfigProvider.ConfigProvider,
-      ConfigProvider.fromUnknown({ RESEND_API_KEY: testResendApiKey })
+      ConfigProvider.fromUnknown({
+        KAPSO_API_KEY: "test-kapso-key",
+        RESEND_API_KEY: testResendApiKey,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      })
     )
   ),
   Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectObservingFetch))
 );
+const redirectLayer = ResendReceivingClient.layer.pipe(Layer.provide(redirectOutboundLayer));
 
 layer(redirectLayer)("Resend receiving redirect policy", (it) => {
   it.effect("uses manual redirects and rejects a CDN redirect without a second request", () =>

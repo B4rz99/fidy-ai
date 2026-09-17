@@ -1,17 +1,12 @@
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import { Config, Context, Data, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Config, Context, Data, Effect, Layer, Option, Result, Schema } from "effect";
 import type {
   EmailAddress,
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
-import {
-  type BoundedExternalHttpResponse,
-  type ExternalHttpFailure,
-  makeBoundedExternalHttpClient,
-} from "~/shell/_shared/bounded-external-http";
-import { loadResendEmailDeliveryApiKey } from "~/shell/secret-material/operations";
+import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -75,7 +70,6 @@ export type EmailDeliveryPortService = {
   }) => Effect.Effect<void, EmailSendFailed>;
 };
 
-const maximumResendResponseBytes = 4096;
 const maximumResendMessageIdLength = 128;
 const ResendSuccess = Schema.Struct({
   id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumResendMessageIdLength)),
@@ -83,7 +77,7 @@ const ResendSuccess = Schema.Struct({
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
-const decodeBoundedResendResponse = Effect.fn(function* (response: BoundedExternalHttpResponse) {
+const decodeBoundedResendResponse = Effect.fn(function* (response: OutboundHttpResponse) {
   const successful =
     response.status >= successfulStatusMinimum &&
     response.status < successfulStatusMaximumExclusive;
@@ -107,7 +101,7 @@ const ResendRequest = Schema.Struct({
 const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
-  response: BoundedExternalHttpResponse
+  response: OutboundHttpResponse
 ): Effect.Effect<void, EmailSendFailed> => {
   // A server error can follow acceptance; a different proof/key must not bypass deduplication.
   if (response.status >= serverErrorStatusMinimum) {
@@ -130,10 +124,10 @@ const classifyResendResponse = (
 };
 
 const mapResendRequestFailure = (
-  failure: ExternalHttpFailure | { readonly _tag: "TimeoutError" }
+  failure: OutboundHttpFailure | { readonly _tag: "TimeoutError" }
 ): EmailSendFailed => {
   const certainty =
-    failure._tag === "ExternalHttpFailure"
+    failure._tag === "OutboundHttpFailure"
       ? Option.match(failure.responseStatus, {
           onNone: () => "ambiguous" as const,
           onSome: (status) =>
@@ -153,16 +147,13 @@ export class EmailDeliveryPort extends Context.Service<
   static readonly layer = Layer.effect(
     EmailDeliveryPort,
     Effect.gen(function* () {
-      const httpClient = (yield* HttpClient.HttpClient).pipe(
-        makeBoundedExternalHttpClient("resend")
-      );
       const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
       if (environment !== "production") {
         return EmailDeliveryPort.of({
           send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),
         });
       }
-      const apiKey = yield* loadResendEmailDeliveryApiKey;
+      const outboundHttp = yield* OutboundHttp;
       const fromEmail = yield* Config.schema(
         Schema.Literal("obarboza@fidyapp.com"),
         "RESEND_FROM_EMAIL"
@@ -171,25 +162,18 @@ export class EmailDeliveryPort extends Context.Service<
       return EmailDeliveryPort.of({
         send: (input) => {
           const projection = verificationEmailFor(input.purpose, input.combinedCode);
-          const request = HttpClientRequest.post("https://api.resend.com/emails", {
-            headers: {
-              authorization: `Bearer ${Redacted.value(apiKey)}`,
-              "content-type": "application/json",
-              "idempotency-key": input.idempotencyKey,
-            },
-            body: HttpBody.text(
-              encodeResendRequest({
+          return outboundHttp
+            .execute({
+              _tag: "ResendEmailDelivery",
+              idempotencyKey: input.idempotencyKey,
+              body: encodeResendRequest({
                 from: `${fromName} <${fromEmail}>`,
                 to: [input.to],
                 subject: projection.subject,
                 text: projection.text,
                 html: projection.html,
               }),
-              "application/json"
-            ),
-          });
-          return httpClient
-            .execute(request, maximumResendResponseBytes)
+            })
             .pipe(
               Effect.timeout("14 seconds"),
               Effect.mapError(mapResendRequestFailure),

@@ -19,8 +19,9 @@ pre-commit:
 
 commit-msg:
   commands:
-    commit-message-format:
+    commit-message-convention:
       run: bun scripts/check-commit-message.ts {1}
+      fail_text: "Commit titles must end with an issue reference, for example (#123)."
 
 pre-push:
   commands:

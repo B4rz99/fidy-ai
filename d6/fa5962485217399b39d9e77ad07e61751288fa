@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_2563acc648f26f::t_bdc5e9635a8920 93,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d6fa5962485217399b39d9e77ad07e61751288fa",
+  "prompts": {},
+  "sessions": {
+    "s_2563acc648f26f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b029-76ad-76a6-8054-acb1b72009e0",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

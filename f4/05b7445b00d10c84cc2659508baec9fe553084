@@ -1,0 +1,34 @@
+apps/server/.dependency-cruiser.mjs
+  s_3c0c97143ed6a8::t_1aafd0ea974da8 114
+  s_3c0c97143ed6a8::t_e29d4fb40fe9ab 113,123,132,142
+CODING_STANDARDS.md
+  s_3c0c97143ed6a8::t_e4032fc07364cc 280-281,286,290-292
+  s_3c0c97143ed6a8::t_f0a0ff9fe5569c 282-285,287-289
+apps/server/scripts/check-dependency-guards.ts
+  s_3c0c97143ed6a8::t_bc391db5b968fe 96,174-196
+  s_491658dd959f64::t_eb5f2e2f28d318 197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f405b7445b00d10c84cc2659508baec9fe553084",
+  "prompts": {},
+  "sessions": {
+    "s_3c0c97143ed6a8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b5-bc61-7733-abf7-80cf5c3ecb93",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_491658dd959f64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b128-8650-705c-93db-7806430c6279",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

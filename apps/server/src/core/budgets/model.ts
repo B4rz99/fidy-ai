@@ -96,9 +96,23 @@ export const OverBudget = Schema.Struct({
 });
 
 type StatusCurrencyView =
-  | typeof UnderBudget.Type
-  | typeof ReachedBudget.Type
-  | typeof OverBudget.Type;
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "under";
+      remaining: ReadonlyMoney;
+    }>
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "reached";
+    }>
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "over";
+      overBy: ReadonlyMoney;
+    }>;
 
 /** Minimal cap, spending, and projected status facts used to preserve exact Budget progress. */
 export type BudgetProgressFact = Readonly<{

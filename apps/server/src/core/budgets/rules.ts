@@ -21,9 +21,19 @@ export const deriveCurrentBudgetMonth = ({
 };
 
 type BudgetStatusInput = Readonly<{
-  budget: Budget;
+  budget: Readonly<{
+    id: Budget["id"];
+    categoryId: Budget["categoryId"];
+    cap: ReadonlyMoney;
+    createdAt: Budget["createdAt"];
+    updatedAt: Budget["updatedAt"];
+  }>;
   spent: ReadonlyMoney;
-  period: AppliedBudgetMonth;
+  period: Readonly<{
+    from: AppliedBudgetMonth["from"];
+    to: AppliedBudgetMonth["to"];
+    timeZone: AppliedBudgetMonth["timeZone"];
+  }>;
 }>;
 
 /** Compares exact same-Currency spending with a cap and returns its closed monthly status. */

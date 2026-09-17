@@ -21,17 +21,12 @@ type PeriodInput = Readonly<{
 
 const toAppliedPeriod = (
   input: Readonly<{
-    from: DateTime.Zoned;
-    toExclusive: DateTime.Zoned;
+    from: DateTime.Utc;
+    toExclusive: DateTime.Utc;
     requested: DashboardPeriod;
     timeZone: IanaTimeZone;
   }>
-): AppliedDashboardPeriod => ({
-  requested: input.requested,
-  from: DateTime.toUtc(input.from),
-  toExclusive: DateTime.toUtc(input.toExclusive),
-  timeZone: input.timeZone,
-});
+): AppliedDashboardPeriod => input;
 
 /** Resolves a relative period against local calendar boundaries in the explicitly supplied zone. */
 export const resolveDashboardPeriod = ({
@@ -49,43 +44,43 @@ export const resolveDashboardPeriod = ({
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: weekStart,
-        toExclusive: DateTime.add(weekStart, { weeks: 1 }),
+        from: DateTime.toUtc(weekStart),
+        toExclusive: DateTime.toUtc(DateTime.add(weekStart, { weeks: 1 })),
       });
     case "this-month":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: monthStart,
-        toExclusive: DateTime.add(monthStart, { months: 1 }),
+        from: DateTime.toUtc(monthStart),
+        toExclusive: DateTime.toUtc(DateTime.add(monthStart, { months: 1 })),
       });
     case "last-week":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(weekStart, { weeks: 1 }),
-        toExclusive: weekStart,
+        from: DateTime.toUtc(DateTime.subtract(weekStart, { weeks: 1 })),
+        toExclusive: DateTime.toUtc(weekStart),
       });
     case "last-month":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(monthStart, { months: 1 }),
-        toExclusive: monthStart,
+        from: DateTime.toUtc(DateTime.subtract(monthStart, { months: 1 })),
+        toExclusive: DateTime.toUtc(monthStart),
       });
     case "last-7-days":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(dayStart, { days: rollingWeekPreviousDays }),
-        toExclusive: DateTime.add(dayStart, { days: 1 }),
+        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingWeekPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
       });
     case "last-30-days":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(dayStart, { days: rollingMonthPreviousDays }),
-        toExclusive: DateTime.add(dayStart, { days: 1 }),
+        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingMonthPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
       });
   }
 };

@@ -28,6 +28,7 @@ import {
 import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
 import { expectNotInspected, renderedFailure } from "~/shell/testing/credential-failure";
 import { authenticatedRunnerMiddleware } from "./authenticated-cluster-http";
+import { projectClusterHttpClientError } from "./cluster-runner-http-policy";
 import {
   type ClusterToken,
   boundRunnerRpcProtocol,
@@ -462,6 +463,67 @@ it.effect("forms a bracketed URL for an IPv6 runner address the allowlist accept
     });
     expect(allowed(runnerRequestUrl(RunnerAddress.make("::1", 8080)))).toBe(true);
     expect(allowed("http://[::1]:9000/_fidy/cluster")).toBe(false);
+  })
+);
+
+it.effect("projects every HTTP failure kind without retaining runner coordinates or headers", () =>
+  Effect.gen(function* () {
+    const secretCoordinate = "http://runner.internal:8080/private?token=coordinate-secret";
+    const secretCredential = "Bearer credential-secret";
+    const secretHeader = "response-secret";
+    const request = HttpClientRequest.make("POST")(secretCoordinate).pipe(
+      HttpClientRequest.setHeader("authorization", secretCredential)
+    );
+    const response = HttpClientResponse.fromWeb(
+      request,
+      new Response(null, { status: 418, headers: { "x-runner-secret": secretHeader } })
+    );
+    const failures = [
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.TransportError({ request }),
+      }),
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.EncodeError({ request }),
+      }),
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.InvalidUrlError({ request }),
+      }),
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.StatusCodeError({ request, response }),
+      }),
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.DecodeError({ request, response }),
+      }),
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.EmptyBodyError({ request, response }),
+      }),
+    ];
+
+    const projected = failures.map(projectClusterHttpClientError);
+    expect(projected.map((failure) => failure.reason._tag)).toEqual([
+      "TransportError",
+      "EncodeError",
+      "InvalidUrlError",
+      "StatusCodeError",
+      "DecodeError",
+      "EmptyBodyError",
+    ]);
+    for (const failure of projected) {
+      expect(failure.request.url).toBe(projectedRunnerUrl);
+      yield* expectSecretsAbsent(failure, [secretCoordinate, secretCredential, secretHeader]);
+    }
+    for (const failure of projected.slice(3)) {
+      const reason = failure.reason;
+      if (
+        reason._tag !== "StatusCodeError" &&
+        reason._tag !== "DecodeError" &&
+        reason._tag !== "EmptyBodyError"
+      ) {
+        return yield* Effect.die("expected projected response failure");
+      }
+      expect(reason.response.status).toBe(418);
+      expect(reason.response.headers["x-runner-secret"]).toBeUndefined();
+    }
   })
 );
 

@@ -4,6 +4,7 @@ apps/server/src/shell/outbound-http/operations.test.ts
   s_c8cb832fff7b99::t_7d427f136a4c39 50-51,58
   s_c8cb832fff7b99::t_469f834de8d67f 96-122,124-126,128-149
   s_c8cb832fff7b99::t_47765837cba09e 52-53
+  s_c8cb832fff7b99::t_ff33736e6c090d 123
 apps/server/src/shell/_shared/bounded-external-http.ts
   s_c8cb832fff7b99::t_fffb527c447b37 2
   s_c8cb832fff7b99::t_1ee564429889e4 3
@@ -16,17 +17,24 @@ apps/server/src/shell/agent/openai.ts
   s_c8cb832fff7b99::t_303400988a31e6 4-11,13,17-21,118-122,555,560,674
   s_c8cb832fff7b99::t_2f5f983bc5d344 961-966
   s_c8cb832fff7b99::t_16feaa7756d65d 957,996,1005
+  s_c8cb832fff7b99::t_ac440de33c6f5e 168,977
+  s_c8cb832fff7b99::t_f0526f3954c0cc 142,579,675,770
 apps/server/src/shell/agent/mistral-conformance.ts
   s_c8cb832fff7b99::t_fea74898d52a77 3,5,130-131,140,163,165-167,169-170,191,194-195
+  s_c8cb832fff7b99::t_23b515549ae68b 168
 apps/server/src/shell/outbound-http/internal/outbound-http.ts
   s_c8cb832fff7b99::t_fdc68da4984535 44-45,180,182-185,187-191,195,197-202,204-209
   s_c8cb832fff7b99::t_ee7a8cb129fdcf 20,28,43,46-47,49,51-53,55-58,73-76,78-80,83-85,173-177,192,193-194,210-212,214-222,229-231,233-234,236-243,245-255
+  s_c8cb832fff7b99::t_fa805c5f351886 48,50,54,101,156-172,178-179,181,186,196,203,213,223-228
 apps/server/scripts/verify-mistral-token-counts.ts
   s_c8cb832fff7b99::t_4cdf1f8512d431 1,4,7
   s_c8cb832fff7b99::t_9a798e7d122471 11
 apps/server/src/shell/outbound-http/operations.ts
   s_c8cb832fff7b99::t_26c228e963626f 92,94-108
   s_c8cb832fff7b99::t_fe77d99b71268c 38-41,60,63-64,110,112
+  s_c8cb832fff7b99::t_1c641c427ad4cb 1,65,70-72,109,111
+  s_c8cb832fff7b99::t_d7c71b3365018f 36-37,62
+  s_c8cb832fff7b99::t_9ac8eb98e7a252 73-75,77-91,93
 apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
   s_c8cb832fff7b99::t_7be4253ef9b457 57-59,64
 apps/server/src/shell/agent/mistral-conformance.test.ts
@@ -34,6 +42,10 @@ apps/server/src/shell/agent/mistral-conformance.test.ts
   s_c8cb832fff7b99::t_208a9210dfac60 6,24,29,38-39,44-45,56-58,62-64,108-110,135,140-141
   s_c8cb832fff7b99::t_7b5897d8da0ad5 124
   s_c8cb832fff7b99::t_ebae125263647a 3-4,122-123,125-134,136,139,145,151
+  s_c8cb832fff7b99::t_e052e3eb809135 26-28
+  s_c8cb832fff7b99::t_7439f98fe014ab 69
+apps/server/src/shell/outbound-http/contract.ts
+  s_c8cb832fff7b99::t_e0611a8241f279 50-52
 ---
 {
   "schema_version": "authorship/3.0.0",

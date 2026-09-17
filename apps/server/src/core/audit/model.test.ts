@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { AuditCaller, AuditOutcome, CanonicalOperationId } from "./model";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { AuditCaller, AuditOutcome } from "./model";
 
 it("accepts only complete canonical operation ids", () => {
   const decodeOperation = Schema.decodeUnknownResult(CanonicalOperationId);

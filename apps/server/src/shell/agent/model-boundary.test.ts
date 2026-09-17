@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime } from "effect";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import {
   AgentIteration,

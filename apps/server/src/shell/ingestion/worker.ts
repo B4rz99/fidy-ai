@@ -12,9 +12,9 @@ import {
   Schema,
 } from "effect";
 import { SqlError } from "effect/unstable/sql";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import type {
   InterpretedStatementRow,
   NeedsReviewStatementRow,
@@ -24,7 +24,7 @@ import { interpretStatementRows } from "~/core/ingestion/rules";
 import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
 import { UserId } from "~/core/identity/reference";
 import { TransactionExtraction } from "~/core/transactions/model";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {
   type ApplicationPersistedQueueHandlerPolicy,
   makePersistedQueue,

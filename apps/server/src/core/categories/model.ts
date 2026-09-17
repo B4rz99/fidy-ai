@@ -1,6 +1,6 @@
 import { Schema, Struct } from "effect";
 import { CategoryId } from "./reference";
-import { normalizeSearchText } from "~/core/_shared/search";
+import { normalizeSearchText } from "~/core/search/operations";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumCategoryTextLength = 80;

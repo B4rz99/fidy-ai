@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { ProviderMessageEvidence } from "./provider-message-evidence";
+import { ProviderMessageEvidence } from "./contract";
 
 const evidence = {
   channel: "whatsapp",

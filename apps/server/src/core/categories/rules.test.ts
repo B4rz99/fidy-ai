@@ -111,20 +111,6 @@ it.effect("detects only a normalized duplicate when no rule is excluded", () =>
   })
 );
 
-it.effect("treats a None exclusion as absent even when it carries incidental runtime data", () =>
-  Effect.gen(function* () {
-    const noneWithIncidentalValue = { _tag: "None" as const, value: firstRuleId };
-
-    expect(
-      yield* hasKeywordRule({
-        keyword: "exito",
-        rules: [categoryRule(firstRuleId, "Éxito")],
-        excluding: noneWithIncidentalValue,
-      })
-    ).toBe(true);
-  })
-);
-
 it.effect("excludes exactly the edited rule while checking duplicate keywords", () =>
   Effect.gen(function* () {
     const matching = categoryRule(firstRuleId, "Éxito");

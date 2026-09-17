@@ -4,8 +4,8 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   CapturedInterpretationContext,
   type CapturedInterpretationContext as CapturedInterpretationContextType,
-} from "~/core/_shared/captured-interpretation-context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import { Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   CapturedFieldIssue,

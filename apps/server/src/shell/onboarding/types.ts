@@ -1,5 +1,5 @@
 import type { DateTime, Redacted } from "effect";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import type { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import type { ConsentInboundContent } from "~/core/consent/model";
 import type { PendingConsentExchangeId } from "~/core/consent/reference";
 import type { UserId } from "~/core/identity/reference";

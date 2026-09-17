@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { normalizeOpaqueProof32 } from "./opaque-proof";
+import { normalizeOpaqueProof32 } from "./operations";
 
 const validProof = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg";
 

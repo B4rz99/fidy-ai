@@ -4,7 +4,3 @@ export const normalizeSearchText = (value: string): string =>
     .normalize("NFD")
     .replaceAll(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-CO");
-
-/** Escapes normalized text for a contains match using PostgreSQL `LIKE ... ESCAPE '\\'`. */
-export const searchLikePattern = (search: string): string =>
-  `%${search.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;

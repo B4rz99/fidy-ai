@@ -33,7 +33,7 @@ import { ClusterError } from "effect/unstable/cluster";
 import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
 import { WorkerError } from "effect/unstable/workers";
-import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";

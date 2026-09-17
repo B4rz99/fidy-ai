@@ -20,7 +20,7 @@ import type { ConfigError } from "effect/Config";
 import { TestClock } from "effect/testing";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { expectTypeOf } from "vitest";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";

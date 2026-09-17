@@ -1,6 +1,6 @@
 import { Crypto, Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
-import type { AccessTier } from "~/core/_shared/access-tier";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import type { AccessTier } from "~/core/access-tier/contract";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { Money } from "~/core/_shared/money";
 import { decideForwardedEmailAdmission, emailAllowancePeriod } from "~/core/ingestion/rules";
 import {
@@ -23,7 +23,7 @@ import {
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUserInScope } from "~/shell/identity/repo";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import {
   findPendingReviewItemInScope,

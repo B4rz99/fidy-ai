@@ -1,5 +1,5 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
-import type { AccessTier } from "~/core/_shared/access-tier";
+import type { AccessTier } from "~/core/access-tier/contract";
 import { type Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   forwardedEmailOutstandingCap,

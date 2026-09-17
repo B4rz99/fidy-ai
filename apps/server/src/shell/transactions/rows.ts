@@ -1,8 +1,8 @@
 import { DateTime, type Effect, Option, Schema } from "effect";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   Counterparty,

@@ -23,7 +23,7 @@ import {
 } from "effect/unstable/cluster";
 import { SqlClient } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import type { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import {

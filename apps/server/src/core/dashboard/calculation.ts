@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { Immutable } from "~/core/_shared/immutable";
 import {
   type Currency,
   Money,
@@ -22,8 +21,8 @@ type PeriodInput = Readonly<{
 
 const toAppliedPeriod = (
   input: Readonly<{
-    from: Immutable<DateTime.Zoned>;
-    toExclusive: Immutable<DateTime.Zoned>;
+    from: DateTime.Zoned;
+    toExclusive: DateTime.Zoned;
     requested: DashboardPeriod;
     timeZone: IanaTimeZone;
   }>
@@ -116,7 +115,7 @@ const money = (currency: Currency, amount: ReadonlyMoney["amount"]): Money =>
 
 /** Converts exact grouped sums into deterministic Currency groups with separated directions. */
 export const dashboardMoneyGroupsFromSums = (
-  facts: ReadonlyArray<Immutable<DashboardDirectionalAmountFact>>
+  facts: ReadonlyArray<DashboardDirectionalAmountFact>
 ): MoneyGroups => {
   const groups = new Map<
     Currency,
@@ -137,7 +136,7 @@ export const dashboardMoneyGroupsFromSums = (
   });
 };
 
-const metricMoney = (fact: Immutable<DashboardMetricFact>): ReadonlyMoney => {
+const metricMoney = (fact: DashboardMetricFact): ReadonlyMoney => {
   if (fact.aggregation !== "average") return fact.money;
   return money(
     fact.sum.currency,
@@ -152,7 +151,7 @@ const metricMoney = (fact: Immutable<DashboardMetricFact>): ReadonlyMoney => {
 
 /** Finalizes sum, average, or maximum without netting direction or combining Currency. */
 export const dashboardMoneyGroupsFromMetrics = (
-  facts: ReadonlyArray<Immutable<DashboardMetricFact>>
+  facts: ReadonlyArray<DashboardMetricFact>
 ): MoneyGroups =>
   dashboardMoneyGroupsFromSums(
     facts.map((fact) => ({ direction: fact.direction, money: metricMoney(fact) }))

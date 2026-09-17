@@ -1,9 +1,9 @@
 import { DateTime, Effect, Function, type Option, Schema } from "effect";
-import type { CanonicalCapability } from "~/core/_shared/canonical-capability";
-import type { AccessTier } from "~/core/_shared/access-tier";
+import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { type CanonicalCaller, ResolvedCaller, toAccessCaller } from "./authz";
-import { resolveAccessTierInScope } from "./access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import type { CanonicalInput } from "./canonical-input";
 import {
   type OperationAccessCaller,

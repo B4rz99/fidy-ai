@@ -1,6 +1,6 @@
 import { type DateTime, Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { type AuditCaller, AuditLogEntry } from "~/core/audit/model";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";

@@ -13,8 +13,8 @@ import {
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import * as XLSX from "xlsx/xlsx.mjs";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import type { CanonicalOperationId } from "~/core/audit/model";
+import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UserId } from "~/core/identity/reference";
 import {
   Base64FileContent,

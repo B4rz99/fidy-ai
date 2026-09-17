@@ -1,7 +1,7 @@
 import * as Arr from "effect/Array";
 import { Context, Option, Schema, SchemaAST } from "effect";
 import { HttpApi, type HttpApiEndpoint, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   AtomicBatchEligible,
   type OperationPolicyValue,

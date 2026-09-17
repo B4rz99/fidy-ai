@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime, Effect } from "effect";
 import { type IanaTimeZone } from "~/core/_shared/context";
-import { type Immutable } from "~/core/_shared/immutable";
 import { CurrencyMismatch, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { type AppliedBudgetMonth, type Budget, type BudgetStatus } from "./model";
 
@@ -21,7 +20,7 @@ export const deriveCurrentBudgetMonth = ({
   };
 };
 
-type BudgetStatusInput = Immutable<{
+type BudgetStatusInput = Readonly<{
   budget: Budget;
   spent: ReadonlyMoney;
   period: AppliedBudgetMonth;

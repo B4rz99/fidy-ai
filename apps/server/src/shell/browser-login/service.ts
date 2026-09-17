@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { Crypto, DateTime, Effect, Encoding, Option, Predicate, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { normalizeOpaqueProof32 } from "~/core/_shared/opaque-proof";
+import { normalizeOpaqueProof32 } from "~/core/credential-proof/operations";
 import {
   BrowserLoginPrivateVerifier,
   type StartedBrowserLoginPairing,

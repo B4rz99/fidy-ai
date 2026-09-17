@@ -1,7 +1,7 @@
 import { Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { Duration } from "effect";
 import type { Prompt, Response } from "effect/unstable/ai";
-import type { CanonicalOperationId } from "~/core/audit/model";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import { freezeDeep } from "~/shell/_shared/deep-freeze";
 

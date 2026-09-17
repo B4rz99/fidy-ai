@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import type { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { CatalogOperation } from "~/shell/_shared/operation-catalog";
 
 const maximumOpenAiToolNameLength = 64;

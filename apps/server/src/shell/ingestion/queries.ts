@@ -6,7 +6,7 @@ import type { StatementSubmissionId } from "~/core/ingestion/reference";
 import { NotFound } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {
   type NeedsReviewPageRequest,
   applyNeedsReviewPageDefaults,

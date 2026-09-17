@@ -1,7 +1,7 @@
 import { DateTime, Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { CanonicalPreTransactions } from "~/shell/_shared/canonical-pre-transaction";
 import { FidyApi } from "~/shell/api";
 import { executeAtomicBatch } from "./atomic-batch";

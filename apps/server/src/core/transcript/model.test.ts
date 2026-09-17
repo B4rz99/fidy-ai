@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Result, Schema, SchemaIssue } from "effect";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   AgentIteration,
   CanonicalToolCallEntry,

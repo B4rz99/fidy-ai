@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import { Cause, DateTime, Effect, Exit, Layer, Result, Stream } from "effect";
 import type { Schema } from "effect";
-import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";

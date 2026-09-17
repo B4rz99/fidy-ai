@@ -1,7 +1,7 @@
 import { Context, Effect, Function, Option, Ref, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import type { AccessTier } from "~/core/_shared/access-tier";
-import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import type { AccessTier } from "~/core/access-tier/contract";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { CanonicalCaller } from "./authz";
 
 type CanonicalPreTransactionPlan = Effect.Effect<

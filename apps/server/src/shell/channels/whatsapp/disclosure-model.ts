@@ -1,8 +1,8 @@
 import { Function, Schema } from "effect";
-import { DisclosureDeliveryCorrelationToken } from "~/core/_shared/provider-message-evidence";
+import { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 
-export { DisclosureDeliveryCorrelationToken } from "~/core/_shared/provider-message-evidence";
+export { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
 
 /** Stable identity of one provider call, retained only inside the delivery module. */
 export const DisclosureDeliveryAttemptId = Schema.String.check(Schema.isUUID())

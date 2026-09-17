@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
+import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { encodeMoneyAmount } from "~/core/_shared/money";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { interpretNotificationEmail } from "./interpret";

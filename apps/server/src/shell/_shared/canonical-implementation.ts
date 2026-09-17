@@ -1,6 +1,6 @@
 import type { Crypto, Effect, Option } from "effect";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
-import type { AccessTier } from "~/core/_shared/access-tier";
+import type { AccessTier } from "~/core/access-tier/contract";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
 import type { ApplicationPersistedQueueRequirement } from "./persisted-queue";
 import type { SqlClient } from "effect/unstable/sql";

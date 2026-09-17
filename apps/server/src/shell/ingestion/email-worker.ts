@@ -10,7 +10,7 @@ import {
   Result,
   Schema,
 } from "effect";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import {
   type EmailRawSampleReviewReason,
   RawEmailIngestSample,
@@ -28,7 +28,7 @@ import {
   type TransactionExtraction as TransactionExtractionType,
 } from "~/core/transactions/model";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {
   hasCurrentOnboardingConsent,
   onboardingConsentStandingInScope,

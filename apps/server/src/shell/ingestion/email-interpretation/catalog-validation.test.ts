@@ -1,8 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import {
+  CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import { Currency } from "~/core/_shared/money";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { AccountHints, NotificationFormatId } from "~/core/transactions/account-hints";

@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Option, Ref, Schema } from "effect";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import type { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import type { PendingConsentExchangeId } from "~/core/consent/model";
 import { findPendingConsentDisclosureRetry } from "~/shell/consent/repo";
 import { TranscriptText } from "~/core/transcript/model";

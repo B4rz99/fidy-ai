@@ -1,14 +1,14 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { PATScopes } from "~/core/tokens/model";
 import {
   CanonicalCapabilities,
+  CanonicalCapability,
   allCanonicalCapabilities,
   canonicalCapabilitiesFromPATScopes,
-} from "./canonical-capability";
+} from "./contract";
 
-it("keeps canonical capabilities distinct from public PAT scopes", () => {
-  const decodedPATScopes = Schema.decodeSync(PATScopes)(["write", "read"]);
+it("copies credential scopes into a closed canonical capability set", () => {
+  const decodedPATScopes = Schema.decodeSync(Schema.Array(CanonicalCapability))(["write", "read"]);
   const capabilities = canonicalCapabilitiesFromPATScopes(decodedPATScopes);
 
   expect(capabilities).toEqual(["write", "read"]);

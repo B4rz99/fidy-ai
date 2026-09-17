@@ -1,0 +1,65 @@
+apps/server/src/shell/email-authentication/delivery.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 13
+apps/server/src/shell/subscription/wompi-webhook.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 4
+apps/server/src/shell/outbound-http/bounded-body.test.ts
+  s_9466f16d22ab04::t_5cc7b4c1e9ba12 8
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 28
+  s_9466f16d22ab04::t_a200e82804c69f 14
+apps/server/src/shell/email-authentication/handlers.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 19
+apps/server/src/shell/agent/openai.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 14
+apps/server/src/shell/public-http/operations.ts
+  s_9466f16d22ab04::t_5d579c374266d5 1-33
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 21
+apps/server/src/shell/cluster-runner-http-policy.ts
+  s_9466f16d22ab04::t_020eade849a0b0 1-77,79-93
+  s_9466f16d22ab04::t_ae5226cda2b70d 78
+apps/server/src/shell/ingestion/resend-webhook.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 3
+apps/server/src/shell/subscription/wompi-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 29
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 8
+apps/server/src/shell/outbound-http/operations.ts
+  s_9466f16d22ab04::t_4e680967234920 3,26,53-221
+  s_9466f16d22ab04::t_35e5152d7d2347 16-18
+  s_9466f16d22ab04::t_5c4b889d4c32c0 27
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 24
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_9466f16d22ab04::t_7ce70cab6f6259 18
+CODING_STANDARDS.md
+  s_9466f16d22ab04::t_adf81386438065 213
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 6
+apps/server/scripts/support-recovery.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 5
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 6
+apps/server/src/shell/cluster-runner-http.ts
+  s_9466f16d22ab04::t_8591ac5a4d2d77 11-14,112,172,239
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_9466f16d22ab04::t_623ee7980d5a43 25
+apps/server/src/shell/recovery/routes.ts
+  s_9466f16d22ab04::t_03f137ae916ddc 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "08b74be3932ce5aac7bf29e623f87a4e01c99ed6",
+  "prompts": {},
+  "sessions": {
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

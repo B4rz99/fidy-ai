@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
+import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import {
   CreateTransactionInput,
   Direction,

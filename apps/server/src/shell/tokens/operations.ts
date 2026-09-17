@@ -11,7 +11,7 @@ import {
   TokenShortId,
 } from "~/core/tokens/model";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   ApprovePATPairingPayload,
   ApprovedPATPairing,

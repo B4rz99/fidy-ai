@@ -1,10 +1,12 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import {
+  CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import { Money } from "~/core/_shared/money";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import {
   CapturedFieldIssue,
   type EmailForwardingAddress,
@@ -31,7 +33,7 @@ import {
 import { TransactionExtraction, type TransactionId } from "~/core/transactions/model";
 import { NotificationEmailInterpretationEvidence } from "~/shell/ingestion/email-interpretation/interpret";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 
 const AddressRow = Schema.Struct({
   id: EmailForwardingAddressId,

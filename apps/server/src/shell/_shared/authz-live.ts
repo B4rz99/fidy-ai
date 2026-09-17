@@ -16,11 +16,12 @@ import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { requiresCanonicalSnapshot, retryCanonicalSnapshot } from "./canonical-snapshot";
-import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
+import type { AuditLogEntry, AuditOutcome } from "~/core/audit/model";
 import {
+  CanonicalOperationId,
   allCanonicalCapabilities,
   canonicalCapabilitiesFromPATScopes,
-} from "~/core/_shared/canonical-capability";
+} from "~/core/canonical-operations/contract";
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";

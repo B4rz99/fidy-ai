@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { Cause, ConfigProvider, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";

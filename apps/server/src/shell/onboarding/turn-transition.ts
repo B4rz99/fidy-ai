@@ -1,5 +1,5 @@
 import { Crypto, DateTime, Effect, Option, Result, Schema } from "effect";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import {
   type ConsentRecord,
   type DisclosureSnapshot,

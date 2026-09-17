@@ -1,7 +1,7 @@
 import { type DateTime, Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { Workflow } from "effect/unstable/workflow";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   EmailDeliveryIntentId,
   EmailReplacementWorkflowId,

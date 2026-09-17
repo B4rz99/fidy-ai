@@ -11,7 +11,7 @@ import {
   Schema,
 } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { normalizeOpaqueProof32 } from "~/core/_shared/opaque-proof";
+import { normalizeOpaqueProof32 } from "~/core/credential-proof/operations";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
 import {

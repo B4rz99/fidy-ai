@@ -1,6 +1,6 @@
 import { Crypto, type DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { findPendingConsentDisclosureRetry } from "~/shell/consent/repo";
 import {

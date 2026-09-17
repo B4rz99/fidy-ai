@@ -15,7 +15,7 @@ import type {
   Widget,
   WidgetId,
 } from "~/core/dashboard/model";
-import { normalizeSearchText } from "~/core/_shared/search";
+import { normalizeSearchText } from "~/core/search/operations";
 import type { Category } from "~/core/categories/model";
 import type { CategoryId } from "~/core/categories/reference";
 import type { UserId } from "~/core/identity/reference";

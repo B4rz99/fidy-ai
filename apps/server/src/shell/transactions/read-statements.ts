@@ -3,7 +3,7 @@ import type { SqlClient, Statement } from "effect/unstable/sql";
 import { type CategoryId } from "~/core/categories/reference";
 import { type MoneyAggregation } from "~/core/dashboard/model";
 import { type UserId } from "~/core/identity/reference";
-import { searchLikePattern } from "~/core/_shared/search";
+import { searchLikePattern } from "~/shell/search/operations";
 import { effectiveTransactionCte, effectiveTransactionPeriodCte } from "./effective-relation";
 import { normalizedTransactionSearchSql } from "./search-sql";
 

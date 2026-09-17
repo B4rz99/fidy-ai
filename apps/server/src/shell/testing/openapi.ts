@@ -1,7 +1,7 @@
 import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { AccessTier } from "~/core/_shared/access-tier";
+import { AccessTier } from "~/core/access-tier/contract";
 import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,

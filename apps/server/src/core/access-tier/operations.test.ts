@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
-import { AccessTier, decideAccessTier } from "./access-tier";
+import { AccessTier } from "./contract";
+import { decideAccessTier } from "./operations";
 
 it("keeps AccessTier closed to Free and Pro", () => {
   expect(Result.isSuccess(Schema.decodeResult(AccessTier)("free"))).toBe(true);

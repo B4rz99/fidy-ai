@@ -1,6 +1,6 @@
 import { DateTime, Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import {
   E164PhoneNumber,
   UserId,

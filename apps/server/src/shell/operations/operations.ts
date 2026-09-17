@@ -1,7 +1,7 @@
 import * as Arr from "effect/Array";
 import { type Effect, Option, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { ErrorCode, FieldIssue } from "~/shell/_shared/errors";
 import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
 import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";

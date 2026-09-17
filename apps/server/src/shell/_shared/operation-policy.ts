@@ -1,7 +1,7 @@
 import { Context, Function, Option, Schema, SchemaTransformation } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { CanonicalCapability } from "~/core/_shared/canonical-capability";
-import type { AccessTier } from "~/core/_shared/access-tier";
+import { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { AccessTier } from "~/core/access-tier/contract";
 
 /** Whether a hosted agent must obtain exact User confirmation before execution. */
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);

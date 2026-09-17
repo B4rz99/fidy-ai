@@ -1,6 +1,6 @@
 import { DateTime, Function, Option, Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { categoryRows } from "~/core/categories/taxonomy";
 import type { User } from "~/core/identity/model";
 import { TokenBearer } from "~/core/tokens/model";

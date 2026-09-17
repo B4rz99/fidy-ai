@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { SqlError } from "effect/unstable/sql";
-import { CanonicalOperationId } from "~/core/audit/model";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 
 const snapshotRetryLimit = 2;
 const coherentSnapshotOperations = new Set<CanonicalOperationId>([

@@ -1,9 +1,11 @@
 import { BigDecimal, Function, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import {
+  CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import { Currency, Money } from "~/core/_shared/money";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import {
   EmailSourceFormat,

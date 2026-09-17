@@ -1,7 +1,7 @@
 import { Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { MoneyGroups } from "~/core/_shared/money";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { InsightKind } from "./reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 

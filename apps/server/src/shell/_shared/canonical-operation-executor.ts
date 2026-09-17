@@ -1,7 +1,7 @@
 import { Cause, Data, DateTime, Effect, Exit, Option, Ref, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import type { AccessTier } from "~/core/_shared/access-tier";
-import type { CanonicalOperationId } from "~/core/audit/model";
+import type { AccessTier } from "~/core/access-tier/contract";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -29,7 +29,7 @@ import { canonicalTransactionIsolation, retryCanonicalSnapshot } from "./canonic
 import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
 import { type OperationPolicyValue, decideOperationAccess } from "./operation-policy";
-import { resolveAccessTierInScope } from "./access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { grantsRequiredTier } from "./suggested-operations";
 
 export class CanonicalCallRejected extends Data.TaggedError("CanonicalCallRejected")<{

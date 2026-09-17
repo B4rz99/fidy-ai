@@ -3,7 +3,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   DisclosureDeliveryCorrelationToken,
   ProviderMessageEvidence,
-} from "~/core/_shared/provider-message-evidence";
+} from "~/core/provider-evidence/contract";
 import {
   ConsentEvent,
   ConsentRecord,

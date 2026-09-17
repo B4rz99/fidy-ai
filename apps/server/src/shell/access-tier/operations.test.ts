@@ -1,19 +1,19 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import type { CanonicalCaller } from "./authz";
-import { executeCanonicalEffect } from "./canonical-operation-executor";
-import { patScoped } from "./operation-policy";
+import type { CanonicalCaller } from "~/shell/_shared/authz";
+import { executeCanonicalEffect } from "~/shell/_shared/canonical-operation-executor";
+import { patScoped } from "~/shell/_shared/operation-policy";
 import { activatePaidProInScope } from "~/shell/subscription/access-repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
-import { resolveAccessTierInScope } from "./access-tier";
+import { resolveAccessTierInScope } from "./operations";
 
 const firstUserId = UserId.make("f1d1a000-0000-4000-8000-00000000a551");
 const secondUserId = UserId.make("f1d1a000-0000-4000-8000-00000000a552");

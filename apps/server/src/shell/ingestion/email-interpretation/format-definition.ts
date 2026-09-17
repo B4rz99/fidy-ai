@@ -1,6 +1,8 @@
 import type { DateTime, Option } from "effect";
-import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import type { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import type {
+  CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import type { Currency } from "~/core/_shared/money";
 import type {
   AccountHints,

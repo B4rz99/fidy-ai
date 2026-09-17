@@ -1,6 +1,6 @@
 import { Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { AnonymizedEmailIngestSample } from "~/core/ingestion/model";
 import { IngestSampleId } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";

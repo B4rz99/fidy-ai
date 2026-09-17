@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import type { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
 import {
   Cause,

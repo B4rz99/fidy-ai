@@ -1,5 +1,5 @@
 import { type Effect, Option } from "effect";
-import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type {
   CanonicalImplementationCaller,
   CanonicalImplementationRequirements,

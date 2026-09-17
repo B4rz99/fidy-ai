@@ -1,6 +1,6 @@
 import { Schema, Struct } from "effect";
 import type { DateTime, Array as EffectArray } from "effect";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import {
   E164PhoneNumber,
   WhatsAppCallerReference,

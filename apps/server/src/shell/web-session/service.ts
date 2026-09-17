@@ -1,5 +1,5 @@
 import { Crypto, DateTime, Effect } from "effect";
-import { normalizeOpaqueProof32 } from "~/core/_shared/opaque-proof";
+import { normalizeOpaqueProof32 } from "~/core/credential-proof/operations";
 import { webSessionIdleRenewalCandidate } from "~/core/web-session/rules";
 import { revokeWebSession, useWebSession } from "./repo";
 

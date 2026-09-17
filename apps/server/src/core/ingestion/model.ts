@@ -1,9 +1,11 @@
 import { DateTime, Option, Schema } from "effect";
-import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import { ServiceMarket } from "~/core/_shared/context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import {
+  CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import { Money } from "~/core/_shared/money";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { TransactionId } from "~/core/transactions/reference";
 import {

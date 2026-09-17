@@ -1,5 +1,5 @@
 /** Encoded length of a 32-octet unpadded base64url proof. */
-export const opaqueProof32EncodedLength = 43;
+const opaqueProof32EncodedLength = 43;
 
 const opaqueProof32Pattern = /^[A-Za-z0-9_-]{43}$/u;
 

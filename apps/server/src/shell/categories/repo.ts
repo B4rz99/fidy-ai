@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { searchLikePattern } from "~/core/_shared/search";
+import { searchLikePattern } from "~/shell/search/operations";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
 import {

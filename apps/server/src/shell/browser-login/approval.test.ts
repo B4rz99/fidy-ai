@@ -14,7 +14,7 @@ import {
 } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
-import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";

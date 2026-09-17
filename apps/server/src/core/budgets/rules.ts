@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime, Effect } from "effect";
 import { type IanaTimeZone } from "~/core/_shared/context";
-import { type Immutable } from "~/core/_shared/immutable";
 import { CurrencyMismatch, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { type AppliedBudgetMonth, type Budget, type BudgetStatus } from "./model";
 
@@ -21,10 +20,20 @@ export const deriveCurrentBudgetMonth = ({
   };
 };
 
-type BudgetStatusInput = Immutable<{
-  budget: Budget;
+type BudgetStatusInput = Readonly<{
+  budget: Readonly<{
+    id: Budget["id"];
+    categoryId: Budget["categoryId"];
+    cap: ReadonlyMoney;
+    createdAt: Budget["createdAt"];
+    updatedAt: Budget["updatedAt"];
+  }>;
   spent: ReadonlyMoney;
-  period: AppliedBudgetMonth;
+  period: Readonly<{
+    from: AppliedBudgetMonth["from"];
+    to: AppliedBudgetMonth["to"];
+    timeZone: AppliedBudgetMonth["timeZone"];
+  }>;
 }>;
 
 /** Compares exact same-Currency spending with a cap and returns its closed monthly status. */

@@ -3,7 +3,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import { type Category } from "~/core/categories/model";
 import { CategoryNotFound } from "~/core/categories/errors";
 import { type CategoryId } from "~/core/categories/reference";
-import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
+import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { TransactionNotFound } from "~/core/transactions/errors";
 import {
   type CreateTransactionInput,

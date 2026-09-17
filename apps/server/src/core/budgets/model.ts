@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { type Immutable } from "~/core/_shared/immutable";
 import { Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/reference";
@@ -96,9 +95,24 @@ export const OverBudget = Schema.Struct({
   overBy: Money,
 });
 
-type StatusCurrencyView = Immutable<
-  typeof UnderBudget.Type | typeof ReachedBudget.Type | typeof OverBudget.Type
->;
+type StatusCurrencyView =
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "under";
+      remaining: ReadonlyMoney;
+    }>
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "reached";
+    }>
+  | Readonly<{
+      budget: Readonly<{ cap: ReadonlyMoney }>;
+      spent: ReadonlyMoney;
+      type: "over";
+      overBy: ReadonlyMoney;
+    }>;
 
 /** Minimal cap, spending, and projected status facts used to preserve exact Budget progress. */
 export type BudgetProgressFact = Readonly<{
@@ -127,11 +141,7 @@ const hasExactOverProgress = (
   BigDecimal.equals(overBy.amount, BigDecimal.subtract(spent.amount, cap.amount));
 
 /** Whether projected progress exactly represents one positive Budget cap and its spending. */
-export const hasExactBudgetProgress = ({
-  cap,
-  spent,
-  status,
-}: Immutable<BudgetProgressFact>): boolean => {
+export const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boolean => {
   if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
   const checks = {
     under: (): boolean =>

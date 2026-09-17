@@ -1,6 +1,6 @@
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Ref, Result } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
-import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/reference";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { TranscriptText } from "~/core/transcript/model";

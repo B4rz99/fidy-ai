@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
-import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
+import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import {
   AccountHints,
   NotificationInterpretationEvidence,

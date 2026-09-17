@@ -1,11 +1,11 @@
 import { type DateTime, Effect } from "effect";
-import { decideAccessTier } from "~/core/_shared/access-tier";
+import { decideAccessTier } from "~/core/access-tier/operations";
 import { isTrialPeriodActive } from "~/core/identity/rules";
 import type { UserId } from "~/core/identity/reference";
 import { findUserInScope } from "~/shell/identity/repo";
 import { hasPaidProInScope } from "~/shell/subscription/access-repo";
 
-/** Resolves current capabilities inside the caller's existing User-scoped transaction. */
+/** Resolves the User's current AccessTier inside the caller's existing User-scoped transaction. */
 export const resolveAccessTierInScope = Effect.fn("resolveAccessTierInScope")(function* (
   userId: UserId,
   now: DateTime.Utc

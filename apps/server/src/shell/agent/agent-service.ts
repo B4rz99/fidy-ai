@@ -20,7 +20,7 @@ import {
 import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import {
   type ApplicationPersistedQueueProvider,
   type ApplicationPersistedQueueRequirement,
@@ -70,7 +70,7 @@ import {
   type TurnFailureReason,
 } from "~/core/transcript/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
+import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { findUser } from "~/shell/identity/repo";

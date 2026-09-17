@@ -1,5 +1,4 @@
 import { DateTime, Effect, Option } from "effect";
-import { type ReadonlyOption, toOption } from "~/core/_shared/option";
 import { InvalidTransactionPeriod, TransactionNotYetOccurred } from "./errors";
 
 /**
@@ -26,8 +25,8 @@ export const checkAlreadyOccurred = (
     : Effect.void;
 
 type TransactionPeriod = Readonly<{
-  readonly from: ReadonlyOption<DateTime.Utc>;
-  readonly to: ReadonlyOption<DateTime.Utc>;
+  readonly from: Option.Option<DateTime.Utc>;
+  readonly to: Option.Option<DateTime.Utc>;
 }>;
 
 type PeriodBounds = Readonly<{
@@ -46,7 +45,7 @@ const checkPeriodWidth = (
 export const checkTransactionPeriod = (
   period: TransactionPeriod
 ): Effect.Effect<void> | Effect.Effect<never, InvalidTransactionPeriod> =>
-  Option.match(Option.all({ from: toOption(period.from), to: toOption(period.to) }), {
+  Option.match(Option.all({ from: period.from, to: period.to }), {
     onNone: () => Effect.void,
     onSome: checkPeriodWidth,
   });

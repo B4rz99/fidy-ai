@@ -2,8 +2,11 @@ import { Context, type Crypto, type DateTime, type Effect, type Layer } from "ef
 import { HttpClientRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
-import type { AuditCaller, AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
-import type { CanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import type { AuditCaller, AuditOutcome } from "~/core/audit/model";
+import type {
+  CanonicalCapabilities,
+  CanonicalOperationId,
+} from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/reference";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";

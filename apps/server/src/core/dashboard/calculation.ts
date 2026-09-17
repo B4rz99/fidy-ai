@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { Immutable } from "~/core/_shared/immutable";
 import {
   type Currency,
   Money,
@@ -22,17 +21,12 @@ type PeriodInput = Readonly<{
 
 const toAppliedPeriod = (
   input: Readonly<{
-    from: Immutable<DateTime.Zoned>;
-    toExclusive: Immutable<DateTime.Zoned>;
+    from: DateTime.Utc;
+    toExclusive: DateTime.Utc;
     requested: DashboardPeriod;
     timeZone: IanaTimeZone;
   }>
-): AppliedDashboardPeriod => ({
-  requested: input.requested,
-  from: DateTime.toUtc(input.from),
-  toExclusive: DateTime.toUtc(input.toExclusive),
-  timeZone: input.timeZone,
-});
+): AppliedDashboardPeriod => input;
 
 /** Resolves a relative period against local calendar boundaries in the explicitly supplied zone. */
 export const resolveDashboardPeriod = ({
@@ -50,43 +44,43 @@ export const resolveDashboardPeriod = ({
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: weekStart,
-        toExclusive: DateTime.add(weekStart, { weeks: 1 }),
+        from: DateTime.toUtc(weekStart),
+        toExclusive: DateTime.toUtc(DateTime.add(weekStart, { weeks: 1 })),
       });
     case "this-month":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: monthStart,
-        toExclusive: DateTime.add(monthStart, { months: 1 }),
+        from: DateTime.toUtc(monthStart),
+        toExclusive: DateTime.toUtc(DateTime.add(monthStart, { months: 1 })),
       });
     case "last-week":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(weekStart, { weeks: 1 }),
-        toExclusive: weekStart,
+        from: DateTime.toUtc(DateTime.subtract(weekStart, { weeks: 1 })),
+        toExclusive: DateTime.toUtc(weekStart),
       });
     case "last-month":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(monthStart, { months: 1 }),
-        toExclusive: monthStart,
+        from: DateTime.toUtc(DateTime.subtract(monthStart, { months: 1 })),
+        toExclusive: DateTime.toUtc(monthStart),
       });
     case "last-7-days":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(dayStart, { days: rollingWeekPreviousDays }),
-        toExclusive: DateTime.add(dayStart, { days: 1 }),
+        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingWeekPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
       });
     case "last-30-days":
       return toAppliedPeriod({
         requested: period,
         timeZone,
-        from: DateTime.subtract(dayStart, { days: rollingMonthPreviousDays }),
-        toExclusive: DateTime.add(dayStart, { days: 1 }),
+        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingMonthPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
       });
   }
 };
@@ -116,7 +110,7 @@ const money = (currency: Currency, amount: ReadonlyMoney["amount"]): Money =>
 
 /** Converts exact grouped sums into deterministic Currency groups with separated directions. */
 export const dashboardMoneyGroupsFromSums = (
-  facts: ReadonlyArray<Immutable<DashboardDirectionalAmountFact>>
+  facts: ReadonlyArray<DashboardDirectionalAmountFact>
 ): MoneyGroups => {
   const groups = new Map<
     Currency,
@@ -137,7 +131,7 @@ export const dashboardMoneyGroupsFromSums = (
   });
 };
 
-const metricMoney = (fact: Immutable<DashboardMetricFact>): ReadonlyMoney => {
+const metricMoney = (fact: DashboardMetricFact): ReadonlyMoney => {
   if (fact.aggregation !== "average") return fact.money;
   return money(
     fact.sum.currency,
@@ -152,7 +146,7 @@ const metricMoney = (fact: Immutable<DashboardMetricFact>): ReadonlyMoney => {
 
 /** Finalizes sum, average, or maximum without netting direction or combining Currency. */
 export const dashboardMoneyGroupsFromMetrics = (
-  facts: ReadonlyArray<Immutable<DashboardMetricFact>>
+  facts: ReadonlyArray<DashboardMetricFact>
 ): MoneyGroups =>
   dashboardMoneyGroupsFromSums(
     facts.map((fact) => ({ direction: fact.direction, money: metricMoney(fact) }))

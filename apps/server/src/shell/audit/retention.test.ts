@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
-import { CanonicalOperationId } from "~/core/audit/model";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { defaultUserId } from "~/shell/db/development-seed";
 import {
   EnvelopeRecorder,

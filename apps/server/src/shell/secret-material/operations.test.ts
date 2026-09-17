@@ -1,3 +1,5 @@
+// Node crypto is required for the focused synchronous HMAC and digest fixture.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash, createHmac } from "node:crypto";
 import { BunCrypto } from "@effect/platform-bun";
 import { expect, it, layer } from "@effect/vitest";

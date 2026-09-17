@@ -56,16 +56,123 @@ export default {
       name: "core-slice-reaches-sibling-slice",
       severity: "error",
       comment:
-        "A core slice imported a sibling's implementation instead of its published reference " +
-        "interface. A core slice may import ownerless shared values from core/_shared or a " +
-        "sibling's direct reference.ts, but sibling models, rules, errors, and other implementation " +
-        "details remain private. Core decides, it does not gather (ARCHITECTURE.md §2).",
+        "A core slice imported a sibling's implementation instead of a published interface. " +
+        "A core slice may import ownerless shared values from core/_shared or a sibling's direct " +
+        "reference.ts, contract.ts, or operations.ts, but sibling models, rules, errors, and other " +
+        "implementation details remain private. Core decides, it does not gather " +
+        "(ARCHITECTURE.md §2).",
 
       from: { path: "^src/core/([^/]+)/", pathNot: "^src/core/_shared/" },
       to: {
         path: "^src/core/[^/]+/",
-        pathNot: ["^src/core/_shared/", "^src/core/$1/", "^src/core/[^/]+/reference\\.ts$"],
+        pathNot: [
+          "^src/core/_shared/",
+          "^src/core/$1/",
+          "^src/core/[^/]+/(reference|contract|operations)\\.ts$",
+        ],
       },
+    },
+    {
+      name: "foreign-module-imports-internal",
+      severity: "error",
+      comment:
+        "A module imported another module's internal implementation. `internal/` is visibly " +
+        "private across core and shell, including to tests and same-named owners in the other " +
+        "layer. Move the caller to the owner's contract.ts or operations.ts interface.",
+      from: { path: "^src/(core|shell)/([^/]+)/" },
+      to: {
+        path: "^src/(core|shell)/[^/]+/internal/",
+        pathNot: "^src/$1/$2/internal/",
+      },
+    },
+    {
+      name: "tooling-imports-internal",
+      severity: "error",
+      comment:
+        "A script or tool imported a module's internal implementation. Operational tooling obeys " +
+        "the same privacy boundary as production code: import contract.ts, operations.ts, or a " +
+        "justified runtime.ts composition interface instead.",
+      from: { path: "^(scripts|tools)/" },
+      to: { path: "^src/(core|shell)/[^/]+/internal/" },
+    },
+    {
+      name: "landmark-imports-internal",
+      severity: "error",
+      comment:
+        "A source landmark outside an owner module imported visible internals. Application assembly " +
+        "may compose published runtime.ts interfaces, but it does not bypass module privacy.",
+      from: { path: "^src/", pathNot: "^src/(core|shell)/[^/]+/" },
+      to: { path: "^src/(core|shell)/[^/]+/internal/" },
+    },
+    {
+      name: "contract-imports-implementation",
+      severity: "error",
+      comment:
+        "contract.ts is the independent declaration interface. It may depend on contracts, but not " +
+        "on private implementation, substantive operations, or runtime composition.",
+      from: { path: "^src/(core|shell)/[^/]+/contract\\.ts$" },
+      to: { path: "^src/(core|shell)/[^/]+/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Private implementation depended backward on its module's outward operations.ts or " +
+        "runtime.ts interface. Internals may depend on their contract and sibling internals; the " +
+        "published facades depend inward, never the reverse.",
+      from: { path: "^src/(core|shell)/([^/]+)/internal/" },
+      to: { path: "^src/$1/$2/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "operations-imports-runtime",
+      severity: "error",
+      comment:
+        "operations.ts depended backward on its module's runtime.ts. Runtime composition may " +
+        "assemble operations, but substantive operations do not acquire construction or startup authority.",
+      from: { path: "^src/(core|shell)/([^/]+)/operations\\.ts$" },
+      to: { path: "^src/$1/$2/runtime\\.ts$" },
+    },
+    {
+      name: "published-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "A published interface re-exported private implementation. contract.ts, operations.ts, and " +
+        "runtime.ts may use internals in their permitted direction, but must declare the interface " +
+        "they publish instead of laundering internal exports.",
+      from: { path: "^src/(core|shell)/([^/]+)/(contract|operations|runtime)\\.ts$" },
+      to: {
+        path: "^src/$1/$2/internal/",
+        dependencyTypes: ["export"],
+      },
+    },
+    {
+      name: "foreign-runtime-imported-outside-composition",
+      severity: "error",
+      comment:
+        "An ordinary module imported another module's runtime.ts. Foreign runtime authority is " +
+        "reserved for runtime.ts composition, exact application landmarks, named broad harnesses, " +
+        "and justified scripts or tools; use contract.ts or operations.ts for ordinary calls.",
+      from: {
+        path: "^src/(core|shell)/([^/]+)/",
+        pathNot: ["/runtime\\.ts$", "^src/shell/testing/.*(?:harness|runtime)\\.ts$"],
+      },
+      to: {
+        path: "^src/(core|shell)/[^/]+/runtime\\.ts$",
+        pathNot: "^src/$1/$2/runtime\\.ts$",
+      },
+    },
+    {
+      name: "tooling-imports-runtime-without-composition-role",
+      severity: "error",
+      comment:
+        "A script or tool imported runtime authority without being an explicitly named runtime or harness. " +
+        "Tooling uses contract.ts or operations.ts by default; a composition entrypoint makes that broader " +
+        "role visible in its filename.",
+      from: {
+        path: "^(scripts|tools)/",
+        pathNot: "(?:runtime|harness)\\.ts$",
+      },
+      to: { path: "^src/(core|shell)/[^/]+/runtime\\.ts$" },
     },
     {
       // Two things under src/ are in reach of the assembly, and nothing else
@@ -122,6 +229,7 @@ export default {
           "^src/shell/_shared/authz\\.ts$",
           "^src/shell/_shared/canonical-input\\.ts$",
           "^src/shell/_shared/canonical-success\\.ts$",
+          "^src/shell/(public-http|schema-codecs|tokens|subscription|web-auth)/contract\\.ts$",
         ],
       },
     },
@@ -170,7 +278,7 @@ export default {
         "Something imported src/main.ts. The entrypoint is where the program runs and " +
         "nothing else (ARCHITECTURE.md §1): importing it means running it as a side effect " +
         "of a build. Whatever you need from it belongs in a layer under shell/.",
-      from: { path: "^src/" },
+      from: { path: "^(src|scripts|tools)/" },
       to: { path: "^src/main\\.ts$" },
     },
     {
@@ -223,7 +331,7 @@ export default {
         "These modules import each other, directly or through a chain. The graph is acyclic " +
         "(ARCHITECTURE.md §1) — a cycle means two files are one module that has not admitted " +
         "it yet, and under ESM it also means one of them observes the other half-initialised.",
-      from: { path: "^src/" },
+      from: { path: "^(src|scripts|tools)/" },
       to: { circular: true },
     },
     // The next two rules are exact complements, and both hang off the same
@@ -273,7 +381,7 @@ export default {
         "Something imported an index file. Barrels hide where a symbol actually lives, make " +
         "every importer depend on every re-export, and turn a directory into a cycle waiting " +
         "to happen. Import the defining module directly.",
-      from: { path: "^src/" },
+      from: { path: "^(src|scripts|tools)/" },
       // `pathNot` rather than an `^src/` prefix on `path`: anchoring the whole
       // thing needs `(.*/)?`, which the cruiser rejects as an unsafe regex.
       to: { path: "/index\\.(ts|mts|cts|js|mjs|cjs)$", pathNot: "(^|.*/)node_modules/" },

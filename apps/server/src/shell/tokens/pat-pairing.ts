@@ -46,7 +46,10 @@ import { PATId } from "~/core/tokens/reference";
 import { computePATExpiration } from "~/core/tokens/rules";
 import type { WebSessionId } from "~/core/web-session/reference";
 import type { ClaimPATPairingPayload } from "~/pat-pairing-api";
-import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
+import {
+  deriveAnonymousSourceIdentifier,
+  derivePATBearerDigest,
+} from "~/shell/secret-material/operations";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import {
@@ -55,7 +58,6 @@ import {
   withCanonicalPreTransaction,
 } from "~/shell/_shared/canonical-pre-transaction";
 import type { OperationResponse } from "~/shell/public-http/contract";
-import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import {
   appendConsentRecordInScope,
   findPATGrantInScope,
@@ -165,9 +167,10 @@ export const startPATPairing = Effect.fn("PATPairing.start")(function* (
   const deviceCodeDigest = yield* sha256(
     new TextEncoder().encode(Redacted.value(redactedDeviceCode))
   );
-  const sourceDigest = yield* anonymousSourceIdentifier("pat-pairing-start", sourceAddress).pipe(
-    Effect.orDie
-  );
+  const sourceDigest = yield* deriveAnonymousSourceIdentifier(
+    "pat-pairing-start",
+    sourceAddress
+  ).pipe(Effect.orDie);
   const { pairingId, publicCode } = yield* insertWithUniqueCode({
     deviceCodeDigest,
     sourceDigest,
@@ -202,7 +205,7 @@ const completeClaim = Effect.fn("PATPairing.completeClaim")(function* (
     Encoding.encodeBase64Url(yield* crypto.randomBytes(bearerSecretBytes).pipe(Effect.orDie))
   );
   const bearer = yield* makeTokenBearer({ shortId: authorization.shortId, secret });
-  const digest = yield* hashTokenBearer(bearer);
+  const digest = yield* derivePATBearerDigest(bearer);
   const changed = yield* persistPATPairingClaim(candidate.pairingId, digest, attemptedAt);
   if (!changed) return { _tag: "Invalid" };
   return {
@@ -321,9 +324,10 @@ export const claimPATPairing = Effect.fn("PATPairing.claim")(function* (
   const attemptedDigest = yield* sha256(
     new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(payload.privateDeviceCode)))
   );
-  const sourceDigest = yield* anonymousSourceIdentifier("pat-pairing-claim", sourceAddress).pipe(
-    Effect.orDie
-  );
+  const sourceDigest = yield* deriveAnonymousSourceIdentifier(
+    "pat-pairing-claim",
+    sourceAddress
+  ).pipe(Effect.orDie);
   const outcome = yield* sql
     .withTransaction(
       Effect.gen(function* () {

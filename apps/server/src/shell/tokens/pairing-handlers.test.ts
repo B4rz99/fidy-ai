@@ -8,8 +8,8 @@ import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
 import { OperationResponse } from "~/shell/public-http/contract";
+import { deriveAnonymousSourceIdentifier } from "~/shell/secret-material/operations";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
@@ -652,7 +652,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           SELECT encode(source_digest, 'hex') AS digest FROM pat_pairing_start_attempts
         `;
         const expectedStart = Encoding.encodeHex(
-          yield* anonymousSourceIdentifier("pat-pairing-start", testSourceAddress)
+          yield* deriveAnonymousSourceIdentifier("pat-pairing-start", testSourceAddress)
         );
         expect(startRow?.digest).toBe(expectedStart);
 
@@ -669,7 +669,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           SELECT encode(source_digest, 'hex') AS digest FROM pat_pairing_claim_attempts
         `;
         const expectedClaim = Encoding.encodeHex(
-          yield* anonymousSourceIdentifier("pat-pairing-claim", testSourceAddress)
+          yield* deriveAnonymousSourceIdentifier("pat-pairing-claim", testSourceAddress)
         );
         expect(claimRow?.digest).toBe(expectedClaim);
         expect(expectedStart).not.toBe(expectedClaim);

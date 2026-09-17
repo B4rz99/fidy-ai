@@ -1,16 +1,5 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import {
-  Config,
-  Context,
-  Data,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Redacted,
-  Result,
-  Schema,
-} from "effect";
+import { Context, Data, DateTime, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import sharp, { type Metadata } from "sharp";
 import {
@@ -26,6 +15,7 @@ import {
   type BoundedExternalHttpResponse,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
+import { loadResendReceivingApiKey } from "~/shell/secret-material/operations";
 
 /** Closed bounded failure set exposed by direct Resend retrieval. */
 export class ResendReceivingFailed extends Data.TaggedError("ResendReceivingFailed")<{
@@ -287,7 +277,7 @@ export class ResendReceivingClient extends Context.Service<
       const httpClient = (yield* HttpClient.HttpClient).pipe(
         makeBoundedExternalHttpClient("resend")
       );
-      const apiKey = yield* Config.redacted("RESEND_API_KEY");
+      const apiKey = yield* loadResendReceivingApiKey;
       return ResendReceivingClient.of({
         retrieveEmail: (receivedEmailId) =>
           retrieveReceivedEmail({ client: httpClient, apiKey, receivedEmailId }).pipe(

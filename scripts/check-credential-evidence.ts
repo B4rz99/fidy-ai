@@ -41,7 +41,7 @@ const credentialEvidence = [
   },
   {
     configuration: "SOURCE_ADMISSION_HMAC_KEY",
-    testFile: "apps/server/src/shell/_shared/anonymous-source-identifier.test.ts",
+    testFile: "apps/server/src/shell/secret-material/operations.test.ts",
     testName: "keeps the source admission HMAC key out of identifiers and failures",
   },
   {
@@ -428,8 +428,16 @@ type CredentialLoader = Readonly<{
 }>;
 
 const credentialLoaders = [
-  { call: "configuredSecret", moduleSuffix: "configured-secret", nameProperty: "name" },
-  { call: "configuredHmacKey", moduleSuffix: "hmac", nameProperty: "variable" },
+  {
+    call: "configuredSecret",
+    moduleSuffix: "secret-material/internal/configured-secret",
+    nameProperty: "name",
+  },
+  {
+    call: "configuredHmacKey",
+    moduleSuffix: "secret-material/internal/keyed-digest",
+    nameProperty: "variable",
+  },
 ] as const satisfies ReadonlyArray<CredentialLoader>;
 
 const credentialLoaderCalls: ReadonlySet<string> = new Set(

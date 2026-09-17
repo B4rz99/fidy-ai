@@ -40,7 +40,7 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
-import { emailCredentialLookupKey } from "./admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import {
   BrowserPairingEmailWorkflowLive,
   pairingQueueHandlerPolicy,
@@ -76,7 +76,7 @@ const requestStart = Effect.fn(function* () {
   yield* sql`DELETE FROM email_delivery_admission_budgets`;
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* seedConsentedPatIdentity({ userId, bearer });
-  const lookup = yield* emailCredentialLookupKey(email);
+  const lookup = yield* deriveEmailCredentialLookupKey(email);
   yield* sql`UPDATE verified_email_credentials SET email_address = ${email}, verified_at = ${yield* DateTime.now} WHERE user_id = ${userId}`;
   yield* sql`INSERT INTO verified_email_credential_authentication_lookups (user_id, authentication_lookup_key)
     VALUES (${userId}, ${lookup}) ON CONFLICT (user_id) DO UPDATE SET authentication_lookup_key = EXCLUDED.authentication_lookup_key`;

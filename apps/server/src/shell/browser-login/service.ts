@@ -21,7 +21,7 @@ import {
 } from "~/core/browser-login/rules";
 import { WebSessionBearer, WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
-import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
+import { deriveAnonymousSourceIdentifier } from "~/shell/secret-material/operations";
 import { redeemPairingToWebSession } from "~/shell/web-auth/repo";
 import {
   type BrowserLoginCapacityExceeded,
@@ -118,9 +118,10 @@ export const startBrowserLoginPairing = Effect.fn("BrowserLogin.startPairing")(f
   const privateVerifier = BrowserLoginPrivateVerifier.make(Encoding.encodeBase64Url(verifierBytes));
   const redactedVerifier = Redacted.make(privateVerifier);
   const verifierDigest = yield* sha256(new TextEncoder().encode(Redacted.value(redactedVerifier)));
-  const sourceDigest = yield* anonymousSourceIdentifier("browser-login-start", sourceAddress).pipe(
-    Effect.orDie
-  );
+  const sourceDigest = yield* deriveAnonymousSourceIdentifier(
+    "browser-login-start",
+    sourceAddress
+  ).pipe(Effect.orDie);
   const { pairingId, publicCode } = yield* insertWithUniquePublicCode({
     verifierDigest,
     sourceDigest,

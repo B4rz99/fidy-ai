@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { EmailAddress } from "~/core/email-authentication/model";
-import { emailCredentialLookupKey } from "~/shell/email-authentication/admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 
 /** Adds bounded verified-email approval of existing BrowserLogin pairings. */
 export const verifiedEmailLogin = Effect.gen(function* () {
@@ -162,7 +162,7 @@ export const verifiedEmailLogin = Effect.gen(function* () {
   })(undefined);
   yield* Effect.forEach(existingCredentials, ({ userId, emailAddress }) =>
     Effect.gen(function* () {
-      const lookupKey = yield* emailCredentialLookupKey(emailAddress);
+      const lookupKey = yield* deriveEmailCredentialLookupKey(emailAddress);
       yield* sql`
         INSERT INTO verified_email_credential_authentication_lookups (
           user_id, authentication_lookup_key

@@ -10,7 +10,7 @@ import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { SqlQueueHarness } from "./durable-execution";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
-import { emailCredentialLookupKey } from "~/shell/email-authentication/admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
@@ -75,7 +75,7 @@ const reset = Effect.gen(function* () {
     createdAt: yield* DateTime.now,
   });
   yield* upsertStableUserFixture(acceptanceUserId, user);
-  const lookupKey = yield* emailCredentialLookupKey(EmailAddress.make(acceptanceEmail)).pipe(
+  const lookupKey = yield* deriveEmailCredentialLookupKey(EmailAddress.make(acceptanceEmail)).pipe(
     Effect.orDie
   );
   yield* sql`

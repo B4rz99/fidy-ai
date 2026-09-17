@@ -20,7 +20,7 @@ import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference"
 import { PATRecipientLabel, PATScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
 import { computePATExpiration } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/token-digest";
+import { derivePATBearerDigest } from "~/shell/secret-material/operations";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
@@ -497,7 +497,7 @@ const AcceptanceCallerProbe = Layer.effect(
 
           const credentials = acceptanceProbeCredentials[observerId];
           const createdAt = yield* DateTime.now;
-          const tokenHash = yield* hashTokenBearer(credentials.bearer);
+          const tokenHash = yield* derivePATBearerDigest(credentials.bearer);
           yield* upsertPAT(userId.value, {
             id: credentials.tokenId,
             shortId: yield* getTokenShortId(credentials.bearer),

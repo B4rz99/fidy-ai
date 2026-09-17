@@ -39,7 +39,10 @@ import {
   processPairingStartQueueItem,
 } from "./authentication-delivery-worker";
 import { browserPairingEmailAuthentication } from "./pairing-authentication";
-import { emailAuthenticationHmacKey, emailCredentialLookupKey } from "./admission";
+import {
+  deriveEmailAuthenticationAdmissionKey,
+  deriveEmailCredentialLookupKey,
+} from "~/shell/secret-material/operations";
 import { purgeBrowserPairingEmailAdmissionEvidence } from "./authentication-retention";
 import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import {
@@ -78,7 +81,7 @@ const resetAuthentication = Effect.gen(function* () {
   yield* sql`DELETE FROM browser_login_pairings`;
   yield* sql`DELETE FROM web_sessions WHERE user_id IN (${userId}, ${otherUserId})`;
   yield* seedConsentedPatIdentity({ userId, bearer });
-  const lookupKey = yield* emailCredentialLookupKey(EmailAddress.make(knownEmail)).pipe(
+  const lookupKey = yield* deriveEmailCredentialLookupKey(EmailAddress.make(knownEmail)).pipe(
     Effect.orDie
   );
   yield* sql`
@@ -521,10 +524,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const deliveryBudgetPairing = yield* startPairing;
         yield* requestEmail(deliveryBudgetPairing, knownEmail);
-        const requesterBudgetKey = yield* emailAuthenticationHmacKey(`user:${userId}`).pipe(
-          Effect.orDie
-        );
-        const recipientBudgetKey = yield* emailAuthenticationHmacKey(
+        const requesterBudgetKey = yield* deriveEmailAuthenticationAdmissionKey(
+          `user:${userId}`
+        ).pipe(Effect.orDie);
+        const recipientBudgetKey = yield* deriveEmailAuthenticationAdmissionKey(
           `recipient:${knownEmail}`
         ).pipe(Effect.orDie);
         yield* sql`
@@ -1043,7 +1046,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               user_id, authentication_lookup_key
             ) VALUES (
               ${otherUserId},
-              ${yield* emailCredentialLookupKey(EmailAddress.make(otherEmail)).pipe(Effect.orDie)}
+              ${yield* deriveEmailCredentialLookupKey(EmailAddress.make(otherEmail)).pipe(Effect.orDie)}
             ) ON CONFLICT (user_id) DO UPDATE
               SET authentication_lookup_key = EXCLUDED.authentication_lookup_key
           `;

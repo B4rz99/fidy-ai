@@ -9,25 +9,9 @@ import type {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
-import { configuredHmacKey, hmacSha256 } from "~/shell/_shared/hmac";
+import { deriveEmailAuthenticationAdmissionKey } from "~/shell/secret-material/operations";
 
 const requiredAdmissionBudgetCount = 2;
-
-export const emailCredentialLookupKey = Effect.fn(function* (email: EmailAddress) {
-  const secret = yield* configuredHmacKey({
-    variable: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY",
-    developmentFallback: "local-email-credential-lookup-key-not-for-production",
-  });
-  return hmacSha256({ secret, payload: `verified-email-credential:${email}` }).toString("hex");
-});
-
-export const emailAuthenticationHmacKey = Effect.fn(function* (scope: string) {
-  const secret = yield* configuredHmacKey({
-    variable: "EMAIL_ADMISSION_HMAC_KEY",
-    developmentFallback: "local-email-admission-key-not-for-production",
-  });
-  return hmacSha256({ secret, payload: scope }).toString("hex");
-});
 
 export type EmailDeliveryRequester =
   | Readonly<{ _tag: "User"; userId: UserId }>
@@ -59,10 +43,10 @@ export const admitEmailDeliveryInScope = Effect.fn("EmailAuthentication.admitDel
     attemptedAt: DateTime.Utc;
   }) {
     const sql = yield* SqlClient.SqlClient;
-    const requesterBudgetKey = yield* emailAuthenticationHmacKey(
+    const requesterBudgetKey = yield* deriveEmailAuthenticationAdmissionKey(
       requesterScope(input.requester)
     ).pipe(Effect.orDie);
-    const recipientBudgetKey = yield* emailAuthenticationHmacKey(
+    const recipientBudgetKey = yield* deriveEmailAuthenticationAdmissionKey(
       `recipient:${input.recipient}`
     ).pipe(Effect.orDie);
     yield* sql`

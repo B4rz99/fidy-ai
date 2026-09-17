@@ -22,7 +22,7 @@ import {
 } from "~/core/subscription/enrollment-model";
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
-import { wompiCredentialPrefixes } from "./wompi-credentials";
+import { wompiCredentialPrefixes } from "~/shell/secret-material/operations";
 
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;

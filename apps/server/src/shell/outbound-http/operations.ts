@@ -1,6 +1,6 @@
 import { Config, Context, Crypto, Effect, Layer, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { configuredSecret } from "~/shell/_shared/configured-secret";
+import { loadWompiIntegritySecret, loadWompiPrivateKey } from "~/shell/secret-material/operations";
 import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
 
@@ -8,13 +8,6 @@ const WompiEnvironment = Schema.Literals(["sandbox", "production"]);
 const WompiPublicKey = Schema.String.check(
   Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
 );
-const WompiPrivateKey = Schema.String.check(
-  Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
-);
-const WompiIntegritySecret = Schema.String.check(
-  Schema.isPattern(/^test_integrity_[A-Za-z0-9_-]{8,}$|^prod_integrity_[A-Za-z0-9_-]{8,}$/u)
-);
-
 /**
  * Executes a request through its closed provider destination policy. Callers provide no URL,
  * provider credential, headers, redirect choice, tracing choice, or byte limit and receive only
@@ -40,16 +33,8 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
         WompiPublicKey.check(Schema.isStartsWith(`pub_${environmentPrefix}_`)),
         "WOMPI_PUBLIC_KEY"
       );
-      const wompiPrivateKey = yield* configuredSecret({
-        name: "WOMPI_PRIVATE_KEY",
-        schema: WompiPrivateKey.check(Schema.isStartsWith(`prv_${environmentPrefix}_`)),
-        requirement: `must be a ${wompiEnvironment} Wompi private key`,
-      });
-      const wompiIntegritySecret = yield* configuredSecret({
-        name: "WOMPI_INTEGRITY_SECRET",
-        schema: WompiIntegritySecret.check(Schema.isStartsWith(`${environmentPrefix}_integrity_`)),
-        requirement: `must be a ${wompiEnvironment} Wompi integrity secret`,
-      });
+      const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);
+      const wompiIntegritySecret = yield* loadWompiIntegritySecret(wompiEnvironment);
       const httpClient = yield* HttpClient.HttpClient;
       const crypto = yield* Crypto.Crypto;
       return makeOutboundHttp({

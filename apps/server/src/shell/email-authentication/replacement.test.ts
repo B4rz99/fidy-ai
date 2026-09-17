@@ -27,7 +27,8 @@ import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
+import { admitEmailDeliveryInScope } from "./admission";
+import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import { EmailDeliveryPort, EmailSendFailed } from "./delivery";
 import { performReplacementAttempt } from "./replacement-delivery-worker";
 import { ReplacementDeliveryPayload, ReplacementExpiryPayload } from "./replacement-protocol";
@@ -748,7 +749,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("keeps the credential lookup HMAC key out of persistence and outcomes", () =>
       Effect.gen(function* () {
         const secret = "a".repeat(64);
-        const lookup = yield* emailCredentialLookupKey(
+        const lookup = yield* deriveEmailCredentialLookupKey(
           EmailAddress.make("lookup-key@example.com")
         ).pipe(
           Effect.provideService(
@@ -759,7 +760,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         );
         expect(lookup).not.toContain(secret);
-        const malformed = yield* emailCredentialLookupKey(
+        const malformed = yield* deriveEmailCredentialLookupKey(
           EmailAddress.make("lookup-key@example.com")
         ).pipe(
           Effect.provideService(

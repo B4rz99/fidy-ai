@@ -5,7 +5,7 @@ import { HttpApiClient, OpenApi } from "effect/unstable/httpapi";
 import { SqlSchema } from "effect/unstable/sql";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { BrowserLoginUnavailableApi, WebAuthApi } from "~/web-auth-api";
-import { anonymousSourceIdentifier } from "~/shell/_shared/anonymous-source-identifier";
+import { deriveAnonymousSourceIdentifier } from "~/shell/secret-material/operations";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { purgeBrowserLoginAnonymousEvidence, startBrowserLoginPairing } from "./service";
@@ -510,7 +510,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* crypto.digest("SHA-256", new TextEncoder().encode("203.0.113.9"))
         );
         const keyed = Encoding.encodeHex(
-          yield* anonymousSourceIdentifier("browser-login-start", "203.0.113.9")
+          yield* deriveAnonymousSourceIdentifier("browser-login-start", "203.0.113.9")
         );
 
         expect(row?.digest).toBe(keyed);

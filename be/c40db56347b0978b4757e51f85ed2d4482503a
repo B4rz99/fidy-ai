@@ -1,0 +1,72 @@
+apps/server/ARCHITECTURE.md
+  s_8edf0aea28ddc5::t_f120cf10a7249c 53-58
+apps/server/.dependency-cruiser.mjs
+  s_8edf0aea28ddc5::t_3567c508386982 157
+  s_8edf0aea28ddc5::t_c360625036b5c5 232
+  s_8edf0aea28ddc5::t_ba38cc0387169f 73-74,162-164,166-167,170-171,173,175
+  s_8edf0aea28ddc5::t_090dad71a42d19 68-72,165,168-169,172
+  s_8edf0aea28ddc5::t_e79a25214f50a9 59-63
+  s_8edf0aea28ddc5::t_5a99af57bb9168 75-156,158-161
+  s_8edf0aea28ddc5::t_fdeca438ff9d2a 281,334,384
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_8edf0aea28ddc5::t_80961bea2479f5 11,16
+apps/server/src/shell/observability/web-auth.test.ts
+  s_8edf0aea28ddc5::t_1d8a05a4aa95f3 10,17
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_8edf0aea28ddc5::t_b366fa08a2a3b1 1262
+apps/server/package.json
+  s_8edf0aea28ddc5::t_21534914c32d36 45
+apps/server/scripts/check-dependency-guards.ts
+  s_8edf0aea28ddc5::t_b5a48fc5c99e5f 318,339
+  s_8edf0aea28ddc5::t_affc3d4e46adf6 72-90,92,95-96,98,104,106-107,116,121,125-126,135,139,141-142,151-153,157-159,161,175-176,180-181,183,196,200,202,217,219,236-237,239,241-242,252,256,258-259,267,269-270,278,280-281,290,294,296-297,305,307-308,316,319,345,364,380,905,912
+  s_8edf0aea28ddc5::t_c971d8b1da10ae 867-871,900-901,921-922
+  s_8edf0aea28ddc5::t_5a59b574528d5a 220
+  s_8edf0aea28ddc5::t_fe0f4d4e2e5171 99,102-103,105,108-115,117-120,127-134,136-138,140,143-150,154-156,160,162-174,177-179,182,184-195,197-199,201,203-211,214-216,218,229-230,232-235,238,240,243-251,253-255,257,260-266,268,271-277,279,282-289,291-293,295,298-304,306,309-312,371-373,375-377,379,382,872,881,886-887,889
+  s_aee6af8a5ba362::t_2e61bf8f0e7081 873,882,884
+  s_8edf0aea28ddc5::t_fecb2d443eaee2 91,93-94,97,327,329-330,343,346,355,360,365,374,378,381
+  s_8edf0aea28ddc5::t_fb850f469a2923 26-28
+  s_8edf0aea28ddc5::t_fbeddfe3b087d3 212,221-224,231
+  s_8edf0aea28ddc5::t_3567c508386982 122-124
+  s_8edf0aea28ddc5::t_0c2a890841d0f4 866,902-903
+  s_8edf0aea28ddc5::t_292165000c950a 865,883,890,904,907-911,913-914
+  s_8edf0aea28ddc5::t_34027f04edea60 322-326,328,331-333
+  s_8edf0aea28ddc5::t_b86853735961e7 313-315,317,320-321,334-338,340-342,344,347-354,356-359,361-363,366-370,906
+  s_8edf0aea28ddc5::t_d0fa417f2ad56a 213,225-228
+  s_8edf0aea28ddc5::t_ff6ddf40830400 29
+apps/server/src/shell/testing/browser-session-fixtures.ts
+  s_8edf0aea28ddc5::t_f5781311bdae16 1-15
+apps/server/src/shell/browser-login/approval.test.ts
+  s_8edf0aea28ddc5::t_553970cbb36f71 34,64
+tools/depcruise/run.mjs
+  s_8edf0aea28ddc5::t_6550ec80e58ddb 78-88,90-92,95-106,108-111,113-114,171-173
+  s_8edf0aea28ddc5::t_a46c61f15879f0 21,31
+  s_8edf0aea28ddc5::t_44f318e4982f73 22
+  s_8edf0aea28ddc5::t_e1dd9855f15800 69
+  s_8edf0aea28ddc5::t_0395c67900f117 13,18,71,77,89,93-94,107,112,115-141,169
+  s_8edf0aea28ddc5::t_171d9447c56833 70
+  s_8edf0aea28ddc5::t_f6773781dd5bf3 72-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bec40db56347b0978b4757e51f85ed2d4482503a",
+  "prompts": {},
+  "sessions": {
+    "s_8edf0aea28ddc5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b045-5cb7-772d-8b01-3b1ed8da0ef0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_aee6af8a5ba362": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbda8-2d1f-799b-830b-a84b9d254678",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

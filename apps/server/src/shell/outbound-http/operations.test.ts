@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BunCrypto } from "@effect/platform-bun";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
 import { expect, it } from "@effect/vitest";
@@ -30,10 +31,8 @@ import { OutboundHttp, type OutboundHttpService } from "./operations";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
 
 const kapsoRequest = {
-  destination: {
-    _tag: "KapsoMessages" as const,
-    businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-  },
+  _tag: "KapsoMessages" as const,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
   body: '{"messaging_product":"whatsapp"}',
 };
 
@@ -44,10 +43,17 @@ const makeTestOutbound = (
   Layer.build(
     OutboundHttp.layer.pipe(
       Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+      Layer.provide(BunCrypto.layer),
       Layer.provide(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ KAPSO_API_KEY: apiKey })
+          ConfigProvider.fromUnknown({
+            KAPSO_API_KEY: apiKey,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          })
         )
       )
     )
@@ -123,6 +129,43 @@ it.effect("bounds the streamed Kapso response before exposing bytes and cancels 
           responseHeaders: {},
         })
       )
+    );
+    expect(cancelled).toBe(true);
+  })
+);
+
+it.effect("bounds Wompi response streams at the provider-specific limit before decoding", () =>
+  Effect.gen(function* () {
+    let cancelled = false;
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start: (controller): void => {
+                  controller.enqueue(new Uint8Array(16 * 1_024));
+                  controller.enqueue(new Uint8Array([1]));
+                },
+                cancel: (): void => {
+                  cancelled = true;
+                },
+              })
+            )
+          )
+        )
+      )
+    );
+
+    const failure = yield* Effect.flip(outbound.execute({ _tag: "WompiMerchant" }));
+
+    expect(failure).toEqual(
+      new OutboundHttpFailure({
+        reason: "response-too-large",
+        responseStatus: Option.some(200),
+        responseHeaders: {},
+      })
     );
     expect(cancelled).toBe(true);
   })
@@ -295,10 +338,8 @@ it.effect.each(transportFailureTags)(
 
       const exit = yield* outbound
         .execute({
-          destination: {
-            _tag: "KapsoMessages",
-            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("987654321"),
-          },
+          _tag: "KapsoMessages",
+          businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("987654321"),
           body: "private-body-sentinel",
         })
         .pipe(Effect.exit);

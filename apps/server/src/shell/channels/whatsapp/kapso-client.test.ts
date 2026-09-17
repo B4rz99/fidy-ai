@@ -1,3 +1,4 @@
+import { BunCrypto } from "@effect/platform-bun";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import {
@@ -49,10 +50,17 @@ const makeRealOutboundHttp = (
   Layer.build(
     OutboundHttp.layer.pipe(
       Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+      Layer.provide(BunCrypto.layer),
       Layer.provide(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ KAPSO_API_KEY: "test-api-key" })
+          ConfigProvider.fromUnknown({
+            KAPSO_API_KEY: "test-api-key",
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          })
         )
       )
     )
@@ -125,7 +133,8 @@ it.effect("encodes the BSUID message for the published Kapso destination", () =>
     );
 
     const request = Option.getOrThrow(outboundRequest);
-    expect(request.destination).toEqual({
+    if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
+    expect(request).toMatchObject({
       _tag: "KapsoMessages",
       businessPhoneNumberId: "123456789",
     });
@@ -162,9 +171,9 @@ it.effect("uses to only in explicit sandbox phone mode", () =>
 
     yield* service.sendText(sendInput());
 
-    const requestBody = yield* Schema.decodeEffect(UnknownJsonString)(
-      Option.getOrThrow(outboundRequest).body
-    );
+    const request = Option.getOrThrow(outboundRequest);
+    if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
+    const requestBody = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
     expect(requestBody).toMatchObject({ to: "573001234567" });
     expect(requestBody).not.toHaveProperty("recipient");
   })

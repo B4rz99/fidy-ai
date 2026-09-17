@@ -248,10 +248,8 @@ export const makeKapsoClientService = ({
   ): Effect.Effect<OutboundHttpResponse, KapsoSendFailed> =>
     outboundHttp
       .execute({
-        destination: {
-          _tag: "KapsoMessages",
-          businessPhoneNumberId: input.businessPhoneNumberId,
-        },
+        _tag: "KapsoMessages",
+        businessPhoneNumberId: input.businessPhoneNumberId,
         body,
       })
       .pipe(Effect.mapError(mapExternalKapsoFailure));

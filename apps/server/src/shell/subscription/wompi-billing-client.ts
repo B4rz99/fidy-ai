@@ -1,39 +1,26 @@
 import {
   Config,
   Context,
-  Crypto,
   Data,
   type DateTime,
   Effect,
-  Encoding,
   Layer,
   type Option,
-  Redacted,
   Result,
   Schema,
 } from "effect";
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import {
   WompiBillingStatus,
   WompiEnvironment,
   WompiTransactionId,
   WompiTransactionReference,
 } from "~/core/subscription/model";
-import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
-import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
-import { configuredSecret } from "~/shell/_shared/configured-secret";
-import { wompiCredentialPrefixes, wompiPrivateKey } from "./wompi-credentials";
+import { type BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 
-const maximumProviderResponseBytes = 16_384;
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
-const sandboxOrigin = "https://sandbox.wompi.co";
-const productionOrigin = "https://production.wompi.co";
-
-const IntegritySecret = Schema.String.check(
-  Schema.isPattern(/^test_integrity_[A-Za-z0-9_-]{8,}$|^prod_integrity_[A-Za-z0-9_-]{8,}$/u)
-);
 const TransactionResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiTransactionId,
@@ -45,18 +32,8 @@ const TransactionResponse = Schema.Struct({
     finalized_at: Schema.OptionFromNullOr(Schema.DateTimeUtcFromString),
   }),
 });
-const CreateTransactionRequest = Schema.Struct({
-  amount_in_cents: Schema.Int,
-  currency: Schema.String,
-  customer_email: BillingEmail,
-  payment_method: Schema.Struct({ installments: Schema.Literal(1) }),
-  payment_source_id: WompiSourceId,
-  reference: WompiTransactionReference,
-  signature: Schema.String,
-});
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const decodeTransaction = Schema.decodeUnknownResult(TransactionResponse);
-const encodeCreateRequest = Schema.encodeSync(jsonStringSchema(CreateTransactionRequest));
 
 const badRequestStatus = 400;
 const unauthorizedStatus = 401;
@@ -102,15 +79,6 @@ export type WompiBillingClientService = Readonly<{
   ) => Effect.Effect<WompiTransaction, WompiTransactionLookupFailed>;
 }>;
 
-type BoundedHttpClient = ReturnType<ReturnType<typeof makeBoundedExternalHttpClient>>;
-type BillingAdapterContext = Readonly<{
-  http: BoundedHttpClient;
-  crypto: Crypto.Crypto;
-  integritySecret: Redacted.Redacted<string>;
-  origin: string;
-  privateKey: Redacted.Redacted<string>;
-}>;
-
 const parseTransaction = Effect.fn(function* (body: Uint8Array) {
   const json = decodeJson(new TextDecoder().decode(body));
   if (Result.isFailure(json)) return yield* Effect.fail("malformed" as const);
@@ -129,36 +97,21 @@ const parseTransaction = Effect.fn(function* (body: Uint8Array) {
 });
 
 const makeCreateTransaction = (
-  context: BillingAdapterContext
+  outboundHttp: OutboundHttpService
 ): WompiBillingClientService["createTransaction"] =>
   Effect.fn("Wompi.createTransaction")(
     function* (input) {
-      const digest = yield* context.crypto.digest(
-        "SHA-256",
-        new TextEncoder().encode(
-          `${input.reference}${input.amountInCents}${input.currency}${Redacted.value(context.integritySecret)}`
-        )
-      );
-      const request = HttpClientRequest.post(`${context.origin}/v1/transactions`, {
-        headers: {
-          authorization: `Bearer ${Redacted.value(context.privateKey)}`,
-          "content-type": "application/json",
-        },
-        body: HttpBody.text(
-          encodeCreateRequest({
-            amount_in_cents: input.amountInCents,
+      const response = yield* outboundHttp
+        .execute({
+          _tag: "WompiCreateTransaction",
+          body: {
+            amountInCents: input.amountInCents,
             currency: input.currency,
-            customer_email: input.billingEmail,
-            payment_method: { installments: 1 },
-            payment_source_id: input.sourceId,
+            billingEmail: input.billingEmail,
+            sourceId: input.sourceId,
             reference: input.reference,
-            signature: Encoding.encodeHex(digest),
-          }),
-          "application/json"
-        ),
-      });
-      const response = yield* context.http
-        .execute(request, maximumProviderResponseBytes)
+          },
+        })
         .pipe(Effect.timeout("14 seconds"));
       if (
         response.status < successfulStatusMinimum ||
@@ -182,16 +135,15 @@ const makeCreateTransaction = (
   );
 
 const makeFindTransaction = (
-  context: BillingAdapterContext
+  outboundHttp: OutboundHttpService
 ): WompiBillingClientService["findTransaction"] =>
   Effect.fn("Wompi.findTransaction")(
     function* (transactionId) {
-      const request = HttpClientRequest.get(
-        `${context.origin}/v1/transactions/${encodeURIComponent(transactionId)}`,
-        { headers: { authorization: `Bearer ${Redacted.value(context.privateKey)}` } }
-      );
-      const response = yield* context.http
-        .execute(request, maximumProviderResponseBytes)
+      const response = yield* outboundHttp
+        .execute({
+          _tag: "WompiFindTransaction",
+          transactionId,
+        })
         .pipe(Effect.timeout("14 seconds"));
       if (
         response.status < successfulStatusMinimum ||
@@ -205,27 +157,12 @@ const makeFindTransaction = (
   );
 
 const loadBillingAdapter = Effect.gen(function* () {
-  const http = makeBoundedExternalHttpClient("wompi")(yield* HttpClient.HttpClient);
-  const crypto = yield* Crypto.Crypto;
+  const outboundHttp = yield* OutboundHttp;
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-  const prefixes = wompiCredentialPrefixes(environment);
-  const privateKey = yield* wompiPrivateKey(environment);
-  const integritySecret = yield* configuredSecret({
-    name: "WOMPI_INTEGRITY_SECRET",
-    schema: IntegritySecret.check(Schema.isStartsWith(prefixes.integritySecret)),
-    requirement: `must be a ${environment} Wompi integrity secret`,
-  });
-  const context = {
-    http,
-    crypto,
-    integritySecret,
-    origin: environment === "sandbox" ? sandboxOrigin : productionOrigin,
-    privateKey,
-  };
   return WompiBillingClient.of({
     environment,
-    createTransaction: makeCreateTransaction(context),
-    findTransaction: makeFindTransaction(context),
+    createTransaction: makeCreateTransaction(outboundHttp),
+    findTransaction: makeFindTransaction(outboundHttp),
   });
 });
 

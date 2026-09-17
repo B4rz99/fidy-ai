@@ -1,4 +1,4 @@
-import { BunHttpClient, BunHttpServer, BunRuntime } from "@effect/platform-bun";
+import { BunCrypto, BunHttpClient, BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { DurableExecutionLive } from "~/shell/durable-execution";
@@ -16,6 +16,7 @@ const MainLive = AppLive.pipe(
   Layer.provide(ServerLive),
   Layer.provide(PgLive),
   Layer.provide(OutboundHttpLive),
+  Layer.provide(BunCrypto.layer),
   Layer.provide(BunHttpClient.layer),
   Layer.provide(SentryLive),
   Layer.provide(RuntimeLoggingLive)

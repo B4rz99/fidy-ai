@@ -327,6 +327,7 @@ const makeAcceptanceKapsoOutboundHttp = (
   requestNumber: MutableRef.MutableRef<number>
 ): OutboundHttpService => ({
   execute: (request) => {
+    if (request._tag !== "KapsoMessages") return Effect.die("unexpected destination");
     const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
     const body = Schema.decodeUnknownSync(Schema.Json)(
       Schema.decodeSync(UnknownJsonString)(request.body)

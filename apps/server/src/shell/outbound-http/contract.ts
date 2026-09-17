@@ -26,18 +26,41 @@ export type OutboundHttpResponse = Readonly<{
   readonly body: Uint8Array;
 }>;
 
-/** Kapso's fixed message-creation destination; its origin and credential remain private. */
-export type KapsoMessagesDestination = Readonly<{
-  readonly _tag: "KapsoMessages";
-  readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+/** Values needed to encode and sign one Wompi transaction without exposing signing authority. */
+export type WompiTransactionBody = Readonly<{
+  readonly amountInCents: number;
+  readonly currency: string;
+  readonly billingEmail: string;
+  readonly sourceId: number;
+  readonly reference: string;
 }>;
 
 /**
- * One provider call accepted by Outbound HTTP. The destination selects fixed method, origin,
- * credentials, response bound, retained headers, redirects, and trace policy; callers retain only
- * provider request-body encoding.
+ * One provider call accepted by Outbound HTTP. Its tag selects a fixed method, origin, credentials,
+ * response bound, retained headers, redirect behavior, and trace policy. Wompi transaction signing
+ * stays inside the interface because its integrity secret is transport authority; all other
+ * provider request bodies remain encoded by their owning adapter.
  */
-export type OutboundHttpRequest = Readonly<{
-  readonly destination: KapsoMessagesDestination;
-  readonly body: string;
-}>;
+export type OutboundHttpRequest =
+  | Readonly<{
+      readonly _tag: "KapsoMessages";
+      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+      readonly body: string;
+    }>
+  | Readonly<{ readonly _tag: "WompiMerchant" }>
+  | Readonly<{
+      readonly _tag: "WompiCreatePaymentSource";
+      readonly body: string;
+    }>
+  | Readonly<{
+      readonly _tag: "WompiVerifyPaymentSource";
+      readonly sourceId: number;
+    }>
+  | Readonly<{
+      readonly _tag: "WompiCreateTransaction";
+      readonly body: WompiTransactionBody;
+    }>
+  | Readonly<{
+      readonly _tag: "WompiFindTransaction";
+      readonly transactionId: string;
+    }>;

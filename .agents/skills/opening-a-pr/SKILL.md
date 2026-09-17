@@ -24,7 +24,7 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 ## 2. Branch and commit
 
 - Branch off `trunk`: `git checkout -b <type>/<short-name> trunk`.
-- Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary (#123)` header, then `- ` bullet body lines only. Put the originating GitHub issue number in the final parenthesized suffix. Trailers (`Co-Authored-By`, etc.) are rejected.
+- Commit with the convention (enforced by the commit-msg hook): a `type(scope): (#123) summary` header, then `- ` bullet body lines only. Put the originating GitHub issue number immediately after the colon. Trailers (`Co-Authored-By`, etc.) are rejected.
   - **type** and **scope** come from the allowlist published in README.md's "Commit convention"
     section, which the hooks and the `PR Title` check parse directly. Read it there rather than
     from a copy here — a copy is exactly what drifts. For server domain work, use the owning slice
@@ -35,9 +35,9 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 
 ## 3. Create the PR
 
-- **Title** must follow `type(scope): summary (#123)` with the originating issue reference — the `PR Title` CI check enforces it, because the squashed `trunk` subject is taken from the PR title.
+- **Title** must follow `type(scope): (#123) summary` with the originating issue reference — the `PR Title` CI check enforces it, because the squashed `trunk` subject is taken from the PR title.
 - **Body** must follow the template and guidance below.
-- Create it with `gh pr create --base trunk --title "type(scope): summary (#123)" --body-file - <<'EOF`, followed by the body and a closing `EOF`.
+- Create it with `gh pr create --base trunk --title "type(scope): (#123) summary" --body-file - <<'EOF`, followed by the body and a closing `EOF`.
 
 ### PR body
 
@@ -221,8 +221,8 @@ gh pr checks "$PR_NUMBER" --json name,state,bucket,link
   build, unit, integration, acceptance, quality, production-image, and provider-hosted security jobs;
   every dependency must report `success`. Read the failing sibling job for its focused verdict.
 - **0 approvals required** — solo self-merge is allowed.
-- **Squash only**: `gh pr merge <n> --squash --delete-branch`. Merge commits and rebase are disabled.
-- Resulting `trunk` commit reads `type(scope): summary (#123) (#N)`, with the issue reference followed by GitHub's appended pull-request number.
+- **Squash only**: `gh pr merge <n> --squash --subject "$(gh pr view <n> --json title --jq .title)" --delete-branch`. Merge commits and rebase are disabled; the explicit subject prevents a pull-request number from being appended.
+- Resulting `trunk` commit reads exactly `type(scope): (#123) summary`.
 
 ## 6. After merge
 

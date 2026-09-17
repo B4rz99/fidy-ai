@@ -1,0 +1,29 @@
+apps/server/src/shell/browser-login/approval.test.ts
+  s_3c0c97143ed6a8::t_8cd537d6c53021 63
+tools/depcruise/run.mjs
+  s_3c0c97143ed6a8::t_ff6f26335052fe 114-132
+apps/server/src/shell/observability/web-auth.test.ts
+  s_3c0c97143ed6a8::t_8cd537d6c53021 16
+apps/server/scripts/check-dependency-guards.ts
+  s_3c0c97143ed6a8::t_b9d9afc145c075 126
+  s_3c0c97143ed6a8::t_e34d70aa13948e 239,247
+  s_3c0c97143ed6a8::t_8cd537d6c53021 240
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_3c0c97143ed6a8::t_8cd537d6c53021 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e3fca716ddd8449beaf085d8a594e164f1145918",
+  "prompts": {},
+  "sessions": {
+    "s_3c0c97143ed6a8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0b5-bc61-7733-abf7-80cf5c3ecb93",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

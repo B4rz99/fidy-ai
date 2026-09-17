@@ -111,13 +111,11 @@ const localExportNames = (statement) => {
   return [];
 };
 
+const isExported = (statement) =>
+  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+
 const exportedVariableAliases = (statement) => {
-  if (
-    !ts.isVariableStatement(statement) ||
-    !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
-  ) {
-    return [];
-  }
+  if (!ts.isVariableStatement(statement) || !isExported(statement)) return [];
   return statement.declarationList.declarations.flatMap((declaration) =>
     declaration.initializer !== undefined && ts.isIdentifier(declaration.initializer)
       ? [declaration.initializer.text]
@@ -125,11 +123,26 @@ const exportedVariableAliases = (statement) => {
   );
 };
 
+const exportedTypeReferences = (statement) => {
+  if (!(ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))) return [];
+  if (!isExported(statement)) return [];
+  const names = [];
+  const visit = (node) => {
+    if (ts.isIdentifier(node)) names.push(node.text);
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(statement, visit);
+  return names;
+};
+
 const locallyExportedBindings = (sourceFile) =>
-  sourceFile.statements.flatMap((statement) => [
-    ...localExportNames(statement),
-    ...exportedVariableAliases(statement),
-  ]);
+  new Set(
+    sourceFile.statements.flatMap((statement) => [
+      ...localExportNames(statement),
+      ...exportedVariableAliases(statement),
+      ...exportedTypeReferences(statement),
+    ])
+  );
 
 const reportLaunderedInternals = (report) => {
   let violations = 0;

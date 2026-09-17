@@ -78,6 +78,7 @@ const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
 const internalDirection = `src/core/${PROBE_PREFIX}internal-direction`;
 const operationsDirection = `src/core/${PROBE_PREFIX}operations-direction`;
 const reexportInternal = `src/core/${PROBE_PREFIX}reexport-internal`;
+const reexportInternalType = `src/core/${PROBE_PREFIX}reexport-internal-type`;
 const publishedSource = `src/shell/${PROBE_PREFIX}published-source`;
 const publishedTarget = `src/shell/${PROBE_PREFIX}published-target`;
 const runtimeSource = `src/shell/${PROBE_PREFIX}runtime-source`;
@@ -226,6 +227,28 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "published interfaces cannot launder imported internals through aliases or re-exports",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${reexportInternalType}/operations.ts → ./internal/value`,
+      ],
+    },
+    files: [
+      {
+        path: `${reexportInternalType}/internal/value.ts`,
+        source: "export interface Value { readonly value: true }\n",
+      },
+      {
+        path: `${reexportInternalType}/operations.ts`,
+        source:
+          'import type { Value } from "./internal/value";\n\n' +
+          "export type PublishedValue = Value;\n" +
+          "export interface PublishedRecord extends Value {}\n",
+      },
+    ],
+    name: "published interfaces cannot launder internal types through aliases or inheritance",
   },
   {
     expect: { kind: "allowed" },

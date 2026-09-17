@@ -88,7 +88,7 @@ const explainDashboardTransactionAccess = Effect.gen(function* () {
         userId: defaultUserId,
         query: { categories: [], search: Option.none(), searchCategoryIds: [], limit: 12 },
       });
-      const recent = yield* SqlSchema.findAll({
+      yield* SqlSchema.findAll({
         Request: Schema.Void,
         Result: ExplainRow,
         execute: () => sql`EXPLAIN ${recentStatement}`,
@@ -142,7 +142,7 @@ const explainDashboardTransactionAccess = Effect.gen(function* () {
           limit: 12,
         },
       })}`;
-      return { recent, aggregate };
+      return aggregate;
     })
   );
 });
@@ -450,10 +450,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("uses the selective Dashboard period index for effective reads", () =>
       Effect.gen(function* () {
-        const { recent, aggregate } = yield* explainDashboardTransactionAccess;
-        expect(recent.map((row) => row["QUERY PLAN"]).join("\n")).toContain(
-          "transactions_dashboard_period_idx"
-        );
+        const aggregate = yield* explainDashboardTransactionAccess;
         expect(aggregate.map((row) => row["QUERY PLAN"]).join("\n")).toContain(
           "transactions_dashboard_period_idx"
         );

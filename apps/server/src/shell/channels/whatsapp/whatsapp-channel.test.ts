@@ -604,28 +604,33 @@ const kapsoClientFixture = (
       }))
     ),
 });
-const deliverLatestDisclosure = Effect.fn("Test.deliverLatestDisclosure")(function* (
-  phoneNumber: E164PhoneNumber,
-  occurredAt: DateTime.Utc
-) {
-  const exchange = yield* Effect.fromOption(
-    yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))
-  ).pipe(Effect.orDie);
-  yield* performConsentDisclosureAttempt(exchange.id, DisclosureDeliveryAttemptNumber.make(1));
-  const attempt = yield* Effect.fromOption(
-    yield* findConsentDisclosureDeliveryState(exchange.id)
-  ).pipe(Effect.orDie);
-  return yield* applyConsentDisclosureLifecycle({
-    outcome: "accepted",
-    correlationToken: DisclosureDeliveryCorrelationToken.make(attempt.attemptId),
-    messageEvidence: {
-      channel: "whatsapp",
-      provider: "kapso",
-      providerMessageId: WhatsAppProviderMessageId.make("wamid.test-outbound"),
-    },
-    occurredAt,
-  });
-});
+const ensureLatestDisclosureDelivered = Effect.fn("Test.ensureLatestDisclosureDelivered")(
+  function* (phoneNumber: E164PhoneNumber, occurredAt: DateTime.Utc) {
+    const exchange = yield* Effect.fromOption(
+      yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))
+    ).pipe(Effect.orDie);
+    yield* performConsentDisclosureAttempt(exchange.id, DisclosureDeliveryAttemptNumber.make(1));
+    const attempt = yield* Effect.fromOption(
+      yield* findConsentDisclosureDeliveryState(exchange.id)
+    ).pipe(Effect.orDie);
+    yield* applyConsentDisclosureLifecycle({
+      outcome: "accepted",
+      correlationToken: DisclosureDeliveryCorrelationToken.make(attempt.attemptId),
+      messageEvidence: {
+        channel: "whatsapp",
+        provider: "kapso",
+        providerMessageId: WhatsAppProviderMessageId.make("wamid.test-outbound"),
+      },
+      occurredAt,
+    });
+    const delivered = yield* Effect.fromOption(
+      yield* findConsentDisclosureDeliveryState(exchange.id)
+    ).pipe(Effect.orDie);
+    if (delivered.state !== "delivered") {
+      return yield* Effect.die("Expected the latest Consent disclosure to be delivered");
+    }
+  }
+);
 
 const instantDeliveryPolicy = {
   maximumAttempts: DeliveryAttemptLimit.make(3),
@@ -2894,6 +2899,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("uses provider occurrence time to reject a delayed pre-disclosure decision", () =>
       Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
         const phoneNumber = E164PhoneNumber.make("+573007776655");
         const postEvent = (
           providerMessageId: string,
@@ -2906,7 +2912,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         > => postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
         const receivedAt = yield* DateTime.now;
         expect((yield* postEvent("wamid.disclosure-trigger", "hola", receivedAt)).status).toBe(200);
-        expect(yield* deliverLatestDisclosure(phoneNumber, yield* DateTime.now)).toBe("applied");
+        yield* ensureLatestDisclosureDelivered(phoneNumber, yield* DateTime.now);
         expect(
           (yield* postEvent(
             "wamid.predates-disclosure",
@@ -2940,7 +2946,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClient.HttpClient
         > => postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
         expect((yield* original()).status).toBe(200);
-        expect(yield* deliverLatestDisclosure(phoneNumber, yield* DateTime.now)).toBe("applied");
+        yield* ensureLatestDisclosureDelivered(phoneNumber, yield* DateTime.now);
         // A minute, not a second: the fixture truncates the provider timestamp to whole seconds
         // while the harness stamps `disclosedAt` from the real clock, so any margin shorter than
         // the disclosure round trip lands the decision before it and only clarifies.

@@ -13,6 +13,12 @@ import { EnvelopeRecorder } from "./envelope-recorder";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
+  yield* sql`
+    DELETE FROM consent_records
+    WHERE revoked_grant_id IN (
+      SELECT id FROM consent_records WHERE web_session_id IS NOT NULL
+    )
+  `;
   yield* sql`DELETE FROM consent_records WHERE web_session_id IS NOT NULL`;
   yield* sql`DELETE FROM web_sessions`;
   yield* sql`DELETE FROM browser_login_start_attempts`;

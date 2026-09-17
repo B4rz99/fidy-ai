@@ -1,0 +1,25 @@
+lefthook.yml
+  s_f26b9f4056e846::t_31d7bb5fc878b5 24
+README.md
+  s_f26b9f4056e846::t_9d882e1f3d81b7 50
+scripts/check-commit-message.ts
+  s_f26b9f4056e846::t_1bb6f65ab5bb6b 18,24,154
+.agents/skills/opening-a-pr/SKILL.md
+  s_f26b9f4056e846::t_361386c5b35838 27,38,40,224-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7fb0242fe83b471b2d977523cbc3b95942a1f9b7",
+  "prompts": {},
+  "sessions": {
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

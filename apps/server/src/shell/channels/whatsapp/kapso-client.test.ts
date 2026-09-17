@@ -2,22 +2,30 @@ import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import {
   Cause,
+  type Config,
+  ConfigProvider,
+  Context,
   DateTime,
   Deferred,
   Effect,
   Exit,
   Fiber,
+  Layer,
   Option,
-  Redacted,
   Schema,
+  type Scope,
   Stream,
-  Tracer,
 } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
-import { expectNotInspected } from "~/shell/testing/credential-failure";
+import {
+  OutboundHttpFailure,
+  type OutboundHttpRequest,
+  type OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
+import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
@@ -35,14 +43,49 @@ const sendInput = (
   ...overrides,
 });
 
-const fakeHttpClient = (response: () => Response): HttpClient.HttpClient =>
-  HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, response())));
+const makeRealOutboundHttp = (
+  httpClient: HttpClient.HttpClient
+): Effect.Effect<OutboundHttpService, Config.ConfigError, Scope.Scope> =>
+  Layer.build(
+    OutboundHttp.layer.pipe(
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+      Layer.provide(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ KAPSO_API_KEY: "test-api-key" })
+        )
+      )
+    )
+  ).pipe(Effect.map((context) => Context.get(context, OutboundHttp)));
+
+const fakeOutboundHttp = (response: () => Response): OutboundHttpService => ({
+  execute: () => {
+    const providerResponse = response();
+    return Effect.tryPromise({
+      try: () => providerResponse.arrayBuffer(),
+      catch: () =>
+        new OutboundHttpFailure({
+          reason: "response-body-failed",
+          responseStatus: Option.none(),
+          responseHeaders: {},
+        }),
+    }).pipe(
+      Effect.map(
+        (body) =>
+          ({
+            status: providerResponse.status,
+            headers: {},
+            body: new Uint8Array(body),
+          }) satisfies OutboundHttpResponse
+      )
+    );
+  },
+});
 
 const makeService = (
-  httpClient: HttpClient.HttpClient,
+  outboundHttp: OutboundHttpService,
   deliveryMode: "bsuid" | "sandbox-phone" = "bsuid"
-): KapsoClientService =>
-  makeKapsoClientService({ apiKey: Redacted.make("test-api-key"), deliveryMode, httpClient });
+): KapsoClientService => makeKapsoClientService({ deliveryMode, outboundHttp });
 
 const responseWithStatusOutsideFetchRange = (): Response => {
   const response = Response.json({}, { status: 599 });
@@ -53,116 +96,75 @@ const responseWithStatusOutsideFetchRange = (): Response => {
   return response;
 };
 
-it.effect("uses recipient without forwarding trace propagation to Kapso", () =>
+it.effect("encodes the BSUID message for the published Kapso destination", () =>
   Effect.gen(function* () {
-    let requestBody: unknown;
-    let requestHeaders = new Headers();
-    const service = makeService(
-      HttpClient.make((request) => {
-        if (request.body._tag !== "Uint8Array") return Effect.die("missing request body");
-        requestBody = Schema.decodeSync(UnknownJsonString)(
-          new TextDecoder().decode(request.body.body)
-        );
-        requestHeaders = new Headers(request.headers);
-        expect(request.method).toBe("POST");
-        expect(request.url).toBe("https://api.kapso.ai/meta/whatsapp/v24.0/123456789/messages");
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            Response.json({
+    let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+    const service = makeService({
+      execute: (request) => {
+        outboundRequest = Option.some(request);
+        return Effect.succeed({
+          status: 200,
+          headers: {},
+          body: new TextEncoder().encode(
+            JSON.stringify({
               messaging_product: "whatsapp",
               messages: [{ id: "wamid.bsuid-outbound" }],
             })
-          )
-        );
-      })
-    );
+          ),
+        });
+      },
+    });
     const correlationToken = DisclosureDeliveryCorrelationToken.make(
       "11111111-1111-4111-8111-111111111111"
     );
-    yield* service
-      .sendText(
-        sendInput({
-          destination: {
-            recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
-            sandboxPhone: Option.some(E164PhoneNumber.make("+573001234567")),
-          },
-          opaqueCallbackData: Option.some(correlationToken),
-        })
-      )
-      .pipe(
-        Effect.withSpan("test active propagation"),
-        Effect.provideService(Tracer.DisablePropagation, false),
-        Effect.provideService(HttpClient.TracerPropagationEnabled, true)
-      );
+
+    yield* service.sendText(
+      sendInput({
+        opaqueCallbackData: Option.some(correlationToken),
+      })
+    );
+
+    const request = Option.getOrThrow(outboundRequest);
+    expect(request.destination).toEqual({
+      _tag: "KapsoMessages",
+      businessPhoneNumberId: "123456789",
+    });
+    const requestBody = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
     expect(requestBody).toMatchObject({
       recipient: "CO.573001234567",
       biz_opaque_callback_data: correlationToken,
     });
     expect(requestBody).not.toHaveProperty("to");
-    expect(requestHeaders.get("content-type")).toBe("application/json");
-    expect(requestHeaders.get("x-api-key")).toBe("test-api-key");
-    expect(Array.from(requestHeaders.keys())).not.toEqual(
-      expect.arrayContaining(["b3", "baggage", "sentry-trace", "traceparent", "tracestate"])
-    );
-  })
-);
-
-it.effect("keeps the configured Kapso API key redacted while sending it only as a header", () =>
-  Effect.gen(function* () {
-    const apiKeyFixture = `kapso-api-key-${"f1d7c0de".repeat(3)}`;
-    const apiKey = Redacted.make(apiKeyFixture);
-    let sentApiKey: Option.Option<string> = Option.none();
-    const service = makeKapsoClientService({
-      apiKey,
-      deliveryMode: "bsuid",
-      httpClient: HttpClient.make((request) => {
-        sentApiKey = Option.fromNullishOr(new Headers(request.headers).get("x-api-key"));
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            Response.json({
-              messaging_product: "whatsapp",
-              messages: [{ id: "wamid.redacted-outbound" }],
-            })
-          )
-        );
-      }),
-    });
-
-    expectNotInspected(apiKey, apiKeyFixture);
-    expectNotInspected(service, apiKeyFixture);
-
-    yield* service.sendText(sendInput());
-
-    expect(Option.getOrNull(sentApiKey)).toBe(apiKeyFixture);
   })
 );
 
 it.effect("uses to only in explicit sandbox phone mode", () =>
   Effect.gen(function* () {
-    let requestBody: unknown;
+    let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
     const service = makeService(
-      HttpClient.make((request) => {
-        if (request.body._tag !== "Uint8Array") return Effect.die("missing request body");
-        requestBody = Schema.decodeSync(UnknownJsonString)(
-          new TextDecoder().decode(request.body.body)
-        );
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            Response.json({
-              messaging_product: "whatsapp",
-              messages: [{ id: "wamid.sandbox-outbound" }],
-            })
-          )
-        );
-      }),
+      {
+        execute: (request) => {
+          outboundRequest = Option.some(request);
+          return Effect.succeed({
+            status: 200,
+            headers: {},
+            body: new TextEncoder().encode(
+              JSON.stringify({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.sandbox-outbound" }],
+              })
+            ),
+          });
+        },
+      },
       "sandbox-phone"
     );
 
     yield* service.sendText(sendInput());
 
+    const requestBody = yield* Schema.decodeEffect(UnknownJsonString)(
+      Option.getOrThrow(outboundRequest).body
+    );
     expect(requestBody).toMatchObject({ to: "573001234567" });
     expect(requestBody).not.toHaveProperty("recipient");
   })
@@ -173,7 +175,7 @@ it.effect("returns validated provider evidence at the local completion time", ()
     const completedAt = DateTime.makeUnsafe("2026-09-01T12:34:56.000Z");
     yield* TestClock.setTime(DateTime.toEpochMillis(completedAt));
     const service = makeService(
-      fakeHttpClient(() =>
+      fakeOutboundHttp(() =>
         Response.json({
           messaging_product: "whatsapp",
           messages: [{ id: "wamid.completed" }],
@@ -199,14 +201,13 @@ it.effect("cancels Effect HTTP execution when delivery is interrupted", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const cancelled = yield* Deferred.make<void>();
-    const service = makeService(
-      HttpClient.make(() =>
+    const service = makeService({
+      execute: () =>
         Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Effect.never),
           Effect.onInterrupt(() => Deferred.succeed(cancelled, undefined))
-        )
-      )
-    );
+        ),
+    });
     const fiber = yield* service
       .sendText(sendInput())
       .pipe(Effect.forkChild({ startImmediately: true }));
@@ -223,9 +224,9 @@ it.effect("cancels Effect HTTP execution when delivery is interrupted", () =>
 it.effect("classifies the adapter deadline as an ambiguous timeout", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
-    const service = makeService(
-      HttpClient.make(() => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)))
-    );
+    const service = makeService({
+      execute: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+    });
     const fiber = yield* service
       .sendText(sendInput())
       .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
@@ -247,7 +248,7 @@ it.effect("applies the adapter deadline while streaming the response body", () =
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
     const cancelled = yield* Deferred.make<void>();
-    const service = makeService(
+    const outboundHttp = yield* makeRealOutboundHttp(
       HttpClient.make((request) => {
         const response = HttpClientResponse.fromWeb(request, new Response());
         Object.defineProperty(response, "stream", {
@@ -261,6 +262,7 @@ it.effect("applies the adapter deadline while streaming the response body", () =
         return Effect.succeed(response);
       })
     );
+    const service = makeService(outboundHttp);
     const fiber = yield* service
       .sendText(sendInput())
       .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
@@ -342,7 +344,7 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
     ];
 
     for (const testCase of cases) {
-      const service = makeService(fakeHttpClient(testCase.response));
+      const service = makeService(fakeOutboundHttp(testCase.response));
       const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
       expect(failure).toEqual(
         expect.objectContaining({
@@ -360,21 +362,24 @@ it.effect("classifies timeout and transport outcomes as ambiguous and not retrya
   Effect.gen(function* () {
     const cases = [
       {
-        httpClient: HttpClient.make((request) =>
-          Effect.fail(
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({ request }),
-            })
-          )
-        ),
+        outboundHttp: {
+          execute: (): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
+            Effect.fail(
+              new OutboundHttpFailure({
+                reason: "transport-failed",
+                responseStatus: Option.none(),
+                responseHeaders: {},
+              })
+            ),
+        } satisfies OutboundHttpService,
         safeReason: "provider_unavailable",
       },
       {
-        httpClient: fakeHttpClient(() => new Response("request timeout", { status: 408 })),
+        outboundHttp: fakeOutboundHttp(() => new Response("request timeout", { status: 408 })),
         safeReason: "timeout",
       },
       {
-        httpClient: fakeHttpClient(
+        outboundHttp: fakeOutboundHttp(
           () => new Response("malformed maintenance body", { status: 503 })
         ),
         safeReason: "provider_unavailable",
@@ -382,7 +387,7 @@ it.effect("classifies timeout and transport outcomes as ambiguous and not retrya
     ];
 
     for (const testCase of cases) {
-      const service = makeService(testCase.httpClient);
+      const service = makeService(testCase.outboundHttp);
       const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
       expect(failure).toEqual(
         expect.objectContaining({
@@ -399,7 +404,7 @@ it.effect("cancels a response rejected by the declared byte bound", () =>
   Effect.gen(function* () {
     let requestSignal = Option.none<AbortSignal>();
     let responseBodyCancelled = false;
-    const service = makeService(
+    const outboundHttp = yield* makeRealOutboundHttp(
       HttpClient.make((request, _url, signal) => {
         requestSignal = Option.some(signal);
         const body = new ReadableStream<Uint8Array>({
@@ -419,6 +424,7 @@ it.effect("cancels a response rejected by the declared byte bound", () =>
         );
       })
     );
+    const service = makeService(outboundHttp);
 
     const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
 
@@ -496,7 +502,7 @@ it.effect("fails unknown, malformed, oversized, and incomplete responses closed"
     ];
 
     for (const testCase of cases) {
-      const service = makeService(fakeHttpClient(testCase.response));
+      const service = makeService(fakeOutboundHttp(testCase.response));
       const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
       expect(failure).toEqual(
         expect.objectContaining({
@@ -519,9 +525,8 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
       response: "remote-private-body",
     };
     const service = makeKapsoClientService({
-      apiKey: Redacted.make(sensitive.credential),
       deliveryMode: "bsuid",
-      httpClient: fakeHttpClient(() =>
+      outboundHttp: fakeOutboundHttp(() =>
         Response.json(
           {
             error: {
@@ -558,7 +563,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
 it.effect("rejects sandbox delivery locally when authenticated phone evidence is absent", () =>
   Effect.gen(function* () {
     const service = makeService(
-      fakeHttpClient(() => Response.json({})),
+      fakeOutboundHttp(() => Response.json({})),
       "sandbox-phone"
     );
 

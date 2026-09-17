@@ -1,6 +1,5 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Config, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 import type {
@@ -18,11 +17,8 @@ import {
   unauthorizedStatus,
 } from "~/shell/_shared/http-status";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-import {
-  type BoundedExternalHttpResponse,
-  type ExternalHttpFailure,
-  makeBoundedExternalHttpClient,
-} from "~/shell/_shared/bounded-external-http";
+import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppInboundEvent,
@@ -84,9 +80,6 @@ export type KapsoClientService = {
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
 
-const bytesPerKibibyte = 1_024;
-const maximumKapsoResponseKibibytes = 64;
-const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
 const kapsoRequestTimeoutMilliseconds = 14_000;
 const firstNonSuccessStatus = 300;
 
@@ -210,7 +203,7 @@ const classifyTransportError = (error: KapsoInvalidResponse): KapsoSendFailed =>
     ? rejected("invalid_response", false, error.responseStatus)
     : ambiguous("invalid_response", error.responseStatus);
 
-const mapExternalKapsoFailure = (failure: ExternalHttpFailure): KapsoSendFailed => {
+const mapExternalKapsoFailure = (failure: OutboundHttpFailure): KapsoSendFailed => {
   if (failure.reason === "transport-failed") return ambiguous("provider_unavailable");
   const responseStatus = Option.flatMap(
     failure.responseStatus,
@@ -241,32 +234,26 @@ const decodeSentMessage = (
     } satisfies KapsoSentMessage;
   });
 
-/** Constructs the bounded, authenticated Kapso adapter for outbound WhatsApp delivery. */
+/** Builds a client that routes recipients by delivery mode and reports closed evidence or failures. */
 export const makeKapsoClientService = ({
-  apiKey,
   deliveryMode,
-  httpClient,
+  outboundHttp,
 }: Readonly<{
-  apiKey: Redacted.Redacted<string>;
   deliveryMode: KapsoDeliveryMode;
-  httpClient: HttpClient.HttpClient;
+  outboundHttp: OutboundHttpService;
 }>): KapsoClientService => {
-  const externalHttpClient = httpClient.pipe(makeBoundedExternalHttpClient("kapso"));
   const postMessage = (
     input: KapsoSendInput,
     body: string
-  ): Effect.Effect<BoundedExternalHttpResponse, KapsoSendFailed> =>
-    externalHttpClient
-      .execute(
-        HttpClientRequest.post(
-          `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
-          {
-            headers: { "x-api-key": Redacted.value(apiKey) },
-            body: HttpBody.text(body, "application/json"),
-          }
-        ),
-        maximumKapsoResponseBytes
-      )
+  ): Effect.Effect<OutboundHttpResponse, KapsoSendFailed> =>
+    outboundHttp
+      .execute({
+        destination: {
+          _tag: "KapsoMessages",
+          businessPhoneNumberId: input.businessPhoneNumberId,
+        },
+        body,
+      })
       .pipe(Effect.mapError(mapExternalKapsoFailure));
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
     const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
@@ -304,24 +291,18 @@ export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService
   "@fidy/server/shell/channels/whatsapp/kapso-client/KapsoClient"
 ) {
   /**
-   * Provides authenticated Kapso text delivery from KAPSO_API_KEY. WHATSAPP_DELIVERY_MODE defaults
-   * to BSUID delivery and permits explicit sandbox phone routing. Calls fail within 15 seconds,
-   * reject invalid provider responses, and never persist channel state.
+   * WHATSAPP_DELIVERY_MODE defaults to BSUID delivery and permits explicit sandbox phone routing.
+   * Calls fail within 15 seconds, reject invalid provider responses, and never persist channel state.
    */
   static readonly layer = Layer.effect(
     this,
     Effect.gen(function* () {
-      const apiKey = yield* Config.redacted("KAPSO_API_KEY");
-      const httpClient = yield* HttpClient.HttpClient;
+      const outboundHttp = yield* OutboundHttp;
       const deliveryMode = yield* Config.literals(
         ["bsuid", "sandbox-phone"],
         "WHATSAPP_DELIVERY_MODE"
       ).pipe(Config.withDefault("bsuid"));
-      return makeKapsoClientService({
-        apiKey,
-        deliveryMode,
-        httpClient,
-      });
+      return makeKapsoClientService({ deliveryMode, outboundHttp });
     })
   );
 }

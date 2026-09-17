@@ -96,6 +96,7 @@ const nestedForeignInternalTarget = `src/shell/channels/${PROBE_PREFIX}foreign-i
 const nestedInterfaceDirection = `src/shell/channels/${PROBE_PREFIX}interface-direction`;
 const typeInternalSource = `src/shell/${PROBE_PREFIX}type-internal-source`;
 const typeInternalTarget = `src/shell/${PROBE_PREFIX}type-internal-target`;
+const outboundHttpPrivateSource = `src/shell/${PROBE_PREFIX}outbound-http-private`;
 const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
 const internalDirection = `src/core/${PROBE_PREFIX}internal-direction`;
 const operationsDirection = `src/core/${PROBE_PREFIX}operations-direction`;
@@ -210,6 +211,23 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "type-only imports cannot cross into foreign internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: ${outboundHttpPrivateSource}/probe.ts → src/shell/outbound-http/internal/outbound-http.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${outboundHttpPrivateSource}/probe.ts`,
+        source:
+          'import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";\n\n' +
+          "export const outboundHttpPrivateProbe = makeOutboundHttp;\n",
+      },
+    ],
+    name: "Outbound HTTP private transport cannot be imported directly",
   },
   {
     expect: {

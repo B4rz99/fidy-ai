@@ -1,0 +1,19 @@
+dependency-policy.json
+  s_2563acc648f26f::t_68f0f411446845 24-25,30-31,36-97,102-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7e31266027e29c6233a7640551ff61885b22f986",
+  "prompts": {},
+  "sessions": {
+    "s_2563acc648f26f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b029-76ad-76a6-8054-acb1b72009e0",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

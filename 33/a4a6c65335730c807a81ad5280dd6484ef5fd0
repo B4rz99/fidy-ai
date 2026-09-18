@@ -1,0 +1,28 @@
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_9466f16d22ab04::t_9de4e8a3255bfb 32
+  s_9466f16d22ab04::t_59b2a99b45dc05 343-357
+  s_9466f16d22ab04::t_7358be00733c03 358-360
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_9466f16d22ab04::t_d0273e8ee8b23b 256,259-280,282-288,290-293
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_9466f16d22ab04::t_14b908f0ed7c6d 55,62
+apps/server/src/shell/outbound-http/contract.ts
+  s_9466f16d22ab04::t_bb7ecdd3afc728 19
+  s_9466f16d22ab04::t_7cc02dc6252f29 5,12,24,31,40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "33a4a6c65335730c807a81ad5280dd6484ef5fd0",
+  "prompts": {},
+  "sessions": {
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

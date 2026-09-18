@@ -1,0 +1,95 @@
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_c8cb832fff7b99::t_7be4253ef9b457 59
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_c8cb832fff7b99::t_1ee564429889e4 3
+  s_c8cb832fff7b99::t_fffb527c447b37 2
+  s_c8cb832fff7b99::t_0cb68a859a3666 1
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_c8cb832fff7b99::t_ff33736e6c090d 189
+  s_c8cb832fff7b99::t_59545fc8fbaadd 216
+  s_c8cb832fff7b99::t_45aeb5ab5b5f68 217
+  s_c8cb832fff7b99::t_6d88a79d9c3a3c 171
+  s_c8cb832fff7b99::t_47765837cba09e 53-54
+  s_c8cb832fff7b99::t_469f834de8d67f 166-170,173-188,190-215
+  s_c8cb832fff7b99::t_8c4b6d6727468b 172
+apps/server/src/shell/agent/openai.ts
+  s_45665427179547::t_a585f3a32b7ce6 12,139
+  s_c8cb832fff7b99::t_5bc24262f65cff 124
+  s_c8cb832fff7b99::t_303400988a31e6 4-11,13,17-21,557,562,676
+  s_c8cb832fff7b99::t_724c917cd14439 22,33-38,105,107-115,121-122,125-138,140-143,145-164
+  s_c8cb832fff7b99::t_5b2a0e1789478c 531,543,556,559,561,575,578,580,586,589,672,706,711,715,729
+  s_c8cb832fff7b99::t_36239be59f58b4 763,771,787,814,829,839,854,865,871,885,895,897
+  s_c8cb832fff7b99::t_16feaa7756d65d 959,998,1007
+  s_c8cb832fff7b99::t_abbf605ff5a85f 117-120,123
+  s_c8cb832fff7b99::t_2f5f983bc5d344 963-968
+  s_221d58c93200ac::t_9af9ad4440e86f 116
+  s_c8cb832fff7b99::t_ac440de33c6f5e 170,979
+  s_c8cb832fff7b99::t_f0526f3954c0cc 144,581,677,772
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_c8cb832fff7b99::t_4cdf1f8512d431 1,4,7
+  s_c8cb832fff7b99::t_9a798e7d122471 11
+apps/server/src/shell/browser-login/approval.test.ts
+  s_c8cb832fff7b99::t_b8063dd9d6af32 63-65
+apps/server/src/shell/onboarding/onboarding-turn.test.ts
+  s_c8cb832fff7b99::t_05277588d4e39b 77
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_c8cb832fff7b99::t_119160b410f8bb 68-69,75,92-98,103,107-108,249,251-252,257-258,261-273,276,278,284,286-287,293-295,297,304,311,320,330,338,343,375-383,385-386
+  s_c8cb832fff7b99::t_fdc68da4984535 64-65,300,302-303,305,307-310,312,316,318-319,321-323,325-329,331
+  s_c8cb832fff7b99::t_6d9c3bb5595870 76-77,275
+  s_c8cb832fff7b99::t_ee7a8cb129fdcf 20,33,63,66-67,71,73-74,99-102,104-106,109-111,292,296,313-315,332-334,336-337,339-342,344-346,373,400
+  s_c8cb832fff7b99::t_fa805c5f351886 70,72,274,277,279-283,285,288-290,298-299,301,306,317,324,335
+  s_c8cb832fff7b99::t_8a279c87a217a1 1,352-368
+apps/server/src/shell/agent/openai.test.ts
+  s_c8cb832fff7b99::t_4f9c09e73d540b 48-53
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c8cb832fff7b99::t_fea74898d52a77 3,5,130-131,140,163,165-167,169-170,191,194-195
+  s_c8cb832fff7b99::t_23b515549ae68b 168
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_c8cb832fff7b99::t_208a9210dfac60 6,24,29,38-39,44-45,56-58,62-64,108-110,135,140-141
+  s_c8cb832fff7b99::t_7439f98fe014ab 69
+  s_c8cb832fff7b99::t_03c9af779b57a3 5
+  s_c8cb832fff7b99::t_ebae125263647a 3-4,122-123,125-134,136,139,145,151
+  s_c8cb832fff7b99::t_e052e3eb809135 26-28
+  s_c8cb832fff7b99::t_7b5897d8da0ad5 124
+apps/server/src/shell/outbound-http/contract.ts
+  s_c8cb832fff7b99::t_e0611a8241f279 72-74
+apps/server/src/shell/outbound-http/operations.ts
+  s_c8cb832fff7b99::t_d7c71b3365018f 35-36,55
+  s_c8cb832fff7b99::t_9ac8eb98e7a252 68-85,88,90
+  s_c8cb832fff7b99::t_1c641c427ad4cb 1,60,65-67,108,110
+  s_c8cb832fff7b99::t_26c228e963626f 89,91-105
+  s_c8cb832fff7b99::t_39b60770196681 16,58-59,86-87,106-107
+  s_c8cb832fff7b99::t_fe77d99b71268c 37-40,56-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "95e653c0b9291d3fbfee77596c23cc893f924b2e",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_45665427179547": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b16c-543b-76d7-a54a-87f4595b191f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c8cb832fff7b99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-96a3-737d-933b-d5b8640ab75f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

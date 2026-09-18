@@ -22,6 +22,18 @@ if (unexpectedSharedKernelFiles.length > 0) {
   );
 }
 
+const retiredOutboundHttpFiles = [
+  "src/shell/_shared/bounded-external-http.ts",
+  "src/shell/_shared/bounded-external-http.test.ts",
+  "src/shell/_shared/protected-http-client.ts",
+  "src/shell/_shared/projected-http-client-error.ts",
+] as const;
+for (const path of retiredOutboundHttpFiles) {
+  if (await Bun.file(`${serverRoot}/${path}`).exists()) {
+    throw new Error(`Retired Outbound HTTP implementation still exists: ${path}`);
+  }
+}
+
 const PROBE_PARENT = "src/core/audit";
 const PROBE_PREFIX = `__probe-${process.pid}-`;
 
@@ -96,7 +108,9 @@ const nestedForeignInternalTarget = `src/shell/channels/${PROBE_PREFIX}foreign-i
 const nestedInterfaceDirection = `src/shell/channels/${PROBE_PREFIX}interface-direction`;
 const typeInternalSource = `src/shell/${PROBE_PREFIX}type-internal-source`;
 const typeInternalTarget = `src/shell/${PROBE_PREFIX}type-internal-target`;
+const outboundHttpPublishedSource = `src/shell/${PROBE_PREFIX}outbound-http-published`;
 const outboundHttpPrivateSource = `src/shell/${PROBE_PREFIX}outbound-http-private`;
+const providerRawHttpSource = `src/shell/agent/${PROBE_PREFIX}provider-raw-http/probe.test.ts`;
 const interfaceDirection = `src/core/${PROBE_PREFIX}interface-direction`;
 const internalDirection = `src/core/${PROBE_PREFIX}internal-direction`;
 const operationsDirection = `src/core/${PROBE_PREFIX}operations-direction`;
@@ -213,6 +227,18 @@ const PROBES: readonly Probe[] = [
     name: "type-only imports cannot cross into foreign internals",
   },
   {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${outboundHttpPublishedSource}/probe.ts`,
+        source:
+          'import { OutboundHttp } from "~/shell/outbound-http/operations";\n\n' +
+          "export const outboundHttpPublishedProbe = OutboundHttp;\n",
+      },
+    ],
+    name: "external provider modules may use published Outbound HTTP authority",
+  },
+  {
     expect: {
       kind: "rejected",
       mustContain: [
@@ -227,7 +253,24 @@ const PROBES: readonly Probe[] = [
           "export const outboundHttpPrivateProbe = makeOutboundHttp;\n",
       },
     ],
-    name: "Outbound HTTP private transport cannot be imported directly",
+    name: "external provider modules cannot import private Outbound HTTP transport",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error provider-callers-import-raw-http: ${providerRawHttpSource} → node_modules/effect/dist/unstable/http/index.js`,
+      ],
+    },
+    files: [
+      {
+        path: providerRawHttpSource,
+        source:
+          'import { HttpClient } from "effect/unstable/http";\n\n' +
+          "export const rawProviderClient = HttpClient;\n",
+      },
+    ],
+    name: "external provider tests cannot import raw Effect HTTP clients",
   },
   {
     expect: {

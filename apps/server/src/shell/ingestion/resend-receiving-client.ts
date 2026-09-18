@@ -81,10 +81,6 @@ const ReceivedEmailResponse = Schema.Struct({
   attachments: Schema.Array(AttachmentMetadata),
 });
 
-const AttachmentResponse = Schema.Struct({
-  download_url: Schema.String,
-});
-
 const parseJsonResponse = Effect.fn(function* <A>(
   response: OutboundHttpResponse,
   decode: (input: unknown) => Effect.Effect<A, Schema.SchemaError>
@@ -161,23 +157,12 @@ const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (i
   receivedEmailId: ResendReceivedEmailId;
   attachment: InlineAttachment;
 }) {
-  const descriptorResponse = yield* getProviderResponse({
-    outboundHttp: input.outboundHttp,
-    request: {
-      _tag: "ResendAttachment",
-      receivedEmailId: input.receivedEmailId,
-      attachmentId: input.attachment.id,
-    },
-  });
-  const descriptor = yield* parseJsonResponse(
-    descriptorResponse,
-    Schema.decodeUnknownEffect(AttachmentResponse)
-  );
   const imageResponse = yield* getProviderResponse({
     outboundHttp: input.outboundHttp,
     request: {
-      _tag: "ResendInboundDownload",
-      downloadUrl: descriptor.download_url,
+      _tag: "ResendAttachmentDownload",
+      receivedEmailId: input.receivedEmailId,
+      attachmentId: input.attachment.id,
     },
   });
   if (!successful(imageResponse.status)) {

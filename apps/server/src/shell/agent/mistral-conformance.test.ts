@@ -1,9 +1,9 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, ConfigProvider, Context, Effect, Exit, Layer, Ref, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { OutboundHttpRequest } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
+import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
 import { mistralConformanceModel, verifyMistralTokenConformance } from "./mistral-conformance";
 
@@ -123,15 +123,10 @@ it.effect("fails without exposing the credential or provider body", () =>
     const context = yield* Layer.build(
       OutboundHttp.mistralLayer.pipe(
         Layer.provide(
-          Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make((request) => {
-              observedAuthorization = new Headers(request.headers).get("authorization") ?? "";
-              return Effect.succeed(
-                HttpClientResponse.fromWeb(request, new Response(privateBody, { status: 500 }))
-              );
-            })
-          )
+          testOutboundTransportLayer((request) => {
+            observedAuthorization = new Headers(request.headers).get("authorization") ?? "";
+            return Effect.succeed(new Response(privateBody, { status: 500 }));
+          })
         ),
         Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ MISTRAL_API_KEY: secret })))
       )

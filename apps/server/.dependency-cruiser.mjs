@@ -89,6 +89,44 @@ export default {
       },
     },
     {
+      name: "provider-callers-import-raw-http",
+      severity: "error",
+      comment:
+        "An external-provider adapter test imported Effect's raw HTTP client instead of the " +
+        "published Outbound HTTP test seam. Keep raw transport inside shell/outbound-http so " +
+        "destinations, credentials, redirects, tracing, and body bounds cannot be bypassed " +
+        "(apps/server/ARCHITECTURE.md §3).",
+      from: {
+        path:
+          "^src/shell/(agent/(openai|mistral-conformance)\\.test\\.ts|" +
+          "agent/__probe-[0-9]+-provider-raw-http/probe\\.test\\.ts|" +
+          "channels/whatsapp/kapso-client\\.test\\.ts|" +
+          "email-authentication/delivery\\.test\\.ts|" +
+          "ingestion/resend-receiving-client\\.test\\.ts|" +
+          "observability/sentry-account-reader\\.test\\.ts|" +
+          "subscription/wompi-(billing-)?client\\.test\\.ts)$",
+      },
+      to: {
+        path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
+      },
+    },
+    {
+      name: "provider-commands-import-raw-http",
+      severity: "error",
+      comment:
+        "An external-provider operational command imported Effect's raw HTTP client instead of " +
+        "production composition from shell/outbound-http/runtime.ts (apps/server/ARCHITECTURE.md §3).",
+      from: {
+        path:
+          "^scripts/(evaluate-es-co-openai|reconcile-wompi-enrollment-runtime|" +
+          "verify-mistral-token-counts|verify-sentry-account-runtime|" +
+          "verify-wompi-sandbox-source)\\.ts$",
+      },
+      to: {
+        path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
+      },
+    },
+    {
       name: "telemetry-harness-imports-non-observability-internal",
       severity: "error",
       comment:
@@ -185,7 +223,11 @@ export default {
         "role visible in its filename.",
       from: {
         path: "^(scripts|tools)/",
-        pathNot: "(?:runtime|harness)\\.ts$",
+        pathNot: [
+          "(?:runtime|harness)\\.ts$",
+          "^scripts/(evaluate-es-co-openai|verify-mistral-token-counts|" +
+            "verify-wompi-sandbox-source)\\.ts$",
+        ],
       },
       to: { path: "^src/(core|shell)/[^/]+/runtime\\.ts$" },
     },

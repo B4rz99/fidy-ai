@@ -2,9 +2,8 @@
 
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Console, DateTime, Effect, Layer, Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
 import { BillingEmail } from "~/core/subscription/enrollment-model";
-import { OutboundHttp } from "~/shell/outbound-http/operations";
+import { OutboundHttpFetchLive } from "~/shell/outbound-http/runtime";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
 
 const verifyReusableSource = Effect.gen(function* () {
@@ -29,8 +28,7 @@ const verifyReusableSource = Effect.gen(function* () {
 
 const VerifyLive = Layer.effectDiscard(verifyReusableSource).pipe(
   Layer.provide(WompiEnrollmentClient.layer),
-  Layer.provide(OutboundHttp.layer),
-  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(OutboundHttpFetchLive),
   Layer.provide(BunServices.layer)
 );
 

@@ -1,14 +1,13 @@
-import { Console, Effect, Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { Console, Effect } from "effect";
 import { verifyMistralTokenConformance } from "~/shell/agent/mistral-conformance";
-import { OutboundHttp } from "~/shell/outbound-http/operations";
+import { MistralOutboundHttpFetchLive } from "~/shell/outbound-http/runtime";
 
 const program = Effect.gen(function* () {
   const reports = yield* verifyMistralTokenConformance;
   for (const report of reports) yield* Console.log(report);
 }).pipe(
   // @effect-diagnostics-next-line strictEffectProvide:off
-  Effect.provide(OutboundHttp.mistralLayer.pipe(Layer.provide(FetchHttpClient.layer))),
+  Effect.provide(MistralOutboundHttpFetchLive),
   Effect.catchCause(() =>
     Console.error(
       "Mistral token conformance failed; no request or response content was logged"

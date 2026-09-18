@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Option, Redacted } from "effect";
-import {
-  HttpClient,
-  type HttpClientError,
-  type HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  type TestOutboundTransport,
+  type TestOutboundTransportError,
+  type TestOutboundTransportRequest,
+  makeTestOutboundTransport,
+  testOutboundTransportFromClientLayer,
+  testOutboundTransportResponse,
+} from "~/shell/outbound-http/testing";
 import {
   SentryAccountReadError,
   type SentryAccountReaderConfig,
@@ -16,11 +18,11 @@ import {
 } from "~/shell/observability/internal/sentry-account-reader";
 
 const responseJson = (
-  request: HttpClientRequest.HttpClientRequest,
+  request: TestOutboundTransportRequest,
   body: unknown,
   headers: Readonly<Record<string, string>> = {}
-): HttpClientResponse.HttpClientResponse =>
-  HttpClientResponse.fromWeb(
+): ReturnType<typeof testOutboundTransportResponse> =>
+  testOutboundTransportResponse(
     request,
     new Response(JSON.stringify(body), {
       status: 200,
@@ -30,22 +32,16 @@ const responseJson = (
 
 const makeHttpClient = (
   handler: (
-    request: HttpClientRequest.HttpClientRequest
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
-): HttpClient.HttpClient =>
-  HttpClient.makeWith<
-    HttpClientError.HttpClientError,
-    never,
-    HttpClientError.HttpClientError,
-    never
-  >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
+    request: TestOutboundTransportRequest
+  ) => Effect.Effect<ReturnType<typeof testOutboundTransportResponse>, TestOutboundTransportError>
+): TestOutboundTransport => makeTestOutboundTransport(handler);
 
 const outboundLayer = (
-  client: HttpClient.HttpClient,
+  client: TestOutboundTransport,
   authToken = "private-token"
 ): Layer.Layer<OutboundHttp> =>
   Layer.orDie(OutboundHttp.sentryLayer).pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(testOutboundTransportFromClientLayer(client)),
     Layer.provide(
       Layer.succeed(
         ConfigProvider.ConfigProvider,
@@ -55,7 +51,7 @@ const outboundLayer = (
   );
 
 const provideOutbound = (
-  client: HttpClient.HttpClient,
+  client: TestOutboundTransport,
   authToken = "private-token"
 ): (<A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, OutboundHttp>>) =>
   // Each test invocation is the entry point that owns its Outbound HTTP test layer lifetime.
@@ -68,9 +64,9 @@ const rateLimitedStatus = 429;
 const unavailableStatus = 500;
 const unexpectedStatus = 418;
 
-const statusClient = (status: number): HttpClient.HttpClient =>
+const statusClient = (status: number): TestOutboundTransport =>
   makeHttpClient((request) =>
-    Effect.succeed(HttpClientResponse.fromWeb(request, new Response("private", { status })))
+    Effect.succeed(testOutboundTransportResponse(request, new Response("private", { status })))
   );
 
 const assertReadFailure =
@@ -120,7 +116,7 @@ it.effect("reads only the account facts needed by policy and returns no account 
     const production = "production-secret-sentinel";
     const nonProduction = "non-production-secret-sentinel";
     const token = "token-secret-sentinel";
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const requests: Array<TestOutboundTransportRequest> = [];
     const bodyFor = (path: string): unknown => {
       if (path.endsWith(`/organizations/${organization}/`)) {
         return { dataRegion: { name: "us" } };
@@ -431,11 +427,11 @@ it.effect("bounds malformed authenticated success responses and stops inspection
   Effect.gen(function* () {
     const providerSentinel = "private-provider-payload-sentinel";
     const organization = "private-organization-sentinel";
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const requests: Array<TestOutboundTransportRequest> = [];
     const client = makeHttpClient((request) => {
       requests.push(request);
       return Effect.succeed(
-        HttpClientResponse.fromWeb(
+        testOutboundTransportResponse(
           request,
           new Response(`{"private":"${providerSentinel}"`, {
             status: 200,
@@ -467,7 +463,7 @@ it.effect("returns a bounded failure instead of an authenticated provider respon
   Effect.gen(function* () {
     const client = makeHttpClient((request) =>
       Effect.succeed(
-        HttpClientResponse.fromWeb(
+        testOutboundTransportResponse(
           request,
           new Response("private-provider-body-sentinel", { status: unauthorizedStatus })
         )

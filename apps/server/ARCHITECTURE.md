@@ -143,12 +143,17 @@ non-request paths use the same explicit subject flow rather than a separate owne
 Core exposes domain failures without HTTP vocabulary. Shell adapters map those failures to the
 transport contract and keep each mapping exhaustive.
 
-External providers stay at narrow shell boundaries. Shared outbound transport applies the repository's
-bounds, credential, tracing, and telemetry policy; the provider adapter owns request encoding, status
-interpretation, runtime decoding, retry certainty, and workflow-failure mapping. Raw provider
-responses and bodies do not cross the boundary. Provider work never runs inside a PostgreSQL
-transaction; ambiguous external outcomes are handled by the owning durable workflow or domain
-state. See [CODING_STANDARDS.md](../../CODING_STANDARDS.md) and
+External providers stay at narrow shell boundaries. `shell/outbound-http` owns the only raw external
+provider client and publishes closed requests through `contract.ts`, execution authority through
+`operations.ts`, and production composition through `runtime.ts`. Its private implementation owns
+fixed destinations, credentials, redirects, tracing, telemetry, streamed byte limits, and projected
+coordinate-free failures. Provider adapters, their tests, scripts, and tools use that published
+interface rather than shared transport helpers or private implementation imports; a provider library
+may observe only a response reconstructed from bytes already bounded by the interface. The provider
+adapter owns request encoding, status interpretation, runtime decoding, retry certainty, and
+workflow-failure mapping. Raw provider responses and bodies do not cross the boundary. Provider work
+never runs inside a PostgreSQL transaction; ambiguous external outcomes are handled by the owning
+durable workflow or domain state. See [CODING_STANDARDS.md](../../CODING_STANDARDS.md) and
 [SECURITY_STANDARDS.md](../../SECURITY_STANDARDS.md).
 
 ## 7. Persistence and durable execution

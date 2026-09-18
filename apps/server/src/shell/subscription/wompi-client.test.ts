@@ -9,8 +9,8 @@ import {
   ManagedRuntime,
   Redacted,
 } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
+import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import {
@@ -100,19 +100,12 @@ const clientLayerWithConfig = (
   merchantResponse: Response,
   configLayer: Layer.Layer<never, Config.ConfigError>
 ): Layer.Layer<WompiEnrollmentClient, Config.ConfigError> => {
-  const client = HttpClient.make((request) =>
-    Effect.succeed(
-      HttpClientResponse.fromWeb(
-        request,
-        request.url.includes("/v1/merchants/") ? merchantResponse : sourceResponse
-      )
-    )
+  const transport = testOutboundTransportLayer((request) =>
+    Effect.succeed(request.url.includes("/v1/merchants/") ? merchantResponse : sourceResponse)
   );
   return WompiEnrollmentClient.layer.pipe(
     Layer.provide(OutboundHttp.layer),
-    Layer.provide(
-      Layer.mergeAll(Layer.succeed(HttpClient.HttpClient, client), configLayer, BunServices.layer)
-    )
+    Layer.provide(Layer.mergeAll(transport, configLayer, BunServices.layer))
   );
 };
 

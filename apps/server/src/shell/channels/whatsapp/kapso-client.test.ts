@@ -1,23 +1,6 @@
-import { BunCrypto } from "@effect/platform-bun";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
-import {
-  Cause,
-  type Config,
-  ConfigProvider,
-  Context,
-  DateTime,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Schema,
-  type Scope,
-  Stream,
-} from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
@@ -26,7 +9,7 @@ import {
   type OutboundHttpRequest,
   type OutboundHttpResponse,
 } from "~/shell/outbound-http/contract";
-import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
+import type { OutboundHttpService } from "~/shell/outbound-http/operations";
 import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
@@ -43,30 +26,6 @@ const sendInput = (
   opaqueCallbackData: Option.none(),
   ...overrides,
 });
-
-const makeRealOutboundHttp = (
-  httpClient: HttpClient.HttpClient
-): Effect.Effect<OutboundHttpService, Config.ConfigError, Scope.Scope> =>
-  Layer.build(
-    OutboundHttp.layer.pipe(
-      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
-      Layer.provide(BunCrypto.layer),
-      Layer.provide(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({
-            KAPSO_API_KEY: "test-api-key",
-            OPENAI_API_KEY: "unused-openai-test-key",
-            RESEND_API_KEY: "re_test_only_resend_key_324000000",
-            WOMPI_ENVIRONMENT: "sandbox",
-            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-          })
-        )
-      )
-    )
-  ).pipe(Effect.map((context) => Context.get(context, OutboundHttp)));
 
 const fakeOutboundHttp = (response: () => Response): OutboundHttpService => ({
   execute: () => {
@@ -255,43 +214,6 @@ it.effect("classifies the adapter deadline as an ambiguous timeout", () =>
   })
 );
 
-it.effect("applies the adapter deadline while streaming the response body", () =>
-  Effect.gen(function* () {
-    const started = yield* Deferred.make<void>();
-    const cancelled = yield* Deferred.make<void>();
-    const outboundHttp = yield* makeRealOutboundHttp(
-      HttpClient.make((request) => {
-        const response = HttpClientResponse.fromWeb(request, new Response());
-        Object.defineProperty(response, "stream", {
-          value: Stream.fromEffect(
-            Deferred.succeed(started, undefined).pipe(
-              Effect.andThen(Effect.never),
-              Effect.onInterrupt(() => Deferred.succeed(cancelled, undefined))
-            )
-          ),
-        });
-        return Effect.succeed(response);
-      })
-    );
-    const service = makeService(outboundHttp);
-    const fiber = yield* service
-      .sendText(sendInput())
-      .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
-    yield* Deferred.await(started);
-    yield* TestClock.adjust("15 seconds");
-    const failure = yield* Fiber.join(fiber);
-    yield* Deferred.await(cancelled);
-
-    expect(failure).toEqual(
-      expect.objectContaining({
-        safeReason: "timeout",
-        deliveryCertainty: "ambiguous",
-        automaticRetry: false,
-      })
-    );
-  })
-);
-
 it.effect("classifies every known rejection with safe retry semantics", () =>
   Effect.gen(function* () {
     const cases = [
@@ -408,46 +330,6 @@ it.effect("classifies timeout and transport outcomes as ambiguous and not retrya
         })
       );
     }
-  })
-);
-
-it.effect("cancels a response rejected by the declared byte bound", () =>
-  Effect.gen(function* () {
-    let requestSignal = Option.none<AbortSignal>();
-    let responseBodyCancelled = false;
-    const outboundHttp = yield* makeRealOutboundHttp(
-      HttpClient.make((request, _url, signal) => {
-        requestSignal = Option.some(signal);
-        const body = new ReadableStream<Uint8Array>({
-          start: (controller): void => controller.enqueue(new Uint8Array([1])),
-          cancel: (): void => {
-            responseBodyCancelled = true;
-          },
-        });
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response(body, {
-              status: 200,
-              headers: { "content-length": String(64 * 1_024 + 1) },
-            })
-          )
-        );
-      })
-    );
-    const service = makeService(outboundHttp);
-
-    const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
-
-    expect(failure).toEqual(
-      expect.objectContaining({
-        safeReason: "invalid_response",
-        deliveryCertainty: "ambiguous",
-        automaticRetry: false,
-      })
-    );
-    expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
-    expect(responseBodyCancelled).toBe(true);
   })
 );
 

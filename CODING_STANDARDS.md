@@ -209,15 +209,17 @@ coordinate-bearing HTTP failures. Export only closed low-cardinality projections
 method, status class, outcome, and latency. Credential-header redaction and trace propagation are an
 explicit exhaustive decision for each provider, never ambient client behaviour.
 
-Provider response bodies are hostile resource input. Ordinary provider adapters use
-`_shared/bounded-external-http.ts`, which executes the request and returns only status, explicitly
-retained protocol headers, and bounded bytes. Bound the actual streamed byte count before buffering,
-parsing JSON, or Schema decoding; `Content-Length` is only an early rejection signal because it may
-be absent or dishonest. Overflow, stream failure, and interruption cancel or release the owned body.
-Adapters must not receive raw responses or use direct `text`, `json`, `arrayBuffer`, form-data, or
-unbounded stream collection. A provider library may receive a reconstructed response only through
-the shared library layer and only after its bytes have been bounded. Incremental providers require
-a separate interface with explicit per-chunk and aggregate budgets.
+Provider response bodies are hostile resource input. Ordinary provider adapters use the published
+Outbound HTTP interface, which executes a closed provider request and returns only status, explicitly
+retained protocol headers, and bounded bytes. Outbound HTTP owns the raw client, destination,
+credential, redirect, tracing, and streamed-byte policies; adapters, tests, scripts, and tools do not
+bypass it through private internals or a shared transport helper. Bound the actual streamed byte count
+before buffering, parsing JSON, or Schema decoding; `Content-Length` is only an early rejection
+signal because it may be absent or dishonest. Overflow, stream failure, and interruption cancel or
+release the owned body. Adapters must not receive raw responses or use direct `text`, `json`,
+`arrayBuffer`, form-data, or unbounded stream collection. A provider library may receive a
+reconstructed response only after its bytes have crossed Outbound HTTP's bound. Incremental
+providers require a separate interface with explicit per-chunk and aggregate budgets.
 
 ---
 

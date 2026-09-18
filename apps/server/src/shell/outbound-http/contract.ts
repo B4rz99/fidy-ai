@@ -59,9 +59,10 @@ export type SentryAccountResource =
     }>;
 
 /**
- * One provider call accepted by Outbound HTTP. Its tag selects a fixed method, origin, credentials,
- * response bound, retained headers, redirect behavior, and trace policy. Wompi transaction signing
- * stays inside the interface because its integrity secret is transport authority; all other
+ * One closed provider operation accepted by Outbound HTTP. Its tag selects fixed origins,
+ * credentials, response bounds, retained headers, redirect behavior, and trace policy. Wompi
+ * transaction signing stays inside the interface because its integrity secret is transport authority;
+ * all other
  * provider request bodies remain encoded by their owning adapter.
  */
 export type OutboundHttpRequest =
@@ -80,13 +81,9 @@ export type OutboundHttpRequest =
       readonly receivedEmailId: ResendReceivedEmailId;
     }>
   | Readonly<{
-      readonly _tag: "ResendAttachment";
+      readonly _tag: "ResendAttachmentDownload";
       readonly receivedEmailId: ResendReceivedEmailId;
       readonly attachmentId: string;
-    }>
-  | Readonly<{
-      readonly _tag: "ResendInboundDownload";
-      readonly downloadUrl: string;
     }>
   | Readonly<{ readonly _tag: "OpenAiResponses"; readonly body: string }>
   | Readonly<{ readonly _tag: "OpenAiInputTokens"; readonly body: string }>

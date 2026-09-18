@@ -5,11 +5,9 @@ import {
   type HttpClient,
   HttpClientRequest,
 } from "effect/unstable/http";
-import {
-  type ExternalHttpFailure,
-  makeBoundedExternalHttpClient,
-} from "~/shell/_shared/bounded-external-http";
 import { cloudflareAccessSupportRecoveryUrl } from "./cloudflare-access";
+import { makeProviderTransport } from "./transport";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import {
   OutboundHttpFailure,
   type OutboundHttpRequest,
@@ -46,7 +44,7 @@ const maximumResendInlineImageResponseBytes =
   maximumResendInlineImageResponseKibibytes * bytesPerKibibyte;
 
 type PreparedRequest = Readonly<{
-  http: ReturnType<ReturnType<typeof makeBoundedExternalHttpClient>>;
+  http: ReturnType<ReturnType<typeof makeProviderTransport>>;
   request: HttpClientRequest.HttpClientRequest;
   maximumResponseBytes: number;
   redirect: "error" | "manual";
@@ -77,15 +75,16 @@ type OutboundHttpConfig = Readonly<{
   crypto: Option.Option<Crypto.Crypto>;
 }>;
 
-type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
+type ResendAttachmentDownloadRequest = Extract<
+  OutboundHttpRequest,
+  { readonly _tag: "ResendAttachmentDownload" }
+>;
+type ResendRequest = Exclude<
+  Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>,
+  ResendAttachmentDownloadRequest
+>;
+type StandardOutboundHttpRequest = Exclude<OutboundHttpRequest, ResendAttachmentDownloadRequest>;
 type WompiRequest = Extract<OutboundHttpRequest, { readonly _tag: `Wompi${string}` }>;
-
-const projectFailure = (failure: ExternalHttpFailure): OutboundHttpFailure =>
-  new OutboundHttpFailure({
-    reason: failure.reason,
-    responseStatus: failure.responseStatus,
-    responseHeaders: { ...failure.responseHeaders },
-  });
 
 const unavailableTransport = (): OutboundHttpFailure =>
   new OutboundHttpFailure({
@@ -132,7 +131,10 @@ const ResendInboundDownloadUrl = Schema.URLFromString.check(
       : "Expected a direct Resend inbound CDN URL"
   )
 );
-const decodeResendInboundDownloadUrl = Schema.decodeUnknownResult(ResendInboundDownloadUrl);
+const ResendAttachmentDescriptor = Schema.Struct({
+  download_url: ResendInboundDownloadUrl,
+});
+const decodeResendAttachmentDescriptor = Schema.decodeUnknownResult(ResendAttachmentDescriptor);
 
 const makeResendRequest = (
   request: ResendRequest,
@@ -162,24 +164,6 @@ const makeResendRequest = (
         maximumResponseBytes: maximumResendMetadataResponseBytes,
         redirect: "manual",
       });
-    case "ResendAttachment":
-      return Effect.succeed({
-        request: HttpClientRequest.get(
-          `${resendApiBaseUrl}/emails/receiving/${encodeURIComponent(request.receivedEmailId)}/attachments/${encodeURIComponent(request.attachmentId)}`,
-          { headers: authorization }
-        ),
-        maximumResponseBytes: maximumResendAttachmentResponseBytes,
-        redirect: "manual",
-      });
-    case "ResendInboundDownload": {
-      const decoded = decodeResendInboundDownloadUrl(request.downloadUrl);
-      if (Result.isFailure(decoded)) return Effect.fail(invalidDestination());
-      return Effect.succeed({
-        request: HttpClientRequest.get(decoded.success.href),
-        maximumResponseBytes: maximumResendInlineImageResponseBytes,
-        redirect: "manual",
-      });
-    }
   }
 };
 
@@ -334,7 +318,7 @@ const prepareWompi = (
   );
 
 const prepareNonProviderGroup = (
-  request: Exclude<OutboundHttpRequest, ResendRequest | WompiRequest>,
+  request: Exclude<StandardOutboundHttpRequest, ResendRequest | WompiRequest>,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
   const config = context.config;
@@ -393,7 +377,7 @@ const prepareNonProviderGroup = (
 };
 
 const prepareRequest = (
-  request: OutboundHttpRequest,
+  request: StandardOutboundHttpRequest,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
   Match.value(request).pipe(
@@ -406,8 +390,6 @@ const prepareRequest = (
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
       ResendReceivedEmail: (value) => prepareResend(value, context),
-      ResendAttachment: (value) => prepareResend(value, context),
-      ResendInboundDownload: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
@@ -416,26 +398,66 @@ const prepareRequest = (
     })
   );
 
+const executePrepared = ({
+  http,
+  maximumResponseBytes,
+  request,
+  redirect,
+}: PreparedRequest): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
+  http.execute(request, maximumResponseBytes).pipe(
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect }),
+    Effect.map((response) => ({
+      status: response.status,
+      headers: { ...response.headers },
+      body: response.body,
+    }))
+  );
+
 const makeService = (
   prepare: (request: OutboundHttpRequest) => Effect.Effect<PreparedRequest, OutboundHttpFailure>
 ): PrivateOutboundHttpService => ({
-  execute: (request) =>
-    prepare(request).pipe(
-      Effect.flatMap(({ http, maximumResponseBytes, request: providerRequest, redirect }) =>
-        http
-          .execute(providerRequest, maximumResponseBytes)
-          .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect }))
-      ),
-      Effect.map((response) => ({
-        status: response.status,
-        headers: { ...response.headers },
-        body: response.body,
-      })),
-      Effect.mapError((failure) =>
-        failure._tag === "OutboundHttpFailure" ? failure : projectFailure(failure)
-      )
-    ),
+  execute: (request) => prepare(request).pipe(Effect.flatMap(executePrepared)),
 });
+
+const firstSuccessfulStatus = 200;
+const firstRedirectStatus = 300;
+const successfulStatus = (status: number): boolean =>
+  status >= firstSuccessfulStatus && status < firstRedirectStatus;
+
+const executeResendAttachmentDownload = (
+  request: ResendAttachmentDownloadRequest,
+  context: RequestPreparationContext
+): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
+  Effect.gen(function* () {
+    const apiKey = yield* Effect.fromOption(
+      context.config.resendReceivingApiKey,
+      unavailableTransport
+    );
+    const descriptorResponse = yield* executePrepared({
+      http: context.resendHttp,
+      request: HttpClientRequest.get(
+        `${resendApiBaseUrl}/emails/receiving/${encodeURIComponent(request.receivedEmailId)}/attachments/${encodeURIComponent(request.attachmentId)}`,
+        { headers: resendAuthorization(apiKey) }
+      ),
+      maximumResponseBytes: maximumResendAttachmentResponseBytes,
+      redirect: "manual",
+    });
+    if (!successfulStatus(descriptorResponse.status)) return descriptorResponse;
+
+    const json = Schema.decodeResult(UnknownJsonString)(
+      new TextDecoder().decode(descriptorResponse.body)
+    );
+    if (Result.isFailure(json)) return yield* invalidDestination();
+    const descriptor = decodeResendAttachmentDescriptor(json.success);
+    if (Result.isFailure(descriptor)) return yield* invalidDestination();
+
+    return yield* executePrepared({
+      http: context.resendHttp,
+      request: HttpClientRequest.get(descriptor.success.download_url.href),
+      maximumResponseBytes: maximumResendInlineImageResponseBytes,
+      redirect: "manual",
+    });
+  });
 
 /**
  * Creates fixed-destination provider transport that owns credentials, rejects redirects, suppresses
@@ -444,13 +466,18 @@ const makeService = (
 export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHttpService => {
   const context: RequestPreparationContext = {
     config,
-    kapsoHttp: makeBoundedExternalHttpClient("kapso")(config.httpClient),
-    openAiHttp: makeBoundedExternalHttpClient("openai")(config.httpClient),
-    mistralHttp: makeBoundedExternalHttpClient("mistral")(config.httpClient),
-    resendHttp: makeBoundedExternalHttpClient("resend")(config.httpClient),
-    wompiHttp: makeBoundedExternalHttpClient("wompi")(config.httpClient),
+    kapsoHttp: makeProviderTransport("kapso")(config.httpClient),
+    openAiHttp: makeProviderTransport("openai")(config.httpClient),
+    mistralHttp: makeProviderTransport("mistral")(config.httpClient),
+    resendHttp: makeProviderTransport("resend")(config.httpClient),
+    wompiHttp: makeProviderTransport("wompi")(config.httpClient),
   };
-  return makeService((request) => prepareRequest(request, context));
+  return {
+    execute: (request) =>
+      request._tag === "ResendAttachmentDownload"
+        ? executeResendAttachmentDownload(request, context)
+        : prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
+  };
 };
 
 export const makeSentryOutboundHttp = ({
@@ -460,7 +487,7 @@ export const makeSentryOutboundHttp = ({
   authToken: Redacted.Redacted<string>;
   httpClient: HttpClient.HttpClient;
 }>): PrivateOutboundHttpService => {
-  const http = makeBoundedExternalHttpClient("sentry")(httpClient);
+  const http = makeProviderTransport("sentry")(httpClient);
   return makeService((request) =>
     request._tag === "SentryAccount"
       ? Effect.succeed({ ...makeSentryRequest(request, authToken), http })
@@ -475,7 +502,7 @@ export const makeCloudflareAccessOutboundHttp = ({
   accessToken: Redacted.Redacted<string>;
   httpClient: HttpClient.HttpClient;
 }>): PrivateOutboundHttpService => {
-  const http = makeBoundedExternalHttpClient("cloudflare-access")(httpClient);
+  const http = makeProviderTransport("cloudflare-access")(httpClient);
   return makeService((request) =>
     request._tag === "CloudflareAccessSupportRecovery"
       ? Effect.succeed({ ...makeCloudflareAccessRequest(request, accessToken), http })

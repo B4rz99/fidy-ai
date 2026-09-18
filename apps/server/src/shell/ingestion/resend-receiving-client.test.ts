@@ -3,12 +3,15 @@ import { expect, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  FetchHttpClient,
-  HttpClient,
-  type HttpClientError,
-  type HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
+  TestOutboundFetch,
+  type TestOutboundTransport,
+  type TestOutboundTransportError,
+  type TestOutboundTransportRequest,
+  makeTestOutboundTransport,
+  testFetchOutboundTransportLayer,
+  testOutboundTransportFromClientLayer,
+  testOutboundTransportResponse,
+} from "~/shell/outbound-http/testing";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { receivedEmailFixture } from "~/shell/ingestion/fixtures/resend-received-email";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
@@ -18,10 +21,10 @@ import { ResendReceivingClient } from "./resend-receiving-client";
 const testResendApiKey = `re_${"f1d7c0de".repeat(3)}`;
 
 const testLayer = (
-  http: HttpClient.HttpClient
+  http: TestOutboundTransport
 ): Layer.Layer<ResendReceivingClient, Config.ConfigError> => {
   const outbound = OutboundHttp.layer.pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, http)),
+    Layer.provide(testOutboundTransportFromClientLayer(http)),
     Layer.provide(BunCrypto.layer),
     Layer.provide(
       Layer.succeed(
@@ -42,15 +45,9 @@ const testLayer = (
 
 const mockClient = (
   handler: (
-    request: HttpClientRequest.HttpClientRequest
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
-): HttpClient.HttpClient =>
-  HttpClient.makeWith<
-    HttpClientError.HttpClientError,
-    never,
-    HttpClientError.HttpClientError,
-    never
-  >((request) => Effect.flatMap(request, handler), Effect.succeed);
+    request: TestOutboundTransportRequest
+  ) => Effect.Effect<ReturnType<typeof testOutboundTransportResponse>, TestOutboundTransportError>
+): TestOutboundTransport => makeTestOutboundTransport(handler);
 
 const pngImage = (width: number, height: number): Uint8Array =>
   new Uint8Array([
@@ -88,7 +85,7 @@ const successfulHttp = mockClient((request) => {
   successfulRequests.push(request.url);
   if (request.url.endsWith("/attachments/inline-1")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({ download_url: "https://inbound-cdn.resend.com/signed/image" })
       )
@@ -96,18 +93,20 @@ const successfulHttp = mockClient((request) => {
   }
   if (request.url === "https://inbound-cdn.resend.com/signed/image") {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         new Response(pngSignature, { headers: { "content-type": "image/png" } })
       )
     );
   }
-  return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(receivedEmailFixture)));
+  return Effect.succeed(
+    testOutboundTransportResponse(request, Response.json(receivedEmailFixture))
+  );
 });
 
 const stalledBodyHttp = mockClient((request) =>
   Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       new Response(
         new ReadableStream<Uint8Array>({
@@ -166,7 +165,7 @@ const unsafeDestinationHttp = mockClient((request) => {
     Object.keys(unsafeDestinations).find((candidate) => request.url.includes(candidate)) ??
     "destination-protocol";
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       request.url.endsWith("/attachments/inline-1")
         ? Response.json({ download_url: unsafeDestinations[id] })
@@ -208,7 +207,7 @@ layer(testLayer(unsafeDestinationHttp))("Resend receiving destination validation
 const spoofedImageHttp = mockClient((request) => {
   if (request.url.endsWith("/attachments/inline-1")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({ download_url: "https://inbound-cdn.resend.com/signed/spoofed" })
       )
@@ -216,11 +215,11 @@ const spoofedImageHttp = mockClient((request) => {
   }
   if (request.url === "https://inbound-cdn.resend.com/signed/spoofed") {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(request, new Response(new Uint8Array([1, 2, 3])))
+      testOutboundTransportResponse(request, new Response(new Uint8Array([1, 2, 3])))
     );
   }
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       Response.json({
         ...receivedEmailFixture,
@@ -248,11 +247,11 @@ const oversizedImageHttp = (input: {
   readonly signedPath: string;
   readonly width: number;
   readonly height: number;
-}): HttpClient.HttpClient =>
+}): TestOutboundTransport =>
   mockClient((request) => {
     if (request.url.endsWith("/attachments/inline-1")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(
+        testOutboundTransportResponse(
           request,
           Response.json({
             download_url: `https://inbound-cdn.resend.com/signed/${input.signedPath}`,
@@ -262,11 +261,11 @@ const oversizedImageHttp = (input: {
     }
     if (request.url.includes("inbound-cdn.resend.com")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response(pngImage(input.width, input.height)))
+        testOutboundTransportResponse(request, new Response(pngImage(input.width, input.height)))
       );
     }
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({
           ...receivedEmailFixture,
@@ -351,20 +350,26 @@ const metadataAttachments = (id: string): ReadonlyArray<MetadataAttachment> => {
 const metadataEdgeHttp = mockClient((request) => {
   const id = request.url.split("/").at(-1) ?? "";
   if (id === "metadata-rate-limited") {
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 429 })));
+    return Effect.succeed(
+      testOutboundTransportResponse(request, new Response("", { status: 429 }))
+    );
   }
   if (id === "metadata-rejected") {
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 404 })));
+    return Effect.succeed(
+      testOutboundTransportResponse(request, new Response("", { status: 404 }))
+    );
   }
   if (id === "metadata-malformed") {
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not-json")));
+    return Effect.succeed(testOutboundTransportResponse(request, new Response("not-json")));
   }
   if (id === "metadata-too-large") {
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("x".repeat(1_048_577))));
+    return Effect.succeed(
+      testOutboundTransportResponse(request, new Response("x".repeat(1_048_577)))
+    );
   }
   const attachments = metadataAttachments(id);
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       Response.json({
         id,
@@ -418,7 +423,7 @@ const imageResponseEdgeHttp = mockClient((request) => {
   const oversized = request.url.includes("image-body-too-large");
   if (request.url.includes("inbound-cdn.resend.com")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         oversized ? new Response(new Uint8Array(1_048_577)) : new Response("", { status: 503 })
       )
@@ -426,7 +431,7 @@ const imageResponseEdgeHttp = mockClient((request) => {
   }
   if (request.url.includes("/attachments/")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({
           download_url: `https://inbound-cdn.resend.com/signed/${
@@ -438,7 +443,7 @@ const imageResponseEdgeHttp = mockClient((request) => {
   }
   const id = request.url.split("/").at(-1) ?? "";
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       Response.json({
         ...receivedEmailFixture,
@@ -486,18 +491,18 @@ const hostileImageStructureHttp = mockClient((request) => {
   );
   const selected = hostileImageStructures[id];
   if (request.url.includes("inbound-cdn.resend.com")) {
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(selected.bytes)));
+    return Effect.succeed(testOutboundTransportResponse(request, new Response(selected.bytes)));
   }
   if (request.url.includes("/attachments/")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({ download_url: `https://inbound-cdn.resend.com/signed/${id}` })
       )
     );
   }
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       Response.json({
         ...receivedEmailFixture,
@@ -552,7 +557,7 @@ const mediaTypeHttp = mockClient((request) => {
   );
   if (request.url.includes("/attachments/")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         Response.json({
           download_url: `https://inbound-cdn.resend.com/signed/${Option.getOrElse(kind, () => "jpeg")}`,
@@ -562,7 +567,7 @@ const mediaTypeHttp = mockClient((request) => {
   }
   if (request.url.includes("inbound-cdn.resend.com")) {
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         new Response(
           Option.match(kind, { onNone: () => null, onSome: (value) => imageCases[value].bytes })
@@ -573,7 +578,7 @@ const mediaTypeHttp = mockClient((request) => {
   const selectedKind = Option.getOrElse(kind, () => defaultImageKind);
   const selected = imageCases[selectedKind];
   return Effect.succeed(
-    HttpClientResponse.fromWeb(
+    testOutboundTransportResponse(
       request,
       Response.json({
         ...receivedEmailFixture,
@@ -654,7 +659,7 @@ const redirectObservingFetch: typeof globalThis.fetch = Object.assign(redirectFe
 });
 
 const redirectOutboundLayer = OutboundHttp.layer.pipe(
-  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(testFetchOutboundTransportLayer),
   Layer.provide(BunCrypto.layer),
   Layer.provide(
     Layer.succeed(
@@ -669,7 +674,7 @@ const redirectOutboundLayer = OutboundHttp.layer.pipe(
       })
     )
   ),
-  Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectObservingFetch))
+  Layer.provide(Layer.succeed(TestOutboundFetch, redirectObservingFetch))
 );
 const redirectLayer = ResendReceivingClient.layer.pipe(Layer.provide(redirectOutboundLayer));
 

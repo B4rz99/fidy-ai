@@ -16,7 +16,10 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { LanguageModel } from "effect/unstable/ai";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import {
+  type TestOutboundTransportRequest,
+  testOutboundTransportLayer,
+} from "~/shell/outbound-http/testing";
 import {
   makeOpenAiFunctionCallResponse,
   makeOpenAiTextResponse,
@@ -59,7 +62,7 @@ const testStructuredContext = (context: HostedStructuredContext): HostedStructur
   context;
 
 const requestBody = Effect.fn("Test.requestBody")(function* (
-  request: HttpClientRequest.HttpClientRequest
+  request: TestOutboundTransportRequest
 ) {
   if (request.body._tag !== "Uint8Array") {
     return yield* Effect.die("Expected an encoded OpenAI request body");
@@ -75,61 +78,47 @@ const makeTransport = Effect.fn("Test.makeTransport")(function* (
   responseBody: string = makeOpenAiTextResponse("ok"),
   executionHeaders: Readonly<Record<string, string>> = {}
 ) {
-  const requests = yield* Ref.make<ReadonlyArray<HttpClientRequest.HttpClientRequest>>([]);
-  const client = HttpClient.make((request) =>
+  const requests = yield* Ref.make<ReadonlyArray<TestOutboundTransportRequest>>([]);
+  const layer = testOutboundTransportLayer((request) =>
     Effect.gen(function* () {
       yield* Ref.update(requests, (all) => [...all, request]);
       const body = request.url.includes("/responses/input_tokens")
         ? `{"object":"response.input_tokens","input_tokens":${inputTokens}}`
         : responseBody;
-      return HttpClientResponse.fromWeb(
-        request,
-        new Response(body, {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-            ...(request.url.includes("/responses/input_tokens") ? {} : executionHeaders),
-          },
-        })
-      );
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          ...(request.url.includes("/responses/input_tokens") ? {} : executionHeaders),
+        },
+      });
     })
   );
-  return { requests, layer: Layer.succeed(HttpClient.HttpClient, client) } as const;
+  return { requests, layer } as const;
 });
 
 const makeExecutionFailingTransport = (
   status: number,
   body: string,
   headers?: Readonly<Record<string, string>>
-): Layer.Layer<HttpClient.HttpClient> =>
-  Layer.succeed(
-    HttpClient.HttpClient,
-    HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          request.url.includes("/responses/input_tokens")
-            ? new Response('{"object":"response.input_tokens","input_tokens":100}', {
-                status: 200,
-                headers: { "content-type": "application/json" },
-              })
-            : new Response(body, { status, headers })
-        )
-      )
+): ReturnType<typeof testOutboundTransportLayer> =>
+  testOutboundTransportLayer((request) =>
+    Effect.succeed(
+      request.url.includes("/responses/input_tokens")
+        ? new Response('{"object":"response.input_tokens","input_tokens":100}', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        : new Response(body, { status, headers })
     )
   );
 
-const makeFailingTransport = (status: number): Layer.Layer<HttpClient.HttpClient> =>
-  Layer.succeed(
-    HttpClient.HttpClient,
-    HttpClient.make((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status })))
-    )
-  );
+const makeFailingTransport = (status: number): ReturnType<typeof testOutboundTransportLayer> =>
+  testOutboundTransportLayer(() => Effect.succeed(new Response("", { status })));
 
 /** Executes one structured turn against a transport that fails the execution request. */
 const retryAfterFailure = (
-  transport: Layer.Layer<HttpClient.HttpClient>
+  transport: ReturnType<typeof testOutboundTransportLayer>
 ): Effect.Effect<HostedInferenceError> =>
   Effect.gen(function* () {
     const inference = yield* buildInference(transport).pipe(Effect.orDie);
@@ -150,7 +139,7 @@ const amendResponse = (body: string, patch: Readonly<Record<string, unknown>>): 
 };
 
 const buildInference = Effect.fn("Test.buildInference")(function* (
-  httpClient: Layer.Layer<HttpClient.HttpClient>,
+  httpClient: ReturnType<typeof testOutboundTransportLayer>,
   layer: typeof OpenAiHostedInferenceWithoutStartupValidation = OpenAiHostedInferenceWithoutStartupValidation
 ) {
   const context = yield* Effect.scoped(
@@ -442,20 +431,17 @@ it.effect("rejects structured capacity overflow before execution", () =>
 it.effect("bounds structured token-count responses before execution", () =>
   Effect.gen(function* () {
     const requests = yield* Ref.make(0);
-    const client = HttpClient.make((request) =>
+    const transport = testOutboundTransportLayer(() =>
       Ref.update(requests, (count) => count + 1).pipe(
         Effect.as(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response("small", {
-              status: 200,
-              headers: { "content-length": "1000001" },
-            })
-          )
+          new Response("small", {
+            status: 200,
+            headers: { "content-length": "1000001" },
+          })
         )
       )
     );
-    const inference = yield* buildInference(Layer.succeed(HttpClient.HttpClient, client));
+    const inference = yield* buildInference(transport);
 
     const failure = yield* inference.prepareStructured(structuredRequest()).pipe(Effect.flip);
 
@@ -468,16 +454,13 @@ it.effect("times out structured token counting before execution", () =>
   Effect.gen(function* () {
     const countingStarted = yield* Deferred.make<void>();
     const requests = yield* Ref.make(0);
-    const client = HttpClient.make(() =>
+    const transport = testOutboundTransportLayer(() =>
       Ref.update(requests, (count) => count + 1).pipe(
         Effect.andThen(Deferred.succeed(countingStarted, undefined)),
         Effect.andThen(Effect.never)
       )
     );
-    const inference = yield* buildInference(
-      Layer.succeed(HttpClient.HttpClient, client),
-      makeOpenAiHarness("2 seconds")
-    );
+    const inference = yield* buildInference(transport, makeOpenAiHarness("2 seconds"));
     const fiber = yield* Effect.exit(inference.prepareStructured(structuredRequest())).pipe(
       Effect.forkChild({ startImmediately: true })
     );
@@ -501,23 +484,17 @@ it.effect("times out structured token counting before execution", () =>
 it.effect("times out structured execution at the adapter-owned deadline", () =>
   Effect.gen(function* () {
     const executionStarted = yield* Deferred.make<void>();
-    const client = HttpClient.make((request) =>
+    const transport = testOutboundTransportLayer((request) =>
       request.url.includes("/responses/input_tokens")
         ? Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              new Response('{"object":"response.input_tokens","input_tokens":100}', {
-                status: 200,
-                headers: { "content-type": "application/json" },
-              })
-            )
+            new Response('{"object":"response.input_tokens","input_tokens":100}', {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
           )
         : Deferred.succeed(executionStarted, undefined).pipe(Effect.andThen(Effect.never))
     );
-    const inference = yield* buildInference(
-      Layer.succeed(HttpClient.HttpClient, client),
-      makeOpenAiHarness("2 seconds")
-    );
+    const inference = yield* buildInference(transport, makeOpenAiHarness("2 seconds"));
     const prepared = yield* inference.prepareStructured(structuredRequest());
     const fiber = yield* Effect.exit(prepared.execute).pipe(
       Effect.forkChild({ startImmediately: true })

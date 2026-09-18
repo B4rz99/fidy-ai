@@ -9,8 +9,13 @@ import {
 } from "~/core/email-authentication/model";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { buildLayerExit, exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import type { HttpClientRequest } from "effect/unstable/http";
+import {
+  type TestOutboundTransport,
+  type TestOutboundTransportRequest,
+  makeTestOutboundTransport,
+  testOutboundTransportFromClientLayer,
+  testOutboundTransportResponse,
+} from "~/shell/outbound-http/testing";
 import {
   EmailDeliveryPort,
   EmailSendFailed,
@@ -99,13 +104,13 @@ const configLayer = (nodeEnv: "development" | "production"): Layer.Layer<never> 
 
 const senderLayer = (
   status: number,
-  requests: Array<HttpClientRequest.HttpClientRequest>,
+  requests: Array<TestOutboundTransportRequest>,
   responseBody: string = '{"id":"resend-message-324"}'
 ): Layer.Layer<EmailDeliveryPort> => {
-  const client = HttpClient.make((request) => {
+  const client = makeTestOutboundTransport((request) => {
     requests.push(request);
     return Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         new Response(responseBody, {
           status,
@@ -116,7 +121,7 @@ const senderLayer = (
   });
   const config = configLayer("production");
   const outbound = OutboundHttp.layer.pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(testOutboundTransportFromClientLayer(client)),
     Layer.provide(BunCrypto.layer),
     Layer.provide(config)
   );
@@ -124,9 +129,9 @@ const senderLayer = (
 };
 
 const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort> => {
-  const client = HttpClient.make((request) =>
+  const client = makeTestOutboundTransport((request) =>
     Effect.succeed(
-      HttpClientResponse.fromWeb(
+      testOutboundTransportResponse(
         request,
         new Response(
           new ReadableStream({
@@ -139,7 +144,7 @@ const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort>
   );
   const config = configLayer("production");
   const outbound = OutboundHttp.layer.pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(testOutboundTransportFromClientLayer(client)),
     Layer.provide(BunCrypto.layer),
     Layer.provide(config)
   );
@@ -170,16 +175,16 @@ const sendWith = (
 
 it.effect("does not contact Resend outside production", () =>
   Effect.gen(function* () {
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
-    const client = HttpClient.make((request) => {
+    const requests: Array<TestOutboundTransportRequest> = [];
+    const client = makeTestOutboundTransport((request) => {
       requests.push(request);
       return Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response(null, { status: 200 }))
+        testOutboundTransportResponse(request, new Response(null, { status: 200 }))
       );
     });
     const config = configLayer("development");
     const outbound = OutboundHttp.layer.pipe(
-      Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+      Layer.provide(testOutboundTransportFromClientLayer(client)),
       Layer.provide(BunCrypto.layer),
       Layer.provide(config)
     );
@@ -205,7 +210,7 @@ it.effect("does not contact Resend outside production", () =>
 it.effect("selects the replacement and browser-pairing provider projections", () =>
   Effect.gen(function* () {
     for (const purpose of ["credential-replacement", "browser-pairing-approval"] as const) {
-      const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+      const requests: Array<TestOutboundTransportRequest> = [];
       yield* sendWith(senderLayer(200, requests), sendPurpose(purpose));
       expect(requests).toHaveLength(1);
     }
@@ -214,7 +219,7 @@ it.effect("selects the replacement and browser-pairing provider projections", ()
 
 it.effect("keeps Resend credentials out of typed failures", () =>
   Effect.gen(function* () {
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const requests: Array<TestOutboundTransportRequest> = [];
     const exit = yield* Effect.exit(sendWith(senderLayer(400, requests)));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
@@ -303,14 +308,14 @@ it.effect("treats a successful status with a valid but unexpected body as ambigu
 );
 
 const buildDeliveryLayerExit = (
-  client: HttpClient.HttpClient,
+  client: TestOutboundTransport,
   config: ConfigProvider.ConfigProvider
 ): Effect.Effect<Exit.Exit<unknown, unknown>> =>
   buildLayerExit(
     EmailDeliveryPort.layer.pipe(
       Layer.provide(
         OutboundHttp.layer.pipe(
-          Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+          Layer.provide(testOutboundTransportFromClientLayer(client)),
           Layer.provide(BunCrypto.layer),
           Layer.provide(ConfigProvider.layer(config))
         )
@@ -321,9 +326,9 @@ const buildDeliveryLayerExit = (
 
 it.effect("fails closed with value-safe diagnostics on malformed production Resend API keys", () =>
   Effect.gen(function* () {
-    const client = HttpClient.make((request) =>
+    const client = makeTestOutboundTransport((request) =>
       Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response('{"id":"unused"}', { status: 200 }))
+        testOutboundTransportResponse(request, new Response('{"id":"unused"}', { status: 200 }))
       )
     );
     const malformedCandidate = `CANARY-resend-${"f1d7c0de".repeat(2)}`;
@@ -348,9 +353,9 @@ it.effect("fails closed with value-safe diagnostics on malformed production Rese
 
 it.effect("fails closed with value-safe diagnostics on a missing production Resend API key", () =>
   Effect.gen(function* () {
-    const client = HttpClient.make((request) =>
+    const client = makeTestOutboundTransport((request) =>
       Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response('{"id":"unused"}', { status: 200 }))
+        testOutboundTransportResponse(request, new Response('{"id":"unused"}', { status: 200 }))
       )
     );
     const failure = yield* exitFailure(
@@ -377,7 +382,7 @@ it.effect.each([
   { status: 500, expected: "ambiguous" },
 ] as const)("classifies Resend status $status as $expected", ({ status, expected }) =>
   Effect.gen(function* () {
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const requests: Array<TestOutboundTransportRequest> = [];
     const exit = yield* Effect.exit(sendWith(senderLayer(status, requests)));
 
     expect(requests).toHaveLength(1);

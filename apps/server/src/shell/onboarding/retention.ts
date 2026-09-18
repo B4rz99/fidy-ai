@@ -13,9 +13,9 @@ import {
   removeExpiredEmailDeliveryBudgets,
   removeExpiredEmailEnrollment,
 } from "~/shell/email-authentication/repo";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { runScheduledWork } from "~/shell/observability/operations";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
-import type { Telemetry } from "~/shell/observability/telemetry";
+import type { Telemetry } from "~/shell/observability/operations";
 import { onboardingEmailDeliveryRetention } from "./delivery-workflow";
 
 /** Removes expired pre-User onboarding state in one independently observed scheduled execution. */

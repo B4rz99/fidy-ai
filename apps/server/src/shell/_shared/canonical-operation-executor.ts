@@ -6,11 +6,12 @@ import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
+  Telemetry,
   operationDescriptor,
   recordExpectedOutcome,
-} from "~/shell/observability/canonical-operation-span";
-import { TelemetryCodeSchema } from "~/shell/observability/registry";
-import { Telemetry } from "~/shell/observability/telemetry";
+} from "~/shell/observability/operations";
+import { TelemetryCodeSchema } from "~/shell/observability/contract";
+
 import type { AgentOperationBinding } from "~/shell/agent/agent-operation-binding";
 import type { ConfirmationPermit } from "~/shell/agent/tool-confirmation-model";
 import {

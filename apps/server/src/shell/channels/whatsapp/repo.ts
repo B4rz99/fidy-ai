@@ -35,7 +35,7 @@ import {
   DurableTraceContext,
   TelemetryAttempt,
   TelemetryDuration,
-} from "~/shell/observability/protocol";
+} from "~/shell/observability/contract";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
   WhatsAppBusinessPhoneNumberId,

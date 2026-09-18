@@ -6,8 +6,8 @@ import type { AgentReply } from "~/shell/agent/message";
 import type { OnboardingTurnOutcome } from "~/shell/onboarding/onboarding";
 import { confirmationDigestFromChallenge } from "~/shell/agent/tool-confirmation-model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
-import type { DeclaredOutcome, TelemetryAttempt } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import type { DeclaredOutcome, TelemetryAttempt } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 import { requestConsentDisclosureDelivery } from "./disclosure-delivery";
 import {
   KapsoClient,

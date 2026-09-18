@@ -2,11 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Ref, Schema } from "effect";
 import { TestConsole } from "effect/testing";
 import { PersistedQueue } from "effect/unstable/persistence";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { makePersistedQueue } from "./persisted-queue";
 import type {
   PersistedQueueFailureDisposition,

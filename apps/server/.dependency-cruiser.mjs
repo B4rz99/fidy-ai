@@ -79,10 +79,25 @@ export default {
         "A module imported another module's internal implementation. `internal/` is visibly " +
         "private across core and shell, including to tests and same-named owners in the other " +
         "layer. Move the caller to the owner's contract.ts or operations.ts interface.",
-      from: { path: "^src/(core|shell)/([^/]+)/" },
+      from: {
+        path: "^src/(core|shell)/([^/]+)/",
+        pathNot: "^src/shell/testing/telemetry-harness\\.ts$",
+      },
       to: {
         path: "^src/(core|shell)/[^/]+/internal/",
         pathNot: "^src/$1/$2/internal/",
+      },
+    },
+    {
+      name: "telemetry-harness-imports-non-observability-internal",
+      severity: "error",
+      comment:
+        "The deliberate broad telemetry harness may reach only Observability internals, never " +
+        "another owner's private implementation.",
+      from: { path: "^src/shell/testing/telemetry-harness\\.ts$" },
+      to: {
+        path: "^src/(core|shell)/[^/]+/internal/",
+        pathNot: "^src/shell/observability/internal/",
       },
     },
     {

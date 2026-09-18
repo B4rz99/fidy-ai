@@ -42,11 +42,8 @@ import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { SqlQueueHarness } from "~/shell/testing/durable-execution";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {

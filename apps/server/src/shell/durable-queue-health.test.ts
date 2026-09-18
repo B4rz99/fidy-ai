@@ -16,13 +16,10 @@ import { PersistedQueue } from "effect/unstable/persistence";
 import { type SqlClient, type SqlError } from "effect/unstable/sql";
 import { whatsappInboundQueueName } from "~/shell/channels/whatsapp/inbound-execution";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import { ProjectedTransaction } from "~/shell/observability/projectors";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { ProjectedTransaction } from "~/shell/observability/contract";
+import { Telemetry, runScheduledWork } from "~/shell/observability/operations";
+
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import {
   durableQueueAttentionLogAnnotations,

@@ -51,7 +51,7 @@ import { SqlQueueHarness } from "./durable-execution";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
 import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { SupportRecoveryTestAccess } from "~/shell/recovery/routes";
 import {
   type ApiClient,

@@ -57,7 +57,7 @@ import {
   OnboardingEmailDeliveryWorkflowLive,
 } from "~/shell/onboarding/delivery-workflow";
 import { OperationsLive } from "~/shell/operations/handlers";
-import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
+import { CanonicalTelemetryLive } from "~/shell/observability/runtime";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { SubscriptionEnrollmentHandlersLive } from "~/shell/subscription/enrollment-handlers";
 import { BillingAttemptWorkerLive } from "~/shell/subscription/billing-attempt-execution";

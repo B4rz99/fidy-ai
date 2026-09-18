@@ -33,11 +33,8 @@ import {
 } from "~/core/ingestion/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import {
   grantCurrentOnboardingConsentForTesting,

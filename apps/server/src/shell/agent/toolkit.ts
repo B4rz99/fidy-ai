@@ -8,7 +8,7 @@ import { grantsRequiredTier } from "~/shell/_shared/suggested-operations";
 import { operationCatalog } from "~/shell/api";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { AccessTier } from "~/core/access-tier/contract";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { Telemetry } from "~/shell/observability/operations";
 import {
   CanonicalCallRejected,
   executeHostedCanonicalOperation,

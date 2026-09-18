@@ -7,7 +7,7 @@ import {
   decodeSentryAccountSmokeConfig,
   telemetryConfig,
   telemetryConfigForProjects,
-} from "./telemetry-config";
+} from "~/shell/observability/internal/telemetry-config";
 
 const fullSha = "0123456789abcdef0123456789abcdef01234567";
 const release = `fidy@${fullSha}`;

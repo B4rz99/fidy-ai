@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Duration, Option } from "effect";
-import { TelemetryAttempt, TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { TelemetryAttempt, TelemetryHttpStatus } from "~/shell/observability/contract";
 import { AgentReplyNotRenderable } from "./outbound";
 import { KapsoSendFailed } from "./kapso-client";
 import { DeliveryAttemptLimit, classifyDeliveryFailure } from "./reply-delivery";

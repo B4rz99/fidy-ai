@@ -16,7 +16,7 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { runScheduledWork } from "~/shell/observability/operations";
 import {
   ReplacementDeliveryWorkflow,
   type ReplacementExpiryPayload,

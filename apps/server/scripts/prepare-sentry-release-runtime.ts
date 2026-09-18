@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 // A Sentry release links telemetry to the exact deployed Fidy code and its source maps.
-import { prepareSentryRelease } from "~/shell/observability/release-preparation";
+import { prepareSentryRelease } from "~/shell/observability/runtime";
 
 try {
   const release = await prepareSentryRelease();

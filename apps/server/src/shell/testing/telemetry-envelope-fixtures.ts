@@ -1,6 +1,6 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Option, Schema } from "effect";
-import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/projectors";
+import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/contract";
 
 /** One decoded header/payload pair from a serialized Sentry envelope fixture. */
 export type DecodedEnvelopeItem = Readonly<{

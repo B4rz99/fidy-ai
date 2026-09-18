@@ -11,7 +11,7 @@ import {
 } from "~/shell/channels/whatsapp/disclosure-delivery";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { DisclosureDeliveryAttemptNumber } from "~/shell/channels/whatsapp/disclosure-model";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppMessageEvidence,

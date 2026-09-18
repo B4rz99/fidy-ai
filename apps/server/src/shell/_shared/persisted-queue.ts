@@ -1,12 +1,16 @@
 import * as Arr from "effect/Array";
 import { Cause, Effect, Option, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
-import { DisabledTelemetry } from "~/shell/observability/disabled";
+import {
+  DisabledTelemetry,
+  Telemetry,
+  type TelemetryService,
+} from "~/shell/observability/operations";
 import {
   DurableQueueName,
   type DurableQueueName as DurableQueueNameType,
 } from "~/shell/durable-queue-policy";
-import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+
 import {
   type PersistedQueueFailureDisposition,
   type PersistedQueueHandlerDescriptor,

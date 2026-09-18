@@ -43,8 +43,8 @@ import {
   disposeTestRuntimes as disposeRuntimes,
 } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import type { Telemetry } from "~/shell/observability/telemetry";
+import { TelemetryDisabled } from "~/shell/observability/operations";
+import type { Telemetry } from "~/shell/observability/operations";
 import {
   type AgentReply,
   AgentService,
@@ -70,7 +70,7 @@ import { WhatsAppWorkerLive, processNextWhatsAppTurn } from "~/shell/channels/wh
 import { truncateWhatsAppChannel } from "~/shell/channels/whatsapp/fixtures";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
 
 const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
   Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))

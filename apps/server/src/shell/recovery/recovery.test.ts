@@ -25,7 +25,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { ApiHarness, makeApiHarnessWithSupportAccess } from "~/shell/testing/api-harness";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { SupportAccessVerifier, makeSupportAccessVerifier } from "./access";
 import { SupportRecoveryOperationalFailure, approveSupportRecovery } from "./service";
 import {

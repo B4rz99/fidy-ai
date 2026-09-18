@@ -2,11 +2,8 @@ import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { defaultUserId } from "~/shell/db/development-seed";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import { ProjectedTransaction } from "~/shell/observability/projectors";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { ProjectedTransaction } from "~/shell/observability/contract";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { truncateAuditLogEntries } from "./fixtures";

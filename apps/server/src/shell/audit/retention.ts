@@ -1,7 +1,7 @@
 import { DateTime, Duration, Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
-import type { Telemetry } from "~/shell/observability/telemetry";
+import { runScheduledWork } from "~/shell/observability/operations";
+import type { Telemetry } from "~/shell/observability/operations";
 import { removeAuditLogEntriesBefore } from "./repo";
 
 const auditRetentionDays = 365;

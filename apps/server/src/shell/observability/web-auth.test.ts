@@ -9,7 +9,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
-import { EnvelopeRecorder } from "./envelope-recorder";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;

@@ -1,6 +1,6 @@
 import { DateTime, Effect, Layer } from "effect";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { runScheduledWork } from "~/shell/observability/operations";
 import {
   getBillingReconciliationEscalations,
   pruneBillingAttemptQueueHistory,

@@ -21,7 +21,7 @@ import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
-import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";

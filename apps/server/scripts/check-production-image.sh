@@ -145,7 +145,7 @@ inspectArtifacts() {
     echo "The runtime image is missing its pinned Sentry upload client." >&2
     return 1
   fi
-  if ! grep --fixed-strings --quiet 'src/shell/observability/preload.ts' "$artifactRoot/preload.js.map" || \
+  if ! grep --fixed-strings --quiet 'src/shell/observability/internal/preload.ts' "$artifactRoot/preload.js.map" || \
     ! grep --fixed-strings --quiet 'src/main.ts' "$artifactRoot/main.js.map"; then
     echo "The production source maps do not cover the preload and application entries." >&2
     return 1
@@ -157,7 +157,7 @@ inspectArtifacts() {
     return 1
   fi
   if ! docker run --rm "$image" sh -c \
-    'test ! -e src/main.ts && test ! -e src/shell/observability/preload.ts && test ! -e scripts/prepare-sentry-release.ts && test ! -e scripts/migrate.ts'; then
+    'test ! -e src/main.ts && test ! -e src/shell/observability/internal/preload.ts && test ! -e scripts/prepare-sentry-release-runtime.ts && test ! -e scripts/migrate.ts'; then
     echo "The runtime image retained direct TypeScript production entries." >&2
     return 1
   fi

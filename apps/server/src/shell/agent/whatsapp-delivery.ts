@@ -7,7 +7,7 @@ import {
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { SqlClient } from "effect/unstable/sql";
 import type { AgentReply } from "./message";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { Telemetry } from "~/shell/observability/operations";
 
 /** Runner-local WhatsApp delivery. Immediate-only runners fail closed if misrouted channel work. */
 export const WhatsAppReplyDelivery = Context.Reference<{

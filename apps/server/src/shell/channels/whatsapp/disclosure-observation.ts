@@ -4,8 +4,8 @@ import {
   type DeclaredOutcome,
   type SpanDescriptor,
   TelemetryAttempt,
-} from "~/shell/observability/protocol";
-import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+} from "~/shell/observability/contract";
+import { Telemetry, type TelemetryService } from "~/shell/observability/operations";
 import type { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 
 const recordExit = (

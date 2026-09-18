@@ -1,4 +1,4 @@
-import { Config, Effect, Layer, Logger, References } from "effect";
+import { Config } from "effect";
 
 const defaultHttpPort = 3000;
 const oneMebibyteInBytes = 1_048_576;
@@ -14,24 +14,3 @@ export const serverConfig = Config.all({
   hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
   maxRequestBodySize: Config.succeed(maximumPublicRequestBodySizeBytes),
 });
-
-const LoggerLive = Layer.unwrap(
-  Effect.map(Config.string("NODE_ENV").pipe(Config.withDefault("development")), (environment) =>
-    environment === "production"
-      ? Logger.layer([Logger.consoleJson])
-      : Logger.layer([Logger.defaultLogger])
-  )
-);
-
-const MinimumLogLevelLive = Layer.unwrap(
-  Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), (minimumLogLevel) =>
-    Layer.succeed(References.MinimumLogLevel, minimumLogLevel)
-  )
-);
-
-/**
- * Installs process-wide log rendering and filtering. NODE_ENV=production emits one JSON object per
- * entry; every other value uses Effect's readable logger. LOG_LEVEL defaults to Info, and an
- * unrecognized configured level fails layer construction with ConfigError.
- */
-export const RuntimeLoggingLive = Layer.mergeAll(LoggerLive, MinimumLogLevelLive);

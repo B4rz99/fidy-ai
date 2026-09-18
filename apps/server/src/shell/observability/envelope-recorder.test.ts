@@ -12,12 +12,11 @@ import {
   makeSpanDescriptor,
   makeWorkSpanDescriptor,
 } from "~/shell/testing/telemetry-fixtures";
-import { strictDecoding } from "./decoding";
 import {
   EnvelopeRecorder,
   TelemetryEnvelopeRecording,
   telemetryEnvelopeRecording,
-} from "./envelope-recorder";
+} from "~/shell/testing/telemetry-harness";
 import {
   ClassifiedFailure,
   type DurableTraceContext,
@@ -27,9 +26,10 @@ import {
   TelemetryCount,
   TelemetryDuration,
   TelemetryHttpStatus,
-} from "./protocol";
-import { isSupportedEnvelopeItemType } from "./sentry-adapter";
-import { Telemetry } from "./telemetry";
+  TelemetryStrictDecoding as strictDecoding,
+} from "./contract";
+import { isSupportedEnvelopeItemType } from "~/shell/observability/internal/sentry-adapter";
+import { Telemetry } from "./operations";
 
 const descriptor = makeSpanDescriptor();
 

@@ -29,7 +29,7 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {

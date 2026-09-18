@@ -1,6 +1,9 @@
-import { makeSentryRecordingClient } from "~/shell/observability/sentry-adapter";
-import { installTelemetryBootstrap } from "~/shell/observability/telemetry-bootstrap";
-import type { NonProductionTelemetryConfig } from "~/shell/observability/telemetry-config";
+import {
+  installTelemetryBootstrap,
+  makeSentryRecordingClient,
+} from "~/shell/testing/telemetry-harness";
+
+import type { NonProductionTelemetryConfig } from "~/shell/testing/telemetry-harness";
 import { installCompatibilityRecorder, requireInstalled } from "./handoff";
 
 const transportOutcome = process.env["FIDY_COMPATIBILITY_TRANSPORT"];

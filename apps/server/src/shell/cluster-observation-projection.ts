@@ -4,7 +4,7 @@ import {
   type TelemetryDuration,
   boundedTelemetryCount,
   boundedTelemetryDuration,
-} from "~/shell/observability/protocol";
+} from "~/shell/observability/contract";
 import type { ClusterObservationSample } from "./cluster-observation-sample";
 
 /** Closed log projection: bounded branded counts, booleans, and Options for unobserved values. */

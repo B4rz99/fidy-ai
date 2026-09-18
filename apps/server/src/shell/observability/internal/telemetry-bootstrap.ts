@@ -1,11 +1,11 @@
 import { Context, Data, Effect, Option, Result } from "effect";
-import { DisabledTelemetryResource } from "./disabled";
+import { DisabledTelemetryResource } from "~/shell/observability/contract";
 import type {
   NonProductionTelemetryConfig,
   ProductionTelemetryConfig,
   TelemetryConfig,
 } from "./telemetry-config";
-import type { TelemetryResource } from "./telemetry";
+import type { TelemetryResource } from "~/shell/observability/contract";
 
 type EnabledConfig = ProductionTelemetryConfig | NonProductionTelemetryConfig;
 
@@ -61,7 +61,7 @@ const bootstrapKey = Symbol.for("@fidy/server/shell/observability/telemetry-boot
 class TelemetryBootstrapContext extends Context.Service<
   TelemetryBootstrapContext,
   TelemetryBootstrap
->()("@fidy/server/shell/observability/telemetry-bootstrap/TelemetryBootstrapContext") {}
+>()("@fidy/server/shell/observability/internal/telemetry-bootstrap/TelemetryBootstrapContext") {}
 
 /** Installs the preload-owned client/resource exactly once for runtime assembly. */
 export const installTelemetryBootstrap = (

@@ -12,7 +12,7 @@ import {
   executeHostedCanonicalOperation,
 } from "~/shell/_shared/canonical-operation-executor";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { MigrationSqlClient } from "~/shell/db/client";

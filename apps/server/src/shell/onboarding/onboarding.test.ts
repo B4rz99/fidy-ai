@@ -32,14 +32,19 @@ import { type OnboardingTurn, handleOnboardingTurn } from "./onboarding";
 import { ApiHarness, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
-import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
-import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import {
+  DisabledTelemetryResource,
+  Telemetry,
+  TelemetryDisabled,
+  makeTelemetryService,
+} from "~/shell/observability/operations";
+import { EnvelopeRecorder } from "~/shell/testing/telemetry-harness";
 import {
   type DeclaredOutcome,
   TelemetrySpanId,
   TelemetryTraceId,
-} from "~/shell/observability/protocol";
-import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
+} from "~/shell/observability/contract";
+
 import { CreatedVerifiedOnboarding } from "~/web-auth-api";
 
 const testTelemetry = makeTelemetryService(DisabledTelemetryResource.adapter);

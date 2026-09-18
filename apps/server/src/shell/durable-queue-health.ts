@@ -9,13 +9,14 @@ import {
 import {
   maximumTelemetryCount,
   maximumTelemetryDurationMilliseconds,
-} from "~/shell/observability/protocol";
+} from "~/shell/observability/contract";
 import {
   type ScheduledWorkDescriptor,
+  Telemetry,
   runScheduledWork,
-} from "~/shell/observability/scheduled-work";
+} from "~/shell/observability/operations";
 import { applicationPersistedQueueNames } from "~/shell/_shared/persisted-queue";
-import { Telemetry } from "~/shell/observability/telemetry";
+
 import { SupportAccessVerifier } from "~/shell/recovery/access";
 import {
   DurableQueueAttention,

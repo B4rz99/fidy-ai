@@ -3,9 +3,9 @@ import { Effect, Layer } from "effect";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { DurableExecutionLive } from "~/shell/durable-execution";
 import { AppLive } from "~/shell/http";
-import { SentryLive } from "~/shell/observability/sentry-live";
+import { ObservabilityLive } from "~/shell/observability/runtime";
 import { OutboundHttpLive } from "~/shell/outbound-http/runtime";
-import { RuntimeLoggingLive, serverConfig } from "~/shell/runtime";
+import { serverConfig } from "~/shell/runtime";
 
 const ServerLive = Layer.unwrap(Effect.map(serverConfig, BunHttpServer.layer));
 
@@ -18,8 +18,7 @@ const MainLive = AppLive.pipe(
   Layer.provide(OutboundHttpLive),
   Layer.provide(BunCrypto.layer),
   Layer.provide(BunHttpClient.layer),
-  Layer.provide(SentryLive),
-  Layer.provide(RuntimeLoggingLive)
+  Layer.provide(ObservabilityLive)
 );
 
 BunRuntime.runMain(Layer.launch(MainLive));

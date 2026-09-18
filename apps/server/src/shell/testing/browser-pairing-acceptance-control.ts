@@ -13,7 +13,7 @@ import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/au
 import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryDisabled } from "~/shell/observability/operations";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import { upsertStableUserFixture } from "./identity-fixtures";
 

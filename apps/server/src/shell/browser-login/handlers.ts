@@ -25,8 +25,8 @@ import {
   type DeclaredOutcome,
   type SpanDescriptor,
   TelemetryHttpStatus,
-} from "~/shell/observability/protocol";
-import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+} from "~/shell/observability/contract";
+import { Telemetry, type TelemetryService } from "~/shell/observability/operations";
 
 const maximumConcurrentStarts = 8;
 const maximumConcurrentRedemptions = 4;

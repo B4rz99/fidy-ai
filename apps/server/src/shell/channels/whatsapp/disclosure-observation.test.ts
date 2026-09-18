@@ -1,10 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
-import {
-  EnvelopeRecorder,
-  TelemetryEnvelopeRecording,
-} from "~/shell/observability/envelope-recorder";
-import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/projectors";
+import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
+import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/contract";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 import {

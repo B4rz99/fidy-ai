@@ -6,7 +6,7 @@ import type { ApplicationPersistedQueueRequirement } from "./persisted-queue";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/agent/hosted-inference";
 import type { OperationId } from "~/shell/api";
-import type { Telemetry } from "~/shell/observability/telemetry";
+import type { Telemetry } from "~/shell/observability/operations";
 import type { CanonicalCaller, ChildOperationAudit } from "./authz";
 import type { CanonicalEndpoint, CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";

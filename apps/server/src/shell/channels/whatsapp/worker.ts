@@ -9,10 +9,9 @@ import {
   type PersistedQueueTerminalReason,
 } from "~/shell/_shared/persisted-queue-handler";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
-import { projectStack } from "~/shell/observability/projectors";
+import { Telemetry, projectStack, runScheduledWork } from "~/shell/observability/operations";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
-import { runScheduledWork } from "~/shell/observability/scheduled-work";
-import { Telemetry } from "~/shell/observability/telemetry";
+
 import {
   type WhatsAppInboundWork,
   maximumWhatsAppInboundAttempts,

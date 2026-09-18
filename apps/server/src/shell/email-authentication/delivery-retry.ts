@@ -2,8 +2,8 @@ import { Effect, Option, Result } from "effect";
 import { Activity } from "effect/unstable/workflow";
 import type { EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import { EmailDeliveryPort } from "./delivery";
-import { TelemetryAttempt } from "~/shell/observability/protocol";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { TelemetryAttempt } from "~/shell/observability/contract";
+import { Telemetry } from "~/shell/observability/operations";
 
 const maximumSendAttempts = 3;
 const initialRetryDelayMillis = 250;

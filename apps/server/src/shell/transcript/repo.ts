@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   TranscriptContentEntry,
   TranscriptEntry,

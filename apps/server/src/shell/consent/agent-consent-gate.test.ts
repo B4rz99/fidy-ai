@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";

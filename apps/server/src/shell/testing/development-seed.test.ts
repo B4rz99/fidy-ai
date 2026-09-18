@@ -4,8 +4,8 @@ import { Config, DateTime, Effect, Layer, Option } from "effect";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { hasPaidProInScope } from "~/shell/subscription/access-repo";
-import { PgLive } from "./client";
-import { withUserTransaction } from "./user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
+import { PgLive } from "./database-harness";
 import { defaultUserId } from "./development-seed";
 
 const localDatabaseUrl = Config.string("DATABASE_URL");
@@ -23,7 +23,7 @@ const runSeedCommand = (
 ): Effect.Effect<{ exitCode: number; stdout: string; stderr: string }> =>
   Effect.gen(function* () {
     const child = yield* Effect.sync(() =>
-      Bun.spawn(["bun", "scripts/seed-development.ts"], {
+      Bun.spawn(["bun", "scripts/seed-development-runtime.ts"], {
         cwd: process.cwd(),
         env: {
           ...process.env,

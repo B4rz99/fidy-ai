@@ -54,7 +54,7 @@ const acceptanceExclude = [
   "src/shell/transactions/**",
   // Migration reconciliation is qualified by the database-backed migration suites; acceptance
   // consumes the resulting schema but does not own migration implementation coverage.
-  "src/shell/db/migrations/**",
+  "src/shell/database/internal/migrations/**",
   // Email authentication, support recovery, PAT management, and category administration are
   // independent canonical capabilities with focused PostgreSQL-backed integration suites. The
   // WhatsApp harness only consumes their stable boundary effects while qualifying transport.

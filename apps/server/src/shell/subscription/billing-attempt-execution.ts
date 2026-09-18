@@ -10,7 +10,7 @@ import {
   makePersistedQueue,
 } from "~/shell/_shared/persisted-queue";
 import { onboardingConsentStandingInScope, withSubjectLockInScope } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   type ArmedCharge,
   type BillingAttemptRecord,

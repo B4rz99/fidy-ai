@@ -37,7 +37,7 @@ import {
 import { categorizeCapture } from "~/shell/categories/categorizer";
 import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors";
 import { findCategory } from "~/shell/categories/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import { advisoryLockKey, withUserLockInScope } from "~/shell/database/operations";
 import { findUserInScope } from "~/shell/identity/repo";
 import type { SpanDescriptor } from "~/shell/observability/contract";
 import { Telemetry } from "~/shell/observability/operations";

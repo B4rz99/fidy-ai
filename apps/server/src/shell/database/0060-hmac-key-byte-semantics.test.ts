@@ -1,10 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import { SqlClient, type SqlConnection, type Statement } from "effect/unstable/sql";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "./operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { RollbackMigrationFixture } from "~/shell/testing/rollback-migration-fixture";
-import { hmacKeyByteSemantics } from "./0060-hmac-key-byte-semantics";
+import { hmacKeyByteSemantics } from "~/shell/database/internal/migrations/0060-hmac-key-byte-semantics";
 
 const fixtureUserId = "f1d1a000-0000-4000-8000-0000000005d1";
 const fixturePairingId = "f1d1a000-0000-4000-8000-0000000005d2";

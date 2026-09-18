@@ -31,8 +31,8 @@ import {
   type ResendReceivedEmailId as ResendReceivedEmailIdType,
   ResendWebhookDeliveryId,
 } from "~/core/ingestion/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";

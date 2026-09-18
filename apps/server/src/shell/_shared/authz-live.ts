@@ -25,7 +25,7 @@ import {
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { useToken } from "~/shell/tokens/repo";
 import {
   renewedWebSessionCookieOptions,

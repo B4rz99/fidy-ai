@@ -21,8 +21,11 @@ import {
 import type { Price } from "~/core/subscription/model";
 import type { PriceId } from "~/core/subscription/reference";
 import { getVerifiedEmailInScope } from "~/shell/email-authentication/credential";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
 import {
   type EnrollmentRecord,
   beginEnrollmentSubmissionInScope,

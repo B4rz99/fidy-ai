@@ -7,7 +7,7 @@ import {
   observeConsentRecords,
   withSubjectLock,
 } from "~/shell/consent/repo";
-import { withConsentExternalEffectLock } from "~/shell/db/advisory-lock";
+import { withConsentExternalEffectLock } from "~/shell/database/operations";
 
 /** Copies a current fixture onboarding grant onto another stable test User. */
 export const grantCurrentOnboardingConsentForTesting = Effect.fn(

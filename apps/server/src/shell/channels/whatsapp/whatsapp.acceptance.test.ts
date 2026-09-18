@@ -16,7 +16,7 @@ import { TelemetrySpanId, TelemetryTraceId } from "~/shell/observability/contrac
 import { Telemetry, makeTelemetryService } from "~/shell/observability/operations";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppProviderMessageId } from "./model";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import {
   WhatsAppAcceptanceApiClient,
   WhatsAppAcceptanceCallerControl,

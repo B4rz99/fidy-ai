@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { PATPairingApi } from "~/pat-pairing-api";
-import { PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { PgLive, RuntimeAuthorityLive } from "./database-harness";
 import { PATPairingHandlersLive } from "~/shell/tokens/pairing-handlers";
 
 // Test-only subprocess: the real bootstrap declaration, handlers, crypto, socket and restricted

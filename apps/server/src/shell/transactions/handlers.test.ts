@@ -1,15 +1,15 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, DateTime, Effect, Equal, Layer, Option, Result, Schema } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { getTransactionUserDecisions, transactionPayload, truncateTransactions } from "./fixtures";
 import { correctTransaction, createTransaction, deleteTransaction } from "./mutations";

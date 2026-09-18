@@ -9,13 +9,13 @@ import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { computePATExpiration } from "~/core/tokens/rules";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { appendConsentRecord, observeConsentRecords } from "~/shell/consent/repo";
 import { OperationResponse } from "~/shell/public-http/contract";
 import { manualPATIssuanceLimit } from "./errors";
 import { bearerSecret } from "./fixtures";
 import { IssuedManualPATResponse, ManualPATReviewExpired } from "./operations";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000248");

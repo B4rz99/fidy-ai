@@ -13,7 +13,7 @@ import {
   type TransactionPresentation,
   type TransactionQuery,
 } from "~/core/transactions/model";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { effectiveTransactionCte, effectiveTransactionPeriodCte } from "./effective-relation";
 import { dashboardListStatement, dashboardMetricStatement } from "./read-statements";
 import {

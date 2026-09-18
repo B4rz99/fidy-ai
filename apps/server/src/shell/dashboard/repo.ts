@@ -2,8 +2,11 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { DashboardDocument, WidgetId } from "~/core/dashboard/model";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
 
 const DashboardRow = Schema.Struct({
   document: DashboardDocument,

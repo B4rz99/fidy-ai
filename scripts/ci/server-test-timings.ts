@@ -18,7 +18,7 @@ export const serverTestTimings = {
   "src/shell/ingestion/worker.test.ts": 7.998,
   "src/shell/subscription/billing-reconciliation.integration.test.ts": 7.423,
   "src/shell/durable-queue-health.test.ts": 5.607,
-  "src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts": 5.134,
+  "src/shell/database/0028-persisted-schema-reconciliation.test.ts": 5.134,
   "src/shell/ingestion/email-forwarding.test.ts": 4.963,
   "src/shell/testing/suggested-operations.test.ts": 3.871,
   "src/shell/email-authentication/replacement.test.ts": 3.054,

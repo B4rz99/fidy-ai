@@ -1,10 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "./operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { RollbackMigrationFixture } from "~/shell/testing/rollback-migration-fixture";
-import { subscriptionPriceVocabulary } from "./0041-subscription-price-vocabulary";
+import { subscriptionPriceVocabulary } from "~/shell/database/internal/migrations/0041-subscription-price-vocabulary";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Subscription price vocabulary migration",

@@ -3,7 +3,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer, Option, Schema } from "effect";
 import { IngestSampleId } from "~/core/ingestion/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClientLive } from "~/shell/database/runtime";
 import {
   ApprovedOperatorId,
   ForwardedEmailSampleApproval,
@@ -31,7 +31,7 @@ const program = Effect.gen(function* () {
 
 const MainLive = Layer.effectDiscard(program).pipe(
   Layer.provide(ForwardedEmailSampleApproval.layer),
-  Layer.provide(MigrationSqlClient.layer),
+  Layer.provide(MigrationSqlClientLive),
   Layer.provide(BunServices.layer)
 );
 

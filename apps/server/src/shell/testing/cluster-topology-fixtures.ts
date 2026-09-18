@@ -7,7 +7,7 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { RunnerAddress, ShardId, type ShardingConfig } from "effect/unstable/cluster";
 import { SqlSchema } from "effect/unstable/sql";
 import { Workflow, type WorkflowEngine } from "effect/unstable/workflow";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient, MigrationSqlClientLive } from "./database-harness";
 import {
   clusterLocksTable,
   clusterRunnersTable,
@@ -109,7 +109,7 @@ const clearClusterTableIfPresent = Effect.fn(function* (tableName: string) {
  */
 export const resetClusterTopologyIdentity: Effect.Effect<void> = Layer.build(
   Layer.effectDiscard(clearClusterTableIfPresent(topologyIdentityTable)).pipe(
-    Layer.provide(MigrationSqlClient.layer)
+    Layer.provide(MigrationSqlClientLive)
   )
 ).pipe(Effect.scoped, Effect.orDie);
 
@@ -121,5 +121,5 @@ export const resetClusterTopologyState: Effect.Effect<void> = Layer.build(
       yield* clearClusterTableIfPresent(clusterRunnersTable);
       yield* clearClusterTableIfPresent(topologyIdentityTable);
     })
-  ).pipe(Layer.provide(MigrationSqlClient.layer))
+  ).pipe(Layer.provide(MigrationSqlClientLive))
 ).pipe(Effect.scoped, Effect.orDie);

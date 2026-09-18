@@ -1,6 +1,6 @@
 import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { Currency, Money } from "~/core/_shared/money";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type CreateTransactionInput, TransactionId } from "~/core/transactions/model";

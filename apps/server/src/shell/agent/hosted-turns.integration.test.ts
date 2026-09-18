@@ -29,13 +29,13 @@ import { TokenBearer } from "~/core/tokens/model";
 import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
 import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedConsentedPatIdentity,
   seedDevelopmentIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   clusterTestRunnerOptions,

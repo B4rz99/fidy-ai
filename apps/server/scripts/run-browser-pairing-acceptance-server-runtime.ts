@@ -2,7 +2,7 @@
 
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { MigratorLive } from "~/shell/db/client";
+import { MigratorLive } from "~/shell/database/runtime";
 import { makeBrowserLoginPairingAcceptanceServer } from "~/shell/testing/api-harness";
 import { makeBrowserLoginPairingAcceptanceControlServer } from "~/shell/testing/browser-pairing-acceptance-control";
 

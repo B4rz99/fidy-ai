@@ -1,7 +1,7 @@
 import { DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { MoneyGroups, encodeMoneyAmount } from "~/core/_shared/money";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { UserId } from "~/core/identity/reference";
 import {
   DeliveryEvidenceInput,

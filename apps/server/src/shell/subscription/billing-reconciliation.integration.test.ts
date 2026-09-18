@@ -38,9 +38,14 @@ import {
 import { PriceId } from "~/core/subscription/reference";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
-import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+} from "~/shell/testing/database-harness";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
+import { withUserTransaction } from "~/shell/database/operations";
 import { SqlQueueHarness } from "~/shell/testing/durable-execution";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
@@ -447,7 +452,7 @@ const makeBillingQueueServices = Effect.gen(function* () {
 });
 
 const TestLayer = Layer.mergeAll(
-  MigrationSqlClient.layer,
+  MigrationSqlClientLive,
   MigratorLive,
   PgLive,
   TestPublicNamespace

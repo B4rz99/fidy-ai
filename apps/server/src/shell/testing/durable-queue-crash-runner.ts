@@ -1,7 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
-import { PgLive } from "~/shell/db/client";
+import { PgLive } from "./database-harness";
 import { durableQueueTableName } from "~/shell/durable-queue-policy";
 
 const TestPayload = Schema.Struct({ note: Schema.String });

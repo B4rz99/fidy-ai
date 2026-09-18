@@ -25,7 +25,7 @@ import { observeAuditLogEntries } from "~/shell/audit/repo";
 import {
   generateDevelopmentPatBearer,
   seedConsentedPatIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import type { FinancialFacts, SafetyCase } from "./model";
 import { EvaluationFailure } from "./model";
 import { check, sameFinancialFacts } from "./scoring";

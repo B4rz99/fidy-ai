@@ -5,7 +5,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 import { Config, Console, Data, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { CardEnrollmentId, WompiSourceId } from "~/core/subscription/enrollment-model";
-import { PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { PgLive, RuntimeAuthorityLive } from "~/shell/database/runtime";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { reconcileCardEnrollment } from "~/shell/subscription/card-enrollment";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";

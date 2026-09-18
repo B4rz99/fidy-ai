@@ -34,7 +34,7 @@ import { RpcClientError } from "effect/unstable/rpc";
 import { WorkerError } from "effect/unstable/workers";
 import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { ConversationCompactionTokenCount } from "~/core/transcript/compaction-policy";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
@@ -52,7 +52,7 @@ import type { AuditLogEntry } from "~/core/audit/model";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import type { ProjectedTransaction, SpanDescriptor } from "~/shell/observability/contract";
@@ -65,7 +65,7 @@ import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedConsentedPatIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import { selectRecentTranscriptEntries, selectTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";

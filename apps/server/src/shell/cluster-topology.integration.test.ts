@@ -34,7 +34,7 @@ import {
 import { sampleClusterObservation } from "./cluster-observation-sample";
 import { ClusterReadiness, type ClusterReadinessReport } from "./cluster-readiness";
 import { clusterCompatibilityIdentity } from "./cluster-topology";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
 import {
   clusterLocksTable,
   clusterMessagesTable,

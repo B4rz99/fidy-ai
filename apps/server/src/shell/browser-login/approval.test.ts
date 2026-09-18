@@ -28,7 +28,7 @@ import {
 import { immediatePermit, makeTurnConfirmation } from "~/shell/agent/tool-confirmation";
 import { OperationResponse } from "~/shell/public-http/contract";
 import { agentOperationBindings } from "~/shell/agent/toolkit";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";

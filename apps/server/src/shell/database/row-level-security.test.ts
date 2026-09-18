@@ -6,9 +6,9 @@ import { makeColombianUser } from "~/core/identity/rules";
 import { TransactionId } from "~/core/transactions/model";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
-import { MigrationSqlClient, assertRuntimeAuthority } from "./client";
-import { userTableNames } from "./user-tables";
-import { withUserTransaction } from "./user-transaction";
+import { assertRuntimeAuthority } from "~/shell/database/internal/runtime-authority";
+import { userTableNames } from "~/shell/database/internal/user-tables";
+import { MigrationSqlClient, withUserTransaction } from "./operations";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000c1");
 const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000d2");

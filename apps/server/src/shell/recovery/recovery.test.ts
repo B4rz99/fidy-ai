@@ -20,9 +20,12 @@ import {
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { ApiHarness, makeApiHarnessWithSupportAccess } from "~/shell/testing/api-harness";
 import { TelemetryDisabled } from "~/shell/observability/operations";

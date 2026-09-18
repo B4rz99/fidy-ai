@@ -4,7 +4,7 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
-import { PgLive } from "~/shell/db/client";
+import { PgLive } from "./database-harness";
 import {
   clusterTestRunnerOptions,
   clusterTestShardLockExpiration,

@@ -6,7 +6,7 @@ import { Currency, Money } from "~/core/_shared/money";
 import { BudgetId } from "~/core/budgets/reference";
 import { deriveCurrentBudgetMonth } from "~/core/budgets/rules";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 

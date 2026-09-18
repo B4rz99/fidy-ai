@@ -21,7 +21,7 @@ import { webSessionCookieName } from "~/shell/_shared/authz";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 import { externalEndpoints } from "~/shell/public-http/operations";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { authenticateWebSession } from "~/shell/web-session/service";
 import { findBillingAttemptByIdInScope, projectBillingAttempt } from "./billing-repo";
 import { getCardEnrollment, prepareCardEnrollment, submitCardEnrollment } from "./card-enrollment";

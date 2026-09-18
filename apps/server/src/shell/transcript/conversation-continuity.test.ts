@@ -45,10 +45,10 @@ import {
 import { projectTranscriptForModel } from "~/shell/agent/model-boundary";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord } from "~/shell/consent/repo";
-import { advisoryLockKey } from "~/shell/db/advisory-lock";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { advisoryLockKey } from "~/shell/database/operations";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
-import { defaultUserId, seedOnboardingConsent } from "~/shell/db/development-seed";
+import { defaultUserId, seedOnboardingConsent } from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   ConversationCompactionInference,

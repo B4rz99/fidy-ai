@@ -6,7 +6,12 @@ import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { DurableClock, WorkflowEngine } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+} from "~/shell/testing/database-harness";
 import { durableWorkflowMailboxesTerminal } from "~/shell/durable-execution-retention";
 import {
   ConsentDisclosureWorkflowLive,
@@ -61,7 +66,7 @@ const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
     })
   ),
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(MigrationSqlClient.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provide(MigratorLive),
   Layer.provideMerge(BunServices.layer)
 );

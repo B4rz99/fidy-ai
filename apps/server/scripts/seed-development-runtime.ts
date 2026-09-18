@@ -1,7 +1,10 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option } from "effect";
-import { MigrationPgLive, MigratorLive } from "~/shell/db/client";
-import { generateDevelopmentPatBearer, seedDevelopmentIdentity } from "~/shell/db/development-seed";
+import { MigrationPgLive, MigratorLive } from "~/shell/database/runtime";
+import {
+  generateDevelopmentPatBearer,
+  seedDevelopmentIdentity,
+} from "~/shell/testing/development-seed";
 
 const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 

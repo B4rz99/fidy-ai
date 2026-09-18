@@ -4,7 +4,7 @@ import { Effect, Layer, Schedule } from "effect";
 import { Sharding } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
-import { PgLive } from "~/shell/db/client";
+import { PgLive } from "./database-harness";
 import {
   clusterTestAuthenticationToken,
   clusterTestRunnerOptions,

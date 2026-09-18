@@ -1,8 +1,9 @@
 import { PgClient, PgMigrator } from "@effect/sql-pg";
-import { Config, ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { Config, ConfigProvider, Effect, Layer, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { migrations } from "~/shell/db/migrations/registry";
-import { hasUnsafeAuthority, readRuntimeAuthority } from "./runtime-authority";
+import { migrations } from "~/shell/database/internal/migrations/registry";
+import { assertRuntimeAuthority } from "~/shell/database/internal/runtime-authority";
+import { MigrationSqlClient } from "./operations";
 
 const runtimeDatabaseUrl = Config.redacted("DATABASE_URL").pipe(
   Config.mapOrFail((redacted) =>
@@ -31,29 +32,10 @@ const PgMigrationLive = PgClient.layerConfig({
   url: Config.redacted("MIGRATION_DATABASE_URL"),
 });
 
-/**
- * Fails startup unless the runtime connection has exactly the deliberately
- * granted role and no authority to bypass isolation or alter application schema.
- */
-export const assertRuntimeAuthority = Effect.flatMap(
-  SqlClient.SqlClient,
-  readRuntimeAuthority
-).pipe(
-  Effect.flatMap((authority) =>
-    authority.connectionRole === "fidy_runtime" &&
-    authority.sessionRole === "fidy_runtime" &&
-    authority.canLogin &&
-    !hasUnsafeAuthority(authority)
-      ? Effect.void
-      : Effect.die(new Error("DATABASE_URL must use the restricted fidy_runtime role."))
-  ),
-  Effect.catchTag("SqlError", (error) => Effect.die(error))
-);
-
 /** Runtime-authority startup gate, provided before any application process can query Postgres. */
 export const RuntimeAuthorityLive = Layer.effectDiscard(assertRuntimeAuthority);
 
-/** Runs the globally ordered migrations through the separately privileged connection. */
+/** Runs the sole globally ordered migration registry through the separately privileged connection. */
 export const MigratorLive = PgMigrator.layer({
   loader: PgMigrator.fromRecord(migrations),
 }).pipe(Layer.provide(PgMigrationLive));
@@ -61,12 +43,7 @@ export const MigratorLive = PgMigrator.layer({
 /** Privileged local/setup pool; production application assembly never receives it. */
 export const MigrationPgLive = PgMigrationLive;
 
-/** Privileged SQL client exposed only to test cleanup and migration-aware setup helpers. */
-export class MigrationSqlClient extends Context.Service<MigrationSqlClient, SqlClient.SqlClient>()(
-  "@fidy/server/shell/db/client/MigrationSqlClient"
-) {
-  /** Builds the isolated setup client without replacing the runtime SqlClient in context. */
-  static readonly layer = Layer.effect(this, SqlClient.SqlClient).pipe(
-    Layer.provide(PgMigrationLive)
-  );
-}
+/** Builds the privileged SQL capability without replacing the runtime SqlClient in context. */
+export const MigrationSqlClientLive = Layer.effect(MigrationSqlClient, SqlClient.SqlClient).pipe(
+  Layer.provide(PgMigrationLive)
+);

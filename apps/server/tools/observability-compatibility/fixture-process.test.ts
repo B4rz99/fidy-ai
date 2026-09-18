@@ -1,7 +1,7 @@
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
-import { PgLive } from "~/shell/db/client";
+import { PgLive } from "~/shell/testing/database-harness";
 import {
   type DurableTraceContext,
   ProjectedErrorEvent,

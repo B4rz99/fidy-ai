@@ -9,7 +9,7 @@ import {
   onboardingConsentStandingInScope,
   withSubjectLock,
 } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 
 const hostedAgentSessionIdleDuration = "15 minutes";
 

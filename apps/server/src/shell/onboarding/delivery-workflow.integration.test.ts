@@ -30,7 +30,7 @@ import {
   type AuthenticatedClusterLayer,
   authenticatedClusterHttp,
 } from "~/shell/authenticated-cluster-http";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
 import {
   EmailDeliveryPort,
   type EmailDeliveryPortService,

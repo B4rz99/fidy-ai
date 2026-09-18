@@ -17,8 +17,8 @@ import {
   advisoryLockKey,
   tryWithUserLockInScope,
   withUserLockInScope,
-} from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+  withUserTransaction,
+} from "~/shell/database/operations";
 import { UserActionRequired } from "~/shell/public-http/contract";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import {

@@ -33,7 +33,7 @@
 import { Option } from "effect";
 
 /** The registry path inside the server package and from the repository root. */
-const PACKAGE_REGISTRY_PATH = "src/shell/db/migrations/registry.ts";
+const PACKAGE_REGISTRY_PATH = "src/shell/database/internal/migrations/registry.ts";
 const REPOSITORY_REGISTRY_PATH = `apps/server/${PACKAGE_REGISTRY_PATH}`;
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("../../", import.meta.url));

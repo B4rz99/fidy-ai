@@ -1,6 +1,6 @@
 import { Data, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { type SqlConnection, type SqlError, SqlSchema } from "effect/unstable/sql";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "./database-harness";
 
 const BackendIdentity = Schema.Struct({ pid: Schema.Int });
 const BlockingObservation = Schema.Struct({ blocked: Schema.Boolean });

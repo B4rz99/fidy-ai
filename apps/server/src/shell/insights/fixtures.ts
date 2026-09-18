@@ -1,5 +1,5 @@
 import { BigDecimal, DateTime, Effect } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { type InsightGenerationInput, ScheduleId, ScheduleVersion } from "~/core/insights/model";

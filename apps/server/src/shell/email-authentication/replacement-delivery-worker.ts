@@ -9,7 +9,7 @@ import {
 } from "~/core/email-authentication/model";
 import { proofExpiry } from "~/core/email-authentication/rules";
 import { withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { attemptEmailDelivery, settleTerminalEmailFailure } from "./delivery-retry";
 import { makeEmailDeliveryProof } from "./repo";
 import type { EmailSendFailed } from "./delivery";

@@ -6,8 +6,8 @@ import {
   TranscriptTurnId,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { appendTranscriptEntries, selectTranscriptEntries } from "./repo";
 

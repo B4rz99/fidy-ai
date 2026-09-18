@@ -8,8 +8,8 @@ import {
 } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { hasCurrentOnboardingConsent } from "~/shell/consent/repo";
-import { seedOnboardingConsent } from "~/shell/db/development-seed";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { seedOnboardingConsent } from "./development-seed";
+import { withUserTransaction } from "~/shell/database/operations";
 import { installVerifiedEmailCredentialInScope } from "~/shell/email-authentication/repo";
 import { associateWhatsAppIdentity, upsertDevelopmentUser } from "~/shell/identity/repo";
 import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";

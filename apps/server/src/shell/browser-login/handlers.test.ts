@@ -6,7 +6,7 @@ import { SqlSchema } from "effect/unstable/sql";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { BrowserLoginUnavailableApi, WebAuthApi } from "~/web-auth-api";
 import { deriveAnonymousSourceIdentifier } from "~/shell/secret-material/operations";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { purgeBrowserLoginAnonymousEvidence, startBrowserLoginPairing } from "./service";
 

@@ -41,7 +41,7 @@ import {
   TurnFailureReason,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   HostedAgentSessionConsentRequired,
   admitHostedAgentSession,

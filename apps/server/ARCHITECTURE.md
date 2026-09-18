@@ -153,7 +153,7 @@ state. See [CODING_STANDARDS.md](../../CODING_STANDARDS.md) and
 
 ## 7. Persistence and durable execution
 
-Migrations form one globally ordered history in `shell/db/migrations/`. Relational rows are
+Migrations form one globally ordered history in `shell/database/internal/migrations/`. Relational rows are
 projections of core models, not parallel domain models. Repositories may flatten values for storage
 and queries, but reconstruct the canonical value on every read.
 

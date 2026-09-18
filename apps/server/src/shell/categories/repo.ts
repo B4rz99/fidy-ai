@@ -11,8 +11,7 @@ import {
   type UpdateKeywordRuleInput,
 } from "~/core/categories/model";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
-import { advisoryLockKey } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { advisoryLockKey, withUserTransaction } from "~/shell/database/operations";
 
 /** Loads Categories in presentation order. Database failures are defects. */
 export const selectCategories = Effect.flatMap(SqlClient.SqlClient, (sql) =>

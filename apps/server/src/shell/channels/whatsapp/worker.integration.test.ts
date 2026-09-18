@@ -9,8 +9,13 @@ import {
   HostedTurnUnavailable,
   WhatsAppInboundRoutingRejected,
 } from "~/shell/agent/agent-service";
-import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+} from "~/shell/testing/database-harness";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
@@ -28,7 +33,7 @@ const WorkerHarness = PersistedQueue.layer.pipe(
     PersistedQueue.layerStoreSql({ tableName: "fidy_queue", pollInterval: "10 millis" })
   ),
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(MigrationSqlClient.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provide(MigratorLive),
   Layer.provideMerge(TelemetryEnvelopeRecording),
   Layer.provideMerge(BunServices.layer),

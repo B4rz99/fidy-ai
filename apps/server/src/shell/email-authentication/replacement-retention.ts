@@ -13,7 +13,7 @@ import {
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/operations";

@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { TranscriptText } from "~/core/transcript/model";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";
 import { makeWorkingContext } from "./working-context";

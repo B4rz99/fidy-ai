@@ -4,7 +4,7 @@ import type { AccessTier } from "~/core/access-tier/contract";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   Telemetry,
   operationDescriptor,

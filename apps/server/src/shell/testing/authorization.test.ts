@@ -13,8 +13,8 @@ import { CreateTransactionInput } from "~/core/transactions/model";
 import { TokenBearer } from "~/core/tokens/model";
 import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { ScopeMissing } from "~/shell/public-http/contract";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { MigrationSqlClient } from "./database-harness";
+import { withUserTransaction } from "~/shell/database/operations";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
@@ -29,7 +29,7 @@ import {
   headersFor,
   makeApiClientLive,
 } from "./api-harness";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "./development-seed";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
 
 const encodeTransactionPayload = Schema.encodeSync(CreateTransactionInput);

@@ -1,5 +1,5 @@
-import { type Cause, type Effect, Schema } from "effect";
-import { type SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
+import { type Cause, Effect, Schema } from "effect";
+import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
 
 const RuntimeAuthority = Schema.Struct({
   connectionRole: Schema.String,
@@ -80,5 +80,21 @@ const unsafeAuthorityFields = [
 ] as const satisfies ReadonlyArray<keyof RuntimeAuthority>;
 
 /** Whether the runtime role holds any authority forbidden by the production contract. */
-export const hasUnsafeAuthority = (authority: RuntimeAuthority): boolean =>
+export const runtimeAuthorityIsUnsafe = (authority: RuntimeAuthority): boolean =>
   unsafeAuthorityFields.some((field) => authority[field]);
+
+/** Fails unless the active connection has exactly the restricted runtime authority. */
+export const assertRuntimeAuthority = Effect.flatMap(
+  SqlClient.SqlClient,
+  readRuntimeAuthority
+).pipe(
+  Effect.flatMap((authority) =>
+    authority.connectionRole === "fidy_runtime" &&
+    authority.sessionRole === "fidy_runtime" &&
+    authority.canLogin &&
+    !runtimeAuthorityIsUnsafe(authority)
+      ? Effect.void
+      : Effect.die(new Error("DATABASE_URL must use the restricted fidy_runtime role."))
+  ),
+  Effect.catchTag("SqlError", (error) => Effect.die(error))
+);

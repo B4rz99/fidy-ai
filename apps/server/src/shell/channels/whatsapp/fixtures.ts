@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { whatsappInboundQueueName } from "./inbound-execution";
 
 /** Clears channel-owned operational state for integration-test isolation. */

@@ -33,6 +33,11 @@ apps/server/src/shell/outbound-http/internal/outbound-http.ts
   s_a3914047cb299e::t_14637aade780b2 273-274
   s_a3914047cb299e::t_ae283e6a42e957 97,99
   s_a3914047cb299e::t_c4d9a9bc95f54f 98,259,261,263,270,275,281,341-342,438-439
+  s_a3914047cb299e::t_43804201afddca 456-462,471-477
+  s_a3914047cb299e::t_0ddcc506dce1aa 419-437,453-455,463-470,478-483
+  s_a3914047cb299e::t_ea3bdf67a4d351 389-391,405-406
+  s_a3914047cb299e::t_e5ab82c9ccdff5 37-38
+  s_a3914047cb299e::t_3fa99da6d9ac85 272,283-286
 apps/server/scripts/verify-sentry-account.ts
   s_a3914047cb299e::t_7bdf76ec74f8e7 29
   s_a3914047cb299e::t_5ac2895790ce5c 6,28,30-31
@@ -74,6 +79,8 @@ apps/server/src/shell/outbound-http/operations.ts
   s_a3914047cb299e::t_f2463d87a4a4b1 128
   s_a3914047cb299e::t_72baa20fcd43ae 26
   s_221d58c93200ac::t_f7bae03bd0b3d0 131,144
+  s_a3914047cb299e::t_47340162662f63 10-14
+  s_a3914047cb299e::t_05054a29f9ba6d 130,143
 apps/server/scripts/support-recovery.ts
   s_a3914047cb299e::t_538a61d2bf1022 4,136-138,140-141
   s_a3914047cb299e::t_a30f66b7487ad2 1

@@ -2,7 +2,7 @@ import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Schema, Struct } from "effect";
 import { Memory } from "~/core/memory/model";
 import { admitMemory } from "~/core/memory/rules";
-import { HostedInference } from "~/shell/agent/hosted-inference";
+import { HostedInference } from "~/shell/hosted-inference/operations";
 
 const MemoryProjection = Memory.mapFields(Struct.pick(["id", "text"]));
 const encodeMemoryProjection = Schema.encodeSync(jsonStringSchema(MemoryProjection));

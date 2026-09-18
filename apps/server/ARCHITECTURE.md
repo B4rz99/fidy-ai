@@ -101,13 +101,16 @@ settlement authority. See
 
 ### Hosted agent
 
-`AgentService` owns the hosted runtime and is its only public service boundary. Its closed
-source-specific entrypoints lexically own session and Turn admission, context construction,
-hosted inference, canonical execution, delivery, and terminalization. HostedInference,
-WorkingContext, and ConversationContinuity remain private runtime concerns; executable lifecycle
-capabilities do not cross that boundary. Hosted calls use the same canonical authorization and
-confirmation policy as other callers. See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md)
-and [ADR 0019](../../docs/adr/0019-hosted-runtime-owns-conversation-continuity.md).
+`AgentService` owns the hosted runtime and is its only public lifecycle boundary. Its closed
+source-specific entrypoints lexically own session and Turn admission, WorkingContext construction,
+canonical execution, delivery, and terminalization. WorkingContext and ConversationContinuity
+remain private Agent concerns; executable lifecycle capabilities do not cross that interface.
+HostedInference is a separate deep module whose provider-neutral contract is shared by Agent and
+Memory. Provider clients, prompt conversion, raw responses, token accounting, transport failures,
+and adapter conformance stay inside its visible internals. Hosted calls use the same canonical
+authorization and confirmation policy as other callers. See
+[ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md) and
+[ADR 0019](../../docs/adr/0019-hosted-runtime-owns-conversation-continuity.md).
 
 ### Browser authentication and delegated authority
 

@@ -4,7 +4,7 @@ import { Memory, MemoryId, type RememberInput, type ReviseInput } from "~/core/m
 import { MemoryNotFound } from "~/core/memory/rules";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import { type NotFound, type OperationResponse } from "~/shell/public-http/contract";
-import type { HostedInference } from "~/shell/agent/hosted-inference";
+import type { HostedInference } from "~/shell/hosted-inference/operations";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/database/operations";
 import { type MemoryCapacityExceededApi, mapMemoryFailure } from "./errors";
 import { countAndAdmitMemory, countAndAdmitMemoryRevision } from "./memory-policy";

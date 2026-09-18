@@ -1,6 +1,9 @@
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Ref, Result } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
-import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
+import {
+  CanonicalOperationId,
+  allCanonicalCapabilities,
+} from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/reference";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { TranscriptText } from "~/core/transcript/model";
@@ -12,11 +15,8 @@ import {
   executeHostedCanonicalOperation,
 } from "~/shell/_shared/canonical-operation-executor";
 import { AgentService, InboundMessage, ModelResponseRejected } from "~/shell/agent/agent-service";
-import {
-  HostedInference,
-  type HostedTextToolCall,
-  makeHostedInference,
-} from "~/shell/agent/hosted-inference";
+import type { HostedTextToolCall } from "~/shell/hosted-inference/contract";
+import { HostedInference, makeHostedInferenceStub } from "~/shell/hosted-inference/operations";
 import { agentOperationBindings } from "~/shell/agent/toolkit";
 import { immediatePermit } from "~/shell/agent/tool-confirmation";
 import type { ConfirmationPermit } from "~/shell/agent/tool-confirmation-model";
@@ -64,34 +64,34 @@ type ProbeState = Readonly<{
 const scriptedInferenceService = (
   calls: Effect.Effect<ReadonlyArray<HostedTextToolCall>>
 ): HostedInference["Service"] =>
-  makeHostedInference({
+  makeHostedInferenceStub({
     countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
     countTranscript: (entries) => Effect.succeed(entries.length),
-    prepare: (input) => Effect.succeed(input),
-    execute: (request) =>
+    validateText: () => Effect.void,
+    prepareStructured: () =>
+      Effect.die("Structured generation is outside this scripted safety fixture"),
+    generate: (contexts) =>
       Effect.map(calls, (activeCalls) => {
-        const serialized = JSON.stringify(request);
+        const serialized = JSON.stringify(contexts);
         const challenge = /Responde exactamente: (CONFIRMAR [^"\\n]+)/u.exec(serialized)?.[1];
-        const lastToolResult = serialized.lastIndexOf("tool-result");
-        const lastUserConfirmation = serialized.lastIndexOf(
-          "[UNTRUSTED_TRANSCRIPT_USER]\\nCONFIRMAR"
+        const sections = contexts.flatMap((context) => context.sections);
+        const lastToolResult = sections.findLastIndex((section) => section._tag === "ToolResult");
+        const lastUserConfirmation = sections.findLastIndex(
+          (section) =>
+            section._tag === "Transcript" &&
+            section.entry._tag === "UserTranscriptEntry" &&
+            section.entry.text.startsWith("CONFIRMAR ")
         );
         const confirmedResult = lastUserConfirmation >= 0 && lastToolResult > lastUserConfirmation;
         const shouldCall = lastToolResult < 0 || lastUserConfirmation > lastToolResult;
         const text = confirmedResult ? "Operación sintética procesada." : (challenge ?? "");
         return {
-          result: {
-            text,
-            toolCalls: shouldCall ? activeCalls : [],
-            finishReason: shouldCall ? ("tool-calls" as const) : ("stop" as const),
-            usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
-          },
-          continuation: {},
+          text,
+          toolCalls: shouldCall ? activeCalls : [],
+          finishReason: shouldCall ? ("tool-calls" as const) : ("stop" as const),
+          usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
         };
       }),
-    structured: {
-      prepare: () => Effect.die("Structured generation is outside this scripted safety fixture"),
-    },
   });
 
 /** Scripted output still traverses host validation, budgets, confirmation and canonical execution. */
@@ -254,13 +254,16 @@ const agentProbe = Effect.fn("Evaluation.agentProbe")(function* (
     entry.probe === "tool-budget"
       ? Array.from({ length: maximumScriptedToolCalls }, (_, index) => ({
           id: `synthetic-${index}`,
-          name: binding.wireName,
+          operation: binding.operation,
           params: { params: { id: transactionId } },
         }))
       : [
           {
             id: "synthetic-call",
-            name: entry.probe === "unknown-tool" ? "nonexistent__synthetic" : binding.wireName,
+            operation:
+              entry.probe === "unknown-tool"
+                ? CanonicalOperationId.make("nonexistent.synthetic")
+                : binding.operation,
             params: { params: { id: transactionId } },
           },
         ];

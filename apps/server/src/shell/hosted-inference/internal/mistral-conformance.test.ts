@@ -6,6 +6,7 @@ import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/op
 import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
 import { mistralConformanceModel, verifyMistralTokenConformance } from "./mistral-conformance";
+import { verifyMistralTokenConformance as verifyRuntimeConformance } from "~/shell/hosted-inference/mistral-conformance-runtime";
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
 const MistralMessage = Schema.Struct({
@@ -145,5 +146,48 @@ it.effect("fails without exposing the credential or provider body", () =>
       expect(rendered).not.toContain(privateBody);
       expect(rendered).not.toContain("api.mistral.ai");
     }
+  })
+);
+
+it.effect("projects safe numeric evidence from the internal probe", () =>
+  Effect.gen(function* () {
+    const requests = yield* Ref.make<ReadonlyArray<OutboundHttpRequest>>([]);
+    const reports = yield* verifyRuntimeConformance.pipe(
+      Effect.provideService(OutboundHttp, makeAccountingOutbound(requests))
+    );
+
+    expect(reports.map((report) => report.id)).toEqual([
+      "baseline",
+      "small-schema",
+      "large-schema",
+      "production-compaction",
+    ]);
+    expect(
+      reports.every(
+        (report) => report.completeRequestTokens === report.localPromptTokens + report.outputReserve
+      )
+    ).toBe(true);
+  })
+);
+
+it.effect("maps internal conformance failures to safe workflow errors", () =>
+  Effect.gen(function* () {
+    const requests = yield* Ref.make<ReadonlyArray<OutboundHttpRequest>>([]);
+    const failure = yield* verifyRuntimeConformance.pipe(
+      Effect.provideService(
+        OutboundHttp,
+        makeAccountingOutbound(requests, (promptTokens) => ({
+          model: "different-model",
+          usage: { prompt_tokens: promptTokens },
+        }))
+      ),
+      Effect.flip
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "MistralConformanceError",
+      reason: "provider_model_mismatch",
+      caseId: "baseline",
+    });
   })
 );

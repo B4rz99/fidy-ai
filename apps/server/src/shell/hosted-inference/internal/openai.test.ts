@@ -1,9 +1,22 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import { isHostedVisible } from "~/shell/_shared/operation-policy";
+import { operationCatalog } from "~/shell/api";
+import {
+  AgentIteration,
+  AssistantTranscriptEntry,
+  CanonicalToolCallEntry,
+  ToolCallId,
+  TranscriptEntryId,
+  TranscriptText,
+  TranscriptTurnId,
+} from "~/core/transcript/model";
 import { expect, it } from "@effect/vitest";
 import {
+  Brand,
   Cause,
   ConfigProvider,
   Context,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -20,32 +33,51 @@ import {
   type TestOutboundTransportRequest,
   testOutboundTransportLayer,
 } from "~/shell/outbound-http/testing";
+import { makeOpenAiFunctionCallResponse, makeOpenAiTextResponse } from "./fixtures";
 import {
-  makeOpenAiFunctionCallResponse,
-  makeOpenAiTextResponse,
-} from "~/shell/agent/fixtures/openai";
-import {
-  HostedInference,
   HostedInferenceError,
+  type HostedInferenceService,
+  type HostedInitialTextContext,
   type HostedStructuredContext,
-  HostedStructuredObjectName,
   type HostedStructuredRequest,
-  type HostedTextContext,
   type HostedTextContinuation,
   type HostedTextRequest,
   HostedToolCallMaximum,
   type PreparedHostedText,
-} from "./hosted-inference";
+} from "~/shell/hosted-inference/contract";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import {
   FidyAgentModel,
   HostedAgentGenerationConfig,
-  OpenAiHostedInferenceLive,
-  OpenAiHostedInferenceWithoutStartupValidation,
   OpenAiLanguageModelLive,
-  makeOpenAiHarness,
-  openAiHostedInferenceBudgetVariation,
+  makeOpenAiHarness as makeOpenAiHarnessEffect,
+  openAiHostedInference,
+  openAiHostedInferenceBudgetVariation as openAiHostedInferenceBudgetVariationEffect,
+  openAiHostedInferenceWithoutStartupValidation,
 } from "./openai";
-import { agentOperationBindings } from "./toolkit";
+
+class TestHostedInference extends Context.Service<TestHostedInference, HostedInferenceService>()(
+  "@fidy/server/shell/hosted-inference/internal/openai.test/TestHostedInference"
+) {}
+const OpenAiHostedInferenceLive = Layer.effect(TestHostedInference, openAiHostedInference).pipe(
+  Layer.provide(OutboundHttp.openAiLayer)
+);
+const OpenAiHostedInferenceWithoutStartupValidation = Layer.effect(
+  TestHostedInference,
+  openAiHostedInferenceWithoutStartupValidation
+).pipe(Layer.provide(OutboundHttp.openAiLayer));
+const makeOpenAiHarness = (
+  timeout: Duration.Input
+): typeof OpenAiHostedInferenceWithoutStartupValidation =>
+  Layer.effect(TestHostedInference, makeOpenAiHarnessEffect(timeout)).pipe(
+    Layer.provide(OutboundHttp.openAiLayer)
+  );
+const openAiHostedInferenceBudgetVariation = (
+  budget: Parameters<typeof openAiHostedInferenceBudgetVariationEffect>[0]
+): typeof OpenAiHostedInferenceWithoutStartupValidation =>
+  Layer.effect(TestHostedInference, openAiHostedInferenceBudgetVariationEffect(budget)).pipe(
+    Layer.provide(OutboundHttp.openAiLayer)
+  );
 
 const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.Layer<never> =>
   ConfigProvider.layer(
@@ -57,7 +89,7 @@ const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.L
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
 
-const testTextContext = (context: HostedTextContext): HostedTextContext => context;
+const makeTestInitialContext = Brand.nominal<HostedInitialTextContext>();
 const testStructuredContext = (context: HostedStructuredContext): HostedStructuredContext =>
   context;
 
@@ -150,7 +182,7 @@ const buildInference = Effect.fn("Test.buildInference")(function* (
       )
     )
   );
-  return Context.get(context, HostedInference);
+  return Context.get(context, TestHostedInference);
 });
 
 it.effect("builds the structured-output LanguageModel adapter", () =>
@@ -168,14 +200,19 @@ it.effect("builds the structured-output LanguageModel adapter", () =>
   })
 );
 
-const allOperationIds = agentOperationBindings.map(({ operation }) => operation);
+const hostedOperationBindings = operationCatalog.operations
+  .filter((operation) => isHostedVisible(operation.policy.access, "verified-whatsapp"))
+  .map((operation) => ({
+    operation: operation.id,
+    wireName: operation.id.replaceAll(".", "__"),
+  }));
+const allOperationIds = hostedOperationBindings.map(({ operation }) => operation);
+const firstHostedOperation = Option.getOrThrow(Option.fromUndefinedOr(hostedOperationBindings[0]));
 
 const textRequest = (): HostedTextRequest => ({
-  context: testTextContext({
-    prefix: [{ role: "system", content: "system framing" }],
-    continuationTail: [],
-    suffix: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
-    activeRequest: { _tag: "Absent" },
+  context: makeTestInitialContext({
+    sections: [{ _tag: "InvalidOutputFeedback", description: "system framing" }],
+    activeRequest: { _tag: "Present", text: "hello" },
   }),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
@@ -192,9 +229,10 @@ const structuredRequest = (): HostedStructuredRequest<
   typeof StructuredOutput.Encoded
 > => ({
   context: testStructuredContext({
-    messages: [{ role: "user" as const, content: "compact exact retained conversation" }],
+    prior: Option.some("compact exact retained conversation"),
+    entries: [],
   }),
-  objectName: HostedStructuredObjectName.make("compacted_conversation"),
+  purpose: "conversation-compaction",
   outputSchema: StructuredOutput,
 });
 
@@ -202,32 +240,15 @@ const continuationRequest = (
   continuation: HostedTextContinuation,
   callId: string
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
-  continuation.prepare(
-    testTextContext({
-      prefix: [{ role: "system", content: "system framing" }],
-      continuationTail: [
-        {
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              id: callId,
-              name: agentOperationBindings[0]?.wireName ?? "get_transactions",
-              result: { status: "completed" },
-              isFailure: false,
-            },
-          ],
-        },
-      ],
-      suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
-      activeRequest: { _tag: "Absent" },
-    }),
+  continuation.prepare([
     {
-      toolChoice: "auto",
-      maximumToolCalls: HostedToolCallMaximum.make(12),
-      availableOperations: allOperationIds,
-    }
-  );
+      _tag: "ToolResult",
+      toolCallId: ToolCallId.make(callId),
+      operation: firstHostedOperation.operation,
+      outcome: { _tag: "Succeeded", output: { status: "completed" } },
+    },
+    { _tag: "InvalidOutputFeedback", description: "continue" },
+  ]);
 
 it.effect("fails closed when the OpenAI secret is absent", () =>
   Effect.gen(function* () {
@@ -296,11 +317,16 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     expect(countJson.tool_choice).toEqual(executeJson.tool_choice);
     expect(countJson.parallel_tool_calls).toEqual(executeJson.parallel_tool_calls);
     const tools = yield* Schema.decodeUnknownEffect(
-      Schema.Array(Schema.Struct({ name: Schema.String }))
+      Schema.Array(Schema.Struct({ name: Schema.String, parameters: JsonRecord }))
     )(executeJson.tools);
     expect(tools.map(({ name }) => name).toSorted()).toEqual(
-      agentOperationBindings.map(({ wireName }) => wireName).toSorted()
+      hostedOperationBindings.map(({ wireName }) => wireName).toSorted()
     );
+    for (const { parameters } of tools) {
+      expect(parameters.type).toBe("object");
+      expect(parameters.anyOf).toBeUndefined();
+      expect(parameters.additionalProperties).toBe(false);
+    }
 
     yield* inference.prepareText({ ...textRequest(), toolChoice: "none" });
     const disabledCount = (yield* Ref.get(transport.requests))[2];
@@ -311,7 +337,7 @@ it.effect("counts complete framing and executes the exact prepared request", () 
 
 it.effect("publishes only the caller-visible canonical tools", () =>
   Effect.gen(function* () {
-    const visible = agentOperationBindings.find(
+    const visible = hostedOperationBindings.find(
       ({ operation }) => operation === "identity.getCurrentUser"
     );
     if (visible === undefined) return yield* Effect.die("missing visible operation");
@@ -610,11 +636,30 @@ it.effect("rejects malformed provider responses", () =>
   })
 );
 
+it.effect("rejects unknown provider tool names at the adapter boundary", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(
+      100,
+      makeOpenAiFunctionCallResponse({ name: "unknown_tool", argumentsJson: "{}" })
+    );
+    const inference = yield* buildInference(transport.layer);
+    const prepared = yield* inference.prepareText(textRequest());
+    const failure = yield* prepared.execute.pipe(Effect.flip);
+    expect(failure.reason).toEqual({
+      _tag: "InvalidOutput",
+      description: "Hosted provider response was invalid",
+    });
+  })
+);
+
 it.effect("rejects malformed tool-call arguments", () =>
   Effect.gen(function* () {
     const transport = yield* makeTransport(
       100,
-      makeOpenAiFunctionCallResponse({ name: "get_transactions", argumentsJson: "{" })
+      makeOpenAiFunctionCallResponse({
+        name: firstHostedOperation.wireName,
+        argumentsJson: "{",
+      })
     );
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareText(textRequest());
@@ -626,43 +671,84 @@ it.effect("rejects malformed tool-call arguments", () =>
   })
 );
 
+it.effect("decodes strict provider arguments into canonical operation input", () =>
+  Effect.gen(function* () {
+    const operation = operationCatalog.operations.find(
+      ({ id }) => id === "transactions.createTransaction"
+    );
+    if (operation === undefined) return yield* Effect.die("missing transaction operation");
+    const argumentsJson = yield* Schema.encodeEffect(UnknownJsonString)({
+      payload: {
+        money: { amount: "10000", currency: "COP" },
+        counterparty: "OpenAiBreakfast",
+        direction: "outflow",
+        categoryId: "f1d1a000-0000-4000-8000-000000000104",
+        notes: null,
+        occurredAt: "2026-04-03T12:01:02.000Z",
+      },
+    });
+    const transport = yield* makeTransport(
+      100,
+      makeOpenAiFunctionCallResponse({
+        name: operation.id.replaceAll(".", "__"),
+        argumentsJson,
+      })
+    );
+    const inference = yield* buildInference(transport.layer);
+    const result = yield* inference
+      .prepareText(textRequest())
+      .pipe(Effect.flatMap((prepared) => prepared.execute));
+    const call = result.toolCalls[0];
+    if (call === undefined) return yield* Effect.die("missing canonical tool call");
+    expect(call.operation).toBe(operation.id);
+    expect(Schema.is(operation.input)(call.params)).toBe(true);
+  })
+);
+
 it.effect("projects replayed Assistant text and tool outcomes as Responses input", () =>
   Effect.gen(function* () {
     const transport = yield* makeTransport(100);
     const inference = yield* buildInference(transport.layer);
+    const operation = hostedOperationBindings[0]?.operation;
+    if (operation === undefined) return yield* Effect.die("missing hosted operation");
+    const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000701");
+    const occurredAt = DateTime.makeUnsafe("2026-08-11T12:00:00Z");
+    const callId = ToolCallId.make("prior_call");
     const request: HostedTextRequest = {
       ...textRequest(),
-      context: testTextContext({
-        prefix: [
-          { role: "assistant", content: "prior answer" },
-          { role: "assistant", content: [{ type: "text", text: "another answer" }] },
+      context: makeTestInitialContext({
+        sections: [
           {
-            role: "assistant",
-            content: [
-              {
-                type: "tool-call",
-                id: "prior_call",
-                name: agentOperationBindings[0]?.wireName ?? "identity__getCurrentUser",
-                params: {},
-              },
-            ],
+            _tag: "Transcript",
+            entry: AssistantTranscriptEntry.make({
+              id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000702"),
+              turnId,
+              iteration: AgentIteration.make(1),
+              text: TranscriptText.make("prior answer"),
+              occurredAt,
+            }),
           },
           {
-            role: "tool",
-            content: [
-              {
-                type: "tool-result",
-                id: "prior_call",
-                name: agentOperationBindings[0]?.wireName ?? "identity__getCurrentUser",
-                result: { status: "completed" },
-                isFailure: false,
-              },
-            ],
+            _tag: "Transcript",
+            entry: CanonicalToolCallEntry.make({
+              id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000703"),
+              turnId,
+              iteration: AgentIteration.make(1),
+              toolCallId: callId,
+              operation,
+              input: {},
+              occurredAt,
+            }),
           },
+          {
+            _tag: "ToolResult",
+            toolCallId: callId,
+            operation,
+            outcome: { _tag: "Succeeded", output: { status: "completed" } },
+          },
+          { _tag: "InvalidOutputFeedback", description: "continue" },
         ],
-        continuationTail: [],
-        suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
-        activeRequest: { _tag: "Absent" },
+        activeRequest: { _tag: "Present", text: "continue" },
       }),
     };
 
@@ -674,43 +760,6 @@ it.effect("projects replayed Assistant text and tool outcomes as Responses input
     expect(input).toContain('"type":"input_text"');
     expect(input).toContain('"type":"function_call"');
     expect(input).toContain('"type":"function_call_output"');
-  })
-);
-
-it.effect("rejects unsupported semantic Prompt parts before counting", () =>
-  Effect.gen(function* () {
-    const unsupportedMessages = [
-      {
-        role: "user",
-        content: [{ type: "file", mediaType: "image/png", data: "aW1hZ2U=" }],
-      },
-      { role: "assistant", content: [{ type: "reasoning", text: "private reasoning" }] },
-      {
-        role: "tool",
-        content: [{ type: "tool-approval-response", approvalId: "approval", approved: false }],
-      },
-    ] as const;
-
-    for (const message of unsupportedMessages) {
-      const transport = yield* makeTransport(100);
-      const inference = yield* buildInference(transport.layer);
-      const failure = yield* inference
-        .prepareText({
-          ...textRequest(),
-          context: testTextContext({
-            prefix: [message],
-            continuationTail: [],
-            suffix: [],
-            activeRequest: { _tag: "Absent" },
-          }),
-        })
-        .pipe(Effect.flip);
-      expect(failure.reason).toEqual({
-        _tag: "InvalidOutput",
-        description: "Semantic hosted text projection was invalid",
-      });
-      expect(yield* Ref.get(transport.requests)).toHaveLength(0);
-    }
   })
 );
 
@@ -896,10 +945,8 @@ it.effect(
       const failure = yield* inference
         .prepareText({
           ...textRequest(),
-          context: testTextContext({
-            prefix: [{ role: "user", content: oversized }],
-            continuationTail: [],
-            suffix: [],
+          context: makeTestInitialContext({
+            sections: [],
             activeRequest: {
               _tag: "Present",
               text: oversized,
@@ -975,7 +1022,7 @@ it.effect("varies each continuity budget without changing the other four semanti
           `[UNTRUSTED_${marker === "EXACT_TRANSCRIPT" ? "TRANSCRIPT_USER" : marker}]`
         );
       }
-      expect(body.tools).toHaveLength(agentOperationBindings.length);
+      expect(body.tools).toHaveLength(hostedOperationBindings.length);
     }
   })
 );
@@ -1006,6 +1053,6 @@ it.effect("frames every independent continuity maximum in startup's complete req
       "[UNTRUSTED_ACTIVE_REQUEST]\\n[STARTUP_MAXIMUM_ACTIVE_REQUEST:16000_TOKENS]"
     );
     expect(counted.max_output_tokens).toBeUndefined();
-    expect(counted.tools).toHaveLength(agentOperationBindings.length);
+    expect(counted.tools).toHaveLength(hostedOperationBindings.length);
   })
 );

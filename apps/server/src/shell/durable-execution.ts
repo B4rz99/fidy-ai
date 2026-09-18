@@ -2,15 +2,12 @@ import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option } from "
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { loadClusterAuthenticationToken } from "~/shell/secret-material/operations";
+import { PersistedQueueMemory, PersistedQueueSqlLive } from "~/shell/persisted-queue/runtime";
 import {
   maximumHostedTurnIterations,
   maximumModelRoundMillis,
 } from "~/shell/_shared/hosted-turn-bounds";
 import type { ClusterRunnerHttpPolicy } from "./cluster-runner-http";
-import {
-  PersistedQueueMemory,
-  SqlPersistedQueueLive,
-} from "~/shell/_shared/persisted-queue-storage";
 import { authenticatedClusterHttp } from "./authenticated-cluster-http";
 import { ClusterObservationLive } from "./cluster-observation";
 import { ClusterReadinessVolatile } from "./cluster-readiness";
@@ -105,8 +102,6 @@ const ProductionClusterLive = Layer.unwrap(
   })
 );
 
-export { SqlPersistedQueueLive };
-
 /**
  * SQL-backed production substrate for native queues, workflows, and runner observation. The runner
  * listener must remain private; every runner request additionally requires the shared Cluster bearer
@@ -117,7 +112,7 @@ const ProductionWorkflowLive = ClusterWorkflowEngine.layer.pipe(
 );
 
 export const DurableExecutionLive = ClusterObservationLive.pipe(
-  Layer.provideMerge(Layer.mergeAll(SqlPersistedQueueLive, ProductionWorkflowLive))
+  Layer.provideMerge(Layer.mergeAll(PersistedQueueSqlLive, ProductionWorkflowLive))
 );
 
 /** CLI routes through production owners without acquiring shards or creating another local mailbox. */
@@ -127,7 +122,7 @@ export const DurableExecutionClientLive = Layer.unwrap(
     const hosts = yield* clientRunnerHosts;
     const port = yield* runnerPort;
     return Layer.mergeAll(
-      SqlPersistedQueueLive,
+      PersistedQueueSqlLive,
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
           authenticatedClusterHttp.layerSqlClient(

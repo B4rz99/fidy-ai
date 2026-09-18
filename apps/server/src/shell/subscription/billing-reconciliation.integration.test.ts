@@ -46,7 +46,7 @@ import {
 } from "~/shell/testing/database-harness";
 import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { withUserTransaction } from "~/shell/database/operations";
-import { SqlQueueHarness } from "~/shell/testing/durable-execution";
+import { SqlQueueHarness } from "~/shell/testing/durable-execution-harness";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";

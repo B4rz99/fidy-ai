@@ -1,37 +1,27 @@
 import { Effect, type Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
 import {
   type ApplicationPersistedQueue,
-  type ApplicationPersistedQueueHandlerPolicy,
   type ApplicationPersistedQueueProvider,
-  type PersistedQueueHandleOptions,
+  type ApplicationPersistedQueueRequirement,
   type PersistedQueueHandlerDescriptor,
-  type PersistedQueueMetadata,
-  type PersistedQueueOfferOptions,
 } from "./contract";
+import type { DurableQueueName } from "~/shell/durable-queue-policy";
 import {
-  DurableQueueName,
-  type DurableQueueName as DurableQueueNameType,
-} from "~/shell/durable-queue-policy";
-import { applyQueueHandlerPolicy } from "~/shell/persisted-queue/internal/handler";
-
-const applicationQueueNames = new Set<DurableQueueNameType>();
+  applicationPersistedQueueProvider as applicationPersistedQueueProviderInternal,
+  declareApplicationPersistedQueue,
+  readApplicationPersistedQueueNames,
+} from "~/shell/persisted-queue/internal/queue";
 
 /** Returns queue identities registered by application queue declarations in this process. */
-export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueNameType> =>
-  Array.from(applicationQueueNames).sort();
+export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueName> =>
+  readApplicationPersistedQueueNames();
 
 /** Captures only the capability to satisfy queue requirements; the raw factory never escapes. */
 export const applicationPersistedQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
-  PersistedQueue.PersistedQueueFactory
-> = PersistedQueue.PersistedQueueFactory.pipe(
-  Effect.map((factory) => ({
-    provide: (effect) =>
-      Effect.provideService(effect, PersistedQueue.PersistedQueueFactory, factory),
-  }))
-);
+  ApplicationPersistedQueueRequirement
+> = Effect.suspend(() => applicationPersistedQueueProviderInternal);
 
 /**
  * Declares one named durable handoff. Offers preserve custom identity, schema encoding, and the
@@ -46,42 +36,4 @@ export const declarePersistedQueue = <
   readonly name: Name;
   readonly schema: PayloadSchema;
   readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueue<PayloadSchema, Name> => {
-  applicationQueueNames.add(DurableQueueName.make(options.name));
-  const definition = Object.freeze({ name: options.name, schema: options.schema });
-  const makeQueue = PersistedQueue.make(definition);
-
-  return {
-    definition,
-    offer: (value: PayloadSchema["Type"], offerOptions?: PersistedQueueOfferOptions) =>
-      makeQueue.pipe(Effect.flatMap((queue) => queue.offer(value, offerOptions))),
-    handleNext: <XA, HandlerFailure, XR, TerminalError, TerminalRequirements>(
-      handler: (
-        value: PayloadSchema["Type"],
-        metadata: PersistedQueueMetadata
-      ) => Effect.Effect<XA, HandlerFailure, XR>,
-      policy: ApplicationPersistedQueueHandlerPolicy<
-        PayloadSchema["Type"],
-        HandlerFailure,
-        TerminalError,
-        TerminalRequirements
-      >,
-      handleOptions?: PersistedQueueHandleOptions
-    ) =>
-      makeQueue.pipe(
-        Effect.flatMap((queue) =>
-          queue.take(
-            (value, metadata) =>
-              applyQueueHandlerPolicy({
-                value,
-                metadata,
-                handler,
-                policy,
-                descriptor: options.descriptor,
-              }),
-            handleOptions
-          )
-        )
-      ),
-  };
-};
+}): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationPersistedQueue(options);

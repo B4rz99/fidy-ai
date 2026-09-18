@@ -53,7 +53,7 @@ import {
   RuntimeAuthorityLive,
 } from "./database-harness";
 import { makeDevelopmentSeedLive } from "./development-seed";
-import { SqlQueueHarness } from "./durable-execution";
+import { SqlQueueHarness } from "./durable-execution-harness";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
 import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";

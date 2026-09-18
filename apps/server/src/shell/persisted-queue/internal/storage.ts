@@ -7,9 +7,9 @@ import {
   durableQueueTableName,
 } from "~/shell/durable-queue-policy";
 
-/** Shared SQL queue substrate using the explicit production table and lock policy. */
-export const SqlPersistedQueueLive = PersistedQueue.layer.pipe(
-  Layer.provideMerge(
+/** SQL queue substrate with the production table and lease policy. */
+export const sqlStorage = PersistedQueue.layer.pipe(
+  Layer.provide(
     PersistedQueue.layerStoreSql({
       tableName: durableQueueTableName,
       pollInterval: durableQueuePollInterval,
@@ -19,7 +19,7 @@ export const SqlPersistedQueueLive = PersistedQueue.layer.pipe(
   )
 );
 
-/** Volatile queue substrate for tests that do not assert process-loss behavior. */
-export const PersistedQueueMemory = PersistedQueue.layer.pipe(
-  Layer.provideMerge(PersistedQueue.layerStoreMemory)
+/** Process-local storage for tests that do not assert loss recovery. */
+export const volatileStorage = PersistedQueue.layer.pipe(
+  Layer.provide(PersistedQueue.layerStoreMemory)
 );

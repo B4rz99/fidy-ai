@@ -1,9 +1,9 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Ref, Schema } from "effect";
 import { TestConsole } from "effect/testing";
-import { PersistedQueue } from "effect/unstable/persistence";
 import type { PersistedQueueFailureDisposition, PersistedQueueTerminalReason } from "./contract";
 import { declarePersistedQueue } from "./operations";
+import { PersistedQueueMemory } from "./runtime";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 
@@ -18,7 +18,6 @@ const GuardedQueue = declarePersistedQueue({
   schema: QueuePayload,
   descriptor,
 });
-const QueueMemory = PersistedQueue.layer.pipe(Layer.provideMerge(PersistedQueue.layerStoreMemory));
 
 it("publishes only protocol identity, offer, and sanitized handling", () => {
   expect(Object.keys(GuardedQueue).sort()).toEqual(["definition", "handleNext", "offer"]);
@@ -27,7 +26,7 @@ it("publishes only protocol identity, offer, and sanitized handling", () => {
 
 it.effect("requires classification and terminal settlement at the application queue handler", () =>
   Effect.gen(function* () {
-    const services = yield* Layer.build(QueueMemory);
+    const services = yield* Layer.build(PersistedQueueMemory);
     const recorded = yield* Ref.make<
       ReadonlyArray<{
         readonly value: string;
@@ -64,7 +63,9 @@ it.effect("requires classification and terminal settlement at the application qu
 
 it.effect("redacts and observes a defect that bypasses the owning queue handler policy", () =>
   Effect.gen(function* () {
-    const services = yield* Layer.build(Layer.mergeAll(TelemetryEnvelopeRecording, QueueMemory));
+    const services = yield* Layer.build(
+      Layer.mergeAll(TelemetryEnvelopeRecording, PersistedQueueMemory)
+    );
     const recorder = Context.get(services, EnvelopeRecorder);
     yield* GuardedQueue.offer(
       { value: "payload-sentinel" },
@@ -91,7 +92,7 @@ it.effect("redacts and observes a defect that bypasses the owning queue handler 
 
 it.effect("logs defects even when configured telemetry is disabled", () =>
   Effect.gen(function* () {
-    const services = yield* Layer.build(Layer.mergeAll(TelemetryDisabled, QueueMemory));
+    const services = yield* Layer.build(Layer.mergeAll(TelemetryDisabled, PersistedQueueMemory));
     yield* GuardedQueue.offer(
       { value: "payload-sentinel" },
       { id: "handler-boundary-disabled" }
@@ -115,7 +116,7 @@ it.effect("logs defects even when configured telemetry is disabled", () =>
 
 it.effect("uses metadata-only defect logging when telemetry is absent", () =>
   Effect.gen(function* () {
-    const services = yield* Layer.build(QueueMemory);
+    const services = yield* Layer.build(PersistedQueueMemory);
     yield* GuardedQueue.offer(
       { value: "payload-sentinel" },
       { id: "handler-boundary-fallback" }

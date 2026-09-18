@@ -91,6 +91,7 @@ apps/server/src/shell/observability/contract.ts
   s_5974c1f33d750e::t_ab4d7d83619251 533,538,540-594,596-609,611-627,629-663,665-683,685-687
   s_5974c1f33d750e::t_92dd3bb48f3110 161,227-229,439-456,458-461,463-464,466-468,470-473,475-478,480-483,485-495,497-500,502-506,508-511,513-515,517,519,521-523,525-532
   s_5974c1f33d750e::t_0a23229c6de5ef 3
+  s_5974c1f33d750e::t_26c72a50b6cee3 806
 apps/server/src/shell/email-authentication/replacement-retention.ts
   s_5974c1f33d750e::t_53e26cb77f750b 19
 apps/server/src/shell/observability/registry.test.ts
@@ -223,6 +224,7 @@ apps/server/src/shell/runtime.ts
   s_5974c1f33d750e::t_d1dc2cc71f2568 1
 apps/server/scripts/verify-sentry-account-runtime.ts
   s_5974c1f33d750e::t_0d7340ef997a93 6,9-10
+  s_5974c1f33d750e::t_5ab9693cf8d54b 7-8,11-14
 apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
   s_5974c1f33d750e::t_1ded1bb1822585 16,25
   s_5974c1f33d750e::t_d33183460c617d 24

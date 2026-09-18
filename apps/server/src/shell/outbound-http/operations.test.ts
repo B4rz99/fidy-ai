@@ -131,7 +131,10 @@ it.effect("owns Resend destinations, authorization, idempotency, and bodyless re
           body:
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
         });
-        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+        const responseBody = request.url.includes("/attachments/")
+          ? '{"download_url":"https://inbound-cdn.resend.com/signed/image?signature=private"}'
+          : "{}";
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(responseBody)));
       })
     );
     const receivedEmailId = ResendReceivedEmailId.make("received-1");
@@ -143,13 +146,9 @@ it.effect("owns Resend destinations, authorization, idempotency, and bodyless re
     });
     yield* outbound.execute({ _tag: "ResendReceivedEmail", receivedEmailId });
     yield* outbound.execute({
-      _tag: "ResendAttachment",
+      _tag: "ResendAttachmentDownload",
       receivedEmailId,
       attachmentId: "inline/1",
-    });
-    yield* outbound.execute({
-      _tag: "ResendInboundDownload",
-      downloadUrl: "https://inbound-cdn.resend.com/signed/image?signature=private",
     });
 
     expect(observed).toEqual([
@@ -233,18 +232,27 @@ it.effect("owns hosted-inference destinations, credentials, and retained headers
   })
 );
 
-it.effect("rejects an unsafe Resend download destination before transport", () =>
+it.effect("rejects an unsafe private Resend download destination before following it", () =>
   Effect.gen(function* () {
     let requests = 0;
     const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         requests += 1;
-        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unused")));
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response('{"download_url":"http://127.0.0.1/private"}')
+          )
+        );
       })
     );
 
     const exit = yield* outbound
-      .execute({ _tag: "ResendInboundDownload", downloadUrl: "http://127.0.0.1/private" })
+      .execute({
+        _tag: "ResendAttachmentDownload",
+        receivedEmailId: ResendReceivedEmailId.make("received-1"),
+        attachmentId: "inline-1",
+      })
       .pipe(Effect.exit);
 
     assert.deepStrictEqual(
@@ -257,7 +265,84 @@ it.effect("rejects an unsafe Resend download destination before transport", () =
         })
       )
     );
-    expect(requests).toBe(0);
+    expect(requests).toBe(1);
+  })
+);
+
+it.effect.each([
+  ["malformed JSON", "not-json"],
+  ["a malformed descriptor", "{}"],
+] as const)("rejects %s from the Resend attachment descriptor", ([, descriptorBody]) =>
+  Effect.gen(function* () {
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(descriptorBody)))
+      )
+    );
+
+    const failure = yield* outbound
+      .execute({
+        _tag: "ResendAttachmentDownload",
+        receivedEmailId: ResendReceivedEmailId.make("received-1"),
+        attachmentId: "inline-1",
+      })
+      .pipe(Effect.flip);
+
+    expect(failure).toEqual(
+      new OutboundHttpFailure({
+        reason: "invalid-destination",
+        responseStatus: Option.none(),
+        responseHeaders: {},
+      })
+    );
+  })
+);
+
+it.effect(
+  "returns an unsuccessful Resend attachment descriptor response without following it",
+  () =>
+    Effect.gen(function* () {
+      let requests = 0;
+      const outbound = yield* makeTestOutbound(
+        HttpClient.make((request) => {
+          requests += 1;
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(request, new Response("private", { status: 404 }))
+          );
+        })
+      );
+
+      const response = yield* outbound.execute({
+        _tag: "ResendAttachmentDownload",
+        receivedEmailId: ResendReceivedEmailId.make("received-1"),
+        attachmentId: "inline-1",
+      });
+
+      expect(response.status).toBe(404);
+      expect(requests).toBe(1);
+    })
+);
+
+it.effect("executes only the closed Cloudflare Access operation", () =>
+  Effect.gen(function* () {
+    let observedToken = "";
+    const outbound = makeCloudflareAccessOutboundHttp({
+      accessToken: Redacted.make("private-cloudflare-access-token"),
+      httpClient: HttpClient.make((request) => {
+        observedToken = new Headers(request.headers).get("cf-access-token") ?? "";
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      }),
+    });
+
+    const response = yield* outbound.execute({
+      _tag: "CloudflareAccessSupportRecovery",
+      body: "{}",
+    });
+    const rejected = yield* outbound.execute(kapsoRequest).pipe(Effect.flip);
+
+    expect(response.status).toBe(200);
+    expect(observedToken).toBe("private-cloudflare-access-token");
+    expect(rejected.reason).toBe("transport-failed");
   })
 );
 
@@ -340,24 +425,6 @@ it.effect("rejects a destination outside the service authority before transport"
   })
 );
 
-it.effect("rejects a non-Access destination before support transport", () =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const outbound = makeCloudflareAccessOutboundHttp({
-      accessToken: Redacted.make("private-access-token"),
-      httpClient: HttpClient.make((request) => {
-        requests += 1;
-        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
-      }),
-    });
-
-    const failure = yield* Effect.flip(outbound.execute(kapsoRequest));
-
-    expect(failure.reason).toBe("transport-failed");
-    expect(requests).toBe(0);
-  })
-);
-
 it.effect("rejects operational requests from the runtime provider group before transport", () =>
   Effect.gen(function* () {
     let requests = 0;
@@ -415,19 +482,16 @@ it.effect("bounds the streamed Kapso response before exposing bytes and cancels 
     );
 
     const exit = yield* outbound.execute(kapsoRequest).pipe(Effect.exit);
-    const unannotatedExit = Exit.isFailure(exit)
-      ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
-      : exit;
+    const failure = Option.getOrThrow(
+      Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
+    );
 
-    assert.deepStrictEqual(
-      unannotatedExit,
-      Exit.fail(
-        new OutboundHttpFailure({
-          reason: "response-too-large",
-          responseStatus: Option.some(200),
-          responseHeaders: {},
-        })
-      )
+    expect(failure).toEqual(
+      new OutboundHttpFailure({
+        reason: "response-too-large",
+        responseStatus: Option.some(200),
+        responseHeaders: {},
+      })
     );
     expect(cancelled).toBe(true);
   })
@@ -679,18 +743,15 @@ it.effect.each(transportFailureTags)(
       const expectedStatus = ["StatusCodeError", "DecodeError", "EmptyBodyError"].includes(tag)
         ? Option.some(503)
         : Option.none<number>();
-      const unannotatedExit = Exit.isFailure(exit)
-        ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
-        : exit;
-      assert.deepStrictEqual(
-        unannotatedExit,
-        Exit.fail(
-          new OutboundHttpFailure({
-            reason: "transport-failed",
-            responseStatus: expectedStatus,
-            responseHeaders: {},
-          })
-        )
+      const failure = Option.getOrThrow(
+        Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
+      );
+      expect(failure).toEqual(
+        new OutboundHttpFailure({
+          reason: "transport-failed",
+          responseStatus: expectedStatus,
+          responseHeaders: {},
+        })
       );
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
       for (const sentinel of [
@@ -725,21 +786,15 @@ it.effect("projects a hostile response-stream failure without its coordinates", 
     );
 
     const exit = yield* outbound.execute(kapsoRequest).pipe(Effect.exit);
-    const unannotatedExit = Exit.isFailure(exit)
-      ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
-      : exit;
-    assert.deepStrictEqual(
-      unannotatedExit,
-      Exit.fail(
-        new OutboundHttpFailure({
-          reason: "response-body-failed",
-          responseStatus: Option.some(200),
-          responseHeaders: {},
-        })
-      )
-    );
     const failure = Option.getOrThrow(
       Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none()
+    );
+    expect(failure).toEqual(
+      new OutboundHttpFailure({
+        reason: "response-body-failed",
+        responseStatus: Option.some(200),
+        responseHeaders: {},
+      })
     );
     const rendered = yield* Schema.encodeEffect(UnknownJsonString)(failure);
 

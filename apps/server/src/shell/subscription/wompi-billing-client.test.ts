@@ -4,9 +4,11 @@ import { createHash } from "node:crypto";
 import { BunServices } from "@effect/platform-bun";
 import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
-import type { HttpClientRequest } from "effect/unstable/http";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  type TestOutboundTransportRequest,
+  testOutboundTransportLayer,
+} from "~/shell/outbound-http/testing";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { WompiTransactionId, WompiTransactionReference } from "~/core/subscription/model";
@@ -50,19 +52,16 @@ const successResponse = (method: string): Response =>
 const clientLayer = (
   response: (method: string) => Response,
   configLayer: typeof config = config,
-  observeRequest?: (request: HttpClientRequest.HttpClientRequest) => void
+  observeRequest?: (request: TestOutboundTransportRequest) => void
 ): Layer.Layer<WompiBillingClient, Config.ConfigError> =>
   WompiBillingClient.layer.pipe(
     Layer.provide(OutboundHttp.layer),
     Layer.provide(
       Layer.mergeAll(
-        Layer.succeed(
-          HttpClient.HttpClient,
-          HttpClient.make((request) => {
-            observeRequest?.(request);
-            return Effect.succeed(HttpClientResponse.fromWeb(request, response(request.method)));
-          })
-        ),
+        testOutboundTransportLayer((request) => {
+          observeRequest?.(request);
+          return Effect.succeed(response(request.method));
+        }),
         configLayer,
         BunServices.layer
       )
@@ -102,7 +101,7 @@ layer(TestLayer, { excludeTestServices: true })("Wompi billing adapter", (it) =>
   );
 });
 
-const recordedRequests: Array<HttpClientRequest.HttpClientRequest> = [];
+const recordedRequests: Array<TestOutboundTransportRequest> = [];
 const credentialBoundaryLayer = clientLayer(successResponse, config, (request) =>
   recordedRequests.push(request)
 );

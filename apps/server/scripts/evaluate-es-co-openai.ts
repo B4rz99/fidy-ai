@@ -2,7 +2,6 @@
 
 import { BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer, Schema } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
 import { AgentService } from "~/shell/agent/agent-service";
 import {
   FidyAgentModel,
@@ -13,6 +12,7 @@ import {
 import { hostedOutputTokenReserve } from "~/shell/agent/hosted-inference";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { TelemetryDisabled } from "~/shell/observability/operations";
+import { OutboundHttpFetchTransportLive } from "~/shell/outbound-http/runtime";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
 import { requestBudgetLayer } from "~/shell/testing/evaluation/request-budget";
@@ -85,7 +85,7 @@ const SafetyApp = SafetyWork.pipe(
   Layer.provideMerge(Budget)
 );
 // Capture a provider-only client before the local ApiHarness client enters application scope.
-const ProviderHttp = FetchHttpClient.layer.pipe(Layer.provide(Budget));
+const ProviderHttp = OutboundHttpFetchTransportLive.pipe(Layer.provide(Budget));
 const HostedInferenceLive = OpenAiHostedInferenceLive.pipe(Layer.provide(ProviderHttp));
 const EvaluationInferenceLive = EvaluationInferenceRouter.pipe(Layer.provide(HostedInferenceLive));
 const LanguageModelLive = OpenAiLanguageModelLive.pipe(Layer.provide(ProviderHttp));

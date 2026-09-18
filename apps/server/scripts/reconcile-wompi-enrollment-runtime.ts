@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
 
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { FetchHttpClient } from "effect/unstable/http";
 import { Config, Console, Data, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { CardEnrollmentId, WompiSourceId } from "~/core/subscription/enrollment-model";
 import { PgLive, RuntimeAuthorityLive } from "~/shell/database/runtime";
-import { OutboundHttp } from "~/shell/outbound-http/operations";
+import { OutboundHttpFetchLive } from "~/shell/outbound-http/runtime";
 import { reconcileCardEnrollment } from "~/shell/subscription/card-enrollment";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
 
@@ -41,8 +40,7 @@ const ReconcileLive = Layer.effectDiscard(reconcile).pipe(
   Layer.provide(PgLive),
   Layer.provide(
     WompiEnrollmentClient.layer.pipe(
-      Layer.provide(OutboundHttp.layer),
-      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(OutboundHttpFetchLive),
       Layer.provide(BunServices.layer)
     )
   ),

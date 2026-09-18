@@ -1,0 +1,36 @@
+apps/server/ARCHITECTURE.md
+  s_62fe65558ee4c6::t_65019076f08557 146-156
+apps/server/src/shell/_shared/bounded-bytes.test.ts
+  s_62fe65558ee4c6::t_f9477832631e44 2-3,5,7-8,10,12,16,19-23,25,27-28,32,34-39,46
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_62fe65558ee4c6::t_91afe1b5ef4b52 1,102-110
+  s_62fe65558ee4c6::t_1514932a847f9c 142
+  s_62fe65558ee4c6::t_0b3873d88a3f60 155-172,174-180,196-197
+  s_62fe65558ee4c6::t_c9d8a1b70485a2 11,136-140
+  s_62fe65558ee4c6::t_a810439ea6470e 2-10,12-101,111-135,141,143-154,173,181-195,198
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_62fe65558ee4c6::t_4fd3423b58e792 46
+  s_62fe65558ee4c6::t_43242407fe75fb 434-438,450,465
+  s_62fe65558ee4c6::t_745817d193764a 9,423
+CODING_STANDARDS.md
+  s_62fe65558ee4c6::t_fe564875ae546a 212-222
+apps/server/scripts/check-dependency-guards.ts
+  s_62fe65558ee4c6::t_e95fca3adbbd1a 27
+  s_62fe65558ee4c6::t_e42087ea64ebbd 25-26,28-36,111,228-239,255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4bf5b412160a52503e9f0dea0d439c7edc814c9d",
+  "prompts": {},
+  "sessions": {
+    "s_62fe65558ee4c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26a-994f-724e-8f23-0d4a7f918025",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

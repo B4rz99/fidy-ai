@@ -2,7 +2,7 @@ import { Array, Config, ConfigProvider, Duration, Effect, Layer, Option } from "
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { loadClusterAuthenticationToken } from "~/shell/secret-material/operations";
-import { PersistedQueueSqlLive, PersistedQueueVolatileLive } from "~/shell/persisted-queue/runtime";
+import { PersistedQueueMemory, PersistedQueueSqlLive } from "~/shell/persisted-queue/runtime";
 import {
   maximumHostedTurnIterations,
   maximumModelRoundMillis,
@@ -138,7 +138,7 @@ export const DurableExecutionClientLive = Layer.unwrap(
 
 /** Volatile native substrate for tests that do not assert process-loss or cross-runtime behavior. */
 export const DurableExecutionMemory = Layer.mergeAll(
-  PersistedQueueVolatileLive,
+  PersistedQueueMemory,
   WorkflowEngine.layerMemory,
   TestRunner.layer,
   ClusterReadinessVolatile

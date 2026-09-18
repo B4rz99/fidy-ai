@@ -18,11 +18,11 @@ import { applyQueueHandlerPolicy } from "./handler";
 const applicationQueueNames = new Set<DurableQueueNameType>();
 
 /** Reads queue identities registered by declarations in this process. */
-export const readApplicationQueueNames = (): ReadonlyArray<DurableQueueNameType> =>
+export const readApplicationPersistedQueueNames = (): ReadonlyArray<DurableQueueNameType> =>
   Array.from(applicationQueueNames).sort();
 
 /** Yields queue wiring authority without allowing the raw factory to escape. */
-export const applicationQueueProvider: Effect.Effect<
+export const applicationPersistedQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
   PersistedQueue.PersistedQueueFactory
@@ -34,7 +34,7 @@ export const applicationQueueProvider: Effect.Effect<
 );
 
 /** Constructs the private Effect queue behind one application declaration. */
-export const declareApplicationQueue = <
+export const declareApplicationPersistedQueue = <
   PayloadSchema extends Schema.Constraint,
   const Name extends string,
 >(options: {

@@ -7,21 +7,21 @@ import {
 } from "./contract";
 import type { DurableQueueName } from "~/shell/durable-queue-policy";
 import {
-  applicationQueueProvider,
-  declareApplicationQueue,
-  readApplicationQueueNames,
+  applicationPersistedQueueProvider as applicationPersistedQueueProviderInternal,
+  declareApplicationPersistedQueue,
+  readApplicationPersistedQueueNames,
 } from "~/shell/persisted-queue/internal/queue";
 
 /** Returns queue identities registered by application queue declarations in this process. */
 export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueName> =>
-  readApplicationQueueNames();
+  readApplicationPersistedQueueNames();
 
 /** Captures only the capability to satisfy queue requirements; the raw factory never escapes. */
 export const applicationPersistedQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
   ApplicationPersistedQueueRequirement
-> = Effect.suspend(() => applicationQueueProvider);
+> = Effect.suspend(() => applicationPersistedQueueProviderInternal);
 
 /**
  * Declares one named durable handoff. Offers preserve custom identity, schema encoding, and the
@@ -36,4 +36,4 @@ export const declarePersistedQueue = <
   readonly name: Name;
   readonly schema: PayloadSchema;
   readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationQueue(options);
+}): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationPersistedQueue(options);

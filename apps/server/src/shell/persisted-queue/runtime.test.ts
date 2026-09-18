@@ -2,7 +2,7 @@ import { expect, it, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Ref, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { declarePersistedQueue } from "./operations";
-import { PersistedQueueVolatileLive } from "./runtime";
+import { PersistedQueueMemory } from "./runtime";
 
 const RuntimePayload = Schema.Struct({ value: Schema.String });
 const RuntimeQueue = declarePersistedQueue({
@@ -14,7 +14,7 @@ const RuntimeQueue = declarePersistedQueue({
   },
 });
 
-layer(PersistedQueueVolatileLive)("volatile persisted queue runtime", (it) => {
+layer(PersistedQueueMemory)("volatile persisted queue runtime", (it) => {
   it.effect("provides declared queue requirements with volatile storage", () =>
     Effect.gen(function* () {
       const handled = yield* Ref.make("");
@@ -31,7 +31,7 @@ layer(PersistedQueueVolatileLive)("volatile persisted queue runtime", (it) => {
 
 it.effect("publishes queue authority without publishing raw queue storage", () =>
   Effect.gen(function* () {
-    const services = yield* Layer.build(PersistedQueueVolatileLive);
+    const services = yield* Layer.build(PersistedQueueMemory);
     expect(Option.isNone(Context.getOption(services, PersistedQueue.PersistedQueueStore))).toBe(
       true
     );

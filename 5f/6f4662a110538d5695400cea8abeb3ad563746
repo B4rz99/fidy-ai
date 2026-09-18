@@ -1,0 +1,22 @@
+apps/server/src/shell/durable-execution.ts
+  h_c6d49c804e0ad2 5,141
+apps/server/src/shell/persisted-queue/internal/queue.ts
+  h_c6d49c804e0ad2 24-25
+apps/server/src/shell/persisted-queue/operations.ts
+  h_c6d49c804e0ad2 10,19,24
+apps/server/src/shell/persisted-queue/runtime.test.ts
+  h_c6d49c804e0ad2 5,17,34
+apps/server/src/shell/persisted-queue/runtime.ts
+  h_c6d49c804e0ad2 11,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5f6f4662a110538d5695400cea8abeb3ad563746",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

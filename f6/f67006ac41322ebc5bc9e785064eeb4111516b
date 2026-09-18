@@ -1,0 +1,18 @@
+apps/server/src/shell/persisted-queue/operations.ts
+  h_c6d49c804e0ad2 17,19-23,28,43
+apps/server/src/shell/persisted-queue/runtime.test.ts
+  h_c6d49c804e0ad2 1-3,31-39
+apps/server/src/shell/persisted-queue/runtime.ts
+  h_c6d49c804e0ad2 11-12,18,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f6f67006ac41322ebc5bc9e785064eeb4111516b",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

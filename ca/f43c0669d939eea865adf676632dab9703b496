@@ -6,6 +6,7 @@ apps/server/.dependency-cruiser.mjs
   s_62fe65558ee4c6::t_1468373a75adf5 91,95-98,101,103-107,112-120,122-123,127
   s_62fe65558ee4c6::t_e00943d33ec4e5 102
   s_62fe65558ee4c6::t_ce2c2dd8f20397 109-111,124-126
+  s_62fe65558ee4c6::t_a57fee7ae2d5fd 121,228-229
 apps/server/src/shell/agent/mistral-conformance.test.ts
   s_62fe65558ee4c6::t_df5cc2ecc04533 6,126-129
 CODING_STANDARDS.md

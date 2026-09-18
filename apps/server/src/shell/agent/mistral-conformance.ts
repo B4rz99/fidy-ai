@@ -1,9 +1,8 @@
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
-import { Data, Effect, Option, Redacted, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { JsonSchema } from "effect";
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
 import { makeSyntheticConversationCompactionContext } from "./conversation-compaction-context";
 import { hostedOutputTokenReserve } from "./hosted-inference";
@@ -11,7 +10,6 @@ import { hostedOutputTokenReserve } from "./hosted-inference";
 /** Fixed candidate whose hosted accounting must agree with the pinned local v13 tokenizer. */
 export const mistralConformanceModel = "ministral-3b-2512";
 
-const maximumConformanceResponseBytes = 1_000_000;
 const conformanceTimeout = "30 seconds";
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
@@ -129,11 +127,8 @@ const conformanceError = (
   reason: MistralConformanceFailureReason
 ): MistralConformanceError => new MistralConformanceError({ reason, caseId: conformanceCase.id });
 
-const makeRequest = (
-  conformanceCase: ConformanceCase,
-  apiKey: Redacted.Redacted<string>
-): HttpClientRequest.HttpClientRequest => {
-  const requestBody = {
+const makeRequestBody = (conformanceCase: ConformanceCase): string =>
+  JSON.stringify({
     model: mistralConformanceModel,
     messages: conformanceCase.messages,
     max_tokens: conformanceCase.maxTokens,
@@ -142,15 +137,7 @@ const makeRequest = (
       onNone: () => ({}),
       onSome: (responseFormat) => ({ response_format: responseFormat }),
     }),
-  };
-  return HttpClientRequest.post("https://api.mistral.ai/v1/chat/completions").pipe(
-    HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(apiKey)}`),
-    HttpClientRequest.setHeader("content-type", "application/json"),
-    HttpClientRequest.setBody(
-      HttpBody.uint8Array(new TextEncoder().encode(JSON.stringify(requestBody)))
-    )
-  );
-};
+  });
 
 const validateResponse = Effect.fn("MistralConformance.validateResponse")(function* (
   conformanceCase: ConformanceCase,
@@ -173,13 +160,14 @@ const validateResponse = Effect.fn("MistralConformance.validateResponse")(functi
 });
 
 const executeCase = Effect.fn("MistralConformance.executeCase")(function* (
-  conformanceCase: ConformanceCase,
-  apiKey: Redacted.Redacted<string>
+  conformanceCase: ConformanceCase
 ) {
-  const client = yield* HttpClient.HttpClient;
-  const bounded = client.pipe(makeBoundedExternalHttpClient("mistral"));
-  const response = yield* bounded
-    .execute(makeRequest(conformanceCase, apiKey), maximumConformanceResponseBytes)
+  const outbound = yield* OutboundHttp;
+  const response = yield* outbound
+    .execute({
+      _tag: "MistralChatCompletions",
+      body: makeRequestBody(conformanceCase),
+    })
     .pipe(
       Effect.timeout(conformanceTimeout),
       Effect.mapError(() => conformanceError(conformanceCase, "provider_failed"))
@@ -200,13 +188,8 @@ const executeCase = Effect.fn("MistralConformance.executeCase")(function* (
  * Runs baseline/small/large schema differentials and a production-shaped Compaction probe.
  * Merely configuring a credential never invokes this function.
  */
-export const verifyMistralTokenConformance = (
-  apiKey: Redacted.Redacted<string>
-): Effect.Effect<
+export const verifyMistralTokenConformance: Effect.Effect<
   ReadonlyArray<MistralConformanceReport>,
   MistralConformanceError,
-  HttpClient.HttpClient
-> =>
-  Effect.forEach(cases, (conformanceCase) => executeCase(conformanceCase, apiKey), {
-    concurrency: 1,
-  });
+  OutboundHttp
+> = Effect.forEach(cases, executeCase, { concurrency: 1 });

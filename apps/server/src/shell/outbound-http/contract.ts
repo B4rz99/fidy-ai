@@ -69,6 +69,9 @@ export type OutboundHttpRequest =
       /** Provider-issued URL accepted only when it names Resend's direct inbound CDN. */
       readonly downloadUrl: string;
     }>
+  | Readonly<{ readonly _tag: "OpenAiResponses"; readonly body: string }>
+  | Readonly<{ readonly _tag: "OpenAiInputTokens"; readonly body: string }>
+  | Readonly<{ readonly _tag: "MistralChatCompletions"; readonly body: string }>
   | Readonly<{ readonly _tag: "WompiMerchant" }>
   | Readonly<{
       readonly _tag: "WompiCreatePaymentSource";

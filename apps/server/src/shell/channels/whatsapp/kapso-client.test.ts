@@ -56,6 +56,7 @@ const makeRealOutboundHttp = (
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown({
             KAPSO_API_KEY: "test-api-key",
+            OPENAI_API_KEY: "unused-openai-test-key",
             RESEND_API_KEY: "re_test_only_resend_key_324000000",
             WOMPI_ENVIRONMENT: "sandbox",
             WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,

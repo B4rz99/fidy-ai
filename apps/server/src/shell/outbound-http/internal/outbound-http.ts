@@ -1,4 +1,4 @@
-import { type Crypto, Effect, Encoding, Option, Redacted, Result, Schema } from "effect";
+import { type Crypto, Effect, Encoding, Match, Option, Redacted, Result, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -17,6 +17,7 @@ import {
 } from "~/shell/outbound-http/contract";
 
 const kapsoMessagesBaseUrl = "https://api.kapso.ai/meta/whatsapp/v24.0";
+const mistralChatCompletionsUrl = "https://api.mistral.ai/v1/chat/completions";
 const resendApiBaseUrl = "https://api.resend.com";
 const wompiSandboxOrigin = "https://sandbox.wompi.co";
 const wompiProductionOrigin = "https://production.wompi.co";
@@ -29,6 +30,7 @@ const maximumResendAttachmentResponseKibibytes = 4;
 const maximumResendInlineImageResponseKibibytes = 1_024;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
 const maximumWompiResponseBytes = maximumWompiResponseKibibytes * bytesPerKibibyte;
+const maximumHostedInferenceResponseBytes = 1_000_000;
 const maximumResendDeliveryResponseBytes =
   maximumResendDeliveryResponseKibibytes * bytesPerKibibyte;
 const maximumResendMetadataResponseBytes =
@@ -58,6 +60,21 @@ type PrivateOutboundHttpService = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
+type OutboundHttpConfig = Readonly<{
+  kapsoApiKey: Option.Option<Redacted.Redacted<string>>;
+  openAiApiKey: Option.Option<Redacted.Redacted<string>>;
+  openAiApiUrl: string;
+  mistralApiKey: Option.Option<Redacted.Redacted<string>>;
+  resendEmailDeliveryApiKey: Option.Option<Redacted.Redacted<string>>;
+  resendReceivingApiKey: Option.Option<Redacted.Redacted<string>>;
+  wompi: Option.Option<WompiTransportConfig>;
+  httpClient: HttpClient.HttpClient;
+  crypto: Option.Option<Crypto.Crypto>;
+}>;
+
+type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
+type WompiRequest = Extract<OutboundHttpRequest, { readonly _tag: `Wompi${string}` }>;
+
 const projectFailure = (failure: ExternalHttpFailure): OutboundHttpFailure =>
   new OutboundHttpFailure({
     reason: failure.reason,
@@ -71,6 +88,26 @@ const unavailableTransport = (): OutboundHttpFailure =>
     responseStatus: Option.none(),
     responseHeaders: {},
   });
+
+const invalidDestination = (): OutboundHttpFailure =>
+  new OutboundHttpFailure({
+    reason: "invalid-destination",
+    responseStatus: Option.none(),
+    responseHeaders: {},
+  });
+
+const jsonRequest = (
+  url: string,
+  body: string,
+  headers: Readonly<Record<string, string>>
+): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.post(url).pipe(
+    HttpClientRequest.setHeaders({ "content-type": "application/json", ...headers }),
+    HttpClientRequest.setBody(HttpBody.text(body, "application/json"))
+  );
+
+const joinUrl = (baseUrl: string, path: string): string =>
+  `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 
 const resendAuthorization = (
   apiKey: Redacted.Redacted<string>
@@ -88,30 +125,6 @@ const ResendInboundDownloadUrl = Schema.URLFromString.check(
   )
 );
 const decodeResendInboundDownloadUrl = Schema.decodeUnknownResult(ResendInboundDownloadUrl);
-
-const invalidDestination = (): OutboundHttpFailure =>
-  new OutboundHttpFailure({
-    reason: "invalid-destination",
-    responseStatus: Option.none(),
-    responseHeaders: {},
-  });
-
-const makeKapsoRequest = (
-  request: Extract<OutboundHttpRequest, { readonly _tag: "KapsoMessages" }>,
-  apiKey: Redacted.Redacted<string>
-): HttpClientRequest.HttpClientRequest =>
-  HttpClientRequest.post(
-    `${kapsoMessagesBaseUrl}/${encodeURIComponent(request.businessPhoneNumberId)}/messages`
-  ).pipe(
-    HttpClientRequest.setHeaders({
-      "content-type": "application/json",
-      "x-api-key": Redacted.value(apiKey),
-    }),
-    HttpClientRequest.setBody(HttpBody.text(request.body, "application/json"))
-  );
-
-type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
-type WompiRequest = Extract<OutboundHttpRequest, { readonly _tag: `Wompi${string}` }>;
 
 const makeResendRequest = (
   request: ResendRequest,
@@ -232,103 +245,145 @@ const makeWompiRequest = (
   }
 };
 
-const isResendRequest = (request: OutboundHttpRequest): request is ResendRequest =>
-  request._tag === "ResendEmailDelivery" ||
-  request._tag === "ResendReceivedEmail" ||
-  request._tag === "ResendAttachment" ||
-  request._tag === "ResendInboundDownload";
-
-const resendApiKeyFor = (
-  request: ResendRequest,
-  deliveryApiKey: Redacted.Redacted<string>,
-  receivingApiKey: Redacted.Redacted<string>
-): Redacted.Redacted<string> =>
-  request._tag === "ResendEmailDelivery" ? deliveryApiKey : receivingApiKey;
-
 type RequestPreparationContext = Readonly<{
-  kapsoApiKey: Redacted.Redacted<string>;
-  resendEmailDeliveryApiKey: Redacted.Redacted<string>;
-  resendReceivingApiKey: Redacted.Redacted<string>;
-  wompi: WompiTransportConfig;
-  crypto: Crypto.Crypto;
+  config: OutboundHttpConfig;
   kapsoHttp: PreparedRequest["http"];
+  openAiHttp: PreparedRequest["http"];
+  mistralHttp: PreparedRequest["http"];
   resendHttp: PreparedRequest["http"];
   wompiHttp: PreparedRequest["http"];
 }>;
 
-const prepareNonResendRequest = (
-  request: Exclude<OutboundHttpRequest, ResendRequest>,
+const prepareResend = (
+  request: ResendRequest,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
-  if (request._tag === "KapsoMessages") {
-    return Effect.succeed({
-      http: context.kapsoHttp,
-      maximumResponseBytes: maximumKapsoResponseBytes,
-      request: makeKapsoRequest(request, context.kapsoApiKey),
-      redirect: "error",
-    });
-  }
-  return makeWompiRequest(request, context.wompi, context.crypto).pipe(
-    Effect.map((wompiRequest) => ({
-      http: context.wompiHttp,
-      maximumResponseBytes: maximumWompiResponseBytes,
-      request: wompiRequest,
-      redirect: "error" as const,
-    }))
+  const apiKey =
+    request._tag === "ResendEmailDelivery"
+      ? context.config.resendEmailDeliveryApiKey
+      : context.config.resendReceivingApiKey;
+  return Option.match(apiKey, {
+    onNone: () => Effect.fail(unavailableTransport()),
+    onSome: (key) =>
+      makeResendRequest(request, key).pipe(
+        Effect.map((prepared) => ({ ...prepared, http: context.resendHttp }))
+      ),
+  });
+};
+
+const prepareWompi = (
+  request: WompiRequest,
+  context: RequestPreparationContext
+): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
+  Option.all({ wompi: context.config.wompi, crypto: context.config.crypto }).pipe(
+    Option.match({
+      onNone: () => Effect.fail(unavailableTransport()),
+      onSome: ({ wompi, crypto }) =>
+        makeWompiRequest(request, wompi, crypto).pipe(
+          Effect.map((providerRequest) => ({
+            http: context.wompiHttp,
+            maximumResponseBytes: maximumWompiResponseBytes,
+            request: providerRequest,
+            redirect: "error" as const,
+          }))
+        ),
+    })
   );
+
+const prepareNonProviderGroup = (
+  request: Exclude<OutboundHttpRequest, ResendRequest | WompiRequest>,
+  context: RequestPreparationContext
+): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
+  const config = context.config;
+  switch (request._tag) {
+    case "KapsoMessages":
+      return Option.match(config.kapsoApiKey, {
+        onNone: () => Effect.fail(unavailableTransport()),
+        onSome: (apiKey) =>
+          Effect.succeed({
+            http: context.kapsoHttp,
+            request: jsonRequest(
+              `${kapsoMessagesBaseUrl}/${encodeURIComponent(request.businessPhoneNumberId)}/messages`,
+              request.body,
+              { "x-api-key": Redacted.value(apiKey) }
+            ),
+            maximumResponseBytes: maximumKapsoResponseBytes,
+            redirect: "error" as const,
+          }),
+      });
+    case "OpenAiResponses":
+    case "OpenAiInputTokens":
+      return Option.match(config.openAiApiKey, {
+        onNone: () => Effect.fail(unavailableTransport()),
+        onSome: (apiKey) =>
+          Effect.succeed({
+            http: context.openAiHttp,
+            request: jsonRequest(
+              joinUrl(
+                config.openAiApiUrl,
+                request._tag === "OpenAiResponses" ? "responses" : "responses/input_tokens"
+              ),
+              request.body,
+              { authorization: `Bearer ${Redacted.value(apiKey)}` }
+            ),
+            maximumResponseBytes: maximumHostedInferenceResponseBytes,
+            redirect: "error" as const,
+          }),
+      });
+    case "MistralChatCompletions":
+      return Option.match(config.mistralApiKey, {
+        onNone: () => Effect.fail(unavailableTransport()),
+        onSome: (apiKey) =>
+          Effect.succeed({
+            http: context.mistralHttp,
+            request: jsonRequest(mistralChatCompletionsUrl, request.body, {
+              authorization: `Bearer ${Redacted.value(apiKey)}`,
+            }),
+            maximumResponseBytes: maximumHostedInferenceResponseBytes,
+            redirect: "error" as const,
+          }),
+      });
+  }
 };
 
 const prepareRequest = (
   request: OutboundHttpRequest,
   context: RequestPreparationContext
-): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
-  if (!isResendRequest(request)) return prepareNonResendRequest(request, context);
-  const apiKey = resendApiKeyFor(
-    request,
-    context.resendEmailDeliveryApiKey,
-    context.resendReceivingApiKey
+): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
+  Match.value(request).pipe(
+    Match.tagsExhaustive({
+      KapsoMessages: (value) => prepareNonProviderGroup(value, context),
+      OpenAiResponses: (value) => prepareNonProviderGroup(value, context),
+      OpenAiInputTokens: (value) => prepareNonProviderGroup(value, context),
+      MistralChatCompletions: (value) => prepareNonProviderGroup(value, context),
+      ResendEmailDelivery: (value) => prepareResend(value, context),
+      ResendReceivedEmail: (value) => prepareResend(value, context),
+      ResendAttachment: (value) => prepareResend(value, context),
+      ResendInboundDownload: (value) => prepareResend(value, context),
+      WompiMerchant: (value) => prepareWompi(value, context),
+      WompiCreatePaymentSource: (value) => prepareWompi(value, context),
+      WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
+      WompiCreateTransaction: (value) => prepareWompi(value, context),
+      WompiFindTransaction: (value) => prepareWompi(value, context),
+    })
   );
-  return makeResendRequest(request, apiKey).pipe(
-    Effect.map((resendRequest) => ({ ...resendRequest, http: context.resendHttp }))
-  );
-};
 
 /**
  * Creates fixed-destination provider transport that owns credentials, rejects redirects, suppresses
- * trace propagation, bounds response bytes, and returns only retained response facts or closed
- * failures.
+ * trace propagation, bounds response bytes, and returns only retained response facts or failures.
  */
-export const makeOutboundHttp = ({
-  kapsoApiKey,
-  resendEmailDeliveryApiKey,
-  resendReceivingApiKey,
-  wompi,
-  httpClient,
-  crypto,
-}: Readonly<{
-  kapsoApiKey: Redacted.Redacted<string>;
-  resendEmailDeliveryApiKey: Redacted.Redacted<string>;
-  resendReceivingApiKey: Redacted.Redacted<string>;
-  wompi: WompiTransportConfig;
-  httpClient: HttpClient.HttpClient;
-  crypto: Crypto.Crypto;
-}>): PrivateOutboundHttpService => {
-  const kapsoHttp = makeBoundedExternalHttpClient("kapso")(httpClient);
-  const resendHttp = makeBoundedExternalHttpClient("resend")(httpClient);
-  const wompiHttp = makeBoundedExternalHttpClient("wompi")(httpClient);
+export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHttpService => {
+  const context: RequestPreparationContext = {
+    config,
+    kapsoHttp: makeBoundedExternalHttpClient("kapso")(config.httpClient),
+    openAiHttp: makeBoundedExternalHttpClient("openai")(config.httpClient),
+    mistralHttp: makeBoundedExternalHttpClient("mistral")(config.httpClient),
+    resendHttp: makeBoundedExternalHttpClient("resend")(config.httpClient),
+    wompiHttp: makeBoundedExternalHttpClient("wompi")(config.httpClient),
+  };
   return {
-    execute: (request) => {
-      const prepared = prepareRequest(request, {
-        kapsoApiKey,
-        resendEmailDeliveryApiKey,
-        resendReceivingApiKey,
-        wompi,
-        crypto,
-        kapsoHttp,
-        resendHttp,
-        wompiHttp,
-      });
-      return prepared.pipe(
+    execute: (request) =>
+      prepareRequest(request, context).pipe(
         Effect.flatMap(({ http, maximumResponseBytes, request: providerRequest, redirect }) =>
           http
             .execute(providerRequest, maximumResponseBytes)
@@ -342,7 +397,6 @@ export const makeOutboundHttp = ({
         Effect.mapError((failure) =>
           failure._tag === "OutboundHttpFailure" ? failure : projectFailure(failure)
         )
-      );
-    },
+      ),
   };
 };

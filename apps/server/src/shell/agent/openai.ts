@@ -1,17 +1,25 @@
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-openai";
 import * as Generated from "@effect/ai-openai/Generated";
-import { Config, DateTime, Duration, Effect, type JsonSchema, Layer, Option, Schema } from "effect";
+import {
+  type Config,
+  DateTime,
+  Duration,
+  Effect,
+  type JsonSchema,
+  Layer,
+  Option,
+  Schema,
+} from "effect";
 import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
-import type { ConfigError } from "effect/Config";
 import { IanaTimeZone } from "~/core/_shared/context";
-import {
-  type BoundedExternalHttpResponse,
-  type ExternalHttpFailure,
-  boundedProviderLibraryHttpClientLayer,
-  makeBoundedExternalHttpClient,
-} from "~/shell/_shared/bounded-external-http";
+import type {
+  OutboundHttpFailure,
+  OutboundHttpRequest,
+  OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
+import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { isTransientHttpStatus } from "~/shell/public-http/contract";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
@@ -22,7 +30,12 @@ import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import { exactTranscriptPrompt } from "./model-boundary";
-import { HttpBody, type HttpClient, HttpClientRequest } from "effect/unstable/http";
+import {
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import {
   HostedInference,
   type HostedInferenceAdapter,
@@ -62,8 +75,6 @@ const productionContinuityBudgets: ContinuityBudgets = Object.freeze({
   activeRequest: maximumActiveRequestTokens,
   outputReserve: hostedOutputTokenReserve,
 });
-// Matches the existing maximum bounded canonical evidence contract; this is decimal bytes, not MiB.
-const maximumStructuredResponseBytes = 1_000_000;
 const structuredExecutionTimeout = "30 seconds";
 
 type StructuredExecutionPolicy = Readonly<{
@@ -91,25 +102,72 @@ type HostedToolCallCapOverride = <A, E, R>(
 export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToolCallCapOverride =>
   OpenAiLanguageModel.withConfigOverride({ max_tool_calls: maximum });
 
-const OpenAiClientBase = OpenAiClient.layerConfig({
-  apiKey: Config.redacted("OPENAI_API_KEY"),
-  apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
-});
+const syntheticOpenAiBaseUrl = "https://outbound.invalid/v1";
 
-const OpenAiClientLive = OpenAiClientBase.pipe(
-  Layer.provide(
-    boundedProviderLibraryHttpClientLayer({
-      provider: "openai",
-      maximumResponseBytes: maximumStructuredResponseBytes,
-    })
-  )
-);
+const outboundLibraryFailure = (
+  request: HttpClientRequest.HttpClientRequest
+): HttpClientError.HttpClientError =>
+  new HttpClientError.HttpClientError({
+    reason: new HttpClientError.TransportError({
+      request: HttpClientRequest.make(request.method)(syntheticOpenAiBaseUrl),
+    }),
+  });
+
+const openAiDestinations: Readonly<Record<string, "OpenAiResponses" | "OpenAiInputTokens">> = {
+  [`${syntheticOpenAiBaseUrl}/responses`]: "OpenAiResponses",
+  [`${syntheticOpenAiBaseUrl}/responses/input_tokens`]: "OpenAiInputTokens",
+};
+
+const openAiDestination = (
+  request: HttpClientRequest.HttpClientRequest
+): Option.Option<"OpenAiResponses" | "OpenAiInputTokens"> =>
+  Option.fromUndefinedOr(openAiDestinations[request.url]);
+
+const encodedRequestBody = (request: HttpClientRequest.HttpClientRequest): Option.Option<string> =>
+  request.body._tag === "Uint8Array"
+    ? Option.some(new TextDecoder().decode(request.body.body))
+    : Option.none();
+
+/** Reconstructs only already-bounded responses for the provider library's required client seam. */
+const openAiLibraryHttpClientLayer: Layer.Layer<HttpClient.HttpClient, never, OutboundHttp> =
+  Layer.effect(
+    HttpClient.HttpClient,
+    Effect.map(OutboundHttp, (outbound) =>
+      HttpClient.make((request) =>
+        Option.all({
+          destination: openAiDestination(request),
+          body: encodedRequestBody(request),
+        }).pipe(
+          Option.match({
+            onNone: () => Effect.fail(outboundLibraryFailure(request)),
+            onSome: ({ destination, body }) =>
+              outbound.execute({ _tag: destination, body }).pipe(
+                Effect.map((response) =>
+                  HttpClientResponse.fromWeb(
+                    request,
+                    new Response(response.body, {
+                      status: response.status,
+                      headers: response.headers,
+                    })
+                  )
+                ),
+                Effect.mapError(() => outboundLibraryFailure(request))
+              ),
+          })
+        )
+      )
+    )
+  );
+
+const OpenAiClientLive = OpenAiClient.layer({
+  apiUrl: syntheticOpenAiBaseUrl,
+}).pipe(Layer.provide(openAiLibraryHttpClientLayer));
 
 /** Structured-output model used by bounded non-agent extraction adapters. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
   model: FidyAgentModel,
   config: HostedAgentGenerationConfig,
-}).pipe(Layer.provide(OpenAiClientLive));
+}).pipe(Layer.provide(OpenAiClientLive), Layer.provide(OutboundHttp.openAiLayer));
 
 type OpenAiTool = Readonly<{
   type: "function";
@@ -470,7 +528,7 @@ const parseRetryAfterHttpDate = (value: string): Effect.Effect<Option.Option<Dur
  * model round keeps its bounded local retry policy and no value enters errors or telemetry.
  */
 const parseProviderRetryAfter = (
-  headers: BoundedExternalHttpResponse["headers"]
+  headers: OutboundHttpResponse["headers"]
 ): Effect.Effect<Option.Option<Duration.Duration>> =>
   Effect.gen(function* () {
     const value = headers[retryAfterHeader]?.trim();
@@ -482,7 +540,7 @@ const parseProviderRetryAfter = (
 
 /** Maps one sanitized bounded-exchange failure to its declared hosted inference failure. */
 const boundedOpenAiFailure = (
-  failure: ExternalHttpFailure,
+  failure: OutboundHttpFailure,
   overflowFailure: () => HostedInferenceError
 ): Effect.Effect<never, HostedInferenceError> =>
   Effect.gen(function* () {
@@ -495,14 +553,13 @@ const boundedOpenAiFailure = (
   });
 
 const executeBoundedOpenAiRequest = (
-  client: OpenAiClient.Service,
-  request: HttpClientRequest.HttpClientRequest,
+  outbound: OutboundHttpService,
+  request: OutboundHttpRequest,
   overflowFailure: () => HostedInferenceError
-): Effect.Effect<BoundedExternalHttpResponse, HostedInferenceError> =>
+): Effect.Effect<OutboundHttpResponse, HostedInferenceError> =>
   Effect.gen(function* () {
-    const response = yield* client.client
-      .pipe(makeBoundedExternalHttpClient("openai"))
-      .execute(request, maximumStructuredResponseBytes)
+    const response = yield* outbound
+      .execute(request)
       .pipe(Effect.catch((failure) => boundedOpenAiFailure(failure, overflowFailure)));
     if (
       response.status >= successfulStatusMinimum &&
@@ -515,23 +572,21 @@ const executeBoundedOpenAiRequest = (
   });
 
 const requestInputTokenCount = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   request: OpenAiCountedRequest | OpenAiStructuredCountedRequest,
   overflowFailure: () => HostedInferenceError
-): Effect.Effect<BoundedExternalHttpResponse, HostedInferenceError> =>
+): Effect.Effect<OutboundHttpResponse, HostedInferenceError> =>
   executeBoundedOpenAiRequest(
-    client,
-    HttpClientRequest.post("/responses/input_tokens", {
-      body: HttpBody.jsonUnsafe(request),
-    }),
+    outbound,
+    { _tag: "OpenAiInputTokens", body: JSON.stringify(request) },
     overflowFailure
   );
 
 const countInputTokens = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   request: OpenAiCountedRequest | OpenAiStructuredCountedRequest
 ): Effect.Effect<number, HostedInferenceError> =>
-  requestInputTokenCount(client, request, () =>
+  requestInputTokenCount(outbound, request, () =>
     invalidProviderOutput("Hosted provider response was invalid")
   ).pipe(
     Effect.flatMap(readBoundedResponseText),
@@ -614,14 +669,12 @@ const decodeResult = (
   });
 
 const executeRequest = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   request: OpenAiRequest
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
   executeBoundedOpenAiRequest(
-    client,
-    HttpClientRequest.post("/responses", {
-      body: HttpBody.jsonUnsafe(request),
-    }),
+    outbound,
+    { _tag: "OpenAiResponses", body: JSON.stringify(request) },
     () => invalidProviderOutput("Hosted provider response was invalid")
   ).pipe(
     Effect.flatMap(readBoundedResponseText),
@@ -650,16 +703,16 @@ const structuredOutputTimedOut = (): HostedInferenceError =>
   });
 
 const readBoundedResponseText = (
-  response: BoundedExternalHttpResponse
+  response: OutboundHttpResponse
 ): Effect.Effect<string, HostedInferenceError> =>
   Effect.succeed(new TextDecoder().decode(response.body));
 
 const countStructuredInputTokens = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   request: OpenAiStructuredCountedRequest,
   policy: StructuredExecutionPolicy
 ): Effect.Effect<number, HostedInferenceError> =>
-  requestInputTokenCount(client, request, structuredOutputExceeded).pipe(
+  requestInputTokenCount(outbound, request, structuredOutputExceeded).pipe(
     Effect.flatMap(readBoundedResponseText),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
     Effect.map(({ input_tokens }) => input_tokens),
@@ -673,7 +726,7 @@ const countStructuredInputTokens = (
   );
 
 const readStructuredResponse = (
-  response: BoundedExternalHttpResponse
+  response: OutboundHttpResponse
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
   readBoundedResponseText(response).pipe(
     Effect.flatMap((body) =>
@@ -707,7 +760,7 @@ const makeStructuredCountedRequest = (
  * model usage once structured generation is integrated by #206.
  */
 const executeStructuredRequest = function <Output>(
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   prepared: Readonly<{
     request: OpenAiStructuredRequest;
     codec: Schema.ConstraintCodec<Output, unknown>;
@@ -715,10 +768,8 @@ const executeStructuredRequest = function <Output>(
   }>
 ): Effect.Effect<Output, HostedInferenceError> {
   return executeBoundedOpenAiRequest(
-    client,
-    HttpClientRequest.post("/responses", {
-      body: HttpBody.jsonUnsafe(prepared.request),
-    }),
+    outbound,
+    { _tag: "OpenAiResponses", body: JSON.stringify(prepared.request) },
     structuredOutputExceeded
   ).pipe(
     Effect.flatMap(readStructuredResponse),
@@ -733,7 +784,7 @@ const executeStructuredRequest = function <Output>(
 };
 
 const makeStructuredAdapter = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   policy: StructuredExecutionPolicy,
   outputTokenReserve: number
 ): HostedStructuredAdapter => ({
@@ -760,7 +811,7 @@ const makeStructuredAdapter = (
         strict: true,
       };
       const counted = makeStructuredCountedRequest(projected.input, format);
-      const inputTokens = yield* countStructuredInputTokens(client, counted, policy);
+      const inputTokens = yield* countStructuredInputTokens(outbound, counted, policy);
       if (inputTokens + outputTokenReserve > hostedContextCapacity) {
         return yield* new HostedInferenceError({
           reason: { _tag: "CapacityExceeded", inputTokens },
@@ -775,7 +826,7 @@ const makeStructuredAdapter = (
         max_output_tokens: outputTokenReserve,
       };
       return {
-        execute: executeStructuredRequest(client, {
+        execute: executeStructuredRequest(outbound, {
           request,
           codec: transformed.codec,
           policy,
@@ -785,7 +836,7 @@ const makeStructuredAdapter = (
 });
 
 const countTranscriptTokens = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   entries: ReadonlyArray<TranscriptEntry>
 ): Effect.Effect<number> =>
   projectMessages(
@@ -800,7 +851,7 @@ const countTranscriptTokens = (
   ).pipe(
     Effect.flatMap(({ input }) =>
       countInputTokens(
-        client,
+        outbound,
         makeCountedRequest(input, {
           toolChoice: "none",
           availableOperations: allOperationIds,
@@ -811,13 +862,13 @@ const countTranscriptTokens = (
   );
 
 const makeOpenAiHostedInference = (
-  client: OpenAiClient.Service,
+  outbound: OutboundHttpService,
   structuredPolicy: StructuredExecutionPolicy,
   outputTokenReserve: number
 ): HostedInferenceService => {
   const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
     countText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
-    countTranscript: (entries) => countTranscriptTokens(client, entries),
+    countTranscript: (entries) => countTranscriptTokens(outbound, entries),
     prepare: (semanticInput) =>
       Effect.gen(function* () {
         const projected = yield* projectMessages(
@@ -831,7 +882,7 @@ const makeOpenAiHostedInference = (
           semanticInput.toolChoice === "none" ? 0 : semanticInput.maximumToolCalls,
           outputTokenReserve
         );
-        const inputTokens = yield* countInputTokens(client, countedRequest);
+        const inputTokens = yield* countInputTokens(outbound, countedRequest);
         if (inputTokens + outputTokenReserve > hostedContextCapacity) {
           return yield* new HostedInferenceError({
             reason: { _tag: "CapacityExceeded", inputTokens },
@@ -841,9 +892,9 @@ const makeOpenAiHostedInference = (
         }
         return { wire: request, continuationPrefix: projected.continuationPrefix };
       }),
-    structured: makeStructuredAdapter(client, structuredPolicy, outputTokenReserve),
+    structured: makeStructuredAdapter(outbound, structuredPolicy, outputTokenReserve),
     execute: (request) =>
-      executeRequest(client, request.wire).pipe(
+      executeRequest(outbound, request.wire).pipe(
         Effect.flatMap((response) =>
           Effect.map(decodeResult(response), (result) => ({
             result,
@@ -905,12 +956,16 @@ const makeOpenAiLayer = (
   validateStartup: boolean,
   structuredPolicy: StructuredExecutionPolicy,
   budgets: ContinuityBudgets
-): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
+): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
   Layer.effect(
     HostedInference,
     Effect.gen(function* () {
-      const client = yield* OpenAiClient.OpenAiClient;
-      const inference = makeOpenAiHostedInference(client, structuredPolicy, budgets.outputReserve);
+      const outbound = yield* OutboundHttp;
+      const inference = makeOpenAiHostedInference(
+        outbound,
+        structuredPolicy,
+        budgets.outputReserve
+      );
       if (validateStartup) {
         yield* inference.validateText({
           context: yield* startupContext(budgets),
@@ -921,7 +976,7 @@ const makeOpenAiLayer = (
       }
       return inference;
     })
-  ).pipe(Layer.provide(OpenAiClientBase));
+  ).pipe(Layer.provide(OutboundHttp.openAiLayer));
 
 /** Production OpenAI adapter with fail-closed maximum-request startup validation. */
 export const OpenAiHostedInferenceLive = makeOpenAiLayer(
@@ -940,7 +995,7 @@ export const OpenAiHostedInferenceWithoutStartupValidation = makeOpenAiLayer(
 /** Fixed one-budget variation used only to prove independence at the startup seam. @internal */
 export const openAiHostedInferenceBudgetVariation = (
   budget: ContinuityBudget
-): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
+): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
   makeOpenAiLayer(true, productionStructuredExecutionPolicy, {
     ...productionContinuityBudgets,
     [budget]: productionContinuityBudgets[budget] - 1,
@@ -949,5 +1004,5 @@ export const openAiHostedInferenceBudgetVariation = (
 /** Test-only constructor for proving adapter-owned structured execution deadlines. @internal */
 export const makeOpenAiHarness = (
   timeout: Duration.Input
-): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
+): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
   makeOpenAiLayer(false, { timeout }, productionContinuityBudgets);

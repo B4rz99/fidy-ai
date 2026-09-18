@@ -74,6 +74,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           SELECT decision_channel AS channel, decision_provider AS provider,
             decision_provider_message_id AS "providerMessageId"
           FROM consent_records WHERE subject_user_id = ${defaultUserId}
+            AND event_type = 'granted' AND grant_type = 'onboarding'
           ORDER BY occurred_at DESC LIMIT 1
         `
       );

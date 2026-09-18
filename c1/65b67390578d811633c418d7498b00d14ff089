@@ -1,0 +1,474 @@
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_c942e809c885a2::t_18ef54897adf2c 7
+apps/server/scripts/check-production-image.sh
+  s_c942e809c885a2::t_18ef54897adf2c 160,340
+apps/server/src/shell/testing/api-harness.ts
+  s_c942e809c885a2::t_18ef54897adf2c 68-73,84,377,452
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6-10,23-24,955
+apps/server/src/shell/database/internal/migrations/0001-create-transactions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-27
+apps/server/src/shell/testing/consent.ts
+  s_c942e809c885a2::t_18ef54897adf2c 10
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 35-36
+apps/server/src/shell/database/internal/migrations/0034-verified-email-onboarding.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-294
+apps/server/src/shell/ingestion/worker.ts
+  s_c942e809c885a2::t_18ef54897adf2c 33
+apps/server/src/shell/testing/identity-fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 11-12
+apps/server/scripts/migrate-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-9
+apps/server/src/shell/dashboard/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 2
+apps/server/src/shell/insights/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 28
+apps/server/src/shell/channels/whatsapp/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 2
+apps/server/src/shell/web-session/authorization.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5-6
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_c942e809c885a2::t_bca10ab905f5d9 11
+apps/server/scripts/run-browser-pairing-acceptance-server-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-158
+apps/server/vitest.ci.config.ts
+  s_c942e809c885a2::t_18ef54897adf2c 20
+apps/server/src/shell/testing/database-harness.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-12
+apps/server/src/shell/ingestion/email-interpretation.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9-10
+apps/server/src/shell/database/internal/migrations/0033-fixed-pat-lifetimes.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-130
+apps/server/src/shell/database/internal/migrations/0058-key-pairing-source-admission.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-26
+apps/server/src/shell/database/internal/migrations/0046-effect-onboarding-delivery.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-83
+apps/server/src/shell/database/internal/migrations/registry.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-133
+apps/server/src/shell/ingestion/forwarded-email-recovery.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21-22
+apps/server/src/shell/database/0060-hmac-key-byte-semantics.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-168
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9-14,69
+research/008-sentry-tracing.md
+  s_c942e809c885a2::t_18ef54897adf2c 21,23,80,107,143,164
+apps/server/src/shell/agent/agent-service.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 37,55,68
+apps/server/src/shell/database/internal/migrations/0016-agent-confirmation-consumptions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-26
+apps/server/src/shell/database/internal/migrations/0029-subscription-price-revisions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-63
+apps/server/src/shell/database/internal/migrations/0053-notification-email-interpretation.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-90
+apps/server/src/shell/audit/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9
+apps/server/src/shell/subscription/enrollment-handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 24-26
+apps/server/src/shell/operations/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 10
+apps/server/src/shell/consent/agent-consent-gate.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/database/internal/migrations/0031-retry-safe-manual-pat-issuance.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-17
+apps/server/src/shell/database/0028-persisted-schema-reconciliation.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-1178
+apps/server/src/shell/testing/postgres-concurrency.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 3
+apps/server/src/shell/transcript/repo.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9-10
+apps/server/src/shell/subscription/wompi-settlement.ts
+  s_c942e809c885a2::t_18ef54897adf2c 30
+apps/server/src/shell/database/internal/migrations/0054-effect-whatsapp-inbound.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-83
+docs/research/distributed-admission-rate-limiter.md
+  s_c942e809c885a2::t_18ef54897adf2c 53-54,58-59,62-65
+apps/server/src/shell/channels/whatsapp/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 29-32
+  s_c942e809c885a2::t_d513cea131a6a6 28
+apps/server/src/shell/ingestion/worker-sanitization.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6-7
+apps/server/src/shell/database/internal/migrations/0059-wompi-billing-transactions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-197
+apps/server/src/shell/database/internal/user-transaction.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-65
+apps/server/src/shell/testing/postgres-concurrency.ts
+  s_c942e809c885a2::t_18ef54897adf2c 3
+apps/server/src/shell/queue-compatibility/queue-compatibility.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 16-21,36
+apps/server/vitest.acceptance.config.ts
+  s_c942e809c885a2::t_18ef54897adf2c 57
+apps/server/src/shell/browser-login/approval.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 31
+apps/server/src/shell/recovery/service.ts
+  s_c942e809c885a2::t_18ef54897adf2c 20-21
+apps/server/src/shell/database/internal/migrations/0012-create-whatsapp-channel.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-491
+apps/server/src/shell/database/internal/migrations/0043-email-ingestion.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-669
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_c942e809c885a2::t_18ef54897adf2c 37-41
+apps/server/src/shell/database/internal/migrations/0005-create-insights.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-59
+apps/server/src/shell/budgets/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9
+apps/server/src/shell/database/internal/migrations/0009-row-level-security.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-317
+apps/server/vitest.config.ts
+  s_c942e809c885a2::t_18ef54897adf2c 22
+apps/server/src/shell/database/internal/migrations/0019-user-access.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-33
+apps/server/src/shell/email-authentication/replacement-delivery-worker.ts
+  s_c942e809c885a2::t_18ef54897adf2c 12
+apps/server/src/shell/memory/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 7
+apps/server/src/shell/transcript/conversation-continuity.ts
+  s_c942e809c885a2::t_18ef54897adf2c 44
+apps/server/src/shell/database/internal/migrations/0007-create-transcripts.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-25
+apps/server/src/shell/database/runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-49
+apps/server/src/shell/consent/repo.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 14-19
+apps/server/src/shell/database/internal/migrations/0020-conversation-continuity.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-96
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_c942e809c885a2::t_18ef54897adf2c 34
+apps/server/src/shell/transactions/mutations.ts
+  s_c942e809c885a2::t_18ef54897adf2c 40
+apps/server/src/shell/identity/whatsapp-identity.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 9,20
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 32,38
+apps/server/ARCHITECTURE.md
+  s_c942e809c885a2::t_18ef54897adf2c 156
+apps/server/src/shell/agent/agent-service.ts
+  s_c942e809c885a2::t_18ef54897adf2c 72
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 28,30-31
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 37
+apps/server/src/shell/database/internal/migrations/0014-optional-transaction-counterparty.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-11
+apps/server/src/shell/testing/development-seed.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-273
+apps/server/src/shell/budgets/mutations.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21
+apps/server/src/shell/database/advisory-lock.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-32
+apps/server/src/shell/database/internal/migrations/0042-wompi-card-enrollments.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-115
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 41-48,455
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 34-35
+apps/server/src/shell/database/internal/migrations/0032-dashboard-transaction-access.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-29
+apps/server/src/shell/database/internal/migrations/0013-claim-consent-disclosure-delivery.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-20
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_c942e809c885a2::t_18ef54897adf2c 24
+apps/server/src/shell/database/internal/migrations/0039-verified-email-login.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-316
+apps/server/package.json
+  s_c942e809c885a2::t_18ef54897adf2c 14-15,17,23,49-50
+apps/server/src/shell/database/internal/migrations/0037-pat-management.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-8
+apps/server/src/shell/database/internal/migrations/0049-effect-email-replacement.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-66
+apps/server/src/shell/audit/retention.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/database/internal/runtime-authority.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-100
+apps/server/src/shell/database/internal/migrations/0025-monthly-budgets.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-64
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_c942e809c885a2::t_18ef54897adf2c 28
+apps/server/src/shell/database/internal/migrations/0051-effect-whatsapp-disclosure.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-327
+apps/server/src/shell/database/internal/migrations/0060-hmac-key-byte-semantics.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-45
+apps/server/src/shell/database/internal/migrations/0055-subscription-standing.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-65
+apps/server/src/shell/browser-login/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 12
+apps/server/src/shell/agent/tool-confirmation-repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/testing/isolation.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 50-51
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 19
+apps/server/src/shell/database/operations.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-141
+apps/server/src/shell/consent/consent-authorization.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 10-12
+apps/server/src/shell/identity/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 13
+apps/web/playwright.config.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 10,112,124
+apps/server/src/shell/database/internal/migrations/0022-statement-ingestion.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-207
+apps/server/src/shell/transcript/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5
+apps/server/src/shell/budgets/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 16
+apps/server/src/shell/database/internal/advisory-lock.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-79
+apps/server/src/shell/database/internal/migrations/0004-categorized-transactions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-107
+.oxlintrc.json
+  s_c942e809c885a2::t_18ef54897adf2c 231,450
+apps/server/src/shell/database/internal/migrations/0017-recover-consent-disclosure-delivery.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-389
+apps/server/src/shell/database/internal/migrations/0030-manual-pat-issuance.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-78
+apps/server/src/shell/tokens/pat-pairing-persistence.ts
+  s_c942e809c885a2::t_18ef54897adf2c 7
+apps/server/src/shell/audit/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 2
+apps/server/src/shell/access-tier/operations.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 8-9
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 17
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21
+apps/server/scripts/agent-repl-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-36
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_c942e809c885a2::t_18ef54897adf2c 48-55,577
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 34-35
+apps/server/src/shell/recovery/recovery.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 23-28
+apps/server/src/shell/database/internal/migrations/0040-support-recovery.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-356
+apps/server/scripts/reconcile-wompi-enrollment-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-52
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 27-29
+apps/server/src/shell/memory/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5
+apps/server/src/shell/database/internal/migrations/0018-whatsapp-durable-propagation.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-28
+apps/server/src/shell/insights/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 2
+apps/server/src/shell/database/internal/migrations/0002-create-identities-and-tokens.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-57
+apps/server/src/shell/identity/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5-6
+apps/server/src/shell/database/internal/migrations/0010-create-consent-ledger.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-185
+apps/server/src/shell/database/internal/migrations/0023-memory-revisions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-59
+apps/server/src/shell/database/internal/migrations/0041-subscription-price-vocabulary.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-13
+apps/server/src/shell/database/internal/migrations/0028-persisted-schema-reconciliation.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-1082
+apps/server/src/shell/database/internal/migrations/0026-browser-login-pairings.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-93
+apps/server/src/shell/ingestion/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 2
+apps/server/src/shell/database/0041-subscription-price-vocabulary.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-71
+apps/server/src/shell/testing/pat-admission-process.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6
+apps/server/src/shell/memory/mutations.ts
+  s_c942e809c885a2::t_18ef54897adf2c 8
+apps/server/src/shell/database/user-transaction.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-54
+apps/server/scripts/seed-development-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-50
+apps/server/src/shell/database/internal/migrations/0047-effect-statement-ingestion.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-134
+apps/server/src/shell/observability/canonical-api.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5
+apps/server/tools/vitest-global-setup-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-21
+apps/server/src/shell/database/internal/migrations/0011-bind-pending-consent-initiator.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-22
+apps/server/src/shell/database/internal/migrations/0024-compacted-conversations.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-33
+apps/server/src/shell/database/internal/migrations/0062-cluster-topology-identity.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-30
+apps/server/src/shell/database/row-level-security.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-1264
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 25-26,28
+apps/server/src/shell/database/internal/migrations/0021-create-memories.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-28
+apps/server/src/shell/dashboard/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5-9
+apps/server/src/shell/subscription/billing-attempt-execution.ts
+  s_c942e809c885a2::t_18ef54897adf2c 13
+apps/server/src/shell/transcript/hosted-agent-session.ts
+  s_c942e809c885a2::t_18ef54897adf2c 12
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_c942e809c885a2::t_18ef54897adf2c 20-24
+apps/server/src/shell/tokens/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/database/internal/migrations/0052-effect-pairing-email.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-50
+apps/server/src/shell/tokens/distributed-admission.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5-9,72
+apps/server/src/shell/onboarding/onboarding-turn.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5-6
+apps/server/src/shell/transactions/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 3,9,12
+apps/server/src/shell/cluster-compatibility.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6-10,27
+apps/server/scripts/approve-email-ingest-sample-runtime.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-38
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 35
+apps/server/src/shell/agent/hosted-execution-boundary.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 18
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 38-39
+apps/server/src/shell/categories/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 14
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  s_c942e809c885a2::t_18ef54897adf2c 7
+scripts/check-credential-evidence.ts
+  s_c942e809c885a2::t_18ef54897adf2c 99,104
+apps/server/src/shell/audit/audit-log.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6,20
+apps/server/src/shell/transactions/fixtures.ts
+  s_c942e809c885a2::t_18ef54897adf2c 3
+apps/server/scripts/provision-runtime-role.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5,7,49,71-72,90-91
+apps/server/src/shell/database/internal/migrations/0057-wompi-billing-reconciliation.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-52
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 48-49,51
+apps/server/src/shell/database/internal/migrations/0006-create-dashboards.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-15
+apps/server/src/shell/database/internal/migrations/0035-pat-pairings.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-528
+apps/server/src/shell/database/internal/migrations/0050-cluster-hosted-turns.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-59
+apps/server/src/shell/observability/web-auth.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 8
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_c942e809c885a2::t_18ef54897adf2c 10,294
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 13-14
+apps/server/src/shell/subscription/billing-repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 30
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 33
+apps/server/src/shell/tokens/management-handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 17-18
+apps/server/src/shell/ingestion/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 13-15
+apps/server/src/shell/testing/authorization.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 16-17,32
+apps/server/src/shell/email-authentication/replacement-retention.ts
+  s_c942e809c885a2::t_18ef54897adf2c 16
+apps/server/src/shell/database/0058-key-pairing-source-admission.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-61
+apps/server/src/shell/transactions/reads.ts
+  s_c942e809c885a2::t_18ef54897adf2c 16
+apps/server/src/shell/database/contract.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-14
+apps/server/src/shell/database/internal/migrations/0038-whatsapp-confirmation-evidence.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-15
+apps/server/src/shell/testing/development-seed.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-111
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_c942e809c885a2::t_87884387f81ae6 7
+apps/server/src/shell/database/internal/migrations/0045-transaction-reconciliation.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-105
+apps/server/src/shell/consent/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 30-31
+apps/server/src/shell/database/internal/migrations/0036-verified-email-replacement.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-184
+apps/server/src/shell/tokens/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 12,18
+apps/server/src/shell/identity/repo.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_c942e809c885a2::t_18ef54897adf2c 68
+apps/server/src/shell/channels/whatsapp/worker.integration.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 12-18,36
+apps/server/src/main.ts
+  s_c942e809c885a2::t_18ef54897adf2c 3
+scripts/ci/server-test-timings.ts
+  s_c942e809c885a2::t_18ef54897adf2c 21
+apps/server/src/shell/testing/identity-fixtures.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 5
+apps/server/src/shell/database/internal/migrations/0061-durable-queue-acquisitions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-31
+apps/server/src/shell/database/internal/migrations/0027-web-sessions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-262
+apps/server/src/shell/agent/working-context.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/ingestion/email-worker.ts
+  s_c942e809c885a2::t_18ef54897adf2c 37
+apps/server/src/shell/categories/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 8-9
+apps/server/src/shell/database/internal/migrations/0056-wompi-billing-attempts.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-166
+apps/server/src/shell/ingestion/queries.ts
+  s_c942e809c885a2::t_18ef54897adf2c 8
+apps/server/src/shell/ingestion/worker.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 30-31
+apps/server/src/shell/ingestion/email-anonymization-approval.ts
+  s_c942e809c885a2::t_18ef54897adf2c 6
+apps/server/src/shell/ingestion/repo.ts
+  s_c942e809c885a2::t_18ef54897adf2c 29
+apps/server/src/shell/database/internal/migrations/0015-whatsapp-bsuid-identity.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-264
+apps/server/src/shell/testing/durable-queue-crash-runner.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/_shared/authz-live.ts
+  s_c942e809c885a2::t_18ef54897adf2c 28
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 48,54,64
+apps/server/src/shell/insights/handlers.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 19-21
+apps/server/src/shell/database/internal/migrations/0048-effect-forwarded-email-workflow.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-327
+apps/server/src/shell/database/internal/migrations/0044-transaction-user-decisions.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-13
+apps/server/src/shell/database/internal/migrations/0003-create-audit-log.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-31
+apps/server/src/shell/durable-queue-health.test.ts
+  s_c942e809c885a2::t_18ef54897adf2c 18-23,66
+apps/server/src/shell/email-authentication/replacement-transition.ts
+  s_c942e809c885a2::t_18ef54897adf2c 27
+apps/server/src/shell/identity/testing.ts
+  s_c942e809c885a2::t_18ef54897adf2c 4
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_c942e809c885a2::t_18ef54897adf2c 24-28
+apps/server/scripts/check-migration-ids.ts
+  s_c942e809c885a2::t_18ef54897adf2c 36
+apps/server/src/shell/database/internal/user-tables.ts
+  s_c942e809c885a2::t_18ef54897adf2c 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c165b67390578d811633c418d7498b00d14ff089",
+  "prompts": {},
+  "sessions": {
+    "s_c942e809c885a2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26c-46e0-762f-ae3f-cd55947cee74",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

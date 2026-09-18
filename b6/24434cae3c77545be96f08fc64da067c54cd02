@@ -1,0 +1,52 @@
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_62fe65558ee4c6::t_0e282acdb66fff 160,163
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_62fe65558ee4c6::t_a810439ea6470e 2-4,10,13-14,16,22,60-62,65-68,71,77-78,83,87-95,97-101,113,116,123,126,130,134-135,141,143-154,182-183,185-186
+  s_62fe65558ee4c6::t_c9d8a1b70485a2 11,136-140
+  s_62fe65558ee4c6::t_91afe1b5ef4b52 1,102-110
+  s_62fe65558ee4c6::t_1514932a847f9c 142
+  s_62fe65558ee4c6::t_0b3873d88a3f60 155-172,175-180,196
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_62fe65558ee4c6::t_1a38eabb3a4cfa 133-136,148,234,240-245,250-254,267
+CODING_STANDARDS.md
+  s_62fe65558ee4c6::t_fe564875ae546a 212-222
+apps/server/src/shell/outbound-http/contract.ts
+  s_62fe65558ee4c6::t_6eff5a325799fa 62,84
+  s_62fe65558ee4c6::t_c09ead8c544b32 63-65
+apps/server/ARCHITECTURE.md
+  s_62fe65558ee4c6::t_65019076f08557 146-156
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_62fe65558ee4c6::t_745817d193764a 9
+  s_62fe65558ee4c6::t_43242407fe75fb 469-473,490,505
+  s_62fe65558ee4c6::t_5db3552792ae1b 10,78-86
+  s_62fe65558ee4c6::t_f8d1555e44804f 422-425
+  s_62fe65558ee4c6::t_41bb4a24abb76e 432-445,447-452
+  s_62fe65558ee4c6::t_793a055beffb82 134-137
+  s_62fe65558ee4c6::t_29a12be32340ab 427,430-431,454-459
+  s_62fe65558ee4c6::t_3c7d2a83ba6499 380
+  s_62fe65558ee4c6::t_6993b5597a1909 401-415,419,426,428-429,446,453,460,474-479
+  s_62fe65558ee4c6::t_4fd3423b58e792 47
+  s_62fe65558ee4c6::t_2a14c5c0aede82 321
+  s_62fe65558ee4c6::t_ec63c9faccd590 461
+apps/server/src/shell/_shared/bounded-bytes.test.ts
+  s_62fe65558ee4c6::t_f9477832631e44 2-3,5,7-8,10,12,16,19-23,25,27-28,32,34-39,46
+apps/server/scripts/check-dependency-guards.ts
+  s_62fe65558ee4c6::t_e95fca3adbbd1a 27
+  s_62fe65558ee4c6::t_e42087ea64ebbd 25-26,28-36,111,228-239,255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b624434cae3c77545be96f08fc64da067c54cd02",
+  "prompts": {},
+  "sessions": {
+    "s_62fe65558ee4c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26a-994f-724e-8f23-0d4a7f918025",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

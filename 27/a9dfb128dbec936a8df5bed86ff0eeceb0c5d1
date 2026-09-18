@@ -1,0 +1,321 @@
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 13
+  s_5974c1f33d750e::t_1ded1bb1822585 9,12,14
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 47,73
+  s_5974c1f33d750e::t_ee7d4c45d2adad 46
+apps/server/src/shell/ingestion/forwarded-email-recovery.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 23
+apps/server/src/shell/observability/account-policy.test.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 11
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 41,46
+  s_5974c1f33d750e::t_1ded1bb1822585 35-40,47
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 45
+  s_5974c1f33d750e::t_d33183460c617d 46
+apps/server/src/shell/email-authentication/replacement-retention.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 19
+apps/server/src/shell/_shared/persisted-queue.ts
+  s_5974c1f33d750e::t_1ded1bb1822585 5-8,13
+  s_5974c1f33d750e::t_a6ed101916c3da 4
+apps/server/src/shell/audit/retention.test.ts
+  s_5974c1f33d750e::t_a56d827b2cb0f5 6
+  s_5974c1f33d750e::t_d33183460c617d 5
+apps/server/src/shell/_shared/bounded-external-http.test.ts
+  s_5974c1f33d750e::t_d33183460c617d 11
+  s_5974c1f33d750e::t_53e26cb77f750b 12-13
+apps/server/src/shell/observability/runtime.ts
+  s_5974c1f33d750e::t_d7955e9f787749 100-129
+  s_5974c1f33d750e::t_7fe7cd2f474703 24
+  s_5974c1f33d750e::t_27245bd71c3759 1
+  s_5974c1f33d750e::t_9f1f127b672f06 23,147-149
+  s_5974c1f33d750e::t_5177b8f753ca37 28-29
+  s_5974c1f33d750e::t_514d3b8d33fdc8 13-20,150-160
+  s_5974c1f33d750e::t_d33183460c617d 25-27,30
+  s_5974c1f33d750e::t_805d36a7aac51e 12
+  s_5974c1f33d750e::t_92664049a1dfdc 21-22
+  s_5974c1f33d750e::t_28f302423d2092 6-7,10-11,31-36,38-40,95,130-146,161-163
+  s_5974c1f33d750e::t_b56bb486565e3a 37
+apps/server/src/shell/browser-login/approval.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 32
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_5974c1f33d750e::t_348645ce714284 12
+  s_5974c1f33d750e::t_1ded1bb1822585 14
+apps/server/src/shell/observability/telemetry-bootstrap.test.ts
+  s_5974c1f33d750e::t_47ff853e25c274 8,10-12,46,142-143
+apps/server/src/shell/runtime.test.ts
+  s_5974c1f33d750e::t_afa66ac77c262a 13-14
+apps/server/scripts/check-production-image.sh
+  s_5974c1f33d750e::t_54ebacb5c2ae20 148
+  s_5974c1f33d750e::t_2270e7788bb5d8 160
+apps/server/src/shell/recovery/recovery.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 28
+apps/server/src/shell/evidence-retention.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 5,7
+apps/server/src/shell/observability/scheduled-work.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 16
+  s_5974c1f33d750e::t_a56d827b2cb0f5 17
+  s_5974c1f33d750e::t_348645ce714284 18
+apps/server/src/shell/observability/canonical-api.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 12
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 32
+apps/server/src/shell/onboarding/retention.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 16,18
+apps/server/src/shell/onboarding/retention.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 12
+apps/server/src/shell/channels/whatsapp/reply-delivery.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 4
+tsconfig.base.json
+  s_5974c1f33d750e::t_57a7e1e3438e52 192-195
+apps/server/src/shell/observability/sentry-adapter.test.ts
+  s_5974c1f33d750e::t_d33183460c617d 4-8
+  s_5974c1f33d750e::t_1233c817b9fb41 9
+apps/server/src/shell/observability/internal/sentry-adapter.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 25
+  s_5974c1f33d750e::t_d33183460c617d 31-35
+  s_5974c1f33d750e::t_5898c7b3a03bc3 15-17
+  s_5974c1f33d750e::t_56010a47ae212b 24
+  s_5974c1f33d750e::t_c507793f3a69c6 677
+apps/server/src/shell/agent/agent-service.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 59
+  s_5974c1f33d750e::t_d33183460c617d 57
+  s_5974c1f33d750e::t_1ded1bb1822585 58
+apps/server/src/shell/transactions/mutations.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 42-43
+apps/server/src/shell/channels/whatsapp/disclosure-observation.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 7-8
+apps/server/src/shell/channels/whatsapp/reply-delivery.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 3
+apps/server/src/shell/testing/telemetry-fixtures.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 3
+apps/server/scripts/smoke-sentry-account-runtime.ts
+  s_5974c1f33d750e::t_d33183460c617d 5-6
+apps/server/src/shell/consent/agent-consent-gate.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 10
+apps/server/src/shell/observability/sentry-account-smoke.test.ts
+  s_5974c1f33d750e::t_0da36ec797f422 4
+  s_5974c1f33d750e::t_53e26cb77f750b 3,5
+apps/server/src/shell/observability/registry.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 6
+apps/server/tools/observability-compatibility/preload.ts
+  s_5974c1f33d750e::t_693f4fb8789695 6
+  s_5974c1f33d750e::t_1ded1bb1822585 1-5
+apps/server/src/shell/email-authentication/delivery-retry.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 5-6
+apps/server/src/shell/observability/telemetry.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 19
+  s_5974c1f33d750e::t_1ded1bb1822585 5-11
+  s_5974c1f33d750e::t_02cc95a3aea9db 4
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 14
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 16
+apps/server/src/shell/agent/hosted-execution-boundary.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 15
+apps/server/src/shell/_shared/persisted-queue-handler.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 2
+apps/server/src/shell/http.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 60
+apps/server/src/shell/subscription/billing-reconciliation-maintenance.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 3
+apps/server/src/shell/durable-queue-health.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 12
+  s_5974c1f33d750e::t_1ded1bb1822585 15,17,19
+apps/server/vitest.acceptance.config.ts
+  s_5974c1f33d750e::t_54ebacb5c2ae20 9-14
+apps/server/src/shell/durable-queue-health.test.ts
+  s_5974c1f33d750e::t_d33183460c617d 19
+  s_5974c1f33d750e::t_1ded1bb1822585 22
+  s_5974c1f33d750e::t_a56d827b2cb0f5 20
+  s_5974c1f33d750e::t_348645ce714284 21
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 15-16
+apps/server/src/shell/channels/whatsapp/worker.integration.test.ts
+  s_5974c1f33d750e::t_d33183460c617d 14
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 13-14
+apps/server/src/shell/observability/telemetry-config.test.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 10
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_5974c1f33d750e::t_1ded1bb1822585 16,25
+  s_5974c1f33d750e::t_d33183460c617d 24
+apps/server/src/shell/observability/operations.ts
+  s_5974c1f33d750e::t_ce3ff4bcf2017b 1-2,10
+  s_5974c1f33d750e::t_b06ca416f1ae4f 21-26
+  s_5974c1f33d750e::t_bf711b7c931caa 238-240,242-245,247-248
+  s_5974c1f33d750e::t_c446f40f30c9c1 15
+  s_5974c1f33d750e::t_92dd3bb48f3110 8-9,11-14,16,195-201,249-253,260-264,266-292,294-296,298-319,321-339,341-345,347-358,360-369,372-373,375-376
+  s_5974c1f33d750e::t_d33183460c617d 19,30,241,246,254-259,265,293,297,320,340,346,359,370-371,374
+  s_5974c1f33d750e::t_badd28aa20146a 5,18
+  s_5974c1f33d750e::t_9bcd973b172b90 45
+apps/server/src/shell/testing/api-harness.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 85
+  s_5974c1f33d750e::t_53e26cb77f750b 78,84
+  s_5974c1f33d750e::t_ee7d4c45d2adad 83
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 54
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 29
+apps/server/src/shell/browser-login/handlers.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 28-29
+apps/server/src/shell/memory/handlers.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 8
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 19
+apps/server/src/shell/ingestion/email-interpretation.integration.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 11
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 36
+  s_5974c1f33d750e::t_d33183460c617d 37
+apps/server/package.json
+  s_5974c1f33d750e::t_b753b587a26891 25
+  s_5974c1f33d750e::t_e04cb87f1fce51 15
+  s_5974c1f33d750e::t_54ebacb5c2ae20 14
+  s_5974c1f33d750e::t_0d7340ef997a93 22
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 24
+apps/server/src/shell/cluster-observation-projection.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 7
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 13,23
+  s_5974c1f33d750e::t_1ded1bb1822585 7-8,14,16-18,22,28
+  s_5974c1f33d750e::t_693f4fb8789695 21
+apps/server/src/shell/observability/contract.ts
+  s_5974c1f33d750e::t_2c1181ffe076ba 769
+  s_5974c1f33d750e::t_48a523003ef312 1,4-7,9-13,15-19,21-22,24-33,35-118,120-160,163-201
+  s_5974c1f33d750e::t_168295883757ba 710-713
+  s_5974c1f33d750e::t_badd28aa20146a 803-805,807-815
+  s_5974c1f33d750e::t_22f7a2cbec3048 534-537
+  s_5974c1f33d750e::t_d33183460c617d 8,14,20,23,34,119,162,230,457,462,465,469,474,479,484,496,501,507,512,516,518,520,524,539,595,610,628,664,684
+  s_5974c1f33d750e::t_6a8651700952e5 768,795
+  s_5974c1f33d750e::t_26c72a50b6cee3 806
+  s_5974c1f33d750e::t_0a23229c6de5ef 3
+  s_5974c1f33d750e::t_cbc4554f1e3aaa 2
+  s_5974c1f33d750e::t_ab4d7d83619251 533,538,540-594,596-609,611-627,629-663,665-683,685-687
+  s_5974c1f33d750e::t_92dd3bb48f3110 161,227-229,439-456,458-461,463-464,466-468,470-473,475-478,480-483,485-495,497-500,502-506,508-511,513-515,517,519,521-523,525-532
+  s_5974c1f33d750e::t_b06ca416f1ae4f 688-691,693-701,703-709,714-767,770-794,796-802
+  s_5974c1f33d750e::t_9c4faebf5e5794 692,702
+apps/server/src/shell/ingestion/worker.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 38
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 16
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 9
+apps/server/scripts/evaluate-es-co-openai.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 15
+apps/server/src/shell/transactions/handlers.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 10
+apps/server/src/shell/ingestion/worker-sanitization.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 8
+apps/server/src/shell/_shared/persisted-queue-handler.test.ts
+  s_5974c1f33d750e::t_d33183460c617d 6
+  s_5974c1f33d750e::t_ee7d4c45d2adad 5
+apps/server/src/shell/observability/internal/projectors.ts
+  s_5974c1f33d750e::t_ab4d7d83619251 10,12,14,225-229
+  s_5974c1f33d750e::t_71019ea15d2be4 23
+  s_5974c1f33d750e::t_1233c817b9fb41 24
+  s_5974c1f33d750e::t_11aefc79eb1a48 11,13,15
+  s_5974c1f33d750e::t_9552335fa4fa06 5,22
+  s_5974c1f33d750e::t_5fe9cf58979bd4 21,136
+  s_5974c1f33d750e::t_f20118d9e6cda4 18
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 24
+apps/server/src/shell/channels/whatsapp/routes.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 28-29
+apps/server/src/shell/agent/toolkit.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 11
+apps/server/scripts/prepare-sentry-release-runtime.ts
+  s_5974c1f33d750e::t_d78546776f9f4e 4
+apps/server/src/shell/agent/agent-service.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 85-86
+apps/server/src/shell/testing/telemetry-envelope-fixtures.ts
+  s_5974c1f33d750e::t_a56d827b2cb0f5 3
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 31
+apps/server/src/shell/channels/whatsapp/outbound.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 9-10
+apps/server/src/shell/channels/whatsapp/repo.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 38
+apps/server/scripts/agent-repl.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 9
+apps/server/src/shell/observability/release-preparation.test.ts
+  s_5974c1f33d750e::t_dc92acdf15b06a 34
+  s_5974c1f33d750e::t_2270e7788bb5d8 32
+apps/server/src/shell/testing/telemetry-harness.ts
+  s_5974c1f33d750e::t_e3314c10f8211d 6,9-13,15-17,22-24,31,36,38,44,46,57,80
+  s_5974c1f33d750e::t_c770a2e5626cd5 33-35
+  s_5974c1f33d750e::t_27245bd71c3759 18-21
+  s_5974c1f33d750e::t_03fe667f5dab4e 7-8,14
+  s_5974c1f33d750e::t_8b9340b6dacb42 1-4,25-30,32
+apps/server/tools/observability-compatibility/handoff.ts
+  s_5974c1f33d750e::t_d33183460c617d 2
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 16-17
+apps/server/src/shell/runtime.ts
+  s_5974c1f33d750e::t_d1dc2cc71f2568 1
+apps/server/src/shell/observability/internal/telemetry-bootstrap.ts
+  s_5974c1f33d750e::t_1233c817b9fb41 8
+  s_5974c1f33d750e::t_9bcd973b172b90 64
+  s_5974c1f33d750e::t_da5469df1b5604 2
+apps/server/.dependency-cruiser.mjs
+  s_5974c1f33d750e::t_cd394e5b2042f8 92-101
+  s_dc7dcb2f98bcc7::t_734fef14739420 90-91
+  s_5974c1f33d750e::t_b8b925c3bdac9b 82-85
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_5974c1f33d750e::t_ee7d4c45d2adad 32
+  s_5974c1f33d750e::t_d33183460c617d 33
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_5974c1f33d750e::t_b3bd3a7d98e7ca 19
+  s_5974c1f33d750e::t_736c585b504a20 29
+  s_5974c1f33d750e::t_1233c817b9fb41 31
+  s_5974c1f33d750e::t_53e26cb77f750b 30,32
+apps/server/src/main.ts
+  s_5974c1f33d750e::t_178a0a81202c7e 6,8,21
+apps/server/src/shell/channels/whatsapp/disclosure-observation.test.ts
+  s_5974c1f33d750e::t_a56d827b2cb0f5 4
+  s_5974c1f33d750e::t_d33183460c617d 3
+apps/server/scripts/verify-sentry-account-runtime.ts
+  s_5974c1f33d750e::t_fe0a2952ad650c 11
+  s_5974c1f33d750e::t_0d7340ef997a93 6,9-10
+apps/server/src/shell/recovery/routes.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 7-8
+apps/server/src/shell/audit/retention.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 3-4
+apps/server/src/shell/observability/web-auth.test.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 12
+apps/server/src/shell/agent/whatsapp-delivery.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 10
+apps/server/source-scope.mjs
+  s_5974c1f33d750e::t_54ebacb5c2ae20 31-32
+apps/server/src/shell/recovery/retention.ts
+  s_5974c1f33d750e::t_53e26cb77f750b 3
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_5974c1f33d750e::t_1ded1bb1822585 66-70,72-78,89
+  s_5974c1f33d750e::t_d33183460c617d 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "27a9dfb128dbec936a8df5bed86ff0eeceb0c5d1",
+  "prompts": {},
+  "sessions": {
+    "s_5974c1f33d750e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b1b0-e0cb-7226-a812-1580b10c4474",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_dc7dcb2f98bcc7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b14c-4960-7205-9814-1e3c5b28ae21",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

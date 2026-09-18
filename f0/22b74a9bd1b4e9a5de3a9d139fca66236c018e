@@ -1,0 +1,61 @@
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_9466f16d22ab04::t_7342685bc980cb 3,10,43-64,99,153-154,207,248,287,321,341,359,382-391,421,450
+apps/server/src/shell/outbound-http/internal/support-recovery-destination.ts
+  s_9466f16d22ab04::t_3549019b1ca07b 1-2
+apps/server/src/shell/outbound-http/internal/cloudflare-access.ts
+  s_9466f16d22ab04::t_fd026036dac10f 8-9,13-14,20,22,26,37-44
+  s_9466f16d22ab04::t_a84dc9aea497af 15,17-19,23-25,27-36,45
+  s_9466f16d22ab04::t_575d9126c24029 3-7,46-51
+  s_9466f16d22ab04::t_9142c169e8371d 16
+  s_9466f16d22ab04::t_5b0827eaebdcbe 10-12,21
+  s_9466f16d22ab04::t_08a4e8f8826fa1 1-2
+  s_9466f16d22ab04::t_b26876eaf39de4 52-54
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_9466f16d22ab04::t_0cd8a8a01df83b 12
+  s_9466f16d22ab04::t_b343390279946d 17,24,37-38,75-76,265-266
+  s_9466f16d22ab04::t_48ca220f5e3ebc 84-87,320-357,359,433-434
+  s_9466f16d22ab04::t_7ff1d6e0182649 306-319,449-450
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_9466f16d22ab04::t_b76502cde5a8f6 3-4,100-101,107-108,111,150-152,158-163,167-172,195,201-202,206-207,212-214,218-220,245-247
+  s_9466f16d22ab04::t_14b908f0ed7c6d 55,62
+apps/server/src/shell/outbound-http/contract.ts
+  s_9466f16d22ab04::t_db36420d7ac4ba 45-62,114-121
+  s_9466f16d22ab04::t_bb7ecdd3afc728 1,23-27
+apps/server/scripts/verify-sentry-account.ts
+  s_9466f16d22ab04::t_e7688050758847 6,28-31
+apps/server/src/shell/outbound-http/internal/cloudflare-access.test.ts
+  s_9466f16d22ab04::t_5b02d17821c404 2,7,14-15,22-25,31
+  s_9466f16d22ab04::t_0a4fe693f12ef5 3,6,8,16-21,26-30,32
+  s_9466f16d22ab04::t_c591ab0f3f09a9 1,4-5,33
+  s_9466f16d22ab04::t_c889f0a71590b0 9-13
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_9466f16d22ab04::t_4c0d69fd4cd02e 13-16,18,29-36,41-44,73,216-229
+apps/server/src/shell/outbound-http/operations.ts
+  s_9466f16d22ab04::t_505f2ac74d01b7 9,11-16,92-93
+  s_9466f16d22ab04::t_208dd14aee3b86 122-123,144-145,153-158,160-161,163-172,177-178
+  s_9466f16d22ab04::t_91f20a6bbf4d5a 23-48,159,173-175
+  s_9466f16d22ab04::t_60b83193554cea 152
+  s_9466f16d22ab04::t_b91284f8cb8515 162
+  s_9466f16d22ab04::t_a476adf2e16e1b 1
+  s_9466f16d22ab04::t_a6843effe97008 176
+scripts/check-credential-evidence.ts
+  s_9466f16d22ab04::t_0887f24f4e138d 119,125,130,135
+apps/server/scripts/support-recovery.ts
+  s_9466f16d22ab04::t_da48e67200912d 1,3-4,136-138,140-142,172-177,179-182,194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f022b74a9bd1b4e9a5de3a9d139fca66236c018e",
+  "prompts": {},
+  "sessions": {
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

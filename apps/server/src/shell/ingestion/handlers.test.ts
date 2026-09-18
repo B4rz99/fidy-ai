@@ -10,9 +10,9 @@ import {
 } from "~/core/ingestion/model";
 import { PaywallRequired, ValidationFailed } from "~/shell/public-http/contract";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
+import { withUserTransaction } from "~/shell/database/operations";
 import { type ApiClient, ApiHarness, makeApiClientLive } from "~/shell/testing/api-harness";
 import { truncateStatementIngestion } from "./fixtures";
 import { enableEmailForwardingInScope, submitForExtractionInScope } from "./mutations";

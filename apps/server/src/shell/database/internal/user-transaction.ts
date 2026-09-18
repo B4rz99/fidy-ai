@@ -18,42 +18,48 @@ type UserTransactionIsolation = "read-committed" | "repeatable-read";
  * isolation for a multi-statement coherent snapshot. Failures from the supplied body remain typed;
  * transaction-management SQL failures are defects.
  */
-export const withUserTransaction = Effect.fn("withUserTransaction")(function* <A, E, R>(
+const run = <A, E, R>(
   userId: UserId,
   effect: Effect.Effect<A, E, R>,
   isolation: UserTransactionIsolation = "read-committed"
-) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* sql
-    .withTransaction(
-      Effect.gen(function* () {
-        if (isolation === "repeatable-read") {
-          yield* sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`.pipe(Effect.orDie);
-        }
-        const { matches } = yield* SqlSchema.findOne({
-          Request: Schema.Void,
-          Result: UserContextMatchRow,
-          execute: () => sql`
+): Effect.Effect<A, E, R | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          if (isolation === "repeatable-read") {
+            yield* sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`.pipe(Effect.orDie);
+          }
+          const { matches } = yield* SqlSchema.findOne({
+            Request: Schema.Void,
+            Result: UserContextMatchRow,
+            execute: () => sql`
             SELECT set_config(
               'fidy.user_id',
               COALESCE(NULLIF(current_setting('fidy.user_id', true), ''), ${userId}::text),
               true
             ) = ${userId}::text AS matches
           `,
-        })(undefined).pipe(Effect.orDie);
+          })(undefined).pipe(Effect.orDie);
 
-        if (!matches) {
-          return yield* Effect.die(new Error("A database transaction cannot switch User context."));
-        }
-        return yield* effect.pipe(
-          Effect.mapError((error) => new TransactionBodyFailure({ error }))
-        );
-      })
-    )
-    .pipe(
-      Effect.catchTags({
-        SqlError: (error) => Effect.die(error),
-        TransactionBodyFailure: ({ error }) => Effect.fail(error),
-      })
-    );
-});
+          if (!matches) {
+            return yield* Effect.die(
+              new Error("A database transaction cannot switch User context.")
+            );
+          }
+          return yield* effect.pipe(
+            Effect.mapError((error) => new TransactionBodyFailure({ error }))
+          );
+        })
+      )
+      .pipe(
+        Effect.catchTags({
+          SqlError: (error) => Effect.die(error),
+          TransactionBodyFailure: ({ error }) => Effect.fail(error),
+        })
+      );
+  });
+
+/** Private SQL implementation consumed only by the database operations interface. */
+export const userTransactionInternal = { run } as const;

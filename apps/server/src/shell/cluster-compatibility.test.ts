@@ -3,7 +3,11 @@ import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { MigrationSqlClient, MigratorLive } from "~/shell/db/client";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+} from "~/shell/testing/database-harness";
 import { ClusterTopologyIncompatible, ensureClusterCompatibility } from "./cluster-compatibility";
 import { topologyIdentityTable } from "./durable-tables";
 import { productionRunnerTopology } from "./cluster-topology";
@@ -20,7 +24,7 @@ const MigrationRuntimeSqlClient = Layer.unwrap(
 );
 
 const CompatibilityHarness = MigrationRuntimeSqlClient.pipe(
-  Layer.provideMerge(MigrationSqlClient.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provide(MigratorLive),
   Layer.provide(BunServices.layer)
 );

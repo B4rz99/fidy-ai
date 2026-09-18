@@ -5,7 +5,7 @@ import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { WebSessionBearer } from "~/core/web-session/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";

@@ -26,7 +26,7 @@ import {
 } from "~/core/ingestion/reference";
 import { UserId } from "~/core/identity/reference";
 import { TransactionId } from "~/core/transactions/model";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 
 const SubmissionRow = Schema.Struct({
   id: StatementSubmissionId,

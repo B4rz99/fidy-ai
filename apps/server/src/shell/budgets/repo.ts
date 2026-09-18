@@ -13,7 +13,7 @@ import { BudgetId } from "~/core/budgets/reference";
 import { calculateBudgetStatus } from "~/core/budgets/rules";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   type BudgetContributionFact,
   selectBudgetContributionsInScope,

@@ -18,7 +18,7 @@ import { HttpBody, HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber } from "~/core/identity/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { EmailDeliveryPort, EmailSendFailed } from "~/shell/email-authentication/delivery";
 import {
   armOnboardingEmailDelivery,

@@ -5,7 +5,7 @@ import {
   WhatsAppBusinessScopedUserId,
   whatsAppCallerReference,
 } from "~/core/identity/reference";
-import { advisoryLockKey } from "./advisory-lock";
+import { advisoryLockKey } from "./operations";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000a30");
 

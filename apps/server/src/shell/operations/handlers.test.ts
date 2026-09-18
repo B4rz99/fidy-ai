@@ -7,7 +7,7 @@ import { MemoryText } from "~/core/memory/model";
 import { TransactionId } from "~/core/transactions/model";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { truncateMemories } from "~/shell/memory/fixtures";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";

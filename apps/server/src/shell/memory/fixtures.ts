@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { MemoryId } from "~/core/memory/model";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 
 /** Restores an empty Memory aggregate for an isolated real-Postgres test. */
 export const truncateMemories = Effect.flatMap(

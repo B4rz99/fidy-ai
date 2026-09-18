@@ -10,7 +10,7 @@ import {
 } from "~/core/identity/reference";
 import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
 import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 
 const UserWithoutId = User.mapFields(Struct.omit(["id"]));
 const UserRowBase = User.mapFields(Struct.omit(["trialPeriod", "createdAt"]));

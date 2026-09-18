@@ -47,8 +47,8 @@ import {
   makeApiClientLive,
 } from "./api-harness";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "./database-harness";
+import { seedConsentedPatIdentity } from "./development-seed";
 import { publishedOperationIds } from "./openapi";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");

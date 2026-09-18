@@ -25,10 +25,10 @@ import {
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { withSubjectLock } from "~/shell/consent/repo";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import { withUserTransaction } from "~/shell/database/operations";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";

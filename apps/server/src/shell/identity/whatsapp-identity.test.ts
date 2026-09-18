@@ -6,7 +6,7 @@ import {
   type HttpClientError,
   type HttpClientResponse,
 } from "effect/unstable/http";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
@@ -17,7 +17,7 @@ import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedDevelopmentIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { makeKapsoIdentityChangeBody } from "~/shell/testing/kapso-identity-change";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";

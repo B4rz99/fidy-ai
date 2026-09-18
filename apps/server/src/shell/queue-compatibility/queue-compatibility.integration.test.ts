@@ -13,7 +13,12 @@ import {
 } from "~/shell/channels/whatsapp/inbound-execution";
 import { WhatsAppInboundJobId } from "~/shell/channels/whatsapp/model";
 import { retireExhaustedWhatsAppWork } from "~/shell/channels/whatsapp/repo";
-import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+} from "~/shell/testing/database-harness";
 
 /**
  * PostgreSQL proof for the queue compatibility contract. The `whatsapp-inbound-turn`
@@ -28,7 +33,7 @@ const CompatibilityHarness = PersistedQueue.layer.pipe(
     PersistedQueue.layerStoreSql({ tableName: "fidy_queue", pollInterval: "10 millis" })
   ),
   Layer.provideMerge(PgLive),
-  Layer.provideMerge(MigrationSqlClient.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provide(MigratorLive),
   Layer.provideMerge(BunServices.layer)
 );

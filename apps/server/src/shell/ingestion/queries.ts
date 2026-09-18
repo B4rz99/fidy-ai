@@ -5,7 +5,7 @@ import type { UserId } from "~/core/identity/reference";
 import type { StatementSubmissionId } from "~/core/ingestion/reference";
 import { NotFound } from "~/shell/public-http/contract";
 import { externalEndpoints } from "~/shell/public-http/operations";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import {
   type NeedsReviewPageRequest,

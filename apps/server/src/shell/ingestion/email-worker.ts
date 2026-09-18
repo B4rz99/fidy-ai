@@ -34,7 +34,7 @@ import {
   onboardingConsentStandingInScope,
   withSubjectLock,
 } from "~/shell/consent/repo";
-import { withConsentExternalEffectLock } from "~/shell/db/advisory-lock";
+import { withConsentExternalEffectLock } from "~/shell/database/operations";
 import { captureNotificationEmailTransactionInScope } from "~/shell/transactions/mutations";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { normalizedMailbox } from "./email-address";

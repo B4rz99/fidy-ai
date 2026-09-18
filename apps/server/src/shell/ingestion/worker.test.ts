@@ -27,8 +27,8 @@ import {
 } from "~/core/ingestion/model";
 import { TokenBearer } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
-import { defaultUserId, seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
+import { defaultUserId, seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import {
   type ApiClient,
   ApiHarness,

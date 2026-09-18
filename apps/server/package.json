@@ -11,16 +11,16 @@
     }
   },
   "scripts": {
-    "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/internal/preload.ts src/main.ts",
-    "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/internal/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release-runtime.ts --target=bun --outdir=dist/commands --entry-naming='prepare-sentry-release.js' --sourcemap=external && bun build scripts/provision-runtime-role.ts scripts/migrate.ts scripts/support-recovery.ts scripts/approve-email-ingest-sample.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
+    "dev": "bun scripts/seed-development-runtime.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/internal/preload.ts src/main.ts",
+    "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/internal/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release-runtime.ts --target=bun --outdir=dist/commands --entry-naming='prepare-sentry-release.js' --sourcemap=external && bun build scripts/provision-runtime-role.ts scripts/support-recovery.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bun build scripts/migrate-runtime.ts --target=bun --outdir=dist/commands --entry-naming='migrate.js' --sourcemap=external && bun build scripts/approve-email-ingest-sample-runtime.ts --target=bun --outdir=dist/commands --entry-naming='approve-email-ingest-sample.js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
-    "agent:repl": "bun scripts/agent-repl.ts",
+    "agent:repl": "bun scripts/agent-repl-runtime.ts",
     "mistral:conformance": "bun scripts/verify-mistral-token-counts.ts",
     "evaluate:es-co": "./scripts/evaluate-es-co.sh",
     "test:evaluation": "./scripts/evaluate-es-co.sh test",
     "support:recovery": "bun scripts/support-recovery.ts",
     "sentry:verify": "bun scripts/verify-sentry-account-runtime.ts",
-    "wompi:reconcile-enrollment": "bun scripts/reconcile-wompi-enrollment.ts",
+    "wompi:reconcile-enrollment": "bun scripts/reconcile-wompi-enrollment-runtime.ts",
     "wompi:sandbox:verify-source": "bun scripts/verify-wompi-sandbox-source.ts",
     "sentry:smoke:build": "bun build scripts/smoke-sentry-account-runtime.ts --target=bun --outdir=reports/sentry-smoke --entry-naming=smoke.js --sourcemap=external",
     "sentry:smoke": "bun reports/sentry-smoke/smoke.js",
@@ -46,8 +46,8 @@
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "check:lint-guards": "bun scripts/check-lint-guards.ts",
     "check:migration-ids": "bun scripts/check-migration-ids.ts",
-    "migrate": "bun scripts/migrate.ts",
-    "approve:email-ingest-sample": "bun scripts/approve-email-ingest-sample.ts"
+    "migrate": "bun scripts/migrate-runtime.ts",
+    "approve:email-ingest-sample": "bun scripts/approve-email-ingest-sample-runtime.ts"
   },
   "dependencies": {
     "@effect/ai-openai": "4.0.0-rc.112",

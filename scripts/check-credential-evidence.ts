@@ -96,12 +96,12 @@ const credentialEvidence = [
   },
   {
     configuration: "DATABASE_URL",
-    testFile: "apps/server/src/shell/db/row-level-security.test.ts",
+    testFile: "apps/server/src/shell/database/row-level-security.test.ts",
     testName: "starts only with a restricted runtime role and complete forced policy coverage",
   },
   {
     configuration: "MIGRATION_DATABASE_URL",
-    testFile: "apps/server/src/shell/db/row-level-security.test.ts",
+    testFile: "apps/server/src/shell/database/row-level-security.test.ts",
     testName: "fails closed when the runtime connection uses the migration authority",
   },
   {

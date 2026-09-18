@@ -3,7 +3,11 @@ import { Array, BigDecimal, DateTime, Effect, Layer, Option, Result, Schema } fr
 import { TestClock } from "effect/testing";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  PgLive,
+} from "~/shell/testing/database-harness";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { categoryIds } from "~/core/categories/taxonomy";
@@ -16,8 +20,8 @@ import {
 } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
-import { defaultUserId } from "~/shell/db/development-seed";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { defaultUserId } from "~/shell/testing/development-seed";
+import { withUserTransaction } from "~/shell/database/operations";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import {
   dashboardListStatement,
@@ -948,7 +952,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   }
 );
 
-const DashboardClockHarness = Layer.merge(PgLive, MigrationSqlClient.layer);
+const DashboardClockHarness = Layer.merge(PgLive, MigrationSqlClientLive);
 
 layer(DashboardClockHarness, { timeout: "30 seconds" })("Dashboard operation Clock seam", (it) => {
   it.effect("uses one TestClock instant for a zone-aware PostgreSQL projection", () =>

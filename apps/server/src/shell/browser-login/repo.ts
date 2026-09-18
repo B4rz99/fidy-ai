@@ -9,7 +9,7 @@ import {
 } from "~/core/browser-login/rules";
 import { UserId } from "~/core/identity/reference";
 import { getRejectedOperationAdmission } from "~/shell/audit/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import { advisoryLockKey, withUserLockInScope } from "~/shell/database/operations";
 import { browserLoginApprovalRateLimited, browserLoginApprovalRejected } from "./approval-errors";
 import { BrowserLoginCapacityExceeded, BrowserLoginStartRateLimited } from "./errors";
 import { browserLoginApprovalOperation } from "./operations";

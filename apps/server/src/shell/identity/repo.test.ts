@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { findUser, upsertDevelopmentUser } from "./repo";

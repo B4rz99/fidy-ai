@@ -27,8 +27,8 @@ import {
   withConsentExternalEffectLock,
   withUserLock,
   withUserLockInScope,
-} from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+  withUserTransaction,
+} from "~/shell/database/operations";
 import { revokePendingForwardedEmailsForConsentInScope } from "~/shell/ingestion/email-consent-revocation";
 import { currentDisclosure } from "./current-disclosure";
 

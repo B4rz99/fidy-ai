@@ -43,8 +43,8 @@ import { installVerifiedEmailCredentialInScope } from "~/shell/email-authenticat
 import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
 import { upsertDevelopmentSubscriptionInScope } from "~/shell/subscription/access-repo";
 import { upsertPAT } from "~/shell/tokens/repo";
-import { withUserTransaction } from "./user-transaction";
-import { MigrationPgLive, MigratorLive } from "./client";
+import { withUserTransaction } from "~/shell/database/operations";
+import { MigrationPgLive, MigratorLive } from "./database-harness";
 
 /** The stable User used by the local development seed and API-seam tests. */
 export const defaultUserId = UserId.make("f1d1a000-0000-4000-8000-000000000001");

@@ -14,7 +14,7 @@ import {
 import { TestConsole } from "effect/testing";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import { ProjectedErrorEvent, TelemetryHttpStatus } from "~/shell/observability/contract";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";

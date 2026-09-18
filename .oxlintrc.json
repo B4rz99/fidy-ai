@@ -228,7 +228,7 @@
     // A migration is one atomic, ordered DDL program; splitting it solely to hide its statement
     // count would obscure ordering without creating a reusable module boundary.
     {
-      "files": ["apps/server/src/shell/db/migrations/0043-email-ingestion.ts"],
+      "files": ["apps/server/src/shell/database/internal/migrations/0043-email-ingestion.ts"],
       "rules": {
         "max-statements": "off"
       }
@@ -447,7 +447,7 @@
     // A `CREATE FUNCTION` is one indivisible statement, so a gateway body longer
     // than the limit cannot be split without routing DDL through `sql.unsafe`.
     {
-      "files": ["apps/server/src/shell/db/migrations/*.ts"],
+      "files": ["apps/server/src/shell/database/internal/migrations/*.ts"],
       "rules": {
         "max-lines-per-function": "off"
       }

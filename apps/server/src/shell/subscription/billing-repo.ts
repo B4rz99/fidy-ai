@@ -27,7 +27,7 @@ import {
   WompiSourceId,
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,

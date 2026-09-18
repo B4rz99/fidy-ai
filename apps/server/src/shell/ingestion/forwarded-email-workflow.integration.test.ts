@@ -31,8 +31,8 @@ import {
   type AuthenticatedClusterLayer,
   authenticatedClusterHttp,
 } from "~/shell/authenticated-cluster-http";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import {
   clusterMessagesTable,
   clusterRepliesTable,

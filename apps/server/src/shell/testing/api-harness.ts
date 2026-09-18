@@ -65,7 +65,12 @@ import {
   KapsoSendFailed,
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
-import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import {
+  type MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+} from "./database-harness";
 import { SqlQueueHarness, makeSqlQueueHarness } from "./durable-execution";
 import {
   MessageStorage,
@@ -76,7 +81,7 @@ import {
 } from "effect/unstable/cluster";
 import { ClusterReadiness } from "~/shell/cluster-readiness";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
-import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
+import { makeDevelopmentSeedLive } from "./development-seed";
 import { defaultPatBearer } from "./identity-fixtures";
 import { TestPublicNamespace, testResendWebhookSecret } from "./test-config";
 import { HttpLive } from "~/shell/http";
@@ -369,7 +374,7 @@ const makeApiHarnessBase = (
     Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
     Layer.provideMerge(BoundedBunHttpServerTest),
     Layer.provideMerge(BunServices.layer),
-    Layer.provideMerge(MigrationSqlClient.layer),
+    Layer.provideMerge(MigrationSqlClientLive),
     Layer.provideMerge(PgLive),
     Layer.provideMerge(TestPublicNamespace)
   );
@@ -444,7 +449,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
     ),
     Layer.provide(BunServices.layer),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(MigrationSqlClient.layer),
+    Layer.provide(MigrationSqlClientLive),
     Layer.provide(PgLive),
     Layer.provide(AcceptancePublicNamespace),
     Layer.provide(TelemetryDisabled)

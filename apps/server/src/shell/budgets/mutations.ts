@@ -18,7 +18,7 @@ import {
 } from "~/shell/public-http/contract";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { findCategory } from "~/shell/categories/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import { advisoryLockKey, withUserLockInScope } from "~/shell/database/operations";
 import { findUserInScope } from "~/shell/identity/repo";
 import { mapBudgetCategoryFailure, toApiFailure } from "./errors";
 import {

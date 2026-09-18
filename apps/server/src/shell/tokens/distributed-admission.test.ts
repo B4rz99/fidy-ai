@@ -2,7 +2,11 @@ import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Config, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient } from "effect/unstable/http";
-import { MigrationSqlClient, MigratorLive } from "~/shell/db/client";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+} from "~/shell/testing/database-harness";
 import { patPairingUnavailableBody } from "~/pat-pairing-api";
 
 const Ready = Schema.Struct({ port: Schema.Int, pid: Schema.Int });
@@ -65,7 +69,7 @@ const startPairing = Effect.fn(function* (
   };
 });
 
-const Harness = Layer.mergeAll(MigrationSqlClient.layer, MigratorLive, FetchHttpClient.layer).pipe(
+const Harness = Layer.mergeAll(MigrationSqlClientLive, MigratorLive, FetchHttpClient.layer).pipe(
   Layer.provide(BunServices.layer)
 );
 

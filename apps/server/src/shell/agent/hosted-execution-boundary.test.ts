@@ -15,7 +15,7 @@ import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import type { ConfirmationPermit } from "./tool-confirmation-model";
 import { immediatePermit } from "./tool-confirmation";
 import { agentOperationBindings, makeAgentToolkit } from "./toolkit";

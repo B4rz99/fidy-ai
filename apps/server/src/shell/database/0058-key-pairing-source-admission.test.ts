@@ -1,10 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "./operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { RollbackMigrationFixture } from "~/shell/testing/rollback-migration-fixture";
-import { keyPairingSourceAdmission } from "./0058-key-pairing-source-admission";
+import { keyPairingSourceAdmission } from "~/shell/database/internal/migrations/0058-key-pairing-source-admission";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Keyed pairing source admission migration",

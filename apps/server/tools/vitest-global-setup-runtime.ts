@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { MigrationSqlClient } from "../src/shell/db/client";
+import { MigrationSqlClient } from "../src/shell/database/operations";
+import { MigrationSqlClientLive } from "../src/shell/database/runtime";
 
 const resetPersistentDatabase = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
@@ -12,7 +13,7 @@ const resetPersistentDatabase = Effect.gen(function* () {
   yield* sql`DROP SCHEMA IF EXISTS fidy_durable CASCADE`;
   yield* sql`CREATE SCHEMA public AUTHORIZATION CURRENT_USER`;
   yield* sql`REVOKE CREATE ON SCHEMA public FROM PUBLIC`;
-}).pipe(Effect.provide(MigrationSqlClient.layer));
+}).pipe(Effect.provide(MigrationSqlClientLive));
 
 /** Resets the configured test database before Vitest loads any test files. */
 export const setup = async (): Promise<void> => {

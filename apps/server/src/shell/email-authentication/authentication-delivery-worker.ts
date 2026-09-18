@@ -17,8 +17,11 @@ import type {
 } from "~/shell/_shared/persisted-queue-handler";
 import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/service";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
 import { sleepUntil } from "~/shell/durable-execution-clock";
 import { attemptEmailDelivery, settleTerminalEmailFailure } from "./delivery-retry";
 import {

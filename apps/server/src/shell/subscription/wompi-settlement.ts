@@ -27,7 +27,7 @@ import {
 } from "~/core/subscription/billing-rules";
 import { WompiSourceId } from "~/core/subscription/enrollment-model";
 import type { UserId } from "~/core/identity/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { loadWompiEventSecret } from "~/shell/secret-material/operations";
 import { activatePaidProInScope } from "./access-repo";
 import { WompiBillingClient, type WompiTransaction } from "./wompi-billing-client";

@@ -3,7 +3,7 @@ import { SqlSchema } from "effect/unstable/sql";
 import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { AnonymizedEmailIngestSample } from "~/core/ingestion/model";
 import { IngestSampleId } from "~/core/ingestion/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/database/operations";
 
 const maximumApprovedOperatorIdCharacters = 120;
 

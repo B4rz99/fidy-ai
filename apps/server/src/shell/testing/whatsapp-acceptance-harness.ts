@@ -45,8 +45,14 @@ import {
   DisclosureDeliveryFailureReason,
 } from "~/shell/channels/whatsapp/disclosure-model";
 import { findPendingConsentExchange, observeConsentRecords } from "~/shell/consent/repo";
-import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
-import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
+import {
+  MigrationSqlClient,
+  MigrationSqlClientLive,
+  MigratorLive,
+  PgLive,
+  RuntimeAuthorityLive,
+} from "./database-harness";
+import { makeDevelopmentSeedLive } from "./development-seed";
 import { SqlQueueHarness } from "./durable-execution";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
 import { upsertPAT } from "~/shell/tokens/repo";
@@ -568,7 +574,7 @@ export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
   Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
-  Layer.provideMerge(MigrationSqlClient.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provideMerge(PgLive),
   Layer.provideMerge(TestPublicNamespace)
 );

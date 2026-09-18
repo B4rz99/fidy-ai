@@ -6,7 +6,7 @@ import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { WebSessionId } from "~/core/web-session/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 
 const AuditLogEntryWithoutIdentity = AuditLogEntry.mapFields(
   Struct.omit(["id", "subjectUserId", "caller"])

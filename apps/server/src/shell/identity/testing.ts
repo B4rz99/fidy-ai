@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 
 /** Removes channel evidence for tests that exercise the unassociated state. */
 export const removeWhatsAppIdentityForTesting = (

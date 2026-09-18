@@ -2,9 +2,9 @@ import { expect, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
-import { defaultUserId } from "./development-seed";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { withUserTransaction } from "./user-transaction";
+import { withUserTransaction } from "./operations";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "User-scoped transactions",

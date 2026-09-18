@@ -24,8 +24,7 @@ import {
 import type { UserId } from "~/core/identity/reference";
 import type { WebSessionId } from "~/core/web-session/reference";
 import { withSubjectLock } from "~/shell/consent/repo";
-import { advisoryLockKey } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { advisoryLockKey, withUserTransaction } from "~/shell/database/operations";
 import { lockFreshWebSessionInScope } from "~/shell/web-session/repo";
 import { admitEmailDeliveryInScope } from "./admission";
 import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";

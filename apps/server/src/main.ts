@@ -1,6 +1,6 @@
 import { BunCrypto, BunHttpClient, BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/database/runtime";
 import { DurableExecutionLive } from "~/shell/durable-execution";
 import { AppLive } from "~/shell/http";
 import { ObservabilityLive } from "~/shell/observability/runtime";

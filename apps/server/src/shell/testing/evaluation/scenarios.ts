@@ -31,7 +31,7 @@ import { makeTokenAuthorizationClientLive } from "~/shell/_shared/authz";
 import {
   generateDevelopmentPatBearer,
   seedConsentedPatIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import { ForwardedEmailProcessor } from "~/shell/ingestion/forwarded-email-ingestion";
 import { interpretNotificationEmail } from "~/shell/ingestion/email-interpretation/interpret";
 import {

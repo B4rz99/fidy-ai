@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 
 /** Resets append-only AuditLogEntry state between API-seam tests. */
 export const truncateAuditLogEntries = Effect.gen(function* () {

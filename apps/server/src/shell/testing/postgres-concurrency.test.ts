@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { Cause, Data, Deferred, Effect, Exit, Fiber, Option } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "./database-harness";
 import { ApiHarness } from "./api-harness";
 import { runReadCommittedScenario } from "./postgres-concurrency";
 

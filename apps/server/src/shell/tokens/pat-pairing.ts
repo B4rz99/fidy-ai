@@ -65,7 +65,7 @@ import {
   findPATGrantInScope,
   withSubjectLockInScope,
 } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { currentPairedPATDisclosure } from "./current-disclosure";
 import { makePATRateLimit, manualPATIssuanceLimit, manualPATIssuanceWindowMinutes } from "./errors";
 import {

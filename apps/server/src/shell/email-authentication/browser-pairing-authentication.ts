@@ -34,8 +34,11 @@ import {
   selectEmailCodeSymbols,
 } from "~/core/email-authentication/rules";
 import { UserId } from "~/core/identity/reference";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import { BrowserLoginPairingInvalid } from "~/shell/browser-login/errors";
 import {

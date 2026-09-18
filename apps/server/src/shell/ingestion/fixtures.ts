@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { statementIngestionQueueName } from "./worker";
 
 /** Resets statement ingestion and its Transaction outcomes between integration tests. */

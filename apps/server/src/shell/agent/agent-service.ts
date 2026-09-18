@@ -69,7 +69,7 @@ import {
   TranscriptTurnId,
   type TurnFailureReason,
 } from "~/core/transcript/model";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import { ValidationFailed } from "~/shell/public-http/contract";

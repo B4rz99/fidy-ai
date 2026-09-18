@@ -2,9 +2,9 @@
 
 import { BunRuntime } from "@effect/platform-bun";
 import { PgClient } from "@effect/sql-pg";
-import { type Cause, Config, Data, Effect, Layer, Redacted, type Schema } from "effect";
+import { Config, Data, Effect, Layer, Redacted } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { hasUnsafeAuthority, readRuntimeAuthority } from "~/shell/db/runtime-authority";
+import { inspectRuntimeRole } from "~/shell/database/operations";
 
 class InvalidDatabaseUrl extends Data.TaggedError("InvalidDatabaseUrl")<{
   readonly message: string;
@@ -46,11 +46,7 @@ const decodeCredential = (name: string, value: string): Effect.Effect<string, In
 
 const provisionRuntimeRole = (
   runtimePassword: string
-): Effect.Effect<
-  void,
-  Cause.NoSuchElementError | Schema.SchemaError | UnsafeRuntimeRole,
-  SqlClient.SqlClient
-> =>
+): Effect.Effect<void, UnsafeRuntimeRole, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
 
@@ -72,8 +68,8 @@ const provisionRuntimeRole = (
         $provision$
       `;
 
-        const initialAuthority = yield* readRuntimeAuthority(sql);
-        if (hasUnsafeAuthority(initialAuthority)) {
+        const initialAuthority = yield* inspectRuntimeRole(sql);
+        if (initialAuthority.hasUnsafeAuthority) {
           return yield* new UnsafeRuntimeRole({
             message: "fidy_runtime already has forbidden database authority.",
           });
@@ -91,8 +87,8 @@ const provisionRuntimeRole = (
         $password$
       `;
 
-        const finalAuthority = yield* readRuntimeAuthority(sql);
-        if (!finalAuthority.canLogin || hasUnsafeAuthority(finalAuthority)) {
+        const finalAuthority = yield* inspectRuntimeRole(sql);
+        if (!finalAuthority.canLogin || finalAuthority.hasUnsafeAuthority) {
           return yield* new UnsafeRuntimeRole({
             message: "The provisioned fidy_runtime role is not restricted.",
           });

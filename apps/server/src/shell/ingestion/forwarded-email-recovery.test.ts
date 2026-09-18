@@ -18,8 +18,8 @@ import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { ReceivedEmailContent } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import { defaultUserId } from "~/shell/testing/development-seed";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {

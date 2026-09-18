@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { TransactionId } from "~/core/transactions/model";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import {
   errorEnvelopePayloads as errorPayloads,

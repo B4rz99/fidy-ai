@@ -45,13 +45,13 @@ import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
 import { confirmationDigestFromChallenge } from "~/shell/agent/tool-confirmation-model";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedConsentedPatIdentity,
   seedDevelopmentIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import {
   ApiHarness,
@@ -61,7 +61,7 @@ import {
 } from "~/shell/testing/api-harness";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { errorEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import {
   DisabledTelemetryResource,
   Telemetry,

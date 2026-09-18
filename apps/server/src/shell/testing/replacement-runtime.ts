@@ -8,7 +8,7 @@ import {
   type AuthenticatedClusterLayer,
   authenticatedClusterHttp,
 } from "~/shell/authenticated-cluster-http";
-import { PgLive } from "~/shell/db/client";
+import { PgLive } from "./database-harness";
 import {
   clusterTestRunnerOptions,
   clusterTestShardLockExpiration,

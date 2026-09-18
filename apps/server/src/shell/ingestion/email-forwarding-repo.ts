@@ -32,7 +32,7 @@ import {
 } from "~/core/ingestion/rules";
 import { TransactionExtraction, type TransactionId } from "~/core/transactions/model";
 import { NotificationEmailInterpretationEvidence } from "~/shell/ingestion/email-interpretation/interpret";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
 
 const AddressRow = Schema.Struct({

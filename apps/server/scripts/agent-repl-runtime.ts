@@ -4,7 +4,7 @@ import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/r
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
-import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/database/runtime";
 import { DurableExecutionClientLive } from "~/shell/durable-execution";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 

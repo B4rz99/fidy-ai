@@ -11,8 +11,12 @@ import {
 import { EmailEnrollmentId, EmailVerificationPublicCode } from "~/core/email-authentication/model";
 import { E164PhoneNumber, UserId, whatsAppCallerReference } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
-import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultPATId, defaultUserId, seedOnboardingConsent } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
+import {
+  defaultPATId,
+  defaultUserId,
+  seedOnboardingConsent,
+} from "~/shell/testing/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";

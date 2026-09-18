@@ -30,7 +30,7 @@ import {
   makePersistedQueue,
 } from "~/shell/_shared/persisted-queue";
 import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";

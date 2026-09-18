@@ -25,12 +25,15 @@ import {
   confirmationDigestFromCommand,
 } from "~/shell/agent/tool-confirmation-model";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
-import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
+import {
+  advisoryLockKey,
+  withUserLockInScope,
+  withUserTransaction,
+} from "~/shell/database/operations";
 import {
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
 } from "~/shell/durable-queue-policy";
-import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   DurableTraceContext,
   TelemetryAttempt,

@@ -3,7 +3,7 @@ import { expect, layer } from "@effect/vitest";
 import assert from "node:assert/strict";
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import type { AuditLogEntry } from "~/core/audit/model";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { PATId } from "~/core/tokens/reference";
@@ -17,7 +17,7 @@ import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedConsentedPatIdentity,
-} from "~/shell/db/development-seed";
+} from "~/shell/testing/development-seed";
 import {
   type ApiClient,
   ApiHarness,

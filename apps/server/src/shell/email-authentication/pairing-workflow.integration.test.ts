@@ -32,8 +32,8 @@ import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { loopbackClusterRunnerHttpPolicy } from "~/shell/testing/cluster-runner-http-policy";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
-import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { MigrationSqlClient, PgLive } from "~/shell/testing/database-harness";
+import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {

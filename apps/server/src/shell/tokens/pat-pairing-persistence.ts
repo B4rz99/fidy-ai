@@ -4,7 +4,7 @@ import { UserId } from "~/core/identity/reference";
 import { PATPairingId, PATPairingLifecycle, PATPairingPublicCode } from "~/core/tokens/pairing";
 import { PATLifetimeDays, PATRecipientLabel, PATScopes, TokenShortId } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+import { withUserTransaction } from "~/shell/database/operations";
 import { PATPairingReviewRateLimited, patPairingGenericMessage } from "./operations";
 
 const maximumBurstStarts = 5;

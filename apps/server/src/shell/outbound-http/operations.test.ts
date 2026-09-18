@@ -29,6 +29,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http";
 import { OutboundHttpFailure } from "./contract";
+import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import { OutboundHttp, type OutboundHttpService } from "./operations";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
 
@@ -336,6 +337,24 @@ it.effect("rejects a destination outside the service authority before transport"
     expect(requests).toBe(0);
     expect(String(exit)).not.toContain("private-sentry-token");
     expect(String(exit)).not.toContain("private-support-body");
+  })
+);
+
+it.effect("rejects a non-Access destination before support transport", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const outbound = makeCloudflareAccessOutboundHttp({
+      accessToken: Redacted.make("private-access-token"),
+      httpClient: HttpClient.make((request) => {
+        requests += 1;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
+      }),
+    });
+
+    const failure = yield* Effect.flip(outbound.execute(kapsoRequest));
+
+    expect(failure.reason).toBe("transport-failed");
+    expect(requests).toBe(0);
   })
 );
 

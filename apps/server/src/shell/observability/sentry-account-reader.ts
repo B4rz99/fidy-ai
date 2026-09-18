@@ -52,14 +52,14 @@ export class SentryAccountReadError extends Schema.TaggedError<SentryAccountRead
   }
 ) {}
 
-/** Secret inputs used only while performing authenticated, read-only account inspection. */
+/** Redacted account locators used only while performing read-only Sentry inspection. */
 export type SentryAccountReaderConfig = Readonly<{
   organizationSlug: Redacted.Redacted;
   productionProjectSlug: Redacted.Redacted;
   nonProductionProjectSlug: Redacted.Redacted;
 }>;
 
-/** Redacted credentials consumed by the operator-only Sentry account verification command. */
+/** Redacted account locators consumed by the operator-only Sentry verification command. */
 export const sentryAccountConfig = Config.all({
   organizationSlug: Config.redacted("SENTRY_ORGANIZATION_SLUG"),
   productionProjectSlug: Config.redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),

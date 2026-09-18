@@ -1,0 +1,141 @@
+apps/server/scripts/evaluate-es-co.sh
+  s_c7b2d8371dca9b::t_7117a3f9486ef7 51
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 15
+  s_c7b2d8371dca9b::t_e93cc3678df782 16
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_c7b2d8371dca9b::t_b92a2f5456898a 5,8,17
+  s_c7b2d8371dca9b::t_2d292bcd3a1e52 346
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 1-2,4,6-7,9-16,18
+  s_c7b2d8371dca9b::t_5384b64aeee5dd 19
+apps/server/src/shell/testing/evaluation/corpus.test.ts
+  s_c7b2d8371dca9b::t_545f7cb63575c9 4,37-45
+  s_c7b2d8371dca9b::t_3beb97ce41b8d8 46-48
+apps/server/scripts/check-dependency-guards.ts
+  s_c7b2d8371dca9b::t_534dea69fa61d4 931,938
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 6
+apps/server/src/shell/memory/mutations.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 7
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 7
+apps/server/src/shell/agent/agent-service.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 113
+apps/server/src/shell/agent/agent-service.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 72
+apps/server/ARCHITECTURE.md
+  s_c7b2d8371dca9b::t_184f8920260ea6 104-113
+apps/server/src/shell/agent/conversation-compaction-context.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 3
+  s_c7b2d8371dca9b::t_fb2f9c4d996095 1
+  s_c7b2d8371dca9b::t_c62ffde9b92b71 4,13
+apps/server/src/shell/testing/hosted-inference-provider-harness.ts
+  s_c7b2d8371dca9b::t_714c6af96c30a2 1-4
+apps/server/src/shell/hosted-inference/internal/openai.ts
+  s_c7b2d8371dca9b::t_7f31113b200bb4 176-182,185-186,191
+  s_c7b2d8371dca9b::t_d67a4d84308608 964-969
+  s_c7b2d8371dca9b::t_b9a2ca52c8029b 17-18
+  s_c7b2d8371dca9b::t_f3de70dff1b02a 183-184,369,371,373,377,383
+  s_c7b2d8371dca9b::t_53650a77b25149 923
+  s_c7b2d8371dca9b::t_a6c80b50bcd5bc 1031-1038,1041-1042
+  s_c7b2d8371dca9b::t_b92a2f5456898a 55-59,957,973
+  s_c7b2d8371dca9b::t_5c48e58ad41859 862
+  s_c7b2d8371dca9b::t_b2b30f088c21ae 54
+  s_c7b2d8371dca9b::t_1da4e3fee9d8ae 372
+  s_c7b2d8371dca9b::t_401e7882290907 53,1030,1039-1040,1043-1048
+  s_c7b2d8371dca9b::t_a6b319a44ea602 939,956,958,962,972,992
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 8
+apps/server/src/shell/testing/hosted-inference-fixtures.ts
+  s_c7b2d8371dca9b::t_0495d5aee47a52 11
+  s_c7b2d8371dca9b::t_ec3a3e848a4b79 2-3,12-26,30,70
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 10
+  s_c7b2d8371dca9b::t_62d44dc44b1c48 1,53-56,58
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 57
+  s_c7b2d8371dca9b::t_d381910e96e33d 9
+  s_c7b2d8371dca9b::t_ca263c76e2dfe9 59
+apps/server/src/shell/testing/evaluation/runner.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 27
+apps/server/vitest.acceptance.config.ts
+  s_c7b2d8371dca9b::t_7f04c5a577748b 16,22-25
+apps/server/package.json
+  s_c7b2d8371dca9b::t_5a9c67cb6250ea 17
+apps/server/src/shell/hosted-inference/internal/openai.test.ts
+  s_c7b2d8371dca9b::t_95e4927755d153 2-3,180-185
+  s_c7b2d8371dca9b::t_c1d76db5a791e3 22
+  s_c7b2d8371dca9b::t_2466fd9c01b29e 186,230,317,329,672,683,1005,1036
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 34
+apps/server/scripts/evaluate-es-co-openai-runtime.ts
+  s_c7b2d8371dca9b::t_6ad295eece0f7f 8-12,53-56,88,90,95-97
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 34
+  s_c7b2d8371dca9b::t_5fba7ef8ceb598 45,506
+apps/server/src/shell/http.ts
+  s_c7b2d8371dca9b::t_48af01e84dc09d 304,349
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 13
+apps/server/src/shell/memory/memory-policy.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 5
+apps/server/src/shell/testing/api-harness.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 35
+apps/server/src/shell/agent/toolkit.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 19
+apps/server/src/shell/hosted-inference/contract.ts
+  s_c7b2d8371dca9b::t_b92a2f5456898a 1,3,7-13,23,25,146,154,157-199
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 2,4-6,14-15,20-22,24,26-145,147-153,155-156,200-223
+  s_c7b2d8371dca9b::t_c2f890a5711d96 16-19
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_c7b2d8371dca9b::t_6858649e286bda 8-9,38
+  s_c7b2d8371dca9b::t_6494f517842056 1-3,5-7,11-25,27,30,33-35
+  s_c7b2d8371dca9b::t_4b5dee4011b704 4,10,26,28-29,31-32,36-37
+apps/server/.dependency-cruiser.mjs
+  s_c7b2d8371dca9b::t_99d1c7bbef4a52 308-310
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 312,315
+apps/server/scripts/agent-repl-runtime.ts
+  s_c7b2d8371dca9b::t_5a9c67cb6250ea 5,21
+apps/server/src/shell/agent/working-context.ts
+  s_c7b2d8371dca9b::t_4e48bd555f11cc 3,6,25,49-58
+  s_c7b2d8371dca9b::t_b8557b6d6116ae 5,9
+apps/server/src/shell/hosted-inference/operations.ts
+  s_c7b2d8371dca9b::t_464d74c4436e8f 7
+  s_c7b2d8371dca9b::t_29658bc8430c6f 1
+  s_c7b2d8371dca9b::t_d8a7fd717f7112 2-4,8-9,23
+  s_c7b2d8371dca9b::t_b92a2f5456898a 5-6,10-14,16-22,24-33,35-42
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 15
+  s_c7b2d8371dca9b::t_61d1c3238b0888 34
+apps/server/src/shell/hosted-inference/operations.test.ts
+  s_c7b2d8371dca9b::t_5c47fb1d658d03 21
+  s_c7b2d8371dca9b::t_b92a2f5456898a 22
+  s_c7b2d8371dca9b::t_d62d018a48f4bc 340-346
+  s_c7b2d8371dca9b::t_1510627ed2377f 427-428,432,440,490-491,495,510
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_c7b2d8371dca9b::t_ed456a27063485 57-58
+apps/server/src/shell/testing/evaluation/corpus.ts
+  s_c7b2d8371dca9b::t_a09a7e6f7ad56d 79-83
+apps/server/src/shell/hosted-inference/internal/fixtures.ts
+  s_c7b2d8371dca9b::t_8002553a4e4a66 1-49
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_c7b2d8371dca9b::t_ec3aea18e11559 18,118,163,194,217
+  s_c7b2d8371dca9b::t_de1c590fcd965a 141-143,218-223
+  s_c7b2d8371dca9b::t_0c51afd57777bf 1-4,6-12,27-59,90-93,95-106,109-117,119-140,144-162,165,167-192,200-209,212-216,224,226-233,235-238
+  s_c7b2d8371dca9b::t_b92a2f5456898a 5,17,19-26,64-67,164,195-199,210-211
+  s_c7b2d8371dca9b::t_984e124a5f1dcc 60-63,68-89,94,107-108
+  s_c7b2d8371dca9b::t_20482cbf0401d7 193
+  s_c7b2d8371dca9b::t_6a68e141a74d2c 13-16,166
+  s_c7b2d8371dca9b::t_0702bcf15501cd 225,234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e85daf7925349a3b6dee40395985a5820fc5072a",
+  "prompts": {},
+  "sessions": {
+    "s_c7b2d8371dca9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26d-08e2-77b4-8f0a-7395ae07d4e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

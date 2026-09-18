@@ -2,6 +2,8 @@ apps/server/src/shell/outbound-http/operations.ts
   s_9466f16d22ab04::t_b91284f8cb8515 148
   s_9466f16d22ab04::t_60b83193554cea 104,126
   s_9466f16d22ab04::t_504f0d578f0a52 23,27
+  s_9466f16d22ab04::t_505f2ac74d01b7 9,11-16,66-67
+  s_9466f16d22ab04::t_208dd14aee3b86 96-97,118-125,127-147,149-167
 apps/server/src/shell/outbound-http/operations.test.ts
   s_9466f16d22ab04::t_a8bbe92ada2e44 241,243-245,247,266,268-269,283-284,310-312,314,321,343,348
   s_9466f16d22ab04::t_e88061486ade79 193
@@ -10,6 +12,11 @@ apps/server/src/shell/outbound-http/operations.test.ts
   s_9466f16d22ab04::t_abc3889e8de72c 216,219,226
   s_9466f16d22ab04::t_8735f73d77598f 96,167,215
   s_9466f16d22ab04::t_346c682198a580 97,210,217,227
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_9466f16d22ab04::t_b343390279946d 16,23-24,37-38,75-76,261-262
+  s_9466f16d22ab04::t_7ff1d6e0182649 302-315,369-397,420-421,436-437
+apps/server/src/shell/outbound-http/contract.ts
+  s_9466f16d22ab04::t_db36420d7ac4ba 45-62,114-121
 ---
 {
   "schema_version": "authorship/3.0.0",

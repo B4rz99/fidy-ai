@@ -1,0 +1,42 @@
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_221d58c93200ac::t_f3fa7b8ae0466d 13-16,58-59
+  s_221d58c93200ac::t_11dbfc5725055a 12
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_221d58c93200ac::t_2d6e80eb3a7d47 8-12,31-32
+apps/server/tools/vitest-global-setup.ts
+  s_221d58c93200ac::t_5f6e2b868834ad 7-10,12
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_221d58c93200ac::t_2820ab8a7a2164 43,142-143
+  s_221d58c93200ac::t_1cd104b1487b0d 44
+apps/server/src/shell/testing/cluster-topology-crash-runner.ts
+  s_221d58c93200ac::t_b42da2f59a85ed 12-13,23-24
+apps/server/src/shell/queue-compatibility/queue-compatibility.integration.test.ts
+  s_221d58c93200ac::t_66692fb627673e 166,208,251,277
+  s_221d58c93200ac::t_c476408e981fd5 113,165,170-171,207,212-213,250,254,276
+  s_221d58c93200ac::t_1a34893ec82913 2,111-112,168-169,210-211,253,278
+  s_221d58c93200ac::t_b5573e18f6910c 62
+  s_221d58c93200ac::t_b800869fbdecc0 3,60-61,63-66
+  s_221d58c93200ac::t_96af0539f5d4bd 67
+apps/server/src/shell/testing/cluster-topology-fixtures.ts
+  s_221d58c93200ac::t_17c7621f9ad849 25-28,56-57
+apps/server/src/shell/cluster-topology.integration.test.ts
+  s_221d58c93200ac::t_2edde9f3e5e7db 50-51,89-90
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_221d58c93200ac::t_34a5a7c67970d7 39-43,149-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b2e68119d97f0bccf9a32b98f996d3d475fd1efe",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

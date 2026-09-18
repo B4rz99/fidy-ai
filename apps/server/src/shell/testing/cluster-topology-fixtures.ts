@@ -22,6 +22,10 @@ export const clusterTestAuthenticationToken = Redacted.make("f".repeat(clusterTe
 /** Shard count the shared test topology publishes in the deployment compatibility identity. */
 export const clusterTestShardCount = 300;
 
+/** Lease settings leave enough time for a 300-shard SQL batch on a cold test process. */
+export const clusterTestShardLockRefreshInterval = 1_000;
+export const clusterTestShardLockExpiration = "5 seconds";
+
 /** Every shard id in the shared test topology, used to count live ownership. */
 export const clusterTestShardIds = Array.from({ length: clusterTestShardCount }, (_, index) =>
   ShardId.make("default", index + 1)
@@ -49,8 +53,8 @@ export const clusterTestSharedOptions = {
   entityMessagePollInterval: 50,
   sendRetryInterval: 50,
   shardLockDisableAdvisory: true,
-  shardLockRefreshInterval: 500,
-  shardLockExpiration: "2 seconds",
+  shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+  shardLockExpiration: clusterTestShardLockExpiration,
 } satisfies Partial<ShardingConfig.ShardingConfig["Service"]>;
 
 /** Builds the shared test topology for one loopback runner, with scenario-specific overrides. */

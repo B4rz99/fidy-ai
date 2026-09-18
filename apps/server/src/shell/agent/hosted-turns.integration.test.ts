@@ -40,6 +40,8 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   clusterTestRunnerOptions,
   clusterTestShardIds,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
   disposeTestRuntimes as disposeRuntimes,
 } from "~/shell/testing/cluster-topology-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
@@ -137,7 +139,8 @@ const runtimeLayer = (input: {
         clusterTestRunnerOptions({
           port: input.port,
           overrides: {
-            shardLockRefreshInterval: 500,
+            shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+            shardLockExpiration: clusterTestShardLockExpiration,
             entityTerminationTimeout: 1000,
             runnerHealthCheckInterval: 250,
             refreshAssignmentsInterval: 100,

@@ -36,7 +36,11 @@ import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { clusterMessagesTable, clusterRepliesTable } from "~/shell/durable-tables";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
+import {
+  clusterTestRunnerOptions,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
+} from "~/shell/testing/cluster-topology-fixtures";
 import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import {
   BrowserPairingEmailWorkflowLive,
@@ -142,8 +146,8 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
       overrides: {
         runnerHealthCheckInterval: 100,
         refreshAssignmentsInterval: 100,
-        shardLockRefreshInterval: 250,
-        shardLockExpiration: "2 seconds",
+        shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+        shardLockExpiration: clusterTestShardLockExpiration,
       },
     }),
     loopbackClusterRunnerHttpPolicy([port])

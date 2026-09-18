@@ -47,6 +47,8 @@ import {
   clusterTestRunnerOptions,
   clusterTestShardCount,
   clusterTestShardIds,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
   clusterTestSharedOptions,
   clusterTopologyProbeEntityType,
   clusterTopologyProbeWorkflow,
@@ -84,8 +86,8 @@ const topologyRunnerPorts: [number, ...number[]] = [
 /** Production-shaped Cluster settings; only leases are tightened so recovery is observable. */
 const clusterOptions = {
   ...clusterTestSharedOptions,
-  shardLockRefreshInterval: 250,
-  shardLockExpiration: "2 seconds",
+  shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+  shardLockExpiration: clusterTestShardLockExpiration,
   runnerHealthCheckInterval: 100,
   refreshAssignmentsInterval: 100,
 } satisfies Partial<ShardingConfig.ShardingConfig["Service"]>;

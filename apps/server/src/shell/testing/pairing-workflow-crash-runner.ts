@@ -5,7 +5,11 @@ import { ClusterWorkflowEngine } from "effect/unstable/cluster";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { loopbackClusterRunnerHttpPolicy } from "./cluster-runner-http-policy";
 import { PgLive } from "~/shell/db/client";
-import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
+import {
+  clusterTestRunnerOptions,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
+} from "./cluster-topology-fixtures";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import {
@@ -24,8 +28,8 @@ const cluster = authenticatedClusterHttp.layerSql(
     overrides: {
       runnerHealthCheckInterval: 100,
       refreshAssignmentsInterval: 100,
-      shardLockRefreshInterval: 250,
-      shardLockExpiration: "2 seconds",
+      shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+      shardLockExpiration: clusterTestShardLockExpiration,
     },
   }),
   loopbackClusterRunnerHttpPolicy([crashRunnerPort])

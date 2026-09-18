@@ -9,6 +9,8 @@ import {
   clusterTestAuthenticationToken,
   clusterTestRunnerOptions,
   clusterTestShardIds,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
 } from "./cluster-topology-fixtures";
 
 const port = Number(process.argv[2]);
@@ -18,8 +20,8 @@ const cluster = authenticatedClusterHttp.layerSql(
   clusterTestRunnerOptions({
     port,
     overrides: {
-      shardLockRefreshInterval: 250,
-      shardLockExpiration: "2 seconds",
+      shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+      shardLockExpiration: clusterTestShardLockExpiration,
       runnerHealthCheckInterval: 100,
       refreshAssignmentsInterval: 100,
     },

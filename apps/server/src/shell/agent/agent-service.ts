@@ -331,11 +331,10 @@ const encodeAgentOperationInput = (
   encodeTranscriptJson(binding.canonicalParameters, input);
 const requireToolResult = function <A>(
   result: Option.Option<A>
-): Effect.Effect<never, ModelResponseRejected> | Effect.Effect<A> {
-  return Option.match(result, {
-    onNone: () => Effect.fail(modelResponseRejected(new Error("Tool result was missing"))),
-    onSome: (value) => Effect.succeed(value),
-  });
+): Effect.Effect<A, ModelResponseRejected> {
+  return Effect.fromOption(result, () =>
+    modelResponseRejected(new Error("Tool result was missing"))
+  );
 };
 const isTerminalToolResult = (result: { readonly preliminary: boolean }): boolean =>
   result.preliminary === false;
@@ -525,11 +524,7 @@ const prepareAgentToolCall = Effect.fn(function* (
   toolCall: AgentToolCall
 ) {
   const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
-    Option.match({
-      onNone: () =>
-        Effect.fail(modelResponseRejected(new Error("Model named an unknown operation"))),
-      onSome: Effect.succeed,
-    })
+    Effect.fromOption(() => modelResponseRejected(new Error("Model named an unknown operation")))
   );
   const encodedInput = yield* Effect.result(encodeAgentOperationInput(binding, toolCall.params));
   const input = yield* Result.match(encodedInput, {
@@ -1105,11 +1100,7 @@ const decodeModelToolCalls = Effect.fn(function* (
   const toolCalls: Array<AgentToolCall> = [];
   for (const toolCall of generated.toolCalls) {
     const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
-      Option.match({
-        onNone: () =>
-          Effect.fail(modelResponseRejected(new Error("Model named an unknown operation"))),
-        onSome: Effect.succeed,
-      })
+      Effect.fromOption(() => modelResponseRejected(new Error("Model named an unknown operation")))
     );
     const params = yield* decodeAgentOperationInput(binding, toolCall.params).pipe(
       Effect.mapError(modelResponseRejected)

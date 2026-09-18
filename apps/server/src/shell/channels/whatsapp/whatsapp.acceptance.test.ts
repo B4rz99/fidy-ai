@@ -224,14 +224,12 @@ const postSignedLifecycleEvidence = Effect.fn("Acceptance.postSignedDisclosureLi
 
 const acceptanceTelemetry = makeTelemetryService({
   startSpan: () =>
-    Effect.succeed(
-      Option.some({
-        traceId: TelemetryTraceId.make("0".repeat(32)),
-        spanId: TelemetrySpanId.make("0".repeat(16)),
-        sampled: true,
-        state: undefined,
-      })
-    ),
+    Effect.succeedSome({
+      traceId: TelemetryTraceId.make("0".repeat(32)),
+      spanId: TelemetrySpanId.make("0".repeat(16)),
+      sampled: true,
+      state: undefined,
+    }),
   finishSpan: () => Effect.void,
   recordOutcome: () => Effect.void,
   recordResponseStatus: () => Effect.void,

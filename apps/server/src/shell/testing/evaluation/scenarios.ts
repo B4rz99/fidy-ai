@@ -200,8 +200,8 @@ const runHostedStep = Effect.fn("Evaluation.runHostedStep")(function* (
     .pipe(
       Effect.asSome,
       Effect.catchTags({
-        HostedTurnUnavailable: () => Effect.succeed(Option.none()),
-        ModelUnavailable: () => Effect.succeed(Option.none()),
+        HostedTurnUnavailable: () => Effect.succeedNone,
+        ModelUnavailable: () => Effect.succeedNone,
       })
     );
   return { deliveryCount: Option.isSome(reply) ? 1 : 0, reply };

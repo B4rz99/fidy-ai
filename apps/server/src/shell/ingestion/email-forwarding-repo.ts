@@ -730,15 +730,13 @@ export const findForwardedEmailInterpretationInScope = Effect.fn(
     `,
   })(context).pipe(Effect.orDie);
   return yield* Option.match(row, {
-    onNone: () => Effect.succeed(Option.none<ForwardedEmailInterpretation>()),
+    onNone: (): Effect.Effect<Option.Option<ForwardedEmailInterpretation>> => Effect.succeedNone,
     onSome: (value) =>
       value.outcome === "needs-review"
-        ? Effect.succeed(
-            Option.some({
-              _tag: "NeedsReview" as const,
-              reason: Option.getOrThrow(value.reviewReason),
-            })
-          )
+        ? Effect.succeedSome({
+            _tag: "NeedsReview" as const,
+            reason: Option.getOrThrow(value.reviewReason),
+          })
         : Effect.all({
             extraction: Schema.decodeUnknownEffect(TransactionExtraction)(
               Option.getOrThrow(value.extraction)

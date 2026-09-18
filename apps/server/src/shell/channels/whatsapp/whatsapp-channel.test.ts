@@ -1545,7 +1545,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           captureFailure: () => Effect.void,
           addBreadcrumb: () => Effect.void,
           recordModelUsage: () => Effect.void,
-          captureDurableContext: Effect.succeed(Option.none()),
+          captureDurableContext: Effect.succeedNone,
           isActiveSpan: () => Effect.succeed(false),
         });
 
@@ -1571,7 +1571,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           captureFailure: () => Ref.update(captures, (count) => count + 1),
           addBreadcrumb: () => Effect.void,
           recordModelUsage: () => Effect.void,
-          captureDurableContext: Effect.succeed(Option.none()),
+          captureDurableContext: Effect.succeedNone,
           isActiveSpan: () => Effect.succeed(false),
         });
         const attempts = yield* Ref.make(0);
@@ -1608,7 +1608,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           captureFailure: () => Ref.update(captures, (count) => count + 1),
           addBreadcrumb: () => Effect.void,
           recordModelUsage: () => Effect.void,
-          captureDurableContext: Effect.succeed(Option.none()),
+          captureDurableContext: Effect.succeedNone,
           isActiveSpan: () => Effect.succeed(false),
         });
         const attempts = yield* Ref.make(0);
@@ -1655,7 +1655,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ),
           addBreadcrumb: () => Effect.void,
           recordModelUsage: () => Effect.void,
-          captureDurableContext: Effect.succeed(Option.none()),
+          captureDurableContext: Effect.succeedNone,
           isActiveSpan: () => Effect.succeed(false),
         });
         const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
@@ -1702,7 +1702,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           captureFailure: () => Ref.update(captures, (count) => count + 1),
           addBreadcrumb: () => Effect.void,
           recordModelUsage: () => Effect.void,
-          captureDurableContext: Effect.succeed(Option.none()),
+          captureDurableContext: Effect.succeedNone,
           isActiveSpan: () => Effect.succeed(false),
         });
         const attempts = yield* Ref.make(0);

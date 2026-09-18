@@ -1,3 +1,5 @@
+// Node crypto is the focused synchronous digest implementation for this deterministic fixture.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Crypto, Effect, Schema } from "effect";

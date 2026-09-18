@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { Effect, Schema } from "effect";
+import { Crypto, Effect, Encoding, Schema } from "effect";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
@@ -58,11 +57,13 @@ export const consentDisclosureEvidenceQueue = makePersistedQueue({
 const queueKeyHexLength = 32;
 
 /** Bounded deterministic native queue key; source identifiers remain in the payload only. */
-export const disclosureEvidenceQueueId = (input: DisclosureRevision): string =>
-  createHash("sha256")
-    .update(`${input.attemptId}/${input.evidenceRevision}`)
-    .digest("hex")
-    .slice(0, queueKeyHexLength);
+export const disclosureEvidenceQueueId = Effect.fn(function* (input: DisclosureRevision) {
+  const crypto = yield* Crypto.Crypto;
+  const digest = yield* crypto
+    .digest("SHA-256", new TextEncoder().encode(`${input.attemptId}/${input.evidenceRevision}`))
+    .pipe(Effect.orDie);
+  return Encoding.encodeHex(digest).slice(0, queueKeyHexLength);
+});
 
 /** Stable DurableDeferred identity for one effective evidence revision. */
 export const disclosureEvidenceDeferredName = (input: DisclosureRevision): string =>

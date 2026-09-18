@@ -148,7 +148,7 @@ const startSafely = (
           )
         )
     ),
-    () => Effect.succeed(Option.none())
+    () => Effect.succeedNone
   );
 
 const activeSpanKey = (traceId: string, spanId: string): string => `${traceId}:${spanId}`;
@@ -185,7 +185,7 @@ const decodeFreshContext = (
           now - context.capturedAtUnixMilliseconds <= durableContextLifetimeMilliseconds
       )
     ),
-    () => Effect.succeed(Option.none())
+    () => Effect.succeedNone
   );
 
 /**
@@ -230,7 +230,7 @@ const durableContextOf = (
   span: Option.Option<TelemetrySpan>
 ): Effect.Effect<Option.Option<DurableTraceContext>> =>
   Option.match(span, {
-    onNone: () => Effect.succeed(Option.none()),
+    onNone: () => Effect.succeedNone,
     onSome: (active) =>
       Effect.map(Clock.currentTimeMillis, (capturedAtUnixMilliseconds) =>
         Option.some(

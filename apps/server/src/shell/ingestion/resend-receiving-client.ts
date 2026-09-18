@@ -109,10 +109,10 @@ type ResendRetrievalDeadline = <A>(
 
 const withResendRetrievalDeadline: ResendRetrievalDeadline = (retrieval) =>
   retrieval.pipe(
-    Effect.timeout(forwardedEmailRetrievalDeadline),
-    Effect.catchTag("TimeoutError", () =>
-      Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" }))
-    )
+    Effect.timeoutOrElse({
+      duration: forwardedEmailRetrievalDeadline,
+      orElse: () => Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" })),
+    })
   );
 
 const inlineMediaTypes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);

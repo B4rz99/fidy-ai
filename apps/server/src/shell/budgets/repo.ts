@@ -78,7 +78,7 @@ export const findBudgetInScope = Effect.fn("findBudgetInScope")(function* (
     `,
   })({ userId, budgetId }).pipe(Effect.orDie);
   return yield* Option.match(row, {
-    onNone: () => Effect.succeed(Option.none()),
+    onNone: () => Effect.succeedNone,
     onSome: (found) => budgetFromRow(found).pipe(Effect.asSome, Effect.orDie),
   });
 });
@@ -138,7 +138,7 @@ export const updateBudgetInScope = Effect.fn("updateBudgetInScope")(function* (
     `,
   })({ ...writeBudget(userId, input), budgetId }).pipe(Effect.orDie);
   return yield* Option.match(row, {
-    onNone: () => Effect.succeed(Option.none()),
+    onNone: () => Effect.succeedNone,
     onSome: (found) => budgetFromRow(found).pipe(Effect.asSome, Effect.orDie),
   });
 });

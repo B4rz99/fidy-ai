@@ -1,3 +1,5 @@
+// Node crypto is required because Effect Crypto does not expose constant-time comparison.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { timingSafeEqual } from "node:crypto";
 import { Crypto, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";

@@ -235,8 +235,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(Result.isFailure(rollback)).toBe(true);
         expect(yield* findConsentDisclosureDeliveryState(payload.exchangeId)).toEqual(before);
         const sql = yield* SqlClient.SqlClient;
+        const queueId = yield* disclosureEvidenceQueueId(correlated);
         expect(
-          yield* sql`SELECT id FROM fidy_queue WHERE queue_name = 'whatsapp-consent-disclosure-evidence' AND id = ${disclosureEvidenceQueueId(correlated)}`
+          yield* sql`SELECT id FROM fidy_queue WHERE queue_name = 'whatsapp-consent-disclosure-evidence' AND id = ${queueId}`
         ).toEqual([]);
         expect(
           yield* Effect.tryPromise(() =>

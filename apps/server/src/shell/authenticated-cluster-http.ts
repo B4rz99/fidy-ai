@@ -1,3 +1,5 @@
+// Node crypto is required because Effect Crypto does not expose constant-time comparison.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { timingSafeEqual } from "node:crypto";
 import { BunClusterHttp, BunCrypto } from "@effect/platform-bun";
 import { type Duration, Effect, Layer, Option } from "effect";

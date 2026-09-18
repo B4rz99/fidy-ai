@@ -113,7 +113,7 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
   })({ ...writeRow(userId, write), transactionId }).pipe(
     Effect.flatMap(
       Option.match({
-        onNone: () => Effect.succeed(Option.none()),
+        onNone: () => Effect.succeedNone,
         onSome: (row) => transactionFromRow(row).pipe(Effect.asSome),
       })
     ),

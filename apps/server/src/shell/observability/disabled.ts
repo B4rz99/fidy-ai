@@ -1,10 +1,10 @@
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { Telemetry, type TelemetryResource, makeTelemetryService } from "./telemetry";
 
 /** The disabled resource constructs no SDK client or transport and performs no shutdown work. */
 export const DisabledTelemetryResource: TelemetryResource = {
   adapter: {
-    startSpan: () => Effect.succeed(Option.none()),
+    startSpan: () => Effect.succeedNone,
     finishSpan: () => Effect.void,
     recordOutcome: () => Effect.void,
     recordResponseStatus: () => Effect.void,

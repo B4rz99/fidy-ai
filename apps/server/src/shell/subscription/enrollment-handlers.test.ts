@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+// Node crypto keeps this focused provider-signature fixture synchronous and independent.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash } from "node:crypto";
 import { expect, layer } from "@effect/vitest";
 import {

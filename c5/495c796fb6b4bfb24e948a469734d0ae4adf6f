@@ -13,6 +13,7 @@ apps/server/src/shell/observability/sentry-account-reader.ts
 apps/server/src/shell/outbound-http/contract.ts
   s_9466f16d22ab04::t_bb7ecdd3afc728 1,19-23
   s_9466f16d22ab04::t_db36420d7ac4ba 41,46-47,49-51,54-56,59-60
+  s_9466f16d22ab04::t_7cc02dc6252f29 5,12,24,31,40
 apps/server/scripts/verify-sentry-account.ts
   s_9466f16d22ab04::t_e7688050758847 6,28-31
 apps/server/scripts/support-recovery.ts

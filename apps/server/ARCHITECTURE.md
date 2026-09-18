@@ -175,9 +175,11 @@ identity. Additive payload changes use backward-readable defaults or unions. Que
 custom ids stay inside Effect's `VARCHAR(100)`/`VARCHAR(36)` bounds, and an incompatible payload
 change requires a named new queue or an explicit drain/migration plan recorded with its fixture.
 
-Application queues are declared only through `shell/persisted-queue/operations.ts`; raw persistence
-Layer assembly remains isolated in `shell/_shared/persisted-queue-storage.ts`. Those boundaries keep
-Effect's queue and raw `take` private: producers receive only `offer`, while `handleNext` requires
+Application queues are declared only through `shell/persisted-queue/operations.ts`; its private
+constructor and raw persistence Layer assembly remain under `shell/persisted-queue/internal/`.
+`shell/persisted-queue/runtime.ts` publishes SQL and volatile compositions typed only as the
+application queue requirement. Those boundaries keep Effect's factory, queue, and raw `take`
+private: producers receive only `offer`, while `handleNext` requires
 exhaustive failure classification and idempotent terminal settlement before applying the closed
 redaction, defect-observation, and interruption contract. Every defect emits a metadata-only log,
 and configured telemetry captures it additionally, so disabled telemetry cannot silence observation.

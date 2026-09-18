@@ -22,7 +22,6 @@ import {
 } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import type { PgClient } from "@effect/sql-pg/PgClient";
-import { type PersistedQueue } from "effect/unstable/persistence";
 import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
 import { type WorkflowEngine } from "effect/unstable/workflow";
 import {
@@ -49,6 +48,7 @@ import { FidyApi } from "~/shell/api";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";
 import type { AtomicBatchRejected } from "~/shell/operations/operations";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/persisted-queue/contract";
 import { WompiTransactionId } from "~/core/subscription/model";
 import { BillingAttemptWorkerLive } from "~/shell/subscription/billing-attempt-execution";
 import {
@@ -71,7 +71,7 @@ import {
   MigratorLive,
   PgLive,
 } from "./database-harness";
-import { SqlQueueHarness, makeSqlQueueHarness } from "./durable-execution";
+import { SqlQueueHarness, makeSqlQueueHarness } from "./durable-execution-harness";
 import {
   MessageStorage,
   RunnerStorage,
@@ -334,7 +334,7 @@ type SupportAccessApiHarnessOutput =
   | KapsoClient
   | MigrationSqlClient
   | PgClient
-  | PersistedQueue.PersistedQueueFactory
+  | ApplicationPersistedQueueRequirement
   | WorkflowEngine.WorkflowEngine
   | WompiEnrollmentClient
   | WompiBillingClient

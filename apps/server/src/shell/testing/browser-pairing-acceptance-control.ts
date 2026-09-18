@@ -8,7 +8,7 @@ import { categoryIds } from "~/core/categories/taxonomy";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient, MigrationSqlClientLive, PgLive } from "./database-harness";
-import { SqlQueueHarness } from "./durable-execution";
+import { SqlQueueHarness } from "./durable-execution-harness";
 import { BrowserPairingEmailWorkflowLive } from "~/shell/email-authentication/authentication-delivery-worker";
 import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";

@@ -3,10 +3,10 @@ import { TestRunner } from "effect/unstable/cluster";
 import { WorkflowEngine } from "effect/unstable/workflow";
 import type { ClusterReadiness } from "~/shell/cluster-readiness";
 import { ClusterReadinessVolatile } from "~/shell/cluster-readiness";
-import { SqlPersistedQueueLive } from "~/shell/durable-execution";
+import { PersistedQueueSqlLive } from "~/shell/persisted-queue/runtime";
 
 const SqlQueueBase = Layer.mergeAll(
-  SqlPersistedQueueLive,
+  PersistedQueueSqlLive,
   WorkflowEngine.layerMemory,
   TestRunner.layer
 );

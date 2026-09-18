@@ -121,8 +121,8 @@ const startQueueFailureFixture = Effect.fn(function* () {
 const admit = Effect.fn(function* () {
   const sql = yield* MigrationSqlClient;
   const pairing = yield* requestStart();
-  const queue = yield* pairingStartQueue;
-  yield* queue.take(processPairingStartQueueItem, pairingQueueHandlerPolicy).pipe(
+  const queue = pairingStartQueue;
+  yield* queue.handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy).pipe(
     // This focused helper owns disabled telemetry for the sanitized consumer boundary.
     // @effect-diagnostics-next-line strictEffectProvide:off
     Effect.provide(TelemetryDisabled)
@@ -454,8 +454,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             24642,
             EmailDeliveryPort.of({ send: () => Effect.void })
           );
-          const queue = yield* pairingDeliveryQueue;
-          yield* queue.take(
+          const queue = pairingDeliveryQueue;
+          yield* queue.handleNext(
             (input) =>
               Effect.tryPromise(
                 runtime.runPromise.bind(
@@ -493,9 +493,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             24646,
             EmailDeliveryPort.of({ send: () => Effect.die("expiry must not send") })
           );
-          const queue = yield* pairingExpiryQueue;
+          const queue = pairingExpiryQueue;
           const observedExpiry = yield* Ref.make(Option.none<PairingExpiryPayload>());
-          yield* queue.take(
+          yield* queue.handleNext(
             (input) =>
               Effect.tryPromise(
                 runtime.runPromise.bind(
@@ -609,8 +609,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         CREATE TRIGGER fidy_test_pairing_start_retry BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_retry()`;
         const exit = yield* Effect.exit(
-          (yield* pairingStartQueue)
-            .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+          pairingStartQueue
+            .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
             .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
         ).pipe(
           Effect.ensuring(
@@ -658,8 +658,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         CREATE TRIGGER fidy_test_pairing_start_defect BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_defect()`;
         const exit = yield* Effect.exit(
-          (yield* pairingStartQueue)
-            .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+          pairingStartQueue
+            .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
             .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
         ).pipe(
           Effect.ensuring(
@@ -701,8 +701,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
         yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
-        const delivery = yield* pairingDeliveryQueue;
-        const expiry = yield* pairingExpiryQueue;
+        const delivery = pairingDeliveryQueue;
+        const expiry = pairingExpiryQueue;
         const deliveryPayload = PairingDeliveryPayload.make({
           revision: 1,
           userId,
@@ -733,8 +733,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const exits = yield* Effect.all(
           [
-            Effect.exit(delivery.take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)),
-            Effect.exit(expiry.take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)),
+            Effect.exit(
+              delivery.handleNext(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+            ),
+            Effect.exit(
+              expiry.handleNext(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
+            ),
           ],
           { concurrency: 1 }
         ).pipe(
@@ -799,8 +803,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         CREATE TRIGGER fidy_test_pairing_start_pause BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_pause()`;
         yield* Effect.gen(function* () {
-          const fiber = yield* (yield* pairingStartQueue)
-            .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+          const fiber = yield* pairingStartQueue
+            .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
             .pipe(
               // The test owns the disabled telemetry lifetime around the interrupted consumer.
               // @effect-diagnostics-next-line strictEffectProvide:off
@@ -827,9 +831,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
         yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
-        const start = yield* pairingStartQueue;
-        const delivery = yield* pairingDeliveryQueue;
-        const expiry = yield* pairingExpiryQueue;
+        const start = pairingStartQueue;
+        const delivery = pairingDeliveryQueue;
+        const expiry = pairingExpiryQueue;
         const startPayload = {
           revision: 1 as const,
           requestId: BrowserPairingEmailStartRequestId.make("f1d1a000-0000-4000-8000-000000000465"),
@@ -850,9 +854,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         yield* Effect.all(
           [
-            start.take(processPairingStartQueueItem, pairingQueueHandlerPolicy),
-            delivery.take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy),
-            expiry.take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy),
+            start.handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy),
+            delivery.handleNext(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy),
+            expiry.handleNext(processPairingExpiryQueueItem, pairingQueueHandlerPolicy),
           ],
           { concurrency: 1 }
         ).pipe(

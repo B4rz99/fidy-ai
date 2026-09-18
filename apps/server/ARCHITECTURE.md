@@ -175,17 +175,17 @@ identity. Additive payload changes use backward-readable defaults or unions. Que
 custom ids stay inside Effect's `VARCHAR(100)`/`VARCHAR(36)` bounds, and an incompatible payload
 change requires a named new queue or an explicit drain/migration plan recorded with its fixture.
 
-Application queues are created only through `shell/_shared/persisted-queue.ts`; raw persistence
-Layer assembly is isolated in `shell/_shared/persisted-queue-storage.ts`. Those boundaries keep
-Effect's queue and raw `take` private: producers receive `offer`, while every take requires exhaustive
-failure classification and idempotent terminal settlement before applying the closed redaction,
-defect-observation, and interruption contract. Every defect emits a metadata-only log, and
-configured telemetry captures it additionally, so disabled telemetry cannot silence observation.
-Each construction carries an immutable protocol definition containing its exact queue name and
-schema. Compatibility evidence derives both values from that definition instead of restating them,
-while the yielded runtime handle still exposes only `offer` and safe `take`. Construction also
-registers each validated queue identity for complete process-local health coverage; this set is
-derived by the constructor rather than maintained as a separate catalog.
+Application queues are declared only through `shell/persisted-queue/operations.ts`; raw persistence
+Layer assembly remains isolated in `shell/_shared/persisted-queue-storage.ts`. Those boundaries keep
+Effect's queue and raw `take` private: producers receive only `offer`, while `handleNext` requires
+exhaustive failure classification and idempotent terminal settlement before applying the closed
+redaction, defect-observation, and interruption contract. Every defect emits a metadata-only log,
+and configured telemetry captures it additionally, so disabled telemetry cannot silence observation.
+Each declaration carries an immutable protocol definition containing its exact queue name and schema.
+Compatibility evidence derives both values from that definition instead of restating them, while the
+runtime construction remains private. Declaration also registers each validated queue identity for
+complete process-local health coverage; this set is derived rather than maintained as a separate
+catalog.
 
 **Review-only queue boundary:** production code may access raw Effect persistence only in the
 constructor and storage adapters. Queue adapter, storage, compatibility, and health tests may import
@@ -193,7 +193,7 @@ it to exercise the seam; the crash harness may import it to prove process-loss b
 `ApplicationPersistedQueueRequirement` is only a type-level name for an Effect requirement: it does
 not export the raw Context service identifier or grant construction access. Reviewers must reject raw
 imports, re-exports, dynamic imports, aliases, or factory service access in other production modules.
-Every new `makePersistedQueue` declaration must add one colocated compatibility contract and oldest
+Every new `declarePersistedQueue` declaration must add one colocated compatibility contract and oldest
 readable fixture. This is deliberately review-only: local static alias or source scanning cannot
 prove the complete JavaScript module graph and must not be presented as exhaustive enforcement.
 Decode failures consume attempts; exhausted work follows the owning queue's reviewed retirement

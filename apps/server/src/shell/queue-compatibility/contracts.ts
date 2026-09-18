@@ -1,5 +1,5 @@
 import type { Schema } from "effect";
-import type { ApplicationPersistedQueueDefinition } from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueDefinition } from "~/shell/persisted-queue/contract";
 import {
   DurableQueueName,
   type DurableQueueName as DurableQueueNameType,

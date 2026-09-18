@@ -8,7 +8,7 @@ import {
   EmailDeliveryIntentId,
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
-import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 import { durableQueueTableName } from "~/shell/durable-queue-policy";
 
 /** Stable queue names are deployment contracts shared with in-flight handoffs. */
@@ -22,7 +22,7 @@ export const PairingStartPayload = Schema.Struct({
   requestId: BrowserPairingEmailStartRequestId,
 }).annotate({ identifier: "PairingStartPayload" });
 export type PairingStartPayload = typeof PairingStartPayload.Type;
-export const pairingStartQueue = makePersistedQueue({
+export const pairingStartQueue = declarePersistedQueue({
   name: pairingStartQueueName,
   schema: PairingStartPayload,
   descriptor: {
@@ -56,7 +56,7 @@ export const BrowserPairingEmailDeliveryWorkflow = Workflow.make("BrowserPairing
   success: PairingDeliveryResult,
   idempotencyKey: ({ userId, intentId }) => `${userId}/${intentId}`,
 });
-export const pairingDeliveryQueue = makePersistedQueue({
+export const pairingDeliveryQueue = declarePersistedQueue({
   name: pairingDeliveryQueueName,
   schema: PairingDeliveryPayload,
   descriptor: {
@@ -76,7 +76,7 @@ export const BrowserPairingEmailExpiryWorkflow = Workflow.make("BrowserPairingEm
   payload: PairingExpiryPayload,
   idempotencyKey: ({ userId, workflowId }) => `${userId}/${workflowId}`,
 });
-export const pairingExpiryQueue = makePersistedQueue({
+export const pairingExpiryQueue = declarePersistedQueue({
   name: pairingExpiryQueueName,
   schema: PairingExpiryPayload,
   descriptor: {
@@ -127,7 +127,7 @@ export const publishPairingStart = Effect.fn(function* (request: {
   expiresAt: DateTime.Utc;
 }) {
   const sql = yield* SqlClient.SqlClient;
-  const queue = yield* pairingStartQueue;
+  const queue = pairingStartQueue;
   yield* sql
     .withTransaction(
       Effect.gen(function* () {
@@ -150,10 +150,10 @@ export const publishPairingStart = Effect.fn(function* (request: {
 
 /** Publication shares the caller's SqlClient transaction with the admitted domain transition. */
 export const publishPairingDelivery = Effect.fn(function* (payload: PairingDeliveryPayload) {
-  const queue = yield* pairingDeliveryQueue;
+  const queue = pairingDeliveryQueue;
   yield* queue.offer(payload, { id: pairingDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
 export const publishPairingExpiry = Effect.fn(function* (payload: PairingExpiryPayload) {
-  const queue = yield* pairingExpiryQueue;
+  const queue = pairingExpiryQueue;
   yield* queue.offer(payload, { id: pairingExpiryQueueId(payload) }).pipe(Effect.orDie);
 });

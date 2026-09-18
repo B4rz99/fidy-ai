@@ -21,11 +21,11 @@ import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/canonical-operations/contract";
-import {
-  type ApplicationPersistedQueueProvider,
-  type ApplicationPersistedQueueRequirement,
-  applicationPersistedQueueProvider,
-} from "~/shell/_shared/persisted-queue";
+import type {
+  ApplicationPersistedQueueProvider,
+  ApplicationPersistedQueueRequirement,
+} from "~/shell/persisted-queue/contract";
+import { applicationPersistedQueueProvider } from "~/shell/persisted-queue/operations";
 import { Entity } from "effect/unstable/cluster";
 import { RpcClientError } from "effect/unstable/rpc";
 import { AgentReply, type InboundMessage } from "./message";

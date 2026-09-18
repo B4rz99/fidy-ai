@@ -88,7 +88,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             const expectedCount = mode === "production-full" ? 103 : 0;
             if (mode === "production-full") {
               const first = Option.getOrThrow(Option.fromUndefinedOr(fixtures[0]));
-              const queue = yield* forwardedEmailWorkflowQueue;
+              const queue = forwardedEmailWorkflowQueue;
               yield* queue.offer(
                 { userId: first.userId, receivedEmailId: first.receivedEmailId, revision: 1 },
                 { id: "wrong-forwarded-email-queue-identity" }

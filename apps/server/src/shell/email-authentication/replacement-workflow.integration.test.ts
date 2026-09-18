@@ -145,8 +145,8 @@ type ReplacementRuntime = ManagedRuntime.ManagedRuntime<
 >;
 
 const submitDelivery = Effect.fn(function* (runtime: ReplacementRuntime) {
-  const queue = yield* replacementDeliveryQueue;
-  yield* queue.take(
+  const queue = replacementDeliveryQueue;
+  yield* queue.handleNext(
     (payload) =>
       classifyReplacementQueueFailure(
         Effect.tryPromise(() =>
@@ -158,8 +158,8 @@ const submitDelivery = Effect.fn(function* (runtime: ReplacementRuntime) {
 });
 
 const submitExpiry = Effect.fn(function* (runtime: ReplacementRuntime) {
-  const queue = yield* replacementExpiryQueue;
-  yield* queue.take(
+  const queue = replacementExpiryQueue;
+  yield* queue.handleNext(
     (payload) =>
       classifyReplacementQueueFailure(
         Effect.tryPromise(() =>
@@ -218,10 +218,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
               operation: forbidden.join(" "),
             }),
           });
-          const queue = yield* replacementDeliveryQueue;
+          const queue = replacementDeliveryQueue;
 
           const transientExit = yield* Effect.exit(
-            queue.take(
+            queue.handleNext(
               () => classifyReplacementQueueFailure(Effect.die(databaseFailure)),
               replacementQueueHandlerPolicy
             )
@@ -238,7 +238,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           expect(yield* recorder.serializedEnvelopes).toEqual([]);
 
           const defectExit = yield* Effect.exit(
-            queue.take(
+            queue.handleNext(
               () =>
                 classifyReplacementQueueFailure(
                   Effect.die(Object.assign(new Error(forbidden.join(" ")), { secret }))
@@ -280,10 +280,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const sql = yield* MigrationSqlClient;
         yield* sql`DELETE FROM fidy_durable.fidy_queue
           WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
-        const queue = yield* replacementDeliveryQueue;
+        const queue = replacementDeliveryQueue;
 
         const exit = yield* Effect.exit(
-          queue.take(
+          queue.handleNext(
             () => classifyReplacementQueueFailure(Effect.failCause(Cause.interrupt(42))),
             replacementQueueHandlerPolicy
           )
@@ -312,8 +312,8 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
             expires_at = now() - interval '1 second'
           WHERE id = ${expiry.workflowId}`;
 
-        const queue = yield* replacementExpiryQueue;
-        yield* queue.take(
+        const queue = replacementExpiryQueue;
+        yield* queue.handleNext(
           (payload) => classifyReplacementQueueFailure(expireReplacement(payload)),
           replacementQueueHandlerPolicy
         );
@@ -348,8 +348,8 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* sql`UPDATE fidy_durable.fidy_queue SET element = ${historicalPayload}
           WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
 
-        const queue = yield* replacementDeliveryQueue;
-        yield* queue.take(
+        const queue = replacementDeliveryQueue;
+        yield* queue.handleNext(
           (payload) =>
             classifyReplacementQueueFailure(
               performReplacementAttempt(payload, 1).pipe(
@@ -775,8 +775,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* sql`SELECT id FROM email_replacement_executions WHERE id = ${delivery.intentId}`
           ).toHaveLength(1);
-          const queue = yield* replacementDeliveryQueue;
-          yield* queue.take(() => Effect.void, replacementQueueHandlerPolicy);
+          const queue = replacementDeliveryQueue;
+          yield* queue.handleNext(() => Effect.void, replacementQueueHandlerPolicy);
           yield* Effect.tryPromise(() =>
             runtime.runPromise(removeExpiredReplacementExecutions(batch.nextCursor))
           );

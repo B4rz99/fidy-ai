@@ -57,7 +57,7 @@ const offerQueueWork = Effect.fn("Test.offerWhatsAppWorkerQueueWork")(function* 
 ) {
   yield* cleanQueue();
   yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
-  const queue = yield* whatsappInboundQueue;
+  const queue = whatsappInboundQueue;
   yield* queue.offer(item, { id: item.inboundJobId });
 });
 

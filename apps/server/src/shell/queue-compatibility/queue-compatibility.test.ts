@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { applicationPersistedQueueNames } from "~/shell/_shared/persisted-queue";
+import { applicationPersistedQueueNames } from "~/shell/persisted-queue/operations";
 import { DisclosureDeliveryAttemptId } from "~/shell/channels/whatsapp/disclosure-model";
 import { disclosureEvidenceQueueId } from "~/shell/channels/whatsapp/disclosure-workflow";
 import { forwardedEmailQueueId } from "~/shell/ingestion/forwarded-email-execution";

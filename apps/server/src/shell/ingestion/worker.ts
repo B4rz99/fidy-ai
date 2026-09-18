@@ -25,11 +25,11 @@ import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/refer
 import { UserId } from "~/core/identity/reference";
 import { TransactionExtraction } from "~/core/transactions/model";
 import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
-import {
-  type ApplicationPersistedQueueHandlerPolicy,
-  makePersistedQueue,
-} from "~/shell/_shared/persisted-queue";
-import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
+import type {
+  ApplicationPersistedQueueHandlerPolicy,
+  PersistedQueueFailureDisposition,
+} from "~/shell/persisted-queue/contract";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 import { withUserTransaction } from "~/shell/database/operations";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
@@ -100,7 +100,7 @@ const statementHandlerDescriptor = {
 
 export const statementIngestionQueueName = "statement-ingestion";
 export const maximumStatementIngestionAttempts = 3;
-export const statementIngestionQueue = makePersistedQueue({
+export const statementIngestionQueue = declarePersistedQueue({
   name: statementIngestionQueueName,
   schema: StatementIngestionPayload,
   descriptor: statementHandlerDescriptor,
@@ -382,7 +382,7 @@ export const publishStatementIngestion = Effect.fn("StatementIngestion.publish")
   userId: UserId,
   submissionId: StatementSubmissionId
 ) {
-  const queue = yield* statementIngestionQueue;
+  const queue = statementIngestionQueue;
   const payload = { userId, submissionId, revision: 1 } as const;
   yield* queue.offer(payload, { id: statementIngestionQueueId(payload) }).pipe(Effect.orDie);
 });
@@ -395,10 +395,10 @@ const observeStatementOutcome =
 /** Processes one submission; skips absent items and returns false on retry, stale routing, or timeout. */
 export const processNextStatement = Effect.fn("processNextStatement")(function* () {
   yield* expireStatementIngestion();
-  const queue = yield* statementIngestionQueue;
+  const queue = statementIngestionQueue;
   const takeCurrent = Effect.gen(function* () {
     const outcome = yield* Ref.make<StatementQueueOutcome>("stale");
-    yield* queue.take(
+    yield* queue.handleNext(
       (payload, { id, attempts }) =>
         processQueuedWork({
           queueId: id,
@@ -424,7 +424,7 @@ export const processNextStatement = Effect.fn("processNextStatement")(function* 
 const publishQueuedPage = Effect.fn("StatementIngestion.publishPage")(function* (
   cursor: Option.Option<QueuedSubmissionCursor>
 ) {
-  const queue = yield* statementIngestionQueue;
+  const queue = statementIngestionQueue;
   const pending = yield* findQueuedStatementSubmissions(cursor);
   yield* Effect.forEach(
     pending,
@@ -464,9 +464,9 @@ const continueQueuedRecovery = Effect.fn("StatementIngestion.continueRecovery")(
 });
 
 const consumeStatementQueue = Effect.gen(function* () {
-  const queue = yield* statementIngestionQueue;
+  const queue = statementIngestionQueue;
   return yield* queue
-    .take(
+    .handleNext(
       (payload, { id, attempts }) =>
         processQueuedWork({
           queueId: id,

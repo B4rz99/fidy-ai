@@ -140,7 +140,7 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
               ${intentId}, ${enrollmentId}, 1, 'incomplete@example.com', 'pending',
               'f1d1a000-0000-4000-8000-000000000868', ${createdAt}
             )`;
-            const queue = yield* onboardingEmailDeliveryQueue;
+            const queue = onboardingEmailDeliveryQueue;
             yield* queue.offer({ intentId, revision: 1 }, { id: intentId });
           })
         );

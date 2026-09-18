@@ -54,14 +54,14 @@ it.effect("keeps the runtime-decoded persisted payload identifier-only and bound
 layer(DurableExecutionMemory)("native onboarding delivery queue", (it) => {
   it.effect("converges duplicate publication identities on one native queue item", () =>
     Effect.gen(function* () {
-      const queue = yield* onboardingEmailDeliveryQueue;
+      const queue = onboardingEmailDeliveryQueue;
       yield* queue.offer({ intentId, revision: 1 }, { id: intentId });
       yield* queue.offer({ intentId, revision: 1 }, { id: intentId });
 
       const deliveries = yield* Ref.make(0);
-      yield* queue.take(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy);
+      yield* queue.handleNext(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy);
       const duplicateFiber = yield* queue
-        .take(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy)
+        .handleNext(() => recordDelivery(deliveries), onboardingQueueHandlerPolicy)
         .pipe(Effect.timeoutOption("10 millis"), Effect.forkChild);
       yield* TestClock.adjust("20 millis");
       const duplicate = yield* Fiber.join(duplicateFiber);

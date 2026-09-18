@@ -376,7 +376,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
         const sql = yield* MigrationSqlClient;
         yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const staleId = StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000e003");
-        const queue = yield* statementIngestionQueue;
+        const queue = statementIngestionQueue;
         yield* queue.offer(
           { submissionId: staleId, userId: defaultUserId, revision: 1 },
           { id: staleId }

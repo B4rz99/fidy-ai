@@ -122,11 +122,11 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
         yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000550");
         const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000551");
-        const startQueue = yield* consentDisclosureQueue;
+        const startQueue = consentDisclosureQueue;
         yield* startQueue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
         yield* startNextConsentDisclosure();
 
-        const evidenceQueue = yield* consentDisclosureEvidenceQueue;
+        const evidenceQueue = consentDisclosureEvidenceQueue;
         yield* evidenceQueue.offer(
           { revision: 1, exchangeId, attemptId, evidenceRevision: 1 },
           { id: "5a110000-0000-4000-8000-000000000552" }
@@ -163,7 +163,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
       Effect.gen(function* () {
         yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000555");
-        const queue = yield* consentDisclosureQueue;
+        const queue = consentDisclosureQueue;
         yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
         const recorder = yield* EnvelopeRecorder;
         const testConsole = yield* TestConsole.make;
@@ -180,7 +180,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
         const exit = yield* Effect.exit(
           queue
-            .take(
+            .handleNext(
               () => Effect.die(new Error(protectedValues.join(" "))),
               disclosureQueueHandlerPolicy
             )
@@ -213,11 +213,11 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
         Effect.gen(function* () {
           yield* isolateDisclosureQueues();
           const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000556");
-          const queue = yield* consentDisclosureQueue;
+          const queue = consentDisclosureQueue;
           yield* queue.offer({ exchangeId, revision: 1 }, { id: exchangeId });
 
           const exit = yield* Effect.exit(
-            queue.take(() => Effect.interrupt, disclosureQueueHandlerPolicy)
+            queue.handleNext(() => Effect.interrupt, disclosureQueueHandlerPolicy)
           );
           expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
           const admin = yield* MigrationSqlClient;
@@ -239,7 +239,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
         yield* isolateDisclosureQueues();
         const exchangeId = PendingConsentExchangeId.make("5a110000-0000-4000-8000-000000000557");
         const attemptId = DisclosureDeliveryAttemptId.make("5a110000-0000-4000-8000-000000000558");
-        const queue = yield* consentDisclosureEvidenceQueue;
+        const queue = consentDisclosureEvidenceQueue;
         yield* queue.offer(
           { revision: 1, exchangeId, attemptId, evidenceRevision: 7 },
           { id: "5a110000-0000-4000-8000-000000000559" }
@@ -258,7 +258,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
         yield* Effect.exit(
           queue
-            .take(
+            .handleNext(
               () => Effect.die(new Error(protectedValues.join(" "))),
               disclosureQueueHandlerPolicy
             )

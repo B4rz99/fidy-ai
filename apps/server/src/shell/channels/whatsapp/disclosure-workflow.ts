@@ -1,7 +1,7 @@
 import { Crypto, Effect, Encoding, Schema } from "effect";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 import { DisclosureDeliveryAttemptId, type DisclosureRevision } from "./disclosure-model";
 
 /** Identifier-only pre-User work. No User exists before verified onboarding completes. */
@@ -37,7 +37,7 @@ export const consentDisclosureQueueName = "whatsapp-consent-disclosure";
 export const consentDisclosureEvidenceQueueName = "whatsapp-consent-disclosure-evidence";
 
 /** Transactional acceptance handoff using the shared SQL client; completion is not delivery evidence. */
-export const consentDisclosureQueue = makePersistedQueue({
+export const consentDisclosureQueue = declarePersistedQueue({
   name: consentDisclosureQueueName,
   schema: ConsentDisclosurePayload,
   descriptor: { component: "whatsapp", operation: "whatsapp.disclosureStart" },
@@ -48,7 +48,7 @@ export const consentDisclosureQueueId = (payload: ConsentDisclosurePayload): str
   payload.exchangeId;
 
 /** Identifier-only evidence handoff, committed with Consent facts and completed outside SQL locks. */
-export const consentDisclosureEvidenceQueue = makePersistedQueue({
+export const consentDisclosureEvidenceQueue = declarePersistedQueue({
   name: consentDisclosureEvidenceQueueName,
   schema: ConsentDisclosureEvidencePayload,
   descriptor: { component: "whatsapp", operation: "whatsapp.disclosureEvidence" },

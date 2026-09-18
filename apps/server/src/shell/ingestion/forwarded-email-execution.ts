@@ -2,7 +2,7 @@ import { Crypto, Effect, Encoding, Schema } from "effect";
 import { Workflow } from "effect/unstable/workflow";
 import { UserId } from "~/core/identity/reference";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 
 /** Identifier-only request retained for one accepted provider receipt. */
 export const ForwardedEmailWorkflowPayload = Schema.Struct({
@@ -29,7 +29,7 @@ export const forwardedEmailQueueName = "forwarded-email-ingestion";
 const durableQueueIdentityLength = 36;
 
 /** Identifier-only durable handoff decoded before any User-scoped execution. */
-export const forwardedEmailWorkflowQueue = makePersistedQueue({
+export const forwardedEmailWorkflowQueue = declarePersistedQueue({
   name: forwardedEmailQueueName,
   schema: ForwardedEmailWorkflowPayload,
   descriptor: { component: "resend", operation: "resend.forwardedEmailHandoff" },
@@ -52,7 +52,7 @@ export const publishForwardedEmailWorkflow = Effect.fn("ForwardedEmail.publish")
   userId: UserId,
   receivedEmailId: ResendReceivedEmailId
 ) {
-  const queue = yield* forwardedEmailWorkflowQueue;
+  const queue = forwardedEmailWorkflowQueue;
   const payload = { userId, receivedEmailId, revision: 1 as const };
   yield* queue.offer(payload, { id: yield* forwardedEmailQueueId(payload) }).pipe(Effect.orDie);
 });

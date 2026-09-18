@@ -24,9 +24,11 @@ import { Activity, DurableClock, type WorkflowEngine } from "effect/unstable/wor
 import type { UserId } from "~/core/identity/reference";
 import type { ForwardedEmailProviderFailureReason } from "~/core/ingestion/rules";
 import type { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
+import type {
+  ApplicationPersistedQueueHandlerPolicy,
+  PersistedQueueFailureDisposition,
+} from "~/shell/persisted-queue/contract";
 import { classifyClusterFailure, classifyRpcFailure } from "~/shell/_shared/rpc-client-failure";
-import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
 import { sleepUntil } from "~/shell/durable-execution-clock";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import {
@@ -641,12 +643,12 @@ const emailQueueHandler =
 /** Skips stale or malformed durable entries until one current receipt settles or the seam times out. */
 export const processNextCurrentForwardedEmail = Effect.fn("ForwardedEmail.processNextCurrent")(
   function* () {
-    const queue = yield* forwardedEmailWorkflowQueue;
+    const queue = forwardedEmailWorkflowQueue;
     let currentWorkSettled = false;
     const markWorkSettled = Effect.sync(() => {
       currentWorkSettled = true;
     });
-    const takeCurrent = queue.take(
+    const takeCurrent = queue.handleNext(
       emailQueueHandler("await-workflow-outcome", markWorkSettled),
       handoffPolicy(markWorkSettled)
     );
@@ -664,7 +666,7 @@ type RecoveryCursor = ResendReceivedEmailId;
 
 const publishRecoveredForwardedEmail = Effect.fn("ForwardedEmail.publishRecovered")(
   function* (input: { readonly userId: UserId; readonly receivedEmailId: ResendReceivedEmailId }) {
-    const queue = yield* forwardedEmailWorkflowQueue;
+    const queue = forwardedEmailWorkflowQueue;
     const payload = { ...input, revision: 1 as const };
     yield* queue.offer(payload, { id: yield* forwardedEmailQueueId(payload) }).pipe(Effect.orDie);
   }
@@ -675,7 +677,7 @@ export const ForwardedEmailQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
-    const queue = yield* forwardedEmailWorkflowQueue;
+    const queue = forwardedEmailWorkflowQueue;
     const publishPage = Effect.fn("ForwardedEmail.publishPage")(function* (
       cursor: Option.Option<RecoveryCursor>
     ) {
@@ -686,16 +688,18 @@ export const ForwardedEmailQueueLive = Layer.effectDiscard(
         : Option.none<ResendReceivedEmailId>();
     });
     const firstPage = yield* publishPage(Option.none());
-    yield* queue.take(emailQueueHandler("submit-background"), handoffPolicy(Effect.void)).pipe(
-      // Queue decoding fails outside the handler boundary; preserve shutdown and pace every other
-      // native or already-redacted failure without logging its Cause.
-      Effect.catchCauseIf(
-        (cause) => !Cause.hasInterrupts(cause),
-        () => Effect.sleep("1 second")
-      ),
-      Effect.forever,
-      Effect.forkScoped
-    );
+    yield* queue
+      .handleNext(emailQueueHandler("submit-background"), handoffPolicy(Effect.void))
+      .pipe(
+        // Queue decoding fails outside the handler boundary; preserve shutdown and pace every other
+        // native or already-redacted failure without logging its Cause.
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterrupts(cause),
+          () => Effect.sleep("1 second")
+        ),
+        Effect.forever,
+        Effect.forkScoped
+      );
     if (Option.isSome(firstPage)) {
       yield* Effect.gen(function* () {
         let cursor: Option.Option<RecoveryCursor> = firstPage;

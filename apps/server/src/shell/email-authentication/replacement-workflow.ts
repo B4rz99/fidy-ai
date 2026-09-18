@@ -11,7 +11,7 @@ import {
 } from "effect";
 import { type SqlClient, SqlError } from "effect/unstable/sql";
 import { Activity, type WorkflowEngine } from "effect/unstable/workflow";
-import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/persisted-queue/contract";
 import { sleepFor, sleepUntil } from "~/shell/durable-execution-clock";
 import type { EmailDeliveryPort } from "./delivery";
 import { performReplacementAttempt } from "./replacement-delivery-worker";
@@ -195,8 +195,8 @@ export const replacementQueueHandlerPolicy: ApplicationPersistedQueueHandlerPoli
  * delivery and settlement continue in the Workflow after this call returns.
  */
 export const consumeReplacementDelivery = Effect.fn(function* () {
-  const queue = yield* replacementDeliveryQueue;
-  yield* queue.take(
+  const queue = replacementDeliveryQueue;
+  yield* queue.handleNext(
     (payload) =>
       classifyReplacementQueueFailure(
         ReplacementDeliveryWorkflow.execute(payload, { discard: true })
@@ -211,8 +211,8 @@ export const consumeReplacementDelivery = Effect.fn(function* () {
  * waiting and expiry continue in the Workflow after this call returns.
  */
 export const consumeReplacementExpiry = Effect.fn(function* () {
-  const queue = yield* replacementExpiryQueue;
-  yield* queue.take(
+  const queue = replacementExpiryQueue;
+  yield* queue.handleNext(
     (payload) =>
       classifyReplacementQueueFailure(
         ReplacementExpiryWorkflow.execute(payload, { discard: true })

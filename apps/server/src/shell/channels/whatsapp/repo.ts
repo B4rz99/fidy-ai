@@ -540,7 +540,7 @@ type EnqueueWhatsAppTurnInput = Readonly<{
 }>;
 
 const publishWhatsAppInbound = Effect.fn(function* (work: WhatsAppInboundWork) {
-  const queue = yield* whatsappInboundQueue;
+  const queue = whatsappInboundQueue;
   yield* queue.offer(work, { id: whatsappInboundQueueId(work) }).pipe(Effect.orDie);
 });
 const publishAcceptedWhatsAppInbound = Effect.fn(function* (

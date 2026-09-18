@@ -1,5 +1,5 @@
 import { DateTime, Effect, Layer } from "effect";
-import type { ApplicationPersistedQueueRequirement } from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/persisted-queue/contract";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import { pruneConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-retention";
 import type { MessageStorage, Sharding } from "effect/unstable/cluster";

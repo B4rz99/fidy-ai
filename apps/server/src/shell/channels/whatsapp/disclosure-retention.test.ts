@@ -171,7 +171,7 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ),
             evidenceRevision: 0,
           };
-          const queue = yield* consentDisclosureEvidenceQueue;
+          const queue = consentDisclosureEvidenceQueue;
           const queueId = yield* disclosureEvidenceQueueId(evidence);
           yield* queue.offer(evidence, { id: queueId }).pipe(Effect.orDie);
           yield* pruneConsentDisclosureDelivery(yield* DateTime.now);

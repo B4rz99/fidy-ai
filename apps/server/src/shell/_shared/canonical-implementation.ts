@@ -2,7 +2,7 @@ import type { Crypto, Effect, Option } from "effect";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { AccessTier } from "~/core/access-tier/contract";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
-import type { ApplicationPersistedQueueRequirement } from "./persisted-queue";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/persisted-queue/contract";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/agent/hosted-inference";
 import type { OperationId } from "~/shell/api";

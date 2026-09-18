@@ -12,20 +12,20 @@ import {
   readApplicationQueueNames,
 } from "~/shell/persisted-queue/internal/queue";
 
-const queueProvider = capturedQueueProvider;
-const makeQueueDeclaration = declareApplicationQueue;
-const readQueueNames = readApplicationQueueNames;
-
 /** Returns queue identities registered by application queue declarations in this process. */
 export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueName> =>
-  readQueueNames();
+  readApplicationQueueNames();
 
-/** Captures only the capability to satisfy queue requirements; the raw factory never escapes. */
+/**
+ * Captures only the capability to satisfy queue requirements; the raw factory never escapes.
+ * Suspended so the published binding constructs its own effect instead of re-exporting the
+ * internal construction value.
+ */
 export const applicationPersistedQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
   ApplicationPersistedQueueRequirement
-> = Effect.suspend(() => queueProvider);
+> = Effect.suspend(() => capturedQueueProvider);
 
 /**
  * Declares one named durable handoff. Offers preserve custom identity, schema encoding, and the
@@ -40,4 +40,4 @@ export const declarePersistedQueue = <
   readonly name: Name;
   readonly schema: PayloadSchema;
   readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueue<PayloadSchema, Name> => makeQueueDeclaration(options);
+}): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationQueue(options);

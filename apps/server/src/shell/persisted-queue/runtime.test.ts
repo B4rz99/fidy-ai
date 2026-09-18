@@ -1,5 +1,6 @@
-import { expect, layer } from "@effect/vitest";
-import { Effect, Ref, Schema } from "effect";
+import { expect, it, layer } from "@effect/vitest";
+import { Context, Effect, Layer, Option, Ref, Schema } from "effect";
+import { PersistedQueue } from "effect/unstable/persistence";
 import { declarePersistedQueue } from "./operations";
 import { VolatilePersistedQueue } from "./runtime";
 
@@ -27,3 +28,12 @@ layer(VolatilePersistedQueue)("volatile persisted queue runtime", (it) => {
     })
   );
 });
+
+it.effect("publishes queue authority without publishing raw queue storage", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(VolatilePersistedQueue);
+    expect(Option.isNone(Context.getOption(services, PersistedQueue.PersistedQueueStore))).toBe(
+      true
+    );
+  })
+);

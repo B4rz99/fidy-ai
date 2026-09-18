@@ -1,0 +1,141 @@
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_a3914047cb299e::t_8719f73abd1688 329-361
+  s_a3914047cb299e::t_d4927e5a45fe7e 64
+  s_a3914047cb299e::t_f0c3caf0b38c3c 48-54,63,153
+  s_86d71f5360f2a6::t_9a09a4aa4a3c46 56
+  s_a3914047cb299e::t_1a88852607b1b5 43-46,57-60
+  s_a3914047cb299e::t_fe19a9982221ff 152
+  s_a3914047cb299e::t_e6b0f27e5c3a76 206,247,286,320,373,391,453,482
+  s_a3914047cb299e::t_3695edb1d8bb75 99
+  s_a3914047cb299e::t_14637aade780b2 417
+  s_a3914047cb299e::t_95dca1b0b6ad75 47
+  s_a3914047cb299e::t_2a30df8aaf8afa 3,10,55
+  s_a3914047cb299e::t_d4425e23c0f882 414-416,418-423
+  s_a3914047cb299e::t_922e6821a6c605 61-62
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_a3914047cb299e::t_22f47f7b5e6e39 13-16,29-36
+  s_a3914047cb299e::t_0be13980b84ffb 221,223-232,234-237
+  s_c9720a58ac9654::t_5b9a69de614b64 256
+  s_a3914047cb299e::t_e05c28f561f480 148,182,210,240-243,257-264
+  s_a3914047cb299e::t_5738c3f50ca6fa 238-239,244-254
+  s_c9720a58ac9654::t_da5a1bb93ba6c8 255
+  s_a3914047cb299e::t_ffcc0a6a7598d9 18,46-49,78
+  s_a3914047cb299e::t_958062ce284e21 19,37-41,62,84-85
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_a3914047cb299e::t_24e3371c4b5d82 339,378-380
+  s_c8cb832fff7b99::t_dc10af36a49c29 124
+  s_a3914047cb299e::t_236908fd21131c 59-60,78,85,107-108,113-119,122,296,312,366,394,417-423
+  s_a3914047cb299e::t_d246e453de324d 14
+  s_a3914047cb299e::t_d22419673ab5fa 321-327
+  s_a3914047cb299e::t_70083ba496c299 287,289-290,301,306,314
+  s_a3914047cb299e::t_3e100ca7d3c505 76-77,79-80,82,88,283
+  s_a3914047cb299e::t_9df3e22d2f84e9 304
+  s_a3914047cb299e::t_88b8a56b9de4cb 336-338,340-347,349
+  s_a3914047cb299e::t_22e327bde3fc20 125,147,149,154,159,173,183,195
+  s_a3914047cb299e::t_97d4e451eadda5 412,433
+  s_a3914047cb299e::t_84bd78d71d66c2 11,19,27,31-34,81,83-84,86-87,110,112,120-121,123,274-276,278,280,282,284-286,295,297-299,302,305,307,310-311,313,389
+  s_a3914047cb299e::t_44e84a233a33c3 89
+  s_a3914047cb299e::t_14637aade780b2 292-293
+  s_a3914047cb299e::t_52152b328752b0 308
+  s_a3914047cb299e::t_ae283e6a42e957 55,64-69,104,106,309,374,376,381-388,406,409,415-416
+  s_a3914047cb299e::t_c4d9a9bc95f54f 9,56-58,61-63,105,111,219,277,279,281,288,291,294,300,303,353-360,377,392-393,395-399,414
+  s_a3914047cb299e::t_c6c64e5dd4253e 330,332-334,351
+  s_a3914047cb299e::t_ae965c2538a9bd 350,352
+  s_a3914047cb299e::t_a8731b8a802d99 361-365,367-368
+apps/server/scripts/verify-sentry-account.ts
+  s_a3914047cb299e::t_7bdf76ec74f8e7 29
+  s_a3914047cb299e::t_5ac2895790ce5c 6,28,30-31
+scripts/check-credential-evidence.ts
+  s_a3914047cb299e::t_fbdff9b2f158c3 119
+  s_a3914047cb299e::t_caa49ca560649a 125,130,135
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_a3914047cb299e::t_826737ce6e2427 230-234
+  s_a3914047cb299e::t_64f6ee3b4e2d8a 18
+  s_a3914047cb299e::t_0f9fd77f97a263 212
+  s_a3914047cb299e::t_bb8664512b5d96 209
+  s_a3914047cb299e::t_43a4e1d6b32f39 518-550
+  s_a3914047cb299e::t_bc52bd2ecfa606 250-287
+  s_a3914047cb299e::t_7211bead314415 210-211,213-229,235-249
+  s_a3914047cb299e::t_7423bca278f1fd 65-80
+apps/server/src/shell/outbound-http/internal/cloudflare-access.ts
+  s_a3914047cb299e::t_601a28de6b4fd7 4-5,10-11,15-18,20-21,23-27,30-32,36-37,41-42,44,47,57-70,72-77,79-81,86-90
+  s_a3914047cb299e::t_ea09d782adec42 1-3,6,14,45,82-85,92-93
+  s_a3914047cb299e::t_712ea4873c800b 7-8,22,46,48-56,71
+  s_a3914047cb299e::t_d98f9c7811f69b 9
+  s_a3914047cb299e::t_38eaf6a207a8cf 12-13
+  s_a3914047cb299e::t_ce4115661815d5 19,28-29,33-35,38-40,43
+  s_a3914047cb299e::t_c2352c0cf276cf 78,91
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_a3914047cb299e::t_a30f66b7487ad2 246-247
+  s_a3914047cb299e::t_14637aade780b2 111
+  s_a3914047cb299e::t_bbf3d6b3445589 3-4,100-101,107-108,150-152,158-163,167-172,195,201-202,206-207,212-214,218-220,245
+apps/server/src/shell/outbound-http/contract.ts
+  s_a3914047cb299e::t_7ac89dda6f85f6 1,35,44-45,48-50,53-54
+  s_a3914047cb299e::t_4a604f09d134bf 86-91
+  s_a3914047cb299e::t_10f1c2412c36c7 17-19
+  s_a3914047cb299e::t_43e7845c7e892b 36-39,42,46-47,51-52
+  s_a3914047cb299e::t_a30f66b7487ad2 40-41,43
+  s_a3914047cb299e::t_bbfa4005602378 20
+apps/server/src/shell/outbound-http/operations.ts
+  s_a3914047cb299e::t_e8728edeb8715c 68,70,72,76
+  s_a3914047cb299e::t_dee51167daf26a 3,11-16,77-86
+  s_a3914047cb299e::t_13834c90d8d33c 4,53-54
+  s_a3914047cb299e::t_18f63def9f1130 67,69,75,88
+  s_a3914047cb299e::t_f2463d87a4a4b1 71,73
+  s_a3914047cb299e::t_72baa20fcd43ae 22,50-52,55-61
+  s_221d58c93200ac::t_f7bae03bd0b3d0 74,87
+apps/server/scripts/support-recovery.ts
+  s_a3914047cb299e::t_538a61d2bf1022 4,136-138,140-141
+  s_a3914047cb299e::t_a30f66b7487ad2 1
+  s_a3914047cb299e::t_b267b5b5e6ffe7 3,172-177,180,194
+  s_a3914047cb299e::t_c0cc79fb4574f0 142
+  s_a3914047cb299e::t_7fd5231d50bfc8 179,181-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dea5c95223db119df5d4721b31ae12e50570d05a",
+  "prompts": {},
+  "sessions": {
+    "s_221d58c93200ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b147-6ccc-74c3-a85a-9f0dc8db6c52",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_86d71f5360f2a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b172-6204-71a7-bc85-e244ef2b03ea",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a3914047cb299e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b158-73ca-7681-8aa3-cd10b5594a13",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_c8cb832fff7b99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b157-96a3-737d-933b-d5b8640ab75f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

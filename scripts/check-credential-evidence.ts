@@ -116,23 +116,23 @@ const credentialEvidence = [
   },
   {
     configuration: "SENTRY_AUTH_TOKEN",
-    testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
+    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
     testName: "loads all operator Sentry account credentials as redacted values",
   },
   {
     configuration: "SENTRY_ORGANIZATION_SLUG",
     testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads all operator Sentry account credentials as redacted values",
+    testName: "loads operator Sentry account locators as redacted values",
   },
   {
     configuration: "SENTRY_PRODUCTION_PROJECT_SLUG",
     testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads all operator Sentry account credentials as redacted values",
+    testName: "loads operator Sentry account locators as redacted values",
   },
   {
     configuration: "SENTRY_NON_PRODUCTION_PROJECT_SLUG",
     testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads all operator Sentry account credentials as redacted values",
+    testName: "loads operator Sentry account locators as redacted values",
   },
 ] as const satisfies ReadonlyArray<CredentialEvidence>;
 

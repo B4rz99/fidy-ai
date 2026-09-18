@@ -15,6 +15,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Redacted,
   Schema,
   type Scope,
   Stream,
@@ -58,6 +59,22 @@ const makeTestOutbound = (
             WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           })
+        )
+      )
+    )
+  ).pipe(Effect.map((context) => Context.get(context, OutboundHttp)));
+
+const makeSentryOutbound = (
+  httpClient: HttpClient.HttpClient,
+  authToken = "private-sentry-token"
+): Effect.Effect<OutboundHttpService, Config.ConfigError, Scope.Scope> =>
+  Layer.build(
+    OutboundHttp.sentryLayer.pipe(
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+      Layer.provide(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ SENTRY_AUTH_TOKEN: authToken })
         )
       )
     )
@@ -239,6 +256,117 @@ it.effect("rejects an unsafe Resend download destination before transport", () =
         })
       )
     );
+    expect(requests).toBe(0);
+  })
+);
+
+it.effect("loads all operator Sentry account credentials as redacted values", () =>
+  Effect.gen(function* () {
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+    const outbound = yield* makeSentryOutbound(
+      HttpClient.make((request) => {
+        requests.push(request);
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("[]", {
+              headers: {
+                link: '<https://sentry.io/next>; rel="next"; results="false"',
+                "x-private-coordinate": "private-response-header",
+              },
+            })
+          )
+        );
+      })
+    );
+
+    const response = yield* outbound.execute({
+      _tag: "SentryAccount",
+      resource: {
+        _tag: "ProjectEnvironments",
+        organizationSlug: Redacted.make("private-organization"),
+        projectSlug: Redacted.make("private-project"),
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.method).toBe("GET");
+    expect(requests[0]?.url).toBe(
+      "https://sentry.io/api/0/projects/private-organization/private-project/environments/"
+    );
+    expect(requests[0]?.headers.authorization).toBe("Bearer private-sentry-token");
+    expect(response.headers).toEqual({
+      link: '<https://sentry.io/next>; rel="next"; results="false"',
+    });
+  })
+);
+
+it.effect("rejects a destination outside the service authority before transport", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const outbound = yield* makeSentryOutbound(
+      HttpClient.make((request) => {
+        requests += 1;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
+      }),
+      "private-sentry-token"
+    );
+    expectNotInspected(outbound, "private-sentry-token");
+
+    const exit = yield* outbound
+      .execute({
+        _tag: "CloudflareAccessSupportRecovery",
+        body: "private-support-body",
+      })
+      .pipe(Effect.exit);
+    const unannotatedExit = Exit.isFailure(exit)
+      ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
+      : exit;
+
+    assert.deepStrictEqual(
+      unannotatedExit,
+      Exit.fail(
+        new OutboundHttpFailure({
+          reason: "transport-failed",
+          responseStatus: Option.none(),
+          responseHeaders: {},
+        })
+      )
+    );
+    expect(requests).toBe(0);
+    expect(String(exit)).not.toContain("private-sentry-token");
+    expect(String(exit)).not.toContain("private-support-body");
+  })
+);
+
+it.effect("rejects operational requests from the runtime provider group before transport", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const outbound = yield* makeTestOutbound(
+      HttpClient.make((request) => {
+        requests += 1;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
+      })
+    );
+
+    const sentryFailure = yield* Effect.flip(
+      outbound.execute({
+        _tag: "SentryAccount",
+        resource: {
+          _tag: "Organization",
+          organizationSlug: Redacted.make("private-organization"),
+        },
+      })
+    );
+    const cloudflareFailure = yield* Effect.flip(
+      outbound.execute({
+        _tag: "CloudflareAccessSupportRecovery",
+        body: "private-support-body",
+      })
+    );
+
+    expect(sentryFailure.reason).toBe("transport-failed");
+    expect(cloudflareFailure.reason).toBe("transport-failed");
     expect(requests).toBe(0);
   })
 );
@@ -472,6 +600,39 @@ const coordinateBearingReason = (
       return new HttpClientError.EmptyBodyError({ ...properties, response });
   }
 };
+
+it.effect("projects a Sentry transport failure without credentials or account locators", () =>
+  Effect.gen(function* () {
+    const authToken = "private-sentry-token-sentinel";
+    const organization = "private-sentry-organization-sentinel";
+    const outbound = yield* makeSentryOutbound(
+      HttpClient.make((request) =>
+        Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: coordinateBearingReason("TransportError", request),
+          })
+        )
+      ),
+      authToken
+    );
+    expectNotInspected(outbound, authToken);
+
+    const exit = yield* outbound
+      .execute({
+        _tag: "SentryAccount",
+        resource: {
+          _tag: "Organization",
+          organizationSlug: Redacted.make(organization),
+        },
+      })
+      .pipe(Effect.exit);
+    const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+
+    expect(rendered).not.toContain(authToken);
+    expect(rendered).not.toContain(organization);
+    expect(rendered).not.toContain("transport-private-sentinel");
+  })
+);
 
 it.effect.each(transportFailureTags)(
   "projects the $ failure without transport coordinates",

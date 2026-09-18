@@ -10,9 +10,13 @@ const boundedRecoveryInput = oversizedRecoveryInput.slice(0, 40);
 const ignoredArgumentSecret = "argv-secret-must-not-be-read";
 const ignoredEnvironmentSecret = "environment-secret-must-not-be-read";
 
+type FixtureResponse =
+  | Readonly<{ status: "approved" | "not_approved" | "unavailable"; message: string }>
+  | Readonly<{ status: "limited"; message: string; retryAfterSeconds: number }>;
+
 const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (input: {
-  response: "approved" | "not_approved" | "limited" | "unavailable";
-  cloudflaredExit: number;
+  response: "approved" | "not_approved" | "limited" | "unavailable" | "transport_failure";
+  cloudflaredBehavior: "success" | "failure" | "oversized";
 }) {
   const directory = yield* Effect.promise(() =>
     Bun.$`mktemp -d`.text().then((text) => text.trim())
@@ -22,14 +26,27 @@ const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (i
   const preloadPath = `${directory}/preload.ts`;
   const cloudflaredPath = `${directory}/cloudflared`;
   const driverPath = `${directory}/run.py`;
-  const response =
-    input.response === "limited"
-      ? { status: "limited", message: "Demasiados intentos.", retryAfterSeconds: 7 }
-      : { status: input.response, message: "Resultado cerrado." };
+  let response: FixtureResponse;
+  if (input.response === "limited") {
+    response = { status: "limited", message: "Demasiados intentos.", retryAfterSeconds: 7 };
+  } else if (input.response === "transport_failure") {
+    response = { status: "unavailable", message: "Resultado cerrado." };
+  } else {
+    response = { status: input.response, message: "Resultado cerrado." };
+  }
+  const cloudflaredExitCode = input.cloudflaredBehavior === "failure" ? 1 : 0;
+  const cloudflaredTokenCommand =
+    input.cloudflaredBehavior === "oversized"
+      ? "head -c 20000 /dev/zero | tr '\\0' x"
+      : "printf 'fixture-access-token'";
   const encodedRequestLog = yield* Schema.encodeEffect(UnknownJsonString)(requestLog);
   const encodedCloudflaredLog = yield* Schema.encodeEffect(UnknownJsonString)(cloudflaredLog);
   const encodedResponse = yield* Schema.encodeEffect(UnknownJsonString)(response);
   const encodedResponseLiteral = yield* Schema.encodeEffect(UnknownJsonString)(encodedResponse);
+  const fetchResult =
+    input.response === "transport_failure"
+      ? `throw new Error("fixture-access-token transport-private-sentinel https://api.fidyapp.com/internal/support-recovery");`
+      : `return new Response(${encodedResponseLiteral}, { status: 200, headers: { "content-type": "application/json" } });`;
   const driverConfiguration = yield* Schema.encodeEffect(UnknownJsonString)({
     command: [
       "bun",
@@ -42,7 +59,7 @@ const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (i
     path: `${directory}:${Bun.env.PATH ?? ""}`,
     environmentSecret: ignoredEnvironmentSecret,
     prompts:
-      input.cloudflaredExit === 0
+      input.cloudflaredBehavior === "success"
         ? [
             ["Referencia pública de vinculación: ", `${pairingCode}\r`],
             ["Código de recuperación (entrada oculta): ", `${oversizedRecoveryInput}\r`],
@@ -58,14 +75,14 @@ const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (i
         `globalThis.fetch = async (request, init) => {\n` +
           `  const value = request instanceof Request ? request : new Request(request, init);\n` +
           `  await Bun.write(${encodedRequestLog}, value.headers.get("cf-access-token") + "\\n" + await value.clone().text());\n` +
-          `  return new Response(${encodedResponseLiteral}, { status: 200, headers: { "content-type": "application/json" } });\n` +
+          `  ${fetchResult}\n` +
           `};\n`
       ),
       Bun.write(
         cloudflaredPath,
         `#!/bin/sh\nprintf '%s\\n' "$*" >> ${encodedCloudflaredLog}\n` +
-          `if [ "$2" = "token" ]; then printf 'fixture-access-token'; fi\n` +
-          `exit ${input.cloudflaredExit}\n`
+          `if [ "$2" = "token" ]; then ${cloudflaredTokenCommand}; fi\n` +
+          `exit ${cloudflaredExitCode}\n`
       ),
       Bun.write(
         driverPath,
@@ -128,7 +145,7 @@ const runFixture = Effect.fn("SupportRecoveryCliTest.runFixture")(function* (fix
 
 it.effect("authenticates before hidden bounded input without exposing credentials", () =>
   Effect.gen(function* () {
-    const fixture = yield* makeFixture({ response: "approved", cloudflaredExit: 0 });
+    const fixture = yield* makeFixture({ response: "approved", cloudflaredBehavior: "success" });
     const result = yield* runFixture(fixture);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Recuperación aprobada.");
@@ -162,7 +179,7 @@ it.effect("authenticates before hidden bounded input without exposing credential
 
 it.effect("rejects non-interactive recovery-code input before sending a recovery request", () =>
   Effect.gen(function* () {
-    const fixture = yield* makeFixture({ response: "approved", cloudflaredExit: 0 });
+    const fixture = yield* makeFixture({ response: "approved", cloudflaredBehavior: "success" });
     const child = Bun.spawn(["bun", "--preload", fixture.preloadPath, cliPath], {
       env: { PATH: `${fixture.directory}:${Bun.env.PATH ?? ""}` },
       stdin: "pipe",
@@ -190,7 +207,7 @@ it.effect("rejects non-interactive recovery-code input before sending a recovery
 
 it.effect("fails closed before prompting when Access authentication fails", () =>
   Effect.gen(function* () {
-    const fixture = yield* makeFixture({ response: "approved", cloudflaredExit: 1 });
+    const fixture = yield* makeFixture({ response: "approved", cloudflaredBehavior: "failure" });
     const result = yield* runFixture(fixture);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).not.toContain("Referencia pública");
@@ -201,14 +218,50 @@ it.effect("fails closed before prompting when Access authentication fails", () =
   })
 );
 
+it.effect("bounds Access authentication output before prompting", () =>
+  Effect.gen(function* () {
+    const fixture = yield* makeFixture({
+      response: "approved",
+      cloudflaredBehavior: "oversized",
+    });
+    const result = yield* runFixture(fixture);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).not.toContain("Referencia pública");
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      "La operación de soporte no está disponible."
+    );
+    expect(yield* Effect.promise(() => Bun.file(fixture.requestLog).exists())).toBe(false);
+  })
+);
+
+it.effect("projects Access transport failures without credentials or coordinates", () =>
+  Effect.gen(function* () {
+    const fixture = yield* makeFixture({
+      response: "transport_failure",
+      cloudflaredBehavior: "success",
+    });
+    const result = yield* runFixture(fixture);
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(result.exitCode).toBe(1);
+    expect(output).toContain("La operación de soporte no está disponible.");
+    expect(output).not.toContain("fixture-access-token");
+    expect(output).not.toContain("transport-private-sentinel");
+    expect(output).not.toContain("api.fidyapp.com");
+  })
+);
+
 it.effect("uses closed output and distinct refusal and retry exit statuses", () =>
   Effect.gen(function* () {
-    const refusal = yield* makeFixture({ response: "not_approved", cloudflaredExit: 0 }).pipe(
-      Effect.flatMap(runFixture)
-    );
-    const limited = yield* makeFixture({ response: "limited", cloudflaredExit: 0 }).pipe(
-      Effect.flatMap(runFixture)
-    );
+    const refusal = yield* makeFixture({
+      response: "not_approved",
+      cloudflaredBehavior: "success",
+    }).pipe(Effect.flatMap(runFixture));
+    const limited = yield* makeFixture({
+      response: "limited",
+      cloudflaredBehavior: "success",
+    }).pipe(Effect.flatMap(runFixture));
     expect(refusal.exitCode).toBe(2);
     expect(refusal.stdout).toContain("No pudimos aprobar la recuperación.");
     expect(refusal.stdout).not.toContain("Resultado cerrado.");

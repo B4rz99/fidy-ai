@@ -3,6 +3,7 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Console, Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
+import { OutboundHttp } from "~/shell/outbound-http/operations";
 import {
   renderSentryVerificationReport,
   verifySentryAccount,
@@ -24,6 +25,9 @@ const verify = Effect.gen(function* () {
   yield* Console.log(renderSentryVerificationReport(report));
 });
 
-const VerifyLive = Layer.effectDiscard(verify).pipe(Layer.provide(FetchHttpClient.layer));
+const VerifyLive = Layer.effectDiscard(verify).pipe(
+  Layer.provide(OutboundHttp.sentryLayer),
+  Layer.provide(FetchHttpClient.layer)
+);
 
 BunRuntime.runMain(Effect.scoped(Layer.build(VerifyLive)));

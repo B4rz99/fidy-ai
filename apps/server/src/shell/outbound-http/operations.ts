@@ -1,13 +1,23 @@
 import { Config, Context, Crypto, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
+import { acquireCloudflareAccessToken } from "~/shell/outbound-http/internal/cloudflare-access";
 import {
   loadResendEmailDeliveryApiKey,
   loadResendReceivingApiKey,
   loadWompiIntegritySecret,
   loadWompiPrivateKey,
 } from "~/shell/secret-material/operations";
-import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
-import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
+import {
+  makeCloudflareAccessOutboundHttp,
+  makeOutboundHttp,
+  makeSentryOutboundHttp,
+} from "~/shell/outbound-http/internal/outbound-http";
+import type {
+  OutboundHttpFailure,
+  OutboundHttpRequest,
+  OutboundHttpResponse,
+  OutboundHttpSetupError,
+} from "./contract";
 
 const WompiEnvironment = Schema.Literals(["sandbox", "production"]);
 const WompiPublicKey = Schema.String.check(
@@ -109,6 +119,28 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
         httpClient,
         crypto: Option.none(),
       });
+    })
+  );
+
+  static readonly sentryLayer = Layer.effect(
+    this,
+    Effect.gen(function* () {
+      const authToken = yield* Config.redacted("SENTRY_AUTH_TOKEN");
+      const httpClient = yield* HttpClient.HttpClient;
+      return makeSentryOutboundHttp({ authToken, httpClient });
+    })
+  );
+
+  static readonly cloudflareAccessLayer: Layer.Layer<
+    OutboundHttp,
+    OutboundHttpSetupError,
+    HttpClient.HttpClient
+  > = Layer.effect(
+    this,
+    Effect.gen(function* () {
+      const accessToken = yield* acquireCloudflareAccessToken();
+      const httpClient = yield* HttpClient.HttpClient;
+      return makeCloudflareAccessOutboundHttp({ accessToken, httpClient });
     })
   );
 }

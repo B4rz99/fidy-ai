@@ -1,0 +1,62 @@
+apps/server/src/shell/testing/api-harness.ts
+  s_e84062df331189::t_d23ffd60f31845 74
+  s_e84062df331189::t_c1f7ed039f6385 337
+  s_e84062df331189::t_f155b74c01cb09 51
+apps/server/src/shell/persisted-queue/internal/storage.ts
+  s_e84062df331189::t_67285b7537d562 10-20,22-25
+  s_e84062df331189::t_07659d13901357 1-9,21
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_e84062df331189::t_d23ffd60f31845 11
+apps/server/src/shell/persisted-queue/operations.ts
+  s_e84062df331189::t_5863080b387646 28
+  s_e84062df331189::t_bb919fa15f0c1d 16-17,21,43
+  s_e84062df331189::t_c7908473f40bb4 5,27
+  s_e84062df331189::t_bb5cb740375d7e 8,11-12,20
+  s_e84062df331189::t_af3f646df43ac6 13
+  s_e84062df331189::t_c82a6e0c03c89f 10,15
+apps/server/src/shell/subscription/billing-reconciliation.integration.test.ts
+  s_e84062df331189::t_d23ffd60f31845 49
+apps/server/ARCHITECTURE.md
+  s_e84062df331189::t_3eb54a2154adb7 178-182
+apps/server/src/shell/persisted-queue/runtime.ts
+  s_e84062df331189::t_3053780597f033 3,13-14,16-17,19,22-23
+  s_e84062df331189::t_b4b2225ad7f2e9 1
+  s_e84062df331189::t_1ef0f9767540fe 8,12,15,21
+  s_e84062df331189::t_ec3043a4a64e43 20,24
+  s_e84062df331189::t_a69d8037704f28 5-6,9-10
+  s_e84062df331189::t_29a3f4e86e7f0c 4,7,11
+  s_e84062df331189::t_f357146a12ac96 2,18
+apps/server/src/shell/persisted-queue/internal/queue.ts
+  s_e84062df331189::t_a093af0f0b7e2d 1-10,12-24,26-28,35-82
+  s_e84062df331189::t_97b362b36625e0 29-34
+  s_e84062df331189::t_3401c3d33784eb 25
+  s_e84062df331189::t_ab5981cc3795b5 11
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_e84062df331189::t_d23ffd60f31845 56
+apps/server/src/shell/persisted-queue/runtime.test.ts
+  s_e84062df331189::t_c484c3cd1dc671 1,4,11-12,16,18-29
+  s_e84062df331189::t_2cb258aacd3762 3,5-10,13-15
+  s_e84062df331189::t_6e92e2105e2754 17
+  s_e84062df331189::t_cefbc66bf8863e 2
+apps/server/src/shell/durable-execution.ts
+  s_e84062df331189::t_9059a9683949ce 5
+  s_e84062df331189::t_2c60175563ae89 115,125,141
+apps/server/src/shell/testing/durable-execution-harness.ts
+  s_e84062df331189::t_845f61a63a1052 6,9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ccea28e931bb56d059cf30260ea33acba68359f5",
+  "prompts": {},
+  "sessions": {
+    "s_e84062df331189": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b460-a2fd-77a3-a736-90c8ac38f35d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

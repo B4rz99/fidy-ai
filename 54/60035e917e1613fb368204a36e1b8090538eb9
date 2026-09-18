@@ -1,0 +1,105 @@
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_c7b2d8371dca9b::t_4b5dee4011b704 4,10,26,28-29,31-32,36-37
+  s_c7b2d8371dca9b::t_6858649e286bda 8-9,38
+  s_c7b2d8371dca9b::t_6494f517842056 1-3,5-7,11-25,27,30,33-35
+apps/server/scripts/check-dependency-guards.ts
+  s_c7b2d8371dca9b::t_534dea69fa61d4 931,938
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 6
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 7
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 1-18,20-345
+  s_c7b2d8371dca9b::t_5384b64aeee5dd 19
+  s_c7b2d8371dca9b::t_2d292bcd3a1e52 346-357
+apps/server/src/shell/agent/toolkit.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 19
+apps/server/src/shell/hosted-inference/operations.test.ts
+  s_c7b2d8371dca9b::t_6c0c9cfe7b122e 22
+  s_c7b2d8371dca9b::t_c0c6a9a2cb6f2b 23-26
+  s_c7b2d8371dca9b::t_d62d018a48f4bc 344-350
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 1-20,27-343,351-825
+  s_c7b2d8371dca9b::t_5c47fb1d658d03 21
+apps/server/src/shell/testing/evaluation/runner.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 27
+apps/server/src/shell/memory/mutations.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 7
+apps/server/src/shell/agent/conversation-compaction-context.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 3
+apps/server/src/shell/testing/api-harness.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 35
+apps/server/src/shell/testing/hosted-inference-fixtures.ts
+  s_c7b2d8371dca9b::t_d381910e96e33d 9
+  s_c7b2d8371dca9b::t_0495d5aee47a52 11
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 10
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 43
+  s_c7b2d8371dca9b::t_62d44dc44b1c48 1,39-42,44
+  s_c7b2d8371dca9b::t_ca263c76e2dfe9 45
+apps/server/package.json
+  s_c7b2d8371dca9b::t_5a9c67cb6250ea 17
+apps/server/ARCHITECTURE.md
+  s_c7b2d8371dca9b::t_184f8920260ea6 104-113
+apps/server/src/shell/hosted-inference/operations.ts
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 1,3-10
+  s_c7b2d8371dca9b::t_b80239c9c7677b 2
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_c7b2d8371dca9b::t_ed456a27063485 57-58
+apps/server/vitest.acceptance.config.ts
+  s_c7b2d8371dca9b::t_7f04c5a577748b 16,22-25
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 8
+apps/server/src/shell/agent/agent-service.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 72
+apps/server/scripts/agent-repl-runtime.ts
+  s_c7b2d8371dca9b::t_5a9c67cb6250ea 1-36
+apps/server/scripts/evaluate-es-co.sh
+  s_c7b2d8371dca9b::t_7117a3f9486ef7 51
+apps/server/src/shell/testing/hosted-inference-provider-harness.ts
+  s_c7b2d8371dca9b::t_714c6af96c30a2 1-4
+apps/server/src/shell/http.ts
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 13
+  s_c7b2d8371dca9b::t_48af01e84dc09d 304,349
+apps/server/src/shell/hosted-inference/internal/openai.test.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 1-44,46-1034
+  s_c7b2d8371dca9b::t_fec061961656fc 45
+apps/server/scripts/evaluate-es-co-openai-runtime.ts
+  s_c7b2d8371dca9b::t_6ad295eece0f7f 8-12,53-56,88,90,95-97
+apps/server/src/shell/hosted-inference/internal/openai.ts
+  s_c7b2d8371dca9b::t_a6c80b50bcd5bc 82,178,205,216,229,319,471,1014-1021,1024-1025
+  s_c7b2d8371dca9b::t_b2b30f088c21ae 32,53
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 54-55
+  s_c7b2d8371dca9b::t_401e7882290907 52,77,360,757,840,1013,1022-1023,1026-1031
+  s_c7b2d8371dca9b::t_53650a77b25149 910
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_c7b2d8371dca9b::t_e93cc3678df782 16
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 15
+apps/server/.dependency-cruiser.mjs
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 312,315
+  s_c7b2d8371dca9b::t_99d1c7bbef4a52 308-310
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_c7b2d8371dca9b::t_5fba7ef8ceb598 45,506
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 34
+apps/server/src/shell/hosted-inference/contract.ts
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 2-219
+  s_c7b2d8371dca9b::t_36138c5c3886e2 1
+apps/server/src/shell/memory/memory-policy.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 5
+apps/server/src/shell/agent/agent-service.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5460035e917e1613fb368204a36e1b8090538eb9",
+  "prompts": {},
+  "sessions": {
+    "s_c7b2d8371dca9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26d-08e2-77b4-8f0a-7395ae07d4e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

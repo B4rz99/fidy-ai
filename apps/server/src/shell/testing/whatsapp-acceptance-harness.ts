@@ -24,7 +24,7 @@ import { derivePATBearerDigest } from "~/shell/secret-material/operations";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
-import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";
+import { HostedInferenceFromLanguageModel } from "./hosted-inference-harness";
 import {
   KapsoClient,
   type KapsoClientService,

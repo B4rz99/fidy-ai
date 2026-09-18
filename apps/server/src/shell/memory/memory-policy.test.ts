@@ -3,7 +3,8 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Ref } from "effect";
 import { Memory, MemoryId, MemoryText } from "~/core/memory/model";
 import { MemoryCapacityExceeded } from "~/core/memory/rules";
-import { HostedInference, type HostedInferenceService } from "~/shell/agent/hosted-inference";
+import type { HostedInferenceService } from "~/shell/hosted-inference/contract";
+import { HostedInference } from "~/shell/hosted-inference/operations";
 import {
   countAndAdmitMemory,
   countAndAdmitMemoryRevision,

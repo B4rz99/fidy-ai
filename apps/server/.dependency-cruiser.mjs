@@ -347,16 +347,27 @@ export default {
       name: "hosted-inference-orchestration-imports-provider",
       severity: "error",
       comment:
-        "Hosted inference orchestration imported provider-specific code. agent-service.ts and " +
-        "hosted-inference.ts may use only the provider-neutral HostedInference authority; model, " +
-        "tokenizer, capacity, and wire-request knowledge belong in the adapter (ADR 0014).",
+        "Agent or Memory orchestration, or the published HostedInference interface, imported " +
+        "provider-specific code. Provider models, clients, tokenizers, capacity, wire requests, " +
+        "and raw responses belong only in HostedInference internals (ADR 0014).",
       from: {
-        path: "^src/shell/agent/(agent-service\\.ts|hosted-inference\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)$",
+        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(memory-policy\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
-        path: "^(src/shell/agent/openai\\.ts|(^|.*/)node_modules/@effect/ai-openai/|(^|.*/)node_modules/js-tiktoken/|(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer))",
+        path: "^(src/shell/hosted-inference/internal/openai\\.ts|(^|.*/)node_modules/@effect/ai-openai/|(^|.*/)node_modules/js-tiktoken/|(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer|OpenAiStructuredOutput))",
         dependencyTypesNot: ["type-only"],
       },
+    },
+    {
+      name: "agent-imports-provider-wire-codec",
+      severity: "error",
+      comment:
+        "Agent bindings imported a provider wire codec. Provider framing and response decoding " +
+        "belong inside HostedInference internals (ADR 0014).",
+      from: {
+        path: "^src/shell/agent/((toolkit|agent-operation-binding)\\.ts|__probe-.*hosted-provider/wire\\.ts)$",
+      },
+      to: { path: "(^|.*/)node_modules/effect/.*/unstable/ai/OpenAiStructuredOutput" },
     },
     {
       name: "continuity-reached-outside-hosted-runtime",

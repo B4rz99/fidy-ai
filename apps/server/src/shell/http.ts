@@ -10,7 +10,7 @@ import { MaintenanceLive } from "./maintenance";
 import { DurableQueueReadinessLive } from "./durable-queue-health";
 import { AgentService } from "~/shell/agent/agent-service";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
-import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import { HostedInferenceLive, StatementLanguageModelLive } from "~/shell/hosted-inference/runtime";
 import { BrowserLoginLive, BrowserLoginWebAuthHandlersLive } from "~/shell/browser-login/handlers";
 import { BudgetsLive } from "~/shell/budgets/handlers";
 import { CategoriesLive } from "~/shell/categories/handlers";
@@ -301,7 +301,7 @@ const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
 );
 
 const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
-  Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
+  Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(StatementLanguageModelLive)))
 );
 
 const HostedForwardedEmailOperationsLive = Layer.merge(
@@ -346,5 +346,5 @@ export const AppLive = Layer.mergeAll(
 ).pipe(
   Layer.provide(WompiEnrollmentClient.layer),
   Layer.provide(WompiBillingClient.layer),
-  Layer.provide(OpenAiHostedInferenceLive)
+  Layer.provide(HostedInferenceLive)
 );

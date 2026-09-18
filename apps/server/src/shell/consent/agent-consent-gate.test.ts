@@ -9,7 +9,7 @@ import { makeColombianUser } from "~/core/identity/rules";
 import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-harness";
 import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { currentDisclosure } from "./current-disclosure";

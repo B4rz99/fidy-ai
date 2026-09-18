@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect";
-import { verifyMistralTokenConformance } from "~/shell/agent/mistral-conformance";
+import { verifyMistralTokenConformance } from "~/shell/hosted-inference/mistral-conformance-runtime";
 import { MistralOutboundHttpFetchLive } from "~/shell/outbound-http/runtime";
 
 const program = Effect.gen(function* () {

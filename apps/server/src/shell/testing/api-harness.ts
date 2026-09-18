@@ -31,7 +31,7 @@ import {
   WompiSourceId,
 } from "~/core/subscription/enrollment-model";
 import { type TokenBearer } from "~/core/tokens/model";
-import { HostedInference } from "~/shell/agent/hosted-inference";
+import { HostedInference } from "~/shell/hosted-inference/operations";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
 import { makeTokenAuthorizationClientLive } from "~/shell/_shared/authz";
 import {

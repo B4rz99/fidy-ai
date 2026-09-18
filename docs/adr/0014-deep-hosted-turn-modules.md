@@ -30,7 +30,7 @@ Use three deep modules behind small interfaces:
 The boundaries own their policies completely:
 
 - HostedInference is the only module that knows provider model or tokenizer identifiers, provider framing, continuation representation, or total context capacity.
-- WorkingContext is the only module that may order or project context sections. Callers provide semantic domain values, not policy or prompt fragments.
+- WorkingContext is the only module that may construct a live-Turn semantic context. The canonical section order is declared once in `shell/_shared/hosted-context-sections.ts`, which WorkingContext and HostedInference's synthetic maximum startup context both use. Callers provide semantic domain values, not policy or prompt fragments. (Issue #592 moved the provider prompt projection of those sections behind HostedInference internals; `apps/server/ARCHITECTURE.md` records the current shape.)
 - ConversationContinuity is the only module that admits or terminalizes a Turn and changes retained conversation state. Compaction model work occurs outside a transaction; optimistic state validation, replacement, and exact-prefix deletion commit atomically afterward.
 
 Memory remains a separate deep module exposing the canonical `remember`, `recall`, `revise`, and `forget` operations behind one content-agnostic MemoryPolicy. Remember admission measures the exact generated Memory identity that persistence uses. Every committed Memory insert, revision, or deletion advances a trigger-backed monotonic per-User continuity revision, so a prepared context cannot survive a Memory change.

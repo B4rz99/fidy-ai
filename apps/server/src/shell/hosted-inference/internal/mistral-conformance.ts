@@ -1,11 +1,18 @@
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
-import { Data, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { JsonSchema } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  type MistralConformanceCaseId,
+  MistralConformanceError,
+  type MistralConformanceFailureReason,
+  type MistralConformanceReport,
+} from "~/shell/hosted-inference/mistral-conformance-contract";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
-import { makeSyntheticConversationCompactionContext } from "./conversation-compaction-context";
-import { hostedOutputTokenReserve } from "./hosted-inference";
+import { hostedOutputTokenReserve } from "./limits";
+import { hostedStructuredCompactionObjectName } from "./inference";
+import { hostedStructuredCompactionInstruction } from "./prompt";
 
 /** Fixed candidate whose hosted accounting must agree with the pinned local v13 tokenizer. */
 export const mistralConformanceModel = "ministral-3b-2512";
@@ -15,6 +22,22 @@ const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
 
 const Book = Schema.Struct({ name: Schema.String, authors: Schema.Array(Schema.String) });
+
+const conformanceMessages = [
+  {
+    role: "system" as const,
+    content: hostedStructuredCompactionInstruction,
+  },
+  {
+    role: "user" as const,
+    content: "Earlier compacted conversation: the User tracks a grocery budget.",
+  },
+  { role: "user" as const, content: "User: I paid COP 48,900 for groceries." },
+  {
+    role: "assistant" as const,
+    content: "Assistant: I recorded the grocery purchase.",
+  },
+] as const;
 
 type ResponseFormat = Readonly<{
   type: "json_schema";
@@ -51,7 +74,7 @@ const largeDifferentialJsonSchema: JsonSchema.JsonSchema = {
 };
 
 type ConformanceCase = Readonly<{
-  id: "baseline" | "small-schema" | "large-schema" | "production-compaction";
+  id: MistralConformanceCaseId;
   messages: MistralV13Messages;
   maxTokens: number;
   responseFormat: Option.Option<ResponseFormat>;
@@ -88,9 +111,11 @@ const cases: ReadonlyArray<ConformanceCase> = [
   },
   {
     id: "production-compaction",
-    messages: makeSyntheticConversationCompactionContext().messages,
+    messages: conformanceMessages,
     maxTokens: hostedOutputTokenReserve,
-    responseFormat: Option.some(jsonSchemaFormat("compacted_conversation", productionJsonSchema)),
+    responseFormat: Option.some(
+      jsonSchemaFormat(hostedStructuredCompactionObjectName, productionJsonSchema)
+    ),
   },
 ];
 
@@ -99,28 +124,6 @@ const ProviderResponse = Schema.Struct({
   usage: Schema.Struct({ prompt_tokens: Schema.Finite }),
 });
 const ProviderResponseJson = jsonStringSchema(ProviderResponse);
-
-/** Safe closed reasons emitted by the manual conformance workflow. */
-export type MistralConformanceFailureReason =
-  | "provider_failed"
-  | "provider_response_invalid"
-  | "provider_model_mismatch"
-  | "prompt_count_mismatch";
-
-/** Content-free failure from the manual Mistral conformance workflow. */
-export class MistralConformanceError extends Data.TaggedError("MistralConformanceError")<{
-  readonly reason: MistralConformanceFailureReason;
-  readonly caseId: ConformanceCase["id"];
-}> {}
-
-/** Safe numeric evidence from one hosted accounting probe. */
-export type MistralConformanceReport = Readonly<{
-  id: ConformanceCase["id"];
-  localPromptTokens: number;
-  hostedPromptTokens: number;
-  outputReserve: number;
-  completeRequestTokens: number;
-}>;
 
 const conformanceError = (
   conformanceCase: ConformanceCase,

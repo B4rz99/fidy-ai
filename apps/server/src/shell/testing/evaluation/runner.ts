@@ -24,7 +24,7 @@ import { makeScenario, runEmail, runHosted, runStatement } from "./scenarios";
 import { runSafety } from "./safety";
 import { EvaluationRequestBudget } from "./request-budget";
 import { CurrentAgentLimits } from "~/shell/agent/agent-service";
-import { HostedInferenceError } from "~/shell/agent/hosted-inference";
+import { HostedInferenceError } from "~/shell/hosted-inference/contract";
 
 const smokeCases = new Set(["hosted-query", "statement-refund-csv", "email-inline-png"]);
 const commitPrefixLength = 12;

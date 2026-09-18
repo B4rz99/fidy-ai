@@ -88,6 +88,7 @@ const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
 const HOSTED_JS_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-js-tokenizer`;
+const HOSTED_MEMORY_PROVIDER = `src/shell/memory/${PROBE_PREFIX}hosted-provider`;
 const ADAPTER_TO_HANDLER = `src/shell/${PROBE_PREFIX}adapter-to-handler`;
 const REGISTRY_TO_HANDLER = `src/shell/_shared/${PROBE_PREFIX}registry-to-handler`;
 const ADAPTER_TO_COORDINATION = `src/shell/${PROBE_PREFIX}adapter-to-coordination`;
@@ -971,15 +972,22 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error hosted-inference-orchestration-imports-provider: ${HOSTED_PROVIDER}/probe.ts → src/shell/agent/openai.ts`,
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_PROVIDER}/probe.ts → src/shell/hosted-inference/internal/openai.ts`,
+        `error agent-imports-provider-wire-codec: ${HOSTED_PROVIDER}/wire.ts`,
       ],
     },
     files: [
       {
         path: `${HOSTED_PROVIDER}/probe.ts`,
         source:
-          'import { FidyAgentModel } from "../openai";\n\n' +
+          'import { FidyAgentModel } from "~/shell/hosted-inference/internal/openai";\n\n' +
           "export const hostedProviderProbe = FidyAgentModel;\n",
+      },
+      {
+        path: `${HOSTED_PROVIDER}/wire.ts`,
+        source:
+          'import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";\n\n' +
+          "export const hostedProviderWireProbe = toCodecOpenAI;\n",
       },
     ],
     name: "hosted inference orchestration rejects provider-specific imports",
@@ -1000,6 +1008,24 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "hosted inference orchestration rejects generic model imports",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_MEMORY_PROVIDER}/probe.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${HOSTED_MEMORY_PROVIDER}/probe.ts`,
+        source:
+          'import { Tiktoken } from "js-tiktoken/lite";\n' +
+          'import { LanguageModel } from "effect/unstable/ai";\n\n' +
+          "export const memoryProviderProbe = [Tiktoken, LanguageModel] as const;\n",
+      },
+    ],
+    name: "Memory orchestration rejects provider models and tokenizers",
   },
 ];
 

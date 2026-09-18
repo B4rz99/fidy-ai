@@ -21,8 +21,8 @@ const applicationQueueNames = new Set<DurableQueueNameType>();
 export const readApplicationQueueNames = (): ReadonlyArray<DurableQueueNameType> =>
   Array.from(applicationQueueNames).sort();
 
-/** Captures queue wiring authority without allowing the raw factory to escape. */
-export const capturedQueueProvider: Effect.Effect<
+/** Yields queue wiring authority without allowing the raw factory to escape. */
+export const applicationQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
   PersistedQueue.PersistedQueueFactory

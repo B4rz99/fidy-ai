@@ -7,7 +7,7 @@ import {
 } from "./contract";
 import type { DurableQueueName } from "~/shell/durable-queue-policy";
 import {
-  capturedQueueProvider,
+  applicationQueueProvider,
   declareApplicationQueue,
   readApplicationQueueNames,
 } from "~/shell/persisted-queue/internal/queue";
@@ -16,16 +16,12 @@ import {
 export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueName> =>
   readApplicationQueueNames();
 
-/**
- * Captures only the capability to satisfy queue requirements; the raw factory never escapes.
- * Suspended so the published binding constructs its own effect instead of re-exporting the
- * internal construction value.
- */
+/** Captures only the capability to satisfy queue requirements; the raw factory never escapes. */
 export const applicationPersistedQueueProvider: Effect.Effect<
   ApplicationPersistedQueueProvider,
   never,
   ApplicationPersistedQueueRequirement
-> = Effect.suspend(() => capturedQueueProvider);
+> = Effect.suspend(() => applicationQueueProvider);
 
 /**
  * Declares one named durable handoff. Offers preserve custom identity, schema encoding, and the

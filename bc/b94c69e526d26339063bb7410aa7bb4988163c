@@ -1,0 +1,61 @@
+apps/server/src/shell/outbound-http/operations.ts
+  s_9466f16d22ab04::t_b91284f8cb8515 148
+  s_9466f16d22ab04::t_60b83193554cea 104,126
+  s_9466f16d22ab04::t_504f0d578f0a52 23,27
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_9466f16d22ab04::t_a8bbe92ada2e44 241,243-245,247,266,268-269,283-284,310-312,314,321,343,348
+  s_9466f16d22ab04::t_e88061486ade79 193
+  s_9466f16d22ab04::t_93dd2e8bd1cb1f 95
+  s_9466f16d22ab04::t_38d854de469995 99,118,120,136,163-165,177
+  s_9466f16d22ab04::t_abc3889e8de72c 216,219,226
+  s_9466f16d22ab04::t_8735f73d77598f 96,167,215
+  s_9466f16d22ab04::t_346c682198a580 97,210,217,227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bcb94c69e526d26339063bb7410aa7bb4988163c",
+  "prompts": {},
+  "sessions": {
+    "s_5974c1f33d750e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b1b0-e0cb-7226-a812-1580b10c4474",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8a65ada37bad49": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0df-06ce-7026-849b-f778d363973e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_9466f16d22ab04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b0d4-8c0d-72b5-8945-28d82265b028",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_e7e4c412e7969a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b11c-bbc5-7207-a7be-1aae98d6c303",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f26b9f4056e846": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b07f-22bc-75bb-8923-63508e4758e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -15,7 +15,7 @@ import {
   Telemetry,
   runScheduledWork,
 } from "~/shell/observability/operations";
-import { applicationPersistedQueueNames } from "~/shell/_shared/persisted-queue";
+import { applicationPersistedQueueNames } from "~/shell/persisted-queue/operations";
 
 import { SupportAccessVerifier } from "~/shell/recovery/access";
 import {

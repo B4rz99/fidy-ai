@@ -1,7 +1,7 @@
 import { Crypto, Effect, Function, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
-import { applicationPersistedQueueProvider } from "~/shell/_shared/persisted-queue";
+import { applicationPersistedQueueProvider } from "~/shell/persisted-queue/operations";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { type AgentConfirmation, isHostedVisible } from "~/shell/_shared/operation-policy";
 import { grantsRequiredTier } from "~/shell/_shared/suggested-operations";

@@ -10,11 +10,11 @@ import {
   EmailVerificationPublicCode,
 } from "~/core/email-authentication/model";
 import { proofExpiry } from "~/core/email-authentication/rules";
-import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
 import type {
+  ApplicationPersistedQueueHandlerPolicy,
   PersistedQueueFailureDisposition,
   PersistedQueueTerminalReason,
-} from "~/shell/_shared/persisted-queue-handler";
+} from "~/shell/persisted-queue/contract";
 import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/service";
 import { withSubjectLockInScope } from "~/shell/consent/repo";
 import {
@@ -427,18 +427,18 @@ export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
     ) {
       return;
     }
-    const starts = yield* pairingStartQueue;
-    const deliveries = yield* pairingDeliveryQueue;
-    const expiries = yield* pairingExpiryQueue;
+    const starts = pairingStartQueue;
+    const deliveries = pairingDeliveryQueue;
+    const expiries = pairingExpiryQueue;
     yield* starts
-      .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.forever, Effect.forkScoped);
     yield* deliveries
-      .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.forever, Effect.forkScoped);
     // Expiry is submitted without occupying a worker until the ten-minute deadline.
     yield* expiries
-      .take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.forever, Effect.forkScoped);
   })
 );
@@ -449,17 +449,17 @@ export type BrowserPairingEmailBackgroundStepOutcome = Readonly<{ _tag: "Idle" |
 /** Drives native queues and the real workflow handler without a production polling fiber. */
 export const processNextBackgroundStep = Effect.fn("EmailAuthentication.processNextBackgroundStep")(
   function* () {
-    const starts = yield* pairingStartQueue;
-    const deliveries = yield* pairingDeliveryQueue;
-    const expiries = yield* pairingExpiryQueue;
+    const starts = pairingStartQueue;
+    const deliveries = pairingDeliveryQueue;
+    const expiries = pairingExpiryQueue;
     const started = yield* starts
-      .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     const delivered = yield* deliveries
-      .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
     const expired = yield* expiries
-      .take(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
+      .handleNext(processPairingExpiryQueueItem, pairingQueueHandlerPolicy)
       .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
     return {
       _tag:

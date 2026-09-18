@@ -59,7 +59,7 @@ const clearMailboxes = Effect.fn("WhatsApp.clearDisclosureMailboxes")(function* 
 export const pruneConsentDisclosureDelivery = Effect.fn("WhatsApp.pruneDisclosureDelivery")(
   function* (now: DateTime.Utc) {
     const candidates = yield* findExpiredConsentDisclosureRequests(now);
-    const queue = yield* consentDisclosureQueue;
+    const queue = consentDisclosureQueue;
     for (const exchangeId of candidates) {
       yield* lockConsentDisclosure(
         exchangeId,

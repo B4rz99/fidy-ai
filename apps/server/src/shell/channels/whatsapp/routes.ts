@@ -18,7 +18,7 @@ import {
   type HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import type { ApplicationPersistedQueueRequirement } from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueRequirement } from "~/shell/persisted-queue/contract";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   TelemetryAttempt,

@@ -4,7 +4,7 @@ import { DateTime, Effect, Layer, Option, Ref, Schema, type Scope } from "effect
 import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/persisted-queue/contract";
 import {
   WhatsAppInboundWork,
   maximumWhatsAppInboundAttempts,
@@ -122,7 +122,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
         const userId = UserId.make("f1d1a000-0000-4000-8000-00000000c021");
         const inboundJobId = WhatsAppInboundJobId.make("f1d1a000-0000-4000-8000-00000000c022");
         const rowId = "f1d1a000-0000-4000-8000-00000000c023";
-        const queue = yield* whatsappInboundQueue;
+        const queue = whatsappInboundQueue;
         yield* queue.offer(WhatsAppInboundWork.make({ version: 1, userId, inboundJobId }), {
           id: rowId,
         });
@@ -132,7 +132,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           WHERE id = ${rowId} AND queue_name = ${whatsappInboundQueueName}`;
         for (let attempt = 0; attempt < maximumWhatsAppInboundAttempts; attempt += 1) {
           const error = yield* queue
-            .take(() => Effect.void, compatibilityQueueHandlerPolicy, {
+            .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
               maxAttempts: maximumWhatsAppInboundAttempts,
             })
             .pipe(Effect.flip);
@@ -154,7 +154,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
         // The exhausted row is no longer eligible: the consumer observes absence,
         // never a silent drop.
         const missed = yield* queue
-          .take(() => Effect.void, compatibilityQueueHandlerPolicy, {
+          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
             maxAttempts: maximumWhatsAppInboundAttempts,
           })
           .pipe(Effect.timeoutOption("500 millis"));
@@ -184,7 +184,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
             'not-json', FALSE, ${maximumWhatsAppInboundAttempts}, now(), now())`;
           const userId = UserId.make("f1d1a000-0000-4000-8000-00000000c025");
           const inboundJobId = WhatsAppInboundJobId.make("f1d1a000-0000-4000-8000-00000000c026");
-          const queue = yield* whatsappInboundQueue;
+          const queue = whatsappInboundQueue;
           yield* queue.offer(WhatsAppInboundWork.make({ version: 1, userId, inboundJobId }), {
             id: inboundJobId,
           });
@@ -228,7 +228,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           (id, queue_name, element, completed, attempts, created_at, updated_at)
           VALUES (${old.inboundJobId}, ${whatsappInboundQueueName}, ${oldElement},
             FALSE, 0, now(), now())`;
-          const queue = yield* whatsappInboundQueue;
+          const queue = whatsappInboundQueue;
           // A new-deployment duplicate offer converges on the old row instead of forking work.
           const decoded = yield* Schema.decodeUnknownEffect(WhatsAppInboundWork)(oldJson);
           yield* queue.offer(decoded, { id: old.inboundJobId });
@@ -237,7 +237,10 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           expect(afterOffer[0]?.element).toBe(oldElement);
           const completions = yield* Ref.make(0);
           const seen = yield* Ref.make<ReadonlyArray<WhatsAppInboundWork>>([]);
-          yield* queue.take(recordCompletion(completions, seen), compatibilityQueueHandlerPolicy);
+          yield* queue.handleNext(
+            recordCompletion(completions, seen),
+            compatibilityQueueHandlerPolicy
+          );
           expect(yield* Ref.get(completions)).toBe(1);
           const [work] = yield* Ref.get(seen);
           expect(work?.version).toBe(1);
@@ -247,7 +250,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           expect(row?.completed).toBe(true);
           expect(row?.attempts).toBe(1);
           const redelivered = yield* queue
-            .take(() => Effect.void, compatibilityQueueHandlerPolicy)
+            .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy)
             .pipe(Effect.timeoutOption("500 millis"));
           expect(Option.isNone(redelivered)).toBe(true);
           expect(yield* Ref.get(completions)).toBe(1);
@@ -262,7 +265,7 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
         yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
         const userId = UserId.make("f1d1a000-0000-4000-8000-00000000c027");
         const inboundJobId = WhatsAppInboundJobId.make("f1d1a000-0000-4000-8000-00000000c028");
-        const queue = yield* whatsappInboundQueue;
+        const queue = whatsappInboundQueue;
         yield* queue.offer(WhatsAppInboundWork.make({ version: 1, userId, inboundJobId }), {
           id: inboundJobId,
         });

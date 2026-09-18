@@ -39,7 +39,7 @@ import {
   HostedTurnUnavailable,
   classifyDurableWhatsAppExchange,
 } from "~/shell/agent/agent-service";
-import { PersistedQueueHandlerFailure } from "~/shell/_shared/persisted-queue-handler";
+import { PersistedQueueHandlerFailure } from "~/shell/persisted-queue/contract";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";

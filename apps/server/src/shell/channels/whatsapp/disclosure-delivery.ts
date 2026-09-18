@@ -12,8 +12,10 @@ import {
 } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
 import { Activity, DurableDeferred } from "effect/unstable/workflow";
-import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/_shared/persisted-queue";
-import type { PersistedQueueFailureDisposition } from "~/shell/_shared/persisted-queue-handler";
+import type {
+  ApplicationPersistedQueueHandlerPolicy,
+  PersistedQueueFailureDisposition,
+} from "~/shell/persisted-queue/contract";
 import { type PendingConsentExchangeId } from "~/core/consent/model";
 import { TranscriptText } from "~/core/transcript/model";
 import { findPendingConsentExchange, recordConsentDisclosureDelivery } from "~/shell/consent/repo";
@@ -112,7 +114,7 @@ export const requestConsentDisclosureDelivery = Effect.fn("WhatsApp.requestDiscl
     readonly exchangeId: PendingConsentExchangeId;
     readonly beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient>;
   }) {
-    const queue = yield* consentDisclosureQueue;
+    const queue = consentDisclosureQueue;
     const destination = kapsoDestinationFor(input.event.caller);
     yield* lockConsentDisclosure(
       input.exchangeId,
@@ -291,7 +293,7 @@ export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosu
         const attempt = { ...current.value, correlationToken: evidence.correlationToken };
         const applied = yield* applyLifecycleEvidence(attempt, evidence);
         if (!applied) return "ignored" as const;
-        const queue = yield* consentDisclosureEvidenceQueue;
+        const queue = consentDisclosureEvidenceQueue;
         const queueId = yield* disclosureEvidenceQueueId(attempt);
         yield* queue
           .offer(
@@ -464,9 +466,9 @@ export const disclosureQueueHandlerPolicy: ApplicationPersistedQueueHandlerPolic
 
 /** Starts one accepted workflow without occupying a consumer while it awaits provider evidence. */
 export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosure")(function* () {
-  const queue = yield* consentDisclosureQueue;
+  const queue = consentDisclosureQueue;
   yield* queue
-    .take(
+    .handleNext(
       (payload) =>
         ConsentDisclosureWorkflow.execute(payload, { discard: true }).pipe(
           Effect.asVoid,
@@ -485,9 +487,9 @@ export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosur
 /** Completes one committed evidence notification outside the evidence transaction. */
 export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisclosureEvidence")(
   function* () {
-    const queue = yield* consentDisclosureEvidenceQueue;
+    const queue = consentDisclosureEvidenceQueue;
     yield* queue
-      .take(
+      .handleNext(
         (payload) =>
           Effect.gen(function* () {
             const deferred = disclosureEvidenceChanged(payload);
@@ -531,7 +533,7 @@ export const ConsentDisclosureQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
-    const queue = yield* consentDisclosureQueue;
+    const queue = consentDisclosureQueue;
     const publishPage = Effect.fn(function* (after: Option.Option<PendingConsentExchangeId>) {
       const ids = yield* findPendingConsentDisclosureRequests(yield* DateTime.now, after);
       yield* Effect.forEach(

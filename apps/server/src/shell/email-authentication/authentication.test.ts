@@ -1136,15 +1136,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const pairing = yield* startPairing;
         yield* requestEmail(pairing, knownEmail);
-        yield* (yield* pairingStartQueue)
-          .take(processPairingStartQueueItem, pairingQueueHandlerPolicy)
+        yield* pairingStartQueue
+          .handleNext(processPairingStartQueueItem, pairingQueueHandlerPolicy)
           .pipe(
             // Finite start-consumer test entrypoint.
             // @effect-diagnostics-next-line strictEffectProvide:off
             Effect.provide(TelemetryDisabled)
           );
-        yield* (yield* pairingDeliveryQueue)
-          .take(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
+        yield* pairingDeliveryQueue
+          .handleNext(processPairingDeliveryQueueItem, pairingQueueHandlerPolicy)
           .pipe(
             // This test expires the workflow explicitly below, so it drives only the start and
             // delivery consumer gateways and leaves the queued expiry unclaimed.

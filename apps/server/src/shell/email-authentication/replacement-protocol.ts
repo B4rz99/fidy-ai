@@ -7,7 +7,7 @@ import {
   EmailReplacementWorkflowId,
 } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
-import { makePersistedQueue } from "~/shell/_shared/persisted-queue";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 
 /** Persisted routing facts only; an intent identifier never grants another User's authority. */
 export const ReplacementDeliveryPayload = Schema.Struct({
@@ -57,7 +57,7 @@ export const ReplacementExpiryWorkflow = Workflow.make("EmailReplacementExpiry",
 export const replacementDeliveryQueueName = "email-replacement-delivery";
 export const replacementExpiryQueueName = "email-replacement-expiry";
 
-export const replacementDeliveryQueue = makePersistedQueue({
+export const replacementDeliveryQueue = declarePersistedQueue({
   name: replacementDeliveryQueueName,
   schema: ReplacementDeliveryPayload,
   descriptor: {
@@ -65,7 +65,7 @@ export const replacementDeliveryQueue = makePersistedQueue({
     operation: CanonicalOperationId.make("emailAuthentication.requestEmailReplacement"),
   },
 });
-export const replacementExpiryQueue = makePersistedQueue({
+export const replacementExpiryQueue = declarePersistedQueue({
   name: replacementExpiryQueueName,
   schema: ReplacementExpiryPayload,
   descriptor: {
@@ -90,7 +90,7 @@ export const publishReplacementDelivery = Effect.fn("EmailReplacement.publish")(
     VALUES (${payload.intentId}, ${payload.userId}, 'delivery', ${expiresAt}) ON CONFLICT DO NOTHING`.pipe(
     Effect.orDie
   );
-  const queue = yield* replacementDeliveryQueue;
+  const queue = replacementDeliveryQueue;
   yield* queue.offer(payload, { id: replacementDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
 
@@ -104,6 +104,6 @@ export const publishReplacementExpiry = Effect.fn("EmailReplacement.publishExpir
     VALUES (${payload.workflowId}, ${payload.userId}, 'expiry', ${expiresAt}) ON CONFLICT DO NOTHING`.pipe(
     Effect.orDie
   );
-  const queue = yield* replacementExpiryQueue;
+  const queue = replacementExpiryQueue;
   yield* queue.offer(payload, { id: replacementExpiryQueueId(payload) }).pipe(Effect.orDie);
 });

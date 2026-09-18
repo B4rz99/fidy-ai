@@ -5,10 +5,8 @@ import { UserId } from "~/core/identity/reference";
 import { amountInCentsForBilling } from "~/core/subscription/billing-rules";
 import { BillingAttemptId, type WompiEnvironment } from "~/core/subscription/model";
 import { BillingEmail } from "~/core/subscription/enrollment-model";
-import {
-  type ApplicationPersistedQueueHandlerPolicy,
-  makePersistedQueue,
-} from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/persisted-queue/contract";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 import { onboardingConsentStandingInScope, withSubjectLockInScope } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/database/operations";
 import {
@@ -60,7 +58,7 @@ export const BillingAttemptReconciliationWorkflow = Workflow.make("BillingAttemp
 });
 
 /** Transactional acceptance handoff; one queue item per BillingAttempt identity. */
-export const billingAttemptQueue = makePersistedQueue({
+export const billingAttemptQueue = declarePersistedQueue({
   name: billingAttemptQueueName,
   schema: BillingAttemptReconciliationPayload,
   descriptor: { component: "api", operation: "subscription.processBillingAttempt" },
@@ -73,7 +71,7 @@ export const billingAttemptQueueId = (work: BillingAttemptReconciliationPayload)
 /** Publishes reconciliation Work in the same SQL transaction that creates the BillingAttempt. */
 export const publishBillingAttemptInScope = Effect.fn("Subscription.publishBillingAttemptInScope")(
   function* (work: Readonly<{ userId: UserId; billingAttemptId: BillingAttemptId }>) {
-    const queue = yield* billingAttemptQueue;
+    const queue = billingAttemptQueue;
     const payload: BillingAttemptReconciliationPayload = {
       userId: work.userId,
       billingAttemptId: work.billingAttemptId,
@@ -413,8 +411,8 @@ export const billingAttemptQueueHandlerPolicy: ApplicationPersistedQueueHandlerP
  */
 export const processNextBillingAttempt = Effect.fn("Subscription.processNextBillingAttempt")(
   function* () {
-    const queue = yield* billingAttemptQueue;
-    yield* queue.take(handleBillingAttemptQueuePayload, billingAttemptQueueHandlerPolicy, {
+    const queue = billingAttemptQueue;
+    yield* queue.handleNext(handleBillingAttemptQueuePayload, billingAttemptQueueHandlerPolicy, {
       maxAttempts: maximumBillingAttemptQueueAttempts,
     });
   }

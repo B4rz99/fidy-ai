@@ -9,10 +9,8 @@ import {
 import { SqlError } from "effect/unstable/sql";
 import { Activity, Workflow } from "effect/unstable/workflow";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
-import {
-  type ApplicationPersistedQueueHandlerPolicy,
-  makePersistedQueue,
-} from "~/shell/_shared/persisted-queue";
+import type { ApplicationPersistedQueueHandlerPolicy } from "~/shell/persisted-queue/contract";
+import { declarePersistedQueue } from "~/shell/persisted-queue/operations";
 import { TelemetryAttempt, TelemetryCount } from "~/shell/observability/contract";
 import { Telemetry } from "~/shell/observability/operations";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
@@ -58,7 +56,7 @@ export const onboardingDeliveryQueueName = "onboarding-email-delivery";
 const workflowEntityType = "Workflow/OnboardingEmailDelivery";
 const maximumProviderRetries = 2;
 
-export const onboardingEmailDeliveryQueue = makePersistedQueue({
+export const onboardingEmailDeliveryQueue = declarePersistedQueue({
   name: onboardingDeliveryQueueName,
   schema: OnboardingDeliveryPayload,
   descriptor: { component: "onboarding", operation: "onboarding.deliverVerification" },
@@ -198,7 +196,7 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
-    const queue = yield* onboardingEmailDeliveryQueue;
+    const queue = onboardingEmailDeliveryQueue;
     const publishPendingPage = Effect.fn("OnboardingDelivery.publishPendingPage")(function* (
       cursor: Option.Option<Readonly<{ id: EmailDeliveryIntentId; createdAt: DateTime.Utc }>>
     ) {
@@ -218,7 +216,7 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
 
     const firstPageCursor = yield* publishPendingPage(Option.none());
     yield* queue
-      .take(
+      .handleNext(
         (payload, { attempts }) =>
           consumeOnboardingDelivery(OnboardingEmailDeliveryWorkflow.execute(payload), attempts),
         onboardingQueueHandlerPolicy
@@ -246,7 +244,7 @@ export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
 export const publishOnboardingEmailDelivery = Effect.fn("OnboardingDelivery.publish")(function* (
   intentId: EmailDeliveryIntentId
 ) {
-  const queue = yield* onboardingEmailDeliveryQueue;
+  const queue = onboardingEmailDeliveryQueue;
   const payload: OnboardingDeliveryPayload = { intentId, revision: 1 };
   yield* queue.offer(payload, { id: onboardingEmailDeliveryQueueId(payload) }).pipe(Effect.orDie);
 });
@@ -290,9 +288,9 @@ export const onboardingEmailDeliveryRetention = {
 export const deliverOneOnboardingEmailForTesting = Effect.fn(
   "OnboardingDelivery.deliverOneForTesting"
 )(function* () {
-  const queue = yield* onboardingEmailDeliveryQueue;
+  const queue = onboardingEmailDeliveryQueue;
   const completed = yield* queue
-    .take(
+    .handleNext(
       (payload, { attempts }) =>
         consumeOnboardingDelivery(performOnboardingEmailDelivery(payload), attempts),
       onboardingQueueHandlerPolicy

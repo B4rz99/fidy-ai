@@ -1,22 +1,18 @@
 import * as Arr from "effect/Array";
 import { Cause, Effect, Option, Schema } from "effect";
-import { PersistedQueue } from "effect/unstable/persistence";
+import {
+  type ApplicationPersistedQueueHandlerPolicy,
+  type PersistedQueueFailureDisposition,
+  type PersistedQueueHandlerDescriptor,
+  PersistedQueueHandlerFailure,
+  type PersistedQueueMetadata,
+  type PersistedQueueTerminalReason,
+} from "~/shell/persisted-queue/contract";
 import {
   DisabledTelemetry,
   Telemetry,
   type TelemetryService,
 } from "~/shell/observability/operations";
-import {
-  DurableQueueName,
-  type DurableQueueName as DurableQueueNameType,
-} from "~/shell/durable-queue-policy";
-
-import {
-  type PersistedQueueFailureDisposition,
-  type PersistedQueueHandlerDescriptor,
-  PersistedQueueHandlerFailure,
-  type PersistedQueueTerminalReason,
-} from "./persisted-queue-handler";
 
 /**
  * Policy supplied by an owning queue consumer. Classification must be total for the handler's typed
@@ -237,33 +233,18 @@ const enforcePersistedQueueHandler =
       )
     );
 
-type QueueMetadata = Readonly<{
-  id: string;
-  attempts: number;
-}>;
-
-type QueueTakeOptions<A, R> = Parameters<PersistedQueue.PersistedQueue<A, R>["take"]>[1];
-
-/** Classification and idempotent terminal settlement required for every consumed payload. */
-export type ApplicationPersistedQueueHandlerPolicy<
+export const applyQueueHandlerPolicy = <
   A,
+  XA,
   HandlerFailure,
+  XR,
   TerminalError,
   TerminalRequirements,
-> = Readonly<{
-  classify: (failure: HandlerFailure) => PersistedQueueFailureDisposition;
-  recordTerminal: (
-    value: A,
-    metadata: QueueMetadata,
-    reason: PersistedQueueTerminalReason
-  ) => Effect.Effect<void, TerminalError, TerminalRequirements>;
-}>;
-
-const applyQueueHandlerPolicy = <A, XA, HandlerFailure, XR, TerminalError, TerminalRequirements>(
+>(
   input: Readonly<{
     value: A;
-    metadata: QueueMetadata;
-    handler: (value: A, metadata: QueueMetadata) => Effect.Effect<XA, HandlerFailure, XR>;
+    metadata: PersistedQueueMetadata;
+    handler: (value: A, metadata: PersistedQueueMetadata) => Effect.Effect<XA, HandlerFailure, XR>;
     policy: ApplicationPersistedQueueHandlerPolicy<
       A,
       HandlerFailure,
@@ -281,127 +262,3 @@ const applyQueueHandlerPolicy = <A, XA, HandlerFailure, XR, TerminalError, Termi
     }),
     enforcePersistedQueueHandler(input.descriptor)
   );
-
-/**
- * A durable application handoff with native offer semantics and one consumer operation. Consumption
- * requires exhaustive failure classification, idempotent terminal settlement, redacted persistence,
- * mandatory metadata-only defect logging plus configured telemetry capture, and interruption-safe
- * lease release.
- */
-/** Type-only name for the queue Effect requirement; it exports no raw service identifier. */
-export type ApplicationPersistedQueueRequirement = PersistedQueue.PersistedQueueFactory;
-
-/** Captured wiring capability that can provide queue persistence without exposing raw construction. */
-export type ApplicationPersistedQueueProvider = Readonly<{
-  provide: <A, E, R>(
-    effect: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E, Exclude<R, PersistedQueue.PersistedQueueFactory>>;
-}>;
-
-/** Captures only the capability to satisfy queue requirements; the raw factory never escapes. */
-export const applicationPersistedQueueProvider: Effect.Effect<
-  ApplicationPersistedQueueProvider,
-  never,
-  PersistedQueue.PersistedQueueFactory
-> = PersistedQueue.PersistedQueueFactory.pipe(
-  Effect.map((factory) => ({
-    provide: (effect) =>
-      Effect.provideService(effect, PersistedQueue.PersistedQueueFactory, factory),
-  }))
-);
-
-export type ApplicationPersistedQueue<PayloadSchema extends Schema.Constraint> = Readonly<{
-  offer: PersistedQueue.PersistedQueue<
-    PayloadSchema["Type"],
-    PayloadSchema["EncodingServices"] | PayloadSchema["DecodingServices"]
-  >["offer"];
-  take: <XA, HandlerFailure, XR, TerminalError, TerminalRequirements>(
-    handler: (
-      value: PayloadSchema["Type"],
-      metadata: QueueMetadata
-    ) => Effect.Effect<XA, HandlerFailure, XR>,
-    policy: ApplicationPersistedQueueHandlerPolicy<
-      PayloadSchema["Type"],
-      HandlerFailure,
-      TerminalError,
-      TerminalRequirements
-    >,
-    options?: QueueTakeOptions<
-      PayloadSchema["Type"],
-      PayloadSchema["EncodingServices"] | PayloadSchema["DecodingServices"]
-    >
-  ) => Effect.Effect<
-    void,
-    PersistedQueueHandlerFailure | PersistedQueue.PersistedQueueError | Schema.SchemaError,
-    | PayloadSchema["EncodingServices"]
-    | PayloadSchema["DecodingServices"]
-    | XR
-    | TerminalRequirements
-  >;
-}>;
-
-/** Stable protocol identity shared by runtime construction and compatibility evidence. */
-export type ApplicationPersistedQueueDefinition<
-  PayloadSchema extends Schema.Constraint,
-  Name extends string,
-> = Readonly<{
-  name: Name;
-  schema: PayloadSchema;
-}>;
-
-/** Queue construction carrying its exact durable protocol definition without widening runtime access. */
-export type ApplicationPersistedQueueConstruction<
-  PayloadSchema extends Schema.Constraint,
-  Name extends string,
-> = Effect.Effect<
-  ApplicationPersistedQueue<PayloadSchema>,
-  never,
-  PersistedQueue.PersistedQueueFactory
-> &
-  Readonly<{
-    definition: ApplicationPersistedQueueDefinition<PayloadSchema, Name>;
-  }>;
-
-const applicationQueueNames = new Set<DurableQueueNameType>();
-
-/** Returns queue identities registered by application queue construction in this process. */
-export const applicationPersistedQueueNames = (): ReadonlyArray<DurableQueueNameType> =>
-  Array.from(applicationQueueNames).sort();
-
-/**
- * Defines one named durable handoff. Offers preserve custom identity and schema encoding; takes
- * require the owning disposition policy and expose only the closed redacted failure vocabulary.
- */
-export const makePersistedQueue = <
-  PayloadSchema extends Schema.Constraint,
-  const Name extends string,
->(options: {
-  readonly name: Name;
-  readonly schema: PayloadSchema;
-  readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueueConstruction<PayloadSchema, Name> => {
-  applicationQueueNames.add(DurableQueueName.make(options.name));
-  const construction = PersistedQueue.make({ name: options.name, schema: options.schema }).pipe(
-    Effect.map((queue): ApplicationPersistedQueue<PayloadSchema> => ({
-      offer: queue.offer,
-      take: (handler, policy, takeOptions) =>
-        queue.take(
-          (value, metadata) =>
-            applyQueueHandlerPolicy({
-              value,
-              metadata,
-              handler,
-              policy,
-              descriptor: options.descriptor,
-            }),
-          takeOptions
-        ),
-    }))
-  );
-  return Object.assign(construction, {
-    definition: Object.freeze({
-      name: options.name,
-      schema: options.schema,
-    }),
-  });
-};

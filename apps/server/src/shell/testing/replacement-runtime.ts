@@ -9,7 +9,11 @@ import {
   authenticatedClusterHttp,
 } from "~/shell/authenticated-cluster-http";
 import { PgLive } from "~/shell/db/client";
-import { clusterTestRunnerOptions } from "./cluster-topology-fixtures";
+import {
+  clusterTestRunnerOptions,
+  clusterTestShardLockExpiration,
+  clusterTestShardLockRefreshInterval,
+} from "./cluster-topology-fixtures";
 import {
   EmailDeliveryPort,
   type EmailDeliveryPortService,
@@ -51,8 +55,8 @@ export const replacementRuntimeLayer = ({
               port,
               overrides: {
                 runnerHealthCheckInterval: "1 second",
-                shardLockRefreshInterval: "500 millis",
-                shardLockExpiration: "2 seconds",
+                shardLockRefreshInterval: clusterTestShardLockRefreshInterval,
+                shardLockExpiration: clusterTestShardLockExpiration,
               },
             }),
             loopbackClusterRunnerHttpPolicy([port])

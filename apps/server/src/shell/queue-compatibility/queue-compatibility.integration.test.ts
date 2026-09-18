@@ -1,6 +1,6 @@
 import { BunServices } from "@effect/platform-bun";
-import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { DateTime, Effect, Layer, Option, Ref, Schema, type Scope } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { UserId } from "~/core/identity/reference";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
@@ -57,6 +57,14 @@ const QueueRowState = Schema.Struct({
   element: Schema.String,
 });
 
+const runWithCompatibilityHarness = <A, E>(
+  effect: Effect.Effect<A, E, Layer.Success<typeof CompatibilityHarness> | Scope.Scope>
+): Effect.Effect<A, E | Layer.Error<typeof CompatibilityHarness>, Scope.Scope> =>
+  Effect.gen(function* () {
+    const context = yield* Layer.build(Layer.fresh(CompatibilityHarness));
+    return yield* effect.pipe(Effect.provide(context));
+  });
+
 const cleanQueue = Effect.fn("Test.cleanCompatibilityQueue")(function* () {
   const admin = yield* MigrationSqlClient;
   yield* admin`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = ${whatsappInboundQueueName}`;
@@ -100,10 +108,9 @@ const recordCompletion = (
     yield* Ref.update(seen, (values) => [...values, work]);
   });
 
-layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
-  "Queue compatibility over PostgreSQL",
-  (it) => {
-    it.effect("consumes attempts on decode failures and retires the exhausted row", () =>
+describe.sequential("Queue compatibility over PostgreSQL", () => {
+  it.live("consumes attempts on decode failures and retires the exhausted row", () =>
+    runWithCompatibilityHarness(
       Effect.gen(function* () {
         yield* cleanQueue();
         yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
@@ -155,11 +162,13 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
         expect(retiredRows).toHaveLength(1);
         expect(retiredRows[0]?.completed).toBe(true);
       })
-    );
+    )
+  );
 
-    it.effect(
-      "retains malformed exhausted elements as schema_incompatible and retires decodable ones",
-      () =>
+  it.live(
+    "retains malformed exhausted elements as schema_incompatible and retires decodable ones",
+    () =>
+      runWithCompatibilityHarness(
         Effect.gen(function* () {
           yield* cleanQueue();
           yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
@@ -195,11 +204,13 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
             inboundJobId,
           });
         })
-    );
+      )
+  );
 
-    it.effect(
-      "completes an oldest-encoding row once under the current consumer despite duplicates",
-      () =>
+  it.live(
+    "completes an oldest-encoding row once under the current consumer despite duplicates",
+    () =>
+      runWithCompatibilityHarness(
         Effect.gen(function* () {
           yield* cleanQueue();
           yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
@@ -236,9 +247,11 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
           expect(Option.isNone(redelivered)).toBe(true);
           expect(yield* Ref.get(completions)).toBe(1);
         })
-    );
+      )
+  );
 
-    it.effect("keeps a new-producer row readable to the previous consumer", () =>
+  it.live("keeps a new-producer row readable to the previous consumer", () =>
+    runWithCompatibilityHarness(
       Effect.gen(function* () {
         yield* cleanQueue();
         yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
@@ -260,6 +273,6 @@ layer(CompatibilityHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const [row] = yield* readQueueRows();
         expect(row?.completed).toBe(true);
       })
-    );
-  }
-);
+    )
+  );
+});

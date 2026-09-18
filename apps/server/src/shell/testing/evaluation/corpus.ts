@@ -76,7 +76,11 @@ const readSourceEvidence = Effect.fn("Evaluation.readSourceEvidence")(function* 
   const sourcePaths = (yield* fs.readDirectory("src", { recursive: true }))
     .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts"))
     .map((path) => `src/${path}`);
-  const paths = [...sourcePaths, "scripts/evaluate-es-co-openai.ts", "scripts/evaluate-es-co.sh"];
+  const paths = [
+    ...sourcePaths,
+    "scripts/evaluate-es-co-openai-runtime.ts",
+    "scripts/evaluate-es-co.sh",
+  ];
   const hashes: Array<string> = [];
   for (const path of paths.toSorted()) {
     hashes.push(awaitedEntry(path, yield* sha256(yield* fs.readFile(path))));

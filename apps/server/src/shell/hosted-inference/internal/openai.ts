@@ -14,6 +14,13 @@ import {
 import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { operationCatalog } from "~/shell/api";
+import {
+  HostedOperationWireName,
+  hostedOperationBindings,
+  hostedToolDescription,
+} from "~/shell/_shared/hosted-operation-bindings";
+import { hostedContextSections } from "~/shell/_shared/hosted-context-sections";
 import type {
   OutboundHttpFailure,
   OutboundHttpRequest,
@@ -29,7 +36,6 @@ import {
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { TranscriptEntry } from "~/core/transcript/model";
-import { exactTranscriptPrompt } from "./model-boundary";
 import {
   HttpClient,
   HttpClientError,
@@ -37,22 +43,22 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http";
 import {
-  HostedInference,
-  type HostedInferenceAdapter,
   HostedInferenceError,
   type HostedInferenceService,
   type HostedInvalidOutputDescription,
-  type HostedStructuredAdapter,
   type HostedTextContext,
   type HostedTextResult,
   type HostedTextToolPolicy,
   HostedToolCallMaximum,
-  hostedOutputTokenReserve,
-  makeHostedInference,
-  maximumActiveRequestTokens,
-} from "./hosted-inference";
-import { agentOperationBindings, agentOperationToolDescription } from "./toolkit";
-import { type WorkingContext, makeStartupWorkingContext } from "./working-context";
+} from "~/shell/hosted-inference/contract";
+import type {
+  HostedInferenceAdapter,
+  HostedPromptProjection,
+  HostedStructuredAdapter,
+} from "./adapter";
+import { makeHostedInferenceInternal } from "./inference";
+import { hostedOutputTokenReserve, maximumActiveRequestTokens } from "./limits";
+import { exactTranscriptPromptInternal, makeStartupTranscriptInternal } from "./prompt";
 
 /** Direct launch model for Fidy's agent; model selection is not runtime-configurable. */
 export const FidyAgentModel = "gpt-5.6-luna";
@@ -93,14 +99,6 @@ export const HostedAgentGenerationConfig = {
   parallel_tool_calls: false,
   store: false,
 } as const;
-
-/** Testing bridge for legacy deterministic LanguageModel fixtures. */
-type HostedToolCallCapOverride = <A, E, R>(
-  effect: Effect.Effect<A, E, R>
-) => Effect.Effect<A, E, Exclude<R, OpenAiLanguageModel.Config>>;
-
-export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToolCallCapOverride =>
-  OpenAiLanguageModel.withConfigOverride({ max_tool_calls: maximum });
 
 const syntheticOpenAiBaseUrl = "https://outbound.invalid/v1";
 
@@ -169,11 +167,36 @@ export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
   config: HostedAgentGenerationConfig,
 }).pipe(Layer.provide(OpenAiClientLive), Layer.provide(OutboundHttp.openAiLayer));
 
+const providerResponseCodec = <Output, Encoded>(
+  schema: Schema.Codec<Output, Encoded, never, never>
+): Schema.Codec<unknown, unknown, never, never> => {
+  const { codec } = toCodecOpenAI(schema);
+  const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(codec.ast);
+  return Schema.Union([wireParameters, schema]);
+};
+
+const openAiOperationBindings = hostedOperationBindings(operationCatalog).map(
+  ({ operation, wireName }) => {
+    const providerResponseParameters = providerResponseCodec(operation.input);
+    return {
+      operation,
+      providerResponseParameters,
+      wireName,
+    };
+  }
+);
+const hostedOperationByWireName = new Map(
+  openAiOperationBindings.map((binding) => [binding.wireName, binding] as const)
+);
+if (hostedOperationByWireName.size !== openAiOperationBindings.length) {
+  throw new Error("Hosted operation aliases must remain unique for OpenAI");
+}
+
 type OpenAiTool = Readonly<{
   type: "function";
   name: string;
   description: string;
-  parameters: (typeof agentOperationBindings)[number]["wireJsonSchema"];
+  parameters: JsonSchema.JsonSchema;
   strict: true;
 }>;
 
@@ -320,7 +343,7 @@ type ProjectedOpenAiInput = Readonly<{
 
 const projectMessages = (
   basePrefix: ReadonlyArray<Prompt.MessageEncoded>,
-  projection: HostedTextContext,
+  projection: HostedPromptProjection,
   continuation: Option.Option<OpenAiContinuation>
 ): Effect.Effect<ProjectedOpenAiInput, HostedInferenceError> =>
   Effect.try({
@@ -351,22 +374,25 @@ const projectMessages = (
     )
   );
 
-const makeOpenAiTool = (binding: (typeof agentOperationBindings)[number]): OpenAiTool => ({
+const makeOpenAiTool = ({
+  operation,
+  wireName,
+}: (typeof openAiOperationBindings)[number]): OpenAiTool => ({
   type: "function",
-  name: binding.wireName,
-  description: agentOperationToolDescription(binding),
-  parameters: binding.wireJsonSchema,
+  name: wireName,
+  description: hostedToolDescription(operation),
+  parameters: toCodecOpenAI(Schema.toEncoded(operation.input)).jsonSchema,
   strict: true,
 });
 
-const allOperationIds = agentOperationBindings.map(({ operation }) => operation);
+const allOperationIds = openAiOperationBindings.map(({ operation }) => operation.id);
 
 const toolsFor = (
   availableOperations: HostedTextToolPolicy["availableOperations"]
 ): ReadonlyArray<OpenAiTool> => {
   const available = new Set(availableOperations);
-  return agentOperationBindings
-    .filter(({ operation }) => available.has(operation))
+  return openAiOperationBindings
+    .filter(({ operation }) => available.has(operation.id))
     .map(makeOpenAiTool);
 };
 
@@ -628,17 +654,24 @@ type FunctionCallItem = Extract<
   { readonly type: "function_call" }
 >;
 
-const decodeToolCall = (
+const decodeToolCall = Effect.fn("HostedInference.decodeToolCall")(function* (
   item: FunctionCallItem
-): Effect.Effect<HostedTextResult["toolCalls"][number], HostedInferenceError> =>
-  Effect.try({
-    try: () => ({
-      id: item.call_id,
-      name: item.name,
-      params: Tool.unsafeSecureJsonParse(item.arguments),
-    }),
+) {
+  const binding = Schema.is(HostedOperationWireName)(item.name)
+    ? hostedOperationByWireName.get(item.name)
+    : undefined;
+  if (binding === undefined) {
+    return yield* invalidProviderOutput("Hosted provider response was invalid");
+  }
+  const rawParams = yield* Effect.try({
+    try: () => Tool.unsafeSecureJsonParse(item.arguments),
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   });
+  const params = yield* Schema.decodeUnknownEffect(binding.providerResponseParameters)(
+    rawParams
+  ).pipe(Effect.mapError(() => invalidProviderOutput("Hosted tool arguments were invalid")));
+  return { id: item.call_id, operation: binding.operation.id, params };
+});
 
 const outputText = (response: OpenAiSchema.Response): ReadonlyArray<string> =>
   response.output.flatMap((item) =>
@@ -797,7 +830,7 @@ const makeStructuredAdapter = (
       const projected = yield* projectMessages(
         [],
         {
-          prefix: input.projection.messages,
+          prefix: input.messages,
           continuationTail: [],
           suffix: [],
           activeRequest: { _tag: "Absent" },
@@ -846,7 +879,7 @@ const countTranscriptTokens = (
   projectMessages(
     [],
     {
-      prefix: exactTranscriptPrompt(entries),
+      prefix: exactTranscriptPromptInternal(entries),
       continuationTail: [],
       suffix: [],
       activeRequest: { _tag: "Absent" },
@@ -907,7 +940,7 @@ const makeOpenAiHostedInference = (
         )
       ),
   };
-  return makeHostedInference(adapter);
+  return makeHostedInferenceInternal(adapter);
 };
 
 const startupMemoryChunkCharacters = 1_800;
@@ -923,7 +956,7 @@ const startupChunks = (text: string, maximumCharacters: number): ReadonlyArray<s
     text.slice(index * maximumCharacters, (index + 1) * maximumCharacters)
   );
 
-const startupContext = (budgets: ContinuityBudgets): Effect.Effect<WorkingContext> => {
+const startupContext = (budgets: ContinuityBudgets): HostedTextContext => {
   const memory = startupMaximumText(
     `[STARTUP_MAXIMUM_MEMORY:${budgets.memory}_TOKENS]`,
     budgets.memory
@@ -940,57 +973,58 @@ const startupContext = (budgets: ContinuityBudgets): Effect.Effect<WorkingContex
     `[STARTUP_MAXIMUM_ACTIVE_REQUEST:${budgets.activeRequest}_TOKENS]`,
     budgets.activeRequest
   );
-  return makeStartupWorkingContext({
-    user: Option.some({
-      serviceMarket: "CO",
-      locale: "es-CO",
-      timeZone: IanaTimeZone.make("America/Bogota"),
-    }),
-    memories: startupChunks(memory, startupMemoryChunkCharacters).map((text) => ({ text })),
-    transcript: startupChunks(exactTranscript, startupTranscriptChunkCharacters).map((text) => ({
+  const startedAt = DateTime.makeUnsafe("2000-01-01T00:00:00Z");
+  const user = {
+    serviceMarket: "CO" as const,
+    locale: "es-CO" as const,
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  };
+  const transcript = makeStartupTranscriptInternal({
+    entries: startupChunks(exactTranscript, startupTranscriptChunkCharacters).map((text) => ({
       text,
     })),
-    compactedConversation: Option.some({ text: compactedConversation }),
-    request: { text: activeRequest },
-    startedAt: DateTime.makeUnsafe("2000-01-01T00:00:00Z"),
-  }).pipe(Effect.orDie);
+    occurredAt: startedAt,
+  });
+  return {
+    sections: hostedContextSections({
+      user,
+      startedAt,
+      memories: startupChunks(memory, startupMemoryChunkCharacters).map((text) => ({ text })),
+      compactedConversation: Option.some({ text: compactedConversation }),
+      transcript,
+    }),
+    activeRequest: { _tag: "Present", text: activeRequest },
+  };
 };
 
-const makeOpenAiLayer = (
+const makeOpenAiService = (
   validateStartup: boolean,
   structuredPolicy: StructuredExecutionPolicy,
   budgets: ContinuityBudgets
-): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
-  Layer.effect(
-    HostedInference,
-    Effect.gen(function* () {
-      const outbound = yield* OutboundHttp;
-      const inference = makeOpenAiHostedInference(
-        outbound,
-        structuredPolicy,
-        budgets.outputReserve
-      );
-      if (validateStartup) {
-        yield* inference.validateText({
-          context: yield* startupContext(budgets),
-          toolChoice: "auto",
-          maximumToolCalls: HostedToolCallMaximum.make(startupMaximumToolCalls),
-          availableOperations: allOperationIds,
-        });
-      }
-      return inference;
-    })
-  ).pipe(Layer.provide(OutboundHttp.openAiLayer));
+): Effect.Effect<HostedInferenceService, Config.ConfigError | HostedInferenceError, OutboundHttp> =>
+  Effect.gen(function* () {
+    const outbound = yield* OutboundHttp;
+    const inference = makeOpenAiHostedInference(outbound, structuredPolicy, budgets.outputReserve);
+    if (validateStartup) {
+      yield* inference.validateText({
+        context: startupContext(budgets),
+        toolChoice: "auto",
+        maximumToolCalls: HostedToolCallMaximum.make(startupMaximumToolCalls),
+        availableOperations: allOperationIds,
+      });
+    }
+    return inference;
+  });
 
 /** Production OpenAI adapter with fail-closed maximum-request startup validation. */
-export const OpenAiHostedInferenceLive = makeOpenAiLayer(
+export const openAiHostedInference = makeOpenAiService(
   true,
   productionStructuredExecutionPolicy,
   productionContinuityBudgets
 );
 
 /** Production adapter without startup validation for focused transport tests. */
-export const OpenAiHostedInferenceWithoutStartupValidation = makeOpenAiLayer(
+export const openAiHostedInferenceWithoutStartupValidation = makeOpenAiService(
   false,
   productionStructuredExecutionPolicy,
   productionContinuityBudgets
@@ -999,8 +1033,8 @@ export const OpenAiHostedInferenceWithoutStartupValidation = makeOpenAiLayer(
 /** Fixed one-budget variation used only to prove independence at the startup seam. @internal */
 export const openAiHostedInferenceBudgetVariation = (
   budget: ContinuityBudget
-): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
-  makeOpenAiLayer(true, productionStructuredExecutionPolicy, {
+): Effect.Effect<HostedInferenceService, Config.ConfigError | HostedInferenceError, OutboundHttp> =>
+  makeOpenAiService(true, productionStructuredExecutionPolicy, {
     ...productionContinuityBudgets,
     [budget]: productionContinuityBudgets[budget] - 1,
   });
@@ -1008,5 +1042,24 @@ export const openAiHostedInferenceBudgetVariation = (
 /** Test-only constructor for proving adapter-owned structured execution deadlines. @internal */
 export const makeOpenAiHarness = (
   timeout: Duration.Input
-): Layer.Layer<HostedInference, Config.ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
-  makeOpenAiLayer(false, { timeout }, productionContinuityBudgets);
+): Effect.Effect<HostedInferenceService, Config.ConfigError | HostedInferenceError, OutboundHttp> =>
+  makeOpenAiService(false, { timeout }, productionContinuityBudgets);
+
+type HostedInferenceProviderMetadata = Readonly<{
+  provider: "openai";
+  requestedModel: string;
+  temperature: number;
+  parallelToolCalls: boolean;
+  providerStorage: boolean;
+  reasoningEffort: string;
+}>;
+
+/** Projects safe provider coordinates and generation controls for bounded evaluation reports. */
+export const hostedInferenceProviderMetadata = (): HostedInferenceProviderMetadata => ({
+  provider: "openai",
+  requestedModel: FidyAgentModel,
+  temperature: HostedAgentGenerationConfig.temperature,
+  parallelToolCalls: HostedAgentGenerationConfig.parallel_tool_calls,
+  providerStorage: HostedAgentGenerationConfig.store,
+  reasoningEffort: HostedAgentGenerationConfig.reasoning.effort,
+});

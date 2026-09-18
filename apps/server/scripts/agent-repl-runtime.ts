@@ -2,7 +2,7 @@ import { BunHttpClient, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Schema } from "effect";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentService } from "~/shell/agent/agent-service";
-import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
+import { HostedInferenceLive } from "~/shell/hosted-inference/runtime";
 import { runAgentRepl } from "~/shell/agent/repl";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/database/runtime";
 import { DurableExecutionClientLive } from "~/shell/durable-execution";
@@ -18,7 +18,7 @@ const program = Effect.gen(function* () {
   yield* runAgentRepl({ phoneNumber, businessScopedUserId });
 });
 
-const AgentLive = AgentService.layer.pipe(Layer.provide(OpenAiHostedInferenceLive));
+const AgentLive = AgentService.layer.pipe(Layer.provide(HostedInferenceLive));
 const InfrastructureLive = Layer.mergeAll(
   PgLive,
   DurableExecutionClientLive.pipe(Layer.provide(PgLive)),

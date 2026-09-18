@@ -1,9 +1,12 @@
-import { Crypto, Effect, Function, Option, Schema } from "effect";
+import { Crypto, Effect, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { applicationPersistedQueueProvider } from "~/shell/persisted-queue/operations";
-import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import { type AgentConfirmation, isHostedVisible } from "~/shell/_shared/operation-policy";
+import { isHostedVisible } from "~/shell/_shared/operation-policy";
+import {
+  hostedConfirmationGuidance,
+  hostedOperationBindings,
+} from "~/shell/_shared/hosted-operation-bindings";
 import { grantsRequiredTier } from "~/shell/_shared/suggested-operations";
 import { operationCatalog } from "~/shell/api";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
@@ -16,51 +19,33 @@ import {
 } from "~/shell/_shared/canonical-operation-executor";
 import { canonicalJsonString } from "./canonical-json";
 import type { CanonicalExecutionRequirements } from "~/shell/_shared/canonical-implementation";
-import { HostedInference } from "./hosted-inference";
+import { HostedInference } from "~/shell/hosted-inference/operations";
 import type { ConfirmationPermit } from "./tool-confirmation-model";
-import {
-  type AgentOperationBinding,
-  OpenAiToolName,
-  encodeOpenAiToolName,
-} from "./agent-operation-binding";
+import { type AgentOperationBinding } from "./agent-operation-binding";
 
-export {
-  type AgentOperationBinding,
-  OpenAiToolName,
-  encodeOpenAiToolName,
-} from "./agent-operation-binding";
+export { type AgentOperationBinding } from "./agent-operation-binding";
 
 /** Every hosted tool binding, derived from the assembled FidyApi catalog. */
-export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> =
-  operationCatalog.operations
-    .filter((operation) => isHostedVisible(operation.policy.access, "verified-whatsapp"))
-    .map((operation) => {
-      const { codec: wireCodec } = toCodecOpenAI(operation.input);
-      const { jsonSchema: wireJsonSchema } = toCodecOpenAI(Schema.toEncoded(operation.input));
-      const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(
-        wireCodec.ast
-      );
-      const providerResponseParameters: Schema.Codec<unknown, unknown, never, never> = Schema.Union(
-        [wireParameters, operation.input]
-      );
-      return {
-        operation: operation.id,
-        wireName: encodeOpenAiToolName(operation.id),
-        description: operation.description,
-        canonicalParameters: operation.input,
-        providerResponseParameters,
-        wireJsonSchema,
-        success: operation.success,
-        failure: operation.failure,
-        policy: operation.policy,
-      };
-    });
+export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> = hostedOperationBindings(
+  operationCatalog
+).map(({ operation, wireName }) => ({
+  operation: operation.id,
+  wireName,
+  description: operation.description,
+  canonicalParameters: operation.input,
+  success: operation.success,
+  failure: operation.failure,
+  policy: operation.policy,
+}));
 
-const bindingsByWireName = new Map(
+const bindingsByWireName = new Map<string, AgentOperationBinding>(
   agentOperationBindings.map((binding) => [binding.wireName, binding] as const)
 );
+const bindingsByOperation = new Map(
+  agentOperationBindings.map((binding) => [binding.operation, binding] as const)
+);
 if (bindingsByWireName.size !== agentOperationBindings.length) {
-  throw new Error("Canonical operation aliases must remain unique for OpenAI");
+  throw new Error("Canonical operation aliases must remain unique");
 }
 
 /** Filters provider-visible bindings using the current hosted authority and AccessTier. */
@@ -75,29 +60,17 @@ export const hostedBindings = (input: {
   );
 
 /** Finds the canonical binding for one provider-safe tool name. */
-export const findAgentOperationBinding = (
-  wireName: string
-): Option.Option<AgentOperationBinding> =>
-  Schema.is(OpenAiToolName)(wireName)
-    ? Option.fromNullishOr(bindingsByWireName.get(wireName))
-    : Option.none();
+export const findAgentOperationBinding = (wireName: string): Option.Option<AgentOperationBinding> =>
+  Option.fromNullishOr(bindingsByWireName.get(wireName));
 
-const confirmationGuidance = (agentConfirmation: AgentConfirmation): string =>
-  agentConfirmation === "not-required"
-    ? " This operation does not require User confirmation; call it directly without asking the User to confirm."
-    : " The host manages exact confirmation for this operation; call the tool rather than asking the User for informal confirmation.";
-
-/** Decodes a provider-safe tool input into the canonical operation input type. */
-export const decodeAgentOperationInput: {
-  (input: unknown): (self: AgentOperationBinding) => Effect.Effect<unknown, Schema.SchemaError>;
-  (self: AgentOperationBinding, input: unknown): Effect.Effect<unknown, Schema.SchemaError>;
-} = Function.dual(2, (self: AgentOperationBinding, input: unknown) =>
-  Schema.decodeUnknownEffect(self.providerResponseParameters)(input)
-);
+/** Finds the Agent binding for one canonical HostedInference operation. */
+export const findAgentOperationBindingByOperation = (
+  operation: AgentOperationBinding["operation"]
+): Option.Option<AgentOperationBinding> => Option.fromNullishOr(bindingsByOperation.get(operation));
 
 /** Returns the complete provider-facing description, including required confirmation behavior. */
 export const agentOperationToolDescription = (binding: AgentOperationBinding): string =>
-  binding.description + confirmationGuidance(binding.policy.agentConfirmation);
+  binding.description + hostedConfirmationGuidance(binding.policy.agentConfirmation);
 
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {

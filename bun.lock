@@ -35,7 +35,7 @@
         "js-tiktoken": "1.0.21",
         "parse5": "8.0.1",
         "sharp": "0.35.4",
-        "svix": "2.4.0",
+        "svix": "2.5.0",
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
       },
       "devDependencies": {
@@ -1504,7 +1504,7 @@
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 
-    "svix": ["svix@2.4.0", "", { "dependencies": { "standardwebhooks": "^1.1.1" } }, "sha512-xE/8otzIu/4ahnGrTKHw1MRIyfpZYQXsUbzb3eKQQOKu1lHMneR34o0QayKZZ1sxm3yudRjFD+Nvr/RF2WNzzA=="],
+    "svix": ["svix@2.5.0", "", { "dependencies": { "standardwebhooks": "^1.1.1" } }, "sha512-mqcwCPKL6J5yqC2EQy5ZqE5XEJriCZffy49EGBDCsnrQ7RAYF4kZLJhKfXrB0n21S+3M9qYmQ9YjzrNjRlIuCw=="],
 
     "symbol-tree": ["symbol-tree@3.2.4", "", {}, "sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw=="],
 

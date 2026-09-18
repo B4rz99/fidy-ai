@@ -98,27 +98,25 @@ import {
   containsSensitiveJson,
   credentialRejectedReply,
   sensitiveEntryRejected,
-  type transcriptPrompt,
 } from "./model-boundary";
-import { makeConversationCompactionContext } from "./conversation-compaction-context";
 import {
-  HostedInference,
+  type HostedContinuationEvent,
   HostedInferenceError,
   type HostedInferenceService,
-  HostedStructuredObjectName,
   type HostedTextContinuation,
   type HostedTextResult,
   HostedToolCallMaximum,
   type PreparedHostedText,
-} from "./hosted-inference";
+} from "~/shell/hosted-inference/contract";
+import { HostedInference } from "~/shell/hosted-inference/operations";
 import { type WorkingContext, makeWorkingContext } from "./working-context";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
   type AgentOperationBinding,
   agentOperationBindings,
-  decodeAgentOperationInput,
   findAgentOperationBinding,
+  findAgentOperationBindingByOperation,
   hostedBindings,
   makeAgentToolkit,
 } from "./toolkit";
@@ -523,7 +521,7 @@ const prepareAgentToolCall = Effect.fn(function* (
   iteration: AgentIteration,
   toolCall: AgentToolCall
 ) {
-  const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
+  const binding = yield* findAgentOperationBinding(String(toolCall.name)).pipe(
     Effect.fromOption(() => modelResponseRejected(new Error("Model named an unknown operation")))
   );
   const encodedInput = yield* Effect.result(encodeAgentOperationInput(binding, toolCall.params));
@@ -1022,7 +1020,7 @@ const runModelAttempts = (
     return yield* telemetry.span(modelRoundDescriptor, work);
   }).pipe(Effect.withSpan("AgentService.modelRound"));
 
-type HostedContinuationTail = ReturnType<typeof transcriptPrompt>;
+type HostedContinuationTail = ReadonlyArray<HostedContinuationEvent>;
 
 const generateCurrentTurn = (
   inference: HostedInferenceService,
@@ -1031,14 +1029,12 @@ const generateCurrentTurn = (
     continuation,
     continuationTail,
     malformedOutputFeedback,
-    remainingToolCalls,
     preparedOverride,
   }: Readonly<{
     turn: HostedTurn;
     continuation: TurnModelContinuation;
     continuationTail: HostedContinuationTail;
     malformedOutputFeedback: Option.Option<string>;
-    remainingToolCalls: number;
     preparedOverride: Option.Option<PreparedHostedText>;
   }>
 ): Effect.Effect<
@@ -1053,25 +1049,16 @@ const generateCurrentTurn = (
         : Option.match(continuation, {
             onNone: () => Effect.die("A continued round requires HostedInference continuation"),
             onSome: (continued) => {
-              const context = {
-                prefix: [],
-                continuationTail,
-                suffix: Option.match(malformedOutputFeedback, {
+              const events = [
+                ...continuationTail,
+                ...Option.match(malformedOutputFeedback, {
                   onNone: () => [],
-                  onSome: (feedback) => [{ role: "system" as const, content: feedback }],
+                  onSome: (description) => [
+                    { _tag: "InvalidOutputFeedback" as const, description },
+                  ],
                 }),
-                activeRequest: { _tag: "Absent" as const },
-              };
-              return continued.prepare(
-                context,
-                remainingToolCalls === 0
-                  ? { toolChoice: "none", availableOperations: turn.availableOperations }
-                  : {
-                      toolChoice: "auto",
-                      maximumToolCalls: HostedToolCallMaximum.make(remainingToolCalls),
-                      availableOperations: turn.availableOperations,
-                    }
-              );
+              ];
+              return continued.prepare(events);
             },
           });
     return yield* runModelAttempts(prepare, inference, turn.limits.maxModelRoundMillis);
@@ -1099,13 +1086,10 @@ const decodeModelToolCalls = Effect.fn(function* (
 ): Effect.fn.Return<ReadonlyArray<AgentToolCall>, ModelResponseRejected> {
   const toolCalls: Array<AgentToolCall> = [];
   for (const toolCall of generated.toolCalls) {
-    const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
+    const binding = yield* findAgentOperationBindingByOperation(toolCall.operation).pipe(
       Effect.fromOption(() => modelResponseRejected(new Error("Model named an unknown operation")))
     );
-    const params = yield* decodeAgentOperationInput(binding, toolCall.params).pipe(
-      Effect.mapError(modelResponseRejected)
-    );
-    toolCalls.push({ id: toolCall.id, name: binding.wireName, params });
+    toolCalls.push({ id: toolCall.id, name: binding.wireName, params: toolCall.params });
   }
   return toolCalls;
 });
@@ -1294,30 +1278,22 @@ const loadContinuationTail = ({
     ) {
       return [];
     }
-    const binding = agentOperationBindings.find(({ operation }) => operation === entry.operation);
-    if (binding === undefined) return [];
-    const failed = entry.outcome._tag !== "Succeeded";
-    const canonicalResult =
-      entry.outcome._tag === "Succeeded" ? entry.outcome.output : entry.outcome.failure;
-    const result =
-      JSON.stringify(canonicalResult).length <= turn.limits.maxToolResultCharacters
-        ? canonicalResult
+    const outcome =
+      JSON.stringify(entry.outcome).length <= turn.limits.maxToolResultCharacters
+        ? entry.outcome
         : {
-            code: "tool_result_too_large",
-            message: "The canonical result exceeded the model-context safety limit.",
+            _tag: "ToolOutputRejected" as const,
+            failure: {
+              code: "tool_result_too_large",
+              message: "The canonical result exceeded the model-context safety limit.",
+            },
           };
     return [
       {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            id: entry.toolCallId,
-            name: binding.wireName,
-            result,
-            isFailure: failed,
-          },
-        ],
+        _tag: "ToolResult",
+        toolCallId: entry.toolCallId,
+        operation: entry.operation,
+        outcome,
       },
     ];
   });
@@ -1363,7 +1339,6 @@ const runHostedTurn = (
           continuation,
           continuationTail,
           malformedOutputFeedback: feedback,
-          remainingToolCalls: turn.limits.maxToolCallsPerTurn - toolCalls,
           preparedOverride: index === 1 ? Option.some(turn.initialPrepared) : Option.none(),
         }).pipe(Effect.catchTag("HostedInferenceError", mapHostedInferenceFailure))
       );
@@ -2262,8 +2237,8 @@ export class AgentService extends Context.Service<
               ): Effect.Effect<CompactedConversationOutput, ConversationCompactionInferenceError> =>
                 inference
                   .prepareStructured({
-                    context: makeConversationCompactionContext({ prior, entries }),
-                    objectName: HostedStructuredObjectName.make("compacted_conversation"),
+                    context: { prior, entries },
+                    purpose: "conversation-compaction",
                     outputSchema: CompactedConversationOutput,
                   })
                   .pipe(

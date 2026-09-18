@@ -25,7 +25,6 @@ import {
   Stream,
   Terminal,
 } from "effect";
-import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { AiError, type Response as AiResponse, LanguageModel, Tool } from "effect/unstable/ai";
 import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
 import { ClusterError } from "effect/unstable/cluster";
@@ -69,8 +68,9 @@ import {
 import { selectRecentTranscriptEntries, selectTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
-import { HostedInference, HostedInferenceError } from "./hosted-inference";
-import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
+import { HostedInferenceError } from "~/shell/hosted-inference/contract";
+import { HostedInference, makeHostedInferenceStub } from "~/shell/hosted-inference/operations";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-harness";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import {
@@ -331,7 +331,6 @@ const readModelPrompts = Effect.flatMap(ModelPrompts, Ref.get);
 
 type ModelToolPolicy = Readonly<{
   toolChoice: LanguageModel.ProviderOptions["toolChoice"];
-  maxToolCalls: Option.Option<number>;
 }>;
 
 class ModelToolPolicies extends Context.Service<
@@ -1343,20 +1342,11 @@ const ScriptedLanguageModel = Layer.effect(
         }
         expect(serialized).not.toContain("fin_deadbeef_");
         return Effect.gen(function* () {
-          const openAiConfig = yield* Effect.serviceOption(OpenAiLanguageModel.Config);
           const attempt = yield* Ref.modify(prompts, (recorded) => [
             recorded.filter((recordedPrompt) => recordedPrompt.includes(serialized)).length,
             [...recorded, serialized],
           ]);
-          yield* Ref.update(toolPolicies, (recorded) => [
-            ...recorded,
-            {
-              toolChoice,
-              maxToolCalls: Option.flatMap(openAiConfig, (config) =>
-                Option.fromUndefinedOr(config.max_tool_calls)
-              ),
-            },
-          ]);
+          yield* Ref.update(toolPolicies, (recorded) => [...recorded, { toolChoice }]);
           return yield* scriptedModelAttempt({ serialized, tools, toolChoice, attempt });
         });
       },
@@ -1416,14 +1406,15 @@ const StaleContinuityHostedInference = Layer.effect(
 const DefectiveHostedInference = Layer.effect(
   HostedInference,
   Effect.map(HostedInference, (inference) =>
-    HostedInference.of({
-      ...inference,
-      prepareText: (request) =>
-        Effect.map(inference.prepareText(request), (prepared) => ({
-          ...prepared,
-          execute: Effect.die(new Error("hosted generation defect")),
-        })),
-    })
+    HostedInference.of(
+      makeHostedInferenceStub({
+        countText: inference.countText,
+        countTranscript: inference.countTranscript,
+        validateText: inference.validateText,
+        prepareStructured: inference.prepareStructured,
+        generate: () => Effect.die(new Error("hosted generation defect")),
+      })
+    )
   )
 ).pipe(Layer.provide(ScriptedHostedInference));
 
@@ -4068,9 +4059,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
         expect(reply.text).toBe("Presupuesto finalizado.");
         expect(policies).toEqual([
-          { toolChoice: "auto", maxToolCalls: Option.some(2) },
-          { toolChoice: "auto", maxToolCalls: Option.some(1) },
-          { toolChoice: "none", maxToolCalls: Option.none() },
+          { toolChoice: "auto" },
+          { toolChoice: "auto" },
+          { toolChoice: "none" },
         ]);
         expect(transcript.filter((entry) => entry._tag === "CanonicalToolCallEntry")).toHaveLength(
           2

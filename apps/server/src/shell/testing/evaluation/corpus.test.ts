@@ -1,7 +1,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, it } from "@effect/vitest";
 import { Crypto, Effect, Encoding, Layer, Option } from "effect";
-import { loadCorpus, validateCoverage } from "./corpus";
+import { loadCorpus, sourceEvidence, validateCoverage } from "./corpus";
 import type { Corpus } from "./model";
 
 it.live("loads one bounded synthetic corpus with every required coverage label", () =>
@@ -31,6 +31,18 @@ it.live("pins a distinct synthetic adversarial inline image", () =>
     const digest = Encoding.encodeHex(yield* crypto.digest("SHA-256", injection));
     expect(injection).not.toEqual(receipt);
     expect(digest).toBe("bd4c8e16d8fafaef10558b9b2805903bc6f9df2377b7fbd16f55f6fc1d6dec13");
+  })
+);
+
+it.live("hashes the committed runtime evaluator source inventory", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(BunServices.layer);
+    const evidence = yield* sourceEvidence("src/shell/hosted-inference/runtime.ts").pipe(
+      Effect.provide(services)
+    );
+    expect(evidence.sourceSha256).toMatch(/^[a-f0-9]{64}$/u);
+    expect(evidence.generationSha256).toMatch(/^[a-f0-9]{64}$/u);
+    expect(evidence.contractSha256).toMatch(/^[a-f0-9]{64}$/u);
   })
 );
 

@@ -13,13 +13,16 @@ const acceptanceExclude = [
   "src/shell/observability/internal/telemetry-bootstrap.ts",
   "src/shell/observability/internal/telemetry-config.ts",
   // Acceptance substitutes provider transport; exact OpenAI behavior is covered by adapter tests.
-  "src/shell/agent/openai.ts",
+  "src/shell/hosted-inference/internal/openai.ts",
   // Hosted Turn orchestration is covered by its real-PostgreSQL integration suite; acceptance
   // substitutes model behavior and validates the WhatsApp transport lifecycle.
   "src/shell/agent/agent-service.ts",
   // HostedInference capability ownership and prompt projection are lower model seams covered by
   // focused suites; acceptance supplies an ApiHarness implementation instead.
-  "src/shell/agent/hosted-inference.ts",
+  "src/shell/hosted-inference/contract.ts",
+  "src/shell/hosted-inference/internal/inference.ts",
+  "src/shell/hosted-inference/operations.ts",
+  "src/shell/hosted-inference/runtime.ts",
   "src/shell/agent/model-boundary.ts",
   // Terminal REPL, confirmation settlement, and lower conversation projection have focused hosted
   // Turn suites; the acceptance harness substitutes those model decisions.

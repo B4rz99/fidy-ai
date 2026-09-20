@@ -255,7 +255,11 @@ const normalizeAnyOf = (object: JsonObject, anyOf: JsonArray): JsonObject => {
   }
   return Option.match(mergeLiteralAnyOf(members), {
     onNone: () => ({ ...siblings, anyOf: members }),
-    onSome: (merged) => ({ ...merged, ...siblings }),
+    onSome: (merged) =>
+      Option.getOrElse(mergeObjectAllOf([merged, siblings]), () => ({
+        ...siblings,
+        anyOf: members,
+      })),
   });
 };
 

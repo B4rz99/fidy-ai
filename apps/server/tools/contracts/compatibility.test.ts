@@ -166,6 +166,41 @@ it("treats a collapsed duplicate response union as compatible", async () => {
   await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
 });
 
+it("reports when a constrained literal response union loses a member", async () => {
+  const base = spec({
+    "/widgets": operation(
+      undefined,
+      {
+        anyOf: [
+          { type: "string", enum: ["small"] },
+          { type: "string", enum: ["medium"] },
+          { type: "string", enum: ["large"] },
+        ],
+        enum: ["small", "medium", "large"],
+      },
+      "400"
+    ),
+  });
+  const candidate = spec({
+    "/widgets": operation(
+      undefined,
+      {
+        anyOf: [
+          { type: "string", enum: ["small"] },
+          { type: "string", enum: ["medium"] },
+        ],
+        enum: ["small", "medium", "large"],
+      },
+      "400"
+    ),
+  });
+
+  const findings = await findOpenApiBreakingChanges(base, candidate);
+
+  expect(findings.length).toBeGreaterThan(0);
+  expect(findings.every((finding) => finding.source === "openapi")).toBe(true);
+});
+
 it("reports when a response union loses a distinct member", async () => {
   const base = spec({
     "/widgets": operation(

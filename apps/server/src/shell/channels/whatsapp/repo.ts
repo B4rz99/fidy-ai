@@ -39,6 +39,7 @@ import {
   TelemetryAttempt,
   TelemetryDuration,
 } from "~/shell/observability/contract";
+import { FiniteFromBigInt } from "~/shell/schema-codecs/contract";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -633,8 +634,7 @@ const StoredDurableTraceContext = Schema.Struct({
   traceId: DurableTraceContext.fields.traceId,
   parentSpanId: DurableTraceContext.fields.parentSpanId,
   sampled: DurableTraceContext.fields.sampled,
-  capturedAtUnixMilliseconds: Schema.flip(Schema.BigIntFromString).pipe(
-    Schema.decodeTo(Schema.FiniteFromString),
+  capturedAtUnixMilliseconds: FiniteFromBigInt.pipe(
     Schema.decodeTo(DurableTraceContext.fields.capturedAtUnixMilliseconds)
   ),
 });

@@ -28,15 +28,13 @@ import {
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { withUserTransaction } from "~/shell/database/operations";
+import { FiniteFromBigInt } from "~/shell/schema-codecs/contract";
 import {
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
 } from "~/shell/durable-queue-policy";
 
-const WompiSourceIdFromDb = Schema.flip(Schema.BigIntFromString).pipe(
-  Schema.decodeTo(Schema.FiniteFromString),
-  Schema.decodeTo(WompiSourceId)
-);
+const WompiSourceIdFromDb = FiniteFromBigInt.pipe(Schema.decodeTo(WompiSourceId));
 
 /** Stable SQL queue identity for one pending BillingAttempt's durable reconciliation. */
 export const billingAttemptQueueName = "subscription-billing-attempt" as const;

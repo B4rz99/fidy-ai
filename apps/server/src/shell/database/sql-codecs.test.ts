@@ -1,3 +1,4 @@
+import * as PgTypes from "@effect/sql-pg/PgTypes";
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -95,7 +96,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     timestamp_value, timestamptz_value, date_value,
                     int8_value, bytes_value, text_array_value, uuid_array_value
                   ) VALUES (
-                    ${request.timestamp}, ${request.timestamptz}, DATE '2026-03-14',
+                    ${PgTypes.timestamp(request.timestamp)},
+                    ${PgTypes.timestamptz(request.timestamptz)}, DATE '2026-03-14',
                     0, ''::bytea, '{}', '{}'
                   )
                   RETURNING timestamp_value AS "timestamp",

@@ -16,7 +16,8 @@ const operation = (
   responseSchema: object = {
     type: "object",
     properties: { value: { type: "string" } },
-  }
+  },
+  responseStatus = "200"
 ): object => ({
   post: {
     operationId: "widgets.createWidget",
@@ -25,8 +26,8 @@ const operation = (
       content: { "application/json": { schema: requestSchema } },
     },
     responses: {
-      "200": {
-        description: "ok",
+      [responseStatus]: {
+        description: "response",
         content: { "application/json": { schema: responseSchema } },
       },
     },
@@ -137,6 +138,63 @@ it("treats nested local request schema references and their inline form as compa
   const candidate = spec({ "/widgets": operation(inline) });
 
   await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
+it("treats a collapsed duplicate response union as compatible", async () => {
+  const response = {
+    type: "object",
+    required: ["message"],
+    properties: { message: { type: "string" } },
+  };
+  const base = spec(
+    {
+      "/widgets": operation(
+        undefined,
+        {
+          anyOf: [
+            { $ref: "#/components/schemas/ValidationFailed" },
+            { $ref: "#/components/schemas/ValidationFailed" },
+          ],
+        },
+        "400"
+      ),
+    },
+    { ValidationFailed: response }
+  );
+  const candidate = spec({ "/widgets": operation(undefined, response, "400") });
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
+it("reports when a response union loses a distinct member", async () => {
+  const base = spec({
+    "/widgets": operation(
+      undefined,
+      {
+        anyOf: [
+          { type: "object", required: ["message"], properties: { message: { type: "string" } } },
+          { type: "object", required: ["retryAt"], properties: { retryAt: { type: "string" } } },
+        ],
+      },
+      "400"
+    ),
+  });
+  const candidate = spec({
+    "/widgets": operation(
+      undefined,
+      {
+        type: "object",
+        required: ["message"],
+        properties: { message: { type: "string" } },
+      },
+      "400"
+    ),
+  });
+
+  const findings = await findOpenApiBreakingChanges(base, candidate);
+
+  expect(findings.length).toBeGreaterThan(0);
+  expect(findings.every((finding) => finding.source === "openapi")).toBe(true);
 });
 
 it("treats equivalent constraints inside cyclic schemas as compatible", async () => {

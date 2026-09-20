@@ -240,6 +240,25 @@ const mergeObjectAllOf = (members: ReadonlyArray<JsonValue>): Option.Option<Json
   return Option.some(merged);
 };
 
+const normalizeAnyOf = (object: JsonObject): JsonObject => {
+  const members = Schema.decodeSync(JsonArray)(object.anyOf).filter(
+    (member, index, all) =>
+      all.findIndex((present) => canonicalJson(present) === canonicalJson(member)) === index
+  );
+  const siblings = Object.fromEntries(Object.entries(object).filter(([key]) => key !== "anyOf"));
+  const member = members[0];
+  if (member !== undefined && members.length === 1) {
+    return Option.getOrElse(mergeObjectAllOf([member, siblings]), () => ({
+      ...siblings,
+      anyOf: members,
+    }));
+  }
+  return Option.match(mergeLiteralAnyOf(members), {
+    onNone: () => ({ ...siblings, anyOf: members }),
+    onSome: (merged) => ({ ...merged, ...siblings }),
+  });
+};
+
 const normalizeSchemaRepresentations = (
   value: JsonValue,
   context: SchemaNormalization
@@ -280,15 +299,7 @@ const normalizeSchemaRepresentations = (
       () => normalized
     );
   }
-  if (Array.isArray(normalized.anyOf)) {
-    normalized = Option.match(mergeLiteralAnyOf(Schema.decodeSync(JsonArray)(normalized.anyOf)), {
-      onNone: () => normalized,
-      onSome: (merged) => ({
-        ...merged,
-        ...Object.fromEntries(Object.entries(normalized).filter(([key]) => key !== "anyOf")),
-      }),
-    });
-  }
+  if (Array.isArray(normalized.anyOf)) normalized = normalizeAnyOf(normalized);
   return normalized;
 };
 

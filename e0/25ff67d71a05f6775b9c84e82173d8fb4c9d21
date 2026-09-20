@@ -1,0 +1,14 @@
+docs/research/effect-4-vitest-5-upgrade-assessment.md
+  h_c6d49c804e0ad2 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e025ff67d71a05f6775b9c84e82173d8fb4c9d21",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

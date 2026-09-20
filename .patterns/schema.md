@@ -5,8 +5,8 @@ relative to `packages/effect/`, except `migration/schema.md` (repo root), which 
 canonical v3→v4 rename map — read it before trusting any v3 muscle memory. Schema lives in
 core `effect` (`Schema`, `SchemaAST`, `SchemaIssue`, `SchemaTransformation`, and `SchemaGetter`
 are top-level stable modules), not in a separate `@effect/schema` package. `SchemaError` is the
-`Schema.SchemaError` class, exported from `Schema.ts`; RC.112 removed the separate
-`effect/SchemaError` module.
+`Schema.SchemaError` class, exported from `Schema.ts`; the separate
+`effect/SchemaError` module no longer exists in rc.116 or the newer vendored snapshot.
 
 ## v3 → v4 in one breath
 
@@ -45,15 +45,28 @@ If adopting full Model variants:
 
 A canonical entity schema derives everything else; nothing is written twice:
 
-| Artifact           | API                                                                         | Notes                                                                                                             |
-| ------------------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| JSON codec         | `Schema.toCodecJson(S)` (`Schema.ts:15366-15373`)                           | `Encoded = Json`; declarations use their `toCodecJson` annotation (BigDecimal → string, `Schema.ts:12647-12665`)  |
-| String-keyed codec | `Schema.toCodecStringTree(S)` (`Schema.ts:15541-15586`)                     | what httpapi applies to params/query/headers                                                                      |
-| JSON-string codec  | `Schema.fromJsonString(S)` (`Schema.ts:12756-12797`)                        | `JSON.parse` then decode through `S` **as-is** — wrap `toCodecJson(S)` first unless `S` is already JSON-encodable |
-| JSON Schema        | `Schema.toJsonSchemaDocument(S)` (`Schema.ts:15299-15307`)                  | draft 2020-12, describes the **encoded** (JSON) side via the representation layer (`Schema.ts:15170-15174`)       |
-| Equivalence        | `Schema.toEquivalence(S)` (`Schema.ts:15143-15145`)                         | BigDecimal compares scale-insensitively (`BigDecimal.ts:1103`)                                                    |
-| Arbitrary          | `Schema.toArbitrary(S)` (`Schema.ts:14926-14930`)                           | respects ordered BigDecimal check constraints                                                                     |
-| Standard Schema    | `toStandardSchemaV1` / `toStandardJSONSchemaV1` (`Schema.ts:1299`, `:1378`) | for third-party libs                                                                                              |
+| Artifact           | API                                                                     | Notes                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| JSON codec         | `Schema.toCodecJson(S)` (`Schema.ts:14484-14557`)                       | `Encoded = Json`; declarations use their `toCodecJson` annotation (BigDecimal → string)                                    |
+| String-keyed codec | `Schema.toCodecStringTree(S)` (`Schema.ts:14562-14645`)                 | what httpapi applies to params/query/headers                                                                               |
+| JSON-string codec  | `Schema.fromJsonString(S)` (`Schema.ts:9156-9209`)                      | `JSON.parse` then decode through `S` **as-is** — wrap `toCodecJson(S)` first unless `S` is already JSON-encodable          |
+| JSON Schema        | `Schema.toJsonSchemaDocument(S, options?)` (`Schema.ts:14423-14451`)    | draft 2020-12, describes the **encoded** (JSON) side; objects are open by default, closed with `onExcessProperty: "error"` |
+| Equivalence        | `Schema.toEquivalence(S)` (`Schema.ts:14238-14267`)                     | BigDecimal compares scale-insensitively                                                                                    |
+| Arbitrary          | `Arbitrary.schema(S)` (`unstable/arbitrary/Arbitrary.ts:362-367`)       | native generation from the decoded Schema type; see `.patterns/testing.md`                                                 |
+| Standard Schema    | `toStandardSchemaV1` / `toStandardJSONSchemaV1` (`Schema.ts:1313-1364`) | for third-party libs                                                                                                       |
+
+### Experimental schema compilers
+
+`effect/unstable/schema` now exports `SchemaCompiler`, `SchemaJITCompiler`, and
+`SchemaAOTCompiler`. All three install decoder operations for an exact AST into the same registry
+used transparently by normal Schema parser APIs; they do not introduce a second compiled-schema API
+(`unstable/schema/SchemaCompiler.ts:1-16`, `:180-209`). `SchemaJITCompiler.enable(ast)` lazily
+compiles and falls back to interpreted parsing when code generation is unavailable
+(`SchemaJITCompiler.ts:73-89`). `SchemaAOTCompiler.compile(targets)` emits a JavaScript module whose
+`install(asts)` must receive the same ASTs in the same order; regenerate it whenever the schema or
+Effect version changes (`SchemaAOTCompiler.ts:57-117`). Treat these as measured optimizations:
+install before consumers capture parser entries, benchmark the real boundary, and retain ordinary
+Schema decoding as the semantic contract.
 
 ## Structs, optionality, constructors
 
@@ -69,6 +82,20 @@ A canonical entity schema derives everything else; nothing is written twice:
 - `Schema.Class<Self>("Id")({ ...fields })` (`Schema.ts:14317-14670`) gives a validated-construction
   data class with schema-derived codecs; `TaggedClass` (`:14720`) adds `_tag`. Plain
   `Struct`s are sufficient for pure data; classes buy methods + nominal identity.
+- `Schema.Redacted(inner, { label? })` validates and transforms the wrapped value rather than
+  treating it as opaque. Decoding an existing `Redacted` preserves its runtime label while applying
+  `inner`; JSON decoding uses the configured label (`Schema.ts:13380-13495`). Use
+  `disallowJsonEncode: true` when the value must never cross that JSON boundary.
+
+## Transformations
+
+Use `SchemaTransformation.transform` for pure infallible mappings and
+`SchemaTransformation.transformEffect` when decode or encode can fail or require services. Each
+effectful function receives the value plus `ParseOptions` and must fail with a `SchemaIssue.Issue`
+(`SchemaTransformation.ts:344-389`). `makeTransformation` is the lower-level constructor for pairing
+existing `SchemaGetter.Getter`s and is idempotent when passed an existing transformation
+(`SchemaTransformation.ts:300-338`). Compose either with `Schema.decodeTo`; keep checks on the
+appropriate encoded or type side so both directions enforce the intended boundary.
 
 ## Checks, brands, sibling-dependent validation
 
@@ -185,12 +212,15 @@ keys); per-issue hooks via `leafHook`/`checkHook`.
 ## JSON Schema for LLM structured outputs
 
 `Schema.toJsonSchemaDocument(S)` targets draft 2020-12 and describes the **JSON-encoded**
-form (it routes through the representation layer, `Schema.ts:15299-15307`, `:15170-15174`) — safe to
+form through the representation layer (`Schema.ts:14305-14416`) — safe to
 feed an LLM and decode its output through the same canonical schema. Measured mappings:
 `identifier` annotation → `$ref` + a named definition (annotate every shared entity or
-everything inlines); `Literals` → `enum`; structs → `additionalProperties: false` +
-`required`; `isUUID` → `pattern` + `format: "uuid"`; brands invisible; struct-level
-`makeFilter` checks are **silently lossy** (nothing to express them in JSON Schema).
+everything inlines); `Literals` → `enum`; structs are **open by default** with
+`additionalProperties: true`, matching decode's default `onExcessProperty: "ignore"`; pass
+`{ onExcessProperty: "error" }` to emit `additionalProperties: false` where representable
+(`internal/schema/toJsonSchemaDocument.ts:492-510`; tests `test/schema/toJsonSchemaDocument.test.ts:121-168`).
+`isUUID` → `pattern` + `format: "uuid"`; brands invisible; struct-level `makeFilter` checks are
+**silently lossy** (nothing to express them in JSON Schema).
 `BigDecimal` emits bare `{ "type": "string" }` — annotate the amount's string side with
 `description`/`pattern` or the model has no format hint. `toStandardJSONSchemaV1`
 (`Schema.ts:1378`) exists for libraries that expect the standard wrapper.

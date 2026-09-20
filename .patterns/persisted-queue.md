@@ -1,6 +1,6 @@
 # Effect v4 persisted queues
 
-> Source: Effect checkout at `.repos/effect`, version RC.112. Citations below are relative to `.repos/effect/packages/`.
+> Source: `effect@4.0.0-rc.116` (`d62dd0d6…`) and the checked-in `.repos/effect` source. Post-rc.116 behavior is identified explicitly. Citations below are relative to `.repos/effect/packages/`.
 
 Use this reference before replacing a PostgreSQL claim table, lease, polling loop, or retry worker with `effect/unstable/persistence/PersistedQueue`.
 
@@ -31,12 +31,18 @@ Use the SQL store for correctness-critical production work. Its defaults are tab
 
 PostgreSQL acquisition atomically updates eligible rows selected in age order with `FOR UPDATE SKIP LOCKED`. Rows must be incomplete, below the caller's `maxAttempts`, and unlocked or expired (`effect/src/unstable/persistence/PersistedQueue.ts:939-965`). This replaces hand-built claim ownership, stale-claim recovery, poll sleeps, and competing-worker locks.
 
-The take scope is the lease boundary:
+The take scope is the lease boundary. An attempt is consumed when the store claims an item,
+not when its handler completes, so the first delivery observes `metadata.attempts === 1`.
+A crashed worker therefore consumes an attempt (`effect/test/unstable/persistence/PersistedQueueTest.ts:49-53`,
+`sql/pg/test/Persistence.integration.test.ts:155-180`). Then:
 
-- success marks the row completed and increments attempts;
-- non-interruption failure clears ownership, increments attempts, and stores `Cause.pretty` in `last_failure`;
-- interruption clears ownership **without** incrementing attempts;
-- finalizer writes retry up to five times and then defect if still unsuccessful (`effect/src/unstable/persistence/PersistedQueue.ts:856-909`, `:1045-1089`).
+- success marks the row completed;
+- non-interruption failure clears ownership and stores `Cause.pretty` in `last_failure`;
+- interruption clears ownership and rolls back the claim attempt, so cancellation does not consume one;
+- an expired final-attempt lease is eventually marked failed;
+- finalizer writes retry up to five times and then defect if still unsuccessful
+  (`effect/src/unstable/persistence/PersistedQueue.ts:428-480`,
+  `sql/pg/test/Persistence.integration.test.ts:183-220`).
 
 The implementation continuously retries poll-fiber defects after logging them. Closing its scope stops polling/refresh and unlocks items buffered by that store instance (`effect/src/unstable/persistence/PersistedQueue.ts:916-1039`). Therefore provide the store in an application-owned scope and let normal Layer shutdown close it; do not daemonize queue workers outside that scope.
 
@@ -50,7 +56,12 @@ Use this to atomically mutate domain state and enqueue follow-up work. Prove rol
 
 This is at-least-once processing, not exactly-once external effects. A worker can perform a provider call and die before queue completion is persisted; lock expiry then redelivers the item. Give the provider operation an idempotency key derived from the queue item id, or reconcile provider state before retrying. Do not hold a database transaction open across network work merely to mask this ambiguity.
 
-`attempts` is the count before the current handler execution (`effect/src/unstable/persistence/PersistedQueue.ts:153-179`, `:1067-1086`). Exhausted rows remain incomplete but become ineligible (`attempts < maxAttempts`); the built-in store has no dead-letter move or public requeue/admin API. Build a narrow, explicit operational policy if Fidy needs inspection, replay, or escalation. Do not update Effect's table casually from feature code.
+`attempts` is the claim count including the current handler execution. Exhausted rows and
+payloads that fail schema decoding are marked failed; failed rows are the store's dead-letter
+records. There is no general public requeue/admin API. Build a narrow, explicit operational policy
+if Fidy needs inspection, replay, or escalation. Do not update Effect's table casually from feature
+code (`effect/src/unstable/persistence/PersistedQueue.ts:121-158`,
+`effect/test/unstable/persistence/PersistedQueueTest.ts:87-101`, `:219-243`).
 
 Classify failures before they leave the handler:
 
@@ -59,14 +70,30 @@ Classify failures before they leave the handler:
 - defects: surface and alert; do not convert every defect into an endless generic retry;
 - shutdown/cancellation: preserve interruption so lease release does not consume an attempt.
 
-`maxAttempts` is a delivery ceiling, not a retry schedule: eligible failed rows can be reclaimed on the store's polling cadence. If a provider needs backoff or `Retry-After`, apply a bounded interruptible schedule inside the handler while maintaining the lease, or model scheduled delivery explicitly. Ensure lock expiry exceeds the longest backoff/handler pause while refresh remains healthy.
+`maxAttempts` is the delivery ceiling; `retrySchedule` controls when a failed element becomes
+eligible again. The default is exponential delay starting at one second and capped at five minutes.
+The persisted attempt count is replayed through the schedule, so delay progression survives worker
+replacement (`effect/src/unstable/persistence/PersistedQueue.ts:132-191`). Supply a bounded schedule
+when provider policy differs. A `Retry-After` value that must survive process loss needs explicit
+persisted scheduling rather than an in-handler sleep. Ensure lock expiry exceeds any pause that still
+occurs while the handler owns the lease and refresh remains healthy.
 
 ## Persistence and evolution traps
 
-- The schema is used to encode on offer and decode after acquisition. Decode failures fail the take and count as processing attempts; this is covered explicitly by the shared store tests (`effect/test/unstable/persistence/PersistedQueueTest.ts:189-213`). Use backward-readable codecs or drain/version a queue before incompatible changes.
+- The schema is used to encode on offer and decode after acquisition. A payload that cannot
+  be decoded is immediately marked failed and skipped; its handler is not invoked, and later
+  elements remain available (`effect/src/unstable/persistence/PersistedQueue.ts:121-158`,
+  `effect/test/unstable/persistence/PersistedQueueTest.ts:219-243`). Use backward-readable
+  codecs or drain/version a queue before incompatible changes.
 - Queue names and custom ids are accepted as strings by the API, but the generated SQL columns are `VARCHAR(100)` and `VARCHAR(36)` respectively (`effect/src/unstable/persistence/PersistedQueue.ts:63-76`, `:1093-1163`). Keep names stable and ids within those limits. A UUID is the safest default.
 - Payloads are JSON codec values stored as SQL text (`effect/src/unstable/persistence/PersistedQueue.ts:143-167`, `:1045-1056`). Persist identifiers and bounded facts, not credentials, unbounded provider bodies, browser state, or rich aggregates. Reload current domain state in the worker.
-- `completed` rows and exhausted rows are retained by the provided migrations; no retention cleanup is installed (`effect/src/unstable/persistence/PersistedQueue.ts:856-887`, `:1093-1197`). Define monitored, batched retention before production volume.
+- `layerCleanup` runs store cleanup on a schedule. Completed rows are retained for
+  `timeToLive`—30 days by default—so custom ids remain deduplicated across replay. Failed rows
+  are retained indefinitely unless `failedTimeToLive` is configured. Removing a completed or
+  failed row also removes its deduplication record; pending rows are not removed merely because
+  they exceed the cleanup TTL (`effect/src/unstable/persistence/PersistedQueue.ts:293-328`,
+  `effect/test/unstable/persistence/PersistedQueueTest.ts:245-316`). Run cleanup in one
+  deployment instance; concurrent runs are safe but redundant.
 - `last_failure` is `Cause.pretty(cause)`. Since it is durable and may contain error details, map provider failures to redacted typed errors before they reach `take` (`effect/src/unstable/persistence/PersistedQueue.ts:871-887`).
 - Queue identity is global within the configured table, not User-scoped. Include an explicit `UserId` in the payload and activate the User database scope before loading domain state. Do not treat an opaque queue id as authorization.
 

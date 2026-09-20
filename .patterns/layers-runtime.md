@@ -108,7 +108,7 @@ Memoization facts (`Layer.ts:380-446`, `migration/layer-memoization.md`):
 
 ## Refreshable layer resources (`LayerRef`)
 
-RC.112 adds stable `LayerRef`: a reference-counted, refreshable cache for one layer-built service
+`LayerRef` is a stable reference-counted, refreshable cache for one layer-built service
 context (`LayerRef.ts:1-65`). `LayerRef.make(layer, { idleTimeToLive?, preload?,
 invalidationSchedule? })` lazily builds once, shares while borrowed, optionally retains the context
 while idle, and exposes:
@@ -128,6 +128,10 @@ rebuildable client. It is not application state, a request cache, or a way to ho
 Invalidation does **not** revoke a context already borrowed by an active Scope; that borrower keeps
 using it until its Scope closes (`LayerRef.ts:74-131`). If immediate credential revocation is a
 security requirement, enforce revocation at use time rather than relying on LayerRef invalidation.
+
+`RcRef.make` treats `idleTimeToLive: 0` exactly like `Duration.zero` or `"0 millis"`; zero is
+not an omitted option. `LayerRef` forwards the same option unchanged (`LayerRef.ts:136-164`,
+`RcRef.ts:120-174`; regression test `test/RcRef.test.ts:290-307`).
 
 ## Runtime assembly on Bun — the canonical main
 

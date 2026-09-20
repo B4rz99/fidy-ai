@@ -1,9 +1,8 @@
 # Testing
 
-How `@effect/vitest` 4.0.0-rc.112 and `effect/testing` actually work, read from the source.
-Citations are `<path>:<line>` relative to `.repos/effect/`. The vitest package is one file pair —
-`packages/vitest/src/index.ts` (types) + `packages/vitest/src/internal/internal.ts` (all logic) —
-so every behavioral claim below is checkable in ~600 lines. Canonical walkthroughs:
+How the current `@effect/vitest` and `effect/testing` APIs work, read from the vendored source and
+tests, including upstream changes through rc.116 and current main. Citations are `<path>:<line>`
+relative to `.repos/effect/`. Canonical walkthroughs:
 `ai-docs/src/09_testing/10_effect-tests.ts` and `20_layer-tests.ts`.
 
 ## API surface
@@ -30,6 +29,11 @@ Proxy (`internal.ts:55-70`), so plain `it(...)`, `describe`, `expect`, chai-styl
 - On failure, the runner pretty-prints every error in the Cause via `Cause.prettyErrors` +
   `Effect.logError` before rejecting with the Exit (`internal.ts:22-34`), so typed failures and
   defects both render with stack/spans.
+- On Vitest timeout or cancellation, the adapter interrupts the Effect and registers test teardown
+  that awaits its finalizers. It also handles retries whose signal is already aborted
+  (`internal.ts:37-50`). `it.layer` scope closure runs outside the aborted test context and is
+  awaited, so test and layer finalizers finish before a subsequent sequential test starts
+  (`internal.ts:267-285`; tests `packages/vitest/test/timeout.test.ts:29-103`).
 - `flakyTest(effect, timeout?)` retries up to 10 times within a wall-clock budget (default 30s) and
   dies on exhaustion (`internal.ts:331-350`). Used in the repo for real-network tests only.
 
@@ -99,8 +103,9 @@ Clock service is controlled: `Effect.sleep`/`delay`, `Effect.timeout`, `Schedule
   the current clock (`fiber.getRef(Clock.Clock) as TestClock`, `TestClock.ts:469-471`), so you get
   `testClock.adjust is not a function` at runtime. TestClock helpers only work where TestEnv is
   provided.
-- Root config disables vitest's own fake timers (`fakeTimers: { toFake: undefined }`,
-  `vitest.config.ts:72-75`) — TestClock is the only time mechanism; don't mix in `vi.useFakeTimers`.
+- The root configuration does not configure Vitest fake timers (`vitest.config.ts:55-82`). Use
+  Effect's `TestClock` for Effect time and avoid mixing it with `vi.useFakeTimers`, because raw
+  JavaScript timers and Effect's `Clock` service are separate mechanisms.
 
 ## Other test services
 
@@ -112,19 +117,27 @@ Clock service is controlled: `Effect.sleep`/`delay`, `Effect.timeout`, `Schedule
   (`packages/effect/src/Random.ts:290-296`). Same seed → same sequence.
 - **TestSchema** (`effect/testing/TestSchema`) — `new TestSchema.Asserts(schema)` bundles
   decode/encode/make/round-trip assertions (`TestSchema.ts:52`); handy for vendor-payload schemas.
-- **FastCheck** is re-exported at `effect/testing/FastCheck` (`packages/effect/src/testing/FastCheck.ts:1-10`); the
-  real dependency is `fast-check` ^4 (`packages/effect/package.json:118`).
+- **Native Arbitrary** — property generation now lives in
+  `effect/unstable/arbitrary/Arbitrary`. `Arbitrary.schema(schema)` derives an Arbitrary directly
+  from a Schema; `sampleEffect` and `checkEffect` provide interruptible Effect runners
+  (`packages/effect/src/unstable/arbitrary/Arbitrary.ts:362-367,585-620`). This is Effect's native
+  implementation, not a fast-check bridge.
 
 ## Property tests
 
-`it.effect.prop(name, arbs, f, { fastCheck: { numRuns: 200 } }?)` accepts an array **or** a record
-whose values are FastCheck arbitraries **or Schemas** — Schemas are converted with
-`Schema.toArbitrary` (`internal.ts:126-153`; `Schema.ts:14926-14930`), so v4 core has schema-driven
-arbitraries built in (`ai-docs/src/09_testing/10_effect-tests.ts:50-55` uses `[Schema.String]`).
-Array form passes values as a tuple (`([a, b]) => ...`), record form as an object
-(`packages/vitest/test/index.test.ts:213-238`). **Trap**: the non-effect `it.prop` throws
-`"Schemas are not supported yet"` for Schema arbitraries (`internal.ts:182`) — Schema arbs only
-work under `it.effect.prop`. Effectful property bodies run under the same TestEnv as `it.effect`.
+`it.effect.prop` and plain `it.prop` accept arrays or records whose members are Schemas or native
+`Arbitrary` values from `effect/unstable/arbitrary/Arbitrary`; the two kinds may be mixed
+(`packages/vitest/src/index.ts:38-47`). Schemas are compiled with `Arbitrary.schema`, and the inputs
+are combined with `Arbitrary.all` (`packages/vitest/src/internal/internal.ts:58-91`).
+
+Property-runner options are nested under `arbitrary`, for example
+`{ arbitrary: { runs: 200, seed, maxDiscards, maxShrinks } }`. Array inputs are passed as a tuple
+and record inputs as an object (`packages/vitest/test/index.test.ts:235-286`).
+
+`it.effect.prop` runs an effectful property under the same TestEnv as `it.effect`. Plain `it.prop`
+runs a synchronous property and supports Schemas as well (`internal.ts:216-230`). The old fast-check
+bridge, raw fast-check arbitraries, `Schema.toArbitrary`, and `{ fastCheck: ... }` options are no
+longer supported.
 
 ## Assertion idioms (house style)
 
@@ -184,9 +197,9 @@ Effect.succeed("found.ts") })` (`AnthropicLanguageModel.test.ts:96-100`).
 
 ## Bun
 
-- `@effect/vitest` has no Bun-specific code — it is plain vitest (peer `vitest ^3 || ^4`,
-  `packages/vitest/package.json`). It must run **under vitest**; Bun's native `bun test` runner is
-  not vitest and will not execute `it.effect`.
+- `@effect/vitest` has no Bun-specific runner integration and currently requires Vitest `>=5 <6`
+  (`packages/vitest/package.json:51-60`). It must run under Vitest; Bun's native `bun test` runner
+  does not execute `it.effect`.
 - The repo selects runtime projects explicitly: Bun runs `@effect/platform-bun` from
   `packages/platform/bun`, while Node runs `@effect/platform-node` from `packages/platform/node`
   (`vitest.config.ts:5-10`, `:134-136`). Shared config keeps `bun:sqlite` out of `optimizeDeps`

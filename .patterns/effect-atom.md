@@ -1,6 +1,6 @@
 # Effect Atom + `@effect/atom-react`
 
-Project baseline: `effect@4.0.0-rc.112`; source checkout `.repos/effect` at `f239b5b6cc`.
+Audited against `effect@4.0.0-rc.116` (`d62dd0d6…`) and the checked-in `.repos/effect` source. Reactivity's original extraction remains useful historical context; rc.113 additionally changed the service to a branded interface (`5a77084651`).
 
 Use Effect Atom for client-side reactive state and scoped effects. HttpApi remains the server-operation contract; atoms adapt it to UI ownership, caching, and invalidation.
 
@@ -92,6 +92,11 @@ Design keys as a small vocabulary:
 - multiple affected resources: a record of collections and IDs.
 
 Use the same key constructors for queries and mutations. Invalidate every projection changed by a successful mutation, but do not use broad global keys as a substitute for dependency design. Failed mutations do not invalidate automatically.
+
+`Reactivity` is now a branded interface with a separate same-name `Context.Service` tag. Refer to
+the service value type as `Reactivity`, not `Reactivity.Service` or `Reactivity["Service"]`.
+Hand-written test or adapter implementations must include
+`[Reactivity.TypeId]: Reactivity.TypeId` (`.repos/effect/packages/effect/src/unstable/reactivity/Reactivity.ts:24-72`).
 
 ## Commands: `Atom.fn` and mutation atoms
 

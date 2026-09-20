@@ -1,7 +1,8 @@
 # Effect core, interop & resources (v4)
 
 How the stable Effect v4 core should be used in this repository. Citations are relative to
-`.repos/effect/packages/effect/`; migration notes are secondary to the checked-out RC.112
+`.repos/effect/packages/effect/`; claims were checked against the vendored source and tests,
+including upstream changes through rc.116 and current main. Migration notes are secondary to the
 implementation and tests.
 
 ## `Effect.gen` accepts Effects, not every generator-friendly value

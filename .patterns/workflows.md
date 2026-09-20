@@ -1,6 +1,6 @@
 # Effect v4 durable workflows
 
-> Source: Effect checkout at `.repos/effect`, version RC.112. Citations below are relative to `.repos/effect/packages/`.
+> Source: `effect@4.0.0-rc.116` (`d62dd0d6…`) and the checked-in `.repos/effect` source. Post-rc.116 behavior is identified explicitly. Citations below are relative to `.repos/effect/packages/`.
 
 Use this reference before implementing a multi-step durable operation, replacing workflow state columns, scheduling durable waits, awaiting a callback, or dispatching workflow-owned external work.
 
@@ -30,6 +30,12 @@ Activity names therefore form persisted identity. Keep them stable and unique fo
 
 An activity retries interruption with a built-in schedule capped at ten recurrences before returning suspension (`effect/src/unstable/workflow/Activity.ts:181-210`). `Activity.retry` advances the durable attempt number according to the supplied schedule rather than pretending all attempts are one request (`effect/src/unstable/workflow/Activity.ts:212-244`). Model expected provider/domain failures in the activity error schema and choose retry schedules by error class.
 
+Activity registration is bracketed with `acquireUseRelease`. If interruption occurs after
+registration but before the activity body starts, the registration is still released, preventing
+a leaked activity count from blocking workflow suspension
+(`effect/src/unstable/workflow/Workflow.ts:728-760`,
+`effect/test/unstable/workflow/Workflow.test.ts:6-40`).
+
 ### The unavoidable provider ambiguity
 
 An activity can make a provider mutation and crash before its reply is durably stored. On recovery that activity request can run again. The workflow engine cannot infer whether the provider committed. This is at-least-once external execution, not exactly once.
@@ -51,6 +57,12 @@ Persist provider correlation facts needed for reconciliation. Do not “fix” a
 ### `DurableDeferred`
 
 A durable deferred is named and schema-backed. `await` suspends the workflow until the engine records completion; `done`, `succeed`, and `fail` complete it from another process (`effect/src/unstable/workflow/DurableDeferred.ts:84-161`, `:468-559`). `raceAll` can await multiple deferreds, but the result remains tied to their stable names (`effect/src/unstable/workflow/DurableDeferred.ts:260-315`).
+
+The memory engine handles durable-deferred self-completion without deadlocking. When completion
+interrupts the current workflow run, replay waits for the interrupted run's cleanup to finish before
+starting the next run. Completion may occur from a finalizer or from `DurableDeferred.into` inside
+`raceAll` (`effect/test/unstable/workflow/WorkflowEngine.test.ts:6-84`). This is an engine guarantee,
+not a new public API.
 
 A token serializes workflow name, execution id, and deferred name into base64url; parsing only decodes and validates that tuple (`effect/src/unstable/workflow/DurableDeferred.ts:317-398`). Treat a token as a routing capability, **not as authenticated authorization**. Callback routes must independently authenticate the caller, authorize the target User/workflow, enforce replay policy, and avoid logging tokens.
 

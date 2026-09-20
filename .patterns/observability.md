@@ -1,6 +1,7 @@
 # Observability (v4)
 
-Effect v4 tracing, logging, and metrics, read from the RC.112 source. Citations are relative to
+Effect v4 tracing, logging, and metrics, audited against `effect@4.0.0-rc.116`
+(`d62dd0d6…`) and the checked-in `.repos/effect` source. Citations are relative to
 `.repos/effect/packages/effect/src/`; unstable exporter citations are under
 `unstable/observability/`. This document describes the Effect substrate; Fidy's closed telemetry
 protocol and Projectors remain the product/security boundary.

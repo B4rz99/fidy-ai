@@ -41,10 +41,11 @@ sure cancellation releases the reader/body.
 
 ## Effectful mapping and concurrency
 
-`Stream.mapEffect` accepts `{ concurrency, bufferSize, unordered }` (`Stream.ts:1821` onward).
-Sequential is the safe default for ordered or side-effectful work. Set finite concurrency from the
-external capacity being protected. `"unbounded"` is only valid for an already-small proven-bounded
-input; it is not a performance default.
+`Stream.mapEffect` accepts `{ concurrency?, unordered? }`; it no longer has a `bufferSize` option
+(`Stream.ts:1861-1888`). Mapping is sequential by default. With concurrent mapping, results remain
+input-ordered unless `unordered: true`, which permits outputs to be emitted as soon as their effects
+complete (`Channel.ts:2053-2055`, `:2073-2090`). Set finite concurrency from the external capacity
+being protected. `"unbounded"` is appropriate only for an already-small, proven-bounded input.
 
 Buffering decouples producer and consumer but moves the memory bound. Every `buffer`, queue, grouping,
 or concurrent mapper needs a capacity decision derived from input limits and downstream latency.

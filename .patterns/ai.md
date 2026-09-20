@@ -28,6 +28,19 @@ ToolResultEncodingError | ToolConfigurationError | ToolkitRequiredError |
 InvalidUserInputError`. `AiErrorReason` is itself a schema, embeddable in domain errors
 (ai-docs `10_language-model.ts:30-39`).
 
+## Decisions
+
+`Decision` defines one schema-backed input plus named provider decisions: `classify` chooses among
+at least two labelled criteria, `rate` uses an ordered scale of at least two distinct levels, and
+`probability` estimates a boolean statement with optional descriptions for both outcomes
+(`Decision.ts:29-75`, `:163-333`). `DecisionModel.decide(definition, { input })` JSON-encodes the
+input, makes one provider decision call, and validates every answer. Classification/rating
+probability distributions must cover all labels and sum to 1 within `1e-6`; confidence and
+probability stay in `[0, 1]`; ratings stay within the scale. Invalid input becomes
+`InvalidUserInputError`, invalid provider output becomes `InvalidOutputError`, and the response
+includes input/output token usage (`DecisionModel.ts:159-340`, `:345-384`). This is a narrow
+classification/rating seam, not an agent loop or a substitute for domain validation.
+
 ## Prompt and response model
 
 A `Prompt` is an immutable list of messages with roles `system | user | assistant | tool`;
@@ -57,7 +70,10 @@ dependencies?, needsApproval? })` (`Tool.ts:1195-1270`); defaults: parameters
 (`Tool.ts:1647-1682`). `Tool.dynamic` takes a raw JSON Schema (runtime/MCP-discovered
 tools, handler gets `unknown`, `:1315`); `Tool.providerDefined` models provider-executed
 tools (web search etc.). Annotations: `Tool.Title`, `Readonly`, `Destructive`,
-`Idempotent`, `OpenWorld`, `Meta` — read by the MCP server.
+`Idempotent`, `OpenWorld`, `Meta` — read by the MCP server — plus `Tool.Strict`, a per-tool strict
+JSON Schema override. OpenAI resolves strict mode as
+`Tool.getStrictMode(tool) ?? Config.strictJsonSchema ?? true`, so explicit `false` overrides the
+provider default (`Tool.ts:1860-1908`; `openai/OpenAiLanguageModel.ts:2766-2778`).
 
 `Toolkit.make(...tools)` / `Toolkit.merge` group tools (`Toolkit.ts:474-476`, `:541-554`).
 Handlers are Effects `(params, ctx) => Effect<Success, Failure | AiError | AiErrorReason,
@@ -128,19 +144,22 @@ unchanged — one derivation feeds both the agent loop and the MCP server.
 
 ## MCP server
 
-`McpServer.layerStdio({ name, version })` runs the server over stdio (NDJSON-RPC via
-`RpcServer.layerProtocolStdio`, `McpServer.ts:627-636`); it requires the `Stdio` service —
-`NodeStdio.layer` — and **loggers must go to stderr** (`Layer.succeed(Logger.LogToStderr)(true)`,
-example `:573-622`). `layerHttp({ path })` registers JSON-RPC on an existing `HttpRouter`
-(`:656-666`).
+`McpServer.layerStdio({ name, version, protocols })` runs the server over stdio using framed
+NDJSON-RPC and requires `Stdio`; `McpServer.layerHttp({ name, version, path, protocols })` registers
+the single-endpoint Streamable HTTP topology on an existing `HttpRouter`. Both now require a non-empty
+array of explicit `McpProtocol.ProtocolAdapter`s, so protocol-version and batch behavior are chosen
+at composition rather than hidden in a default (`McpServer.ts:1410-1458`, `:1514-1563`). Keep stdio
+logging on stderr; for HTTP, independently install authentication and an exact `allowedOrigins`
+allowlist when browsers can call it.
 
-`McpServer.toolkit(toolkit)` is a Layer registering every tool (`:749-760` →
-`registerToolkit` `:673-741`): MCP tool = `{ name, description: Tool.getDescription,
-inputSchema: Tool.getJsonSchema, annotations: {title, readOnlyHint, destructiveHint,
-idempotentHint, openWorldHint} }` (`:688-703`). Handler failures become
-`CallToolResult{ isError: true, content: [Cause.pretty(cause)] }` — never a protocol error
-(`:717-724`); successes return `structuredContent` plus JSON text (`:726-733`). Also
-available: `McpServer.resource` (URI templates with completions), `prompt`, `elicit`.
+`McpServer.toolkit(toolkit)` registers every tool through `registerToolkit`
+(`McpServer.ts:1789-1949`). Input validation failures become MCP `InvalidParams`; a declared handler
+failure becomes `CallToolResult { isError: true }` with its encoded payload (or its caller-visible
+`Error.message`, which must itself be safe). Undeclared typed failures and result-encoding failures remain failed effects for the MCP protocol
+boundary. Defects are logged/reported and scrubbed to the generic
+`"Tool execution failed due to an internal server error."` result; interruption propagates
+(`:1770-1922`). Successes return `structuredContent` plus JSON text. Also available:
+`McpServer.resource` (URI templates with completions), `prompt`, and `elicit`.
 
 ## Structured output (`generateObject`)
 
@@ -151,17 +170,18 @@ text is decoded through `Schema.fromJsonString(schema)` — failure is
 `StructuredOutputError` carrying the raw text (`:2181-2211`). So the wire value round-trips
 the canonical schema: encoded side out as JSON Schema, decoded side back as domain types.
 
-OpenAI mapping (`openai/OpenAiLanguageModel.ts:2911-2928`): Responses-API
+OpenAI mapping (`openai/OpenAiLanguageModel.ts:2990-3020`): Responses-API
 `text.format = { type: "json_schema", name, schema, strict: config.strictJsonSchema ?? true }`.
-The JSON Schema comes from `toCodecOpenAI` (`OpenAiStructuredOutput.ts:53-70`), which
-rewrites to OpenAI's strict subset **and returns a matching codec** so decoding still
-lands on your type: tuples → objects with numeric-string keys, records → `[key, value]`
-pair arrays, `Schema.optional` → required nullable (`optionalKey` is the JSDoc-recommended
-fix), `oneOf` → `anyOf`, multiple regex filters merged (no `allOf`), `allOf` flattened
-(`:39-48`, `:79-101`). Unsupported AST kinds **throw** → `UnsupportedSchemaError`:
-`Declaration`, `Enum`, `TemplateLiteral`, `Undefined`, `Void`, bigint/symbol
-(`:105-125`). Tool parameters go through the same transformer with the same
-`strict: true` default (`openai/OpenAiLanguageModel.ts:2682-2693`).
+The JSON Schema comes from `toCodecOpenAI`, which rewrites to OpenAI's subset **and returns a
+matching codec** so decoding still lands on your type: tuples → objects with numeric-string keys,
+records → `[key, value]` pair arrays, optional properties → required nullable, and `oneOf` →
+`anyOf` (`OpenAiStructuredOutput.ts:24-82`; `internal/structured-output.ts:45-188`). There is no
+longer a blanket unsupported-AST-kind blacklist. Unsupported constraints and formats are omitted or
+moved into descriptions while the returned codec remains authoritative. Conversion still throws —
+and the provider maps that to `UnsupportedSchemaError` — for invalid/unsupported references or when
+the rewritten root is not an object or contains top-level `anyOf` (`OpenAiStructuredOutput.ts:53-82`;
+`internal/structured-output.ts:20-43`; `openai/OpenAiLanguageModel.ts:2980-3006`). Tool parameters
+use the same transformer; their strict flag follows the per-tool precedence described above.
 
 ## OpenAI provider
 

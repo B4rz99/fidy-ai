@@ -4,33 +4,47 @@ How Effect v4 SQL support actually works, read from the source. Citations are `<
 relative to `.repos/effect/packages/`. The dialect-agnostic core lives in
 `effect/src/unstable/sql/` (`SqlClient`, `Statement`, `SqlSchema`, `SqlResolver`, `SqlModel`,
 `Migrator`, `SqlError`, `SqlStream`); the Postgres driver package is `@effect/sql-pg` at
-`sql/pg/` (just `PgClient.ts` + `PgMigrator.ts`). There is no ai-docs SQL walkthrough — the
+`sql/pg/`, whose native protocol implementation includes `PgClient`, `PgPool`,
+`PgConnection`, `PgTypes`, and `PgMigrator`. There is no ai-docs SQL walkthrough — the
 package tests are the canonical usage examples.
 
 ## Client construction (PgClient)
 
-`@effect/sql-pg` wraps the **`pg` npm driver** (pure JS — Bun-compatible) plus `pg-cursor`
-for streaming and `pg-types` for parsing (`sql/pg/src/PgClient.ts:53-55`,
-`sql/pg/package.json:70-75`). platform-bun ships **no** SQL module (only
-`sql/sqlite-bun` exists for sqlite); on Bun you use `@effect/sql-pg` as-is.
+`@effect/sql-pg` implements the PostgreSQL wire protocol directly. `PgConnection` and
+`PgPool` own connection setup, authentication, binary codecs, prepared statements,
+pipelining, streaming, notifications, cancellation, and pooling; there is no runtime
+dependency on `pg`, `pg-cursor`, or `pg-types` (`sql/pg/CHANGELOG.md:49-64`,
+`sql/pg/package.json:1-75`, `sql/pg/src/PgConnection.ts:246-279`). platform-bun ships
+**no** SQL module (only `sql/sqlite-bun` exists for sqlite); on Bun use
+`@effect/sql-pg` as-is.
 
 - `PgClient.layer(config)` / `layerConfig(Config.Wrap<PgPoolConfig>)` provide **both**
   `PgClient` and `SqlClient` tags, with `Reactivity.layer` already baked in
-  (`PgClient.ts:779-813`). Handlers should depend on `SqlClient`; reach for `PgClient` only
-  for `json`/`listen`/`notify`/`config` (`PgClient.ts:79-85`).
-- Config: `url: Redacted` (connection string) **or** parts (`host/port/database/username/
-password: Redacted/ssl`); pool knobs `maxConnections`, `minConnections`, `idleTimeout`,
-  `connectionTTL`, `connectTimeout` (`PgClient.ts:105-141`). Construction runs `SELECT 1` and
-  fails the layer with a classified `SqlError` after `connectTimeout` (default 5s)
-  (`PgClient.ts:179-203`). `applicationName` defaults to `"@effect/sql-pg"` (`:173`).
+  (`sql/pg/src/PgClient.ts:342-374`). Handlers should depend on `SqlClient`; reach for
+  `PgClient` only for `json`/`listen`/`notify`/`config` (`PgClient.ts:43-64`).
+- Config: `url: Redacted` (connection string) **or** parts (`host/port/path/database/
+username/password/ssl`). A password may be a static `Redacted` or an infallible
+  `Effect<Redacted>` evaluated for each physical connection. Connection options also include
+  structured `startupParameters`, opaque `startupOptions`, a `PgTypes.Registry`, optional
+  `multiplex` and `multiplexConcurrency`, prepared-statement controls, and `maxMessageSize`
+  (`PgClient.ts:76-147`). Pool options add connection limits and idle/TTL settings.
+  `sslmode=prefer` and `sslmode=allow` try TLS first and fall back only when the server
+  declines `SSLRequest`; TLS handshake and certificate failures remain fatal
+  (`sql/pg/CHANGELOG.md:7-20`). Connection and authentication run under `connectTimeout`,
+  five seconds by default (`PgConnection.ts:246-279`).
 - Casing: `transformResultNames: String.snakeToCamel` + `transformQueryNames:
-String.camelToSnake` is the tested idiom (`sql/pg/test/utils.ts:29-38`) — identifiers and
+String.camelToSnake` is the tested idiom (`sql/pg/test/utils.ts:54-55`) — identifiers and
   record-helper keys are snake_cased at compile time, row keys camelCased on read
-  (`PgClient.ts:574-583`, `sql/pg/test/Client.test.ts:255-270`). `sql.withoutTransforms()`
-  opts out per call site (`effect/src/unstable/sql/SqlClient.ts:178-195`).
-- Interruption of an in-flight query issues best-effort `pg_cancel_backend`
-  (`PgClient.ts:752-771`; test `Client.test.ts:288-298`).
-- `types: Pg.CustomTypesConfig` overrides driver-level OID parsers if ever needed (`:126`).
+  (`PgClient.ts:216-225`, `:381-418`; `sql/pg/test/Client.integration.test.ts:10-250`).
+  `sql.withoutTransforms()` opts out per call site
+  (`effect/src/unstable/sql/SqlClient.ts:215-241`).
+- Interruption of a pinned in-flight query sends a PostgreSQL `CancelRequest` through a
+  side connection and drains back to `ReadyForQuery`; an unpinned multiplexed connection
+  cannot be canceled because its active query may belong to another fiber
+  (`PgConnection.ts:215-239`, `:1483-1505`).
+- `types: PgTypes.Registry` installs native scalar and array codecs. Register binary UDTs
+  explicitly rather than relying on textual fallback (`PgClient.ts:122-125`,
+  `PgTypes.ts:1413-1420`).
 
 ## The `sql` tag (Statement)
 
@@ -39,22 +53,25 @@ A statement is simultaneously a `Fragment` and an `Effect<ReadonlyArray<A>, SqlE
 `.unprepared`, `.withoutTransform`, and `.compile()` (`effect/src/unstable/sql/Statement.ts:70-81`).
 Interpolated values become `$n` bind parameters; interpolated fragments/helpers splice in
 (`Statement.ts:625-643`); `sql("name")` (a plain string call) is an **escaped identifier**,
-double-quoted (`Statement.ts:436,543-545`; `PgClient.ts:864`).
+double-quoted (`Statement.ts:436,543-545`; `PgClient.ts:390-400`).
 
 | Helper                                      | Compiles to                                                             | Trap                                                        |
 | ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `sql.in(col, xs)`                           | `"col" IN ($1,…)`                                                       | empty `xs` → `1=0` (`Statement.ts:1496-1509`)               |
 | `sql.insert(rec \| recs)`                   | `("c1","c2") VALUES …`; chain `.returning("*")`                         | columns from the **first** record only (`Statement.ts:871`) |
 | `sql.update(rec, omit?)`                    | `"c" = $1, …`; `.returning`                                             | no WHERE — you append it                                    |
-| `sql.updateValues(recs, alias)`             | `(values …) AS alias("c")` for bulk update-from (`PgClient.ts:839-846`) |                                                             |
+| `sql.updateValues(recs, alias)`             | `(values …) AS alias("c")` for bulk update-from (`PgClient.ts:398-409`) |                                                             |
 | `sql.and(cs)` / `sql.or(cs)`                | parenthesized chain                                                     | empty → `1=1` (`Statement.ts:693-702`)                      |
 | `sql.csv(prefix?, cs)`                      | comma list (ORDER/GROUP BY) (`Statement.ts:711-731`)                    |                                                             |
 | `sql.literal(s)` / `sql.unsafe(s, params?)` | raw SQL, unescaped (`Statement.ts:441-446,559-573`)                     | injection escape hatch — params still bind                  |
-| `sql.json(x)` (PgClient only)               | bind param carrying JSON (`PgClient.ts:604,847-859`)                    | see transformJson trap below                                |
+| `sql.json(x)` (PgClient only)               | typed `jsonb` bind parameter (`PgClient.ts:249-250,410-419`)            | see transformJson trap below                                |
 
-`undefined` in a record helper binds as `null` (`Statement.ts:1479`). Multi-statement
-strings return an **array of row-arrays**, one per statement
-(`PgClient.ts:658-663`, test `Client.test.ts:272-286`). Compiled SQL+params are cached on
+`undefined` in a record helper binds as `null` (`Statement.ts:1479`). Native
+extended-protocol queries must contain exactly one PostgreSQL statement; tagged queries
+containing multiple statements are rejected (`sql/pg/CHANGELOG.md:57-64`,
+`sql/pg/test/Client.integration.test.ts:524-538`). Named prepared statements are enabled by
+default. Use `prepare: false` for poolers that cannot preserve them, or the unprepared
+variants for individual statements. Compiled SQL+params are cached on
 the statement object (`Statement.ts:826-835`). There is no request batching beyond the
 record helpers; batching of _concurrent_ requests is SqlResolver's job.
 
@@ -85,40 +102,45 @@ schema with derived `insert`/`update`/`json` variants (`Model.GeneratedByDb`,
 `Sensitive`, `JsonFromString`), and `SqlModel.makeRepository(Model, { tableName, spanPrefix,
 idColumn, softDeleteColumn? })` derives insert/update/findById/delete over `insert …
 returning *` (`effect/src/unstable/sql/SqlModel.ts:33-221`). Note the repository dies on
-missing rows after insert/update (`SqlModel.ts:111,155`). For hand-written SQL, `SqlSchema`
-
-- your own statements is the intended layer; `SqlModel` is optional sugar.
+missing rows after insert/update (`SqlModel.ts:111,155`). For hand-written SQL, wrapping your
+own statements with `SqlSchema` is the intended layer; `SqlModel` is optional sugar.
 
 ## Column mapping
 
-- **numeric** — the driver returns `numeric` as a **string** (pg-types default); decode with
+- **numeric** — the native codec returns `numeric` as a **string**; decode with
   `Schema.BigDecimalFromString` (string ⇄ BigDecimal, `effect/src/Schema.ts:10966-10968`).
   Gotcha: empty string decodes to zero (`Schema.ts:10957`). For `Money { amount, currency }`
   flattened to adjacent columns there is no built-in — model the row schema with
   `amount: Schema.BigDecimalFromString, currency: Schema.String` and reconstruct via
-  `Schema.decodeTo`/class constructor in the Result schema.
-- **timestamptz/timestamp** — driver parses to JS `Date`; decode with
-  `Schema.DateTimeUtcFromDate` (validates the Date, yields `DateTime.Utc`, encodes back to
-  `Date` — `Schema.ts:12090-12096`). Prefer `timestamptz` columns: the driver parses bare
-  `timestamp` in server-local time.
-- **jsonb/json** — the driver returns the **already-parsed** object (test
-  `Client.test.ts:234-239`), so decode with the domain schema directly
-  (`Schema.decodeUnknownEffect` inside a `SqlSchema` Result). Writing: a plain object
-  parameter is stringified by the driver; `sql.json(x)` marks it explicitly
-  (`PgClient.ts:604`). `Model.JsonFromString` is only for TEXT-typed columns
+  `Schema.decodeTo` or a class constructor in the Result schema.
+- **timestamptz/timestamp** — native codecs decode both, including array elements, to JS
+  `Date`; decode with `Schema.DateTimeUtcFromDate`. Precision is milliseconds. Non-finite or
+  out-of-range timestamps decode to an invalid `Date`. A bare `Date` parameter binds as
+  `timestamptz`; inserting it into `timestamp` applies the session `TimeZone`, so use UTC or
+  `PgTypes.timestamp(value)` when its UTC fields must be preserved (`sql/pg/src/PgTypes.ts:9-27`).
+- **jsonb/json** — results are already parsed, so decode with the domain schema directly.
+  Plain object parameters are **not** inferred as JSON; wrap them with `sql.json(x)`
+  (`sql/pg/CHANGELOG.md:57-60`). `Model.JsonFromString` is only for TEXT-typed columns
   (`Model.ts:685-706`).
+- **unknown OIDs** — unregistered scalar OIDs decode as UTF-8 text, so scalar enums return
+  labels. Binary user-defined values such as enum arrays can decode incorrectly or fail;
+  register scalar and array codecs in a `PgTypes.Registry` (`sql/pg/src/PgTypes.ts:1413-1420`).
+- **parameters** — strings remain untyped so PostgreSQL infers their type, `Date` maps to
+  `timestamptz`, bytes map to `bytea`, unsupported objects are rejected, and empty arrays
+  require explicit typing (`sql/pg/src/PgConnection.ts:816-873`).
 - **nullability** — `NULL` arrives as `null`; model with `Schema.NullOr(...)` (or
   `Model.FieldOption` for `Option` in app code, `Model.ts:334-356`). No silent defaults.
-- **bigint columns** (`int8`) also come back as strings from the driver — decode explicitly.
+- **date / int8 / bytea** — `date` decodes to a string, `int8` to `bigint`, and `bytea` to
+  `Uint8Array` (`sql/pg/CHANGELOG.md:57-64`).
 
 ### Trap: transformJson renames keys inside your jsonb
 
 With `transformResultNames` set, the row transform **recurses into nested objects by
-default** — `transformJson` defaults to nested=true (`PgClient.ts:578-583`,
+default** — `transformJson` defaults to nested=true (`PgClient.ts:216-225`,
 `Statement.ts:1131-1134`), so keys _inside a decoded jsonb document_ get snakeToCamel'd
 before your schema sees them; symmetrically `sql.json` payload keys get camelToSnake'd on
-write (`PgClient.ts:825-827,847-859`). The test suite shows both behaviors
-(`Client.test.ts:107-166`). If jsonb documents must round-trip byte-exact (raw payloads),
+write (`PgClient.ts:381-418`). The test suite shows both behaviors
+(`Client.integration.test.ts:10-250`). If jsonb documents must round-trip byte-exact (raw payloads),
 pass `transformJson: false` in the client config and keep the column-name transform only.
 
 ## Transactions (`sql.withTransaction`)
@@ -137,8 +159,13 @@ pass `transformJson: false` in the client config and keep the column-name transf
   connection (pg serializes them per connection). SqlResolver batches key on this service.
 - Acquire failures surface as typed `SqlError` `ConnectionError`, not defects
   (`sql/pg/test/TransactionAcquire.test.ts:23-52`).
-- Nested-savepoint success is a no-op (no early RELEASE) (`:272-274`); the transaction gets
-  a `sql.transaction` span with commit/rollback events (`:236,270-277`).
+- Source/package skew matters for nested savepoints. The rc.116 release leaves a successful
+  nested savepoint unreleased. The newer vendored snapshot accepts a dialect-specific
+  `releaseSavepoint` hook, and `PgClient` supplies `RELEASE SAVEPOINT`, so PostgreSQL releases a
+  nested savepoint after successful completion or successful rollback
+  (`effect/src/unstable/sql/SqlClient.ts:263-339`, `sql/pg/src/PgClient.ts:222-243`).
+  Do not infer rc.116 release behavior from the newer checkout.
+- The transaction gets a `sql.transaction` span with commit/rollback events.
 
 This is the fidy "atomic all-or-nothing" primitive: wrap the unit of work, let typed domain
 failures propagate — the rollback happens on the way out.
@@ -148,9 +175,10 @@ failures propagate — the rollback happens on the way out.
 Every driver failure is `SqlError { reason: SqlErrorReason }` where the reason is a tagged
 class with `cause`, optional `message`/`operation`, and an `isRetryable` getter
 (`effect/src/unstable/sql/SqlError.ts:335-421`). Pg SQLSTATE classification
-(`PgClient.ts:910-950`): `08*`→ConnectionError(retryable), `28*`→Authentication,
-`42501`→Authorization, `42*`→SqlSyntaxError, **`23505`→`UniqueViolation` carrying the
-trimmed `constraint` name** (`:930-931`, tests `sql/pg/test/SqlErrorClassification.test.ts:58-75`),
+(`sql/pg/src/internal/sqlError.ts:37-69`): `08*`→ConnectionError(retryable),
+`28*`→Authentication, `42501`→Authorization, `42*`→SqlSyntaxError,
+**`23505`→`UniqueViolation` carrying the trimmed `constraint` name**
+(`:55-57`, tests `sql/pg/test/SqlErrorClassification.test.ts:58-75`),
 other `23*`→ConstraintError, `40P01`→Deadlock(retryable), `40001`→Serialization(retryable),
 `55P03`→LockTimeout, `57014`→StatementTimeout, else UnknownError. For insert-only /
 idempotency tables, match `error.reason._tag === "UniqueViolation" && error.reason.constraint
@@ -184,21 +212,27 @@ EXCLUSIVE MODE` (`:222-226,306`); a concurrent runner hits the insert conflict a
   `.patterns/persisted-queue.md` before implementing queue publication, claiming, retries,
   crash recovery, schema evolution, or retention. Keep this document focused on the SQL
   substrate rather than duplicating that operational contract.
-- **LISTEN/NOTIFY**: `PgClient.listen(channel): Stream<string, SqlError>` on a dedicated
-  non-pool connection, and `notify(channel, payload)` via `pg_notify`
-  (`PgClient.ts:605-629`; tests `Client.test.ts:319-373`) — usable to cut queue poll latency.
-- **Streaming reads**: `statement.stream` uses a `pg-cursor` reading 128-row pages on a
-  reserved connection (`PgClient.ts:724-748`) — the tool for large exports/ingestion scans.
+- **LISTEN/NOTIFY**: `PgClient.listen(channel)` returns a scoped
+  `Effect<Queue.Dequeue<PgConnection.Notification, SqlError>, SqlError, Scope>`. Acquisition
+  completes only after PostgreSQL confirms `LISTEN`. A later connection failure fails the
+  dequeue with the original `SqlError`, allowing a surrounding stream retry to reacquire;
+  intentional scope closure interrupts consumers (`sql/pg/src/PgClient.ts:43-64`,
+  `sql/pg/CHANGELOG.md:7-10`). `notify(channel, payload)` uses `pg_notify`.
+- **Streaming reads**: `statement.stream` uses the native extended-query protocol on a
+  scoped, pinned connection. Early stream termination sends `CancelRequest`, drains the
+  connection back to `ReadyForQuery`, and invalidates it if draining stalls
+  (`sql/pg/src/PgConnection.ts:1577-1773`).
 
 ## Testing
 
 The repo's own Pg tests run against **Testcontainers**, not the root docker-compose (that
 compose file provisions a Postgres for the cluster examples, `docker-compose.yaml:1-10`):
 `PgContainer.layerClient` starts `postgres:alpine` per suite and builds `PgClient.layer({
-url })` from the container URI (`sql/pg/test/utils.ts:9-48`), consumed via
-`it.layer(PgContainer.layerClient, { timeout: "30 seconds" })` (`Client.test.ts:14`). For
+url })` from the container URI (`sql/pg/test/utils.ts:8-28`), consumed via
+`it.layer(PgContainer.layerClient, { timeout: "30 seconds" })`
+(`Client.integration.test.ts:14`). For
 fidy's fixed local Postgres (port 5433), the same shape applies with `PgClient.layer`
 pointed at the env-provided URL — everything downstream depends only on `SqlClient`, so the
 derived-client-against-real-Postgres seam is just a layer swap. Compiler-only assertions
 need no database: `.compile()` returns `[sql, params]` synchronously
-(`Client.test.ts:15-105`).
+(`Client.integration.test.ts:10-250`).

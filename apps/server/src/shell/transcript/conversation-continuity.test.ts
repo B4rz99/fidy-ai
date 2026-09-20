@@ -1,5 +1,6 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import assert from "node:assert/strict";
+import { PgClient } from "@effect/sql-pg";
 import { expect, layer } from "@effect/vitest";
 import {
   Array as Arr,
@@ -1580,6 +1581,7 @@ const concurrentCompactionProgram = Effect.scoped(
     const continuity = yield* ConversationContinuity;
     const control = yield* CompactionRaceControl;
     const sql = yield* MigrationSqlClient;
+    const pg = yield* PgClient.PgClient;
     yield* resetDefaultContinuity;
     yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
     yield* completeTestTurn(continuity, "primero");
@@ -1633,7 +1635,7 @@ const concurrentCompactionProgram = Effect.scoped(
             ${defaultUserId},
             ${protectedEntry.id},
             ${protectedEntry.turnId},
-            ${protectedPersistedEntry}::jsonb
+            ${pg.json(protectedPersistedEntry)}::jsonb
           )
         `;
     yield* sql`

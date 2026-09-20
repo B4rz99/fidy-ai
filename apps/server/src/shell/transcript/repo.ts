@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
@@ -30,13 +31,13 @@ const OwnedTranscriptEntryRow = Schema.Struct({
 });
 
 const appendOne = Effect.fn(function* (subjectUserId: UserId, entry: TranscriptContentEntry) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   yield* SqlSchema.findOne({
     Request: OwnedTranscriptEntryRow,
     Result: Schema.Struct({ entryId: TranscriptEntryId }),
     execute: (row) => sql`
       INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
-      VALUES (${row.subjectUserId}, ${row.entryId}, ${row.turnId}, ${row.entry}::jsonb)
+      VALUES (${row.subjectUserId}, ${row.entryId}, ${row.turnId}, ${sql.json(row.entry)}::jsonb)
       RETURNING entry_id AS "entryId"
     `,
   })({ subjectUserId, entryId: entry.id, turnId: entry.turnId, entry }).pipe(Effect.orDie);

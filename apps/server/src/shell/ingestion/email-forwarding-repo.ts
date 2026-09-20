@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -590,7 +591,10 @@ export const insertRawEmailSampleInScope = Effect.fn("insertRawEmailSampleInScop
     readonly anonymizationCandidate: string;
     readonly anonymizationRevision: string;
   }) {
-    const sql = yield* SqlClient.SqlClient;
+    const sql = yield* PgClient.PgClient;
+    const content = yield* Schema.decodeEffect(UnknownJsonString)(input.encodedContent).pipe(
+      Effect.orDie
+    );
     return yield* SqlSchema.findOne({
       Request: Schema.Struct({ id: IngestSampleId }),
       Result: Schema.Struct({ id: IngestSampleId }),
@@ -603,7 +607,7 @@ export const insertRawEmailSampleInScope = Effect.fn("insertRawEmailSampleInScop
         ${input.sample.id}, ${input.userId}, ${input.sample.receivedEmailId},
         ${input.sample.serviceMarket}, ${input.sample.locale}, ${input.sample.timeZone},
         ${input.sample.sourceFormat}, ${input.sample.sourceProvider}, ${input.sample.parserRevision},
-        ${input.encodedContent}::jsonb, ${input.contentHash}, ${input.anonymizationCandidate},
+        ${sql.json(content)}::jsonb, ${input.contentHash}, ${input.anonymizationCandidate},
         ${input.anonymizationRevision}, ${input.sample.retainedAt}, ${input.sample.expiresAt}
       ) ON CONFLICT (received_email_id) DO UPDATE SET received_email_id = EXCLUDED.received_email_id
       RETURNING id
@@ -668,21 +672,17 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
   context: ForwardedEmailExecutionContext,
   interpretation: ForwardedEmailInterpretation
 ) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   const extraction =
     interpretation._tag === "Interpreted"
-      ? yield* Schema.encodeEffect(UnknownJsonString)(
-          yield* Schema.encodeEffect(TransactionExtraction)(interpretation.extraction).pipe(
-            Effect.orDie
-          )
-        ).pipe(Effect.orDie)
+      ? yield* Schema.encodeEffect(TransactionExtraction)(interpretation.extraction).pipe(
+          Effect.orDie
+        )
       : null;
   const evidence =
     interpretation._tag === "Interpreted"
-      ? yield* Schema.encodeEffect(UnknownJsonString)(
-          yield* Schema.encodeEffect(NotificationEmailInterpretationEvidence)(
-            interpretation.evidence
-          ).pipe(Effect.orDie)
+      ? yield* Schema.encodeEffect(NotificationEmailInterpretationEvidence)(
+          interpretation.evidence
         ).pipe(Effect.orDie)
       : null;
   const inserted = yield* SqlSchema.findOneOption({
@@ -694,7 +694,8 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
         review_reason, created_at, expires_at
       )
       SELECT ${context.receivedEmailId}, ${context.userId}, ${interpretation._tag === "Interpreted" ? "interpreted" : "needs-review"},
-        ${extraction}::jsonb, ${evidence}::jsonb,
+        ${extraction === null ? null : sql.json(extraction)}::jsonb,
+        ${evidence === null ? null : sql.json(evidence)}::jsonb,
         ${interpretation._tag === "NeedsReview" ? interpretation.reason : null}, now(), sample.expires_at
       FROM forwarded_email_receipts AS receipt
       JOIN raw_email_ingest_samples AS sample
@@ -906,26 +907,30 @@ type CompleteForwardedEmailReviewInput = Readonly<{
   createdAt: DateTime.Utc;
 }>;
 
-const prepareForwardedEmailReview = Effect.fnUntraced(function* (
+const prepareForwardedEmailReview = (
   input: CompleteForwardedEmailReviewInput
-) {
-  const sampleId = input.evidence._tag === "RawSample" ? input.evidence.sampleId : null;
+): Readonly<{
+  issues: CompleteForwardedEmailReviewInput["issues"];
+  money: Option.Option<Money>;
+  sampleId: Option.Option<IngestSampleId>;
+}> => {
+  const sampleId =
+    input.evidence._tag === "RawSample"
+      ? Option.some(input.evidence.sampleId)
+      : Option.none<IngestSampleId>();
   const money =
     input.evidence._tag === "RawSample"
       ? Option.map(input.evidence.extraction, (value) => value.money)
       : Option.none<Money>();
-  const encodedIssues = yield* Schema.encodeEffect(UnknownJsonString)(input.issues).pipe(
-    Effect.orDie
-  );
-  return { encodedIssues, money, sampleId };
-});
+  return { issues: input.issues, money, sampleId };
+};
 
 /** Inserts one visible email NeedsReviewItem and closes the matching receipt atomically. */
 export const completeForwardedEmailWithReviewInScope = Effect.fn(
   "completeForwardedEmailWithReviewInScope"
 )(function* (input: CompleteForwardedEmailReviewInput) {
-  const sql = yield* SqlClient.SqlClient;
-  const { encodedIssues, money, sampleId } = yield* prepareForwardedEmailReview(input);
+  const sql = yield* PgClient.PgClient;
+  const { issues, money, sampleId } = prepareForwardedEmailReview(input);
   yield* sql`
     WITH inserted AS (
       INSERT INTO email_needs_review_items (
@@ -935,13 +940,13 @@ export const completeForwardedEmailWithReviewInScope = Effect.fn(
       )
       SELECT
         ${input.reviewId}, ${input.context.userId}, ${input.context.receivedEmailId},
-        ${sampleId},
+        ${Option.getOrNull(sampleId)},
         ${input.evidence.reason}, ${Option.getOrNull(Option.map(money, (value) => value.amount))},
         ${Option.getOrNull(Option.map(money, (value) => value.currency))},
         ${input.context.serviceMarket},
         ${input.context.locale}, ${input.context.timeZone}, 'notification-email', 'forwarded-email',
         'resend', ${input.context.receivedEmailId}, ${input.context.parserRevision},
-        ${input.extractorRevision}, ${encodedIssues}::jsonb, 'pending', ${input.createdAt}
+        ${input.extractorRevision}, ${sql.json(issues)}::jsonb, 'pending', ${input.createdAt}
       FROM forwarded_email_receipts AS receipt
       WHERE receipt.user_id = ${input.context.userId}
         AND receipt.received_email_id = ${input.context.receivedEmailId}

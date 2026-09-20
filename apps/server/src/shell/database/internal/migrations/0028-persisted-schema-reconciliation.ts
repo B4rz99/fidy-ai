@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import { Data, Effect, Option, Schema, Stream } from "effect";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
@@ -702,6 +703,7 @@ const createLegacyTranscriptTurns = Effect.gen(function* () {
 /** Appends the schema-encoded recovery marker required for a stale non-terminal Turn. */
 const appendLegacyInterruptedTranscriptMarkers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const pg = yield* PgClient.PgClient;
   const appendBatch = (
     afterTurnId: Option.Option<TranscriptTurnId>
   ): Effect.Effect<void, SqlError.SqlError> =>
@@ -742,7 +744,7 @@ const appendLegacyInterruptedTranscriptMarkers = Effect.gen(function* () {
         });
         return sql`
           INSERT INTO public.transcript_entries (user_id, entry_id, turn_id, entry)
-          VALUES (${marker.userId}, ${marker.entryId}, ${marker.turnId}, ${entry}::jsonb)
+          VALUES (${marker.userId}, ${marker.entryId}, ${marker.turnId}, ${pg.json(entry)}::jsonb)
         `;
       });
 

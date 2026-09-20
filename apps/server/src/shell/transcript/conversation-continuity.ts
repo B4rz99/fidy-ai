@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import {
   Array as Arr,
   Context,
@@ -211,7 +212,7 @@ export type ConversationContinuityService = Readonly<{
 type CryptoService = Effect.Success<typeof Crypto.Crypto>;
 type Dependencies = {
   readonly crypto: CryptoService;
-  readonly sql: SqlClient.SqlClient;
+  readonly sql: PgClient.PgClient;
   readonly inference: ConversationCompactionInferenceService;
   readonly compactionPolicy: ConversationCompactionPolicy;
   readonly observeCompactionCommit: (tag: CompactionCommitTag) => Effect.Effect<void>;
@@ -455,7 +456,7 @@ const observePersisted = Effect.fn("ConversationContinuity.observePersisted")(fu
 });
 
 const appendEntry = Effect.fn("ConversationContinuity.appendEntry")(function* (
-  sql: SqlClient.SqlClient,
+  sql: PgClient.PgClient,
   userId: UserId,
   entry: TranscriptEntry
 ) {
@@ -469,7 +470,7 @@ const appendEntry = Effect.fn("ConversationContinuity.appendEntry")(function* (
     Result: Schema.Struct({ entryId: TranscriptEntryId }),
     execute: (row) => sql`
       INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
-      VALUES (${row.userId}, ${row.entryId}, ${row.turnId}, ${row.entry}::jsonb)
+      VALUES (${row.userId}, ${row.entryId}, ${row.turnId}, ${sql.json(row.entry)}::jsonb)
       RETURNING entry_id AS "entryId"
     `,
   })({ userId, entryId: entry.id, turnId: entry.turnId, entry });
@@ -1176,7 +1177,7 @@ const admitTurnOwned = Effect.fn("ConversationContinuity.admitTurn")(function* (
 const makeConversationContinuity = Effect.gen(function* () {
   const dependencies: Dependencies = {
     crypto: yield* Crypto.Crypto,
-    sql: yield* SqlClient.SqlClient,
+    sql: yield* PgClient.PgClient,
     inference: yield* ConversationCompactionInference,
     compactionPolicy: yield* ConversationCompactionPolicy,
     observeCompactionCommit: yield* CompactionCommitObserver,

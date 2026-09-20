@@ -1,6 +1,11 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import { type Config, ConfigProvider, DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  HttpRouter,
+  type HttpServerError,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 import { type SqlError, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
 import { EmailAddress, type EmailVerificationCode } from "~/core/email-authentication/model";
@@ -277,7 +282,7 @@ export const makeBrowserLoginPairingAcceptanceControlServer = ({
 }: {
   readonly certificate: Bun.BunFile;
   readonly privateKey: Bun.BunFile;
-}): Layer.Layer<never, Config.ConfigError | SqlError.SqlError> =>
+}): Layer.Layer<never, Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError> =>
   HttpRouter.serve(ControlRoutesLive).pipe(
     Layer.provide(AcceptanceControlConfig),
     Layer.provide(

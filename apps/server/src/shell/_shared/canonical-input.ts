@@ -25,5 +25,5 @@ type ClientInput<Endpoint extends HttpApiEndpoint.ConstraintRequest> = Exclude<
 /** Decoded client input selected directly from one canonical `FidyApi` operation. */
 export type CanonicalInput<Id extends OperationId> = Omit<
   ClientInput<CanonicalEndpoint<Id>>,
-  "responseMode"
+  "responseMode" | "sseOptions"
 >;

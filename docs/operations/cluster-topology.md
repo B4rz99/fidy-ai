@@ -44,7 +44,7 @@ setting is listed here and a new upstream setting is a type error until it is ch
 | `simulateRemoteSerialization` | `true`                                              | Every send crosses the serialization boundary, so local and remote delivery behave identically.        |
 | `runnerAddress`               | `FIDY_CLUSTER_RUNNER_HOST:FIDY_CLUSTER_RUNNER_PORT` | Address other runners use to route RPC to this runner.                                                 |
 | `runnerListenAddress`         | `FIDY_CLUSTER_LISTEN_HOST:FIDY_CLUSTER_RUNNER_PORT` | Bind address; defaults to `0.0.0.0`. The listener must stay private.                                   |
-| serialization                 | `msgpack`, 64 KiB                                   | The only approved frame codec and the maximum encoded frame.                                           |
+| serialization                 | `schema-binary`, 64 KiB                             | The only approved frame codec and the maximum encoded frame.                                           |
 
 Required environment: `FIDY_CLUSTER_RUNNER_HOST`, `FIDY_CLUSTER_RUNNER_PORT`, optional
 `FIDY_CLUSTER_LISTEN_HOST`, and `FIDY_CLUSTER_AUTH_TOKEN` (exactly 32 bytes as 64 lowercase
@@ -65,7 +65,7 @@ runtime never overwrites a published row.
 | `protocolGeneration`         | Deployment generation of the entity/RPC/workflow schema.                     |
 | `shardsPerGroup`             | Size of each hash-ring group.                                                |
 | `availableShardGroups`       | Sorted set of groups every runner hashes.                                    |
-| `serialization`              | Frame codec (`msgpack`).                                                     |
+| `serialization`              | Frame codec (`schema-binary`).                                               |
 | `serializationMaxBufferSize` | Maximum encoded frame size in bytes.                                         |
 | `messageStoragePrefix`       | Durable mailbox table namespace.                                             |
 | `runnerStoragePrefix`        | Runner registry and shard-lock table namespace.                              |

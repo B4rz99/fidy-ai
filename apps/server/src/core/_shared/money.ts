@@ -278,7 +278,7 @@ const MoneyAmount = Schema.String.check(
     Schema.BigDecimal.check(Schema.isGreaterThanOrEqualToBigDecimal(zero)),
     // Decoding reports unparsable text as an issue instead of throwing; encoding
     // keeps the normalized plain-decimal spelling `BigDecimal.format` does not give.
-    SchemaTransformation.make({
+    SchemaTransformation.makeTransformation({
       decode: SchemaTransformation.bigDecimalFromString.decode,
       encode: SchemaGetter.transform(formatPlainDecimal),
     })

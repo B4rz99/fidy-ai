@@ -45,7 +45,6 @@ const testQueueName = DurableQueueName.make(whatsappInboundQueueName);
 const lostWorkerId = "f1d1a000-0000-4000-8000-00000000dead";
 
 const TestPayload = Schema.Struct({ note: Schema.String });
-const makeTestQueue = PersistedQueue.make({ name: testQueueName, schema: TestPayload });
 
 /**
  * Independent store runtime: every fresh build opens its own worker identity, pool, and poll
@@ -118,10 +117,21 @@ const pendingRow = (
   });
 
 /** Builds one queue handle from a freshly provisioned independent store runtime. */
-const buildTestQueue = Effect.gen(function* () {
-  const context = yield* Layer.build(Layer.fresh(IndependentQueueRuntimeHarness));
-  return yield* makeTestQueue.pipe(Effect.provide(context));
-});
+const buildTestQueue = (
+  maxAttempts = 10
+): Effect.Effect<
+  PersistedQueue.PersistedQueue<typeof TestPayload.Type>,
+  Config.ConfigError | SqlError.SqlError,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const context = yield* Layer.build(Layer.fresh(IndependentQueueRuntimeHarness));
+    return yield* PersistedQueue.make({
+      name: testQueueName,
+      schema: TestPayload,
+      maxAttempts,
+    }).pipe(Effect.provide(context));
+  });
 
 /** Starts an independent queue runtime that the test can terminate without running finalizers. */
 const startCrashRuntime = Effect.gen(function* () {
@@ -229,8 +239,8 @@ const defineDurableQueueHealthTests = (
   it.effect("keeps a live lease invisible to a second runtime until its handler settles", () =>
     Effect.gen(function* () {
       yield* clearTestQueue;
-      const queueA = yield* buildTestQueue;
-      const queueB = yield* buildTestQueue;
+      const queueA = yield* buildTestQueue();
+      const queueB = yield* buildTestQueue();
       yield* queueA.offer({ note: "held" }, { id: "health-test-held" });
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
@@ -269,7 +279,7 @@ const defineDurableQueueHealthTests = (
       yield* Effect.sync(() => crashRuntime.child.kill("SIGKILL"));
       yield* Effect.tryPromise(() => crashRuntime.child.exited).pipe(Effect.orDie);
 
-      const replacement = yield* buildTestQueue;
+      const replacement = yield* buildTestQueue();
       const redelivered = yield* replacement
         .take((payload, { attempts }) => Effect.succeed({ payload, attempts }))
         .pipe(Effect.timeoutOption("5 seconds"));
@@ -291,7 +301,7 @@ const defineDurableQueueHealthTests = (
   it.effect("counts a stale lease reacquired by the same store runtime as redelivery", () =>
     Effect.gen(function* () {
       yield* clearTestQueue;
-      const queue = yield* buildTestQueue;
+      const queue = yield* buildTestQueue();
       yield* queue.offer({ note: "worker-id" }, { id: "health-test-worker-id" });
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
@@ -333,7 +343,7 @@ const defineDurableQueueHealthTests = (
       yield* pendingRow("health-test-graceful", { element: '{"note":"graceful"}' });
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const queue = yield* buildTestQueue;
+          const queue = yield* buildTestQueue();
           const entered = yield* Deferred.make<void>();
           const holdUntilShutdown = (): Effect.Effect<never> =>
             Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never));
@@ -346,7 +356,7 @@ const defineDurableQueueHealthTests = (
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-graceful'`;
       expect(released).toEqual([{ attempts: 0, completed: false, released: true }]);
-      const replacement = yield* buildTestQueue;
+      const replacement = yield* buildTestQueue();
       const recovered = yield* replacement
         .take((payload) => Effect.succeed(payload))
         .pipe(Effect.timeoutOption("5 seconds"));
@@ -366,16 +376,17 @@ const defineDurableQueueHealthTests = (
         acquiredMinutesAgo: Option.none(),
         createdMinutesAgo: 0,
       });
-      const queue = yield* buildTestQueue;
-      const error = yield* queue.take(Effect.succeed, { maxAttempts: 10 }).pipe(Effect.flip);
+      const queue = yield* buildTestQueue();
+      const error = yield* queue.take(Effect.succeed).pipe(Effect.flip);
       expect(Schema.isSchemaError(error)).toBe(true);
       const admin = yield* MigrationSqlClient;
       const rows = yield* admin`SELECT attempts, completed
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-broken'`;
       expect(rows).toEqual([{ attempts: 1, completed: false }]);
-      const exhausted = yield* queue
-        .take(Effect.succeed, { maxAttempts: 1 })
+      const oneAttemptQueue = yield* buildTestQueue(1);
+      const exhausted = yield* oneAttemptQueue
+        .take(Effect.succeed)
         .pipe(Effect.timeoutOption("500 millis"));
       expect(Option.isNone(exhausted)).toBe(true);
       const queues = yield* getDurableQueueHealthFor([testQueueName]);
@@ -413,8 +424,8 @@ const defineDurableQueueHealthTests = (
         acquiredMinutesAgo: Option.none(),
         createdMinutesAgo: 0,
       });
-      const queue = yield* buildTestQueue;
-      const exit = yield* Effect.exit(queue.take(Effect.succeed, { maxAttempts: 10 }));
+      const queue = yield* buildTestQueue();
+      const exit = yield* Effect.exit(queue.take(Effect.succeed));
       expect(Exit.isFailure(exit)).toBe(true);
       const queues = yield* getDurableQueueHealthFor([testQueueName]);
       const row = queues.find((candidate) => candidate.queueName === testQueueName);

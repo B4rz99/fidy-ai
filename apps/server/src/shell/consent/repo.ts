@@ -298,7 +298,7 @@ const evidenceToRow = (evidence: (typeof ConsentRecord.Encoded)["evidence"]): Ev
 const ConsentRecordFromRow = ConsentRecordRow.pipe(
   Schema.decodeTo(
     ConsentRecord,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (row) =>
         asIssue(
           Effect.flatMap(eventFromRow(row), (event) =>
@@ -787,7 +787,7 @@ const pendingColumns = `id, business_portfolio_id AS "businessPortfolioId",
 const PendingFromRow = PendingRow.pipe(
   Schema.decodeTo(
     PendingConsentExchange,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (row) => {
         const common = {
           id: row.id,

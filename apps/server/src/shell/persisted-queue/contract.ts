@@ -74,10 +74,27 @@ export type PersistedQueueOfferOptions = Parameters<
   PersistedQueue.PersistedQueue<never>["offer"]
 >[1];
 
-/** Native delivery ceiling options accepted only by the sanitized handling operation. */
-export type PersistedQueueHandleOptions = Parameters<
-  PersistedQueue.PersistedQueue<never>["take"]
->[1];
+/** Retry budget fixed when one named queue is constructed. */
+export type PersistedQueueRetryPolicy = Readonly<{
+  maxAttempts: number;
+}>;
+
+/** Construction input with an explicit distinction between default and application retry policy. */
+export type PersistedQueueDeclarationOptions<
+  PayloadSchema extends Schema.Constraint,
+  Name extends string,
+> =
+  | Readonly<{
+      name: Name;
+      schema: PayloadSchema;
+      descriptor: PersistedQueueHandlerDescriptor;
+    }>
+  | Readonly<{
+      name: Name;
+      schema: PayloadSchema;
+      descriptor: PersistedQueueHandlerDescriptor;
+      retryPolicy: PersistedQueueRetryPolicy;
+    }>;
 
 /**
  * A declared durable protocol. Producers can only offer schema-encoded payloads and consumers can
@@ -109,11 +126,10 @@ export type ApplicationPersistedQueue<
       HandlerFailure,
       TerminalError,
       TerminalRequirements
-    >,
-    options?: PersistedQueueHandleOptions
+    >
   ) => Effect.Effect<
     void,
-    PersistedQueueHandlerFailure | PersistedQueue.PersistedQueueError | Schema.SchemaError,
+    PersistedQueueHandlerFailure | PersistedQueue.PersistedQueueError,
     | PersistedQueue.PersistedQueueFactory
     | PayloadSchema["EncodingServices"]
     | PayloadSchema["DecodingServices"]

@@ -4,8 +4,7 @@ import {
   type ApplicationPersistedQueue,
   type ApplicationPersistedQueueHandlerPolicy,
   type ApplicationPersistedQueueProvider,
-  type PersistedQueueHandleOptions,
-  type PersistedQueueHandlerDescriptor,
+  type PersistedQueueDeclarationOptions,
   type PersistedQueueMetadata,
   type PersistedQueueOfferOptions,
 } from "~/shell/persisted-queue/contract";
@@ -37,14 +36,15 @@ export const applicationPersistedQueueProvider: Effect.Effect<
 export const declareApplicationPersistedQueue = <
   PayloadSchema extends Schema.Constraint,
   const Name extends string,
->(options: {
-  readonly name: Name;
-  readonly schema: PayloadSchema;
-  readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueue<PayloadSchema, Name> => {
+>(
+  options: PersistedQueueDeclarationOptions<PayloadSchema, Name>
+): ApplicationPersistedQueue<PayloadSchema, Name> => {
   applicationQueueNames.add(DurableQueueName.make(options.name));
   const definition = Object.freeze({ name: options.name, schema: options.schema });
-  const makeQueue = PersistedQueue.make(definition);
+  const makeQueue = PersistedQueue.make({
+    ...definition,
+    ...("retryPolicy" in options ? options.retryPolicy : {}),
+  });
 
   return {
     definition,
@@ -60,21 +60,18 @@ export const declareApplicationPersistedQueue = <
         HandlerFailure,
         TerminalError,
         TerminalRequirements
-      >,
-      handleOptions?: PersistedQueueHandleOptions
+      >
     ) =>
       makeQueue.pipe(
         Effect.flatMap((queue) =>
-          queue.take(
-            (value, metadata) =>
-              applyQueueHandlerPolicy({
-                value,
-                metadata,
-                handler,
-                policy,
-                descriptor: options.descriptor,
-              }),
-            handleOptions
+          queue.take((value, metadata) =>
+            applyQueueHandlerPolicy({
+              value,
+              metadata,
+              handler,
+              policy,
+              descriptor: options.descriptor,
+            })
           )
         )
       ),

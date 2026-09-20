@@ -23,6 +23,7 @@ export const whatsappInboundQueue = declarePersistedQueue({
   name: whatsappInboundQueueName,
   schema: WhatsAppInboundWork,
   descriptor: { component: "whatsapp", operation: "whatsapp.processWork" },
+  retryPolicy: { maxAttempts: maximumWhatsAppInboundAttempts },
 });
 
 /** Native queue primary key: the inbound job this work carries. */

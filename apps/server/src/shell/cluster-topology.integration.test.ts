@@ -16,6 +16,7 @@ import {
   Option,
   PrimaryKey,
   Ref,
+  Schema,
   Stream,
 } from "effect";
 import { ClusterWorkflowEngine, EntityId, Sharding, ShardingConfig } from "effect/unstable/cluster";
@@ -535,15 +536,24 @@ const registerClusterTopologyScenarios = (): void => {
             Effect.sync(() => spawnLossRunner(lossRunnerPort)),
             killLossRunner
           );
+          const stdout = runner.stdout;
+          if (!(stdout instanceof ReadableStream)) {
+            return yield* Effect.die("Cluster runner stdout pipe was unavailable");
+          }
           const output = yield* Stream.fromReadableStream({
-            evaluate: () => runner.stdout,
+            evaluate: () => stdout,
             onError: () => "cluster-runner-output-failed" as const,
           }).pipe(
+            Stream.mapEffect((chunk) =>
+              Schema.decodeEffect(Schema.Uint8Array)(chunk).pipe(Effect.orDie)
+            ),
             Stream.decodeText(),
-            Stream.scanEffect("", (text, chunk) =>
-              text.length + chunk.length > maximumCrashRunnerOutputBytes
-                ? Effect.die("Cluster runner output exceeded its bound")
-                : Effect.succeed(text + chunk)
+            Stream.scanEffect(
+              () => "",
+              (text, chunk) =>
+                text.length + chunk.length > maximumCrashRunnerOutputBytes
+                  ? Effect.die("Cluster runner output exceeded its bound")
+                  : Effect.succeed(text + chunk)
             ),
             Stream.takeUntil((text) => text.includes("cluster-runner-ready")),
             Stream.runLast,

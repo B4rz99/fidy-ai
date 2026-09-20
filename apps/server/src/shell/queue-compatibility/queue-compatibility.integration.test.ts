@@ -132,9 +132,7 @@ describe("Queue compatibility over PostgreSQL", { concurrent: false }, () => {
           WHERE id = ${rowId} AND queue_name = ${whatsappInboundQueueName}`;
         for (let attempt = 0; attempt < maximumWhatsAppInboundAttempts; attempt += 1) {
           const error = yield* queue
-            .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
-              maxAttempts: maximumWhatsAppInboundAttempts,
-            })
+            .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy)
             .pipe(Effect.flip);
           expect(Schema.isSchemaError(error), `attempt ${attempt}`).toBe(true);
         }
@@ -154,9 +152,7 @@ describe("Queue compatibility over PostgreSQL", { concurrent: false }, () => {
         // The exhausted row is no longer eligible: the consumer observes absence,
         // never a silent drop.
         const missed = yield* queue
-          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
-            maxAttempts: maximumWhatsAppInboundAttempts,
-          })
+          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy)
           .pipe(Effect.timeoutOption("500 millis"));
         expect(Option.isNone(missed)).toBe(true);
         // The reviewed exhausted-item policy retires the row with its domain identity

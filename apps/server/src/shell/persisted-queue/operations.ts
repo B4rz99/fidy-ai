@@ -3,7 +3,7 @@ import {
   type ApplicationPersistedQueue,
   type ApplicationPersistedQueueProvider,
   type ApplicationPersistedQueueRequirement,
-  type PersistedQueueHandlerDescriptor,
+  type PersistedQueueDeclarationOptions,
 } from "./contract";
 import type { DurableQueueName } from "~/shell/durable-queue-policy";
 import {
@@ -32,8 +32,6 @@ export const applicationPersistedQueueProvider: Effect.Effect<
 export const declarePersistedQueue = <
   PayloadSchema extends Schema.Constraint,
   const Name extends string,
->(options: {
-  readonly name: Name;
-  readonly schema: PayloadSchema;
-  readonly descriptor: PersistedQueueHandlerDescriptor;
-}): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationPersistedQueue(options);
+>(
+  options: PersistedQueueDeclarationOptions<PayloadSchema, Name>
+): ApplicationPersistedQueue<PayloadSchema, Name> => declareApplicationPersistedQueue(options);

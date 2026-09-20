@@ -29,6 +29,7 @@ import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcSerialization } from "effe
 import { expectNotInspected, renderedFailure } from "~/shell/testing/credential-failure";
 import { authenticatedRunnerMiddleware } from "./authenticated-cluster-http";
 import { projectClusterHttpClientError } from "./cluster-runner-http-policy";
+import { clusterSerializationMaxBufferSizeBytes } from "./cluster-topology";
 import {
   type ClusterToken,
   boundRunnerRpcProtocol,
@@ -41,9 +42,9 @@ import {
 const tokenFixture = "a1b2c3d4".repeat(8);
 const token = Redacted.make(tokenFixture);
 const otherTokenFixture = "b".repeat(64);
-// The first byte of a MessagePack array frame: enough to flush response headers, incomplete
-// enough that the RPC parser buffers it and keeps waiting for the rest of the exchange.
-const partialMessagePackFrame = new Uint8Array([0x91]);
+// The SchemaBinary length prefix of an encoded Ping: enough to flush response headers,
+// incomplete enough that the RPC parser buffers it and waits for the frame body.
+const partialSchemaBinaryFrame = new Uint8Array([10]);
 
 type RunnerHandler = (request: Request) => Response | Promise<Response>;
 
@@ -141,11 +142,21 @@ const ProbeRpcs = RpcGroup.make(Rpc.make("Probe"));
 const makeBoundedProbeProtocol = (
   client: HttpClient.HttpClient,
   deadline: Duration.Input
-): Effect.Effect<RpcClient.Protocol["Service"]> =>
-  RpcClient.makeProtocolHttp(client).pipe(
-    Effect.provideService(RpcSerialization.RpcSerialization, RpcSerialization.msgPack),
-    Effect.map((protocol) => boundRunnerRpcProtocol({ protocol, deadline }))
-  );
+): Effect.Effect<RpcClient.Protocol["Service"], never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const serialization = Context.get(
+      yield* Layer.build(
+        RpcSerialization.layerSchemaBinary({
+          maxFrameSize: clusterSerializationMaxBufferSizeBytes,
+        })
+      ),
+      RpcSerialization.RpcSerialization
+    );
+    return yield* RpcClient.makeProtocolHttp(client).pipe(
+      Effect.provideService(RpcSerialization.RpcSerialization, serialization),
+      Effect.map((protocol) => boundRunnerRpcProtocol({ protocol, deadline }))
+    );
+  });
 
 const probeProtocol = (
   protocol: RpcClient.Protocol["Service"]
@@ -361,7 +372,7 @@ const stalledBodyHandler =
     new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(partialMessagePackFrame);
+          controller.enqueue(partialSchemaBinaryFrame);
         },
         pull: (controller) =>
           Effect.runPromiseWith(services)(
@@ -378,7 +389,7 @@ const openBodyHandler = (): RunnerHandler => () =>
   new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(partialMessagePackFrame);
+        controller.enqueue(partialSchemaBinaryFrame);
       },
     })
   );

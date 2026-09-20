@@ -197,15 +197,22 @@ const killAtBoundary = Effect.fn(function* (
         runner.kill("SIGKILL");
       }).pipe(Effect.andThen(Effect.tryPromise(() => runner.exited)), Effect.orDie)
   );
+  const stdout = child.stdout;
+  if (!(stdout instanceof ReadableStream)) {
+    return yield* Effect.die("Crash runner stdout pipe was unavailable");
+  }
   const output = yield* Stream.fromReadableStream({
-    evaluate: () => child.stdout,
+    evaluate: () => stdout,
     onError: () => "crash-runner-output-failed" as const,
   }).pipe(
+    Stream.mapEffect((chunk) => Schema.decodeEffect(Schema.Uint8Array)(chunk).pipe(Effect.orDie)),
     Stream.decodeText(),
-    Stream.scanEffect("", (text, chunk) =>
-      text.length + chunk.length > 16_384
-        ? Effect.die("crash runner output exceeded bound")
-        : Effect.succeed(text + chunk)
+    Stream.scanEffect(
+      () => "",
+      (text, chunk) =>
+        text.length + chunk.length > 16_384
+          ? Effect.die("crash runner output exceeded bound")
+          : Effect.succeed(text + chunk)
     ),
     Stream.takeUntil((text) => text.includes("crash-boundary-ready")),
     Stream.runLast,

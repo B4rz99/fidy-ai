@@ -1,7 +1,7 @@
 import { expect, it, layer } from "@effect/vitest";
-import { Data, Effect, Layer, Redacted, Ref } from "effect";
+import { Context, Data, Effect, Layer, Redacted, Ref, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { RpcSerialization } from "effect/unstable/rpc";
+import { RpcMessage, RpcSerialization } from "effect/unstable/rpc";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
 import {
   ClusterSerializationLive,
@@ -23,8 +23,8 @@ const releaseHandler = (dispose: () => Promise<void>): Effect.Effect<void> =>
 const responseText = (response: Response): Effect.Effect<string> =>
   Effect.promise(() => response.text());
 
-/** Thrown MessagePack parser failures kept typed so assertions can inspect the actual cause. */
-class MessagePackDecodeFailure extends Data.TaggedError("MessagePackDecodeFailure")<{
+/** Thrown SchemaBinary parser failures kept typed so assertions can inspect the actual cause. */
+class SchemaBinaryDecodeFailure extends Data.TaggedError("SchemaBinaryDecodeFailure")<{
   readonly error: unknown;
 }> {}
 
@@ -38,85 +38,65 @@ const encodedBytes = (parser: RpcSerialization.Parser, value: unknown): Effect.E
     const encoded = parser.encode(value);
     return encoded instanceof Uint8Array
       ? Effect.succeed(encoded)
-      : Effect.die("MessagePack must encode a frame as bytes");
+      : Effect.die("SchemaBinary must encode a frame as bytes");
   });
 const decodeFailure = (
   parser: RpcSerialization.Parser,
   bytes: Uint8Array
-): Effect.Effect<MessagePackDecodeFailure, ReadonlyArray<unknown>> =>
+): Effect.Effect<SchemaBinaryDecodeFailure, ReadonlyArray<unknown>> =>
   Effect.try({
     try: () => parser.decode(bytes),
-    catch: (error) => new MessagePackDecodeFailure({ error }),
+    catch: (error) => new SchemaBinaryDecodeFailure({ error }),
   }).pipe(Effect.flip);
 
-/** A valid MessagePack prefix that declares far more array elements than it carries. */
-const declaredOversizeFrame = (bytes: number): Uint8Array => {
-  const frame = new Uint8Array(bytes);
-  frame.set([0xdd, 0xff, 0xff, 0xff, 0xff]);
-  return frame;
-};
+const oversizedRequest = {
+  _tag: "Request",
+  id: "oversized",
+  tag: "Probe",
+  payload: new Uint8Array(clusterSerializationMaxBufferSizeBytes),
+  headers: [],
+} as const;
 
-layer(ClusterSerializationLive)("Cluster runner MessagePack framing", (it) => {
+const encodeOversizedRequest = Effect.gen(function* () {
+  const context = yield* Layer.build(
+    RpcSerialization.layerSchemaBinary({ maxFrameSize: "unbounded" })
+  );
+  const serialization = Context.get(context, RpcSerialization.RpcSerialization);
+  return yield* encodedBytes(serialization.makeUnsafe(), oversizedRequest);
+}).pipe(Effect.scoped);
+
+layer(ClusterSerializationLive)("Cluster runner SchemaBinary framing", (it) => {
   it("pins the configured retained-frame bound", () => {
     // The reviewed 64 KiB bound; changing it must be a deliberate, reviewed protocol decision.
     expect(clusterSerializationMaxBufferSizeBytes).toBe(64 * 1024);
   });
 
-  it.effect("rejects malformed MessagePack frames without retaining a partial prefix", () =>
+  it.effect("rejects malformed SchemaBinary input and spends the parser", () =>
     Effect.gen(function* () {
       const parser = yield* parserUnderTest;
-      // A fixext1 carrying an unregistered extension type: a well-formed header msgpackr cannot accept.
-      const failure = yield* decodeFailure(parser, new Uint8Array([0xd4, 0x7f, 0x00]));
-      expect(failure.error).toBeInstanceOf(Error);
-      expect(failure.error).not.toBeInstanceOf(RpcSerialization.MaxBufferSizeExceeded);
-      const encoded = yield* encodedBytes(parser, { accepted: true });
-      expect(parser.decode(encoded)).toEqual([{ accepted: true }]);
+      expect(() => parser.decode(new Uint8Array([1, 0xff]))).toThrow();
+      expect(() => parser.decode(new Uint8Array())).toThrow(/parser is spent/);
     })
   );
 
-  it.effect("retains an incomplete MessagePack frame until it is completed", () =>
+  it.effect("retains an incomplete SchemaBinary frame until it is completed", () =>
     Effect.gen(function* () {
       const parser = yield* parserUnderTest;
-      const encoded = yield* encodedBytes(parser, { fragment: "complete" });
+      const encoded = yield* encodedBytes(parser, RpcMessage.constPing);
       expect(parser.decode(encoded.subarray(0, encoded.length - 1))).toEqual([]);
-      expect(parser.decode(encoded.subarray(encoded.length - 1))).toEqual([
-        { fragment: "complete" },
-      ]);
+      expect(parser.decode(encoded.subarray(encoded.length - 1))).toEqual([RpcMessage.constPing]);
     })
   );
 
-  it.effect(
-    "fails an incomplete frame that grows beyond the configured MessagePack buffer bound",
-    () =>
-      Effect.gen(function* () {
-        const parser = yield* parserUnderTest;
-        expect(
-          parser.decode(declaredOversizeFrame(clusterSerializationMaxBufferSizeBytes))
-        ).toEqual([]);
-        const failure = yield* decodeFailure(parser, new Uint8Array([0x00]));
-        if (!(failure.error instanceof RpcSerialization.MaxBufferSizeExceeded)) {
-          return yield* Effect.die("expected MaxBufferSizeExceeded");
-        }
-        expect(failure.error.maxBufferSize).toBe(clusterSerializationMaxBufferSizeBytes);
-        const encoded = yield* encodedBytes(parser, { recovered: true });
-        expect(parser.decode(encoded)).toEqual([{ recovered: true }]);
-      })
-  );
-
-  it.effect(
-    "fails a single incomplete chunk that exceeds the configured MessagePack buffer bound",
-    () =>
-      Effect.gen(function* () {
-        const parser = yield* parserUnderTest;
-        const failure = yield* decodeFailure(
-          parser,
-          declaredOversizeFrame(clusterSerializationMaxBufferSizeBytes + 1)
-        );
-        if (!(failure.error instanceof RpcSerialization.MaxBufferSizeExceeded)) {
-          return yield* Effect.die("expected MaxBufferSizeExceeded");
-        }
-        expect(failure.error.maxBufferSize).toBe(clusterSerializationMaxBufferSizeBytes);
-      })
+  it.effect("rejects a declared frame beyond the configured SchemaBinary bound", () =>
+    Effect.gen(function* () {
+      const parser = yield* parserUnderTest;
+      const ping = yield* encodedBytes(parser, RpcMessage.constPing);
+      const encoded = yield* encodeOversizedRequest;
+      const failure = yield* decodeFailure(parser, encoded.subarray(0, 32));
+      expect(Schema.isSchemaError(failure.error)).toBe(true);
+      expect(() => parser.decode(ping)).toThrow(/parser is spent/);
+    })
   );
 });
 

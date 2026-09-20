@@ -477,10 +477,9 @@ export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosur
       disclosureQueueHandlerPolicy
     )
     .pipe(
-      Effect.catchTags({
-        PersistedQueueError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
-        SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
-      })
+      Effect.catchTag("PersistedQueueError", (error) =>
+        observeConsentDisclosureQueue(Effect.fail(error), "start")
+      )
     );
 });
 
@@ -507,11 +506,9 @@ export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisc
         disclosureQueueHandlerPolicy
       )
       .pipe(
-        Effect.catchTags({
-          PersistedQueueError: (error) =>
-            observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
-          SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
-        })
+        Effect.catchTag("PersistedQueueError", (error) =>
+          observeConsentDisclosureQueue(Effect.fail(error), "evidence")
+        )
       );
   }
 );

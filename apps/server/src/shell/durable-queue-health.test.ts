@@ -652,7 +652,7 @@ const defineDurableQueueHealthTests = (
   );
 };
 
-describe.sequential("durable queue health", () => {
+describe("durable queue health", { concurrent: false }, () => {
   layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     "two-runtime behavior",
     defineDurableQueueHealthTests

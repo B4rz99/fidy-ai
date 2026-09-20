@@ -113,7 +113,7 @@ const recordCompletion = (
     yield* Ref.update(seen, (values) => [...values, work]);
   });
 
-describe.sequential("Queue compatibility over PostgreSQL", () => {
+describe("Queue compatibility over PostgreSQL", { concurrent: false }, () => {
   it.live("consumes attempts on decode failures and retires the exhausted row", () =>
     runWithCompatibilityHarness(
       Effect.gen(function* () {

@@ -624,4 +624,4 @@ const registerClusterTopologyScenarios = (): void => {
   });
 };
 
-describe.sequential("durable Cluster topology", registerClusterTopologyScenarios);
+describe("durable Cluster topology", { concurrent: false }, registerClusterTopologyScenarios);

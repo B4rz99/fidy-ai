@@ -633,7 +633,8 @@ const StoredDurableTraceContext = Schema.Struct({
   traceId: DurableTraceContext.fields.traceId,
   parentSpanId: DurableTraceContext.fields.parentSpanId,
   sampled: DurableTraceContext.fields.sampled,
-  capturedAtUnixMilliseconds: Schema.FiniteFromString.pipe(
+  capturedAtUnixMilliseconds: Schema.flip(Schema.BigIntFromString).pipe(
+    Schema.decodeTo(Schema.FiniteFromString),
     Schema.decodeTo(DurableTraceContext.fields.capturedAtUnixMilliseconds)
   ),
 });

@@ -327,7 +327,7 @@ const DashboardMetricAverageRow = Schema.Struct({
   currency: Currency,
   direction: Transaction.fields.direction,
   sum: Money.fields.amount,
-  count: Schema.BigIntFromString,
+  count: Schema.BigInt,
 });
 
 /** Selects exact sum/count/maximum groups required by Dashboard custom metrics. */

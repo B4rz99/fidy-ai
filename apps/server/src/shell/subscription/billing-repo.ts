@@ -33,7 +33,10 @@ import {
   durableQueueTableName,
 } from "~/shell/durable-queue-policy";
 
-const WompiSourceIdFromDb = Schema.FiniteFromString.pipe(Schema.decodeTo(WompiSourceId));
+const WompiSourceIdFromDb = Schema.flip(Schema.BigIntFromString).pipe(
+  Schema.decodeTo(Schema.FiniteFromString),
+  Schema.decodeTo(WompiSourceId)
+);
 
 /** Stable SQL queue identity for one pending BillingAttempt's durable reconciliation. */
 export const billingAttemptQueueName = "subscription-billing-attempt" as const;

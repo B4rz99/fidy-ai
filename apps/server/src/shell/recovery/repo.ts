@@ -503,7 +503,7 @@ export const expireDueSupportRecoveryCases = Effect.fn("Recovery.expireDueCases"
   const sql = yield* SqlClient.SqlClient;
   const { count } = yield* SqlSchema.findOne({
     Request: Schema.Void,
-    Result: Schema.Struct({ count: Schema.BigIntFromString }),
+    Result: Schema.Struct({ count: Schema.BigInt }),
     execute: () => sql`
         SELECT fidy_expire_support_recovery_cases(${observedAt}) AS count
       `,
@@ -523,7 +523,7 @@ export const deleteExpiredSupportRecoveryEvidence = Effect.fn("Recovery.deleteEx
     const sql = yield* SqlClient.SqlClient;
     const { count } = yield* SqlSchema.findOne({
       Request: Schema.Void,
-      Result: Schema.Struct({ count: Schema.BigIntFromString }),
+      Result: Schema.Struct({ count: Schema.BigInt }),
       execute: () => sql`
         SELECT fidy_delete_expired_support_recovery(${observedAt}) AS count
       `,

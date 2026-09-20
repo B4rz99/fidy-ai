@@ -156,7 +156,7 @@ export const insertPendingBrowserLoginPairing = Effect.fn("BrowserLogin.insertPe
 const ApprovalCandidate = Schema.Struct({
   id: BrowserLoginPairingId,
   createdAt: Schema.DateTimeUtcFromDate,
-  createdOrdinal: Schema.BigIntFromString,
+  createdOrdinal: Schema.BigInt,
   expiresAt: Schema.DateTimeUtcFromDate,
 });
 
@@ -244,7 +244,7 @@ export const approveLockedBrowserLoginPairingInScope = Effect.fn(
 ): Effect.fn.Return<void, ReturnType<typeof browserLoginApprovalRejected>, never> {
   const readyOrdinal = yield* SqlSchema.findOneOption({
     Request: UserId,
-    Result: Schema.Struct({ createdOrdinal: Schema.BigIntFromString }),
+    Result: Schema.Struct({ createdOrdinal: Schema.BigInt }),
     execute: (userId) => sql`
       SELECT created_ordinal AS "createdOrdinal" FROM browser_login_pairings
       WHERE user_id = ${userId}::uuid AND lifecycle = 'ready'

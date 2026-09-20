@@ -232,18 +232,18 @@ type PreparedPersistence = {
   }>;
   readonly consentStands: boolean;
 };
-const RevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
-const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
+const RevisionRow = Schema.Struct({ revision: Schema.BigInt });
+const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigInt });
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const SequencedTranscriptEntryRow = Schema.Struct({
-  sequence: Schema.BigIntFromString,
+  sequence: Schema.BigInt,
   entry: PersistedTranscriptEntry,
 });
 const CompactedConversationRow = Schema.Struct({
   text: Schema.String,
-  throughSequence: Schema.BigIntFromString,
-  revision: Schema.BigIntFromString,
+  throughSequence: Schema.BigInt,
+  revision: Schema.BigInt,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 const OptionalFailureReason = Schema.OptionFromNullOr(TurnFailureReason);
@@ -334,13 +334,13 @@ const readRevision = Effect.fn("ConversationContinuity.readRevision")(function* 
     execute: (ownedUserId) =>
       lock
         ? sql`
-            SELECT revision::text AS revision
+            SELECT revision
             FROM conversation_continuity
             WHERE user_id = ${ownedUserId}
             FOR UPDATE
           `
         : sql`
-            SELECT revision::text AS revision
+            SELECT revision
             FROM conversation_continuity
             WHERE user_id = ${ownedUserId}
           `,
@@ -356,7 +356,7 @@ const readMemoryRevision = Effect.fn("ConversationContinuity.readMemoryRevision"
     Request: UserId,
     Result: MemoryRevisionRow,
     execute: (ownedUserId) => sql`
-      SELECT COALESCE(memory.revision, 0)::text AS revision
+      SELECT COALESCE(memory.revision, 0::bigint) AS revision
       FROM users AS subject
       LEFT JOIN memory_revisions AS memory ON memory.user_id = subject.id
       WHERE subject.id = ${ownedUserId}
@@ -436,7 +436,7 @@ const readCompactedConversation = Effect.fn("ConversationContinuity.readCompacte
     Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
     Result: CompactedConversationRow,
     execute: (owned) => sql`
-      SELECT text, through_sequence::text AS "throughSequence", revision::text AS revision,
+      SELECT text, through_sequence AS "throughSequence", revision,
         updated_at AS "updatedAt"
       FROM compacted_conversations
       WHERE user_id = ${owned.userId} AND session_id = ${owned.hostedAgentSessionId}
@@ -622,7 +622,7 @@ const preparePersisted = Effect.fn("ConversationContinuity.prepare")(function* (
           Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
           Result: SequencedTranscriptEntryRow,
           execute: (owned) => dependencies.sql`
-            SELECT entry.sequence::text AS sequence, entry.entry
+            SELECT entry.sequence, entry.entry
             FROM transcript_entries AS entry
             JOIN conversation_turns AS turn
               ON turn.user_id = entry.user_id AND turn.id = entry.turn_id
@@ -746,7 +746,7 @@ const readCompactionPreconditions = Effect.fn("ConversationContinuity.readCompac
       Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
       Result: SequencedTranscriptEntryRow,
       execute: (owned) => dependencies.sql`
-      SELECT entry.sequence::text AS sequence, entry.entry
+      SELECT entry.sequence, entry.entry
       FROM transcript_entries AS entry
       JOIN conversation_turns AS turn
         ON turn.user_id = entry.user_id AND turn.id = entry.turn_id

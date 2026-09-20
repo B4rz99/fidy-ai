@@ -15,9 +15,9 @@ export const observeMemoryRevision = Effect.fn("observeMemoryRevision")(function
   const sql = yield* MigrationSqlClient;
   const row = yield* SqlSchema.findOneOption({
     Request: Schema.Struct({ userId: UserId }),
-    Result: Schema.Struct({ revision: Schema.BigIntFromString }),
+    Result: Schema.Struct({ revision: Schema.BigInt }),
     execute: (request) => sql`
-      SELECT revision::text AS revision FROM memory_revisions WHERE user_id = ${request.userId}
+      SELECT revision FROM memory_revisions WHERE user_id = ${request.userId}
     `,
   })({ userId }).pipe(Effect.orDie);
   return row._tag === "Some" ? row.value.revision : 0n;

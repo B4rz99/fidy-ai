@@ -3279,7 +3279,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           defaultUserId,
           sql`SELECT trace_version AS "traceVersion", trace_id AS "traceId",
             parent_span_id AS "parentSpanId", trace_sampled AS "sampled",
-            trace_captured_at AS "capturedAt", processing_attempt AS "processingAttempt"
+            trace_captured_at::text AS "capturedAt", processing_attempt AS "processingAttempt"
           FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
         );
         expect(stored).toHaveLength(1);

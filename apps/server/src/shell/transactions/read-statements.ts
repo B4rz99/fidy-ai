@@ -50,7 +50,7 @@ export const dashboardMetricStatement = ({
         from: query.from,
         toExclusive: query.toExclusive,
       })}
-      SELECT currency, direction, SUM(amount) AS sum, COUNT(*)::text AS count
+      SELECT currency, direction, SUM(amount) AS sum, COUNT(*) AS count
       FROM effective_transaction
       WHERE ${sql.and(conditions)}
       GROUP BY currency, direction

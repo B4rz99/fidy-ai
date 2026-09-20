@@ -1,5 +1,5 @@
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Schema } from "effect";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 
 const makeOpenAiResponse = (output: ReadonlyArray<unknown>): string =>
   Schema.encodeSync(UnknownJsonString)({
@@ -20,7 +20,7 @@ const makeOpenAiResponse = (output: ReadonlyArray<unknown>): string =>
     parallel_tool_calls: false,
   });
 
-/** Builds a minimal completed Responses API text response for adapter tests. */
+/** Builds a minimal completed Responses API text response for owner-local adapter tests. */
 export const makeOpenAiTextResponse = (text: string): string =>
   makeOpenAiResponse([
     {
@@ -32,7 +32,7 @@ export const makeOpenAiTextResponse = (text: string): string =>
     },
   ]);
 
-/** Builds a completed Responses API function call for an assembled toolkit test. */
+/** Builds a completed Responses API function call for owner-local adapter tests. */
 export const makeOpenAiFunctionCallResponse = ({
   name,
   argumentsJson,

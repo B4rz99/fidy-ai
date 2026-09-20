@@ -68,6 +68,33 @@ const hasDeferredReceipt = (rows: ReadonlyArray<{ readonly status: string }>): b
   rows.some((row) => row.status === "deferred");
 const resolutionOutcomes = { restored: "completed", revoked: "revoked", absent: "stale" } as const;
 
+/**
+ * Polls the completed recovery queue count on the live clock while advancing the recovery
+ * TestClock. The startup sweep pages through a durable one-minute pace and the workflow engine
+ * parks on TestClock sleeps, so a fiber that parks after the initial adjust must still progress.
+ * `TestClock.adjust` resolves the ambient Clock, which `withLive` swaps for the live clock, so the
+ * instance is captured first and advanced directly.
+ */
+const waitForRecoveredQueue = Effect.fn("test.waitForRecoveredQueue")(function* (
+  expectedCount: number
+) {
+  const sql = yield* MigrationSqlClient;
+  const recoveryClock = yield* TestClock.testClockWith(Effect.succeed);
+  return yield* TestClock.withLive(
+    sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion' AND completed = true`.pipe(
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ count: Schema.Int })))
+      ),
+      Effect.tap(recoveryClock.adjust("1 minute")),
+      Effect.repeat({
+        until: recoveredQueueCount(expectedCount),
+        schedule: Schedule.spaced("10 millis"),
+      }),
+      Effect.timeout("25 seconds")
+    )
+  );
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Forwarded email recovery",
   (it) => {
@@ -131,18 +158,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 )
               );
               yield* TestClock.adjust("2 minutes");
-              const rows = yield* TestClock.withLive(
-                sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion' AND completed = true`.pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ count: Schema.Int })))
-                  ),
-                  Effect.repeat({
-                    until: recoveredQueueCount(expectedCount),
-                    schedule: Schedule.spaced("10 millis"),
-                  }),
-                  Effect.timeout("10 seconds")
-                )
-              );
+              const rows = yield* waitForRecoveredQueue(expectedCount);
               expect(rows).toEqual([{ count: expectedCount }]);
               if (mode === "production-full") {
                 const staleHandoff = yield* TestClock.withLive(
@@ -170,7 +186,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               }
             }).pipe(Effect.provide(context));
           }),
-        20_000
+        // The sweep settles a page of 100 queued receipts plus the paced second page; measured at
+        // ~11s under two-file concurrency, so leave headroom for a loaded CI shard.
+        40_000
       );
     }
     for (const transition of ["expired", "revoked", "defect"] as const) {

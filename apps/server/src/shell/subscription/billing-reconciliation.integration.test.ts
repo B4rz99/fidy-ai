@@ -765,55 +765,60 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
-    it.effect("survives runtime loss while waiting and settles without a duplicate period", () =>
-      Effect.gen(function* () {
-        const now = yield* DateTime.now;
-        const attempt = yield* seedAttempt({
-          index: 2,
-          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-2")),
-          armedAt: now,
-          createdAt: now,
-        });
-        const { provider, lookups, creations } = yield* makeProvider({
-          reference: attempt.reference,
-          amountInCents: attempt.amountInCents,
-          sourceId: attempt.sourceId,
-          statuses: ["PENDING", "APPROVED"],
-          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
-        });
-        const first = yield* acquireRuntime(24711, "2 seconds", provider);
-        yield* Effect.tryPromise(() =>
-          first.runPromise(
-            BillingAttemptReconciliationWorkflow.execute(attempt.payload, { discard: true })
-          )
-        );
-        const executionId = yield* BillingAttemptReconciliationWorkflow.executionId(
-          attempt.payload
-        );
-        yield* Effect.tryPromise(() =>
-          first.runPromise(BillingAttemptReconciliationWorkflow.poll(executionId))
-        ).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("20 millis"),
-            until: (state) => Option.exists(state, (value) => value._tag === "Suspended"),
-          }),
-          Effect.timeout("10 seconds")
-        );
-        yield* Effect.tryPromise(() => first.dispose());
+    it.effect(
+      "survives runtime loss while waiting and settles without a duplicate period",
+      () =>
+        Effect.gen(function* () {
+          const now = yield* DateTime.now;
+          const attempt = yield* seedAttempt({
+            index: 2,
+            transactionId: Option.some(WompiTransactionId.make("txn-reconcile-2")),
+            armedAt: now,
+            createdAt: now,
+          });
+          const { provider, lookups, creations } = yield* makeProvider({
+            reference: attempt.reference,
+            amountInCents: attempt.amountInCents,
+            sourceId: attempt.sourceId,
+            statuses: ["PENDING", "APPROVED"],
+            finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+          });
+          const first = yield* acquireRuntime(24711, "2 seconds", provider);
+          yield* Effect.tryPromise(() =>
+            first.runPromise(
+              BillingAttemptReconciliationWorkflow.execute(attempt.payload, { discard: true })
+            )
+          );
+          const executionId = yield* BillingAttemptReconciliationWorkflow.executionId(
+            attempt.payload
+          );
+          yield* Effect.tryPromise(() =>
+            first.runPromise(BillingAttemptReconciliationWorkflow.poll(executionId))
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 millis"),
+              until: (state) => Option.exists(state, (value) => value._tag === "Suspended"),
+            }),
+            Effect.timeout("10 seconds")
+          );
+          yield* Effect.tryPromise(() => first.dispose());
 
-        const second = yield* acquireRuntime(24712, "2 seconds", provider);
-        const result = yield* Effect.tryPromise(() =>
-          second.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
-        );
-        expect(result).toEqual({ outcome: "succeeded" });
-        expect(yield* Ref.get(lookups)).toBe(2);
-        expect(yield* Ref.get(creations)).toBe(0);
-        expect(yield* attemptStatus(attempt)).toMatchObject({
-          status: "succeeded",
-          periods: 1,
-          paid: true,
-        });
-      })
+          const second = yield* acquireRuntime(24712, "2 seconds", provider);
+          const result = yield* Effect.tryPromise(() =>
+            second.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+          );
+          expect(result).toEqual({ outcome: "succeeded" });
+          expect(yield* Ref.get(lookups)).toBe(2);
+          expect(yield* Ref.get(creations)).toBe(0);
+          expect(yield* attemptStatus(attempt)).toMatchObject({
+            status: "succeeded",
+            periods: 1,
+            paid: true,
+          });
+        }),
+      // Two full cluster runtimes, a suspension wait and a resumed execution; the default 15s
+      // test budget is a CI-load coin flip even though every wait here is bounded.
+      30_000
     );
 
     it.effect("keeps a twenty-minute-old armed charge with no provider reference pending", () =>

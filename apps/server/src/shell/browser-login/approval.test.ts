@@ -263,7 +263,6 @@ layer(ApprovalHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const retained = yield* Schema.encodeEffect(UnknownJsonString)({
           input,
           challenge: decision.failure.challenge,
-          toolSchema: binding.wireJsonSchema,
         });
         expect(retained).toContain("browserLogin.approvePairing");
         expect(retained).toContain(challenge.publicCode);

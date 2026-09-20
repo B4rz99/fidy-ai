@@ -1,17 +1,14 @@
 import { expect, it } from "@effect/vitest";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 import { McpServer, Tool } from "effect/unstable/ai";
-import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi as ClientFidyApi } from "~/client";
-import { categoryIds } from "~/core/categories/taxonomy";
 import { assertCanonicalOperationRegistry } from "~/shell/_shared/canonical-operation-registry";
 import { isHostedVisible } from "~/shell/_shared/operation-policy";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import {
   AgentToolkit,
   agentOperationBindings,
-  decodeAgentOperationInput,
   findAgentOperationBinding,
   hostedBindings,
 } from "./toolkit";
@@ -108,48 +105,6 @@ it.effect("registers every canonical operation and schema through the MCP toolki
       expect(tool.description).toBe(Tool.getDescription(hosted));
       expect(tool.inputSchema).toEqual(Tool.getJsonSchema(hosted));
     }
-  })
-);
-
-it("encodes every hosted operation with its derived OpenAI wire schema", () => {
-  for (const binding of agentOperationBindings) {
-    const parameters = Tool.getJsonSchema(hostedTool(binding.wireName), {
-      transformer: toCodecOpenAI,
-    });
-    expect(parameters).toEqual(binding.wireJsonSchema);
-    expect(parameters.type).toBe("object");
-    expect(parameters.anyOf).toBeUndefined();
-    expect(parameters.additionalProperties).toBe(false);
-  }
-});
-
-it.effect("decodes strict-mode nullable optional fields back to absent canonical input", () =>
-  Effect.gen(function* () {
-    const binding = agentOperationBindings.find(
-      ({ operation }) => operation === "transactions.createTransaction"
-    );
-    if (binding === undefined) return yield* Effect.die("Create Transaction binding is missing");
-
-    const decoded = yield* decodeAgentOperationInput(binding, {
-      payload: {
-        money: { amount: "9000", currency: "COP" },
-        counterparty: null,
-        direction: "outflow",
-        categoryId: categoryIds.restaurantes,
-        notes: null,
-        occurredAt: "2026-07-20T12:00:00Z",
-      },
-    });
-    const canonical = yield* Schema.encodeUnknownEffect(binding.canonicalParameters)(decoded);
-
-    expect(canonical).toEqual({
-      payload: {
-        money: { amount: "9000", currency: "COP" },
-        direction: "outflow",
-        categoryId: categoryIds.restaurantes,
-        occurredAt: "2026-07-20T12:00:00.000Z",
-      },
-    });
   })
 );
 

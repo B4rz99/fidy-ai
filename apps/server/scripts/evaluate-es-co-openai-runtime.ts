@@ -4,12 +4,13 @@ import { BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer, Schema } from "effect";
 import { AgentService } from "~/shell/agent/agent-service";
 import {
-  FidyAgentModel,
-  HostedAgentGenerationConfig,
-  OpenAiHostedInferenceLive,
-  OpenAiLanguageModelLive,
-} from "~/shell/agent/openai";
-import { hostedOutputTokenReserve } from "~/shell/agent/hosted-inference";
+  HostedInferenceLive as ProductionHostedInferenceLive,
+  StatementLanguageModelLive,
+} from "~/shell/hosted-inference/runtime";
+import {
+  hostedInferenceEvaluationMetadata,
+  hostedInferenceEvaluationSourcePath,
+} from "~/shell/hosted-inference/provider-evaluation-runtime";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { OutboundHttpFetchTransportLive } from "~/shell/outbound-http/runtime";
@@ -48,13 +49,14 @@ const program = Effect.gen(function* () {
   );
 });
 
+const hostedInferenceRuntimeMetadata = hostedInferenceEvaluationMetadata;
 const Budget = requestBudgetLayer(plan.maximumRequests);
 const providerControls = {
-  outputReserveTokens: hostedOutputTokenReserve,
-  temperature: HostedAgentGenerationConfig.temperature,
-  parallelToolCalls: HostedAgentGenerationConfig.parallel_tool_calls,
-  providerStorage: HostedAgentGenerationConfig.store,
-  reasoningEffort: HostedAgentGenerationConfig.reasoning.effort,
+  outputReserveTokens: hostedInferenceRuntimeMetadata.outputReserveTokens,
+  temperature: hostedInferenceRuntimeMetadata.temperature,
+  parallelToolCalls: hostedInferenceRuntimeMetadata.parallelToolCalls,
+  providerStorage: hostedInferenceRuntimeMetadata.providerStorage,
+  reasoningEffort: hostedInferenceRuntimeMetadata.reasoningEffort,
   truncation: "disabled",
 } as const;
 const SafetyInference = EvaluationInferenceRouter.pipe(Layer.provide(scriptedInference([])));
@@ -86,16 +88,16 @@ const SafetyApp = SafetyWork.pipe(
 );
 // Capture a provider-only client before the local ApiHarness client enters application scope.
 const ProviderHttp = OutboundHttpFetchTransportLive.pipe(Layer.provide(Budget));
-const HostedInferenceLive = OpenAiHostedInferenceLive.pipe(Layer.provide(ProviderHttp));
+const HostedInferenceLive = ProductionHostedInferenceLive.pipe(Layer.provide(ProviderHttp));
 const EvaluationInferenceLive = EvaluationInferenceRouter.pipe(Layer.provide(HostedInferenceLive));
-const LanguageModelLive = OpenAiLanguageModelLive.pipe(Layer.provide(ProviderHttp));
+const LanguageModelLive = StatementLanguageModelLive.pipe(Layer.provide(ProviderHttp));
 const ModelWork = Layer.mergeAll(
   Layer.succeed(
     EvaluationProviderMetadata,
     EvaluationProviderMetadata.of({
-      provider: "openai",
-      requestedModel: FidyAgentModel,
-      generationSourcePath: "src/shell/agent/openai.ts",
+      provider: hostedInferenceRuntimeMetadata.provider,
+      requestedModel: hostedInferenceRuntimeMetadata.requestedModel,
+      generationSourcePath: hostedInferenceEvaluationSourcePath,
       observedModelFallback: [],
       ...providerControls,
     })

@@ -56,7 +56,7 @@ import {
   WhatsAppInboundRoutingRejected,
 } from "./agent-service";
 import { HostedTurns } from "./hosted-turns";
-import { HostedInference, type HostedTextContext, makeHostedInference } from "./hosted-inference";
+import { HostedInference, makeHostedInferenceStub } from "~/shell/hosted-inference/operations";
 import { ImmediateDelivery } from "./immediate-delivery";
 import { WhatsAppReplyDeliveryLive } from "./whatsapp-delivery";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
@@ -96,26 +96,24 @@ const mailbox = Effect.gen(function* () {
   );
 });
 const inference = (execute: (text: string) => Effect.Effect<void>): HostedInference["Service"] =>
-  makeHostedInference<HostedTextContext, void>({
+  makeHostedInferenceStub({
     countText: () => Effect.succeed(1),
     countTranscript: () => Effect.succeed(1),
-    prepare: ({ projection }) => Effect.succeed(projection),
-    execute: (request) => {
+    validateText: () => Effect.void,
+    prepareStructured: () => Effect.die("Unexpected Compaction in bounded Turn fixture"),
+    generate: (contexts) => {
+      const active = contexts.findLast((context) => context.activeRequest._tag === "Present");
       const text =
-        request.activeRequest._tag === "Present" ? request.activeRequest.text : "continuation";
+        active?.activeRequest._tag === "Present" ? active.activeRequest.text : "continuation";
       return execute(text).pipe(
         Effect.as({
-          result: {
-            text,
-            toolCalls: [],
-            finishReason: "stop" as const,
-            usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
-          },
-          continuation: undefined,
+          text,
+          toolCalls: [],
+          finishReason: "stop" as const,
+          usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
         })
       );
     },
-    structured: { prepare: () => Effect.die("Unexpected Compaction in bounded Turn fixture") },
   });
 const runtimeLayer = (input: {
   port: number;

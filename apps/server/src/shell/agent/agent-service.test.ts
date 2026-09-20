@@ -71,6 +71,7 @@ import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { HostedInferenceError } from "~/shell/hosted-inference/contract";
 import { HostedInference, makeHostedInferenceStub } from "~/shell/hosted-inference/operations";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-harness";
+import { eventually } from "~/shell/testing/eventually";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import {
@@ -360,13 +361,10 @@ const modelAttemptCount = (marker: string): Effect.Effect<number, never, ModelPr
 const awaitModelAttempts = (
   marker: string,
   count: number
-): Effect.Effect<ReadonlyArray<string>, never, ModelPrompts> =>
-  Effect.gen(function* () {
-    for (;;) {
-      const matching = yield* modelAttemptPrompts(marker);
-      if (matching.length >= count) return matching;
-      yield* Effect.sleep("1 millis");
-    }
+): Effect.Effect<ReadonlyArray<string>, Cause.TimeoutError, ModelPrompts> =>
+  eventually(modelAttemptPrompts(marker), (matching) => matching.length >= count, {
+    interval: "1 millis",
+    timeout: "5 seconds",
   });
 
 const makeManualClock = (): {
@@ -2608,8 +2606,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* Deferred.await(started);
       yield* Fiber.interrupt(waiting);
       yield* Deferred.succeed(release, undefined);
-      yield* Effect.sleep("100 millis");
-      expect((yield* latestTerminalTurn(defaultUserId))[0]?.state).toBe("Completed");
+      const terminal = yield* eventually(
+        latestTerminalTurn(defaultUserId),
+        (turns) => turns[0]?.state === "Completed",
+        { interval: "10 millis", timeout: "2 seconds" }
+      );
+      expect(terminal[0]?.state).toBe("Completed");
     })
   );
 

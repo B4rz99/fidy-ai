@@ -24,6 +24,9 @@ import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
+import { eventually } from "~/shell/testing/eventually";
+import { runReadCommittedScenario } from "~/shell/testing/postgres-concurrency";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -40,7 +43,6 @@ import { ConsentDisclosureWorkflow, disclosureEvidenceQueueId } from "./disclosu
 import {
   findConsentDisclosureAttemptByCorrelation,
   findConsentDisclosureDeliveryState,
-  lockConsentDisclosure,
 } from "./disclosure-store";
 import { KapsoClient, type KapsoClientService, KapsoSendFailed } from "./kapso-client";
 import {
@@ -81,12 +83,15 @@ const admit = Effect.fn(function* (phone: string) {
   return { exchangeId: admission.exchangeId, revision: 1 as const };
 });
 
+const isSuspended = (state: Option.Option<{ readonly _tag: string }>): boolean =>
+  Option.exists(state, (value) => value._tag === "Suspended");
+
 const acquireRuntime = Effect.fn(function* (
-  port: number,
   client: KapsoClientService,
   transformer?: Statement.Transformer
 ) {
   const crypto = yield* Crypto.Crypto;
+  const port = yield* availableLoopbackPort;
   const runtimeLayer = Layer.effectDiscard(
     startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped)
   ).pipe(
@@ -202,8 +207,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return result;
             }),
         });
-        const first = yield* acquireRuntime(24661, provider(1));
-        const second = yield* acquireRuntime(24662, provider(2));
+        const first = yield* acquireRuntime(provider(1));
+        const second = yield* acquireRuntime(provider(2));
         yield* Effect.tryPromise(() => first.runPromise(Effect.void));
         yield* Effect.tryPromise(() => second.runPromise(Effect.void));
         yield* Effect.tryPromise(() =>
@@ -287,13 +292,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return yield* Effect.never;
             }),
         };
-        const first = yield* acquireRuntime(24663, provider);
+        const first = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
         const evidence = yield* Deferred.await(started);
         yield* Effect.tryPromise(() => first.dispose());
-        const recovered = yield* acquireRuntime(24664, provider);
+        const recovered = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -321,24 +326,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           2,
           "wamid.cluster-retry-466"
         );
-        const first = yield* acquireRuntime(24665, provider);
+        const first = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
         const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
         yield* Effect.tryPromise(() =>
           first.runPromise(
-            Effect.gen(function* () {
-              for (;;) {
-                const state = yield* ConsentDisclosureWorkflow.poll(executionId);
-                if (Option.isSome(state) && state.value._tag === "Suspended") return;
-                yield* Effect.sleep("20 millis");
-              }
-            }).pipe(Effect.timeout("5 seconds"))
+            eventually(ConsentDisclosureWorkflow.poll(executionId), isSuspended, {
+              interval: "20 millis",
+              timeout: "5 seconds",
+            })
           )
         );
         yield* Effect.tryPromise(() => first.dispose());
-        const recovered = yield* acquireRuntime(24666, provider);
+        const recovered = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -367,7 +369,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           3,
           "wamid.cluster-retry-twice-466"
         );
-        const runtime = yield* acquireRuntime(24692, provider);
+        const runtime = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -416,7 +418,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               });
             }),
         };
-        const runtime = yield* acquireRuntime(24667, provider);
+        const runtime = yield* acquireRuntime(provider);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -424,16 +426,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
         const waiting = yield* Effect.tryPromise(() =>
           runtime.runPromise(
-            Effect.gen(function* () {
-              for (;;) {
-                const state = yield* ConsentDisclosureWorkflow.poll(executionId);
-                if (Option.isSome(state) && state.value._tag === "Suspended") return state.value;
-                yield* Effect.sleep("20 millis");
-              }
-            }).pipe(Effect.timeout("5 seconds"))
+            eventually(ConsentDisclosureWorkflow.poll(executionId), isSuspended, {
+              interval: "20 millis",
+              timeout: "5 seconds",
+            })
           )
         );
-        expect(waiting._tag).toBe("Suspended");
+        expect(isSuspended(waiting)).toBe(true);
         const latest = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
           Effect.flatMap(Effect.fromOption)
         );
@@ -464,29 +463,26 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return delivered("wamid.expiry-lock-466", yield* DateTime.now);
             }),
         };
-        const runtime = yield* acquireRuntime(24669, provider);
+        const runtime = yield* acquireRuntime(provider);
         const admin = yield* MigrationSqlClient;
-        yield* admin`UPDATE pending_consent_exchanges SET created_at = now() - interval '24 hours' + interval '1 second', expires_at = now() + interval '1 second' WHERE id = ${payload.exchangeId}`;
-        const finished = yield* Deferred.make<void>();
-        yield* lockConsentDisclosure(
-          payload.exchangeId,
-          Effect.gen(function* () {
-            // ManagedRuntime starts independently of this transaction, unlike an inherited SQL fiber.
-            yield* Effect.tryPromise(() =>
-              runtime.runPromise(
-                performConsentDisclosureAttempt(
-                  payload.exchangeId,
-                  DisclosureDeliveryAttemptNumber.make(1)
-                ).pipe(Effect.provideService(KapsoClient, provider))
-              )
-            ).pipe(
-              Effect.tap(() => Deferred.succeed(finished, undefined)),
-              Effect.forkScoped
-            );
-            yield* Effect.sleep("1100 millis");
-          })
-        );
-        yield* Deferred.await(finished);
+        yield* admin`UPDATE pending_consent_exchanges
+          SET created_at = now() - interval '23 hours',
+            expires_at = now() + interval '1 hour'
+          WHERE id = ${payload.exchangeId}`;
+        yield* runReadCommittedScenario({
+          holdUncommitted: admin`UPDATE pending_consent_exchanges
+            SET created_at = now() - interval '24 hours 1 second',
+              expires_at = now() - interval '1 second'
+            WHERE id = ${payload.exchangeId}`.pipe(Effect.asVoid),
+          mustWaitThenContinue: Effect.tryPromise(() =>
+            runtime.runPromise(
+              performConsentDisclosureAttempt(
+                payload.exchangeId,
+                DisclosureDeliveryAttemptNumber.make(1)
+              ).pipe(Effect.provideService(KapsoClient, provider))
+            )
+          ),
+        });
         expect(yield* Ref.get(calls)).toBe(0);
         expect(Option.isNone(yield* findConsentDisclosureDeliveryState(payload.exchangeId))).toBe(
           true
@@ -527,7 +523,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             }
             return statement;
           });
-        const runtime = yield* acquireRuntime(24668, provider, transformer);
+        const runtime = yield* acquireRuntime(provider, transformer);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -547,15 +543,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.forkScoped
         );
         const admin = yield* MigrationSqlClient;
-        const callbackBlocked = Effect.gen(function* () {
-          for (;;) {
-            const waiting =
-              yield* admin`SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%fidy_lock_whatsapp_disclosure%'`;
-            if (waiting.length > 0) return;
-            yield* Effect.sleep("10 millis");
-          }
-        });
-        yield* Effect.race(Deferred.await(callbackDone), callbackBlocked);
+        const callbackBlocked = eventually(
+          admin`SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%fidy_lock_whatsapp_disclosure%'`,
+          (waiting) => waiting.length > 0,
+          { interval: "10 millis", timeout: "5 seconds" }
+        ).pipe(Effect.asVoid);
+        yield* Effect.raceFirst(
+          Deferred.await(callbackDone).pipe(
+            Effect.andThen(Effect.die("callback completed before the disclosure lock blocked it"))
+          ),
+          callbackBlocked
+        );
         yield* Deferred.succeed(release, undefined);
         yield* Deferred.await(callbackDone);
         expect(

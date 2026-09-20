@@ -31,6 +31,8 @@ import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
+import { eventually } from "~/shell/testing/eventually";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
@@ -86,11 +88,11 @@ const admit = Effect.fn(function* () {
 });
 
 const acquireRuntime = Effect.fn(function* (
-  port: number,
   client: KapsoClientService,
   registration: typeof ConsentDisclosureWorkflowLive
 ) {
   const crypto = yield* Crypto.Crypto;
+  const port = yield* availableLoopbackPort;
   const runtimeLayer = registration.pipe(
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
@@ -205,7 +207,7 @@ const primeAndSuspend = Effect.fn(function* (
   provider: KapsoClientService
 ) {
   const primed = yield* Deferred.make<number>();
-  const first = yield* acquireRuntime(24689, provider, primeRegistration(payload, primed));
+  const first = yield* acquireRuntime(provider, primeRegistration(payload, primed));
   yield* Effect.tryPromise(() =>
     first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
   );
@@ -213,13 +215,11 @@ const primeAndSuspend = Effect.fn(function* (
   const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
   yield* Effect.tryPromise(() =>
     first.runPromise(
-      Effect.gen(function* () {
-        for (;;) {
-          const result = yield* ConsentDisclosureWorkflow.poll(executionId);
-          if (Option.isSome(result) && result.value._tag === "Suspended") return;
-          yield* Effect.sleep("20 millis");
-        }
-      }).pipe(Effect.timeout("5 seconds"))
+      eventually(
+        ConsentDisclosureWorkflow.poll(executionId),
+        (result) => Option.exists(result, (value) => value._tag === "Suspended"),
+        { interval: "20 millis", timeout: "5 seconds" }
+      )
     )
   );
   yield* Effect.tryPromise(() => first.dispose());
@@ -286,7 +286,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(failed.evidenceRevision).toBeGreaterThan(revision);
         expect(failed.state).toBe("definitively-failed");
-        const recovered = yield* acquireRuntime(24690, provider, ConsentDisclosureWorkflowLive);
+        const recovered = yield* acquireRuntime(provider, ConsentDisclosureWorkflowLive);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(
             Effect.scoped(
@@ -331,7 +331,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const original = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
           Effect.flatMap(Effect.fromOption)
         );
-        const runtime = yield* acquireRuntime(24691, provider, RetryDelayLive);
+        const runtime = yield* acquireRuntime(provider, RetryDelayLive);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(
             RetryDelay.execute({

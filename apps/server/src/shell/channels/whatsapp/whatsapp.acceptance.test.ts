@@ -786,8 +786,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         );
 
         expect((yield* postSignedDelivery(delivery)).status).toBe(200);
-        yield* Effect.sleep("500 millis");
-        expect(yield* kapso.requests).toHaveLength(2);
+        expect(yield* awaitKapsoRequests(2)).toHaveLength(2);
         const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
         const retryAttempt = yield* Effect.fromOption(observed).pipe(
           Effect.flatMap((value) => Effect.fromOption(value.state)),
@@ -838,7 +837,6 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         });
         expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(200);
         expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(200);
-        yield* Effect.sleep("500 millis");
         expect(yield* awaitKapsoRequests(3)).toHaveLength(3);
         const terminalObserved = yield* awaitDisclosureEvidence(
           disclosures,
@@ -1004,8 +1002,6 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             signature: Option.none(),
           })).status
         ).toBe(200);
-        yield* Effect.sleep("500 millis");
-        expect(yield* kapso.requests).toHaveLength(4);
         expect(
           (yield* awaitDisclosureEvidence(disclosures, terminalIdentity.businessScopedUserId)).pipe(
             Option.flatMap((value) => value.state),
@@ -1013,6 +1009,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             Option.getOrUndefined
           )
         ).toBe("definitively-failed");
+        expect(yield* kapso.requests).toHaveLength(4);
       })
     );
 
@@ -1033,7 +1030,6 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           })).status
         ).toBe(200);
         yield* awaitKapsoRequests(1);
-        yield* Effect.sleep("100 millis");
         const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
         const attempt = yield* Effect.fromOption(
           Option.getOrUndefined(observed)?.state ?? Option.none()

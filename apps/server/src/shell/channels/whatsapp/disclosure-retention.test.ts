@@ -13,6 +13,7 @@ import {
   PgLive,
 } from "~/shell/testing/database-harness";
 import { durableWorkflowMailboxesTerminal } from "~/shell/durable-execution-retention";
+import { eventually } from "~/shell/testing/eventually";
 import {
   ConsentDisclosureWorkflowLive,
   startNextConsentDisclosure,
@@ -192,8 +193,12 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* admin`SELECT count(*)::int AS count FROM fidy_durable.cluster_messages WHERE entity_id = ${executionId}`
           );
           expect(rows).toEqual([{ count: 0 }]);
-          yield* Effect.sleep("100 millis");
-          expect(Option.isNone(yield* ConsentDisclosureWorkflow.poll(executionId))).toBe(true);
+          const execution = yield* eventually(
+            ConsentDisclosureWorkflow.poll(executionId),
+            Option.isNone,
+            { interval: "10 millis", timeout: "2 seconds" }
+          );
+          expect(Option.isNone(execution)).toBe(true);
         })
     );
     it.effect("retains terminal history until its separate start publication is completed", () =>

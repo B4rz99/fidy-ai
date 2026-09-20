@@ -13,6 +13,7 @@ import { deriveAnonymousSourceIdentifier } from "~/shell/secret-material/operati
 import { MigrationSqlClient } from "~/shell/testing/database-harness";
 import { seedConsentedPatIdentity } from "~/shell/testing/development-seed";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
+import { eventually } from "~/shell/testing/eventually";
 import { bearerSecret } from "./fixtures";
 import { claimPATPairing, expireDuePATPairings } from "./pat-pairing";
 
@@ -381,7 +382,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
           testSourceAddress
         ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }));
-        yield* Effect.sleep("300 millis");
+        yield* eventually(
+          sql`SELECT pid FROM pg_locks WHERE NOT granted AND pid <> pg_backend_pid()`,
+          (rows) => rows.length > 0,
+          { interval: "10 millis", timeout: "5 seconds" }
+        );
         const expiry = yield* expireDuePATPairings().pipe(
           Effect.forkChild({ startImmediately: true })
         );

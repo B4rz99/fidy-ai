@@ -4,7 +4,9 @@ import {
   type Config,
   Crypto,
   DateTime,
+  Deferred,
   Effect,
+  Fiber,
   Layer,
   ManagedRuntime,
   Option,
@@ -43,6 +45,7 @@ import {
   clusterTestRunnerOptions,
   disposeTestRuntimes as disposeRuntimes,
 } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
@@ -167,6 +170,11 @@ const makeRuntimeLayer = (
   );
 };
 
+const makeRuntime = Effect.fn(function* (input: Omit<RuntimeLayerInput, "port">) {
+  const port = yield* availableLoopbackPort;
+  return ManagedRuntime.make(makeRuntimeLayer({ ...input, port }));
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster forwarded-email workflow",
   (it) => {
@@ -178,24 +186,30 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const suffix = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
           const admitted = yield* admit(suffix);
           const calls = yield* Ref.make(0);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
           const provider = ResendReceivingClient.of({
             retrieveEmail: (receivedEmailId) =>
               Ref.update(calls, (count) => count + 1).pipe(
-                Effect.andThen(Effect.sleep("100 millis")),
+                Effect.andThen(Deferred.succeed(entered, undefined)),
+                Effect.andThen(Deferred.await(release)),
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24611, provider }));
-          const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24612, provider }));
+          const runtimeA = yield* makeRuntime({ crypto, provider });
+          const runtimeB = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtimeA, runtimeB]));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
-          yield* Effect.tryPromise(() =>
+          const executions = yield* Effect.tryPromise(() =>
             Promise.all([
               runtimeA.runPromise(ForwardedEmailWorkflow.execute(admitted.payload)),
               runtimeB.runPromise(ForwardedEmailWorkflow.execute(admitted.payload)),
             ])
-          );
+          ).pipe(Effect.forkChild({ startImmediately: true }));
+          yield* Deferred.await(entered);
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(executions);
           expect(yield* Ref.get(calls)).toBe(1);
           const sql = yield* MigrationSqlClient;
           expect(
@@ -259,14 +273,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* Effect.promise(() =>
               runtimeA.runPromise(
-                retainForwardedEmailExecutions({ now: retentionNow, retentionDays: 90 })
+                retainForwardedEmailExecutions({
+                  now: retentionNow,
+                  retentionDays: 90,
+                })
               )
             )
           ).toBe(0);
           expect(
             yield* Effect.promise(() =>
               runtimeA.runPromise(
-                retainForwardedEmailExecutions({ now: retentionNow, retentionDays: 90 })
+                retainForwardedEmailExecutions({
+                  now: retentionNow,
+                  retentionDays: 90,
+                })
               )
             )
           ).toBe(1);
@@ -299,14 +319,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const provider = ResendReceivingClient.of({
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24620, provider }));
+          const runtime = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
             yield* Effect.promise(() =>
               runtime.runPromise(
-                retainForwardedEmailExecutions({ now: retentionNow, retentionDays: 90 })
+                retainForwardedEmailExecutions({
+                  now: retentionNow,
+                  retentionDays: 90,
+                })
               )
             )
           ).toBe(1);
@@ -343,7 +366,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24617, provider }));
+          const runtime = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
@@ -375,7 +398,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24619, provider }));
+          const runtime = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
@@ -411,12 +434,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24615, provider }));
+          const runtime = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
-              ForwardedEmailWorkflow.execute({ ...admitted.payload, userId: isolatedUserId })
+              ForwardedEmailWorkflow.execute({
+                ...admitted.payload,
+                userId: isolatedUserId,
+              })
             )
           );
           expect(result).toEqual({ outcome: "stale" });
@@ -463,7 +489,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ) VALUES (
               ${deferredId}, ${defaultUserId}, ${`workflow-${deferredId}`}, 'deferred',
               'CO', 'es-CO', 'America/Bogota', ${now}, true,
-              ${DateTime.add(now, { seconds: 5 })}, ${now}
+              ${DateTime.add(now, { seconds: 1 })}, ${now}
             )
           `;
           const calls = yield* Ref.make(0);
@@ -473,13 +499,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24616, provider }));
+          const runtime = yield* makeRuntime({ crypto, provider });
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(
               ForwardedEmailWorkflow.execute(
-                { userId: defaultUserId, receivedEmailId: deferredId, revision: 1 },
+                {
+                  userId: defaultUserId,
+                  receivedEmailId: deferredId,
+                  revision: 1,
+                },
                 { discard: true }
               )
             )
@@ -488,7 +518,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             runtime.runPromise(ForwardedEmailWorkflow.execute(admitted.payload))
           );
           expect(yield* Ref.get(calls)).toBe(1);
-          yield* Effect.sleep("6 seconds");
           yield* Effect.promise(() =>
             runtime.runPromise(
               ForwardedEmailWorkflow.execute({

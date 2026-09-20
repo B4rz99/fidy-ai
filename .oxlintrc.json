@@ -159,8 +159,12 @@
         "effect-guards/no-nullable-type": "off"
       }
     },
+    // Vitest discovers these standalone configurations through its required default-export contract.
     {
-      "files": ["apps/server/tools/contracts/vitest.config.ts"],
+      "files": [
+        "apps/server/tools/contracts/vitest.config.ts",
+        "apps/server/vitest.slow.config.ts"
+      ],
       "rules": {
         "import/no-default-export": "off"
       }

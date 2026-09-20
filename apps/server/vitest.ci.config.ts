@@ -18,6 +18,9 @@ export default defineConfig({
   test: {
     include: ["src/shell/**/*.test.ts"],
     exclude: ["src/**/*.acceptance.test.ts", ...SLOW_SERVER_TEST_FILES],
+    // Keep Vitest 5's test isolation explicit; suites must not inherit mock history, and every
+    // asynchronous assertion must be awaited so failures remain attached to their test.
+    clearMocks: true,
     globalSetup: ["./tools/vitest-global-setup-runtime.ts"],
     environment: "node",
     pool: "forks",
@@ -30,6 +33,7 @@ export default defineConfig({
       [
         "junit",
         {
+          // CI uploads this project-relative path from apps/server.
           outputFile: "reports/server-tests.xml",
           includeConsoleOutput: false,
           addFileAttribute: true,
@@ -40,7 +44,10 @@ export default defineConfig({
       provider: "istanbul",
       enabled: true,
       all: true,
+      reportsDirectory: "coverage",
       reporter: ["json"],
+      // Vitest 5 resolves these globs from the apps/server project root. The JSON reporter writes
+      // coverage/coverage-final.json there, matching the CI artifact path exactly.
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...SOURCE_EXCLUDE],
     },

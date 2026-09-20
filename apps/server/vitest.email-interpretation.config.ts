@@ -6,6 +6,8 @@ export default defineConfig({
   resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
     include: ["src/shell/ingestion/email-interpretation/**/*.test.ts"],
+    // Preserve Vitest 5's isolated mock history and awaited asynchronous assertion semantics.
+    clearMocks: true,
     environment: "node",
     pool: "forks",
     coverage: { enabled: false },

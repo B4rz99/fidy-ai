@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Vitest 5's cleared mock history and awaited asynchronous assertions are deliberate: rendered
+    // behavior must not inherit spy calls or let assertion failures escape their owning test.
+    clearMocks: true,
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
@@ -20,7 +23,9 @@ export default defineConfig({
     setupFiles: ["./src/testing/setup.ts"],
     coverage: {
       provider: "istanbul",
+      reportsDirectory: "coverage",
       reporter: ["text", "json-summary", "html"],
+      // Vitest 5 matches these paths from the apps/web project root, not the workspace root.
       include: [
         "src/app/**/*.{ts,tsx}",
         "src/features/**/*.{ts,tsx}",

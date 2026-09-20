@@ -19,6 +19,9 @@ export default defineConfig({
   },
   test: {
     include: ["src/core/**/*.test.ts"],
+    // Keep Vitest 5's isolated mock history and awaited-async-assertion requirement as intentional
+    // suite semantics rather than relying on a future runner default.
+    clearMocks: true,
     environment: "node",
     pool: "forks",
     coverage: {
@@ -26,7 +29,10 @@ export default defineConfig({
       provider: "istanbul",
       enabled: true,
       all: true,
+      reportsDirectory: "coverage",
       reporter: ["text", "json"],
+      // Vitest 5 resolves coverage paths from apps/server; CI uploads the JSON reporter's
+      // coverage/coverage-final.json from that same project root.
       include: CORE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...CORE_EXCLUDE],
       thresholds: {

@@ -101,6 +101,9 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.acceptance.test.ts"],
+    // Vitest 5's cleared mock history and awaited asynchronous assertions are intentional here;
+    // acceptance cases must remain isolated and cannot report failures after their test completes.
+    clearMocks: true,
     environment: "node",
     reporter: ["verbose"],
     pool: "forks",
@@ -113,6 +116,8 @@ export default defineConfig({
       all: true,
       reportsDirectory: "coverage/acceptance",
       reporter: ["text", "json-summary"],
+      // Vitest 5 resolves these project-relative globs from apps/server; acceptance evidence stays
+      // in its explicit subdirectory and cannot overwrite the CI coverage artifact.
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: acceptanceExclude,
       thresholds: {

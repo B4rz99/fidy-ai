@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     include: ["src/shell/testing/durable-compatibility/*.compatibility.test.ts"],
+    // Preserve Vitest 5's isolated mock history and awaited asynchronous assertion semantics.
+    clearMocks: true,
     environment: "node",
     pool: "forks",
     fileParallelism: false,

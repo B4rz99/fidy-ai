@@ -2334,7 +2334,7 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       "round-trips schema-generated semantic content through PostgreSQL exactly",
       [TranscriptContentEntry],
       ([entry]) => generatedContentProgram(entry),
-      { timeout: 30_000, fastCheck: { numRuns: 40 } }
+      { timeout: 30_000, arbitrary: { runs: 40 } }
     );
     it.effect(
       "rejects malformed request content with a content-free defect",

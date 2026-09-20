@@ -19,6 +19,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     exclude: ["src/**/*.acceptance.test.ts"],
+    // Vitest 5's isolation and async-assertion semantics are deliberate: every test starts with
+    // empty mock history, and an unawaited asynchronous assertion fails instead of escaping.
+    clearMocks: true,
     globalSetup: ["./tools/vitest-global-setup-runtime.ts"],
     environment: "node",
     pool: "forks",
@@ -34,6 +37,8 @@ export default defineConfig({
       enabled: true,
       all: true,
       reporter: ["text"],
+      // Vitest 5 matches coverage globs from the project root; source-scope paths are deliberately
+      // relative to apps/server, which is also the command's working directory.
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...SOURCE_EXCLUDE],
       // Fail the suite (and CI's Test job) when any overall coverage metric drops below

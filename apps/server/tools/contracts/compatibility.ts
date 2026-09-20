@@ -240,8 +240,8 @@ const mergeObjectAllOf = (members: ReadonlyArray<JsonValue>): Option.Option<Json
   return Option.some(merged);
 };
 
-const normalizeAnyOf = (object: JsonObject): JsonObject => {
-  const members = Schema.decodeSync(JsonArray)(object.anyOf).filter(
+const normalizeAnyOf = (object: JsonObject, anyOf: JsonArray): JsonObject => {
+  const members = anyOf.filter(
     (member, index, all) =>
       all.findIndex((present) => canonicalJson(present) === canonicalJson(member)) === index
   );
@@ -299,7 +299,9 @@ const normalizeSchemaRepresentations = (
       () => normalized
     );
   }
-  if (Array.isArray(normalized.anyOf)) normalized = normalizeAnyOf(normalized);
+  if (Array.isArray(normalized.anyOf)) {
+    normalized = normalizeAnyOf(normalized, Schema.decodeSync(JsonArray)(normalized.anyOf));
+  }
   return normalized;
 };
 

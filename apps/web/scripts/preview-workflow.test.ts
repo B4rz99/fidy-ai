@@ -46,7 +46,10 @@ describe("pull-request preview workflow policy", () => {
     expect(serverJob).toContain("Restore server test timings");
     expect(serverJob).toContain("server-coverage-${{ matrix.shard }}");
     expect(checksWorkflow).toContain("name: server-coverage-core");
-    expect(qualityJob).toContain("      - server\n      - unit");
+    expect(serverJob).toContain("server-slow:");
+    expect(serverJob).toContain("test:slow:ci");
+    expect(serverJob).toContain("name: server-coverage-slow");
+    expect(qualityJob).toContain("      - server\n      - server-slow\n      - unit");
     expect(qualityJob).toContain("actions/download-artifact@");
     expect(qualityJob).toContain("services:");
     expect(qualityJob).toContain("Create restricted runtime role");

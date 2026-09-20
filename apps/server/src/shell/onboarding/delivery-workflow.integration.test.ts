@@ -9,6 +9,7 @@ import {
   Deferred,
   Effect,
   Exit,
+  Fiber,
   Layer,
   ManagedRuntime,
   Redacted,
@@ -38,6 +39,7 @@ import {
 } from "~/shell/email-authentication/delivery";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
@@ -188,6 +190,14 @@ const makeRuntimeLayer = (
   );
 };
 
+const makeRuntime = Effect.fn(function* (
+  crypto: Crypto.Crypto,
+  deliveryPort: EmailDeliveryPortService
+) {
+  const port = yield* availableLoopbackPort;
+  return ManagedRuntime.make(makeRuntimeLayer(crypto, port, deliveryPort));
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "SQL Cluster onboarding delivery",
   (it) => {
@@ -199,24 +209,38 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const sql = yield* SqlClient.SqlClient;
           const crypto = yield* Crypto.Crypto;
           const calls = yield* Ref.make(0);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
           const deliveryPort = EmailDeliveryPort.of({
             send: () =>
-              Ref.update(calls, (count) => count + 1).pipe(Effect.andThen(Effect.sleep(200))),
+              Ref.update(calls, (count) => count + 1).pipe(
+                Effect.andThen(Deferred.succeed(entered, undefined)),
+                Effect.andThen(Deferred.await(release))
+              ),
           });
-          const runtimeA = ManagedRuntime.make(makeRuntimeLayer(crypto, 24601, deliveryPort));
-          const runtimeB = ManagedRuntime.make(makeRuntimeLayer(crypto, 24602, deliveryPort));
+          const runtimeA = yield* makeRuntime(crypto, deliveryPort);
+          const runtimeB = yield* makeRuntime(crypto, deliveryPort);
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
-          yield* Effect.tryPromise(() =>
+          const executions = yield* Effect.tryPromise(() =>
             Promise.all([
               runtimeA.runPromise(
-                OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 })
+                OnboardingEmailDeliveryWorkflow.execute({
+                  intentId,
+                  revision: 1,
+                })
               ),
               runtimeB.runPromise(
-                OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 })
+                OnboardingEmailDeliveryWorkflow.execute({
+                  intentId,
+                  revision: 1,
+                })
               ),
             ])
-          );
+          ).pipe(Effect.forkChild({ startImmediately: true }));
+          yield* Deferred.await(entered);
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(executions);
           expect(yield* Ref.get(calls)).toBe(1);
           expect(
             yield* Schema.decodeUnknownEffect(IntentStatusRows)(
@@ -237,12 +261,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const sql = yield* SqlClient.SqlClient;
           const crypto = yield* Crypto.Crypto;
           const calls = yield* Ref.make(0);
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer(crypto, 24605, retryTwiceThenSucceed(calls))
-          );
+          const runtime = yield* makeRuntime(crypto, retryTwiceThenSucceed(calls));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
-            runtime.runPromise(OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 }))
+            runtime.runPromise(
+              OnboardingEmailDeliveryWorkflow.execute({
+                intentId,
+                revision: 1,
+              })
+            )
           );
           expect(yield* Ref.get(calls)).toBe(3);
           expect(
@@ -266,13 +293,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           const crypto = yield* Crypto.Crypto;
           const calls = yield* Ref.make(0);
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer(crypto, 24606, rejectRetryably(calls))
-          );
+          const runtime = yield* makeRuntime(crypto, rejectRetryably(calls));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const exit = yield* Effect.promise(() =>
             runtime.runPromise(
-              OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 }).pipe(Effect.exit)
+              OnboardingEmailDeliveryWorkflow.execute({
+                intentId,
+                revision: 1,
+              }).pipe(Effect.exit)
             )
           );
           assert.deepStrictEqual(
@@ -298,38 +326,42 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const crypto = yield* Crypto.Crypto;
           const calls = yield* Ref.make(0);
           const started = yield* Deferred.make<void>();
-          const runtimeA = ManagedRuntime.make(
-            makeRuntimeLayer(
-              crypto,
-              24603,
-              EmailDeliveryPort.of({
-                send: () =>
-                  Ref.update(calls, (count) => count + 1).pipe(
-                    Effect.andThen(Deferred.succeed(started, undefined)),
-                    Effect.andThen(Effect.never)
-                  ),
-              })
-            )
+          const runtimeA = yield* makeRuntime(
+            crypto,
+            EmailDeliveryPort.of({
+              send: () =>
+                Ref.update(calls, (count) => count + 1).pipe(
+                  Effect.andThen(Deferred.succeed(started, undefined)),
+                  Effect.andThen(Effect.never)
+                ),
+            })
           );
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           const first = runtimeA
-            .runPromise(OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 }))
+            .runPromise(
+              OnboardingEmailDeliveryWorkflow.execute({
+                intentId,
+                revision: 1,
+              })
+            )
             .catch(() => undefined);
           yield* Deferred.await(started);
           yield* Effect.promise(() => runtimeA.dispose());
           yield* Effect.promise(() => first);
 
-          const runtimeB = ManagedRuntime.make(
-            makeRuntimeLayer(
-              crypto,
-              24604,
-              EmailDeliveryPort.of({ send: () => Ref.update(calls, (count) => count + 1) })
-            )
+          const runtimeB = yield* makeRuntime(
+            crypto,
+            EmailDeliveryPort.of({
+              send: () => Ref.update(calls, (count) => count + 1),
+            })
           );
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           const recoveredExit = yield* Effect.promise(() =>
             runtimeB.runPromise(
-              OnboardingEmailDeliveryWorkflow.execute({ intentId, revision: 1 }).pipe(Effect.exit)
+              OnboardingEmailDeliveryWorkflow.execute({
+                intentId,
+                revision: 1,
+              }).pipe(Effect.exit)
             )
           );
           assert.deepStrictEqual(

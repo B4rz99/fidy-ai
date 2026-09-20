@@ -661,13 +661,16 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const active = yield* Ref.make(0);
         const maximumActive = yield* Ref.make(0);
         const calls = yield* Ref.make(0);
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
         const mapper = StatementColumnMapper.of({
           mapColumns: () =>
             Effect.gen(function* () {
               const current = yield* Ref.updateAndGet(active, increment);
               yield* Ref.update(maximumActive, maximumOf(current));
               yield* Ref.update(calls, increment);
-              yield* Effect.sleep("200 millis");
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
               return mapping;
             }).pipe(Effect.ensuring(Ref.update(active, decrement))),
         });
@@ -677,13 +680,16 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const workerA = yield* Layer.build(Layer.fresh(independentWorker(mapper)));
         const workerB = yield* Layer.build(Layer.fresh(independentWorker(mapper)));
-        yield* Effect.all(
+        const workers = yield* Effect.all(
           [
             processNextStatement().pipe(Effect.provide(workerA)),
             processNextStatement().pipe(Effect.provide(workerB)),
           ],
           { concurrency: "unbounded" }
-        );
+        ).pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(entered);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(workers);
         expect(yield* Ref.get(calls)).toBe(1);
         expect(yield* Ref.get(maximumActive)).toBe(1);
         const status = yield* client.ingestion.getStatementSubmission({

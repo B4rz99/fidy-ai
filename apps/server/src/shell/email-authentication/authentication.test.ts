@@ -32,6 +32,7 @@ import { withUserTransaction } from "~/shell/database/operations";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { eventually } from "~/shell/testing/eventually";
 import {
   BrowserPairingEmailDeliveryWorkerLive,
   BrowserPairingEmailWorkflowLive,
@@ -771,15 +772,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).pipe(Effect.forkChild);
         yield* Deferred.await(lockAcquired);
         const completion = yield* completeEmail(pairing, combinedCode).pipe(Effect.forkChild);
-        for (let poll = 0; poll < 100; poll += 1) {
-          const attempts = yield* sql`
-            SELECT count(*)::int AS count FROM email_pairing_login_admission_attempts attempt
+        yield* eventually(
+          sql`SELECT count(*)::int AS count
+            FROM email_pairing_login_admission_attempts attempt
             JOIN email_pairing_login_admission_scopes scope ON scope.scope_key = attempt.scope_key
-            WHERE scope.scope_kind = 'address'
-          `;
-          if (attempts[0]?.count === 3) break;
-          yield* Effect.sleep("10 millis");
-        }
+            WHERE scope.scope_kind = 'address'`,
+          (attempts) => attempts[0]?.count === 3,
+          { interval: "10 millis", timeout: "1 second" }
+        );
         yield* sql`DELETE FROM browser_pairing_email_workflows`;
         yield* Deferred.succeed(releaseLock, undefined);
         yield* Fiber.join(lockHolder);

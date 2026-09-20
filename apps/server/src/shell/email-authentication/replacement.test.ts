@@ -35,8 +35,20 @@ import { ReplacementDeliveryPayload, ReplacementExpiryPayload } from "./replacem
 import { expireReplacement, removeReplacementLifecycleEventsBefore } from "./replacement-retention";
 import { completeEmailReplacement } from "./replacement-transition";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { eventually } from "~/shell/testing/eventually";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000325");
+
+const waitForDatabaseSleep = Effect.fn(function* (relation: string) {
+  const sql = yield* MigrationSqlClient;
+  yield* eventually(
+    sql`SELECT pid FROM pg_stat_activity
+      WHERE datname = current_database() AND wait_event = 'PgSleep'
+      AND query LIKE ${`%${relation}%`}`,
+    (rows) => rows.length > 0,
+    { interval: "10 millis", timeout: "5 seconds" }
+  );
+});
 const bearer = TokenBearer.make("fin_replace1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const webSessionId = WebSessionId.make("f1d1a000-0000-4000-8000-000000000326");
 const webSessionBearer = "y".repeat(43);
@@ -1095,7 +1107,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const initiationFirst = yield* requestCandidate("initiation-wins@example.com").pipe(
           Effect.forkChild
         );
-        yield* Effect.sleep("25 millis");
+        yield* waitForDatabaseSleep("email_replacement_workflows");
         const completionSecond = yield* verifyCode(firstCode).pipe(Effect.forkChild);
         expect((yield* Fiber.join(initiationFirst)).status).toBe(200);
         expect((yield* Fiber.join(completionSecond)).status).toBe(400);
@@ -1123,7 +1135,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_replacement_credential_update()
         `;
         const completionFirst = yield* verifyCode(secondCode).pipe(Effect.forkChild);
-        yield* Effect.sleep("25 millis");
+        yield* waitForDatabaseSleep("verified_email_credentials");
         const initiationSecond = yield* requestCandidate("completion-wins@example.com").pipe(
           Effect.forkChild
         );
@@ -1334,7 +1346,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_owner_credential_update()
         `);
           const completion = yield* verifyCode(combinedCode).pipe(Effect.forkChild);
-          yield* Effect.sleep("25 millis");
+          yield* waitForDatabaseSleep("verified_email_credentials");
           yield* sql`
           UPDATE verified_email_credentials SET
             email_address = 'completion-uniqueness-race@example.com'

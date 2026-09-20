@@ -41,6 +41,8 @@ import {
   clusterTestShardLockExpiration,
   clusterTestShardLockRefreshInterval,
 } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
+import { eventually } from "~/shell/testing/eventually";
 import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operations";
 import {
   BrowserPairingEmailWorkflowLive,
@@ -67,6 +69,10 @@ const userId = UserId.make("f1d1a000-0000-4000-8000-000000000463");
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000464");
 const bearer = TokenBearer.make("fin_login463_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const email = EmailAddress.make("workflow-463@example.com");
+
+const hasRows = (rows: ReadonlyArray<unknown>): boolean => rows.length > 0;
+const isSuspended = (state: Option.Option<{ readonly _tag: string }>): boolean =>
+  Option.exists(state, (value) => value._tag === "Suspended");
 
 const requestStart = Effect.fn(function* () {
   const sql = yield* MigrationSqlClient;
@@ -137,8 +143,9 @@ const admit = Effect.fn(function* () {
   return { payload, pairing };
 });
 
-const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPortService) {
+const runtimeFor = Effect.fn(function* (provider: EmailDeliveryPortService) {
   const crypto = yield* Crypto.Crypto;
+  const port = yield* availableLoopbackPort;
   const cluster = authenticatedClusterHttp.layerSql(
     Redacted.make("c".repeat(64)),
     clusterTestRunnerOptions({
@@ -152,7 +159,7 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
     }),
     loopbackClusterRunnerHttpPolicy([port])
   );
-  return yield* Effect.acquireRelease(
+  const runtime = yield* Effect.acquireRelease(
     Effect.sync(() =>
       ManagedRuntime.make(
         BrowserPairingEmailWorkflowLive.pipe(
@@ -165,6 +172,8 @@ const runtimeFor = Effect.fn(function* (port: number, provider: EmailDeliveryPor
     ),
     (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
   );
+  yield* Effect.tryPromise(() => runtime.context());
+  return runtime;
 });
 
 const killAtBoundary = Effect.fn(function* (
@@ -225,7 +234,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT status FROM browser_pairing_email_delivery_intents WHERE id = ${payload.intentId}`
           ).toEqual([{ status: "armed" }]);
           const runtime = yield* runtimeFor(
-            24644,
             EmailDeliveryPort.of({
               send: () => Effect.die("Armed hard-loss recovery must not send"),
             })
@@ -248,19 +256,26 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const { payload } = yield* admit();
           const sends = yield* Ref.make(0);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
           const provider = EmailDeliveryPort.of({
             send: () =>
-              Ref.update(sends, (count) => count + 1).pipe(Effect.andThen(Effect.sleep(100))),
+              Ref.update(sends, (count) => count + 1).pipe(
+                Effect.andThen(Deferred.succeed(entered, undefined)),
+                Effect.andThen(Deferred.await(release))
+              ),
           });
-          const firstRuntime = yield* runtimeFor(24631, provider);
-          const replacementRuntime = yield* runtimeFor(24632, provider);
-          const results = yield* Effect.tryPromise(() =>
+          const firstRuntime = yield* runtimeFor(provider);
+          const replacementRuntime = yield* runtimeFor(provider);
+          const executions = yield* Effect.tryPromise(() =>
             Promise.all([
               firstRuntime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload)),
               replacementRuntime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload)),
             ])
-          );
-          expect(results).toEqual([{ outcome: "sent" }, { outcome: "sent" }]);
+          ).pipe(Effect.forkChild({ startImmediately: true }));
+          yield* Deferred.await(entered);
+          yield* Deferred.succeed(release, undefined);
+          expect(yield* Fiber.join(executions)).toEqual([{ outcome: "sent" }, { outcome: "sent" }]);
           expect(yield* Ref.get(sends)).toBe(1);
         }),
       30_000
@@ -274,7 +289,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const sends = yield* Ref.make(0);
           const accepted = yield* Deferred.make<void>();
           const firstRuntime = yield* runtimeFor(
-            24633,
             EmailDeliveryPort.of({
               send: () =>
                 Ref.update(sends, (count) => count + 1).pipe(
@@ -285,14 +299,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           yield* Effect.tryPromise(() =>
             firstRuntime.runPromise(
-              BrowserPairingEmailDeliveryWorkflow.execute(payload, { discard: true })
+              BrowserPairingEmailDeliveryWorkflow.execute(payload, {
+                discard: true,
+              })
             )
           );
           yield* Deferred.await(accepted);
           yield* Effect.tryPromise(() => firstRuntime.dispose());
           const replacementRuntime = yield* runtimeFor(
-            24634,
-            EmailDeliveryPort.of({ send: () => Ref.update(sends, (count) => count + 1) })
+            EmailDeliveryPort.of({
+              send: () => Ref.update(sends, (count) => count + 1),
+            })
           );
           expect(
             yield* Effect.tryPromise(() =>
@@ -317,11 +334,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ReadonlyArray<Parameters<EmailDeliveryPortService["send"]>[0]>
           >([]);
           const runtime = yield* runtimeFor(
-            24635,
             EmailDeliveryPort.of({
               send: (input) =>
                 Ref.update(inputs, (values) => [...values, input]).pipe(
-                  Effect.andThen(new EmailSendFailed({ certainty: "rejected", retryable: true }))
+                  Effect.andThen(
+                    new EmailSendFailed({
+                      certainty: "rejected",
+                      retryable: true,
+                    })
+                  )
                 ),
             })
           );
@@ -357,11 +378,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const { payload } = yield* admit();
           const sends = yield* Ref.make(0);
           const runtime = yield* runtimeFor(
-            24647,
             EmailDeliveryPort.of({
               send: () =>
                 Ref.update(sends, (count) => count + 1).pipe(
-                  Effect.andThen(new EmailSendFailed({ certainty: "rejected", retryable: false }))
+                  Effect.andThen(
+                    new EmailSendFailed({
+                      certainty: "rejected",
+                      retryable: false,
+                    })
+                  )
                 ),
             })
           );
@@ -394,31 +419,33 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ReadonlyArray<Parameters<EmailDeliveryPortService["send"]>[0]>
           >([]);
           const firstRuntime = yield* runtimeFor(
-            24639,
             EmailDeliveryPort.of({
               send: (input) =>
                 Ref.update(inputs, (values) => [...values, input]).pipe(
-                  Effect.andThen(new EmailSendFailed({ certainty: "rejected", retryable: true }))
+                  Effect.andThen(
+                    new EmailSendFailed({
+                      certainty: "rejected",
+                      retryable: true,
+                    })
+                  )
                 ),
             })
           );
           yield* Effect.tryPromise(() =>
             firstRuntime.runPromise(
-              BrowserPairingEmailDeliveryWorkflow.execute(payload, { discard: true })
+              BrowserPairingEmailDeliveryWorkflow.execute(payload, {
+                discard: true,
+              })
             )
           );
           const sql = yield* MigrationSqlClient;
-          yield* Effect.gen(function* () {
-            for (;;) {
-              const rows =
-                yield* sql`SELECT id FROM browser_pairing_email_delivery_intents WHERE id = ${payload.intentId} AND status = 'temporarily-refused'`;
-              if (rows.length > 0) return;
-              yield* Effect.sleep(5);
-            }
-          }).pipe(Effect.timeout("5 seconds"));
+          yield* eventually(
+            sql`SELECT id FROM browser_pairing_email_delivery_intents WHERE id = ${payload.intentId} AND status = 'temporarily-refused'`,
+            (rows) => rows.length > 0,
+            { interval: "5 millis", timeout: "5 seconds" }
+          );
           yield* Effect.tryPromise(() => firstRuntime.dispose());
           const replacementRuntime = yield* runtimeFor(
-            24640,
             EmailDeliveryPort.of({
               send: (input) => Ref.update(inputs, (values) => [...values, input]),
             })
@@ -433,8 +460,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(new Set(attempts.map((input) => input.combinedCode)).size).toBe(2);
           yield* Effect.tryPromise(() => replacementRuntime.dispose());
           const replayRuntime = yield* runtimeFor(
-            24641,
-            EmailDeliveryPort.of({ send: () => Effect.die("settled delivery must not replay") })
+            EmailDeliveryPort.of({
+              send: () => Effect.die("settled delivery must not replay"),
+            })
           );
           expect(
             yield* Effect.tryPromise(() =>
@@ -450,10 +478,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       () =>
         Effect.gen(function* () {
           const { payload } = yield* admit();
-          const runtime = yield* runtimeFor(
-            24642,
-            EmailDeliveryPort.of({ send: () => Effect.void })
-          );
+          const runtime = yield* runtimeFor(EmailDeliveryPort.of({ send: () => Effect.void }));
           const queue = pairingDeliveryQueue;
           yield* queue.handleNext(
             (input) =>
@@ -490,8 +515,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${DateTime.add(yield* DateTime.now, { seconds: 10 })}
             WHERE user_id = ${payload.userId}`;
           const runtime = yield* runtimeFor(
-            24646,
-            EmailDeliveryPort.of({ send: () => Effect.die("expiry must not send") })
+            EmailDeliveryPort.of({
+              send: () => Effect.die("expiry must not send"),
+            })
           );
           const queue = pairingExpiryQueue;
           const observedExpiry = yield* Ref.make(Option.none<PairingExpiryPayload>());
@@ -500,7 +526,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               Effect.tryPromise(
                 runtime.runPromise.bind(
                   runtime,
-                  BrowserPairingEmailExpiryWorkflow.execute(input, { discard: true }),
+                  BrowserPairingEmailExpiryWorkflow.execute(input, {
+                    discard: true,
+                  }),
                   undefined
                 )
               ).pipe(Effect.orDie, Effect.andThen(Ref.set(observedExpiry, Option.some(input)))),
@@ -508,12 +536,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           const expiry = yield* Ref.get(observedExpiry).pipe(Effect.flatMap(Effect.fromOption));
           const executionId = yield* BrowserPairingEmailExpiryWorkflow.executionId(expiry);
-          const suspended = BrowserPairingEmailExpiryWorkflow.poll(executionId).pipe(
-            Effect.delay("25 millis"),
-            Effect.repeat({ until: Option.exists((state) => state._tag === "Suspended") }),
-            Effect.timeout("5 seconds")
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(
+              eventually(BrowserPairingEmailExpiryWorkflow.poll(executionId), isSuspended, {
+                interval: "25 millis",
+                timeout: "5 seconds",
+              })
+            )
           );
-          yield* Effect.tryPromise(() => runtime.runPromise(suspended));
           yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, completed, created_at, updated_at)
             SELECT gen_random_uuid()::text, 'browser-pairing-email-start',
               jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, TRUE, now(), now()
@@ -541,6 +571,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* sql`SELECT id FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId}`
           ).toHaveLength(1);
+          yield* sql`UPDATE browser_pairing_email_workflows
+            SET started_at = now() - interval '24 hours', expires_at = now() - interval '1 second'
+            WHERE id = ${expiry.workflowId}`;
+          const releasedClocks = yield* sql`UPDATE fidy_durable.${sql(clusterMessagesTable)}
+            SET deliver_at = 0
+            WHERE entity_id = ${executionId} AND processed = FALSE AND deliver_at IS NOT NULL
+            RETURNING id`;
+          expect(releasedClocks.length).toBeGreaterThan(0);
           yield* Effect.tryPromise(() =>
             runtime.runPromise(BrowserPairingEmailExpiryWorkflow.execute(expiry))
           );
@@ -569,13 +607,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const { payload } = yield* admit();
           const sends = yield* Ref.make(0);
           const runtime = yield* runtimeFor(
-            24636,
-            EmailDeliveryPort.of({ send: () => Ref.update(sends, (count) => count + 1) })
+            EmailDeliveryPort.of({
+              send: () => Ref.update(sends, (count) => count + 1),
+            })
           );
           expect(
             yield* Effect.tryPromise(() =>
               runtime.runPromise(
-                BrowserPairingEmailDeliveryWorkflow.execute({ ...payload, userId: otherUserId })
+                BrowserPairingEmailDeliveryWorkflow.execute({
+                  ...payload,
+                  userId: otherUserId,
+                })
               )
             )
           ).toEqual({ outcome: "not-current" });
@@ -713,7 +755,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           userId,
           workflowId: BrowserPairingEmailWorkflowId.make("f1d1a000-0000-4000-8000-000000000469"),
         });
-        yield* delivery.offer(deliveryPayload, { id: deliveryPayload.intentId });
+        yield* delivery.offer(deliveryPayload, {
+          id: deliveryPayload.intentId,
+        });
         yield* expiry.offer(expiryPayload, { id: expiryPayload.workflowId });
 
         const telemetry = yield* Layer.build(TelemetryEnvelopeRecording);
@@ -811,7 +855,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               Effect.provide(TelemetryDisabled),
               Effect.forkChild
             );
-          yield* Effect.sleep("200 millis");
+          yield* eventually(
+            sql`SELECT pid FROM pg_stat_activity
+              WHERE datname = current_database() AND wait_event = 'PgSleep'
+              AND query LIKE '%browser_pairing_email_start_requests%'`,
+            hasRows,
+            { interval: "10 millis", timeout: "5 seconds" }
+          );
           yield* Fiber.interrupt(fiber);
         }).pipe(
           Effect.ensuring(
@@ -849,7 +899,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           workflowId: BrowserPairingEmailWorkflowId.make("f1d1a000-0000-4000-8000-000000000467"),
         });
         yield* start.offer(startPayload, { id: startPayload.requestId });
-        yield* delivery.offer(deliveryPayload, { id: deliveryPayload.intentId });
+        yield* delivery.offer(deliveryPayload, {
+          id: deliveryPayload.intentId,
+        });
         yield* expiry.offer(expiryPayload, { id: expiryPayload.workflowId });
 
         yield* Effect.all(
@@ -865,7 +917,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.provide(Layer.merge(BrowserPairingEmailWorkflowLive, TelemetryDisabled)),
           Effect.provideService(
             EmailDeliveryPort,
-            EmailDeliveryPort.of({ send: () => Effect.die("stale work must not send") })
+            EmailDeliveryPort.of({
+              send: () => Effect.die("stale work must not send"),
+            })
           )
         );
 
@@ -928,10 +982,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             userId: otherUserId,
             bearer: TokenBearer.make("fin_login464_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
           });
-          const runtime = yield* runtimeFor(
-            24645,
-            EmailDeliveryPort.of({ send: () => Effect.void })
-          );
+          const runtime = yield* runtimeFor(EmailDeliveryPort.of({ send: () => Effect.void }));
           yield* Effect.tryPromise(() =>
             runtime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload))
           );
@@ -949,7 +1000,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(proof).toHaveLength(1);
           yield* Effect.tryPromise(() =>
             runtime.runPromise(
-              BrowserPairingEmailExpiryWorkflow.execute({ ...expiry, userId: otherUserId })
+              BrowserPairingEmailExpiryWorkflow.execute({
+                ...expiry,
+                userId: otherUserId,
+              })
             )
           );
           expect(
@@ -978,9 +1032,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           const expiry = expiries[0];
           if (expiry === undefined) return yield* Effect.die("expected expiry");
-          const provider = EmailDeliveryPort.of({ send: () => Effect.die("expiry must not send") });
+          const provider = EmailDeliveryPort.of({
+            send: () => Effect.die("expiry must not send"),
+          });
           yield* killAtBoundary("expiry", expiry.userId, expiry.workflowId);
-          const replacementRuntime = yield* runtimeFor(24638, provider);
+          const replacementRuntime = yield* runtimeFor(provider);
           yield* Effect.tryPromise(() =>
             replacementRuntime.runPromise(BrowserPairingEmailExpiryWorkflow.execute(expiry))
           );

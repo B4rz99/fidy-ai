@@ -1,14 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { ServerTestSequencer } from "../../scripts/ci/server-test-sequencer";
 import { SOURCE_EXCLUDE, SOURCE_SRC } from "./source-scope.mjs";
 import { SLOW_SERVER_TEST_FILES } from "./slow-test-files";
 
-// CI shards the database-backed shell suite across isolated runners using prior
-// file timings instead of Vitest's equal-file-count hash ranges. Each shard instruments
-// the repository source scope so integration coverage of core decisions is retained.
-// The Quality job merges those reports with the core tier's artifact before enforcing
-// repository-wide totals and per-function CRAP scores.
+// Durable-runtime loss, restart, and live transport scenarios intentionally use real process time.
+// They run together outside the fast shards so CI load cannot consume a unit-sized outer budget.
 export default defineConfig({
   resolve: {
     alias: {
@@ -16,21 +12,19 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/shell/**/*.test.ts"],
-    exclude: ["src/**/*.acceptance.test.ts", ...SLOW_SERVER_TEST_FILES],
+    include: [...SLOW_SERVER_TEST_FILES],
     globalSetup: ["./tools/vitest-global-setup-runtime.ts"],
     environment: "node",
     pool: "forks",
     fileParallelism: false,
-    sequence: { sequencer: ServerTestSequencer },
-    testTimeout: 15_000,
-    hookTimeout: 30_000,
+    testTimeout: 45_000,
+    hookTimeout: 60_000,
     reporters: [
       "default",
       [
         "junit",
         {
-          outputFile: "reports/server-tests.xml",
+          outputFile: "reports/server-slow-tests.xml",
           includeConsoleOutput: false,
           addFileAttribute: true,
         },

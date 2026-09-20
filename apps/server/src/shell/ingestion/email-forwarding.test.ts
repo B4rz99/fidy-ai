@@ -42,6 +42,7 @@ import {
   revokeCurrentOnboardingConsentForTesting,
 } from "~/shell/testing/consent";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
+import { eventually } from "~/shell/testing/eventually";
 import { testResendWebhookSecret } from "~/shell/testing/test-config";
 import { ApprovedOperatorId, ForwardedEmailSampleApproval } from "./email-anonymization-approval";
 import { runEmailIngestRetention } from "./email-retention";
@@ -918,7 +919,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             Effect.tap(() => Deferred.succeed(revocationCompleted, undefined)),
             Effect.forkChild
           );
-          yield* Effect.sleep("25 millis");
+          yield* eventually(
+            sql`SELECT pid FROM pg_locks WHERE NOT granted AND pid <> pg_backend_pid()`,
+            (rows) => rows.length > 0,
+            { interval: "10 millis", timeout: "5 seconds" }
+          );
           expect(yield* Deferred.isDone(revocationCompleted)).toBe(false);
           yield* Deferred.succeed(releaseProvider, undefined);
           yield* Fiber.join(processing);

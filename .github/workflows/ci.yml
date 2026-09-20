@@ -184,10 +184,54 @@ jobs:
           retention-days: 7
           overwrite: true
 
+  server-slow:
+    name: Server durable-runtime tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Create restricted runtime role
+        env:
+          PGPASSWORD: fidy
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
+      - name: Durable-runtime integration validation
+        env:
+          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
+          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
+        run: bun run --cwd apps/server test:slow:ci
+      - name: Preserve durable-runtime coverage and test evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-coverage-slow
+          path: |
+            apps/server/coverage-slow/coverage-final.json
+            apps/server/reports/server-slow-tests.xml
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
+
   quality:
     name: Quality thresholds
     needs:
       - server
+      - server-slow
       - unit
     runs-on: ubuntu-latest
     services:

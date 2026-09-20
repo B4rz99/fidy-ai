@@ -13,7 +13,6 @@ import {
   Option,
   Redacted,
   Ref,
-  Schedule,
   Schema,
 } from "effect";
 import { TestConsole } from "effect/testing";
@@ -50,6 +49,8 @@ import { SqlQueueHarness } from "~/shell/testing/durable-execution-harness";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "~/shell/testing/telemetry-harness";
 import { clusterTestRunnerOptions } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
+import { eventually } from "~/shell/testing/eventually";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import {
   BillingAttemptReconciliationPayload,
@@ -234,7 +235,11 @@ const buildProvider = Effect.fn("Test.buildWompiBillingProvider")(function* (inp
       Ref.update(creations, (count) => count + 1).pipe(
         Effect.andThen(
           input.fault._tag === "Create"
-            ? Effect.fail(new WompiTransactionCreationFailed({ certainty: input.fault.certainty }))
+            ? Effect.fail(
+                new WompiTransactionCreationFailed({
+                  certainty: input.fault.certainty,
+                })
+              )
             : Effect.succeed({
                 transactionId: WompiTransactionId.make(`txn-${reference}`),
                 reference,
@@ -294,12 +299,15 @@ const providerTransaction = (
   finalizedAt,
 });
 
+const isSuspended = (state: Option.Option<{ readonly _tag: string }>): boolean =>
+  Option.exists(state, (value) => value._tag === "Suspended");
+
 const acquireRuntime = Effect.fn("Test.acquireBillingRuntime")(function* (
-  port: number,
   baseDelay: Duration.Input,
   provider: WompiBillingClientService
 ) {
   const crypto = yield* Crypto.Crypto;
+  const port = yield* availableLoopbackPort;
   const workflowLayer = billingAttemptReconciliationWorkflowLayer(baseDelay).pipe(
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
@@ -366,7 +374,10 @@ const attemptTransactions = Effect.fn("Test.readBillingTransactions")(function* 
   const sql = yield* MigrationSqlClient;
   return yield* SqlSchema.findAll({
     Request: Schema.Struct({ id: BillingAttemptId }),
-    Result: Schema.Struct({ transactionId: Schema.String, status: Schema.String }),
+    Result: Schema.Struct({
+      transactionId: Schema.String,
+      status: Schema.String,
+    }),
     execute: ({ id }) => sql`
       SELECT wompi_transaction_id AS "transactionId", status
       FROM billing_attempt_transactions
@@ -461,14 +472,9 @@ const TestLayer = Layer.mergeAll(
 layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
   "durable BillingAttempt reconciliation",
   (it) => {
-    it.effect("builds and runs the escalation maintenance loop", () =>
+    it.effect("builds the escalation maintenance loop", () =>
       Effect.scoped(
-        Effect.gen(function* () {
-          yield* Layer.build(
-            BillingReconciliationMaintenanceLive.pipe(Layer.provide(TelemetryDisabled))
-          );
-          yield* Effect.sleep("500 millis");
-        })
+        Layer.build(BillingReconciliationMaintenanceLive.pipe(Layer.provide(TelemetryDisabled)))
       )
     );
 
@@ -505,12 +511,10 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         );
 
         expect(Exit.isFailure(exit)).toBe(true);
-        const row = yield* readBillingQueueRow(attempt).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("10 millis"),
-            until: Option.exists((value) => value.attempts === 1),
-          }),
-          Effect.timeout("2 seconds")
+        const row = yield* eventually(
+          readBillingQueueRow(attempt),
+          Option.exists((value) => value.attempts === 1),
+          { interval: "10 millis", timeout: "2 seconds" }
         );
         expect(Option.isSome(row)).toBe(true);
         if (Option.isNone(row)) return;
@@ -559,11 +563,14 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         );
 
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
-        yield* Effect.sleep("100 millis");
         const row = yield* readBillingQueueRow(attempt);
         expect(Option.isSome(row)).toBe(true);
         if (Option.isNone(row)) return;
-        expect(row.value).toEqual({ completed: false, attempts: 0, lastFailure: null });
+        expect(row.value).toEqual({
+          completed: false,
+          attempts: 0,
+          lastFailure: null,
+        });
         expect(yield* recorder.serializedEnvelopes).toEqual([]);
         expect(yield* attemptStatus(attempt)).toMatchObject({
           status: "pending",
@@ -588,7 +595,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
             statuses: ["PENDING"],
             finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
           });
-          const runtime = yield* acquireRuntime(24716, "25 millis", provider);
+          const runtime = yield* acquireRuntime("25 millis", provider);
           const result = yield* Effect.tryPromise(() =>
             runtime.runPromise(
               BillingAttemptReconciliationWorkflow.execute({
@@ -620,7 +627,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["PENDING", "APPROVED"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24710, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -655,7 +662,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["DECLINED"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24715, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -715,7 +722,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
           fault: { _tag: "Create", certainty: "rejected" },
         });
-        const runtime = yield* acquireRuntime(24720, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -751,7 +758,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
           fault: { _tag: "Create", certainty: "ambiguous" },
         });
-        const runtime = yield* acquireRuntime(24717, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -765,60 +772,63 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
       })
     );
 
-    it.effect(
-      "survives runtime loss while waiting and settles without a duplicate period",
-      () =>
-        Effect.gen(function* () {
-          const now = yield* DateTime.now;
-          const attempt = yield* seedAttempt({
-            index: 2,
-            transactionId: Option.some(WompiTransactionId.make("txn-reconcile-2")),
-            armedAt: now,
-            createdAt: now,
-          });
-          const { provider, lookups, creations } = yield* makeProvider({
-            reference: attempt.reference,
-            amountInCents: attempt.amountInCents,
-            sourceId: attempt.sourceId,
-            statuses: ["PENDING", "APPROVED"],
-            finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
-          });
-          const first = yield* acquireRuntime(24711, "2 seconds", provider);
-          yield* Effect.tryPromise(() =>
-            first.runPromise(
-              BillingAttemptReconciliationWorkflow.execute(attempt.payload, { discard: true })
-            )
-          );
-          const executionId = yield* BillingAttemptReconciliationWorkflow.executionId(
-            attempt.payload
-          );
-          yield* Effect.tryPromise(() =>
+    it.effect("survives runtime loss while waiting and settles without a duplicate period", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now;
+        const attempt = yield* seedAttempt({
+          index: 2,
+          transactionId: Option.some(WompiTransactionId.make("txn-reconcile-2")),
+          armedAt: now,
+          createdAt: now,
+        });
+        const { provider, lookups, creations } = yield* makeProvider({
+          reference: attempt.reference,
+          amountInCents: attempt.amountInCents,
+          sourceId: attempt.sourceId,
+          statuses: ["PENDING", "APPROVED"],
+          finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
+        });
+        const first = yield* acquireRuntime("1 hour", provider);
+        yield* Effect.tryPromise(() =>
+          first.runPromise(
+            BillingAttemptReconciliationWorkflow.execute(attempt.payload, {
+              discard: true,
+            })
+          )
+        );
+        const executionId = yield* BillingAttemptReconciliationWorkflow.executionId(
+          attempt.payload
+        );
+        yield* eventually(
+          Effect.tryPromise(() =>
             first.runPromise(BillingAttemptReconciliationWorkflow.poll(executionId))
-          ).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("20 millis"),
-              until: (state) => Option.exists(state, (value) => value._tag === "Suspended"),
-            }),
-            Effect.timeout("10 seconds")
-          );
-          yield* Effect.tryPromise(() => first.dispose());
+          ),
+          isSuspended,
+          { interval: "20 millis", timeout: "10 seconds" }
+        );
+        yield* Effect.tryPromise(() => first.dispose());
+        const sql = yield* MigrationSqlClient;
+        const releasedClocks = yield* sql`
+            UPDATE fidy_durable.cluster_messages
+            SET deliver_at = 0
+            WHERE entity_id = ${executionId} AND processed = FALSE AND deliver_at IS NOT NULL
+            RETURNING id
+          `;
+        expect(releasedClocks.length).toBeGreaterThan(0);
 
-          const second = yield* acquireRuntime(24712, "2 seconds", provider);
-          const result = yield* Effect.tryPromise(() =>
-            second.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
-          );
-          expect(result).toEqual({ outcome: "succeeded" });
-          expect(yield* Ref.get(lookups)).toBe(2);
-          expect(yield* Ref.get(creations)).toBe(0);
-          expect(yield* attemptStatus(attempt)).toMatchObject({
-            status: "succeeded",
-            periods: 1,
-            paid: true,
-          });
-        }),
-      // Two full cluster runtimes, a suspension wait and a resumed execution; the default 15s
-      // test budget is a CI-load coin flip even though every wait here is bounded.
-      30_000
+        const second = yield* acquireRuntime("1 hour", provider);
+        const result = yield* Effect.tryPromise(() =>
+          second.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
+        );
+        expect(result).toEqual({ outcome: "succeeded" });
+        expect(yield* Ref.get(lookups)).toBe(2);
+        expect(yield* Ref.get(creations)).toBe(0);
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "succeeded",
+          periods: 1,
+          paid: true,
+        });
+      })
     );
 
     it.effect("keeps a twenty-minute-old armed charge with no provider reference pending", () =>
@@ -837,7 +847,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["APPROVED"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24713, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -888,7 +898,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["PENDING"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24714, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -919,7 +929,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
           fault: { _tag: "Lookup" },
         });
-        const runtime = yield* acquireRuntime(24718, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -951,7 +961,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
           fault: { _tag: "Evidence" },
         });
-        const runtime = yield* acquireRuntime(24719, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -1019,12 +1029,20 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         });
         const t0 = now;
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: first, status: "DECLINED" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: first,
+            status: "DECLINED",
+          }),
           environment: "sandbox",
           observedAt: t0,
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: retry, status: "PENDING" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: retry,
+            status: "PENDING",
+          }),
           environment: "sandbox",
           observedAt: DateTime.add(t0, { seconds: 30 }),
         });
@@ -1061,12 +1079,20 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           createdAt: now,
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: declined,
+            status: "DECLINED",
+          }),
           environment: "sandbox",
           observedAt: now,
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: unresolved, status: "PENDING" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: unresolved,
+            status: "PENDING",
+          }),
           environment: "sandbox",
           observedAt: DateTime.add(now, { minutes: 4 }),
         });
@@ -1091,12 +1117,20 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           createdAt: now,
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: declined,
+            status: "DECLINED",
+          }),
           environment: "sandbox",
           observedAt: now,
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: declined,
+            status: "DECLINED",
+          }),
           environment: "sandbox",
           observedAt: DateTime.add(now, { minutes: 4 }),
         });
@@ -1142,7 +1176,11 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           observedAt: DateTime.add(now, { minutes: 1 }),
         });
         yield* reconcileWompiSettlement({
-          provider: providerTransaction({ attempt, transactionId: declined, status: "DECLINED" }),
+          provider: providerTransaction({
+            attempt,
+            transactionId: declined,
+            status: "DECLINED",
+          }),
           environment: "sandbox",
           observedAt: DateTime.add(now, { minutes: 2 }),
         });
@@ -1350,7 +1388,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["PENDING"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24730, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const result = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -1435,7 +1473,9 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         yield* offerBillingQueueItem(attempt);
         yield* exhaustBillingQueueItem(attempt);
         yield* retireExhaustedBillingAttemptWork(now);
-        expect(yield* attemptStatus(attempt)).toMatchObject({ status: "pending" });
+        expect(yield* attemptStatus(attempt)).toMatchObject({
+          status: "pending",
+        });
         yield* reconcileWompiSettlement({
           provider: providerTransaction(
             {
@@ -1515,7 +1555,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           statuses: ["PENDING", "APPROVED"],
           finalizedAt: DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"),
         });
-        const runtime = yield* acquireRuntime(24731, "25 millis", provider);
+        const runtime = yield* acquireRuntime("25 millis", provider);
         const first = yield* Effect.tryPromise(() =>
           runtime.runPromise(BillingAttemptReconciliationWorkflow.execute(attempt.payload))
         );
@@ -1590,7 +1630,9 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           environment: "sandbox",
           observedAt: now,
         });
-        expect(yield* attemptStatus(succeeded)).toMatchObject({ status: "succeeded" });
+        expect(yield* attemptStatus(succeeded)).toMatchObject({
+          status: "succeeded",
+        });
         const pending = yield* seedAttempt({
           index: 37,
           transactionId: Option.some(WompiTransactionId.make("txn-exhaust-37")),
@@ -1679,7 +1721,11 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         const missingAttemptId = BillingAttemptId.make("47700000-0000-4000-8000-000000000090");
         const element = yield* Schema.encodeEffect(
           Schema.fromJsonString(BillingAttemptReconciliationPayload)
-        )({ userId: missingUserId, billingAttemptId: missingAttemptId, revision: 1 });
+        )({
+          userId: missingUserId,
+          billingAttemptId: missingAttemptId,
+          revision: 1,
+        });
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
             id, queue_name, element, completed, attempts, created_at, updated_at
           ) VALUES (
@@ -1719,7 +1765,11 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         const missingAttemptId = BillingAttemptId.make("47700000-0000-4000-8000-000000000091");
         const element = yield* Schema.encodeEffect(
           Schema.fromJsonString(BillingAttemptReconciliationPayload)
-        )({ userId: missingUserId, billingAttemptId: missingAttemptId, revision: 1 });
+        )({
+          userId: missingUserId,
+          billingAttemptId: missingAttemptId,
+          revision: 1,
+        });
         const old = DateTime.subtract(now, { hours: 25 });
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
             id, queue_name, element, completed, attempts, created_at, updated_at

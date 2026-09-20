@@ -10,12 +10,12 @@ import {
   type Duration,
   Effect,
   Exit,
+  Fiber,
   Layer,
   ManagedRuntime,
   Option,
   PrimaryKey,
   Ref,
-  Schedule,
   Stream,
 } from "effect";
 import { ClusterWorkflowEngine, EntityId, Sharding, ShardingConfig } from "effect/unstable/cluster";
@@ -57,20 +57,39 @@ import {
   resetClusterTopologyIdentity,
   resetClusterTopologyState,
 } from "~/shell/testing/cluster-topology-fixtures";
+import { availableLoopbackPort } from "~/shell/testing/network";
+import { eventually } from "~/shell/testing/eventually";
 
 const clusterToken = clusterTestAuthenticationToken;
 const shardCount = clusterTestShardCount;
 const shardIds = clusterTestShardIds;
 
-const observationLoopPort = 24701;
-const sharingFirstPort = 24702;
-const sharingSecondPort = 24703;
-const compatiblePort = 24704;
-const incompatiblePort = 24705;
-const gracefulFirstPort = 24706;
-const gracefulSecondPort = 24707;
-const lossRunnerPort = 24708;
-const lossSurvivorPort = 24709;
+const [
+  observationLoopPort,
+  sharingFirstPort,
+  sharingSecondPort,
+  compatiblePort,
+  incompatiblePort,
+  gracefulFirstPort,
+  gracefulSecondPort,
+  lossRunnerPort,
+  lossSurvivorPort,
+] = await Effect.runPromise(
+  Effect.all(
+    [
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+      availableLoopbackPort,
+    ],
+    { concurrency: "unbounded" }
+  )
+);
 const topologyRunnerPorts: [number, ...number[]] = [
   observationLoopPort,
   sharingFirstPort,
@@ -183,19 +202,24 @@ type SerialProbeControl = Readonly<{
   readonly activeHandlers: Ref.Ref<number>;
   readonly maximumConcurrentHandlers: Ref.Ref<number>;
   readonly handlerCalls: Ref.Ref<number>;
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
 }>;
 
 const makeSerialProbeLayer = ({
   activeHandlers,
   maximumConcurrentHandlers,
   handlerCalls,
+  entered,
+  release,
 }: SerialProbeControl): Layer.Layer<never, never, WorkflowEngine.WorkflowEngine> =>
   clusterTopologyProbeWorkflow.toLayer(() =>
     Effect.gen(function* () {
       const active = yield* Ref.updateAndGet(activeHandlers, (count) => count + 1);
       yield* Ref.update(maximumConcurrentHandlers, (maximum) => Math.max(maximum, active));
       yield* Ref.update(handlerCalls, (count) => count + 1);
-      yield* Effect.sleep("250 millis");
+      yield* Deferred.succeed(entered, undefined);
+      yield* Deferred.await(release);
       return "recovered";
     }).pipe(Effect.ensuring(Ref.update(activeHandlers, (count) => count - 1)))
   );
@@ -261,11 +285,7 @@ const waitForCondition = <E, R>(
   ready: Effect.Effect<boolean, E, R>,
   timeout: Duration.Input = "15 seconds"
 ): Effect.Effect<void, E | Cause.TimeoutError, R> =>
-  ready.pipe(
-    Effect.repeat({ until: (value) => value, schedule: Schedule.spaced("50 millis") }),
-    Effect.asVoid,
-    Effect.timeout(timeout)
-  );
+  eventually(ready, (value) => value, { interval: "50 millis", timeout }).pipe(Effect.asVoid);
 
 const maximumCrashRunnerOutputBytes = 16_384;
 
@@ -323,10 +343,14 @@ const registerClusterTopologyScenarios = (): void => {
           const activeHandlers = yield* Ref.make(0);
           const maximumConcurrentHandlers = yield* Ref.make(0);
           const handlerCalls = yield* Ref.make(0);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
           const serialProbeLayer = makeSerialProbeLayer({
             activeHandlers,
             maximumConcurrentHandlers,
             handlerCalls,
+            entered,
+            release,
           });
           const first = makeSerialProbeRuntime(sharingFirstPort, serialProbeLayer);
           const second = makeSerialProbeRuntime(sharingSecondPort, serialProbeLayer);
@@ -367,14 +391,15 @@ const registerClusterTopologyScenarios = (): void => {
           const serialProbePayload = {
             probe: `shared-owner-${yield* Clock.currentTimeMillis}`,
           };
-          expect(
-            yield* Effect.promise(() =>
-              Promise.all([
-                first.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
-                second.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
-              ])
-            )
-          ).toEqual(["recovered", "recovered"]);
+          const executions = yield* Effect.promise(() =>
+            Promise.all([
+              first.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
+              second.runPromise(clusterTopologyProbeWorkflow.execute(serialProbePayload)),
+            ])
+          ).pipe(Effect.forkChild({ startImmediately: true }));
+          yield* Deferred.await(entered);
+          yield* Deferred.succeed(release, undefined);
+          expect(yield* Fiber.join(executions)).toEqual(["recovered", "recovered"]);
           expect(yield* Ref.get(handlerCalls)).toBe(1);
           expect(yield* Ref.get(maximumConcurrentHandlers)).toBe(1);
 
@@ -479,17 +504,11 @@ const registerClusterTopologyScenarios = (): void => {
 
           // One configured deployment-drain deadline covers resident-entity termination, disposal,
           // and survivor takeover. Preemptive shutdown must release every lock before lease expiry.
-          yield* Effect.promise(() => first.dispose()).pipe(
-            Effect.andThen(
-              Effect.promise(() => second.runPromise(ownedShardCount)).pipe(
-                Effect.repeat({
-                  until: (owned) => owned === shardCount,
-                  schedule: Schedule.spaced("50 millis"),
-                }),
-                Effect.asVoid
-              )
-            ),
-            Effect.timeout("25 seconds")
+          yield* Effect.promise(() => first.dispose());
+          yield* eventually(
+            Effect.promise(() => second.runPromise(ownedShardCount)),
+            (owned) => owned === shardCount,
+            { interval: "50 millis", timeout: "25 seconds" }
           );
           expect(
             yield* sql`SELECT count(*)::int AS count FROM fidy_durable.${sql(clusterLocksTable)}

@@ -28,6 +28,7 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
 import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
+import { eventually } from "~/shell/testing/eventually";
 import {
   BillingAttemptId,
   PaymentRequestId,
@@ -197,16 +198,17 @@ const waitForBlockedAdvisoryLocks = Effect.fn("Test.waitForBlockedAdvisoryLocks"
   expected: number
 ) {
   const sql = yield* MigrationSqlClient;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const [result] = yield* sql`
-      SELECT COUNT(*)::int AS count FROM pg_locks
-      WHERE locktype = 'advisory' AND NOT granted
-    `;
-    const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(result);
-    if (decoded.count >= expected) return;
-    yield* Effect.sleep("10 millis");
-  }
-  return yield* Effect.die("advisory-lock waiter did not arrive");
+  yield* eventually(
+    Effect.gen(function* () {
+      const [result] = yield* sql`
+        SELECT COUNT(*)::int AS count FROM pg_locks
+        WHERE locktype = 'advisory' AND NOT granted
+      `;
+      return yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(result);
+    }),
+    ({ count }) => count >= expected,
+    { interval: "10 millis", timeout: "1 second" }
+  );
 });
 
 const assertArmedRedeliveryCannotRearm = Effect.fn(function* (input: {
@@ -294,13 +296,13 @@ const waitForProviderTransaction = Effect.fn("Test.waitForProviderTransaction")(
       WHERE attempt.id = ${id}
     `,
   });
-  for (;;) {
-    const attempt = yield* readProviderAttempt({ id: billingAttemptId }).pipe(Effect.orDie);
-    if (Option.isSome(attempt.transactionId)) {
-      return { ...attempt, transactionId: attempt.transactionId.value };
-    }
-    yield* Effect.sleep("10 millis");
-  }
+  const attempt = yield* eventually(
+    readProviderAttempt({ id: billingAttemptId }).pipe(Effect.orDie),
+    (value) => Option.isSome(value.transactionId),
+    { interval: "10 millis", timeout: "5 seconds" }
+  );
+  const transactionId = yield* Effect.fromOption(attempt.transactionId).pipe(Effect.orDie);
+  return { ...attempt, transactionId };
 });
 
 const assertBillingAttemptVisibilityBoundaries = Effect.fn(function* (

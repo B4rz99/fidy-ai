@@ -1,0 +1,369 @@
+apps/server/src/shell/agent/agent-service.test.ts
+  s_c7b2d8371dca9b::t_2b71b2f5bf96e1 1413
+  s_c7b2d8371dca9b::t_091ffe6f6df9ce 72
+  s_c7b2d8371dca9b::t_a8faf03f2bd398 73
+  s_c7b2d8371dca9b::t_3d2b706c807d14 71,1409-1412,1414-1417
+  s_c7b2d8371dca9b::t_8e2e78979b9243 1349,4062-4064
+apps/server/src/shell/agent/model-boundary.test.ts
+  s_c7b2d8371dca9b::t_89f4ce48c1a117 2-3
+apps/server/src/shell/hosted-inference/internal/openai.ts
+  s_c7b2d8371dca9b::t_401e7882290907 53,1053,1062-1063
+  s_c7b2d8371dca9b::t_fb64d616f843ea 54-58,61,346,833
+  s_c7b2d8371dca9b::t_3b3c95f9313177 179,181-182,184-187,189,660,663,666,670-673
+  s_c7b2d8371dca9b::t_7f31113b200bb4 190,194,199
+  s_c7b2d8371dca9b::t_0c3b3d3f6c51b6 60
+  s_c7b2d8371dca9b::t_3ae1a0420ee91f 657,659,665,667,674
+  s_c7b2d8371dca9b::t_f5483ff6f17181 661-662
+  s_c7b2d8371dca9b::t_b9a2ca52c8029b 17-23
+  s_c7b2d8371dca9b::t_4f45c5675a69bd 664
+  s_c7b2d8371dca9b::t_a6b319a44ea602 959,976
+  s_c7b2d8371dca9b::t_add1b42054eeac 977-983,986-997
+  s_c7b2d8371dca9b::t_6ef11f0631425c 1000,1004-1006,1008-1017,1020,1027,1036-1037,1045-1050,1052
+  s_c7b2d8371dca9b::t_c49509089aedb1 183
+  s_c7b2d8371dca9b::t_5c48e58ad41859 882
+  s_c7b2d8371dca9b::t_53650a77b25149 943
+  s_c7b2d8371dca9b::t_a2fb9a786c6b19 170-171
+  s_c7b2d8371dca9b::t_271687d0acd222 178,188,377-380,382,388,394-395
+  s_c7b2d8371dca9b::t_b75c818bdb7924 1007,1051
+  s_c7b2d8371dca9b::t_a6c80b50bcd5bc 1054-1061,1064-1065
+  s_c7b2d8371dca9b::t_f726fdd2841544 191-193
+  s_c7b2d8371dca9b::t_259ed5b505d821 172-177,180
+  s_c7b2d8371dca9b::t_f3de70dff1b02a 384
+  s_c7b2d8371dca9b::t_b2b30f088c21ae 59
+  s_c7b2d8371dca9b::t_1da4e3fee9d8ae 383
+apps/server/src/shell/http.ts
+  s_c7b2d8371dca9b::t_4b008a474a7cf9 13
+  s_c7b2d8371dca9b::t_48af01e84dc09d 304,349
+apps/server/src/shell/consent/agent-consent-gate.test.ts
+  s_c7b2d8371dca9b::t_a8faf03f2bd398 12
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_c7b2d8371dca9b::t_eb9c95216f460e 18-19
+  s_c7b2d8371dca9b::t_2cadb8060f07fe 71-72
+  s_c7b2d8371dca9b::t_17b24ec4485dfc 5
+  s_c7b2d8371dca9b::t_f3248adef3e912 3-4,6,257,263-266
+  s_c7b2d8371dca9b::t_5042d2aac77e47 67,73,75,89-92
+  s_c7b2d8371dca9b::t_a98611850766f6 70
+  s_c7b2d8371dca9b::t_e2d2c5226e579b 77-83
+apps/server/src/shell/agent/working-context.ts
+  s_c7b2d8371dca9b::t_9c4b20668c278a 10
+  s_c7b2d8371dca9b::t_8dc3127753e823 1
+  s_c7b2d8371dca9b::t_1330dbabec6f2b 62
+  s_c7b2d8371dca9b::t_f5a715bf36054b 11
+  s_c7b2d8371dca9b::t_b6fc7d7213ecd5 5
+  s_c7b2d8371dca9b::t_4e48bd555f11cc 3
+  s_c7b2d8371dca9b::t_44a3d31dd8a3aa 9
+  s_c7b2d8371dca9b::t_1b7269de921844 6
+  s_c7b2d8371dca9b::t_8f2ba81269f28a 8
+  s_c7b2d8371dca9b::t_c103243216ce9a 60-61
+apps/server/src/shell/testing/hosted-inference-harness.ts
+  s_c7b2d8371dca9b::t_8b32532f84a052 1-4
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_c7b2d8371dca9b::t_a8faf03f2bd398 27
+apps/server/scripts/evaluate-es-co.sh
+  s_c7b2d8371dca9b::t_7117a3f9486ef7 51
+apps/server/src/shell/hosted-inference/operations.test.ts
+  s_c7b2d8371dca9b::t_062473950c101a 925
+  s_c7b2d8371dca9b::t_a43d4ff81b2045 440
+  s_c7b2d8371dca9b::t_e4a8ab180cff3f 453-455
+  s_c7b2d8371dca9b::t_ca00835d5f5c81 2,34,102-105,125-127,139-140,142
+  s_c7b2d8371dca9b::t_4358232acb5cd0 109-111
+  s_c7b2d8371dca9b::t_0f5eba46b217fd 790
+  s_c7b2d8371dca9b::t_4a5219f3476d4c 978-979
+  s_c7b2d8371dca9b::t_f95b695a3c4140 172-173,186-187,433-436,438-439
+  s_c7b2d8371dca9b::t_9b920a021ea9df 986
+  s_c7b2d8371dca9b::t_071c8fbb76660d 907-910
+  s_c7b2d8371dca9b::t_d62d018a48f4bc 377-383
+  s_c7b2d8371dca9b::t_23479386ba5aff 959-966
+  s_c7b2d8371dca9b::t_e25be3f5a1af92 994-995
+  s_c7b2d8371dca9b::t_c74649cbdcb1b0 999-1000
+  s_c7b2d8371dca9b::t_5c47fb1d658d03 19
+  s_c7b2d8371dca9b::t_2c4c083300106d 929-939
+  s_c7b2d8371dca9b::t_418c20f5f87c78 988-991
+  s_c7b2d8371dca9b::t_4398eb3035b2e8 913-914
+  s_c7b2d8371dca9b::t_8654392be67046 951-956
+  s_c7b2d8371dca9b::t_02c56129ad73a2 625,786
+  s_c7b2d8371dca9b::t_13af0a5ad585e5 899-901
+  s_c7b2d8371dca9b::t_87646adbddc16e 668,777-779
+  s_c7b2d8371dca9b::t_f3ffb772013d0a 384
+  s_c7b2d8371dca9b::t_e668b8169ea3b6 141
+  s_c7b2d8371dca9b::t_bc3815fc014f6d 12,108
+  s_c7b2d8371dca9b::t_86f02ab0b0e0d2 997
+  s_c7b2d8371dca9b::t_c0fd37fc18e216 14
+  s_c7b2d8371dca9b::t_0d05273c6fee4c 794
+  s_c7b2d8371dca9b::t_ea6f04590b5eec 20-24
+  s_c7b2d8371dca9b::t_0815c792d8004a 776
+  s_c7b2d8371dca9b::t_5a503b3218d3d1 780-782
+  s_c7b2d8371dca9b::t_f79d4fd56f4dca 902-903
+  s_c7b2d8371dca9b::t_54561f2086cc26 175,189,220,245,286
+  s_c7b2d8371dca9b::t_aeae0b766ceccf 970-975
+  s_c7b2d8371dca9b::t_960f694f2e8a3f 793
+  s_c7b2d8371dca9b::t_18a3c31548d16e 1002-1005
+  s_c7b2d8371dca9b::t_b14ac9a5ccd786 775
+  s_c7b2d8371dca9b::t_10f129fd3b7daa 796-798,800
+  s_c7b2d8371dca9b::t_b58cdc63be2c38 112-124,128-138
+  s_c7b2d8371dca9b::t_16dc2f719b21a0 968
+  s_c7b2d8371dca9b::t_a067fa82309149 942-943
+  s_c7b2d8371dca9b::t_8d3161e031579a 25,456,469-470,474,482,532-533,537,552,605,610,622,675,701,722,730,757,791,795,799,802,810,832-898,904-906,911-912,915-924,926-928,940-941,944-950,957-958,967,969,976-977,980-985,987,992-993,996,1001,1006-1007
+  s_c7b2d8371dca9b::t_d427dca7b61ad9 96,165,207,219,234,244,261,285,301,330,351,405,654,746,998
+apps/server/src/shell/hosted-inference/internal/stub.ts
+  s_c7b2d8371dca9b::t_4f92997f6c120b 26-32,49-51,53-60,64-74,77-90
+  s_c7b2d8371dca9b::t_b50d68140b6b4a 47
+  s_c7b2d8371dca9b::t_5a753e8f9f9cd4 61-63
+  s_c7b2d8371dca9b::t_d27282f7aaa1b9 7,9,35-41,46,76
+  s_c7b2d8371dca9b::t_2075a51eca350c 1-6,8,10,18-24,48
+  s_c7b2d8371dca9b::t_9d7056a8d33cca 25,33
+  s_c7b2d8371dca9b::t_2161e4d124cda2 11-17,34,42-45,52,75
+apps/server/src/shell/hosted-inference/internal/deterministic.ts
+  s_c7b2d8371dca9b::t_48bcc8e493f7b8 111
+  s_c7b2d8371dca9b::t_9f11bbc94f3323 21,23-26,33-34
+  s_c7b2d8371dca9b::t_957c31ff19fe2a 6,178-180
+  s_c7b2d8371dca9b::t_9c4771fca13452 7,92-107,126-128,158
+  s_c7b2d8371dca9b::t_ca921cf8fbca60 11-12,177,181-202
+  s_c7b2d8371dca9b::t_61772cd8854fb7 3
+  s_c7b2d8371dca9b::t_caa1e6a9a959a8 2
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 13-20,27
+  s_be292adadce947::t_989c6558abbc48 1,9-10,28-32,38,61-67,78
+  s_c7b2d8371dca9b::t_63a35391d34378 22,108-110,112-125
+  s_c7b2d8371dca9b::t_14bd797d725857 157,159-173
+apps/server/src/shell/hosted-inference/internal/authority.ts
+  s_c7b2d8371dca9b::t_133e4296897aa8 1-13,24-46,53-132
+  s_c7b2d8371dca9b::t_f4793a8fb6d002 47
+  s_c7b2d8371dca9b::t_533b2d6a5751bc 14-22
+  s_c7b2d8371dca9b::t_8b918d63419a8e 48-52
+  s_c7b2d8371dca9b::t_2ca2724ac5579a 23
+apps/server/.dependency-cruiser.mjs
+  s_c7b2d8371dca9b::t_205cbffe9b7432 354
+  s_c7b2d8371dca9b::t_4d8891a35de50d 361
+  s_c7b2d8371dca9b::t_a1e2393b8e1baa 362-366,370-371
+  s_c7b2d8371dca9b::t_03f1c48a8bd214 367-369
+  s_c7b2d8371dca9b::t_daf08f6585125d 357
+  s_c7b2d8371dca9b::t_99d1c7bbef4a52 350-352
+apps/server/src/shell/hosted-inference/operations.ts
+  s_c7b2d8371dca9b::t_332c6417a30f33 3,11
+  s_c7b2d8371dca9b::t_ae881106e3fe99 2,5,15-19
+  s_c7b2d8371dca9b::t_d06ab87f178316 4,12-13
+  s_c7b2d8371dca9b::t_c9d020c9cd0090 1,6-10,14
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_c7b2d8371dca9b::t_7340a4fec0daa6 146-147,202,245,342
+  s_c7b2d8371dca9b::t_f605a306cb0f82 11,15-16
+  s_c7b2d8371dca9b::t_734f378ea6cd70 14
+  s_c7b2d8371dca9b::t_f62ab7891bed58 362
+  s_c7b2d8371dca9b::t_5384b64aeee5dd 17
+  s_c7b2d8371dca9b::t_9b9d224efaf801 167-169,174,179-181,187,189-195,233-237,239,278
+  s_c7b2d8371dca9b::t_6503626f97416d 346-348
+  s_c7b2d8371dca9b::t_df284b8415cfd9 141-145
+  s_c7b2d8371dca9b::t_b53c8506ae9855 314,317
+  s_c7b2d8371dca9b::t_66f698aaba278b 343-345
+  s_c7b2d8371dca9b::t_34002ab0210e92 140
+  s_c7b2d8371dca9b::t_33a75413c4024c 64-68
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 34
+  s_c7b2d8371dca9b::t_2d292bcd3a1e52 370
+  s_c7b2d8371dca9b::t_7eb75fb4acb3a2 27-32,54,89,210,259,361
+  s_c7b2d8371dca9b::t_c6a8e9bea9599d 246-250
+  s_c7b2d8371dca9b::t_757db814030c61 18,20-26
+  s_c7b2d8371dca9b::t_4ddaa13bca30e3 33
+  s_c7b2d8371dca9b::t_99d35cceff9c4f 19
+  s_c7b2d8371dca9b::t_5f79d9f0d47cc0 170-173
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 1-2,4-10,12-13
+  s_c7b2d8371dca9b::t_8b489f8f70f8ee 349
+apps/server/src/shell/memory/memory-policy.ts
+  s_c7b2d8371dca9b::t_e3043167c0ad71 5
+apps/server/ARCHITECTURE.md
+  s_c7b2d8371dca9b::t_184f8920260ea6 104-113
+apps/server/src/shell/hosted-inference/provider-evaluation-runtime.ts
+  s_c7b2d8371dca9b::t_03115b057c004f 3-11
+  s_c7b2d8371dca9b::t_a5de2b4f292c6e 1-2
+apps/server/scripts/check-dependency-guards.ts
+  s_c7b2d8371dca9b::t_6157bf6e9344be 1023-1025
+  s_c7b2d8371dca9b::t_d6b30aaef35d4a 976,986-990,1020,1022
+  s_c7b2d8371dca9b::t_022d92adf4547b 1017-1019
+  s_c7b2d8371dca9b::t_534dea69fa61d4 975,983
+  s_c7b2d8371dca9b::t_1618356b9029a8 1027-1029
+  s_c7b2d8371dca9b::t_e25f683ab0da6e 1021
+  s_c7b2d8371dca9b::t_51d9b638b5fa72 991,1026
+  s_c7b2d8371dca9b::t_478f5c40fed509 1012-1013
+  s_c7b2d8371dca9b::t_6ec7be85b052ee 1014-1016
+scripts/check-credential-evidence.ts
+  s_c7b2d8371dca9b::t_616ea402729a98 24
+  s_c7b2d8371dca9b::t_93a61d02616fae 29
+apps/server/src/shell/hosted-inference/internal/live.ts
+  s_c7b2d8371dca9b::t_1bc664c518bf11 1-8
+apps/server/src/shell/hosted-inference/mistral-conformance-runtime.ts
+  s_c7b2d8371dca9b::t_1fc63e7625d756 4-7
+  s_c7b2d8371dca9b::t_fc5060d7b2e84f 21-25
+  s_c7b2d8371dca9b::t_e48c8a53fcc952 1-2
+  s_c7b2d8371dca9b::t_63031d8bf8e80c 8-20
+  s_c7b2d8371dca9b::t_c22b0c114ffb5d 3
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_c7b2d8371dca9b::t_1007bc74007217 6-7
+apps/server/src/shell/hosted-inference/internal/openai.test.ts
+  s_c7b2d8371dca9b::t_fedc8c0fbf92bd 674-679,690-693,695-707,1056
+  s_c7b2d8371dca9b::t_d0594964103112 69-71,77
+  s_c7b2d8371dca9b::t_4f03e21c43600d 15,40,92
+  s_c7b2d8371dca9b::t_7f38680086d2f0 53-56,58,65,67
+  s_c7b2d8371dca9b::t_25cf72e4acee52 59-61
+  s_c7b2d8371dca9b::t_2466fd9c01b29e 209,323,340
+  s_c7b2d8371dca9b::t_e7afdb188aa4a2 243,245-250
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 47
+  s_c7b2d8371dca9b::t_eeb3efa55650b5 210
+  s_c7b2d8371dca9b::t_f543617c99e9b0 4-12,19,712-716,719-730,732-741,744-747,749
+  s_c7b2d8371dca9b::t_69d7b7985915f4 680-689,694
+  s_c7b2d8371dca9b::t_c308bd7050acf5 639-654
+  s_c7b2d8371dca9b::t_c2d424e92a837e 39,62,66,72,78,185
+  s_c7b2d8371dca9b::t_859dc29331807c 213
+  s_c7b2d8371dca9b::t_b51dde1eb58643 75-76
+  s_c7b2d8371dca9b::t_0597ea20d2b1c2 215,232-233
+  s_c7b2d8371dca9b::t_54561f2086cc26 235
+  s_c7b2d8371dca9b::t_95e4927755d153 2-3,203-208
+  s_c7b2d8371dca9b::t_29a169d458d42d 660
+  s_c7b2d8371dca9b::t_e53a971872ede1 214
+  s_c7b2d8371dca9b::t_944e8ef803c34f 659,661-662
+  s_c7b2d8371dca9b::t_ffd60dd5038156 320,325-329
+  s_c7b2d8371dca9b::t_1ed8c9b67989bc 251
+  s_c7b2d8371dca9b::t_308cf6efc13306 48,63-64,68,73-74,79-80
+  s_c7b2d8371dca9b::t_c1d76db5a791e3 36
+apps/server/src/shell/hosted-inference/internal/fixtures.ts
+  s_c7b2d8371dca9b::t_8002553a4e4a66 2,23,35
+apps/server/scripts/agent-repl-runtime.ts
+  s_c7b2d8371dca9b::t_5a9c67cb6250ea 5,21
+apps/server/scripts/evaluate-es-co-openai-runtime.ts
+  s_c7b2d8371dca9b::t_9319e11d109c4f 10-13,52,55
+  s_c7b2d8371dca9b::t_6ad295eece0f7f 7-9,56-59,91,93,98-100
+apps/server/src/shell/hosted-inference/internal/prompt.test.ts
+  s_c7b2d8371dca9b::t_4a2375e3599187 1-75
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_c7b2d8371dca9b::t_8db573842a006c 7
+apps/server/src/shell/hosted-inference/internal/limits.ts
+  s_c7b2d8371dca9b::t_fdd6e7debfd6d0 1-5
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_c7b2d8371dca9b::t_6858649e286bda 7
+  s_c7b2d8371dca9b::t_6494f517842056 1-2,5,11-18,23,35
+  s_c7b2d8371dca9b::t_7d9537291a20de 8,29
+  s_c7b2d8371dca9b::t_a5b3840e4d4433 3,6,9,20,26-28,32-34
+  s_c7b2d8371dca9b::t_455403eebc032f 30-31
+  s_c7b2d8371dca9b::t_4b5dee4011b704 4,10,19,21-22,24-25
+apps/server/src/shell/testing/api-harness.ts
+  s_c7b2d8371dca9b::t_e3043167c0ad71 34
+apps/server/src/shell/hosted-inference/contract.ts
+  s_c7b2d8371dca9b::t_5e90a5667533d4 179-189,194
+  s_c7b2d8371dca9b::t_0b020be4b3fe79 50-53,62-64,79-81
+  s_c7b2d8371dca9b::t_773b17ccc66534 4,7-17,27-29,31,40,42-43
+  s_c7b2d8371dca9b::t_402f975a8ea0bf 2,54-55,65-66,83-84
+  s_c7b2d8371dca9b::t_b92a2f5456898a 30,32
+  s_c7b2d8371dca9b::t_c2f890a5711d96 36,39
+  s_c7b2d8371dca9b::t_1a6fc610f48c6b 3,5-6,33-34,41,44,56,67,82,85,88-94,96-161,164-174,176-178,190-193,195-215,227
+  s_c7b2d8371dca9b::t_501c7a9e260baa 20-23
+  s_c7b2d8371dca9b::t_e412a4a25c3d0f 35,37-38,45-49,57-61,74-78,162-163
+  s_c7b2d8371dca9b::t_57a298977a7c96 175
+  s_c7b2d8371dca9b::t_3019350ef1d27c 18-19,24,26
+  s_c7b2d8371dca9b::t_8001e4203028f0 68-73
+  s_c7b2d8371dca9b::t_a1a92d732296f9 86-87,95
+  s_c7b2d8371dca9b::t_67389c2a1e8ebe 216-218
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 25
+  s_c7b2d8371dca9b::t_4b1c3a47a4eefa 219-226
+  s_c7b2d8371dca9b::t_bec26a6d84ea23 1
+apps/server/vitest.acceptance.config.ts
+  s_c7b2d8371dca9b::t_7f04c5a577748b 16,22-25
+apps/server/src/shell/agent/toolkit.test.ts
+  s_c7b2d8371dca9b::t_2b2bf6ef84eb78 2
+apps/server/src/shell/testing/evaluation/runner.ts
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 27
+apps/server/src/shell/agent/agent-operation-binding.ts
+  s_c7b2d8371dca9b::t_8a8a234f681565 9
+  s_c7b2d8371dca9b::t_0ac43075bc68bd 5
+  s_c7b2d8371dca9b::t_f073f4d6a4092b 8
+apps/server/src/shell/hosted-inference/internal/adapter.ts
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 25-27,29-31
+  s_c7b2d8371dca9b::t_db2a67fb2098cf 1-7,9-24,32-53
+  s_c7b2d8371dca9b::t_c1b114fba25138 28
+  s_c7b2d8371dca9b::t_d3ce3ac20ab8a4 8
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_c7b2d8371dca9b::t_a19de2c24efa59 99,104-105,110-113
+  s_c7b2d8371dca9b::t_c1c875de6ecdf9 59
+  s_c7b2d8371dca9b::t_54ae655f4bab69 102
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 107
+  s_c7b2d8371dca9b::t_f8f95627f8418f 103
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_c7b2d8371dca9b::t_a8faf03f2bd398 57
+  s_c7b2d8371dca9b::t_33d26009627f97 27-32
+  s_c7b2d8371dca9b::t_e3043167c0ad71 38
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_c7b2d8371dca9b::t_5b39819e23c61f 2
+apps/server/src/shell/hosted-inference/internal/mistral-conformance.ts
+  s_c7b2d8371dca9b::t_4d38d7469c156d 40
+  s_c7b2d8371dca9b::t_5f28b6581fae2a 13
+  s_c7b2d8371dca9b::t_2d51b964792149 14-15
+  s_c7b2d8371dca9b::t_3cf69c16895f78 26-39,41,77,114
+apps/server/src/shell/testing/evaluation/corpus.ts
+  s_c7b2d8371dca9b::t_a09a7e6f7ad56d 79-83
+apps/server/src/shell/testing/evaluation/corpus.test.ts
+  s_c7b2d8371dca9b::t_545f7cb63575c9 4,37-45
+  s_c7b2d8371dca9b::t_3beb97ce41b8d8 46-48
+apps/server/src/shell/agent/agent-service.ts
+  s_c7b2d8371dca9b::t_f90e5f962540b0 103,1023
+  s_c7b2d8371dca9b::t_914faa7770f75f 1052-1054,1056-1058,1060
+  s_c7b2d8371dca9b::t_937878f4a173a8 1092
+  s_c7b2d8371dca9b::t_c774f6ff461c58 1281-1283,1285-1289,1293-1296
+  s_c7b2d8371dca9b::t_1cb7bd37fb51b0 110
+  s_c7b2d8371dca9b::t_4968b4b3d71b5e 119,1089
+  s_c7b2d8371dca9b::t_c6421bb71d591f 524
+  s_c7b2d8371dca9b::t_29ca116011cdb3 2240
+  s_c7b2d8371dca9b::t_f2bb30ed6e31cd 1061
+  s_c7b2d8371dca9b::t_760544dc238abf 2241
+  s_c7b2d8371dca9b::t_91e3753826f21a 111
+apps/server/src/shell/agent/model-boundary.ts
+  s_c7b2d8371dca9b::t_9e3983c63e8f17 1,3
+apps/server/src/shell/memory/mutations.ts
+  s_c7b2d8371dca9b::t_95c77e245e5fa1 7
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_c7b2d8371dca9b::t_4950b650d3b873 22,48,190,193
+  s_c7b2d8371dca9b::t_0702bcf15501cd 253,262
+  s_c7b2d8371dca9b::t_a8319fb9146714 167-169,185-189,191-192,195
+  s_c7b2d8371dca9b::t_ec3aea18e11559 110,245
+  s_c7b2d8371dca9b::t_b92a2f5456898a 5,20,59
+  s_c7b2d8371dca9b::t_d40b2b16c9facc 155
+  s_c7b2d8371dca9b::t_460a5b07b17747 56-58,179-180
+  s_c7b2d8371dca9b::t_20482cbf0401d7 166
+  s_c7b2d8371dca9b::t_19a7840e4322cb 205
+  s_c7b2d8371dca9b::t_6a68e141a74d2c 13,15,17
+  s_c7b2d8371dca9b::t_984e124a5f1dcc 52-55,60-81,86,99-100
+  s_c7b2d8371dca9b::t_0d173fc7654258 26
+  s_c7b2d8371dca9b::t_0c51afd57777bf 1-4,6-12,21,23-25,27-46,49-51,82-85,87-98,101-109,111-132,136-154,240-244,252,254-261,263-266
+  s_c7b2d8371dca9b::t_98b58710694c63 47
+  s_c7b2d8371dca9b::t_cecb78fc77b80c 19
+  s_c7b2d8371dca9b::t_5af76c5f9dea0a 14,16,18,156-165,170-178,181-184,194,196-204,206-239
+  s_c7b2d8371dca9b::t_de1c590fcd965a 133-135,246-251
+apps/server/src/shell/hosted-inference/internal/mistral-tokenizer.ts
+  s_c7b2d8371dca9b::t_daec3e2cdee33e 4
+apps/server/src/shell/agent/toolkit.ts
+  s_c7b2d8371dca9b::t_f18adb43144a57 24,31-39,48
+  s_c7b2d8371dca9b::t_a22cc101e26abc 26,63-64
+  s_c7b2d8371dca9b::t_afd223a977e2e1 44-46,66-69
+  s_c7b2d8371dca9b::t_5a4ec14f546552 29-30
+  s_c7b2d8371dca9b::t_0cd259b54b9a80 1
+  s_c7b2d8371dca9b::t_e3043167c0ad71 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "726962f93a084381fcbc867a592ae1808840e31d",
+  "prompts": {},
+  "sessions": {
+    "s_be292adadce947": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b2bc-aaec-7078-b10e-7c1c86b3d440",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c7b2d8371dca9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b26d-08e2-77b4-8f0a-7395ae07d4e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

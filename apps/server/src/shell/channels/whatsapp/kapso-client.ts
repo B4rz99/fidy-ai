@@ -298,7 +298,7 @@ export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService
     this,
     Effect.gen(function* () {
       const outboundHttp = yield* OutboundHttp;
-      const deliveryMode = yield* Config.literals(
+      const deliveryMode = yield* Config.Literals(
         ["bsuid", "sandbox-phone"],
         "WHATSAPP_DELIVERY_MODE"
       ).pipe(Config.withDefault("bsuid"));

@@ -406,8 +406,8 @@ const handleKapsoIdentityWebhook = (
  */
 export const KapsoWebhookLive = Layer.unwrap(
   Effect.gen(function* () {
-    const secret = yield* Config.redacted("KAPSO_WEBHOOK_SECRET");
-    const businessPortfolioId = yield* Config.string("WHATSAPP_BUSINESS_PORTFOLIO_ID");
+    const secret = yield* Config.Redacted("KAPSO_WEBHOOK_SECRET");
+    const businessPortfolioId = yield* Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
     const bodyReaders = yield* Semaphore.make(concurrentWebhookBodyReads);
     const messageRoute = HttpRouter.add("POST", "/webhooks/kapso", (request) =>
       handleKapsoWebhook(

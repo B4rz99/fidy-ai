@@ -100,8 +100,8 @@ const provisionRuntimeRole = (
 const ProvisionLive = Layer.unwrap(
   Effect.gen(function* () {
     const urls = yield* Config.all({
-      migration: Config.redacted("MIGRATION_DATABASE_URL"),
-      runtime: Config.redacted("DATABASE_URL"),
+      migration: Config.Redacted("MIGRATION_DATABASE_URL"),
+      runtime: Config.Redacted("DATABASE_URL"),
     });
     const migrationUrl = yield* parseDatabaseUrl("MIGRATION_DATABASE_URL", urls.migration);
     const runtimeUrl = yield* parseDatabaseUrl("DATABASE_URL", urls.runtime);

@@ -8,7 +8,7 @@ import { withUserTransaction } from "~/shell/database/operations";
 import { PgLive } from "./database-harness";
 import { defaultUserId } from "./development-seed";
 
-const localDatabaseUrl = Config.string("DATABASE_URL");
+const localDatabaseUrl = Config.String("DATABASE_URL");
 
 const testPublicNamespace = {
   PUBLIC_WEB_ORIGIN: "https://fidyapp.com",

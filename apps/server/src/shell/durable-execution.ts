@@ -29,17 +29,17 @@ const blankRunnerAdvertisedHostError = (): Config.ConfigError =>
     new ConfigProvider.SourceError({ message: "FIDY_CLUSTER_RUNNER_HOST must not be blank" })
   );
 
-const runnerAdvertisedHost = Config.string("FIDY_CLUSTER_RUNNER_HOST").pipe(
-  Config.mapOrFail((host): Effect.Effect<string, Config.ConfigError> => {
+const runnerAdvertisedHost = Config.String("FIDY_CLUSTER_RUNNER_HOST").pipe(
+  Config.mapEffect((host): Effect.Effect<string, Config.ConfigError> => {
     const advertised = host.trim();
     return advertised === ""
       ? Effect.fail(blankRunnerAdvertisedHostError())
       : Effect.succeed(advertised);
   })
 );
-const runnerPort = Config.port("FIDY_CLUSTER_RUNNER_PORT");
+const runnerPort = Config.Port("FIDY_CLUSTER_RUNNER_PORT");
 const runnerHostAndPort = Config.all({ host: runnerAdvertisedHost, port: runnerPort });
-const runnerPeerHosts = Config.string("FIDY_CLUSTER_RUNNER_PEER_HOSTS").pipe(
+const runnerPeerHosts = Config.String("FIDY_CLUSTER_RUNNER_PEER_HOSTS").pipe(
   Config.withDefault(""),
   Config.map((hosts) =>
     hosts
@@ -66,7 +66,7 @@ const clientRunnerHosts = Config.all({
   advertised: Config.option(runnerAdvertisedHost),
   peers: runnerPeerHosts,
 }).pipe(
-  Config.mapOrFail(({ advertised, peers }) =>
+  Config.mapEffect(({ advertised, peers }) =>
     requireRunnerHosts(
       Option.match(advertised, {
         onNone: () => peers,
@@ -90,7 +90,7 @@ const ProductionClusterLive = Layer.unwrap(
   Effect.gen(function* () {
     const { host: advertisedHost, port } = yield* runnerHostAndPort;
     const peerHosts = yield* runnerPeerHosts;
-    const listenHost = yield* Config.string("FIDY_CLUSTER_LISTEN_HOST").pipe(
+    const listenHost = yield* Config.String("FIDY_CLUSTER_LISTEN_HOST").pipe(
       Config.withDefault("0.0.0.0")
     );
     const authenticationToken = yield* loadClusterAuthenticationToken;

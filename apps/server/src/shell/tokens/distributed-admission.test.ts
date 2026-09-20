@@ -13,8 +13,8 @@ const Ready = Schema.Struct({ port: Schema.Int, pid: Schema.Int });
 const source = "203.0.113.70";
 
 const startProcess = Effect.gen(function* () {
-  const databaseUrl = yield* Config.string("DATABASE_URL");
-  const path = yield* Config.string("PATH");
+  const databaseUrl = yield* Config.String("DATABASE_URL");
+  const path = yield* Config.String("PATH");
   const ready = Promise.withResolvers<typeof Ready.Type>();
   const child = yield* Effect.acquireRelease(
     Effect.sync(() =>

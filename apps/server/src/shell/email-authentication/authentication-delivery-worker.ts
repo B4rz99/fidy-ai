@@ -423,7 +423,7 @@ export const processPairingExpiryQueueItem = Effect.fn(function* (payload: Pairi
 export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
     if (
-      (yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"))) !== "production"
+      (yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"))) !== "production"
     ) {
       return;
     }

@@ -5,8 +5,8 @@ import { migrations } from "~/shell/database/internal/migrations/registry";
 import { assertRuntimeAuthority } from "~/shell/database/internal/runtime-authority";
 import { MigrationSqlClient } from "./operations";
 
-const runtimeDatabaseUrl = Config.redacted("DATABASE_URL").pipe(
-  Config.mapOrFail((redacted) =>
+const runtimeDatabaseUrl = Config.Redacted("DATABASE_URL").pipe(
+  Config.mapEffect((redacted) =>
     Schema.decodeEffect(Schema.URLFromString)(Redacted.value(redacted)).pipe(
       Effect.map((url) => {
         url.searchParams.append("options", "-c search_path=fidy_durable,public");
@@ -29,7 +29,7 @@ const runtimeDatabaseUrl = Config.redacted("DATABASE_URL").pipe(
 export const PgLive = PgClient.layerConfig({ url: runtimeDatabaseUrl });
 
 const PgMigrationLive = PgClient.layerConfig({
-  url: Config.redacted("MIGRATION_DATABASE_URL"),
+  url: Config.Redacted("MIGRATION_DATABASE_URL"),
 });
 
 /** Runtime-authority startup gate, provided before any application process can query Postgres. */

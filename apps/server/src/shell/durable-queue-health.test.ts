@@ -126,8 +126,8 @@ const buildTestQueue = Effect.gen(function* () {
 /** Starts an independent queue runtime that the test can terminate without running finalizers. */
 const startCrashRuntime = Effect.gen(function* () {
   const { databaseUrl, path } = yield* Config.all({
-    databaseUrl: Config.string("DATABASE_URL"),
-    path: Config.string("PATH"),
+    databaseUrl: Config.String("DATABASE_URL"),
+    path: Config.String("PATH"),
   });
   return yield* Effect.acquireRelease(
     Effect.sync(() => {

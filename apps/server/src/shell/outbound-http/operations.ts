@@ -42,12 +42,12 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   static readonly layer = Layer.effect(
     this,
     Effect.gen(function* () {
-      const kapsoApiKey = yield* Config.redacted("KAPSO_API_KEY").pipe(Config.option);
-      const openAiApiKey = yield* Config.redacted("OPENAI_API_KEY").pipe(Config.option);
-      const openAiApiUrl = yield* Config.string("OPENAI_API_URL").pipe(
+      const kapsoApiKey = yield* Config.Redacted("KAPSO_API_KEY").pipe(Config.option);
+      const openAiApiKey = yield* Config.Redacted("OPENAI_API_KEY").pipe(Config.option);
+      const openAiApiUrl = yield* Config.String("OPENAI_API_URL").pipe(
         Config.withDefault("https://api.openai.com/v1")
       );
-      const mistralApiKey = yield* Config.redacted("MISTRAL_API_KEY").pipe(Config.option);
+      const mistralApiKey = yield* Config.Redacted("MISTRAL_API_KEY").pipe(Config.option);
       const resendEmailDeliveryApiKey = yield* loadResendEmailDeliveryApiKey;
       const resendReceivingApiKey = yield* loadResendReceivingApiKey;
       const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
@@ -83,8 +83,8 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   static readonly openAiLayer = Layer.effect(
     this,
     Effect.gen(function* () {
-      const openAiApiKey = yield* Config.redacted("OPENAI_API_KEY");
-      const openAiApiUrl = yield* Config.string("OPENAI_API_URL").pipe(
+      const openAiApiKey = yield* Config.Redacted("OPENAI_API_KEY");
+      const openAiApiUrl = yield* Config.String("OPENAI_API_URL").pipe(
         Config.withDefault("https://api.openai.com/v1")
       );
       const httpClient = yield* HttpClient.HttpClient;
@@ -106,7 +106,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   static readonly mistralLayer = Layer.effect(
     this,
     Effect.gen(function* () {
-      const mistralApiKey = yield* Config.redacted("MISTRAL_API_KEY");
+      const mistralApiKey = yield* Config.Redacted("MISTRAL_API_KEY");
       const httpClient = yield* HttpClient.HttpClient;
       return makeOutboundHttp({
         kapsoApiKey: Option.none(),
@@ -125,7 +125,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
   static readonly sentryLayer = Layer.effect(
     this,
     Effect.gen(function* () {
-      const authToken = yield* Config.redacted("SENTRY_AUTH_TOKEN");
+      const authToken = yield* Config.Redacted("SENTRY_AUTH_TOKEN");
       const httpClient = yield* HttpClient.HttpClient;
       return makeSentryOutboundHttp({ authToken, httpClient });
     })

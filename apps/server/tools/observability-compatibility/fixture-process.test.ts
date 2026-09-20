@@ -29,7 +29,7 @@ import {
 import { getCompatibilityRecorder, requireInstalled } from "./handoff";
 
 const expectedBunVersion = "1.4.1";
-const expectedEffectVersion = "4.0.0-rc.112";
+const expectedEffectVersion = "4.0.0-rc.116";
 const expectedSentryVersion = "10.74.0";
 const expectedTraceId = TelemetryTraceId.make("a".repeat(32));
 const expectedParentSpanId = TelemetrySpanId.make("b".repeat(16));

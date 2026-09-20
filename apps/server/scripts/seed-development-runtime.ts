@@ -10,9 +10,9 @@ const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 const requireLocalPostgres = Effect.gen(function* () {
   const { databaseUrl, nodeEnvironment, railwayEnvironment } = yield* Config.all({
-    databaseUrl: Config.url("DATABASE_URL"),
-    nodeEnvironment: Config.option(Config.string("NODE_ENV")),
-    railwayEnvironment: Config.option(Config.string("RAILWAY_ENVIRONMENT")),
+    databaseUrl: Config.URL("DATABASE_URL"),
+    nodeEnvironment: Config.option(Config.String("NODE_ENV")),
+    railwayEnvironment: Config.option(Config.String("RAILWAY_ENVIRONMENT")),
   });
   const localPostgres =
     (databaseUrl.protocol === "postgres:" || databaseUrl.protocol === "postgresql:") &&

@@ -14,8 +14,8 @@ export const configuredSecret = (input: {
   readonly schema: Schema.Constraint;
   readonly requirement: string;
 }): Config.Config<Redacted.Redacted<string>> =>
-  Config.redacted(input.name).pipe(
-    Config.mapOrFail((secret): Effect.Effect<Redacted.Redacted<string>, Config.ConfigError> =>
+  Config.Redacted(input.name).pipe(
+    Config.mapEffect((secret): Effect.Effect<Redacted.Redacted<string>, Config.ConfigError> =>
       Schema.is(Schema.Redacted(input.schema))(secret)
         ? Effect.succeed(secret)
         : Effect.fail(invalidSecret(input.name, input.requirement))

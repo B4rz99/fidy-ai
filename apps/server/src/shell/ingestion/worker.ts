@@ -516,7 +516,7 @@ export const StatementIngestionRetentionLive = Layer.effectDiscard(
 
 /** Runs SQL queue consumption and bounded startup recovery. */
 export const StatementIngestionWorkerLive = Layer.effectDiscard(
-  Config.string("NODE_ENV").pipe(
+  Config.String("NODE_ENV").pipe(
     Config.withDefault("development"),
     Effect.flatMap((environment) =>
       runStatementIngestionWorker.pipe(

@@ -7,10 +7,10 @@ import { OutboundHttpFetchLive } from "~/shell/outbound-http/runtime";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
 
 const verifyReusableSource = Effect.gen(function* () {
-  const environment = yield* Config.string("WOMPI_ENVIRONMENT");
+  const environment = yield* Config.String("WOMPI_ENVIRONMENT");
   if (environment !== "sandbox") return yield* Effect.die("Sandbox verification requires sandbox");
   const billingEmail = yield* Config.schema(BillingEmail, "WOMPI_SANDBOX_BILLING_EMAIL");
-  const cardToken = yield* Config.redacted("WOMPI_SANDBOX_CARD_TOKEN");
+  const cardToken = yield* Config.Redacted("WOMPI_SANDBOX_CARD_TOKEN");
   const wompi = yield* WompiEnrollmentClient;
   const contracts = yield* wompi.contracts(yield* DateTime.now);
   const result = yield* wompi.createPaymentSource({

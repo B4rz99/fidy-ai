@@ -15,14 +15,14 @@ import { replacementRuntimeLayer } from "./replacement-runtime";
 /** Test-only runner: park at precise Activity boundaries so the parent can SIGKILL without finalizers. */
 const run = Effect.gen(function* () {
   const options = yield* Config.all({
-    payload: Config.string("TEST_REPLACEMENT_PAYLOAD"),
-    phase: Config.literals(
+    payload: Config.String("TEST_REPLACEMENT_PAYLOAD"),
+    phase: Config.Literals(
       ["before-call", "after-call", "after-settlement"],
       "TEST_REPLACEMENT_PHASE"
     ),
-    port: Config.port("TEST_REPLACEMENT_PORT"),
-    providerUrl: Config.string("TEST_REPLACEMENT_PROVIDER_URL"),
-    readyPath: Config.string("TEST_REPLACEMENT_READY_PATH"),
+    port: Config.Port("TEST_REPLACEMENT_PORT"),
+    providerUrl: Config.String("TEST_REPLACEMENT_PROVIDER_URL"),
+    readyPath: Config.String("TEST_REPLACEMENT_READY_PATH"),
   });
   const payload = yield* Schema.decodeEffect(Schema.fromJsonString(ReplacementDeliveryPayload))(
     options.payload

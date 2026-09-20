@@ -23,7 +23,7 @@ const reconcile = Effect.gen(function* () {
       : ({
           _tag: "Available",
           sourceId: yield* Schema.decodeOption(ProviderSourceId)(
-            Redacted.value(yield* Config.redacted("WOMPI_RECONCILIATION_SOURCE_ID"))
+            Redacted.value(yield* Config.Redacted("WOMPI_RECONCILIATION_SOURCE_ID"))
           ).pipe(Effect.fromOption(() => new InvalidProviderSourceId())),
         } as const);
   yield* reconcileCardEnrollment({

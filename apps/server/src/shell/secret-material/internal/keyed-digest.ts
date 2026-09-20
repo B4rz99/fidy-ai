@@ -23,10 +23,10 @@ export const configuredHmacKey = (input: {
   readonly developmentFallback: string;
 }): Effect.Effect<Redacted.Redacted<Uint8Array>, Config.ConfigError> =>
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return developmentKey(input.developmentFallback);
 
-    const encoded = Redacted.value(yield* Config.redacted(input.variable));
+    const encoded = Redacted.value(yield* Config.Redacted(input.variable));
     if (!hmacKeyPattern.test(encoded)) return yield* Effect.fail(invalidKey(input.variable));
 
     const decoded = Encoding.decodeHex(encoded);

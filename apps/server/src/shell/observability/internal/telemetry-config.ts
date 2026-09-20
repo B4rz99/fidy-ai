@@ -97,15 +97,15 @@ export class InvalidTelemetryConfig extends Data.TaggedError("InvalidTelemetryCo
 }> {}
 
 const rawTelemetryConfig = Config.all({
-  environment: Config.literals(["production", "local", "ci"], "SENTRY_ENVIRONMENT").pipe(
+  environment: Config.Literals(["production", "local", "ci"], "SENTRY_ENVIRONMENT").pipe(
     Config.withDefault("local")
   ),
-  captureErrors: Config.boolean("SENTRY_CAPTURE_ERRORS").pipe(Config.withDefault(false)),
-  captureTraces: Config.boolean("SENTRY_CAPTURE_TRACES").pipe(Config.withDefault(false)),
-  productionDsn: Config.option(Config.redacted("SENTRY_PRODUCTION_DSN")),
-  nonProductionDsn: Config.option(Config.redacted("SENTRY_NON_PRODUCTION_DSN")),
-  release: Config.option(Config.string("SENTRY_RELEASE")),
-  traceSampleRate: Config.option(Config.finite("SENTRY_TRACE_SAMPLE_RATE")),
+  captureErrors: Config.Boolean("SENTRY_CAPTURE_ERRORS").pipe(Config.withDefault(false)),
+  captureTraces: Config.Boolean("SENTRY_CAPTURE_TRACES").pipe(Config.withDefault(false)),
+  productionDsn: Config.option(Config.Redacted("SENTRY_PRODUCTION_DSN")),
+  nonProductionDsn: Config.option(Config.Redacted("SENTRY_NON_PRODUCTION_DSN")),
+  release: Config.option(Config.String("SENTRY_RELEASE")),
+  traceSampleRate: Config.option(Config.Finite("SENTRY_TRACE_SAMPLE_RATE")),
 });
 
 const sentryProjectPathPattern = /^\/\d+$/u;

@@ -30,14 +30,14 @@ const policy = evaluationPolicy(mode);
 const plan = policy.plan;
 
 const program = Effect.gen(function* () {
-  const origin = yield* Config.string("OPENAI_API_URL").pipe(
+  const origin = yield* Config.String("OPENAI_API_URL").pipe(
     Config.withDefault("https://api.openai.com/v1")
   );
   if (policy.startupValidation && origin !== "https://api.openai.com/v1") {
     return yield* new EvaluationFailure({ reason: "unsafe-environment" });
   }
   if (policy.requiresApproval) {
-    const approval = yield* Config.string("FIDY_EVALUATION_APPROVE_FULL");
+    const approval = yield* Config.String("FIDY_EVALUATION_APPROVE_FULL");
     if (approval !== "synthetic-only") {
       return yield* new EvaluationFailure({ reason: "unsafe-environment" });
     }

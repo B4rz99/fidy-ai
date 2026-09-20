@@ -531,7 +531,7 @@ const superviseDisclosureQueue = <E, R>(
 /** Production queue handoff and a bounded, paced startup translation of drained legacy requests. */
 export const ConsentDisclosureQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
     const queue = consentDisclosureQueue;
     const publishPage = Effect.fn(function* (after: Option.Option<PendingConsentExchangeId>) {

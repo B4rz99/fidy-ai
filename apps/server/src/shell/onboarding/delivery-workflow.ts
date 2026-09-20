@@ -194,7 +194,7 @@ export const OnboardingEmailDeliveryWorkflowLive =
 /** Runs native queue consumers that start each transactionally accepted workflow once. */
 export const OnboardingEmailDeliveryQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
     const queue = onboardingEmailDeliveryQueue;
     const publishPendingPage = Effect.fn("OnboardingDelivery.publishPendingPage")(function* (

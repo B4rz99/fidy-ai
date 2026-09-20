@@ -19,9 +19,9 @@ export default defineConfig({
   },
   test: {
     include: ["src/core/**/*.test.ts"],
-    // Keep Vitest 5's isolated mock history and awaited-async-assertion requirement as intentional
-    // suite semantics rather than relying on a future runner default.
+    // Isolate mock call history explicitly rather than relying on Vitest 5's default.
     clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate.
     environment: "node",
     pool: "forks",
     coverage: {

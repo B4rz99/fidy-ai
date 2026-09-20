@@ -11,9 +11,10 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // Vitest 5's cleared mock history and awaited asynchronous assertions are deliberate: rendered
-    // behavior must not inherit spy calls or let assertion failures escape their owning test.
+    // Isolate rendered-behavior mock history explicitly rather than relying on Vitest 5's default.
     clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
+    // must remain attached to their owning test.
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",

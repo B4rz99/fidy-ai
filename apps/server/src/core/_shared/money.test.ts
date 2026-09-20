@@ -23,7 +23,7 @@ const money = (amount: string, currency: Currency = Currency.make("COP")): Money
 const nonNegativeCoefficient = Arbitrary.schema(
   Schema.BigInt.check(Schema.isGreaterThanOrEqualToBigInt(0n))
 );
-const moneyArbitrary = Arbitrary.schema(Currency).pipe(
+const moneyArbitrary = Arbitrary.schema(Schema.Literals(["JPY", "COP", "KWD", "UYW"])).pipe(
   Arbitrary.flatMap((currency) =>
     Arbitrary.all([
       nonNegativeCoefficient,

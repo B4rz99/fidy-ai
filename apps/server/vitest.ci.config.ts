@@ -18,9 +18,10 @@ export default defineConfig({
   test: {
     include: ["src/shell/**/*.test.ts"],
     exclude: ["src/**/*.acceptance.test.ts", ...SLOW_SERVER_TEST_FILES],
-    // Keep Vitest 5's test isolation explicit; suites must not inherit mock history, and every
-    // asynchronous assertion must be awaited so failures remain attached to their test.
+    // Isolate mock call history explicitly rather than relying on Vitest 5's default.
     clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate: failures must remain
+    // attached to their owning test.
     globalSetup: ["./tools/vitest-global-setup-runtime.ts"],
     environment: "node",
     pool: "forks",

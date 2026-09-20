@@ -101,9 +101,10 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.acceptance.test.ts"],
-    // Vitest 5's cleared mock history and awaited asynchronous assertions are intentional here;
-    // acceptance cases must remain isolated and cannot report failures after their test completes.
+    // Isolate acceptance-case mock history explicitly rather than relying on Vitest 5's default.
     clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
+    // must remain attached to their owning acceptance case.
     environment: "node",
     reporter: ["verbose"],
     pool: "forks",

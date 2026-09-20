@@ -5,8 +5,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["tools/observability-compatibility/compatibility.test.ts"],
-    // Preserve Vitest 5's isolated mock history and awaited asynchronous assertion semantics.
+    // Isolate mock call history explicitly rather than relying on Vitest 5's default.
     clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate.
     environment: "node",
     pool: "forks",
     fileParallelism: false,

@@ -671,7 +671,7 @@ const assertCredentialLoaderUse = (
 
 const configuredSecretNames = (source: string): ReadonlyArray<string> => {
   const direct = Array.from(
-    source.matchAll(/Config\.redacted\("([A-Z0-9_]+)"\)/gu),
+    source.matchAll(/Config\.Redacted\("([A-Z0-9_]+)"\)/gu),
     ([, name]) => name
   );
   const syntax = parse(source, { sourceType: "module", plugins: ["typescript"] });

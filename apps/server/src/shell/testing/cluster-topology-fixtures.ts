@@ -6,7 +6,6 @@
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { RunnerAddress, ShardId, type ShardingConfig } from "effect/unstable/cluster";
 import { SqlSchema } from "effect/unstable/sql";
-import { Workflow, type WorkflowEngine } from "effect/unstable/workflow";
 import { MigrationSqlClient, MigrationSqlClientLive } from "./database-harness";
 import {
   clusterLocksTable,
@@ -70,28 +69,6 @@ export const clusterTestRunnerOptions = ({
   runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", port)),
   ...overrides,
 });
-
-const clusterTopologyProbeWorkflowName = "ClusterTopologyProbe";
-
-/**
- * Test Workflow the hard-loss scenario persists on the shard a doomed runner owns but cannot serve.
- * Completion after the SIGKILL is the durable-mailbox recovery signal.
- */
-export const clusterTopologyProbeWorkflow = Workflow.make(clusterTopologyProbeWorkflowName, {
-  payload: { probe: Schema.String },
-  idempotencyKey: ({ probe }) => probe,
-  success: Schema.String,
-});
-
-/** Entity type the durable mailbox stores for the probe workflow; used to assert persisted Work. */
-export const clusterTopologyProbeEntityType = `Workflow/${clusterTopologyProbeWorkflowName}`;
-
-/** A runner that registers this entity can execute and complete the persisted probe. */
-export const clusterTopologyProbeWorkflowLayer: Layer.Layer<
-  never,
-  never,
-  WorkflowEngine.WorkflowEngine
-> = clusterTopologyProbeWorkflow.toLayer(() => Effect.succeed("recovered"));
 
 const clearClusterTableIfPresent = Effect.fn(function* (tableName: string) {
   const sql = yield* MigrationSqlClient;

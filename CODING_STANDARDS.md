@@ -225,6 +225,9 @@ providers require a separate interface with explicit per-chunk and aggregate bud
 
 ## Tests
 
+Every test must protect observable behaviour and catch a plausible defect not already caught by
+another test. Otherwise delete or merge it.
+
 What review looks for:
 
 - **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before
@@ -232,6 +235,13 @@ What review looks for:
   _"Money validation"_.
 - **Exercise the public interface.** Never mock an internal collaborator. Pure exported policy
   checkpoints may be tested directly, but their integration still needs API-seam coverage.
+- **Expected results are independent.** Derive them from the specification or a worked example,
+  never by repeating the production algorithm.
+- **Assert behaviour, not inventory.** Constants, types, exports, and trivial delegation need no
+  runtime test unless they are themselves a caller-visible contract.
+- **Mocks arrange boundary conditions; public outcomes prove behaviour.** Mock calls alone count
+  only when the external interaction is the protocol being tested.
+- **Each case has a distinct failure mode.** Merge redundant examples that detect the same defect.
 - **Fixtures are builders with sensible defaults**, overridden per test with only the fields that
   matter, so a reader sees immediately what the test is about.
 - **Prefer a derived guard over a hand-kept list** wherever the assembled API can supply the

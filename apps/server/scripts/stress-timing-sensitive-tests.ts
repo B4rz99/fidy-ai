@@ -42,10 +42,6 @@ const defaultScenarios: ReadonlyArray<StressScenario> = [
     name: "resumes a persisted retry clock after restart without retrying before its deadline",
   },
   {
-    file: "src/shell/cluster-topology.integration.test.ts",
-    name: "recovers every shard and persisted Work after a runner is killed without finalizers",
-  },
-  {
     file: "src/shell/onboarding/delivery-workflow.integration.test.ts",
     name: "coordinates one Activity across two independent runtimes",
   },

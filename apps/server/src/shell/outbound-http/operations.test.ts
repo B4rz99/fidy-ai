@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { BunCrypto } from "@effect/platform-bun";
-import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import { TestCrypto } from "~/shell/testing/crypto";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import {
   Cause,
@@ -46,36 +45,18 @@ const makeTestOutbound = (
   Layer.build(
     OutboundHttp.layer.pipe(
       Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
-      Layer.provide(BunCrypto.layer),
+      Layer.provide(TestCrypto),
       Layer.provide(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
           ConfigProvider.fromUnknown({
             KAPSO_API_KEY: apiKey,
-            OPENAI_API_KEY: "private-openai-key",
-            MISTRAL_API_KEY: "private-mistral-key",
             RESEND_API_KEY: "re_test_only_resend_key_324000000",
             WOMPI_ENVIRONMENT: "sandbox",
             WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
             WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
             WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
           })
-        )
-      )
-    )
-  ).pipe(Effect.map((context) => Context.get(context, OutboundHttp)));
-
-const makeSentryOutbound = (
-  httpClient: HttpClient.HttpClient,
-  authToken = "private-sentry-token"
-): Effect.Effect<OutboundHttpService, Config.ConfigError, Scope.Scope> =>
-  Layer.build(
-    OutboundHttp.sentryLayer.pipe(
-      Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
-      Layer.provide(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ SENTRY_AUTH_TOKEN: authToken })
         )
       )
     )
@@ -113,7 +94,7 @@ it.effect("keeps the configured Kapso API key redacted while sending it only as 
   })
 );
 
-it.effect("owns Resend destinations, authorization, idempotency, and bodyless retrieval", () =>
+it.effect("owns the Resend delivery destination, authorization, and idempotency", () =>
   Effect.gen(function* () {
     const observed: Array<{
       readonly url: string;
@@ -131,26 +112,14 @@ it.effect("owns Resend destinations, authorization, idempotency, and bodyless re
           body:
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
         });
-        const responseBody = request.url.includes("/attachments/")
-          ? '{"download_url":"https://inbound-cdn.resend.com/signed/image?signature=private"}'
-          : "{}";
-        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(responseBody)));
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       })
     );
-    const receivedEmailId = ResendReceivedEmailId.make("received-1");
-
     yield* outbound.execute({
       _tag: "ResendEmailDelivery",
       idempotencyKey: "delivery-1",
       body: '{"subject":"bounded"}',
     });
-    yield* outbound.execute({ _tag: "ResendReceivedEmail", receivedEmailId });
-    yield* outbound.execute({
-      _tag: "ResendAttachmentDownload",
-      receivedEmailId,
-      attachmentId: "inline/1",
-    });
-
     expect(observed).toEqual([
       {
         url: "https://api.resend.com/emails",
@@ -158,169 +127,8 @@ it.effect("owns Resend destinations, authorization, idempotency, and bodyless re
         idempotencyKey: Option.some("delivery-1"),
         body: '{"subject":"bounded"}',
       },
-      {
-        url: "https://api.resend.com/emails/receiving/received-1",
-        authorization: Option.some("Bearer re_test_only_resend_key_324000000"),
-        idempotencyKey: Option.none(),
-        body: "",
-      },
-      {
-        url: "https://api.resend.com/emails/receiving/received-1/attachments/inline%2F1",
-        authorization: Option.some("Bearer re_test_only_resend_key_324000000"),
-        idempotencyKey: Option.none(),
-        body: "",
-      },
-      {
-        url: "https://inbound-cdn.resend.com/signed/image?signature=private",
-        authorization: Option.none(),
-        idempotencyKey: Option.none(),
-        body: "",
-      },
     ]);
   })
-);
-
-it.effect("owns hosted-inference destinations, credentials, and retained headers", () =>
-  Effect.gen(function* () {
-    const observed: Array<Readonly<{ url: string; authorization: string; body: string }>> = [];
-    const outbound = yield* makeTestOutbound(
-      HttpClient.make((request) => {
-        const body =
-          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
-        observed.push({
-          url: request.url,
-          authorization: new Headers(request.headers).get("authorization") ?? "",
-          body,
-        });
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response("{}", {
-              status: 429,
-              headers: { "retry-after": "5", "x-private-coordinate": "private" },
-            })
-          )
-        );
-      })
-    );
-
-    const openAi = yield* outbound.execute({
-      _tag: "OpenAiInputTokens",
-      body: '{"model":"test"}',
-    });
-    const mistral = yield* outbound.execute({
-      _tag: "MistralChatCompletions",
-      body: '{"messages":[]}',
-    });
-
-    expect(observed).toEqual([
-      {
-        url: "https://api.openai.com/v1/responses/input_tokens",
-        authorization: "Bearer private-openai-key",
-        body: '{"model":"test"}',
-      },
-      {
-        url: "https://api.mistral.ai/v1/chat/completions",
-        authorization: "Bearer private-mistral-key",
-        body: '{"messages":[]}',
-      },
-    ]);
-    expect(openAi.headers).toEqual({ "retry-after": "5" });
-    expect(mistral.headers).toEqual({});
-    expectNotInspected(outbound, "private-openai-key");
-    expectNotInspected(outbound, "private-mistral-key");
-  })
-);
-
-it.effect("rejects an unsafe private Resend download destination before following it", () =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const outbound = yield* makeTestOutbound(
-      HttpClient.make((request) => {
-        requests += 1;
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response('{"download_url":"http://127.0.0.1/private"}')
-          )
-        );
-      })
-    );
-
-    const exit = yield* outbound
-      .execute({
-        _tag: "ResendAttachmentDownload",
-        receivedEmailId: ResendReceivedEmailId.make("received-1"),
-        attachmentId: "inline-1",
-      })
-      .pipe(Effect.exit);
-
-    assert.deepStrictEqual(
-      exit,
-      Exit.fail(
-        new OutboundHttpFailure({
-          reason: "invalid-destination",
-          responseStatus: Option.none(),
-          responseHeaders: {},
-        })
-      )
-    );
-    expect(requests).toBe(1);
-  })
-);
-
-it.effect.each([
-  ["malformed JSON", "not-json"],
-  ["a malformed descriptor", "{}"],
-] as const)("rejects %s from the Resend attachment descriptor", ([, descriptorBody]) =>
-  Effect.gen(function* () {
-    const outbound = yield* makeTestOutbound(
-      HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(descriptorBody)))
-      )
-    );
-
-    const failure = yield* outbound
-      .execute({
-        _tag: "ResendAttachmentDownload",
-        receivedEmailId: ResendReceivedEmailId.make("received-1"),
-        attachmentId: "inline-1",
-      })
-      .pipe(Effect.flip);
-
-    expect(failure).toEqual(
-      new OutboundHttpFailure({
-        reason: "invalid-destination",
-        responseStatus: Option.none(),
-        responseHeaders: {},
-      })
-    );
-  })
-);
-
-it.effect(
-  "returns an unsuccessful Resend attachment descriptor response without following it",
-  () =>
-    Effect.gen(function* () {
-      let requests = 0;
-      const outbound = yield* makeTestOutbound(
-        HttpClient.make((request) => {
-          requests += 1;
-          return Effect.succeed(
-            HttpClientResponse.fromWeb(request, new Response("private", { status: 404 }))
-          );
-        })
-      );
-
-      const response = yield* outbound.execute({
-        _tag: "ResendAttachmentDownload",
-        receivedEmailId: ResendReceivedEmailId.make("received-1"),
-        attachmentId: "inline-1",
-      });
-
-      expect(response.status).toBe(404);
-      expect(requests).toBe(1);
-    })
 );
 
 it.effect("executes only the closed Cloudflare Access operation", () =>
@@ -346,58 +154,15 @@ it.effect("executes only the closed Cloudflare Access operation", () =>
   })
 );
 
-it.effect("loads all operator Sentry account credentials as redacted values", () =>
-  Effect.gen(function* () {
-    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
-    const outbound = yield* makeSentryOutbound(
-      HttpClient.make((request) => {
-        requests.push(request);
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response("[]", {
-              headers: {
-                link: '<https://sentry.io/next>; rel="next"; results="false"',
-                "x-private-coordinate": "private-response-header",
-              },
-            })
-          )
-        );
-      })
-    );
-
-    const response = yield* outbound.execute({
-      _tag: "SentryAccount",
-      resource: {
-        _tag: "ProjectEnvironments",
-        organizationSlug: Redacted.make("private-organization"),
-        projectSlug: Redacted.make("private-project"),
-      },
-    });
-
-    expect(requests).toHaveLength(1);
-    expect(requests[0]?.method).toBe("GET");
-    expect(requests[0]?.url).toBe(
-      "https://sentry.io/api/0/projects/private-organization/private-project/environments/"
-    );
-    expect(requests[0]?.headers.authorization).toBe("Bearer private-sentry-token");
-    expect(response.headers).toEqual({
-      link: '<https://sentry.io/next>; rel="next"; results="false"',
-    });
-  })
-);
-
 it.effect("rejects a destination outside the service authority before transport", () =>
   Effect.gen(function* () {
     let requests = 0;
-    const outbound = yield* makeSentryOutbound(
+    const outbound = yield* makeTestOutbound(
       HttpClient.make((request) => {
         requests += 1;
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
-      }),
-      "private-sentry-token"
+      })
     );
-    expectNotInspected(outbound, "private-sentry-token");
 
     const exit = yield* outbound
       .execute({
@@ -420,7 +185,6 @@ it.effect("rejects a destination outside the service authority before transport"
       )
     );
     expect(requests).toBe(0);
-    expect(String(exit)).not.toContain("private-sentry-token");
     expect(String(exit)).not.toContain("private-support-body");
   })
 );
@@ -435,15 +199,6 @@ it.effect("rejects operational requests from the runtime provider group before t
       })
     );
 
-    const sentryFailure = yield* Effect.flip(
-      outbound.execute({
-        _tag: "SentryAccount",
-        resource: {
-          _tag: "Organization",
-          organizationSlug: Redacted.make("private-organization"),
-        },
-      })
-    );
     const cloudflareFailure = yield* Effect.flip(
       outbound.execute({
         _tag: "CloudflareAccessSupportRecovery",
@@ -451,7 +206,6 @@ it.effect("rejects operational requests from the runtime provider group before t
       })
     );
 
-    expect(sentryFailure.reason).toBe("transport-failed");
     expect(cloudflareFailure.reason).toBe("transport-failed");
     expect(requests).toBe(0);
   })
@@ -634,7 +388,7 @@ it.effect("does not follow redirects or propagate trace coordinates to Kapso", (
     expect(response.status).toBe(302);
     expect(redirectOptions).toEqual([Option.some("error")]);
     expect(Array.from(propagatedHeaders.keys())).not.toEqual(
-      expect.arrayContaining(["b3", "baggage", "sentry-trace", "traceparent", "tracestate"])
+      expect.arrayContaining(["b3", "baggage", "traceparent", "tracestate"])
     );
     expect(spans.map((span) => span.name)).toEqual(["safe.parent", "provider.request"]);
     const recorded = spans
@@ -683,39 +437,6 @@ const coordinateBearingReason = (
       return new HttpClientError.EmptyBodyError({ ...properties, response });
   }
 };
-
-it.effect("projects a Sentry transport failure without credentials or account locators", () =>
-  Effect.gen(function* () {
-    const authToken = "private-sentry-token-sentinel";
-    const organization = "private-sentry-organization-sentinel";
-    const outbound = yield* makeSentryOutbound(
-      HttpClient.make((request) =>
-        Effect.fail(
-          new HttpClientError.HttpClientError({
-            reason: coordinateBearingReason("TransportError", request),
-          })
-        )
-      ),
-      authToken
-    );
-    expectNotInspected(outbound, authToken);
-
-    const exit = yield* outbound
-      .execute({
-        _tag: "SentryAccount",
-        resource: {
-          _tag: "Organization",
-          organizationSlug: Redacted.make(organization),
-        },
-      })
-      .pipe(Effect.exit);
-    const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
-
-    expect(rendered).not.toContain(authToken);
-    expect(rendered).not.toContain(organization);
-    expect(rendered).not.toContain("transport-private-sentinel");
-  })
-);
 
 it.effect.each(transportFailureTags)(
   "projects the $ failure without transport coordinates",

@@ -7,7 +7,6 @@ const configuredNamespace = (webOrigin: string): ConfigProvider.ConfigProvider =
     env: {
       PUBLIC_WEB_ORIGIN: webOrigin,
       PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
-      INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
     },
   });
 
@@ -40,7 +39,6 @@ it.effect("fails closed when the configured web origin is missing", () =>
     const provider = ConfigProvider.fromEnv({
       env: {
         PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
-        INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
       },
     });
     const exit = yield* Effect.exit(externalEndpoints.parse(provider));

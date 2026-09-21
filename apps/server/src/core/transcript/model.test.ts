@@ -18,7 +18,7 @@ import {
 
 const decodeTranscriptText = Schema.decodeUnknownResult(Schema.toType(TranscriptText));
 
-it("rejects Transcript text that PostgreSQL JSONB cannot retain", () => {
+it("rejects Transcript text that the JSON wire format cannot retain", () => {
   expect(Result.isFailure(decodeTranscriptText("contains\u0000nul"))).toBe(true);
   expect(Result.isFailure(decodeTranscriptText("unpaired-high-\ud800"))).toBe(true);
   expect(Result.isFailure(decodeTranscriptText("unpaired-low-\udc00"))).toBe(true);
@@ -48,7 +48,7 @@ it("rejects unpersistable or oversized canonical tool evidence", () => {
   expect(Result.isFailure(decode("é".repeat(500_000)))).toBe(true);
 });
 
-it("rejects UUID spellings PostgreSQL would canonicalize", () => {
+it("rejects UUID spellings that would be canonicalized", () => {
   const uppercase = "F1D1A000-0000-4000-8000-000000000301";
   expect(Result.isFailure(Schema.decodeResult(TranscriptEntryId)(uppercase))).toBe(true);
   expect(Result.isFailure(Schema.decodeResult(TranscriptTurnId)(uppercase))).toBe(true);

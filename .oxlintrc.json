@@ -161,10 +161,7 @@
     },
     // Vitest discovers these standalone configurations through its required default-export contract.
     {
-      "files": [
-        "apps/server/tools/contracts/vitest.config.ts",
-        "apps/server/vitest.slow.config.ts"
-      ],
+      "files": ["apps/server/tools/contracts/vitest.config.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -219,35 +216,6 @@
       "rules": {
         "typescript/explicit-function-return-type": "off",
         "typescript/no-unsafe-assignment": "off"
-      }
-    },
-    // This integration scenario intentionally proves admission, privacy, retry, extraction, and
-    // retention as one stateful lifecycle; splitting its statements would duplicate expensive setup.
-    {
-      "files": ["apps/server/src/shell/ingestion/email-forwarding.test.ts"],
-      "rules": {
-        "max-statements": "off"
-      }
-    },
-    // A migration is one atomic, ordered DDL program; splitting it solely to hide its statement
-    // count would obscure ordering without creating a reusable module boundary.
-    {
-      "files": ["apps/server/src/shell/database/internal/migrations/0043-email-ingestion.ts"],
-      "rules": {
-        "max-statements": "off"
-      }
-    },
-    // Svix and Sharp expose package roots that resolve to `.mjs`; the global `.mjs` exception then
-    // incorrectly asks source imports to append an extension that is not part of either exports map.
-    {
-      "files": [
-        "apps/server/src/shell/ingestion/email-forwarding.test.ts",
-        "apps/server/src/shell/ingestion/forwarded-email-ingestion.ts",
-        "apps/server/src/shell/ingestion/resend-receiving-client.ts",
-        "apps/server/src/shell/testing/sign-resend-webhook.ts"
-      ],
-      "rules": {
-        "import/extensions": "off"
       }
     },
     // The two tooling locations below also have no types. dependency-cruiser
@@ -398,9 +366,7 @@
                   "effect/unstable/httpapi",
                   "effect/unstable/httpapi/**",
                   "effect/unstable/http",
-                  "effect/unstable/http/**",
-                  "@effect/platform-bun",
-                  "@effect/platform-bun/**"
+                  "effect/unstable/http/**"
                 ],
                 "message": "core may not import the HTTP modules. A canonical operation's declaration — path, status code, required scope, cost class — is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md §4)."
               }
@@ -460,10 +426,6 @@
       "files": [
         "apps/server/vitest.config.ts",
         "apps/server/vitest.core.config.ts",
-        "apps/server/vitest.ci.config.ts",
-        "apps/server/vitest.acceptance.config.ts",
-        "apps/server/vitest.compatibility.config.ts",
-        "apps/server/vitest.durable-compatibility.config.ts",
         "apps/server/vitest.email-interpretation.config.ts",
         "apps/server/stryker.config.mjs",
         "apps/web/.dependency-cruiser.mjs",

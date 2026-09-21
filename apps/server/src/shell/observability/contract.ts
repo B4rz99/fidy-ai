@@ -44,11 +44,9 @@ export const TelemetryRegistry = {
     "api",
     "agent",
     "onboarding",
+    "email",
     "whatsapp",
-    "postgres",
     "kapso",
-    "mistral",
-    "openai",
     "resend",
     "wompi",
     "ci",
@@ -71,16 +69,14 @@ export const TelemetryRegistry = {
     "whatsapp.disclosureResume",
     "whatsapp.disclosureStart",
     "whatsapp.disclosureEvidence",
-    "resend.forwardedEmailHandoff",
-    "postgres.repositoryOperation",
-    "postgres.compatibilityProbe",
+    "email.forwardedEmailHandoff",
     "task.auditRetention",
     "task.emailAuthenticationRetention",
     "task.onboardingRetention",
     "task.supportRecoveryRetention",
     "task.whatsappRetention",
     "task.billingReconciliationMaintenance",
-    "task.durableQueueHealth",
+    "task.queueHealth",
     "provider.request",
     "observability.accountSmoke",
     "browserLogin.redeemPairing",
@@ -116,7 +112,7 @@ export const TelemetryRegistry = {
     "disclosure_rejected",
     "disclosure_not_current",
   ],
-  provider: ["cloudflare-access", "kapso", "mistral", "openai", "resend", "sentry", "wompi"],
+  provider: ["cloudflare-access", "kapso", "resend", "wompi"],
   workKind: [
     ...TelemetryWorkKindGroup.http,
     ...TelemetryWorkKindGroup.queue,
@@ -142,9 +138,9 @@ export const TelemetryRegistry = {
     "POST /web/pairings/redeem",
     "POST /internal/support-recovery",
   ],
-  repositoryOperation: ["capture_transaction", "compatibility_probe"],
-  databaseSystem: ["postgresql"],
-  model: ["gpt_5_6_luna", "hosted_inference"],
+  repositoryOperation: ["capture_transaction"],
+  databaseSystem: ["d1"],
+  model: ["workers_ai", "hosted_inference"],
   spanOperation: [
     "http.server",
     "http.client",
@@ -633,7 +629,7 @@ export const ProjectedFinalSpan = Schema.Struct({
 });
 export type ProjectedFinalSpan = typeof ProjectedFinalSpan.Type;
 
-/** A complete metadata-only transaction reconstructed before the Sentry SDK boundary. */
+/** A complete metadata-only transaction reconstructed before the telemetry export boundary. */
 export const ProjectedTransaction = Schema.Struct({
   type: Schema.Literal("transaction"),
   transaction: ProjectedSpanName,

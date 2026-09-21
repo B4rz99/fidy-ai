@@ -1,6 +1,3 @@
-// Node crypto is required because Effect Crypto does not expose constant-time comparison.
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { timingSafeEqual } from "node:crypto";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import {
   Data,
@@ -175,7 +172,11 @@ const authenticatesDigest = (signature: string, expected: Uint8Array): boolean =
   const decoded = Encoding.decodeHex(signature);
   if (Result.isFailure(decoded)) return false;
   const provided = decoded.success;
-  return provided.byteLength === hmacSha256Bytes && timingSafeEqual(provided, expected);
+  let difference = provided.byteLength ^ expected.byteLength;
+  for (let index = 0; index < hmacSha256Bytes; index += 1) {
+    difference |= (provided[index] ?? 0) ^ (expected[index] ?? 0);
+  }
+  return difference === 0;
 };
 
 const normalizePhoneNumber = (
@@ -197,7 +198,20 @@ const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
   if (secret.length < minimumWebhookSecretLength) {
     return yield* new InvalidKapsoSignature();
   }
-  const expected = new Bun.CryptoHasher("sha256", secret).update(input.rawBody).digest();
+  const expected = yield* Effect.tryPromise({
+    try: () =>
+      globalThis.crypto.subtle
+        .importKey(
+          "raw",
+          new TextEncoder().encode(secret),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["sign"]
+        )
+        .then((key) => globalThis.crypto.subtle.sign("HMAC", key, Uint8Array.from(input.rawBody)))
+        .then((digest) => new Uint8Array(digest)),
+    catch: () => new InvalidKapsoSignature(),
+  });
   if (!authenticatesDigest(input.signature, expected)) {
     return yield* new InvalidKapsoSignature();
   }

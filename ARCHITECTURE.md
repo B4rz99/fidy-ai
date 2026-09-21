@@ -4,83 +4,76 @@
 
 ## 1. System shape
 
-The repository root is a private Bun workspace. It owns the single lockfile, CI, shared compiler
-policy, repository-wide quality policy, and stable orchestration commands. Root commands deliberately
-delegate application work to its owning workspace package: this gives contributors and automation one
-repository entrypoint while keeping runtime dependencies and behavior inside the application that
-owns them.
+The repository root is a private Bun workspace. It owns the lockfile, CI, compiler policy, quality
+policy, and stable orchestration commands. Root commands delegate application work to the owning
+workspace package.
 
-The workspace contains exactly two application packages:
+The workspace contains two application packages:
 
-- [`@fidy/server`](apps/server/ARCHITECTURE.md) is the API, domain, persistence, hosted-agent, and
-  provider application.
-- [`@fidy/web`](apps/web/ARCHITECTURE.md) is the portable React/Vite browser application.
+- [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operation
+  declarations, schemas, and provider-neutral shell contracts. It is not a process runtime.
+- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and the static
+  Cloudflare artifact.
 
-The directory boundary is intentional. It is enforced by lint and dependency checks so a naming
-convention cannot be mistaken for an application boundary. A feature may touch both applications;
-that cost is accepted in exchange for a structural boundary that survives refactoring and independent
-agent sessions.
+Cloudflare is the production authority. The intended runtime adapters use Worker entrypoints with D1,
+Durable Objects, Queues, Workflows, R2, Workers AI, and Email Workers as appropriate. Until an adapter
+is present, its published server seam is unavailable rather than backed by a local process, an
+in-memory substitute, or a removed infrastructure authority.
 
 ## 2. Cross-application contract
 
 The server declares the canonical operation surface and owns its OpenAPI and complete reflected
 operation-policy artifacts under `apps/server/contracts/`. Those artifacts are deterministic review
-evidence, never another declaration. The server exposes one browser-safe `@fidy/server/client`
-declaration seam. The web application derives its typed Effect Atom client from that declaration and
-never owns a copied contract or imports server implementations.
+evidence, never another declaration. The web application derives its typed client from the
+server-owned declaration and never owns a copied contract or imports server implementations.
 
 The root TypeScript project-reference build expresses the server-before-web declaration dependency.
 The mandatory root gate checks artifact freshness and compares the server-owned artifacts with the
 pull-request base. A policy break requires an acknowledgement bound to the exact base digest,
 candidate digest, finding set, and coordinated rollout issue. See
-[Contract compatibility](docs/contract-compatibility.md) for the artifact lifecycle and the one-time
-base bootstrap used by the architecture change that introduced it.
+[Contract compatibility](docs/contract-compatibility.md).
 
 Every stable-User domain API and agent surface derives from the server's canonical operation
-definition. A shape that differs from a canonical shape is derived from it rather than maintained as
-a parallel contract. A proof-bearing credential-bootstrap API that has no stable User yet is the
-narrow exception: it is declared once by the server from core schemas, stays unavailable to hosted
-agents, and joins the canonical surface only after proof exchange establishes a stable User.
+definition. A proof-bearing credential-bootstrap API with no stable User is the narrow exception and
+joins canonical authority only after proof exchange establishes a stable User.
 
 ## 3. Production topology
 
-[ADR 0018](docs/adr/0018-independent-production-deployments.md) makes the application boundary a
-runtime boundary. Railway builds and runs only the server image at `api.fidyapp.com`; Cloudflare serves
-only the validated static web output at `fidyapp.com`. Cloudflare has no Worker entrypoint and the API
-has no web route or static-file route.
+Cloudflare serves the immutable web artifact at `fidyapp.com`. The artifact is static-only: it
+contains the browser shell, hashed assets, headers, and deployment metadata, and never contains
+server source, source maps, or secrets. The checked-in Wrangler configuration is the sole web
+runtime configuration.
 
-GitHub Actions is the sole release coordinator. A trunk release selects one immutable source commit,
-deploys it through Railway's connected-repository API, and verifies that public health reports its
-full Git revision and canonical contract digest. Only then does it build an identically marked web
-artifact, upload one immutable Cloudflare version, recheck trunk head, and promote that exact version.
+GitHub Actions is the release coordinator. A trunk release checks out one exact source revision,
+builds and validates one artifact, uploads one immutable Cloudflare version, rechecks the current
+trunk revision, and promotes only that uploaded version. If trunk advances before promotion, the
+release fails closed and leaves the prior version active. Provider-controlled source deployments are
+not used.
 
-Releases are serialized without cancelling an active deployment. A server failure stops before web
-work. A web failure or superseded release leaves the prior Cloudflare version active; the newly
-successful server remains temporarily compatible under the documented add/use/remove rollout. No
-cross-provider rollback transaction exists. Provider source-triggered deployments are disabled.
-[The production runbook](docs/operations/production-releases.md) owns configuration, executable
-procedures, diagnostics, and recovery.
+The server package does not start a local production listener. Cloudflare API, storage, asynchronous
+execution, email-ingress, and hosted-inference adapters are separate seams; an unimplemented seam
+returns its typed unavailable result. No deployment step may reintroduce a process-local database,
+queue, lock, workflow, or hosted-model fallback.
 
 ## 4. Browser-to-server authentication boundary
 
 Browser login begins with a browser-held private verifier. WhatsApp approval, verified email, or
-support recovery may approve the pairing for the same stable User, but none can establish a session
-without that verifier. One approved pairing bootstraps one stable-User web session. The server owns
-proof verification and session authority; the web owns keeping browser-private material out of URLs,
-public references, and unrelated application state.
+support recovery may approve a pairing for the same stable User, but none can establish a session
+without that verifier. One approved pairing bootstraps one stable-User web session. The server-owned
+contract defines proof verification and session authority; the web owns keeping browser-private
+material out of URLs, public references, and unrelated application state.
 
-The web consumes only canonical API paths. The API process never serves browser routes or application
-shell fallbacks, and the static host never exposes canonical API, OpenAPI, or authentication
-implementations.
+The web consumes only canonical API paths. The static Cloudflare host never exposes server source,
+OpenAPI implementation, or an unowned API fallback. Browser tests use explicit HTTP fixtures at the
+adapter boundary and do not imply that a removed local server is a production authority.
 
 ## 5. Cross-application acceptance
 
-The PostgreSQL-backed browser acceptance runs the production web mode and checked-in Cloudflare
-header policy on a dedicated HTTPS origin, with the real API on a second HTTPS origin. It probes shell
-fallbacks, hashed assets, cache and security headers, OpenAPI/canonical/web-auth ownership, then
-executes pairing, one-time redemption, session retention and revocation, and real Categories and
-Transactions presentation. The loopback-only acceptance control may arrange database state but does
-not replace those public HTTP paths.
+The browser acceptance builds the production web mode and checks the checked-in Cloudflare header
+policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cache and security
+headers, and browser proof-handling behavior. API responses are explicit test fixtures; they do not
+stand in for the future Worker/D1/DO/Queue/Workflow/R2/Workers AI integration gates.
 
-Application-local test seams belong to the owning application architecture. This root seam proves the
-contract between independently built and deployed applications.
+Application-local test seams belong to the owning application architecture. Portable core, schema,
+security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests
+whose only owner was a removed process runtime are deleted rather than replaced with local fakes.

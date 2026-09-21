@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { BunRuntime } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
 
 const effectPrereleaseVersion = /^4\.0\.0-(?:beta|rc)\.\d+$/u;
@@ -177,4 +176,7 @@ const main = Effect.gen(function* () {
   );
 });
 
-BunRuntime.runMain(main);
+Effect.runPromise(main).catch((error: unknown) => {
+  process.stderr.write(`${String(error)}\n`);
+  process.exitCode = 1;
+});

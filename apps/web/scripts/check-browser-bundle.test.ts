@@ -16,7 +16,7 @@ it("rejects a forbidden runtime dependency reachable from the web entrypoint", a
     );
     await Bun.write(
       join(fixtureRoot, "src/features/public-site/feature.tsx"),
-      'import { BunRuntime } from "@effect/platform-bun";\n\nexport const PublicSiteFeature = BunRuntime;\n'
+      'import { readFileSync } from "node:fs";\n\nexport const PublicSiteFeature = readFileSync;\n'
     );
 
     await expect(
@@ -26,7 +26,7 @@ it("rejects a forbidden runtime dependency reachable from the web entrypoint", a
         webRoot: fixtureRoot,
         workspaceRoot,
       })
-    ).rejects.toThrow(/Browser-incompatible runtime modules[\s\S]*@effect\/platform-bun/u);
+    ).rejects.toThrow(/Browser-incompatible runtime modules[\s\S]*node:fs/u);
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
   }

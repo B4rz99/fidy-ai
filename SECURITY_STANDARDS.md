@@ -28,7 +28,7 @@ invariants.
   policy own them.
 - Findings already produced deterministically by an applicable automated gate. A concrete bypass
   of the intended gate remains reviewable.
-- Surviving a total compromise of Kapso, Resend, Wompi, OpenAI, Railway, or another provider.
+- Surviving a total compromise of Kapso, Resend, Wompi, Cloudflare, or another provider.
 
 ---
 
@@ -54,7 +54,7 @@ invariants.
 - An unauthenticated internet attacker.
 - A User, or one of their agents, attempting to reach another User's data or operations.
 - A holder of a stolen, revoked, expired, replayed, or under-scoped bearer credential.
-- A sender forging or replaying Kapso, Resend, Wompi, or queued work.
+- A sender forging or replaying Kapso, Cloudflare Email, Wompi, or queued work.
 - Malicious instructions embedded in messages, emails, statements, images, receipts, Memories, or
   provider/model output.
 - Accidental disclosure through logs, errors, URLs, browser state, transcripts, caches, or outbound
@@ -66,11 +66,11 @@ invariants.
 Every crossing is untrusted regardless of its TypeScript type or vendor:
 
 - public HTTP, the SPA, browser-login pairing, and PATPairing flows;
-- Kapso, Resend, Wompi, OpenAI, and other outbound or callback seams;
+- Kapso, Resend, Wompi, Workers AI, and other outbound or callback seams;
 - PAT, hosted-agent, CLI, MCP, and typed-client calls;
 - LLM prompts, tool requests, structured output, and generated presentation content;
 - emails, PDFs, CSV/XLSX files, images, voice transcripts, and screenshots;
-- PostgreSQL rows and JSONB, queue payloads, schedules, migrations, and environment configuration.
+- D1 rows and JSON values, queue payloads, schedules, migrations, and environment configuration.
 
 ### Data handling classes
 
@@ -113,9 +113,9 @@ eligible caller class for account-security operations. It governs HTTP
 authorization, MCP/tool visibility, CLI availability, hosted-agent calls, and suggested operations.
 The hosted agent uses the same authorization path as the User's own agents.
 
-A non-request path that reads User data activates the architecture's RLS tripwire. Its diff must
-resolve that decision and prove isolation beyond the request-derived API test. Queue work, caches,
-schedules, retries, and model context must not mix Users.
+A non-request path that reads User data crosses the private data boundary. Its diff must prove
+isolation beyond the request-derived API test. Queue work, caches, schedules, retries, and model
+context must not mix Users.
 
 **Evidence:** trace the subject and policy from entry point through handler and repository; inspect
 all object-id reads and writes; verify an under-scoped caller cannot invoke or discover the
@@ -308,8 +308,8 @@ loading, debug output, or request/provider/model capture.
 **Invariant:** logs are allowlisted metadata, never broad objects later redacted. Request and
 response bodies, authorization material, raw provider payloads, financial content, transcripts,
 model prompts/responses, one-time links, and Secrets do not enter logs. Errors expose only the
-canonical failure contract, never those values, stacks, SQL, parser dumps, provider bodies, or
-internal topology.
+canonical failure contract, never those values, stacks, database statements, parser dumps, provider
+bodies, or internal topology.
 
 Every canonical call remains attributable through a metadata-only AuditLogEntry containing the
 stable subject, token identity where applicable, operation, outcome, and time—never the body.
@@ -326,7 +326,7 @@ trace a Secret's lifetime; test that evidence cannot be rewritten through ordina
 paths.
 
 **Violation examples:** logging a decoded Transaction for convenience; returning a raw Effect or
-SQL error; placing a provider credential in generated OpenAPI; upserting a revocation over the
+database error; placing a provider credential in generated OpenAPI; upserting a revocation over the
 original grant.
 
 ### 9. Browser, API, and runtime exposure

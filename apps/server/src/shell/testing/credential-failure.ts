@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { expect } from "@effect/vitest";
 import { Cause, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 
@@ -25,7 +26,7 @@ export const exitFailure = <A, E>(exit: Exit.Exit<A, E>): Effect.Effect<E> =>
  */
 export const renderedFailure = (failure: unknown): Effect.Effect<string, Schema.SchemaError> =>
   Effect.map(Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(failure), (serialized) =>
-    [String(failure), Bun.inspect(failure), serialized].join("\n")
+    [String(failure), inspect(failure), serialized].join("\n")
   );
 
 /**
@@ -33,6 +34,6 @@ export const renderedFailure = (failure: unknown): Effect.Effect<string, Schema.
  * Secrets, so credential evidence covers service inspection as well as serialized failures.
  */
 export const expectNotInspected = (value: unknown, ...secrets: ReadonlyArray<string>): void => {
-  const inspected = Bun.inspect(value);
+  const inspected = inspect(value);
   for (const secret of secrets) expect(inspected).not.toContain(secret);
 };

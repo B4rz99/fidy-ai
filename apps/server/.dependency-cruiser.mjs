@@ -81,7 +81,6 @@ export default {
         "layer. Move the caller to the owner's contract.ts or operations.ts interface.",
       from: {
         path: "^src/(core|shell)/([^/]+)/",
-        pathNot: "^src/shell/testing/telemetry-harness\\.ts$",
       },
       to: {
         path: "^src/(core|shell)/[^/]+/internal/",
@@ -98,44 +97,12 @@ export default {
         "(apps/server/ARCHITECTURE.md §3).",
       from: {
         path:
-          "^src/shell/(agent/(openai|mistral-conformance)\\.test\\.ts|" +
-          "agent/__probe-[0-9]+-provider-raw-http/probe\\.test\\.ts|" +
+          "^src/shell/(agent/__probe-[0-9]+-provider-raw-http/probe\\.test\\.ts|" +
           "channels/whatsapp/kapso-client\\.test\\.ts|" +
-          "email-authentication/delivery\\.test\\.ts|" +
-          "ingestion/resend-receiving-client\\.test\\.ts|" +
-          "observability/sentry-account-reader\\.test\\.ts|" +
           "subscription/wompi-(billing-)?client\\.test\\.ts)$",
       },
       to: {
         path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
-      },
-    },
-    {
-      name: "provider-commands-import-raw-http",
-      severity: "error",
-      comment:
-        "An external-provider operational command imported Effect's raw HTTP client instead of " +
-        "production composition from shell/outbound-http/runtime.ts (apps/server/ARCHITECTURE.md §3).",
-      from: {
-        path:
-          "^scripts/(evaluate-es-co-openai|reconcile-wompi-enrollment-runtime|" +
-          "verify-mistral-token-counts|verify-sentry-account-runtime|" +
-          "verify-wompi-sandbox-source)\\.ts$",
-      },
-      to: {
-        path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
-      },
-    },
-    {
-      name: "telemetry-harness-imports-non-observability-internal",
-      severity: "error",
-      comment:
-        "The deliberate broad telemetry harness may reach only Observability internals, never " +
-        "another owner's private implementation.",
-      from: { path: "^src/shell/testing/telemetry-harness\\.ts$" },
-      to: {
-        path: "^src/(core|shell)/[^/]+/internal/",
-        pathNot: "^src/shell/observability/internal/",
       },
     },
     {
@@ -223,11 +190,7 @@ export default {
         "role visible in its filename.",
       from: {
         path: "^(scripts|tools)/",
-        pathNot: [
-          "(?:runtime|harness)\\.ts$",
-          "^scripts/(evaluate-es-co-openai|verify-mistral-token-counts|" +
-            "verify-wompi-sandbox-source)\\.ts$",
-        ],
+        pathNot: ["(?:runtime|harness)\\.ts$"],
       },
       to: { path: "^src/(core|shell)/[^/]+/runtime\\.ts$" },
     },
@@ -307,43 +270,6 @@ export default {
       to: { path: "^src/shell/browser-login/repo\\.ts$" },
     },
     {
-      name: "adapter-imports-handler-adapter",
-      severity: "error",
-      comment:
-        "An HTTP handler or canonical registry imported an HTTP handler adapter. Both are adapters: " +
-        "they delegate to reusable slice modules rather than composing one another. Import the " +
-        "owning queries, mutations, or named coordination module instead (ARCHITECTURE.md §4).",
-      from: {
-        path:
-          "^src/shell/([^/]+/handlers\\.ts|" +
-          "_shared/canonical-(mutation|operation)-registry\\.ts|" +
-          "_shared/__probe-[^/]+/canonical-operation-registry\\.ts)$",
-      },
-      to: { path: "^src/shell/[^/]+/handlers\\.ts$" },
-    },
-    {
-      name: "adapter-reaches-slice-persistence",
-      severity: "error",
-      comment:
-        "An HTTP handler or a canonical registry imported a slice repo directly. Import the " +
-        "slice's queries.ts or mutations.ts instead, so one operation cannot answer differently " +
-        "over HTTP and under hosted Turn authority (ADR 0004).",
-      from: {
-        path: "^src/shell/([^/]+/handlers\\.ts|_shared/canonical-(mutation|operation)-registry\\.ts)$",
-      },
-      to: { path: "^src/shell/[^/]+/repo\\.ts$" },
-    },
-    {
-      name: "entrypoint-is-imported",
-      severity: "error",
-      comment:
-        "Something imported src/main.ts. The entrypoint is where the program runs and " +
-        "nothing else (ARCHITECTURE.md §1): importing it means running it as a side effect " +
-        "of a build. Whatever you need from it belongs in a layer under shell/.",
-      from: { path: "^(src|scripts|tools)/" },
-      to: { path: "^src/main\\.ts$" },
-    },
-    {
       name: "hosted-inference-orchestration-imports-provider",
       severity: "error",
       comment:
@@ -354,48 +280,9 @@ export default {
         path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(memory-policy\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
-        path: "^(src/shell/hosted-inference/internal/openai\\.ts|(^|.*/)node_modules/@effect/ai-openai/|(^|.*/)node_modules/js-tiktoken/|(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer|OpenAiStructuredOutput))",
+        path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",
         dependencyTypesNot: ["type-only"],
       },
-    },
-    {
-      name: "agent-imports-provider-wire-codec",
-      severity: "error",
-      comment:
-        "Agent bindings imported a provider wire codec. Provider framing and response decoding " +
-        "belong inside HostedInference internals (ADR 0014).",
-      from: {
-        path: "^src/shell/agent/((toolkit|agent-operation-binding)\\.ts|__probe-.*hosted-provider/wire\\.ts)$",
-      },
-      to: { path: "(^|.*/)node_modules/effect/.*/unstable/ai/OpenAiStructuredOutput" },
-    },
-    {
-      name: "continuity-reached-outside-hosted-runtime",
-      severity: "error",
-      comment:
-        "Conversation Continuity, Hosted Agent Session, and Transcript operations belong to the " +
-        "hosted runtime, whose public seam is AgentService.handleMessage (ADR 0019). Import them " +
-        "only from src/shell/transcript, agent-service.ts, or a test under src/shell/agent; " +
-        "type-only imports and transcript/repo.ts stay open.",
-      from: {
-        path: "^src/",
-        pathNot:
-          "^src/shell/transcript/|^src/shell/agent/agent-service\\.ts$|^src/shell/agent/.*\\.test\\.ts$",
-      },
-      to: {
-        path: "^src/shell/transcript/(conversation-continuity|hosted-agent-session|transcript-service)\\.ts$",
-        dependencyTypesNot: ["type-only"],
-      },
-    },
-    {
-      name: "sentry-imported-outside-observability",
-      severity: "error",
-      comment:
-        "A module outside src/shell/observability imported Sentry. Telemetry is one metadata-only " +
-        "shell seam: callers supply its closed protocol rather than gaining SDK event, context, " +
-        "breadcrumb, attachment, or request construction capability (issue #106).",
-      from: { path: "^src/", pathNot: "^src/shell/observability/" },
-      to: { path: "(^|.*/)node_modules/@sentry/", dependencyTypes: ["npm"] },
     },
     {
       name: "cycle",

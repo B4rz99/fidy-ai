@@ -4,17 +4,7 @@ import { Option } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
-const verifyGroups = [
-  "static",
-  "builds",
-  "unit",
-  "browser",
-  "server",
-  "acceptance",
-  "quality",
-  "mutation",
-  "image",
-] as const;
+const verifyGroups = ["static", "builds", "unit", "browser", "mutation"] as const;
 type VerifyGroup = (typeof verifyGroups)[number];
 
 type Check = {
@@ -76,21 +66,9 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
   env: Bun.env,
 });
 
-const coreEnvironment = { ...Bun.env };
-delete coreEnvironment.DATABASE_URL;
-delete coreEnvironment.MIGRATION_DATABASE_URL;
 const gitRevision = new TextDecoder()
   .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
   .trim();
-const serverShard = Option.fromUndefinedOr(Bun.env.SERVER_TEST_SHARD);
-const serverTestCommand = [
-  "bun",
-  "run",
-  "--cwd",
-  "apps/server",
-  "test:ci",
-  ...(Option.isSome(serverShard) ? ["--", `--shard=${serverShard.value}`] : []),
-];
 
 const checks: Array<Check> = [
   {
@@ -123,9 +101,7 @@ const checks: Array<Check> = [
   ]),
   rootCheck("static", "Effect dependency family", ["bun", "run", "check:effect-family"]),
   rootCheck("static", "Dependency policy", ["bun", "run", "lint:dependencies"]),
-  rootCheck("static", "Migration ids", ["bun", "run", "check:migration-ids"]),
   rootCheck("static", "Credential path evidence", ["bun", "run", "check:credential-evidence"]),
-  rootCheck("builds", "Server production build", ["bun", "run", "build:production"]),
   {
     ...rootCheck("builds", "Production web build", [
       "bun",
@@ -137,11 +113,9 @@ const checks: Array<Check> = [
     env: { ...Bun.env, RELEASE_GIT_SHA: gitRevision },
   },
   rootCheck("builds", "Portable web build", ["bun", "run", "build"]),
-  // Preserve the core tier's proof that decisions need no database, even when the complete CI gate
-  // has PostgreSQL configured for higher-seam tests.
+  // Preserve the core tier's proof that business decisions need no platform services.
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
-    env: coreEnvironment,
   },
   rootCheck("unit", "Notification-email interpretation tests", [
     "bun",
@@ -175,59 +149,6 @@ const checks: Array<Check> = [
 
 if (Bun.env.PR_TITLE !== undefined && groupIsSelected("static")) {
   checks.push(rootCheck("static", "PR title", ["bun", "scripts/check-pr-title.ts"]));
-}
-
-const databaseGroups = new Set<VerifyGroup>(["server", "acceptance", "quality"]);
-const databaseConfigured =
-  Bun.env.DATABASE_URL !== undefined && Bun.env.MIGRATION_DATABASE_URL !== undefined;
-const runsDatabaseGroup = Option.isNone(requestedGroup) || databaseGroups.has(requestedGroup.value);
-
-if (runsDatabaseGroup) {
-  if (databaseConfigured) {
-    checks.push(
-      rootCheck("server", "Server tests", serverTestCommand),
-      rootCheck("acceptance", "WhatsApp acceptance", ["bun", "run", "test:acceptance"]),
-      rootCheck("acceptance", "Acceptance coverage ratchet", [
-        "git",
-        "diff",
-        "--exit-code",
-        "--",
-        "apps/server/vitest.acceptance.config.ts",
-      ])
-    );
-  } else {
-    process.stdout.write(
-      "Database-backed tests are not applicable: set DATABASE_URL and MIGRATION_DATABASE_URL to include them.\n"
-    );
-  }
-}
-
-const qualityRequested = Option.isSome(requestedGroup) && requestedGroup.value === "quality";
-if (databaseConfigured && (qualityRequested || Option.isNone(requestedGroup))) {
-  checks.push(
-    {
-      group: "quality",
-      label: "Install CRAP analyzer",
-      command: ["bun", "install", "--frozen-lockfile"],
-      cwd: `${workspaceRoot}/tools/crap`,
-      env: Bun.env,
-    },
-    rootCheck("quality", "CRAP parser preflight", ["bun", "tools/crap/preflight.ts"]),
-    rootCheck("quality", "Coverage and CRAP thresholds", ["bun", "run", "test:quality"]),
-    rootCheck("quality", "Observability compatibility", [
-      "bun",
-      "run",
-      "test:observability-compatibility",
-    ])
-  );
-}
-
-if (groupIsSelected("image")) {
-  if (Bun.which("docker") !== null) {
-    checks.push(rootCheck("image", "Production image", ["bun", "run", "check:production-image"]));
-  } else {
-    process.stdout.write("Production image is not applicable: docker is unavailable.\n");
-  }
 }
 
 const selectedChecks = checks.filter(({ group }) => groupIsSelected(group));

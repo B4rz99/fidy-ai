@@ -12,7 +12,6 @@ const TestPublicNamespace = ConfigProvider.fromEnv({
   env: {
     PUBLIC_WEB_ORIGIN: "https://fidyapp.com",
     PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
-    INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
   },
 });
 

@@ -30,25 +30,10 @@ const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPo
     redactedHeaders: ["x-api-key"],
     retainedResponseHeaders: [],
   },
-  mistral: {
-    propagateTrace: false,
-    redactedHeaders: ["authorization"],
-    retainedResponseHeaders: [],
-  },
-  openai: {
-    propagateTrace: false,
-    redactedHeaders: ["authorization", "openai-organization", "openai-project"],
-    retainedResponseHeaders: ["retry-after"],
-  },
   resend: {
     propagateTrace: false,
     redactedHeaders: ["authorization", "idempotency-key"],
     retainedResponseHeaders: [],
-  },
-  sentry: {
-    propagateTrace: false,
-    redactedHeaders: ["authorization"],
-    retainedResponseHeaders: ["link"],
   },
   wompi: {
     propagateTrace: false,

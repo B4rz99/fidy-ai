@@ -85,7 +85,7 @@ describe("production static release identity", () => {
 
   it("rejects server code from the production artifact", async () => {
     const directory = await productionOutput();
-    await Bun.write(join(directory, "assets/server.js"), "DATABASE_URL");
+    await Bun.write(join(directory, "assets/server.js"), "RESEND_API_KEY");
 
     await expect(
       validateProductionArtifact({

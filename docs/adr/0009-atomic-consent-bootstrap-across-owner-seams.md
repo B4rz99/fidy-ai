@@ -7,48 +7,37 @@
 
 ## Context
 
-Onboarding now has four inseparable owner results. Identity must create the stable User and verified
-WhatsAppIdentity it owns and start the User's TrialPeriod. Consent must append the immutable
-onboarding ConsentRecord it owns. EmailAuthentication must install the VerifiedEmailCredential it
-owns, and Recovery must install the BackupRecoveryCode digest it owns. The User has already accepted
-the disclosure before supplying the email, but that pending decision cannot become a subject-bearing
-ConsentRecord until the subject exists. Letting any stable result survive alone would create either
-an inaccessible User, consent evidence without its subject, or a credential detached from a User.
+Onboarding has four inseparable owner results. Identity creates the stable User and verified
+WhatsAppIdentity it owns and starts the TrialPeriod. Consent appends the immutable onboarding
+ConsentRecord. EmailAuthentication installs the VerifiedEmailCredential, and Recovery installs the
+BackupRecoveryCode digest. The User has accepted the disclosure before supplying the email, but the
+pending decision cannot become subject-bearing evidence until the subject exists.
 
 Moving those records into one slice would hide their independent lifecycle invariants. Consent owns
-pending decisions and append-only evidence; Identity owns stable User, channel association, and
-TrialPeriod facts; EmailAuthentication owns mailbox verification and the verified credential;
-Recovery owns backup credentials and support recovery.
+pending decisions and append-only evidence; Identity owns the stable User, channel association, and
+TrialPeriod; EmailAuthentication owns mailbox verification; Recovery owns backup credentials.
 
 ## Decision
 
-The onboarding completion process is shell-only. Before email verification, Consent and
-EmailAuthentication may retain only bounded pre-User decision and verification state linked by stable
-references; Identity has no User or WhatsAppIdentity, and Recovery has no durable credential. A
-successful mailbox proof opens one PostgreSQL transaction before locking or verifying the proof and
-invokes owner-published operations from all four slices. That transaction consumes the pending
-states, creates the User and WhatsAppIdentity, starts the TrialPeriod, appends the onboarding
-ConsentRecord, installs the one VerifiedEmailCredential and BackupRecoveryCode digest, and consumes
-the proof. Failure rolls back every result.
+Onboarding completion is an adapter composition over one Cloudflare D1 atomic unit. Before email
+verification, only bounded pre-User decision and verification state may exist. A successful mailbox
+proof consumes those states, creates the User and WhatsAppIdentity, starts the TrialPeriod, appends
+the onboarding ConsentRecord, installs the verified credential and recovery-code digest, and consumes
+the proof as one commit. A Durable Object may serialize the admission key, but it is coordination,
+not domain authority and cannot replace the D1 atomic boundary.
 
-TrialPeriod is part of Identity's User lifecycle rather than another owner operation. The accepted
-onboarding disclosure covers the mandatory contact and authentication email purpose; there is no
-separate Consent grant for the credential. No coordinating process writes an owner's tables
-directly.
+TrialPeriod remains part of Identity's lifecycle. The onboarding disclosure covers the mandatory
+contact and authentication email purpose; there is no separate Consent grant for that credential. No
+coordinating adapter writes an owner's tables outside the published owner operation.
 
-This remains the narrow bootstrap exception to ADR 0003's boundary check that data requiring atomic
-commit ordinarily belongs to one slice. It applies only to initial verified onboarding and does not
-permit general cross-slice invariants, shared table ownership, or the consent-authorization
-coordination separately decided by ADR 0008.
+This is the narrow bootstrap exception to the slice boundary: it applies only to initial verified
+onboarding and does not permit general cross-slice table ownership.
 
 ## Rejected alternatives
 
-- **Create the User at Consent acceptance and verify email later:** rejected because it permits a
-  stable but inaccessible User and makes mandatory verification only aspirational.
-- **Eventual consistency or compensation:** rejected because it can leave one stable onboarding
-  result without the others.
-- **Move all onboarding records into one slice:** rejected because User, Consent, email
-  authentication, and backup recovery each have independent owner invariants and later lifecycles.
-- **Add an email-specific Consent grant:** rejected because the current onboarding disclosure already
-  states the mandatory contact and authentication purpose; duplicate evidence would imply an option
-  that onboarding does not offer.
+- **Create the User at Consent acceptance and verify email later:** permits a stable but inaccessible
+  User and makes mandatory verification aspirational.
+- **Eventual consistency or compensation:** can leave one stable onboarding result without the others.
+- **Move all onboarding records into one slice:** hides independent owner invariants and later
+  lifecycles.
+- **Add an email-specific Consent grant:** duplicates the mandatory purpose already in onboarding.

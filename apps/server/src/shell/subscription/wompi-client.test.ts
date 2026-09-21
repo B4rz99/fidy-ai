@@ -1,4 +1,4 @@
-import { BunServices } from "@effect/platform-bun";
+import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
 import {
   type Config,
@@ -105,7 +105,7 @@ const clientLayerWithConfig = (
   );
   return WompiEnrollmentClient.layer.pipe(
     Layer.provide(OutboundHttp.layer),
-    Layer.provide(Layer.mergeAll(transport, configLayer, BunServices.layer))
+    Layer.provide(Layer.mergeAll(transport, configLayer, TestCrypto))
   );
 };
 

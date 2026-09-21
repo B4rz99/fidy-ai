@@ -1,5 +1,5 @@
-// Product and evidence bounds shared by the notification-email model, admission policy, and direct
-// Resend adapter. Transport-only limits remain at their owning shell boundary.
+// Product and evidence bounds shared by the notification-email model and forwarded-email policy.
+// Transport-only limits remain at their owning shell boundary.
 
 /** Issue #22 grants each Free User fifty unique notification emails per Bogotá calendar month. */
 export const freeForwardedEmailCap = 50;
@@ -31,7 +31,7 @@ export const maximumEmailHtmlCharacters = 524_288;
 /** Eight one-MiB images cap decoded inline-image bytes at eight MiB per notification email. */
 export const maximumEmailInlineImages = 8;
 
-/** Each inline image is bounded independently before Sharp decodes it. */
+/** Each inline image is bounded independently before interpretation. */
 export const maximumEmailInlineImageBytes = 1_048_576;
 
 /** Width and height are each capped at 4096; their product also bounds decoded pixel allocation. */
@@ -40,5 +40,5 @@ export const maximumEmailInlineImageDimension = 4_096;
 /** Content and provider message identifiers are bounded metadata, never open-ended evidence. */
 export const maximumEmailEvidenceIdCharacters = 256;
 
-/** Svix delivery identifiers are bounded to the replay-ledger column and verification input. */
-export const maximumResendWebhookDeliveryIdCharacters = 128;
+/** Forwarded email delivery identifiers are bounded to the replay-ledger column and verification input. */
+export const maximumForwardedEmailDeliveryIdCharacters = 128;

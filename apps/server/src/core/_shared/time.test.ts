@@ -15,13 +15,13 @@ it("reads an offset spelling and a UTC spelling as the same instant", () => {
   );
 });
 
-it("rejects text that names no PostgreSQL instant", () => {
+it("rejects text that names no valid instant", () => {
   for (const text of ["", "yesterday", "2026-13-01T00:00:00Z"]) {
     expect(Result.isFailure(decode(text))).toBe(true);
   }
 });
 
-it("rejects PostgreSQL-invalid in-memory instants at the domain boundary", () => {
+it("rejects invalid in-memory instants at the domain boundary", () => {
   for (const value of [
     DateTime.makeUnsafe("0000-01-01T00:00:00Z"),
     DateTime.makeUnsafe("+010000-01-01T00:00:00Z"),
@@ -36,18 +36,18 @@ it("accepts the last valid day in months with 30 or 31 days", () => {
   }
 });
 
-it("accepts every four-digit year in PostgreSQL's supported range", () => {
+it("accepts every supported four-digit year", () => {
   for (const year of ["0001", "0009", "0010", "0099", "0100", "0999", "1000", "9999"]) {
     expect(Result.isSuccess(decode(`${year}-01-01T00:00:00Z`))).toBe(true);
   }
   expect(Result.isFailure(decode("0000-01-01T00:00:00Z"))).toBe(true);
 });
 
-it("accepts PostgreSQL timezone offsets through +15:59", () => {
+it("accepts timezone offsets through +15:59", () => {
   expect(Result.isSuccess(decode("2026-03-14T09:30:00+15:59"))).toBe(true);
 });
 
-it("rejects timezone offsets outside PostgreSQL's displacement range", () => {
+it("rejects timezone offsets outside the supported displacement range", () => {
   expect(Result.isFailure(decode("2026-03-14T09:30:00+16:00"))).toBe(true);
   expect(Result.isFailure(decode("2026-03-14T09:30:00-16:00"))).toBe(true);
 });

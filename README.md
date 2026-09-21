@@ -1,43 +1,39 @@
 # Fidy
 
 Fidy is an agent-first personal finance product for Colombia. Users manage their finances through
-WhatsApp, and their own agents use the same API as Fidy's hosted agent.
+WhatsApp, and their own agents use the same canonical API as Fidy's hosted agent.
 
-The project is under development.
+The project is under development. Cloudflare is the production platform; the server package currently
+provides domain, contract, and provider-boundary code while Cloudflare adapters are added.
 
 ## Run locally
 
-Requirements: [Bun](https://bun.sh), [Docker](https://www.docker.com/),
-[Gitleaks](https://github.com/gitleaks/gitleaks), and
-[TruffleHog](https://github.com/trufflesecurity/trufflehog). Gitleaks and TruffleHog run in the
-pre-push hook so secret-shaped or verified credentials never reach the remote.
+Requirements: [Bun](https://bun.sh), [Gitleaks](https://github.com/gitleaks/gitleaks), and
+[TruffleHog](https://github.com/trufflesecurity/trufflehog). Secret scans run in the pre-push hook.
 
 ```sh
 bun install
 cp .env.example .env
-# Set WHATSAPP_BUSINESS_PORTFOLIO_ID=portfolio-local in .env.
-docker compose up -d db
-bun run dev
+bun run dev:web
 ```
 
-The API is available at <http://localhost:3000>; health checks are at
-<http://localhost:3000/health>.
-
-To run the complete application in Docker instead:
+The browser development server is available at <http://localhost:5173>. The built static artifact can
+be checked with:
 
 ```sh
-docker compose up --build
+bun run --cwd apps/web build:preview
+bun run --cwd apps/web test:browser
 ```
 
-## Tests
+## Tests and checks
 
 ```sh
-bun run test:core  # pure core tests; no database required
-bun run test       # full suite; requires the local PostgreSQL configuration
+bun run test:core
+bun run test
+bun run verify
 ```
 
-See [`.env.example`](./.env.example) for configuration and the project documentation for more
-context:
+See [`.env.example`](./.env.example) for retained local configuration and the project documentation:
 
 - [Domain context](./CONTEXT.md)
 - [System architecture](./ARCHITECTURE.md)
@@ -47,7 +43,9 @@ context:
 
 ## Commit messages
 
-Use `type(scope): #123 summary` followed by one or more `-` body bullets. The `#123` immediately after the colon is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description when merging should close the issue.
+Use `type(scope): #123 summary` followed by one or more `-` body bullets. The `#123` immediately after
+the colon is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description
+when merging should close the issue.
 
 Allowed types:
 
@@ -79,13 +77,13 @@ Cross-cutting scopes:
 
 <!-- commit-scopes:cross-cutting -->
 
-| scope      | when to use                                |
-| ---------- | ------------------------------------------ |
-| `api`      | API assembly, transport, and authorization |
-| `channels` | vendor adapters and callbacks              |
-| `agent`    | hosted agent and its harness               |
-| `frontend` | web app                                    |
-| `db`       | schema, migrations, and SQL                |
-| `repo`     | tooling, configuration, hooks, and CI      |
-| `deps`     | dependency updates                         |
-| `docs`     | documentation                              |
+| scope        | when to use                                |
+| ------------ | ------------------------------------------ |
+| `api`        | API assembly, transport, and authorization |
+| `channels`   | vendor adapters and callbacks              |
+| `agent`      | hosted agent and its harness               |
+| `frontend`   | web app                                    |
+| `cloudflare` | Worker, D1, DO, Queue, Workflow, R2, or AI |
+| `repo`       | tooling, configuration, hooks, and CI      |
+| `deps`       | dependency updates                         |
+| `docs`       | documentation                              |

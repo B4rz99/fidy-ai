@@ -56,11 +56,13 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const FORBIDDEN_CONTENT_STRINGS = [
   "BEGIN PRIVATE KEY",
   "CLOUDFLARE_API_TOKEN",
-  "DATABASE_URL",
-  "MIGRATION_DATABASE_URL",
-  "RAILWAY_TOKEN",
+  "RESEND_API_KEY",
+  "KAPSO_API_KEY",
+  "WOMPI_PRIVATE_KEY",
+  "WOMPI_INTEGRITY_SECRET",
+  "CLOUDFLARE_ACCESS_",
   "/apps/server/src/",
-  "node_modules/@effect/sql-pg",
+  "node_modules/effect/dist/unstable/sql",
   "https://api.fidyapp.com",
 ];
 

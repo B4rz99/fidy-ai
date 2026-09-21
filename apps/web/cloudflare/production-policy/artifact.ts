@@ -24,11 +24,13 @@ const SHELL_ASSET_REFERENCE = /(?:href|src)=["']\/(assets\/[^"'?#]+)(?:[?#][^"']
 const FORBIDDEN_CONTENT = [
   "BEGIN PRIVATE KEY",
   "CLOUDFLARE_API_TOKEN",
-  "DATABASE_URL",
-  "MIGRATION_DATABASE_URL",
-  "RAILWAY_API_TOKEN",
+  "RESEND_API_KEY",
+  "KAPSO_API_KEY",
+  "WOMPI_PRIVATE_KEY",
+  "WOMPI_INTEGRITY_SECRET",
+  "CLOUDFLARE_ACCESS_",
   "/apps/server/src/",
-  "node_modules/@effect/sql-pg",
+  "node_modules/effect/dist/unstable/sql",
 ];
 
 export type ProductionArtifactRequest = {

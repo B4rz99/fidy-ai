@@ -14,8 +14,7 @@ import { CORE_SRC } from "./source-scope.mjs";
 export default {
   // The command runner, not @stryker-mutator/vitest-runner. The vitest runner
   // drives vitest through its Node API, so every mutant would be judged on
-  // Node while the project ships on Bun — the runtime that decides what
-  // `@effect/platform-bun` and the API seam even do. This runs the same command
+  // Node while the project validates Worker-compatible boundaries. This runs the same command
   // `bun run test:core` runs, so a mutant survives or dies under the runtime
   // that would have shipped it. The cost is the whole core suite per mutant
   // instead of per-test selection, which at ~1s a suite is not yet a cost.

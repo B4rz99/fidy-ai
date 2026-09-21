@@ -1,8 +1,10 @@
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { readFile } from "node:fs/promises";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { encodeMoneyAmount } from "~/core/_shared/money";
-import { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import { ReceivedEmailId } from "~/core/ingestion/reference";
 import { interpretNotificationEmail } from "./interpret";
 
 const context = Schema.decodeSync(CapturedInterpretationContext)({
@@ -15,10 +17,12 @@ const fixtureUrl = (name: string): URL =>
   new URL(`./formats/${name}/fixtures/positive.synthetic.html`, import.meta.url);
 
 const interpretFixture = Effect.fn(function* (name: string) {
-  const html = yield* Effect.tryPromise(() => Bun.file(fixtureUrl(name)).text()).pipe(Effect.orDie);
+  const html = yield* Effect.tryPromise(() => readFile(fixtureUrl(name), "utf8")).pipe(
+    Effect.orDie
+  );
   return yield* interpretNotificationEmail({
     content: {
-      receivedEmailId: ResendReceivedEmailId.make(`received-${name}`),
+      receivedEmailId: ReceivedEmailId.make(`received-${name}`),
       from: "untrusted@example.test",
       to: ["private@ingest.fidyapp.com"],
       subject: "Untrusted subject",
@@ -75,7 +79,7 @@ it.effect(
 it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suffix fields", () =>
   Effect.gen(function* () {
     const html = yield* Effect.tryPromise(() =>
-      Bun.file(fixtureUrl("rappicard-purchase")).text()
+      readFile(fixtureUrl("rappicard-purchase"), "utf8")
     ).pipe(Effect.orDie);
     const interpret = (
       source: string,
@@ -84,7 +88,7 @@ it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suf
     ): ReturnType<typeof interpretNotificationEmail> =>
       interpretNotificationEmail({
         content: {
-          receivedEmailId: ResendReceivedEmailId.make("received-currency"),
+          receivedEmailId: ReceivedEmailId.make("received-currency"),
           from: "untrusted@example.test",
           to: ["private@ingest.fidyapp.com"],
           subject: Option.getOrElse(subject, () => "Untrusted subject"),
@@ -155,7 +159,7 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
     ): ReturnType<typeof interpretNotificationEmail> =>
       interpretNotificationEmail({
         content: {
-          receivedEmailId: ResendReceivedEmailId.make("received-unsafe"),
+          receivedEmailId: ReceivedEmailId.make("received-unsafe"),
           from: "untrusted@example.test",
           to: ["private@ingest.fidyapp.com"],
           subject: "Untrusted subject",
@@ -169,10 +173,10 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
       });
     expect((yield* make("<p>Compra desconocida</p>"))._tag).toBe("NeedsReview");
     const davibank = yield* Effect.tryPromise(() =>
-      Bun.file(fixtureUrl("davibank-card")).text()
+      readFile(fixtureUrl("davibank-card"), "utf8")
     ).pipe(Effect.orDie);
     const rappicard = yield* Effect.tryPromise(() =>
-      Bun.file(fixtureUrl("rappicard-purchase")).text()
+      readFile(fixtureUrl("rappicard-purchase"), "utf8")
     ).pipe(Effect.orDie);
     expect(yield* make(`${davibank}${rappicard}`)).toMatchObject({
       _tag: "NeedsReview",
@@ -183,7 +187,7 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
     );
     const imageOnly = yield* interpretNotificationEmail({
       content: {
-        receivedEmailId: ResendReceivedEmailId.make("received-image"),
+        receivedEmailId: ReceivedEmailId.make("received-image"),
         from: "untrusted@example.test",
         to: ["private@ingest.fidyapp.com"],
         subject: "Untrusted subject",

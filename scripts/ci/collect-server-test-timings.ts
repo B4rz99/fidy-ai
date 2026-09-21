@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
 
-import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { dirname } from "node:path";
+import { Effect, Option, Schema } from "effect";
 
 const serverTestFile = /^src\/shell\/.*\.test\.ts$/u;
 const testSuiteTag = /<testsuite\b[^>]*>/gu;
@@ -55,23 +58,21 @@ const parseArguments = (): { readonly input: string; readonly output: string } =
 
 const main = Effect.gen(function* () {
   const { input, output } = parseArguments();
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const glob = new Bun.Glob("**/server-tests.xml");
   const files = [...glob.scanSync({ cwd: input, absolute: true })].sort();
   if (files.length === 0) {
     throw new Error(`No server JUnit reports found under ${input}`);
   }
-  const reports = yield* Effect.forEach(files, (file) => fs.readFileString(file), {
-    concurrency: "unbounded",
-  });
+  const reports = yield* Effect.tryPromise(() =>
+    Promise.all(files.map((file) => readFile(file, "utf8")))
+  );
   const timings = collectServerTestTimings(reports);
   if (Object.keys(timings).length === 0) {
     throw new Error("Server JUnit reports contained no test files");
   }
-  yield* fs.makeDirectory(path.dirname(output), { recursive: true });
+  yield* Effect.tryPromise(() => mkdir(dirname(output), { recursive: true }));
   const source = `/** Generated from successful CI JUnit reports. */\nexport const cachedServerTestTimings: Readonly<Record<string, number>> = ${encodeTimings(timings)};\n`;
-  yield* fs.writeFileString(output, source);
+  yield* Effect.tryPromise(() => writeFile(output, source));
   yield* Effect.sync(() =>
     process.stdout.write(
       `Collected timings for ${Object.keys(timings).length} server test files.\n`
@@ -79,6 +80,9 @@ const main = Effect.gen(function* () {
   );
 });
 
-const MainLive = Layer.effectDiscard(main).pipe(Layer.provide(BunServices.layer));
-
-if (import.meta.main) BunRuntime.runMain(Layer.build(MainLive).pipe(Effect.scoped));
+if (import.meta.main) {
+  Effect.runPromise(main).catch((error: unknown) => {
+    process.stderr.write(`${String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

@@ -225,14 +225,14 @@ everything inlines); `Literals` → `enum`; structs are **open by default** with
 `description`/`pattern` or the model has no format hint. `toStandardJSONSchemaV1`
 (`Schema.ts:1378`) exists for libraries that expect the standard wrapper.
 
-## Decoding stored documents (Postgres rows, jsonb, LLM output)
+## Decoding stored documents (D1 rows, JSON, model output)
 
-- **jsonb / LLM JSON (already-parsed values)**: decode with
+- **JSON / model JSON (already-parsed values)**: decode with
   `Schema.decodeUnknownEffect(Schema.toCodecJson(Doc), { errors: "all" })`; write back
   through `Schema.encodeUnknownEffect(Schema.toCodecJson(Doc))` — encode-on-write is the
-  cheap insurance that the document matches the schema before it hits the DB, since encode
+  cheap insurance that the document matches the schema before it hits D1, since encode
   runs the same checks in reverse (verified: encode fails on check-violating values).
-- **JSON in a text column / raw LLM string**: `Schema.fromJsonString(Schema.toCodecJson(Doc))`
+- **JSON in a text column / raw model string**: `Schema.fromJsonString(Schema.toCodecJson(Doc))`
   — `fromJsonString` alone does NOT apply JSON codecs, it decodes the parsed value through
   the schema as given (`Schema.ts:12756-12797`); with a BigDecimal-typed field that fails.
   It does annotate `contentMediaType`/`contentSchema` so JSON Schema generation stays

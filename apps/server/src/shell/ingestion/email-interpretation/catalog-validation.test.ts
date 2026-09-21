@@ -6,7 +6,7 @@ import {
   InterpretationRevision,
 } from "~/core/interpretation-evidence/contract";
 import { Currency } from "~/core/_shared/money";
-import { ResendReceivedEmailId } from "~/core/ingestion/reference";
+import { ReceivedEmailId } from "~/core/ingestion/reference";
 import { AccountHints, NotificationFormatId } from "~/core/transactions/account-hints";
 import type { NotificationEmailFormat } from "./format-definition";
 import type { interpretNotificationEmail as InterpretNotificationEmail } from "./interpret";
@@ -69,7 +69,7 @@ it.effect("rejects canonical facts that fail final schema validation", () =>
     });
     const result = yield* interpretNotificationEmail({
       content: {
-        receivedEmailId: ResendReceivedEmailId.make("received-invalid-facts"),
+        receivedEmailId: ReceivedEmailId.make("received-invalid-facts"),
         from: "untrusted@example.test",
         to: ["private@ingest.fidyapp.com"],
         subject: "subject",
@@ -103,7 +103,7 @@ it.effect("bounds competing candidates from a valid generated catalog", () =>
     });
     const result = yield* interpretNotificationEmail({
       content: {
-        receivedEmailId: ResendReceivedEmailId.make("received-catalog-test"),
+        receivedEmailId: ReceivedEmailId.make("received-catalog-test"),
         from: "untrusted@example.test",
         to: ["private@ingest.fidyapp.com"],
         subject: "subject",

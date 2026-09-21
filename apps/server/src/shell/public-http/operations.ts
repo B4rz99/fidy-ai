@@ -11,10 +11,8 @@ export type ExternalEndpoints = {
   readonly apiOrigin: string;
   readonly policyUrl: string;
   readonly upgradeUrl: string;
-  readonly magicLinkUrl: string;
   readonly kapsoWebhookUrl: string;
   readonly wompiCallbackUrl: string;
-  readonly ingestDomain: string;
 };
 
 const HttpOrigin = Schema.URL.check(
@@ -32,16 +30,13 @@ const HttpOrigin = Schema.URL.check(
 export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
   webOrigin: Config.schema(HttpOrigin, "PUBLIC_WEB_ORIGIN"),
   apiOrigin: Config.schema(HttpOrigin, "PUBLIC_API_ORIGIN"),
-  ingestDomain: Config.NonEmptyString("INGEST_EMAIL_DOMAIN"),
 }).pipe(
-  Config.map(({ apiOrigin, ingestDomain, webOrigin }) => ({
+  Config.map(({ apiOrigin, webOrigin }) => ({
     webOrigin: webOrigin.origin,
     apiOrigin: apiOrigin.origin,
     policyUrl: new URL("/politica", webOrigin).href,
     upgradeUrl: new URL("/upgrade", webOrigin).href,
-    magicLinkUrl: new URL("/auth/magic", webOrigin).href,
     kapsoWebhookUrl: new URL("/webhooks/kapso", apiOrigin).href,
     wompiCallbackUrl: new URL("/webhooks/wompi", apiOrigin).href,
-    ingestDomain,
   }))
 );

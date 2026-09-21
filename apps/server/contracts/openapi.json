@@ -2193,7 +2193,7 @@
               },
               "sourceProvider": {
                 "enum": [
-                  "resend"
+                  "cloudflare-email"
                 ],
                 "type": "string"
               },
@@ -2284,7 +2284,7 @@
               },
               "sourceProvider": {
                 "enum": [
-                  "resend"
+                  "cloudflare-email"
                 ],
                 "type": "string"
               },
@@ -2379,7 +2379,7 @@
               },
               "sourceProvider": {
                 "enum": [
-                  "resend"
+                  "cloudflare-email"
                 ],
                 "type": "string"
               },
@@ -12710,7 +12710,7 @@
     },
     "/operations/atomic-batch": {
       "post": {
-        "description": "Execute a non-empty ordered set of canonical mutations in one User-scoped PostgreSQL transaction. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children.",
+        "description": "Execute a non-empty ordered set of canonical mutations in one User-scoped atomic commit. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children.",
         "operationId": "operations.executeAtomicBatch",
         "parameters": [],
         "requestBody": {

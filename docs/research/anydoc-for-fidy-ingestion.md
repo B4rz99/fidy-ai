@@ -76,7 +76,7 @@ statement data-row count
 
 Run the one column-mapping model call over headers plus bounded representative rows, then apply its mapping mechanically. Each mapped row must still pass the canonical Money/Transaction decode gate. A parser error becomes a NeedsReviewItem rather than a skipped row. This is the architecture already described by #18 and the parent specification. [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18) · [Fidy parent specification](https://github.com/B4rz99/fidy-ai/issues/1)
 
-If anydoc is evaluated anyway, use `toDocument`, never Markdown, and require a fixture spike to prove row conservation, sheet/row evidence, displayed/raw monetary values, hidden-row policy, malformed-record handling, Bun loading, memory limits, and behavior on real anonymized Colombian statement formats. Adoption should be based on those fixtures, not the library's document-quality benchmark, whose target is readable Markdown rather than financial-row fidelity. [benchmark methodology](https://github.com/firecrawl/anydoc/blob/4e3089b1ed43404241a303109f81e2c7933040b2/README.md#L152-L188)
+If anydoc is evaluated anyway, use `toDocument`, never Markdown, and require a fixture spike to prove row conservation, sheet/row evidence, displayed/raw monetary values, hidden-row policy, malformed-record handling, Worker/WASM loading, memory limits, and behavior on real anonymized Colombian statement formats. Adoption should be based on those fixtures, not the library's document-quality benchmark, whose target is readable Markdown rather than financial-row fidelity. [benchmark methodology](https://github.com/firecrawl/anydoc/blob/4e3089b1ed43404241a303109f81e2c7933040b2/README.md#L152-L188)
 
 ## Fit for adjacent Fidy ingestion issues
 
@@ -92,7 +92,7 @@ If anydoc is evaluated anyway, use `toDocument`, never Markdown, and require a f
 
 Firecrawl's hosted `/parse` is a separate proposition from open-source anydoc. It accepts uploads and can return Markdown or schema-shaped JSON. For PDFs it offers `fast`, `auto`, and `ocr`: `auto` starts with native text and falls back to OCR; `ocr` processes every page. Structured JSON is an LLM extraction format, so it does not remove model dependence; it moves it behind Firecrawl's API. [official Parse documentation](https://docs.firecrawl.dev/features/parse) · [official Parse API schema](https://docs.firecrawl.dev/api-reference/endpoint/parse)
 
-For Fidy, hosted Parse should **not** be added merely to avoid OpenAI vision:
+For Fidy, hosted Parse should **not** be added merely to avoid a Workers AI vision path:
 
 - it becomes another external processor receiving financial documents;
 - zero-data-retention is off by default and must be enabled through Firecrawl rather than assumed;
@@ -103,7 +103,7 @@ For Fidy, hosted Parse should **not** be added merely to avoid OpenAI vision:
 
 The first two points are documented in the official Parse API (`zeroDataRetention` defaults to `false` and requires contacting Firecrawl); the remaining points are conclusions from Fidy's canonical-operation and Ingestion requirements. [Parse API](https://docs.firecrawl.dev/api-reference/endpoint/parse) · [Fidy server architecture](../../apps/server/ARCHITECTURE.md) · [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18)
 
-A future provider evaluation could compare Firecrawl Parse's OCR-only Markdown against OpenAI native PDF/image input using Fidy's anonymized IngestSamples, measuring Transaction field accuracy, table-row conservation, latency, cost, Colombia data-processing terms, ZDR availability, and failure behavior. Until that evidence exists, switching providers is not justified.
+A future provider evaluation could compare Firecrawl Parse's OCR-only Markdown against a Workers AI PDF/image input using Fidy's anonymized IngestSamples, measuring Transaction field accuracy, table-row conservation, latency, cost, Colombia data-processing terms, ZDR availability, and failure behavior. Until that evidence exists, switching providers is not justified.
 
 ## Recommended architecture
 
@@ -139,6 +139,6 @@ anydoc could sit behind a narrow optional `office document -> Document/Markdown`
 ## Unresolved questions
 
 - What exact CSV/XLSX bank statement fixtures and malformed-row cases will define #18's “input line count” (all physical records, all parsed records, or all identified data rows)? The issue requires conservation but does not yet define headers, footers, and blank rows precisely.
-- Does `@firecrawl/anydoc` v0.1.8 bundle and run reliably under Fidy's Linux production image, including memory limits and teardown? A local Bun/macOS import-and-parse smoke test passed, but upstream declares Node rather than Bun.
-- For #20, do representative Colombian statement PDFs preserve transaction-table rows better through OpenAI native layout-aware input, `pdf-inspector` page output, or anydoc's combined Markdown?
+- Does `@firecrawl/anydoc` v0.1.8 fit a Worker/WASM production bundle, including memory limits and teardown? A local import-and-parse smoke test is not evidence for the production adapter.
+- For #20, do representative Colombian statement PDFs preserve transaction-table rows better through a Workers AI layout-aware input, `pdf-inspector` page output, or anydoc's combined Markdown?
 - What data-processing terms and ZDR availability would Firecrawl offer for Colombian financial documents? Public API docs describe the feature toggle but do not answer Fidy's legal/provider due diligence.

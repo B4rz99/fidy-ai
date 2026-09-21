@@ -1,0 +1,20 @@
+docs/adr/0026-cloudflare-native-production-replatform.md
+  s_20777467017292::t_d57355b5e120c3 4
+  s_20777467017292::t_8e40e1ef0ec850 1-3,5-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d963296b90e3aec3adf1025158505216cd4db40f",
+  "prompts": {},
+  "sessions": {
+    "s_20777467017292": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b27b-503d-73e1-ba2d-feab1842b71d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

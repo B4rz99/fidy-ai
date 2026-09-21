@@ -1,0 +1,19 @@
+apps/server/vitest.config.ts
+  s_20777467017292::t_ce522c7f1643fb 45-46,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ad9c5ebeca8608ac8bf8b0ad79766bebf35e8842",
+  "prompts": {},
+  "sessions": {
+    "s_20777467017292": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0b27b-503d-73e1-ba2d-feab1842b71d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

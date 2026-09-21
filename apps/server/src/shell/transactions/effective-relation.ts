@@ -1,4 +1,4 @@
-import { type DateTime, Option } from "effect";
+import { DateTime, Option } from "effect";
 import type { SqlClient, Statement } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 
@@ -27,13 +27,13 @@ const periodConditions = (
   original: Option.match(period, {
     onNone: () => sql`TRUE`,
     onSome: ({ from, toExclusive }) =>
-      sql`original.occurred_at >= ${from} AND original.occurred_at < ${toExclusive}`,
+      sql`original.occurred_at >= ${DateTime.toDateUtc(from)} AND original.occurred_at < ${DateTime.toDateUtc(toExclusive)}`,
   }),
   linked: Option.match(period, {
     onNone: () => sql`TRUE`,
     onSome: ({ from, toExclusive }) =>
-      sql`${sql.literal(linkedOccurredAt)} >= ${from}
-        AND ${sql.literal(linkedOccurredAt)} < ${toExclusive}`,
+      sql`${sql.literal(linkedOccurredAt)} >= ${DateTime.toDateUtc(from)}
+        AND ${sql.literal(linkedOccurredAt)} < ${DateTime.toDateUtc(toExclusive)}`,
   }),
 });
 

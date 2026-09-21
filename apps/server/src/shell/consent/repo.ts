@@ -298,7 +298,7 @@ const evidenceToRow = (evidence: (typeof ConsentRecord.Encoded)["evidence"]): Ev
 const ConsentRecordFromRow = ConsentRecordRow.pipe(
   Schema.decodeTo(
     ConsentRecord,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (row) =>
         asIssue(
           Effect.flatMap(eventFromRow(row), (event) =>
@@ -476,7 +476,7 @@ export const markPendingConsentAcceptedInScope = Effect.fn(
         decision_channel = ${input.decisionMessage.channel},
         decision_provider = ${input.decisionMessage.provider},
         decision_provider_message_id = ${input.decisionMessage.providerMessageId},
-        accepted_at = ${input.acceptedAt}
+        accepted_at = ${DateTime.toDateUtc(input.acceptedAt)}
       WHERE id = ${input.pendingExchangeId}
         AND lifecycle = 'awaiting-decision'
         AND decision_channel IS NULL
@@ -567,7 +567,7 @@ const queryCurrentOnboardingConsent = Effect.fn(function* (
   const disclosure = yield* currentDisclosure;
   const occurrenceCondition = Option.match(occurredAt, {
     onNone: () => sql``,
-    onSome: (value) => sql`AND grant_record.occurred_at <= ${value}`,
+    onSome: (value) => sql`AND grant_record.occurred_at <= ${DateTime.toDateUtc(value)}`,
   });
   const result = yield* SqlSchema.findOne({
     Request: UserId,
@@ -787,7 +787,7 @@ const pendingColumns = `id, business_portfolio_id AS "businessPortfolioId",
 const PendingFromRow = PendingRow.pipe(
   Schema.decodeTo(
     PendingConsentExchange,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (row) => {
         const common = {
           id: row.id,
@@ -1070,7 +1070,7 @@ export const removeExpiredPendingConsentExchanges = (
       WITH expired AS (
         SELECT id
         FROM pending_consent_exchanges
-        WHERE expires_at <= ${now}
+        WHERE expires_at <= ${DateTime.toDateUtc(now)}
           AND accepted_at IS NULL
         ORDER BY expires_at, id
         LIMIT ${retentionBatchSize}

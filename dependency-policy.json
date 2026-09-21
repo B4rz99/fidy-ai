@@ -17,6 +17,25 @@
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
     "an entry whose exclusion is gone."
   ],
-  "deferredUpdates": [],
+  "deferredUpdates": [
+    {
+      "name": "typescript",
+      "manifest": "tools/crap/package.json",
+      "reason": "TypeScript 7.0.2 removes the classic compiler surface, so crap4ts's @typescript-eslint/typescript-estree parser exits when ts.Extension is missing. Revisit after TypeScript 7.1 ships the replacement compiler API and typescript-estree adopts it.",
+      "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "typescript",
+      "manifest": "tools/depcruise/package.json",
+      "reason": "With TypeScript 7.0.2, dependency-cruiser silently cruises zero modules and the repo's tripwire exits because no architecture rules ran. Revisit after TypeScript 7.1 ships the replacement compiler API and dependency-cruiser adopts it.",
+      "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "typescript",
+      "manifest": "tools/mutation/package.json",
+      "reason": "With TypeScript 7.0.2, Stryker's tsconfig rewrite crashes because parseConfigFileTextToJson is missing. Revisit after TypeScript 7.1 ships the replacement compiler API and Stryker adopts it.",
+      "until": "2026-12-20T00:00:00Z"
+    }
+  ],
   "acceptedVulnerabilities": []
 }

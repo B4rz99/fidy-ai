@@ -238,7 +238,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* sql`
             SELECT sum(invocation_count)::int AS count
             FROM support_recovery_admission_attempts
-            WHERE attempted_at = ${openedAt}
+            WHERE attempted_at = ${DateTime.toDateUtc(openedAt)}
           `
         ).toEqual([{ count: 5 }]);
         yield* purgeSupportRecoveryAdmissionEvidence(
@@ -247,7 +247,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* sql`
             SELECT count(*)::int AS count FROM support_recovery_admission_attempts
-            WHERE attempted_at = ${openedAt}
+            WHERE attempted_at = ${DateTime.toDateUtc(openedAt)}
           `
         ).toEqual([{ count: 0 }]);
       })
@@ -267,7 +267,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`
           INSERT INTO support_recovery_admission_attempts (
             operator_issuer, operator_subject, attempted_at, invocation_count
-          ) VALUES (${operatorId.issuer}, ${operatorId.subject}, ${earlierAt}, 20)
+          ) VALUES (${operatorId.issuer}, ${operatorId.subject}, ${DateTime.toDateUtc(earlierAt)}, 20)
         `;
         expect((yield* admitSupportRecoveryInvocation(operatorId, attemptedAt))._tag).toBe(
           "Limited"
@@ -277,7 +277,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`
           INSERT INTO support_recovery_admission_attempts (
             operator_issuer, operator_subject, attempted_at, invocation_count
-          ) VALUES ('https://test.cloudflareaccess.com', 'minute-neighbor', ${attemptedAt}, 20)
+          ) VALUES ('https://test.cloudflareaccess.com', 'minute-neighbor', ${DateTime.toDateUtc(attemptedAt)}, 20)
         `;
         expect((yield* admitSupportRecoveryInvocation(operatorId, attemptedAt))._tag).toBe(
           "Limited"
@@ -287,7 +287,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`
           INSERT INTO support_recovery_admission_attempts (
             operator_issuer, operator_subject, attempted_at, invocation_count
-          ) VALUES ('https://test.cloudflareaccess.com', 'hour-neighbor', ${earlierAt}, 100)
+          ) VALUES ('https://test.cloudflareaccess.com', 'hour-neighbor', ${DateTime.toDateUtc(earlierAt)}, 100)
         `;
         expect((yield* admitSupportRecoveryInvocation(operatorId, attemptedAt))._tag).toBe(
           "Limited"
@@ -305,7 +305,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_login_pairings
-          SET expires_at = ${expiredAt}
+          SET expires_at = ${DateTime.toDateUtc(expiredAt)}
           WHERE id = ${pairing.pairingId}
         `;
 
@@ -763,8 +763,9 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           INSERT INTO support_recovery_cases (
             id, user_id, pairing_id, credential_revision, lifecycle, opened_at, expires_at
           ) SELECT
-            ${caseId}, ${userId}, ${pairing.pairingId}, credential.revision, 'open', ${openedAt},
-            ${DateTime.add(openedAt, { minutes: 15 })}
+            ${caseId}, ${userId}, ${pairing.pairingId}, credential.revision, 'open',
+            ${DateTime.toDateUtc(openedAt)},
+            ${DateTime.toDateUtc(DateTime.add(openedAt, { minutes: 15 }))}
           FROM backup_recovery_credentials credential WHERE credential.user_id = ${userId}
         `;
         for (const ordinal of [1, 2, 3, 4]) {
@@ -776,7 +777,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ${`f1d1a000-0000-4000-8000-000000000b${ordinal + 1}0`}, ${caseId}, ${ordinal},
               'https://test.cloudflareaccess.com', 'fixture-operator',
               ${ordinal === 1 ? "open" : "decide"},
-              ${ordinal === 1 ? "accepted" : "rejected"}, ${openedAt}
+              ${ordinal === 1 ? "accepted" : "rejected"}, ${DateTime.toDateUtc(openedAt)}
             )
           `;
         }
@@ -831,20 +832,24 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("rolls back every support approval owner write after injected failures", () =>
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
-        const cleanup = sql`
-          DROP TRIGGER IF EXISTS recovery_fault_case ON support_recovery_cases;
-          DROP TRIGGER IF EXISTS recovery_fault_open_event ON support_recovery_case_events;
-          DROP TRIGGER IF EXISTS recovery_fault_pairing ON browser_login_pairings;
-          DROP TRIGGER IF EXISTS recovery_fault_credential ON backup_recovery_credentials;
-          DROP TRIGGER IF EXISTS recovery_fault_rotation ON backup_recovery_credentials;
-          DROP TRIGGER IF EXISTS recovery_fault_event ON support_recovery_case_events;
-          DROP TRIGGER IF EXISTS recovery_fault_closure ON support_recovery_cases;
-          DROP FUNCTION IF EXISTS fidy_test_recovery_fault();
-          DROP TABLE IF EXISTS support_recovery_fault_fixture
-        `.pipe(Effect.orDie);
+        const cleanup = Effect.forEach(
+          [
+            sql`DROP TRIGGER IF EXISTS recovery_fault_case ON support_recovery_cases`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_open_event ON support_recovery_case_events`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_pairing ON browser_login_pairings`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_credential ON backup_recovery_credentials`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_rotation ON backup_recovery_credentials`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_event ON support_recovery_case_events`,
+            sql`DROP TRIGGER IF EXISTS recovery_fault_closure ON support_recovery_cases`,
+            sql`DROP FUNCTION IF EXISTS fidy_test_recovery_fault()`,
+            sql`DROP TABLE IF EXISTS support_recovery_fault_fixture`,
+          ],
+          (statement) => statement,
+          { concurrency: 1, discard: true }
+        ).pipe(Effect.orDie);
         yield* Effect.gen(function* () {
+          yield* sql`CREATE TABLE support_recovery_fault_fixture (stage text PRIMARY KEY)`;
           yield* sql`
-            CREATE TABLE support_recovery_fault_fixture (stage text PRIMARY KEY);
             CREATE FUNCTION fidy_test_recovery_fault() RETURNS trigger
             LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
             AS $function$
@@ -857,31 +862,45 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               END IF;
               RETURN NEW;
             END
-            $function$;
+            $function$
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_case
               AFTER INSERT ON support_recovery_cases FOR EACH ROW
               WHEN (NEW.lifecycle = 'open')
-              EXECUTE FUNCTION fidy_test_recovery_fault('case');
+              EXECUTE FUNCTION fidy_test_recovery_fault('case')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_open_event
               AFTER INSERT ON support_recovery_case_events FOR EACH ROW
               WHEN (NEW.action = 'open')
-              EXECUTE FUNCTION fidy_test_recovery_fault('open-event');
+              EXECUTE FUNCTION fidy_test_recovery_fault('open-event')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_pairing
               AFTER UPDATE ON browser_login_pairings FOR EACH ROW
               WHEN (OLD.lifecycle = 'pending_approval' AND NEW.lifecycle = 'ready')
-              EXECUTE FUNCTION fidy_test_recovery_fault('pairing');
+              EXECUTE FUNCTION fidy_test_recovery_fault('pairing')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_credential
               AFTER UPDATE ON backup_recovery_credentials FOR EACH ROW
               WHEN (OLD.code_digest IS NOT NULL AND NEW.code_digest IS NULL)
-              EXECUTE FUNCTION fidy_test_recovery_fault('credential');
+              EXECUTE FUNCTION fidy_test_recovery_fault('credential')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_rotation
               AFTER UPDATE ON backup_recovery_credentials FOR EACH ROW
               WHEN (NEW.code_digest IS NOT NULL AND NEW.revision > OLD.revision)
-              EXECUTE FUNCTION fidy_test_recovery_fault('rotation');
+              EXECUTE FUNCTION fidy_test_recovery_fault('rotation')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_event
               AFTER INSERT ON support_recovery_case_events FOR EACH ROW
               WHEN (NEW.action = 'approve')
-              EXECUTE FUNCTION fidy_test_recovery_fault('event');
+              EXECUTE FUNCTION fidy_test_recovery_fault('event')
+          `;
+          yield* sql`
             CREATE TRIGGER recovery_fault_closure
               AFTER UPDATE ON support_recovery_cases FOR EACH ROW
               WHEN (NEW.lifecycle = 'approved')

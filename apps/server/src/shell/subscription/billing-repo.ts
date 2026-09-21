@@ -28,12 +28,13 @@ import {
 } from "~/core/subscription/enrollment-model";
 import { PriceId } from "~/core/subscription/reference";
 import { withUserTransaction } from "~/shell/database/operations";
+import { FiniteFromBigInt } from "~/shell/schema-codecs/contract";
 import {
   durableQueueSchemaIncompatibleMarker,
   durableQueueTableName,
 } from "~/shell/durable-queue-policy";
 
-const WompiSourceIdFromDb = Schema.FiniteFromString.pipe(Schema.decodeTo(WompiSourceId));
+const WompiSourceIdFromDb = FiniteFromBigInt.pipe(Schema.decodeTo(WompiSourceId));
 
 /** Stable SQL queue identity for one pending BillingAttempt's durable reconciliation. */
 export const billingAttemptQueueName = "subscription-billing-attempt" as const;
@@ -232,7 +233,7 @@ export const insertPendingBillingAttemptInScope = Effect.fn(
       ${input.price.id}, ${encodeMoneyAmount(input.price.money.amount)},
       ${input.price.money.currency}, ${input.price.billingPeriod}, ${input.price.serviceMarket},
       ${input.price.taxTreatment}, ${input.timeZone}, ${input.wompiEnvironment},
-      ${input.reference}, 'pending', 'queued', ${input.createdAt}
+      ${input.reference}, 'pending', 'queued', ${DateTime.toDateUtc(input.createdAt)}
     )
     ON CONFLICT DO NOTHING
   `.pipe(Effect.orDie);
@@ -256,7 +257,7 @@ export const armBillingAttemptInScope = Effect.fn("Subscription.armBillingAttemp
       Request: Schema.Void,
       Result: ArmedCharge,
       execute: () => sql`
-        UPDATE billing_attempts AS attempt SET charge_state = 'armed', armed_at = ${armedAt}
+        UPDATE billing_attempts AS attempt SET charge_state = 'armed', armed_at = ${DateTime.toDateUtc(armedAt)}
         FROM card_payment_sources AS source, card_enrollments AS enrollment
         WHERE attempt.id = ${billingAttemptId} AND attempt.user_id = ${userId}
           AND attempt.charge_state = 'queued' AND attempt.status = 'pending'
@@ -362,8 +363,8 @@ const upsertBillingTransaction = Effect.fn("Subscription.upsertBillingTransactio
       ) VALUES (
         ${input.billingAttemptId}, ${input.userId}, ${input.transactionId}, ${next.status},
         ${input.amountInCents}, ${input.currency}, ${input.wompiSourceId},
-        ${input.wompiEnvironment}, ${Option.getOrNull(next.finalizedAt)},
-        ${input.observedAt}, ${input.observedAt}
+        ${input.wompiEnvironment}, ${Option.map(next.finalizedAt, DateTime.toDateUtc).pipe(Option.getOrNull)},
+        ${DateTime.toDateUtc(input.observedAt)}, ${DateTime.toDateUtc(input.observedAt)}
       )
       ON CONFLICT (billing_attempt_id, wompi_transaction_id) DO UPDATE SET
         status = EXCLUDED.status,
@@ -415,7 +416,7 @@ export const markBillingAttemptAwaitingReferenceInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     UPDATE billing_attempts
-      SET awaiting_reference_since = COALESCE(awaiting_reference_since, ${observedAt})
+      SET awaiting_reference_since = COALESCE(awaiting_reference_since, ${DateTime.toDateUtc(observedAt)})
     WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
       AND charge_state = 'armed'
       AND NOT EXISTS (
@@ -432,7 +433,7 @@ export const markBillingAttemptManualReconciliationInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     UPDATE billing_attempts
-      SET manual_reconciliation_since = COALESCE(manual_reconciliation_since, ${observedAt})
+      SET manual_reconciliation_since = COALESCE(manual_reconciliation_since, ${DateTime.toDateUtc(observedAt)})
     WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
   `.pipe(Effect.orDie);
 });
@@ -505,7 +506,7 @@ export const appendWompiObservationInScope = Effect.fn(
     ) VALUES (
       ${input.userId}, ${input.billingAttemptId}, ${input.checksum}, ${input.transactionId},
       ${input.status}, ${input.amountInCents}, ${input.currency}, ${input.wompiSourceId},
-      ${input.wompiEnvironment}, ${Option.getOrNull(input.finalizedAt)}, ${input.observedAt}
+      ${input.wompiEnvironment}, ${Option.map(input.finalizedAt, DateTime.toDateUtc).pipe(Option.getOrNull)}, ${DateTime.toDateUtc(input.observedAt)}
     ) ON CONFLICT (billing_attempt_id, event_checksum) DO NOTHING
   `.pipe(Effect.orDie);
 });
@@ -515,7 +516,7 @@ export const failBillingAttemptInScope = Effect.fn("Subscription.failBillingAtte
   function* (userId: UserId, billingAttemptId: BillingAttemptId, failedAt: DateTime.Utc) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      UPDATE billing_attempts SET status = 'failed', failed_at = ${failedAt}, finalized_at = NULL,
+      UPDATE billing_attempts SET status = 'failed', failed_at = ${DateTime.toDateUtc(failedAt)}, finalized_at = NULL,
         awaiting_reference_since = NULL, manual_reconciliation_since = NULL
       WHERE id = ${billingAttemptId} AND user_id = ${userId} AND status = 'pending'
     `.pipe(Effect.orDie);
@@ -533,7 +534,7 @@ export const activatePaidPeriodInScope = Effect.fn("Subscription.activatePaidPer
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
       UPDATE billing_attempts SET status = 'succeeded', failed_at = NULL,
-        finalized_at = ${input.period.startsAt},
+        finalized_at = ${DateTime.toDateUtc(input.period.startsAt)},
         awaiting_reference_since = NULL, manual_reconciliation_since = NULL
       WHERE id = ${input.attempt.id} AND user_id = ${input.userId}
         AND status IN ('pending', 'failed')
@@ -543,8 +544,8 @@ export const activatePaidPeriodInScope = Effect.fn("Subscription.activatePaidPer
         billing_attempt_id, user_id, subscription_id, starts_at, ends_at, renewal_anchor, created_at
       ) VALUES (
         ${input.attempt.id}, ${input.userId}, ${input.attempt.subscriptionId},
-        ${input.period.startsAt}, ${input.period.endsAt}, ${input.period.renewalAnchor},
-        ${input.recordedAt}
+        ${DateTime.toDateUtc(input.period.startsAt)}, ${DateTime.toDateUtc(input.period.endsAt)}, ${DateTime.toDateUtc(input.period.renewalAnchor)},
+        ${DateTime.toDateUtc(input.recordedAt)}
       ) ON CONFLICT (billing_attempt_id) DO NOTHING
     `.pipe(Effect.orDie);
   }
@@ -581,7 +582,7 @@ export const getBillingReconciliationEscalations = Effect.fn(
 });
 
 const BillingAttemptQueueCandidate = Schema.Struct({
-  sequence: Schema.Int,
+  sequence: Schema.BigInt,
   element: Schema.String,
 });
 
@@ -616,7 +617,7 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
     Request: Schema.Void,
     Result: BillingAttemptQueueCandidate,
     execute: () => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
-      WHERE queue_name = ${billingAttemptQueueName} AND completed = FALSE
+      WHERE queue_name = ${billingAttemptQueueName} AND state <> 'completed'
         AND attempts >= ${maximumBillingAttemptQueueAttempts}
       ORDER BY sequence LIMIT ${exhaustedRetirementPage}`,
   })(undefined).pipe(Effect.orDie);
@@ -624,8 +625,11 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
   for (const item of exhausted) {
     const identity = Schema.decodeOption(BillingAttemptQueueIdentity)(item.element);
     if (Option.isNone(identity)) {
-      yield* sql`UPDATE ${sql(durableQueueTableName)} SET last_failure = ${durableQueueSchemaIncompatibleMarker}, updated_at = ${now}
-        WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
+      yield* sql`UPDATE ${sql(durableQueueTableName)} SET last_failure = ${durableQueueSchemaIncompatibleMarker}, updated_at = ${DateTime.toDateUtc(now)}
+        WHERE sequence = ${item.sequence} AND state <> 'completed'`.pipe(
+        Effect.asVoid,
+        Effect.orDie
+      );
       yield* Effect.logWarning("Retained malformed exhausted BillingAttempt work", {
         sequence: item.sequence,
       }).pipe(Effect.annotateLogs({ work_kind: "billing-reconciliation" }));
@@ -646,9 +650,9 @@ export const retireExhaustedBillingAttemptWork = Effect.fn(
       );
     }
     const retiredRows =
-      yield* sql`UPDATE ${sql(durableQueueTableName)} SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
-      last_failure = 'exhausted', updated_at = ${now}
-      WHERE sequence = ${item.sequence} AND completed = FALSE
+      yield* sql`UPDATE ${sql(durableQueueTableName)} SET state = 'completed', acquired_at = NULL, acquired_by = NULL,
+      last_failure = 'exhausted', updated_at = ${DateTime.toDateUtc(now)}
+      WHERE sequence = ${item.sequence} AND state <> 'completed'
         AND attempts >= ${maximumBillingAttemptQueueAttempts}
       RETURNING sequence`.pipe(Effect.orDie);
     retired += retiredRows.length;
@@ -679,7 +683,7 @@ export const pruneBillingAttemptQueueHistory = Effect.fn(
     Request: Schema.DateTimeUtc,
     Result: BillingAttemptQueueCandidate,
     execute: (before) => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
-      WHERE queue_name = ${billingAttemptQueueName} AND completed = TRUE AND updated_at < ${before}
+      WHERE queue_name = ${billingAttemptQueueName} AND state = 'completed' AND updated_at < ${DateTime.toDateUtc(before)}
       ORDER BY sequence LIMIT ${queueHistoryPage}`,
   })(cutoff).pipe(Effect.orDie);
   let pruned = 0;
@@ -697,7 +701,7 @@ export const pruneBillingAttemptQueueHistory = Effect.fn(
     );
     if (Option.isSome(attempt) && attempt.value.status === "pending") continue;
     const prunedRows = yield* sql`DELETE FROM ${sql(durableQueueTableName)}
-      WHERE sequence = ${candidate.sequence} AND completed = TRUE
+      WHERE sequence = ${candidate.sequence} AND state = 'completed'
       RETURNING sequence`.pipe(Effect.orDie);
     pruned += prunedRows.length;
   }

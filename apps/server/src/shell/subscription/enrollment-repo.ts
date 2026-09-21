@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 import {
@@ -159,9 +159,9 @@ export const insertPreparedEnrollmentInScope = Effect.fn(
       ${input.paymentSourceMode}, 'prepared', ${endUser.permalink.href}, ${endUser.displayedText},
       ${endUser.contentSha256}, ${endUser.providerContentHash}, ${personalData.permalink.href},
       ${personalData.displayedText}, ${personalData.contentSha256},
-      ${personalData.providerContentHash}, ${endUser.observedAt}, ${input.disclosure.revision},
+      ${personalData.providerContentHash}, ${DateTime.toDateUtc(endUser.observedAt)}, ${input.disclosure.revision},
       ${input.disclosure.displayedText}, ${input.disclosure.contentSha256},
-      ${input.preparedAt}, ${input.expiresAt}
+      ${DateTime.toDateUtc(input.preparedAt)}, ${DateTime.toDateUtc(input.expiresAt)}
     )
   `.pipe(Effect.orDie);
 });
@@ -178,7 +178,7 @@ export const hasEnrollmentPreparationCapacityInScope = Effect.fn(
       SELECT COUNT(*) < ${maximumEnrollmentPreparationsPerHour} AS available
       FROM card_enrollments
       WHERE user_id = ${userId}
-        AND prepared_at > ${preparedAt}::timestamptz - INTERVAL '1 hour'
+        AND prepared_at > ${DateTime.toDateUtc(preparedAt)}::timestamptz - INTERVAL '1 hour'
     `,
   })(undefined).pipe(
     Effect.map((result) => result.available),
@@ -198,7 +198,7 @@ export const hasSourceCreationCapacityInScope = Effect.fn(
       SELECT COUNT(*) < ${maximumSourceCreationAttemptsPerHour} AS available
       FROM card_enrollments
       WHERE user_id = ${userId} AND payment_source_mode = 'create' AND accepted_at IS NOT NULL
-        AND accepted_at > ${acceptedAt}::timestamptz - INTERVAL '1 hour'
+        AND accepted_at > ${DateTime.toDateUtc(acceptedAt)}::timestamptz - INTERVAL '1 hour'
     `,
   })(undefined).pipe(
     Effect.map((result) => result.available),
@@ -216,7 +216,7 @@ export const expireEnrollmentInScope = Effect.fn("Subscription.expireEnrollmentI
   yield* sql`
       UPDATE card_enrollments SET status = 'expired'
       WHERE user_id = ${userId} AND id = ${enrollmentId}
-        AND status = 'prepared' AND expires_at <= ${expiredAt}
+        AND status = 'prepared' AND expires_at <= ${DateTime.toDateUtc(expiredAt)}
     `.pipe(Effect.orDie);
 });
 
@@ -232,9 +232,9 @@ export const beginEnrollmentSubmissionInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql`
     UPDATE card_enrollments SET status = 'creating', billing_email = ${input.billingEmail},
-      accepted_at = ${input.acceptedAt}
+      accepted_at = ${DateTime.toDateUtc(input.acceptedAt)}
     WHERE user_id = ${input.userId} AND id = ${input.enrollmentId}
-      AND status = 'prepared' AND expires_at > ${input.acceptedAt}
+      AND status = 'prepared' AND expires_at > ${DateTime.toDateUtc(input.acceptedAt)}
     RETURNING id
   `.pipe(Effect.orDie);
   return rows.length === 1;
@@ -265,7 +265,7 @@ export const retainAvailableSourceInScope = Effect.fn("Subscription.retainAvaila
       INSERT INTO card_payment_sources (id, user_id, wompi_source_id, status, created_at)
       VALUES (
         ${input.paymentSourceId}, ${input.userId}, ${input.wompiSourceId}, 'available',
-        ${input.createdAt}
+        ${DateTime.toDateUtc(input.createdAt)}
       )
     `.pipe(Effect.orDie);
     yield* reusePaymentSourceInScope(input.userId, input.enrollmentId, input.paymentSourceId);

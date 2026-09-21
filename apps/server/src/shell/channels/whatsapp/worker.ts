@@ -14,7 +14,6 @@ import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 
 import {
   type WhatsAppInboundWork,
-  maximumWhatsAppInboundAttempts,
   whatsappInboundConsumerCount,
   whatsappInboundQueue,
 } from "./inbound-execution";
@@ -74,9 +73,7 @@ export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(fun
   const queue = whatsappInboundQueue;
   const agent = yield* AgentService;
   return yield* queue
-    .handleNext((work) => agent.handleWhatsAppWork(work), whatsappInboundHandlerPolicy, {
-      maxAttempts: maximumWhatsAppInboundAttempts,
-    })
+    .handleNext((work) => agent.handleWhatsAppWork(work), whatsappInboundHandlerPolicy)
     .pipe(Effect.as(true));
 });
 

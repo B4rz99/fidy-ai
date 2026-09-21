@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import type { WebSessionId } from "~/core/web-session/reference";
@@ -24,7 +24,8 @@ export const redeemPairingToWebSession = Effect.fn("WebAuth.redeemPairingToWebSe
     execute: () => sql`
         SELECT fidy_redeem_pairing_to_web_session(
           ${input.pairingId}::uuid, ${input.sessionId}::uuid, ${input.bearerDigest},
-          ${input.pairedAt}, ${input.freshUntil}, ${input.idleExpiresAt}, ${input.hardExpiresAt}
+          ${DateTime.toDateUtc(input.pairedAt)}, ${DateTime.toDateUtc(input.freshUntil)},
+          ${DateTime.toDateUtc(input.idleExpiresAt)}, ${DateTime.toDateUtc(input.hardExpiresAt)}
         ) AS changed
       `,
   })(undefined).pipe(Effect.orDie);

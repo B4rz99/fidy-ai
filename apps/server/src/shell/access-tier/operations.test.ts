@@ -50,7 +50,7 @@ const installExpiredTrialFixtures = Effect.gen(function* () {
       created_at
     ) VALUES (
       ${firstPatId}, ${firstUserId}, 'tierchec', 'Tier check', ${"c".repeat(64)},
-      ARRAY['write'], 90, '2026-10-30T12:00:00Z', ${createdAt}
+      ARRAY['write'], 90, '2026-10-30T12:00:00Z', ${DateTime.toDateUtc(createdAt)}
     )
   `;
 });

@@ -8,7 +8,7 @@ import { RunnerAddress, type ShardingConfig } from "effect/unstable/cluster";
 export const clusterStoragePrefix = "cluster";
 
 /** The only approved Cluster frame serialization. Every runner and client must agree on it. */
-export const clusterSerialization = "msgpack";
+export const clusterSerialization = "schema-binary";
 
 /** Bound applied to one encoded Cluster frame before protocol decoding. */
 export const clusterSerializationMaxBufferSizeBytes = 65_536;

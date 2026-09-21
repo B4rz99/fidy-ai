@@ -232,7 +232,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
             )
           ).pipe(Effect.withLogger(logger));
           expect(Exit.isFailure(transientExit)).toBe(true);
-          const [transientState] = yield* sql`SELECT completed, attempts,
+          const [transientState] = yield* sql`SELECT state = 'completed' AS completed, attempts,
             last_failure AS "lastFailure" FROM fidy_durable.fidy_queue
             WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
           expect(transientState).toEqual({
@@ -252,7 +252,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
             )
           ).pipe(Effect.withLogger(logger));
           expect(Exit.isFailure(defectExit)).toBe(true);
-          const [defectState] = yield* sql`SELECT completed, attempts,
+          const [defectState] = yield* sql`SELECT state = 'completed' AS completed, attempts,
             last_failure AS "lastFailure" FROM fidy_durable.fidy_queue
             WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`;
           expect(defectState).toEqual({
@@ -295,7 +295,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         );
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
         expect(
-          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+          yield* sql`SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`
         ).toEqual([{ completed: false, attempts: 0, lastFailure: null }]);
@@ -324,7 +324,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         );
 
         expect(
-          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+          yield* sql`SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = 'email-replacement-expiry' AND id = ${expiry.workflowId}`
         ).toEqual([{ completed: true, attempts: 1, lastFailure: null }]);
@@ -370,7 +370,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         );
 
         expect(
-          yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+          yield* sql`SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = 'email-replacement-delivery' AND id = ${delivery.intentId}`
         ).toEqual([{ completed: true, attempts: 1, lastFailure: null }]);
@@ -566,8 +566,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const { delivery } = yield* admit("replacement-cluster-retry@example.com");
           const sql = yield* MigrationSqlClient;
           yield* Effect.addFinalizer(() =>
-            sql`DROP TRIGGER IF EXISTS test_delivery_second_attempt_failure ON email_replacement_delivery_attempts;
-            DROP FUNCTION IF EXISTS test_delivery_second_attempt_failure()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER IF EXISTS test_delivery_second_attempt_failure
+                  ON email_replacement_delivery_attempts`,
+                sql`DROP FUNCTION IF EXISTS test_delivery_second_attempt_failure()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           );
           yield* sql`CREATE OR REPLACE FUNCTION test_delivery_second_attempt_failure() RETURNS trigger LANGUAGE plpgsql AS $$
           BEGIN RAISE EXCEPTION 'delivery-database-secret-sentinel'; END $$`;
@@ -621,8 +627,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const sql = yield* MigrationSqlClient;
           yield* Effect.addFinalizer(() =>
-            sql`DROP TRIGGER IF EXISTS test_delivery_failure ON email_replacement_delivery_attempts;
-          DROP FUNCTION IF EXISTS test_delivery_failure()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER IF EXISTS test_delivery_failure
+                  ON email_replacement_delivery_attempts`,
+                sql`DROP FUNCTION IF EXISTS test_delivery_failure()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           );
           for (const phase of ["arming", "settlement"] as const) {
             const { delivery } = yield* admit(`replacement-database-${phase}@example.com`);
@@ -679,12 +691,19 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* sql`UPDATE email_replacement_workflows SET started_at = now() - interval '24 hours 1 second', expires_at = now() - interval '1 second' WHERE id = ${expiry.workflowId}`;
           yield* sql`UPDATE email_replacement_executions SET expires_at = now() - interval '1 second' WHERE id = ${expiry.workflowId}`;
           yield* Effect.addFinalizer(() =>
-            sql`DROP TRIGGER IF EXISTS test_replacement_expiry_failure ON email_replacement_workflows;
-            DROP FUNCTION IF EXISTS test_replacement_expiry_failure()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER IF EXISTS test_replacement_expiry_failure
+                  ON email_replacement_workflows`,
+                sql`DROP FUNCTION IF EXISTS test_replacement_expiry_failure()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           );
           yield* sql`CREATE FUNCTION test_replacement_expiry_failure() RETURNS trigger LANGUAGE plpgsql AS $$
-          BEGIN RAISE EXCEPTION 'expiry-database-secret-sentinel'; END $$;
-          CREATE TRIGGER test_replacement_expiry_failure BEFORE DELETE ON email_replacement_workflows
+          BEGIN RAISE EXCEPTION 'expiry-database-secret-sentinel'; END $$`;
+          yield* sql`CREATE TRIGGER test_replacement_expiry_failure
+          BEFORE DELETE ON email_replacement_workflows
           FOR EACH ROW EXECUTE FUNCTION test_replacement_expiry_failure()`;
           const runtimeA = yield* acquireRuntime(EmailDeliveryPort.of({ send: () => Effect.void }));
           yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'email-replacement-expiry' AND id <> ${expiry.workflowId}`;
@@ -785,8 +804,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           // Start the waiting window only once the runtime is ready, so a slow shard hand-off cannot
           // expire the replacement before the workflow observes the waiting boundary at all.
           const deadline = DateTime.add(yield* DateTime.now, { seconds: 2 });
-          yield* sql`UPDATE email_replacement_workflows SET expires_at = ${deadline},
-      started_at = ${DateTime.subtract(deadline, { hours: 24 })} WHERE id = ${expiry.workflowId}`;
+          yield* sql`UPDATE email_replacement_workflows SET expires_at = ${DateTime.toDateUtc(deadline)},
+      started_at = ${DateTime.toDateUtc(DateTime.subtract(deadline, { hours: 24 }))} WHERE id = ${expiry.workflowId}`;
           yield* Effect.tryPromise(() =>
             runtimeA.runPromise(ReplacementExpiryWorkflow.execute(expiry, { discard: true }))
           );

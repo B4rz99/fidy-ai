@@ -1,4 +1,4 @@
-import { expect, layer } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { Array, BigDecimal, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpBody, HttpClient } from "effect/unstable/http";
@@ -954,11 +954,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
 const DashboardClockHarness = Layer.merge(PgLive, MigrationSqlClientLive);
 
-layer(DashboardClockHarness, { timeout: "30 seconds" })("Dashboard operation Clock seam", (it) => {
-  it.effect("uses one TestClock instant for a zone-aware PostgreSQL projection", () =>
-    Effect.gen(function* () {
-      const instant = DateTime.makeUnsafe("2026-03-15T12:00:00Z");
-      yield* TestClock.setTime(instant.epochMilliseconds);
+it.effect("uses one TestClock instant for a zone-aware PostgreSQL projection", () =>
+  Effect.gen(function* () {
+    const instant = DateTime.makeUnsafe("2026-03-15T12:00:00Z");
+    // Move the TestClock before the harness builds. The pools schedule periodic idle-reaper
+    // sleeps on the ambient Clock, and `TestClock.setTime` replays every sleep at or before the
+    // target: jumping after the reapers register would step through their 10-second interval
+    // from the epoch to the target instant and never finish.
+    yield* TestClock.setTime(instant.epochMilliseconds);
+    const harness = yield* Layer.build(DashboardClockHarness);
+    yield* Effect.gen(function* () {
       yield* truncateDashboards;
       const admin = yield* MigrationSqlClient;
       yield* admin`
@@ -979,6 +984,6 @@ layer(DashboardClockHarness, { timeout: "30 seconds" })("Dashboard operation Clo
       expect(DateTime.formatIso(widget.result.appliedPeriod.toExclusive)).toBe(
         "2026-04-01T04:00:00.000Z"
       );
-    })
-  );
-});
+    }).pipe(Effect.provide(harness));
+  })
+);

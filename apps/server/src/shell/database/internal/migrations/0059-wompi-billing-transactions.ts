@@ -27,8 +27,9 @@ export const wompiBillingTransactions = Effect.gen(function* () {
       CHECK (last_observed_at >= first_observed_at),
       PRIMARY KEY (billing_attempt_id, wompi_transaction_id),
       FOREIGN KEY (billing_attempt_id, user_id) REFERENCES billing_attempts(id, user_id)
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_preserve_billing_transaction() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
@@ -51,17 +52,25 @@ export const wompiBillingTransactions = Effect.gen(function* () {
       END IF;
       RETURN NEW;
     END;
-    $$;
+    $$
+  `;
+  yield* sql`
     CREATE TRIGGER billing_transaction_preserve
       BEFORE UPDATE OR DELETE ON billing_attempt_transactions
-      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_billing_transaction();
-
-    ALTER TABLE billing_attempt_transactions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE billing_attempt_transactions FORCE ROW LEVEL SECURITY;
+      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_billing_transaction()
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempt_transactions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempt_transactions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY billing_attempt_transactions_by_user ON billing_attempt_transactions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
     WITH observed AS (
       SELECT billing_attempt_id, user_id, wompi_transaction_id,
         bool_or(status = 'APPROVED') AS approved,
@@ -85,8 +94,9 @@ export const wompiBillingTransactions = Effect.gen(function* () {
       CASE WHEN approved THEN 'APPROVED' WHEN pending THEN 'PENDING' ELSE latest_status END,
       amount_in_cents, currency, wompi_source_id, wompi_environment, finalized_at,
       first_observed_at, last_observed_at
-    FROM observed;
-
+    FROM observed
+  `;
+  yield* sql`
     INSERT INTO billing_attempt_transactions (
       billing_attempt_id, user_id, wompi_transaction_id, status, amount_in_cents, currency,
       wompi_source_id, wompi_environment, finalized_at, first_observed_at, last_observed_at
@@ -104,8 +114,9 @@ export const wompiBillingTransactions = Effect.gen(function* () {
     FROM billing_attempts AS attempt
     INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
     WHERE attempt.wompi_transaction_id IS NOT NULL
-    ON CONFLICT DO NOTHING;
-
+    ON CONFLICT DO NOTHING
+  `;
+  yield* sql`
     CREATE OR REPLACE FUNCTION fidy_preserve_billing_snapshot() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
@@ -137,15 +148,17 @@ export const wompiBillingTransactions = Effect.gen(function* () {
       END IF;
       RETURN NEW;
     END;
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE OR REPLACE FUNCTION fidy_resolve_wompi_billing_user_by_transaction(transaction_id text)
     RETURNS uuid LANGUAGE sql SECURITY DEFINER STABLE
     SET search_path = pg_catalog, pg_temp AS $$
       SELECT user_id FROM public.billing_attempt_transactions
       WHERE wompi_transaction_id = transaction_id
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE OR REPLACE FUNCTION fidy_billing_reconciliation_escalations() RETURNS TABLE (
       "awaitingReferenceCount" int,
       "awaitingReferenceMaxAgeSeconds" int,
@@ -181,17 +194,28 @@ export const wompiBillingTransactions = Effect.gen(function* () {
           FILTER (WHERE attempt.manual_reconciliation_since IS NOT NULL), 0)::int
       FROM public.billing_attempts AS attempt
       WHERE attempt.status = 'pending'
-    $$;
-
-    ALTER TABLE billing_attempts DROP COLUMN wompi_transaction_id;
-
-    ALTER FUNCTION fidy_resolve_wompi_billing_user(text) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_billing_reconciliation_escalations() OWNER TO fidy_gateway;
-    GRANT SELECT ON billing_attempts, billing_attempt_transactions TO fidy_gateway;
-
-    GRANT SELECT, INSERT ON billing_attempt_transactions TO fidy_runtime;
+    $$
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempts DROP COLUMN wompi_transaction_id
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_resolve_wompi_billing_user(text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_billing_reconciliation_escalations() OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT ON billing_attempts, billing_attempt_transactions TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT ON billing_attempt_transactions TO fidy_runtime
+  `;
+  yield* sql`
     GRANT UPDATE (status, finalized_at, last_observed_at)
-      ON billing_attempt_transactions TO fidy_runtime;
+      ON billing_attempt_transactions TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

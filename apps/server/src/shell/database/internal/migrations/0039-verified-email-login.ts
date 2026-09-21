@@ -12,8 +12,9 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       authentication_lookup_key text NOT NULL
         CONSTRAINT verified_email_auth_lookup_key_unique UNIQUE
         CHECK (authentication_lookup_key ~ '^[0-9a-f]{64}$')
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE TABLE browser_pairing_email_workflows (
       id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -33,12 +34,17 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       CHECK ((proof_digest IS NULL) = (proof_expires_at IS NULL)),
       CHECK (proof_expires_at IS NULL OR proof_expires_at <= expires_at),
       CHECK ((retention_claim_token IS NULL) = (retention_claim_expires_at IS NULL))
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX browser_pairing_email_workflow_expiry_idx
-      ON browser_pairing_email_workflows (expires_at, id);
+      ON browser_pairing_email_workflows (expires_at, id)
+  `;
+  yield* sql`
     CREATE INDEX browser_pairing_email_workflow_user_idx
-      ON browser_pairing_email_workflows (user_id, id);
-
+      ON browser_pairing_email_workflows (user_id, id)
+  `;
+  yield* sql`
     CREATE TABLE browser_pairing_email_delivery_intents (
       id uuid PRIMARY KEY,
       workflow_id uuid NOT NULL REFERENCES browser_pairing_email_workflows(id) ON DELETE CASCADE,
@@ -55,11 +61,14 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       CHECK ((status IN ('claimed', 'armed')) =
         (claim_token IS NOT NULL AND claim_expires_at IS NOT NULL)),
       UNIQUE (workflow_id, generation)
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX browser_pairing_email_delivery_claimable_idx
       ON browser_pairing_email_delivery_intents (created_at, id)
-      WHERE status IN ('pending', 'claimed', 'armed');
-
+      WHERE status IN ('pending', 'claimed', 'armed')
+  `;
+  yield* sql`
     CREATE TABLE browser_pairing_email_start_requests (
       id uuid PRIMARY KEY,
       pairing_id uuid NOT NULL REFERENCES browser_login_pairings(id) ON DELETE CASCADE,
@@ -72,44 +81,66 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       claim_expires_at timestamptz,
       CHECK ((status = 'claimed') =
         (user_id IS NOT NULL AND claim_token IS NOT NULL AND claim_expires_at IS NOT NULL))
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX browser_pairing_email_start_request_claimable_idx
       ON browser_pairing_email_start_requests (requested_at, id)
-      WHERE status IN ('pending', 'claimed');
-
+      WHERE status IN ('pending', 'claimed')
+  `;
+  yield* sql`
     CREATE TABLE email_pairing_login_admission_scopes (
       scope_key text PRIMARY KEY CHECK (scope_key ~ '^[0-9a-f]{64}$'),
       scope_kind text NOT NULL CHECK (scope_kind IN ('address', 'source', 'pairing')),
       expires_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX email_pairing_login_admission_expiry_idx
-      ON email_pairing_login_admission_scopes (expires_at, scope_key);
-
+      ON email_pairing_login_admission_scopes (expires_at, scope_key)
+  `;
+  yield* sql`
     CREATE TABLE email_pairing_login_admission_attempts (
       scope_key text NOT NULL REFERENCES email_pairing_login_admission_scopes(scope_key)
         ON DELETE CASCADE,
       attempted_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX email_pairing_login_attempt_scope_time_idx
-      ON email_pairing_login_admission_attempts (scope_key, attempted_at DESC);
+      ON email_pairing_login_admission_attempts (scope_key, attempted_at DESC)
   `;
 
   yield* sql`
-    ALTER TABLE verified_email_credential_authentication_lookups ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE verified_email_credential_authentication_lookups FORCE ROW LEVEL SECURITY;
+    ALTER TABLE verified_email_credential_authentication_lookups ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE verified_email_credential_authentication_lookups FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY verified_email_credential_authentication_lookups_by_user
       ON verified_email_credential_authentication_lookups
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE browser_pairing_email_workflows ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE browser_pairing_email_workflows FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_workflows ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_workflows FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY browser_pairing_email_workflows_by_user ON browser_pairing_email_workflows
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE browser_pairing_email_delivery_intents ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE browser_pairing_email_delivery_intents FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_delivery_intents ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_delivery_intents FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY browser_pairing_email_delivery_intents_by_user
       ON browser_pairing_email_delivery_intents
       USING (EXISTS (
@@ -120,10 +151,15 @@ export const verifiedEmailLogin = Effect.gen(function* () {
         SELECT 1 FROM browser_pairing_email_workflows workflow
         WHERE workflow.id = workflow_id
           AND workflow.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
-      ));
-
-    ALTER TABLE browser_pairing_email_start_requests ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE browser_pairing_email_start_requests FORCE ROW LEVEL SECURITY;
+      ))
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_start_requests ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE browser_pairing_email_start_requests FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY browser_pairing_email_start_requests_context
       ON browser_pairing_email_start_requests
       USING (
@@ -132,21 +168,31 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       ) WITH CHECK (
         (user_id IS NULL AND NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
         OR user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
-      );
-
-    ALTER TABLE email_pairing_login_admission_scopes ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE email_pairing_login_admission_scopes FORCE ROW LEVEL SECURITY;
+      )
+  `;
+  yield* sql`
+    ALTER TABLE email_pairing_login_admission_scopes ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE email_pairing_login_admission_scopes FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY email_pairing_login_admission_scopes_anonymous
       ON email_pairing_login_admission_scopes
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
-      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL);
-
-    ALTER TABLE email_pairing_login_admission_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE email_pairing_login_admission_attempts FORCE ROW LEVEL SECURITY;
+      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
+  `;
+  yield* sql`
+    ALTER TABLE email_pairing_login_admission_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE email_pairing_login_admission_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY email_pairing_login_admission_attempts_anonymous
       ON email_pairing_login_admission_attempts
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
-      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL);
+      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
   `;
 
   const existingCredentials = yield* SqlSchema.findAll({
@@ -210,8 +256,9 @@ export const verifiedEmailLogin = Effect.gen(function* () {
             AND lookup.authentication_lookup_key = request.address_lookup_key
           RETURNING request.id, request.user_id, request.claim_token;
     END
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_resolve_browser_pairing_email_workflow_owner(uuid)
     RETURNS TABLE (workflow_id uuid, user_id uuid, expires_at timestamptz)
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -220,8 +267,9 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       FROM browser_pairing_email_workflows workflow
       WHERE workflow.pairing_id = $1
       LIMIT 1
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_claim_browser_pairing_email_delivery(timestamptz, uuid, timestamptz)
     RETURNS TABLE (intent_id uuid, user_id uuid, claim_token uuid)
     LANGUAGE sql SECURITY DEFINER
@@ -246,8 +294,9 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       FROM candidate, browser_pairing_email_workflows workflow
       WHERE intent.id = candidate.id AND workflow.id = intent.workflow_id
       RETURNING intent.id, workflow.user_id, intent.claim_token
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_claim_expired_browser_pairing_email_workflow(
       timestamptz, uuid, timestamptz
     ) RETURNS TABLE (workflow_id uuid, user_id uuid, claim_token uuid)
@@ -264,8 +313,9 @@ export const verifiedEmailLogin = Effect.gen(function* () {
       ) claimed
       WHERE workflow.id = claimed.id
       RETURNING workflow.id, workflow.user_id, workflow.retention_claim_token
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_purge_email_pairing_login_admission_evidence(timestamptz)
     RETURNS bigint LANGUAGE sql SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -277,17 +327,27 @@ export const verifiedEmailLogin = Effect.gen(function* () {
         DELETE FROM email_pairing_login_admission_scopes scope USING expired
         WHERE scope.scope_key = expired.scope_key RETURNING 1
       ) SELECT count(*) FROM deleted
-    $$;
+    $$
   `;
 
   yield* sql`
     GRANT SELECT ON verified_email_credentials,
-    verified_email_credential_authentication_lookups, browser_login_pairings TO fidy_gateway;
-    GRANT SELECT, UPDATE ON browser_pairing_email_workflows TO fidy_gateway;
-    GRANT SELECT, UPDATE ON browser_pairing_email_delivery_intents TO fidy_gateway;
-    GRANT SELECT, UPDATE, DELETE ON browser_pairing_email_start_requests TO fidy_gateway;
-    GRANT SELECT, UPDATE, DELETE ON email_pairing_login_admission_scopes TO fidy_gateway;
-    GRANT SELECT, DELETE ON email_pairing_login_admission_attempts TO fidy_gateway;
+    verified_email_credential_authentication_lookups, browser_login_pairings TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE ON browser_pairing_email_workflows TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE ON browser_pairing_email_delivery_intents TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE, DELETE ON browser_pairing_email_start_requests TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE, DELETE ON email_pairing_login_admission_scopes TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, DELETE ON email_pairing_login_admission_attempts TO fidy_gateway
   `;
   yield* sql`ALTER FUNCTION fidy_claim_browser_pairing_email_start_request(timestamptz, uuid, timestamptz) OWNER TO fidy_gateway`;
   yield* sql`ALTER FUNCTION fidy_resolve_browser_pairing_email_workflow_owner(uuid) OWNER TO fidy_gateway`;
@@ -306,11 +366,21 @@ export const verifiedEmailLogin = Effect.gen(function* () {
   yield* sql`GRANT EXECUTE ON FUNCTION fidy_purge_email_pairing_login_admission_evidence(timestamptz) TO fidy_runtime`;
   yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE
-    ON verified_email_credential_authentication_lookups TO fidy_runtime;
-  GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_workflows TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_delivery_intents TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_start_requests TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON email_pairing_login_admission_scopes TO fidy_runtime;
+    ON verified_email_credential_authentication_lookups TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_workflows TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_delivery_intents TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_pairing_email_start_requests TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON email_pairing_login_admission_scopes TO fidy_runtime
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, DELETE ON email_pairing_login_admission_attempts TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

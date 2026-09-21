@@ -147,7 +147,7 @@ export const insertEmailEnrollment = Effect.fn("EmailAuthentication.insertEnroll
         ${input.id}, ${input.publicCode}, ${input.caller.businessPortfolioId},
         ${input.caller.businessScopedUserId}, ${Option.getOrNull(input.caller.parentBusinessScopedUserId)},
         ${Option.getOrNull(input.caller.username)}, ${Option.getOrNull(input.caller.phoneNumber)},
-        ${input.pendingConsentExchangeId}, ${input.expiresAt}
+        ${input.pendingConsentExchangeId}, ${DateTime.toDateUtc(input.expiresAt)}
       )
       ON CONFLICT (business_portfolio_id, business_scoped_user_id) DO UPDATE
         SET business_scoped_user_id = EXCLUDED.business_scoped_user_id
@@ -253,7 +253,7 @@ export const submitEnrollmentEmail = Effect.fn("EmailAuthentication.submitEmail"
         WITH advanced AS (
           UPDATE email_enrollments SET email_address = ${input.email},
             delivery_generation = delivery_generation + 1,
-            resend_available_at = ${input.resendAvailableAt}, proof_digest = NULL,
+            resend_available_at = ${DateTime.toDateUtc(input.resendAvailableAt)}, proof_digest = NULL,
             proof_expires_at = NULL, wrong_proof_attempts = 0
           WHERE id = ${input.enrollmentId} AND delivery_generation < 5
           RETURNING delivery_generation AS generation
@@ -265,7 +265,7 @@ export const submitEnrollmentEmail = Effect.fn("EmailAuthentication.submitEmail"
         INSERT INTO email_delivery_intents (
           id, enrollment_id, generation, email_address, status, idempotency_key, created_at
         ) SELECT ${input.intentId}, ${input.enrollmentId}, generation, ${input.email}, 'pending',
-          ${input.idempotencyKey}, ${input.submittedAt} FROM advanced
+          ${input.idempotencyKey}, ${DateTime.toDateUtc(input.submittedAt)} FROM advanced
         RETURNING generation
       `,
   })(undefined).pipe(Effect.orDie);
@@ -346,7 +346,7 @@ export const findPendingOnboardingEmailDeliveries: FindPendingOnboardingEmailDel
         onSome: (cursor) => sql`
           SELECT id, created_at AS "createdAt" FROM email_delivery_intents
           WHERE status = 'pending'
-            AND (created_at, id) > (${cursor.createdAt}, ${cursor.id})
+            AND (created_at, id) > (${DateTime.toDateUtc(cursor.createdAt)}, ${cursor.id})
           ORDER BY created_at, id
           LIMIT ${pendingDeliveryStartupLimit}
         `,
@@ -364,7 +364,7 @@ export const supersedeNotCurrentOnboardingEmailDelivery = Effect.fn(
     FROM email_enrollments AS enrollment
     WHERE intent.id = ${intentId} AND intent.enrollment_id = enrollment.id
       AND intent.status = 'pending'
-      AND (intent.generation <> enrollment.delivery_generation OR enrollment.expires_at <= ${observedAt})
+      AND (intent.generation <> enrollment.delivery_generation OR enrollment.expires_at <= ${DateTime.toDateUtc(observedAt)})
   `.pipe(Effect.orDie);
 });
 
@@ -388,7 +388,7 @@ export const armOnboardingEmailDelivery = Effect.fn("EmailAuthentication.armOnbo
             JOIN email_enrollments AS enrollment ON enrollment.id = intent.enrollment_id
             WHERE intent.id = ${intentId} AND intent.status = 'pending'
               AND intent.generation = enrollment.delivery_generation
-              AND enrollment.expires_at > ${armedAt}
+              AND enrollment.expires_at > ${DateTime.toDateUtc(armedAt)}
             FOR UPDATE OF intent, enrollment
           `,
           })(undefined).pipe(Effect.orDie);
@@ -406,7 +406,7 @@ export const armOnboardingEmailDelivery = Effect.fn("EmailAuthentication.armOnbo
           const armed = yield* sql`
           UPDATE email_enrollments AS enrollment
           SET proof_digest = ${digest},
-            proof_expires_at = ${DateTime.min(proofExpiry(armedAt), intent.enrollmentExpiresAt)},
+            proof_expires_at = ${DateTime.toDateUtc(DateTime.min(proofExpiry(armedAt), intent.enrollmentExpiresAt))},
             wrong_proof_attempts = 0
           FROM email_delivery_intents AS delivery
           WHERE delivery.id = ${intent.id} AND delivery.enrollment_id = enrollment.id
@@ -445,7 +445,7 @@ export const installVerifiedEmailCredentialInScope = Effect.fn(
   const inserted = yield* sql`
     WITH credential AS (
       INSERT INTO verified_email_credentials (user_id, email_address, verified_at)
-      VALUES (${input.userId}, ${input.email}, ${input.verifiedAt})
+      VALUES (${input.userId}, ${input.email}, ${DateTime.toDateUtc(input.verifiedAt)})
       ON CONFLICT DO NOTHING RETURNING user_id
     )
     INSERT INTO verified_email_credential_authentication_lookups (
@@ -481,7 +481,7 @@ export const lockExpiredEmailEnrollmentsForRetention: LockExpiredEmailEnrollment
         WITH expired AS (
           SELECT id
           FROM email_enrollments
-          WHERE expires_at <= ${now}
+          WHERE expires_at <= ${DateTime.toDateUtc(now)}
           ORDER BY expires_at, id
           LIMIT ${retentionBatchSize}
           FOR UPDATE SKIP LOCKED
@@ -508,7 +508,7 @@ export const removeExpiredEmailEnrollment = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     DELETE FROM email_enrollments
-    WHERE id = ${enrollmentId} AND expires_at <= ${now}
+    WHERE id = ${enrollmentId} AND expires_at <= ${DateTime.toDateUtc(now)}
   `.pipe(Effect.orDie);
 });
 
@@ -521,7 +521,7 @@ export const removeExpiredEmailDeliveryBudgets = Effect.fn(
     WITH expired AS (
       SELECT scope_key
       FROM email_delivery_admission_budgets
-      WHERE expires_at <= ${now}
+      WHERE expires_at <= ${DateTime.toDateUtc(now)}
       ORDER BY expires_at, scope_key
       LIMIT ${retentionBatchSize}
       FOR UPDATE SKIP LOCKED

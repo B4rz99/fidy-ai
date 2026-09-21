@@ -65,12 +65,18 @@ export const browserLoginPairings = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE browser_login_pairings ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE browser_login_pairings FORCE ROW LEVEL SECURITY;
+    ALTER TABLE browser_login_pairings ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE browser_login_pairings FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY browser_login_pairings_unbound ON browser_login_pairings
       USING (user_id IS NULL AND NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
       WITH CHECK (user_id IS NULL AND lifecycle IN ('pending_approval', 'expired')
-        AND NULLIF(current_setting('fidy.user_id', true), '') IS NULL);
+        AND NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
+  `;
+  yield* sql`
     CREATE POLICY browser_login_pairings_approval ON browser_login_pairings
       USING (
         (user_id IS NULL AND lifecycle = 'pending_approval'
@@ -80,14 +86,20 @@ export const browserLoginPairings = Effect.gen(function* () {
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE browser_login_start_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE browser_login_start_attempts FORCE ROW LEVEL SECURITY;
+    ALTER TABLE browser_login_start_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE browser_login_start_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY browser_login_start_attempts_anonymous ON browser_login_start_attempts
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
       WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
   `;
   yield* sql`
-    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_login_pairings TO fidy_runtime;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON browser_login_pairings TO fidy_runtime
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, DELETE ON browser_login_start_attempts TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

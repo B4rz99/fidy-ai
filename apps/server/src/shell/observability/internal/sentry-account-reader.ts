@@ -61,9 +61,9 @@ export type SentryAccountReaderConfig = Readonly<{
 
 /** Redacted account locators consumed by the operator-only Sentry verification command. */
 export const sentryAccountConfig = Config.all({
-  organizationSlug: Config.redacted("SENTRY_ORGANIZATION_SLUG"),
-  productionProjectSlug: Config.redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),
-  nonProductionProjectSlug: Config.redacted("SENTRY_NON_PRODUCTION_PROJECT_SLUG"),
+  organizationSlug: Config.Redacted("SENTRY_ORGANIZATION_SLUG"),
+  productionProjectSlug: Config.Redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),
+  nonProductionProjectSlug: Config.Redacted("SENTRY_NON_PRODUCTION_PROJECT_SLUG"),
 });
 
 const unauthorizedStatus = 401;

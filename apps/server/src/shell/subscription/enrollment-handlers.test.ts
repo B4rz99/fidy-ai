@@ -171,7 +171,7 @@ const seedWebSessionFor = Effect.fn("Test.seedEnrollmentWebSession")(function* (
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${targetUserId}`;
   yield* sql`
     INSERT INTO verified_email_credentials (user_id, email_address, verified_at)
-    VALUES (${targetUserId}, ${targetEmail}, ${now})
+    VALUES (${targetUserId}, ${targetEmail}, ${DateTime.toDateUtc(now)})
     ON CONFLICT (user_id) DO UPDATE SET
       email_address = EXCLUDED.email_address, verified_at = EXCLUDED.verified_at
   `;
@@ -179,8 +179,9 @@ const seedWebSessionFor = Effect.fn("Test.seedEnrollmentWebSession")(function* (
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${targetSessionId}, ${targetUserId}, ${bearerDigest}, ${now}, ${deadlines.freshUntil},
-      ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${targetSessionId}, ${targetUserId}, ${bearerDigest}, ${DateTime.toDateUtc(now)},
+      ${DateTime.toDateUtc(deadlines.freshUntil)},
+      ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
 });

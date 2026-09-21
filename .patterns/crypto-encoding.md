@@ -1,6 +1,7 @@
 # Effect v4 crypto, encoding, and secret handling
 
-Project baseline: `effect@4.0.0-rc.112`; source checkout `.repos/effect` at `f239b5b6cc`.
+Audit baseline: `effect@4.0.0-rc.116` (`d62dd0d6…`) plus the vendored upstream snapshot
+`8d40572d…`, which contains post-rc.116 changes.
 
 Use this pattern when generating identifiers or bearer secrets, hashing, encoding binary values, comparing secret-derived values, or handling `Redacted` configuration.
 
@@ -8,7 +9,7 @@ Use this pattern when generating identifiers or bearer secrets, hashing, encodin
 
 | Concern                           | API                                          | Security property                                                        |
 | --------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| Entropy, UUIDs, SHA digest        | `Crypto.Crypto`                              | Platform-backed cryptographic implementation                             |
+| Entropy, UUIDs, ULIDs, SHA digest | `Crypto.Crypto`                              | Platform-backed cryptographic implementation                             |
 | Binary-to-text representation     | `Encoding`                                   | Reversible encoding only; no secrecy or authenticity                     |
 | Accidental display/log protection | `Redacted`                                   | Presentation guard only; not encryption or access control                |
 | Constant-time byte comparison     | platform `timingSafeEqual`                   | Reduces timing leakage for equal-length secret-derived bytes             |
@@ -38,7 +39,11 @@ Rules:
 - Use SHA-256 or stronger for fingerprints and lookup digests. SHA-1 exists for interoperability, not new security designs.
 - A fast digest does not make a low-entropy code safe against offline guessing. Include enough entropy or use a protocol-specific KDF/pepper design.
 - Hash the canonical bytes, not an ambiguously concatenated string. For multi-field proofs, use an unambiguous length-prefix/canonical encoding or a protocol-defined construction.
-- Random UUIDs are identifiers, not bearer credentials. Use explicit random bytes for secrets.
+- `randomUUIDv4`, `randomUUIDv7`, and `randomULID` produce identifiers, not bearer credentials.
+  Use explicit random bytes for secrets. ULIDs expose their creation time: their first 10 Crockford
+  base32 characters encode the `Clock` timestamp in milliseconds and the remaining 16 encode 80
+  random bits (`Crypto.ts:150-170`, `:291-298`). Use that sortability only when timestamp disclosure
+  is acceptable; it adds no secrecy.
 
 ## Encoding is a boundary with failure
 

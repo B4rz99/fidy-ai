@@ -19,7 +19,7 @@ const CrashRunnerHarness = PersistedQueue.layer.pipe(
 );
 
 const program = Effect.gen(function* () {
-  const queueName = yield* Config.string("DURABLE_QUEUE_NAME");
+  const queueName = yield* Config.String("DURABLE_QUEUE_NAME");
   const testQueue = yield* PersistedQueue.make({ name: queueName, schema: TestPayload });
   return yield* testQueue.take(() =>
     Effect.sync(() => {

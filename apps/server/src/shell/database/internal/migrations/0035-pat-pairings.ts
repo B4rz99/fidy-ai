@@ -1,8 +1,7 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/** Adds digest-only PATPairing state, constrained awaiting-claim PATs, and narrow gateways. */
-export const patPairings = Effect.gen(function* () {
+const createPatPairingStorage = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
@@ -73,25 +72,37 @@ export const patPairings = Effect.gen(function* () {
   `;
   yield* sql`
     CREATE INDEX pat_pairing_start_attempts_source_time_idx
-      ON pat_pairing_start_attempts (source_digest, attempted_at DESC);
+      ON pat_pairing_start_attempts (source_digest, attempted_at DESC)
+  `;
+  yield* sql`
     CREATE TABLE pat_pairing_claim_attempts (
       source_digest bytea NOT NULL CHECK (octet_length(source_digest) = 32),
       attempted_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX pat_pairing_claim_attempts_source_time_idx
-      ON pat_pairing_claim_attempts (source_digest, attempted_at DESC);
+      ON pat_pairing_claim_attempts (source_digest, attempted_at DESC)
+  `;
+  yield* sql`
     CREATE TABLE pat_pairing_inspection_attempts (
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       attempted_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX pat_pairing_inspection_attempts_user_time_idx
       ON pat_pairing_inspection_attempts (user_id, attempted_at DESC)
   `;
 
   yield* sql`
-    ALTER TABLE tokens ALTER COLUMN token_hash DROP NOT NULL;
+    ALTER TABLE tokens ALTER COLUMN token_hash DROP NOT NULL
+  `;
+  yield* sql`
     ALTER TABLE tokens ADD COLUMN pat_pairing_id uuid UNIQUE
-      REFERENCES pat_pairings(id) ON DELETE SET NULL;
+      REFERENCES pat_pairings(id) ON DELETE SET NULL
+  `;
+  yield* sql`
     ALTER TABLE tokens ADD CONSTRAINT tokens_bearer_presence_check CHECK (
       token_hash IS NOT NULL
       OR (pat_pairing_id IS NOT NULL AND last_used_at IS NULL)
@@ -100,50 +111,89 @@ export const patPairings = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE pat_pairings ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE pat_pairings FORCE ROW LEVEL SECURITY;
+    ALTER TABLE pat_pairings ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairings FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY pat_pairings_select ON pat_pairings FOR SELECT USING (
       (user_id IS NULL AND lifecycle IN ('pending_approval', 'expired_unapproved'))
       OR user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
-    );
+    )
+  `;
+  yield* sql`
     CREATE POLICY pat_pairings_insert ON pat_pairings FOR INSERT WITH CHECK (
       user_id IS NULL AND inspected_at IS NULL AND lifecycle = 'pending_approval'
       AND NULLIF(current_setting('fidy.user_id', true), '') IS NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE POLICY pat_pairings_update ON pat_pairings FOR UPDATE
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE pat_pairing_start_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE pat_pairing_start_attempts FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_start_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_start_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY pat_pairing_start_attempts_anonymous ON pat_pairing_start_attempts
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
-      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL);
-    ALTER TABLE pat_pairing_claim_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE pat_pairing_claim_attempts FORCE ROW LEVEL SECURITY;
+      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_claim_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_claim_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY pat_pairing_claim_attempts_anonymous ON pat_pairing_claim_attempts
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
-      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL);
-    ALTER TABLE pat_pairing_inspection_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE pat_pairing_inspection_attempts FORCE ROW LEVEL SECURITY;
+      WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_inspection_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE pat_pairing_inspection_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY pat_pairing_inspection_attempts_user ON pat_pairing_inspection_attempts
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    GRANT SELECT, INSERT, DELETE ON pat_pairing_inspection_attempts TO fidy_gateway;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON pat_pairings TO fidy_gateway;
-    GRANT SELECT, INSERT, DELETE ON pat_pairing_start_attempts TO fidy_gateway;
-    GRANT SELECT, INSERT, DELETE ON pat_pairing_claim_attempts TO fidy_gateway;
+    GRANT SELECT, INSERT, DELETE ON pat_pairing_inspection_attempts TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON pat_pairings TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, DELETE ON pat_pairing_start_attempts TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, DELETE ON pat_pairing_claim_attempts TO fidy_gateway
+  `;
+  yield* sql`
     GRANT SELECT, UPDATE ON tokens TO fidy_gateway
   `;
+});
+
+const createPatPairingFunctions = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
     CREATE FUNCTION fidy_live_pat_pairing_count()
     RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       SELECT count(*)::integer FROM public.pat_pairings
       WHERE lifecycle IN ('pending_approval', 'approved_awaiting_claim')
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_insert_pending_pat_pairing(
       requested_public_code text, requested_device_digest bytea, requested_recipient_label text,
       requested_scopes text[], requested_source_digest bytea, creation_time timestamptz
@@ -194,8 +244,9 @@ export const patPairings = Effect.gen(function* () {
       END IF;
       RETURN NEXT;
     END
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_admit_pat_pairing_claim(
       requested_source_digest bytea, attempt_time timestamptz
     ) RETURNS TABLE (burst_count integer, window_count integer, retry_after_seconds integer)
@@ -218,8 +269,9 @@ export const patPairings = Effect.gen(function* () {
           WHERE source_digest = requested_source_digest
             AND attempted_at > attempt_time - interval '10 minutes'), 1)
       FROM recorded
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_purge_pat_pairing_attempt_evidence(purge_time timestamptz)
     RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       DELETE FROM public.pat_pairing_start_attempts
@@ -228,8 +280,9 @@ export const patPairings = Effect.gen(function* () {
         WHERE attempted_at <= purge_time - interval '10 minutes';
       DELETE FROM public.pat_pairing_inspection_attempts
         WHERE attempted_at <= purge_time - interval '10 minutes'
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_reserve_pat_pairing_inspection(
       subject_user_id uuid, inspection_time timestamptz
     ) RETURNS TABLE (admitted boolean, retry_after_seconds integer)
@@ -261,8 +314,9 @@ export const patPairings = Effect.gen(function* () {
       END IF;
       RETURN NEXT;
     END
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_mark_pat_pairing_approved(
       subject_user_id uuid, requested_pairing_id uuid, approval_time timestamptz
     ) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
@@ -274,8 +328,9 @@ export const patPairings = Effect.gen(function* () {
           AND lifecycle = 'pending_approval' AND inspected_at IS NOT NULL
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_lock_pat_pairing_approval(
       subject_user_id uuid, requested_pairing_id uuid, attempt_time timestamptz
     ) RETURNS TABLE (
@@ -288,8 +343,9 @@ export const patPairings = Effect.gen(function* () {
         AND subject_user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
         AND lifecycle = 'pending_approval' AND expires_at > attempt_time
       FOR UPDATE
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_bind_pat_pairing_review(
       subject_user_id uuid, requested_public_code text, inspection_time timestamptz
     ) RETURNS TABLE (
@@ -310,8 +366,9 @@ export const patPairings = Effect.gen(function* () {
         RETURNING pairing.id, pairing.recipient_label, pairing.scopes, pairing.expires_at,
           pairing.inspected_at
       ) SELECT id, recipient_label, scopes, expires_at, inspected_at FROM bound
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_lock_pat_pairing(requested_pairing_id uuid)
     RETURNS TABLE (
       pairing_id uuid,
@@ -342,8 +399,9 @@ export const patPairings = Effect.gen(function* () {
       LEFT JOIN public.tokens AS token ON token.pat_pairing_id = pairing.id
       WHERE pairing.id = requested_pairing_id
       FOR UPDATE OF pairing
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_accept_pat_pairing_poll(requested_pairing_id uuid, accepted_at timestamptz)
     RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       WITH changed AS (
@@ -351,8 +409,9 @@ export const patPairings = Effect.gen(function* () {
         WHERE id = requested_pairing_id AND lifecycle = 'pending_approval'
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_slow_pat_pairing_poll(requested_pairing_id uuid, interval_seconds integer)
     RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       WITH changed AS (
@@ -362,8 +421,9 @@ export const patPairings = Effect.gen(function* () {
           AND lifecycle IN ('pending_approval', 'approved_awaiting_claim')
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_reject_pat_pairing_proof(requested_pairing_id uuid, attempts integer)
     RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       WITH changed AS (
@@ -372,8 +432,9 @@ export const patPairings = Effect.gen(function* () {
           AND lifecycle IN ('pending_approval', 'approved_awaiting_claim')
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_expire_unapproved_pat_pairing(
       requested_pairing_id uuid, expiry_time timestamptz
     ) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
@@ -383,8 +444,9 @@ export const patPairings = Effect.gen(function* () {
         WHERE id = requested_pairing_id AND lifecycle = 'pending_approval'
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_claim_pat_pairing(
       requested_pairing_id uuid, claimed_token_hash text, claim_time timestamptz
     ) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
@@ -405,8 +467,9 @@ export const patPairings = Effect.gen(function* () {
         FROM issued WHERE target.id = issued.pat_pairing_id
         RETURNING 1
       ) SELECT EXISTS (SELECT 1 FROM consumed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_expire_unapproved_pat_pairings(expiry_time timestamptz)
     RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       WITH changed AS (
@@ -415,8 +478,9 @@ export const patPairings = Effect.gen(function* () {
         WHERE lifecycle = 'pending_approval' AND expires_at <= expiry_time
         RETURNING 1
       ) SELECT count(*)::integer FROM changed
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_purge_terminal_pat_pairings(retention_before timestamptz)
     RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       WITH removed AS (
@@ -426,16 +490,18 @@ export const patPairings = Effect.gen(function* () {
           OR (lifecycle = 'revoked_unclaimed' AND revoked_at < retention_before)
         RETURNING 1
       ) SELECT count(*)::integer FROM removed
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_due_approved_pat_pairings(expiry_time timestamptz, batch_size integer)
     RETURNS TABLE (pairing_id uuid, subject_user_id uuid)
     LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
       SELECT id, user_id FROM public.pat_pairings
       WHERE lifecycle = 'approved_awaiting_claim' AND expires_at <= expiry_time
       ORDER BY expires_at, id LIMIT batch_size
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_lock_due_approved_pat_pairing(
       subject_user_id uuid, requested_pairing_id uuid, attempt_time timestamptz
     ) RETURNS TABLE (pairing_id uuid, token_id uuid)
@@ -449,8 +515,9 @@ export const patPairings = Effect.gen(function* () {
         AND pairing.expires_at <= attempt_time
         AND token.token_hash IS NULL AND token.revoked_at IS NULL
       FOR UPDATE OF pairing SKIP LOCKED
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_revoke_unclaimed_pat_pairing(
       subject_user_id uuid, requested_pairing_id uuid, revocation_time timestamptz
     ) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $function$
@@ -463,66 +530,187 @@ export const patPairings = Effect.gen(function* () {
       ) SELECT EXISTS (SELECT 1 FROM changed)
     $function$
   `;
+});
+
+const configurePatPairingFunctions = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    ALTER FUNCTION fidy_live_pat_pairing_count() OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_lock_pat_pairing(uuid) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_revoke_unclaimed_pat_pairing(uuid, uuid, timestamptz) OWNER TO fidy_gateway;
-
-    REVOKE ALL ON FUNCTION fidy_live_pat_pairing_count() FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_lock_pat_pairing(uuid) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_revoke_unclaimed_pat_pairing(uuid, uuid, timestamptz) FROM PUBLIC;
-
-    GRANT EXECUTE ON FUNCTION fidy_live_pat_pairing_count() TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_lock_pat_pairing(uuid) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) TO fidy_runtime;
+    ALTER FUNCTION fidy_live_pat_pairing_count() OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_lock_pat_pairing(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_revoke_unclaimed_pat_pairing(uuid, uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_live_pat_pairing_count() FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_lock_pat_pairing(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_revoke_unclaimed_pat_pairing(uuid, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_live_pat_pairing_count() TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_insert_pending_pat_pairing(text, bytea, text, text[], bytea, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_admit_pat_pairing_claim(bytea, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_purge_pat_pairing_attempt_evidence(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_reserve_pat_pairing_inspection(uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_mark_pat_pairing_approved(uuid, uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_lock_pat_pairing_approval(uuid, uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_bind_pat_pairing_review(uuid, text, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_lock_pat_pairing(uuid) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_accept_pat_pairing_poll(uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_slow_pat_pairing_poll(uuid, integer) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_reject_pat_pairing_proof(uuid, integer) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_expire_unapproved_pat_pairing(uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_claim_pat_pairing(uuid, text, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_expire_unapproved_pat_pairings(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_purge_terminal_pat_pairings(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_due_approved_pat_pairings(timestamptz, integer) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_lock_due_approved_pat_pairing(uuid, uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_revoke_unclaimed_pat_pairing(uuid, uuid, timestamptz) TO fidy_runtime
   `;
+});
+
+/** Adds digest-only PATPairing state, constrained awaiting-claim PATs, and narrow gateways. */
+export const patPairings = Effect.gen(function* () {
+  yield* createPatPairingStorage;
+  yield* createPatPairingFunctions;
+  yield* configurePatPairingFunctions;
 }).pipe(Effect.asVoid);

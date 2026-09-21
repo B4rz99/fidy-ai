@@ -62,6 +62,7 @@ export const billingAttemptQueue = declarePersistedQueue({
   name: billingAttemptQueueName,
   schema: BillingAttemptReconciliationPayload,
   descriptor: { component: "api", operation: "subscription.processBillingAttempt" },
+  retryPolicy: { maxAttempts: maximumBillingAttemptQueueAttempts },
 });
 
 /** Stable native queue key from one reconciliation payload. */
@@ -412,9 +413,7 @@ export const billingAttemptQueueHandlerPolicy: ApplicationPersistedQueueHandlerP
 export const processNextBillingAttempt = Effect.fn("Subscription.processNextBillingAttempt")(
   function* () {
     const queue = billingAttemptQueue;
-    yield* queue.handleNext(handleBillingAttemptQueuePayload, billingAttemptQueueHandlerPolicy, {
-      maxAttempts: maximumBillingAttemptQueueAttempts,
-    });
+    yield* queue.handleNext(handleBillingAttemptQueuePayload, billingAttemptQueueHandlerPolicy);
   }
 );
 

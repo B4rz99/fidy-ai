@@ -46,7 +46,7 @@ const findCurrentDelivery = Effect.fn(function* (
         AND intent.generation = workflow.delivery_generation
         AND intent.email_address = workflow.candidate_email_address
         AND credential.verified_at = workflow.credential_verified_at
-        AND workflow.expires_at > ${now}
+        AND workflow.expires_at > ${DateTime.toDateUtc(now)}
       FOR UPDATE OF workflow, intent`,
   })(undefined).pipe(Effect.orDie);
 });
@@ -110,7 +110,7 @@ const prepareAttempt = Effect.fn(function* (payload: ReplacementDeliveryPayload,
   yield* sql`UPDATE email_replacement_delivery_intents SET status = 'armed'
     WHERE id = ${payload.intentId}`.pipe(Effect.orDie);
   yield* sql`UPDATE email_replacement_workflows SET proof_digest = ${digest},
-    proof_expires_at = LEAST(${proofExpiry(now)}, expires_at), wrong_proof_attempts = 0
+    proof_expires_at = LEAST(${DateTime.toDateUtc(proofExpiry(now))}, expires_at), wrong_proof_attempts = 0
     WHERE id = ${current.value.workflowId} AND user_id = ${payload.userId}`.pipe(Effect.orDie);
   return {
     _tag: "Armed",

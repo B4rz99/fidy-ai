@@ -147,7 +147,7 @@ export class EmailDeliveryPort extends Context.Service<
   static readonly layer = Layer.effect(
     EmailDeliveryPort,
     Effect.gen(function* () {
-      const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+      const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
       if (environment !== "production") {
         return EmailDeliveryPort.of({
           send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),

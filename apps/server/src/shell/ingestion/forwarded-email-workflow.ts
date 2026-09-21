@@ -675,7 +675,7 @@ const publishRecoveredForwardedEmail = Effect.fn("ForwardedEmail.publishRecovere
 /** Starts native consumers and performs one finite, paced startup recovery sweep. */
 export const ForwardedEmailQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
     const queue = forwardedEmailWorkflowQueue;
     const publishPage = Effect.fn("ForwardedEmail.publishPage")(function* (

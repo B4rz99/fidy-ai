@@ -11,8 +11,9 @@ export const wompiCardEnrollments = Effect.gen(function* () {
       wompi_source_id bigint NOT NULL UNIQUE CHECK (wompi_source_id > 0),
       status text NOT NULL CHECK (status = 'available'),
       created_at timestamptz NOT NULL
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE TABLE card_enrollments (
       id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -52,13 +53,18 @@ export const wompiCardEnrollments = Effect.gen(function* () {
       CHECK ((status = 'refused') = (refusal_reason IS NOT NULL)),
       CHECK ((status IN ('creating', 'available', 'refused', 'verifying')) = (accepted_at IS NOT NULL)),
       CHECK ((status = 'available') = (payment_source_id IS NOT NULL))
-    );
+    )
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX card_enrollments_one_pending_per_user
       ON card_enrollments (user_id)
-      WHERE status IN ('prepared', 'creating', 'verifying');
+      WHERE status IN ('prepared', 'creating', 'verifying')
+  `;
+  yield* sql`
     CREATE INDEX card_enrollments_user_created_idx
-      ON card_enrollments (user_id, prepared_at DESC, id);
-
+      ON card_enrollments (user_id, prepared_at DESC, id)
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_preserve_card_enrollment_evidence() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
@@ -90,26 +96,43 @@ export const wompiCardEnrollments = Effect.gen(function* () {
       END IF;
       RETURN NEW;
     END;
-    $$;
+    $$
+  `;
+  yield* sql`
     CREATE TRIGGER card_enrollment_evidence_immutable
       BEFORE UPDATE OR DELETE ON card_enrollments
-      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_card_enrollment_evidence();
-
-    ALTER TABLE card_payment_sources ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE card_payment_sources FORCE ROW LEVEL SECURITY;
+      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_card_enrollment_evidence()
+  `;
+  yield* sql`
+    ALTER TABLE card_payment_sources ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE card_payment_sources FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY card_payment_sources_by_user ON card_payment_sources
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE card_enrollments ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE card_enrollments FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE card_enrollments ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE card_enrollments FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY card_enrollments_by_user ON card_enrollments
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    GRANT SELECT, INSERT ON card_payment_sources, card_enrollments TO fidy_runtime;
-    GRANT DELETE ON card_enrollments TO fidy_runtime;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT ON card_payment_sources, card_enrollments TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT DELETE ON card_enrollments TO fidy_runtime
+  `;
+  yield* sql`
     GRANT UPDATE (billing_email, status, refusal_reason, accepted_at, payment_source_id)
-      ON card_enrollments TO fidy_runtime;
+      ON card_enrollments TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

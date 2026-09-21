@@ -41,8 +41,8 @@ const seedActiveWebSession = Effect.gen(function* () {
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${webSessionId}, ${userId}, ${bearerDigest}, ${pairedAt}, ${deadlines.freshUntil},
-      ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${webSessionId}, ${userId}, ${bearerDigest}, ${DateTime.toDateUtc(pairedAt)}, ${DateTime.toDateUtc(deadlines.freshUntil)},
+      ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
   return user;
@@ -94,7 +94,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           INSERT INTO memories (id, user_id, text, created_at, updated_at)
           VALUES (
             'f1d1a000-0000-7000-8000-000000000247', ${otherUserId},
-            'belongs only to the other User', ${now}, ${now}
+            'belongs only to the other User', ${DateTime.toDateUtc(now)}, ${DateTime.toDateUtc(now)}
           )
         `;
 
@@ -200,21 +200,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ) VALUES
           (
             'f1d1a000-0000-4000-8000-000000000243', ${userId}, ${digests[1]},
-            ${currentPairedAt}, ${DateTime.addDuration(currentPairedAt, "10 minutes")},
-            ${DateTime.addDuration(currentPairedAt, "30 days")},
-            ${DateTime.addDuration(currentPairedAt, "90 days")}, ${now}
+            ${DateTime.toDateUtc(currentPairedAt)}, ${DateTime.toDateUtc(DateTime.addDuration(currentPairedAt, "10 minutes"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(currentPairedAt, "30 days"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(currentPairedAt, "90 days"))}, ${DateTime.toDateUtc(now)}
           ),
           (
             'f1d1a000-0000-4000-8000-000000000244', ${userId}, ${digests[2]},
-            ${idleExpiredPairedAt}, ${DateTime.addDuration(idleExpiredPairedAt, "10 minutes")},
-            ${DateTime.subtractDuration(now, "1 day")},
-            ${DateTime.addDuration(idleExpiredPairedAt, "90 days")}, NULL
+            ${DateTime.toDateUtc(idleExpiredPairedAt)}, ${DateTime.toDateUtc(DateTime.addDuration(idleExpiredPairedAt, "10 minutes"))},
+            ${DateTime.toDateUtc(DateTime.subtractDuration(now, "1 day"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(idleExpiredPairedAt, "90 days"))}, NULL
           ),
           (
             'f1d1a000-0000-4000-8000-000000000245', ${userId}, ${digests[3]},
-            ${hardExpiredPairedAt}, ${DateTime.addDuration(hardExpiredPairedAt, "10 minutes")},
-            ${DateTime.addDuration(hardExpiredPairedAt, "90 days")},
-            ${DateTime.addDuration(hardExpiredPairedAt, "90 days")}, NULL
+            ${DateTime.toDateUtc(hardExpiredPairedAt)}, ${DateTime.toDateUtc(DateTime.addDuration(hardExpiredPairedAt, "10 minutes"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(hardExpiredPairedAt, "90 days"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(hardExpiredPairedAt, "90 days"))}, NULL
           )
         `;
 
@@ -297,9 +297,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             id, user_id, bearer_digest, paired_at, fresh_until,
             idle_expires_at, hard_expires_at
           ) VALUES (
-            ${webSessionId}, ${userId}, ${bearerDigest}, ${pairedAt},
-            ${DateTime.addDuration(pairedAt, "10 minutes")},
-            ${initialIdleExpiresAt}, ${hardExpiresAt}
+            ${webSessionId}, ${userId}, ${bearerDigest}, ${DateTime.toDateUtc(pairedAt)},
+            ${DateTime.toDateUtc(DateTime.addDuration(pairedAt, "10 minutes"))},
+            ${DateTime.toDateUtc(initialIdleExpiresAt)}, ${DateTime.toDateUtc(hardExpiresAt)}
           )
         `;
 
@@ -320,7 +320,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const renewed = yield* readUseState(undefined);
         const olderUsedAt = DateTime.addDuration(pairedAt, "5 days");
         yield* sql`SELECT * FROM fidy_use_web_session(
-          ${bearerDigest}, ${olderUsedAt}, ${webSessionIdleRenewalCandidate(olderUsedAt)}
+          ${bearerDigest}, ${DateTime.toDateUtc(olderUsedAt)}, ${DateTime.toDateUtc(webSessionIdleRenewalCandidate(olderUsedAt))}
         )`;
         const afterOlderUse = yield* readUseState(undefined);
         const renewedForMilliseconds =
@@ -350,9 +350,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             id, user_id, bearer_digest, paired_at, fresh_until,
             idle_expires_at, hard_expires_at
           ) VALUES (
-            ${webSessionId}, ${userId}, ${bearerDigest}, ${pairedAt},
-            ${DateTime.addDuration(pairedAt, "10 minutes")},
-            ${DateTime.addDuration(usedAt, "1 hour")}, ${hardExpiresAt}
+            ${webSessionId}, ${userId}, ${bearerDigest}, ${DateTime.toDateUtc(pairedAt)},
+            ${DateTime.toDateUtc(DateTime.addDuration(pairedAt, "10 minutes"))},
+            ${DateTime.toDateUtc(DateTime.addDuration(usedAt, "1 hour"))}, ${DateTime.toDateUtc(hardExpiresAt)}
           )
         `;
 

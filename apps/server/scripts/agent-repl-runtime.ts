@@ -9,10 +9,10 @@ import { DurableExecutionClientLive } from "~/shell/durable-execution";
 import { TelemetryDisabled } from "~/shell/observability/operations";
 
 const program = Effect.gen(function* () {
-  const phoneNumber = yield* Config.string("FIDY_REPL_PHONE_NUMBER").pipe(
+  const phoneNumber = yield* Config.String("FIDY_REPL_PHONE_NUMBER").pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(E164PhoneNumber))
   );
-  const businessScopedUserId = yield* Config.string("FIDY_REPL_BSUID").pipe(
+  const businessScopedUserId = yield* Config.String("FIDY_REPL_BSUID").pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(WhatsAppBusinessScopedUserId))
   );
   yield* runAgentRepl({ phoneNumber, businessScopedUserId });

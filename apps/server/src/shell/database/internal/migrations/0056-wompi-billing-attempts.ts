@@ -5,12 +5,21 @@ import { SqlClient } from "effect/unstable/sql";
 export const wompiBillingAttempts = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE subscriptions ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL;
-    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_id_unique UNIQUE (id);
-    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_id_user_unique UNIQUE (id, user_id);
-    ALTER TABLE card_enrollments ADD CONSTRAINT card_enrollments_id_user_unique UNIQUE (id, user_id);
-    ALTER TABLE card_payment_sources ADD CONSTRAINT card_payment_sources_id_user_unique UNIQUE (id, user_id);
-
+    ALTER TABLE subscriptions ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL
+  `;
+  yield* sql`
+    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_id_unique UNIQUE (id)
+  `;
+  yield* sql`
+    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_id_user_unique UNIQUE (id, user_id)
+  `;
+  yield* sql`
+    ALTER TABLE card_enrollments ADD CONSTRAINT card_enrollments_id_user_unique UNIQUE (id, user_id)
+  `;
+  yield* sql`
+    ALTER TABLE card_payment_sources ADD CONSTRAINT card_payment_sources_id_user_unique UNIQUE (id, user_id)
+  `;
+  yield* sql`
     CREATE TABLE billing_attempts (
       id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -42,11 +51,13 @@ export const wompiBillingAttempts = Effect.gen(function* () {
       FOREIGN KEY (subscription_id, user_id) REFERENCES subscriptions(id, user_id),
       FOREIGN KEY (card_enrollment_id, user_id) REFERENCES card_enrollments(id, user_id),
       FOREIGN KEY (payment_source_id, user_id) REFERENCES card_payment_sources(id, user_id)
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX billing_attempts_one_pending_price
-      ON billing_attempts(user_id, subscription_id, price_id) WHERE status = 'pending';
-
+      ON billing_attempts(user_id, subscription_id, price_id) WHERE status = 'pending'
+  `;
+  yield* sql`
     CREATE TABLE paid_subscription_periods (
       billing_attempt_id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -57,8 +68,9 @@ export const wompiBillingAttempts = Effect.gen(function* () {
       created_at timestamptz NOT NULL,
       FOREIGN KEY (billing_attempt_id, user_id) REFERENCES billing_attempts(id, user_id),
       FOREIGN KEY (subscription_id, user_id) REFERENCES subscriptions(id, user_id)
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE TABLE wompi_billing_observations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -74,8 +86,9 @@ export const wompiBillingAttempts = Effect.gen(function* () {
       observed_at timestamptz NOT NULL,
       UNIQUE (billing_attempt_id, event_checksum),
       FOREIGN KEY (billing_attempt_id, user_id) REFERENCES billing_attempts(id, user_id)
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_preserve_billing_snapshot() RETURNS trigger
     LANGUAGE plpgsql AS $$
     BEGIN
@@ -111,56 +124,93 @@ export const wompiBillingAttempts = Effect.gen(function* () {
       END IF;
       RETURN NEW;
     END;
-    $$;
+    $$
+  `;
+  yield* sql`
     CREATE TRIGGER billing_attempt_snapshot_immutable
       BEFORE UPDATE OR DELETE ON billing_attempts
-      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_billing_snapshot();
-
+      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_billing_snapshot()
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_preserve_paid_period() RETURNS trigger
-    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'paid Subscription period is immutable'; END; $$;
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'paid Subscription period is immutable'; END; $$
+  `;
+  yield* sql`
     CREATE TRIGGER paid_period_immutable BEFORE UPDATE OR DELETE ON paid_subscription_periods
-      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_paid_period();
+      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_paid_period()
+  `;
+  yield* sql`
     CREATE TRIGGER wompi_billing_observation_append_only
       BEFORE UPDATE OR DELETE ON wompi_billing_observations
-      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_paid_period();
-
-    ALTER TABLE billing_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE billing_attempts FORCE ROW LEVEL SECURITY;
+      FOR EACH ROW EXECUTE FUNCTION fidy_preserve_paid_period()
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY billing_attempts_by_user ON billing_attempts
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE paid_subscription_periods ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE paid_subscription_periods FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE paid_subscription_periods ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE paid_subscription_periods FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY paid_subscription_periods_by_user ON paid_subscription_periods
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE wompi_billing_observations ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE wompi_billing_observations FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE wompi_billing_observations ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE wompi_billing_observations FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY wompi_billing_observations_by_user ON wompi_billing_observations
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_resolve_wompi_billing_user(reference_text text) RETURNS uuid
     LANGUAGE sql SECURITY DEFINER STABLE
     SET search_path = pg_catalog, pg_temp AS $$
       SELECT user_id FROM public.billing_attempts
       WHERE wompi_transaction_reference = reference_text
-    $$;
-    REVOKE ALL ON FUNCTION fidy_resolve_wompi_billing_user(text) FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION fidy_resolve_wompi_billing_user(text) TO fidy_runtime;
-
+    $$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_wompi_billing_user(text) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_resolve_wompi_billing_user(text) TO fidy_runtime
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_resolve_wompi_billing_user_by_transaction(transaction_id text)
     RETURNS uuid LANGUAGE sql SECURITY DEFINER STABLE
     SET search_path = pg_catalog, pg_temp AS $$
       SELECT user_id FROM public.billing_attempts
       WHERE wompi_transaction_id = transaction_id
-    $$;
-    REVOKE ALL ON FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) TO fidy_runtime;
-
+    $$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_resolve_wompi_billing_user_by_transaction(text) TO fidy_runtime
+  `;
+  yield* sql`
     GRANT SELECT, INSERT ON billing_attempts, paid_subscription_periods,
-      wompi_billing_observations TO fidy_runtime;
+      wompi_billing_observations TO fidy_runtime
+  `;
+  yield* sql`
     GRANT UPDATE (wompi_transaction_id, status, charge_state, armed_at, failed_at, finalized_at)
-      ON billing_attempts TO fidy_runtime;
+      ON billing_attempts TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

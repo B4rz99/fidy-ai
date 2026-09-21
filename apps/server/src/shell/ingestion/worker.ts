@@ -104,6 +104,7 @@ export const statementIngestionQueue = declarePersistedQueue({
   name: statementIngestionQueueName,
   schema: StatementIngestionPayload,
   descriptor: statementHandlerDescriptor,
+  retryPolicy: { maxAttempts: maximumStatementIngestionAttempts },
 });
 
 /** Native queue primary key: the submission this work belongs to. */
@@ -406,8 +407,7 @@ export const processNextStatement = Effect.fn("processNextStatement")(function* 
           attempts,
           observeOutcome: observeStatementOutcome(outcome),
         }),
-      statementQueueHandlerPolicy,
-      { maxAttempts: maximumStatementIngestionAttempts }
+      statementQueueHandlerPolicy
     );
     return yield* Ref.get(outcome);
   }).pipe(Effect.orElseSucceed(() => "retrying" as const));
@@ -474,8 +474,7 @@ const consumeStatementQueue = Effect.gen(function* () {
           attempts,
           observeOutcome: () => Effect.void,
         }),
-      statementQueueHandlerPolicy,
-      { maxAttempts: maximumStatementIngestionAttempts }
+      statementQueueHandlerPolicy
     )
     .pipe(
       Effect.catchTag("PersistedQueueHandlerFailure", () => Effect.void),
@@ -516,7 +515,7 @@ export const StatementIngestionRetentionLive = Layer.effectDiscard(
 
 /** Runs SQL queue consumption and bounded startup recovery. */
 export const StatementIngestionWorkerLive = Layer.effectDiscard(
-  Config.string("NODE_ENV").pipe(
+  Config.String("NODE_ENV").pipe(
     Config.withDefault("development"),
     Effect.flatMap((environment) =>
       runStatementIngestionWorker.pipe(

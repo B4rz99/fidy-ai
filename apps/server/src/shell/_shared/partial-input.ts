@@ -228,7 +228,7 @@ const partialUnionAst = (ast: SchemaAST.Union): SchemaAST.AST => {
   const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
   return new SchemaAST.Union(
     ast.types.map(partialInputAst),
-    ast.mode,
+    ast.options,
     Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
     Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.checks), isComplete)),
     ast.encoding,

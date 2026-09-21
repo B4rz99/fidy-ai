@@ -9941,14 +9941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -10264,14 +10257,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -10561,14 +10547,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -10774,14 +10753,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -11070,14 +11042,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -11651,14 +11616,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -11758,14 +11716,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -11986,14 +11937,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -12092,14 +12036,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -12198,14 +12135,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -13892,14 +13822,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -13987,14 +13910,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -14310,14 +14226,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -14532,14 +14441,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },
@@ -14639,14 +14541,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ValidationFailedEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
                 }
               }
             },

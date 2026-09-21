@@ -131,7 +131,7 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
   const wompiSourceId = 10_000 + input.index;
   yield* sql`
     INSERT INTO card_payment_sources (id, user_id, wompi_source_id, status, created_at)
-    VALUES (${paymentSourceId}, ${userId}, ${wompiSourceId}, 'available', ${input.createdAt})
+    VALUES (${paymentSourceId}, ${userId}, ${wompiSourceId}, 'available', ${DateTime.toDateUtc(input.createdAt)})
   `;
   yield* sql`
     INSERT INTO card_enrollments (
@@ -146,10 +146,10 @@ const seedAttempt = Effect.fn("Test.seedBillingAttempt")(function* (
       'https://wompi.example/end-user.pdf', 'Acepto el reglamento de Wompi.', ${"0".repeat(64)},
       ${"2".repeat(64)}, 'https://wompi.example/personal-data.pdf',
       'Autorizo el tratamiento de datos personales de Wompi.', ${"1".repeat(64)},
-      ${"3".repeat(64)}, ${input.createdAt}, 'wompi-card-enrollment-v1',
+      ${"3".repeat(64)}, ${DateTime.toDateUtc(input.createdAt)}, 'wompi-card-enrollment-v1',
       'Autorizo cobros recurrentes de Fidy.', ${"4".repeat(64)},
-      ${input.createdAt}, ${DateTime.add(input.createdAt, { hours: 1 })},
-      ${input.createdAt}, ${paymentSourceId}
+      ${DateTime.toDateUtc(input.createdAt)}, ${DateTime.toDateUtc(DateTime.add(input.createdAt, { hours: 1 }))},
+      ${DateTime.toDateUtc(input.createdAt)}, ${paymentSourceId}
     )
   `;
   const context = yield* withUserTransaction(
@@ -404,10 +404,10 @@ const offerBillingQueueItem = Effect.fn("Test.offerBillingQueueItem")(function* 
     revision: 1,
   });
   yield* sql`INSERT INTO fidy_durable.fidy_queue (
-      id, queue_name, element, completed, attempts, created_at, updated_at
+      id, queue_name, element, state, visible_at, attempts, created_at, updated_at
     ) VALUES (
       ${attempt.payload.billingAttemptId}, ${billingAttemptQueueName}, ${element},
-      FALSE, 0, now(), now()
+      'pending', now(), 0, now(), now()
     ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
 });
 
@@ -439,7 +439,7 @@ const readBillingQueueRow = Effect.fn("Test.readBillingQueueRow")(function* (
       attempts: Schema.Int,
       lastFailure: Schema.NullOr(Schema.String),
     }),
-    execute: ({ id }) => sql`SELECT completed, attempts,
+    execute: ({ id }) => sql`SELECT state = 'completed' AS completed, attempts,
         last_failure AS "lastFailure"
       FROM fidy_durable.fidy_queue
       WHERE queue_name = ${billingAttemptQueueName} AND id = ${id}`,
@@ -1324,14 +1324,14 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
               ) VALUES (
                 ${attempt.payload.billingAttemptId}, ${attempt.userId},
                 'txn-cross-user-forged', 'PENDING', ${attempt.amountInCents}, 'COP',
-                ${attempt.sourceId}, 'sandbox', ${now}, ${now}
+                ${attempt.sourceId}, 'sandbox', ${DateTime.toDateUtc(now)}, ${DateTime.toDateUtc(now)}
               )`
           )
         );
         expect(Exit.isFailure(forgedInsert)).toBe(true);
         const crossUserUpdate = yield* withUserTransaction(
           userIdFor(6),
-          sql`UPDATE billing_attempt_transactions SET last_observed_at = ${now}
+          sql`UPDATE billing_attempt_transactions SET last_observed_at = ${DateTime.toDateUtc(now)}
               WHERE billing_attempt_id = ${attempt.payload.billingAttemptId} RETURNING 1 AS touched`
         );
         expect(crossUserUpdate).toEqual([]);
@@ -1580,10 +1580,10 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         const sql = yield* MigrationSqlClient;
         const malformedId = BillingAttemptId.make("47700000-0000-4000-8000-000000000031");
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
-            id, queue_name, element, completed, attempts, created_at, updated_at
+            id, queue_name, element, state, visible_at, attempts, created_at, updated_at
           ) VALUES (
             ${malformedId}, ${billingAttemptQueueName}, 'not-json',
-            FALSE, ${maximumBillingAttemptQueueAttempts}, now(), now()
+            'pending', now(), ${maximumBillingAttemptQueueAttempts}, now(), now()
           ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
         const retired = yield* retireExhaustedBillingAttemptWork(now);
         expect(retired).toBe(0);
@@ -1593,7 +1593,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
             completed: Schema.Boolean,
             lastFailure: Schema.NullOr(Schema.String),
           }),
-          execute: () => sql`SELECT completed,
+          execute: () => sql`SELECT state = 'completed' AS completed,
               last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedId}`,
@@ -1643,7 +1643,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         yield* offerBillingQueueItem(pending);
         const sql = yield* MigrationSqlClient;
         const old = DateTime.subtract(now, { hours: 25 });
-        yield* sql`UPDATE fidy_durable.fidy_queue SET completed = TRUE, updated_at = ${old}
+        yield* sql`UPDATE fidy_durable.fidy_queue SET state = 'completed', updated_at = ${DateTime.toDateUtc(old)}
           WHERE queue_name = ${billingAttemptQueueName}
             AND id IN ${sql.in([
               succeeded.payload.billingAttemptId,
@@ -1727,10 +1727,10 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
           revision: 1,
         });
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
-            id, queue_name, element, completed, attempts, created_at, updated_at
+            id, queue_name, element, state, visible_at, attempts, created_at, updated_at
           ) VALUES (
             ${missingAttemptId}, ${billingAttemptQueueName}, ${element},
-            FALSE, ${maximumBillingAttemptQueueAttempts}, now(), now()
+            'pending', now(), ${maximumBillingAttemptQueueAttempts}, now(), now()
           ) ON CONFLICT (id, queue_name) DO NOTHING`.pipe(Effect.orDie);
         const retired = yield* retireExhaustedBillingAttemptWork(now);
         expect(retired).toBe(1);
@@ -1740,7 +1740,7 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
             completed: Schema.Boolean,
             lastFailure: Schema.NullOr(Schema.String),
           }),
-          execute: () => sql`SELECT completed,
+          execute: () => sql`SELECT state = 'completed' AS completed,
               last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = ${billingAttemptQueueName} AND id = ${missingAttemptId}`,
@@ -1772,12 +1772,12 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         });
         const old = DateTime.subtract(now, { hours: 25 });
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
-            id, queue_name, element, completed, attempts, created_at, updated_at
+            id, queue_name, element, state, visible_at, attempts, created_at, updated_at
           ) VALUES (
             ${missingAttemptId}, ${billingAttemptQueueName}, ${element},
-            TRUE, ${maximumBillingAttemptQueueAttempts}, ${old}, ${old}
+            'completed', ${DateTime.toDateUtc(old)}, ${maximumBillingAttemptQueueAttempts}, ${DateTime.toDateUtc(old)}, ${DateTime.toDateUtc(old)}
           ) ON CONFLICT (id, queue_name) DO UPDATE SET
-            completed = TRUE, updated_at = ${old}`.pipe(Effect.orDie);
+            state = 'completed', updated_at = ${DateTime.toDateUtc(old)}`.pipe(Effect.orDie);
         const pruned = yield* pruneBillingAttemptQueueHistory(now);
         expect(pruned).toBe(1);
         const remaining = yield* SqlSchema.findOneOption({
@@ -1797,18 +1797,20 @@ layer(TestLayer, { excludeTestServices: true, timeout: "90 seconds" })(
         const malformedHistoryId = BillingAttemptId.make("47700000-0000-4000-8000-000000000092");
         const old = DateTime.subtract(now, { hours: 25 });
         yield* sql`INSERT INTO fidy_durable.fidy_queue (
-            id, queue_name, element, completed, attempts, created_at, updated_at
+            id, queue_name, element, state, visible_at, attempts, created_at, updated_at
           ) VALUES (
             ${malformedHistoryId}, ${billingAttemptQueueName}, 'not-json',
-            TRUE, ${maximumBillingAttemptQueueAttempts}, ${old}, ${old}
+            'completed', ${DateTime.toDateUtc(old)}, ${maximumBillingAttemptQueueAttempts}, ${DateTime.toDateUtc(old)}, ${DateTime.toDateUtc(old)}
           ) ON CONFLICT (id, queue_name) DO UPDATE SET
-            element = 'not-json', completed = TRUE, updated_at = ${old}`.pipe(Effect.orDie);
+            element = 'not-json', state = 'completed', updated_at = ${DateTime.toDateUtc(old)}`.pipe(
+          Effect.orDie
+        );
         const pruned = yield* pruneBillingAttemptQueueHistory(now);
         expect(pruned).toBe(0);
         const row = yield* SqlSchema.findOneOption({
           Request: Schema.Void,
           Result: Schema.Struct({ completed: Schema.Boolean }),
-          execute: () => sql`SELECT completed FROM fidy_durable.fidy_queue
+          execute: () => sql`SELECT state = 'completed' AS completed FROM fidy_durable.fidy_queue
             WHERE queue_name = ${billingAttemptQueueName} AND id = ${malformedHistoryId}`,
         })(undefined).pipe(Effect.orDie);
         expect(Option.isSome(row)).toBe(true);

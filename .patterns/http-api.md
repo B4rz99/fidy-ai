@@ -17,14 +17,15 @@ just at the type level:
 
 ## Defining endpoints
 
-`HttpApiEndpoint.get/post/put/patch/delete/head/options(identifier, path, options)`
-(`HttpApiEndpoint.ts:979-1096`, method exports at `:1397-1449`). Options:
+`HttpApiEndpoint.get/post/put/patch/delete/head/options/query(identifier, path, options)`
+(`HttpApiEndpoint.ts:979-1096`, `query` at `:1413-1418`). Options:
 
 - `params` — path params; must encode to strings (`HttpApiEndpoint.ts:105-107`). Bridge branded/numeric types with
   `Schema.FiniteFromString.pipe(Schema.decodeTo(UserId))` (ai-docs `api/Users.ts:42-45`).
 - `query`, `headers` — string-encodable schemas or bare fields records.
 - `payload` — body schema; **array of schemas** = content-type negotiation (`HttpApiEndpoint.ts:1111-1145`).
-  On GET/HEAD, `payload` is modeled as query params (`HttpApiSchema.ts:948-959`).
+  `QUERY` is body-capable. On `GET | HEAD | OPTIONS | TRACE`, `payload` uses URL-query encoding;
+  all other supported methods use body encoding (`HttpApiSchema.ts:948-965`; `HttpMethod.ts:31-52`).
 - `success` — single schema or array (multiple statuses/content-types). Defaults to
   `HttpApiSchema.NoContent` → 204 (`HttpApiEndpoint.ts:986-990`; `HttpApiSchema.ts:149`).
 - `error` — single or array; streams forbidden in errors (`HttpApiEndpoint.ts:1172-1181`).
@@ -41,11 +42,27 @@ payload/success/error get their response-aware JSON codecs (`HttpApiEndpoint.ts:
 `:1149-1186`). This is why
 `Schema.DateTimeUtc` in an operation definition "just works" as an encoded ISO string.
 
+Paths may contain literal colon suffixes, for example `/operations/:id:wait`. The params schema
+identifies which `:name` segments are placeholders: undeclared colons are escaped for the router,
+and a declared parameter followed immediately by a literal suffix receives a terminating regex
+(`httpapi/internal/path.ts:14-53`; tests `test/unstable/httpapi/HttpApiBuilder.test.ts:149-175`).
+OpenAPI likewise substitutes only declared path params and preserves the suffix (`OpenApi.ts:395-405`).
+
 `HttpApiSchema` inventory: `Empty(code)`, `NoContent`(204), `Created`(201), `Accepted`(202),
 `asNoContent({decode})` (empty body ⇄ constructed value), `asJson/asText/asUint8Array/
 asFormUrlEncoded`, `asMultipart(limits?)` (buffered) and `asMultipartStream(limits?)`
 (streaming — see the Multipart section), `StreamSse`, `StreamUint8Array`. v3's
 `withEncoding` is gone — use the `as*` combinators.
+
+## Parse options
+
+Attach `HttpApi.ParseOptions` to an API, group, or endpoint to control server request decoding,
+server success/error encoding, client request encoding, response decoding, stream decoding, and pure
+URL building (`HttpApi.ts:341-360`; `HttpApiBuilder.ts:811-828`; `HttpApiClient.ts:329-385`,
+`:670-684`). Endpoint options replace group options, which replace API options; the objects are not
+merged. Without the annotation, Schema defaults apply. Header codecs receive every request header,
+so API-wide `onExcessProperty: "error"` usually rejects ordinary undeclared headers. Attach API
+annotations before deriving builder groups/endpoints.
 
 ## Server pipeline semantics (the parts that surprise)
 
@@ -58,16 +75,15 @@ Per-request flow is `handlerToHttpEffect` (`HttpApiBuilder.ts:756-838`):
    **no v3-style `HttpApiDecodeError` with an `issues` JSON body in v4**; field-level
    validation detail in responses must be built explicitly.
    The cause is still reported to logs (`HttpEffect.ts:45-47`).
-   Payload decoding has two extra traps. `buildPayloadDecoders` always constructs
-   `Schema.Union(schemas)`, even when there is exactly one payload schema, and invokes the decoder
-   without parse options (`HttpApiBuilder.ts:682`), so parsing uses `errors: "first"`, the default
-   (`SchemaAST.ts:470`). The union parser first narrows candidates by literal sentinels; when no
-   candidate matches, it raises `AnyOf(ast, input, [])` with no member issue
-   (`SchemaAST.ts:2965-2974`). Formatting that empty `AnyOf` reports one root issue containing the whole
-   rejected value (`SchemaIssue.ts:1084-1092`), losing both the field path and the other offending
-   fields. To produce complete field-level payload failures in middleware, recover the `AnyOf`
-   input and decode it against the single unwrapped payload schema with `{ errors: "all" }`.
-   The official interception seam for all of this is
+   Payload decoding has one extra trap. `buildPayloadDecoders` always constructs
+   `Schema.Union(schemas)`, even when there is exactly one payload schema, but it now receives the
+   endpoint's merged `HttpApi.ParseOptions` (`HttpApiBuilder.ts:726-741`, `:811-828`). Setting
+   `{ errors: "all" }` therefore reaches payload decoding. The union parser still narrows candidates
+   by literal sentinels; when no candidate matches, it raises `AnyOf(ast, input, [])` with no member
+   issue (`SchemaAST.ts:2965-2974`). Formatting that empty `AnyOf` reports one root issue containing
+   the whole rejected value (`SchemaIssue.ts:1084-1092`), losing field paths. If middleware needs a
+   friendlier unknown-discriminator error, inspect that empty `AnyOf` or decode the input against the
+   intended unwrapped member. The official interception seam is
    `HttpApiMiddleware.layerSchemaErrorTransform` — see the Middleware section.
 2. **Unknown request content-type → 415** (`:707`).
 3. **Success responses are runtime-validated.** The handler's return value is encoded
@@ -94,6 +110,11 @@ middleware's `error` schema merges into every endpoint it covers,
 the group; the request arg carries decoded `payload/params/query/headers`; an unhandled
 endpoint turns the builder's return type into the string literal
 `` `Endpoint not handled: ${name}` `` (`HttpApiBuilder.ts:241-247`).
+
+`HttpApiBuilder.handler(api, groupIdentifier, endpointIdentifier, callback)` is a reusable
+single-endpoint typing helper: it returns the callback unchanged while inferring request, success,
+error, and service requirements. Pass the result to `handlers.handle` when the implementation lives
+outside the group builder (`HttpApiBuilder.ts:164-211`).
 
 ## Client semantics
 
@@ -128,27 +149,32 @@ endpoint turns the builder's return type into the string literal
 - **operationId** defaults to `` `${group.identifier}.${endpoint.identifier}` ``
   (`OpenApi.ts:383-386`); `topLevel: true` groups drop the prefix; override with
   `OpenApi.Identifier`. Duplicate ids or duplicate method+path **throw** at spec build.
+- `QUERY` operations are emitted under
+  `paths[path]["x-oai-additionalOperations"].QUERY`, preserving a standard operation object without
+  pretending `QUERY` is an OpenAPI path-item method (`OpenApi.ts:395-405`, `:1081-1101`). A `GET`
+  and `QUERY` can therefore coexist on one path.
 - Annotations (`.annotate(OpenApi.X, ...)` on api/group/endpoint): `Title`, `Version`,
   `Description`, `Summary`, `License`, `ExternalDocs`, `Servers`, `Deprecated`,
   `Identifier`, `Exclude` (group-level cascades), `Override` (shallow merge), `Transform`
   (function on the generated object), plus `OpenApi.annotations({...})` and
   `HttpApi.AdditionalSchemas`.
-- **Schema `identifier` annotations drive `$ref`/`components.schemas`.** RC.112 resolves identifiers on the encoded AST and uses them as the default reference policy
+- **Schema `identifier` annotations drive `$ref`/`components.schemas`.** The current implementation resolves identifiers on the encoded AST and uses them as the default reference policy
   (`internal/schema/toRepresentation.ts:8`, `:49-64`, `:112-139`). Anonymous non-recursive
   schemas inline; recursive schemas still receive a synthetic reference. Annotate shared
   operation schemas (`Schema.annotate({ identifier: "Transaction" })`) so agent/codegen
   consumers get stable named components.
 - Check → JSON Schema mapping: `isUUID` → `pattern` + `format: "uuid"`; `isInt` → `integer`;
   `isGreaterThan` → `exclusiveMinimum`; `isMaxLength` → `maxLength`/`maxItems`; brands are
-  **invisible**; objects get `additionalProperties: false`; unconstrained `Schema.Number`
-  emits an `anyOf` including `"NaN"`/`"Infinity"` strings (use `isFinite`/`isInt`).
+  **invisible**. OpenAPI generation explicitly uses `onExcessProperty: "error"`, so objects get
+  `additionalProperties: false` (`OpenApi.ts:686-695`). Unconstrained `Schema.Number` emits an
+  `anyOf` including `"NaN"`/`"Infinity"` strings (use `isFinite`/`isInt`).
 - Docs UI: `HttpApiScalar.layer(api, { path: "/docs" })` (self-contained, bundled) or
   `.layerCdn`, and `HttpApiSwagger.layer` — all in core `effect/unstable/httpapi`, all embed
   the spec into the HTML; keep `openapiPath` for the raw JSON.
 
 ## Dates in operation definitions
 
-RC.112 made `Schema.Date` the valid-JavaScript-Date schema: it rejects instances whose timestamp
+`Schema.Date` is the valid-JavaScript-Date schema: it rejects instances whose timestamp
 is `NaN`, and its JSON codec decodes strings through the validating `dateFromString`
 transformation (`Schema.ts:12188-12241`; `SchemaTransformation.ts:879-897`). The old
 `Schema.DateValid` workaround no longer exists.
@@ -310,7 +336,7 @@ the envelope's marker (e.g. an AST annotation the combinator sets).
 
 ## Response headers
 
-RC.112 models typed response headers directly. Wrap a success body with
+Typed response headers are modeled directly. Wrap a success body with
 `HttpApiSchema.WithHeaders(bodySchema, headerFields)` and return
 `HttpApiSchema.withHeaders({ body, headers })`; headers are converted through
 `Schema.toCodecStringTree`, validated by the server, decoded by the typed client, and emitted in

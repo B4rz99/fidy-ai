@@ -93,13 +93,13 @@ export const transactionReconciliation = Effect.gen(function* () {
     "transaction_reconciliation_decisions",
     "transaction_reconciliation_members",
   ]) {
+    yield* sql.unsafe(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+    yield* sql.unsafe(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
     yield* sql.unsafe(`
-      ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
-      ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
       CREATE POLICY ${table}_by_user ON ${table}
         USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-        WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-      GRANT SELECT, INSERT, UPDATE, DELETE ON ${table} TO fidy_runtime
+        WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
     `);
+    yield* sql.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${table} TO fidy_runtime`);
   }
 }).pipe(Effect.asVoid);

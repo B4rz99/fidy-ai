@@ -14,8 +14,12 @@ export const agentConfirmationConsumptions = Effect.gen(function* () {
     )
   `;
   yield* sql`
-    ALTER TABLE agent_confirmation_consumptions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE agent_confirmation_consumptions FORCE ROW LEVEL SECURITY;
+    ALTER TABLE agent_confirmation_consumptions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE agent_confirmation_consumptions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY agent_confirmation_consumptions_by_user ON agent_confirmation_consumptions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)

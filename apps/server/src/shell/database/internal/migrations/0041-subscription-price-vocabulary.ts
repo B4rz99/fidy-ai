@@ -6,8 +6,12 @@ export const subscriptionPriceVocabulary = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    ALTER TABLE public.price_revisions RENAME TO prices;
-    ALTER TABLE public.published_price_revisions RENAME TO published_prices;
+    ALTER TABLE public.price_revisions RENAME TO prices
+  `;
+  yield* sql`
+    ALTER TABLE public.published_price_revisions RENAME TO published_prices
+  `;
+  yield* sql`
     ALTER TABLE public.published_prices RENAME COLUMN price_revision_id TO price_id
   `;
 }).pipe(Effect.asVoid);

@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
@@ -76,7 +76,7 @@ export const insertTransactionInScope = Effect.fn("insertTransactionInScope")(fu
         category_user_decided, counterparty_user_decided, notes_user_decided
       ) VALUES (
         ${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
-        ${row.categoryId}, ${row.notes}, ${row.occurredAt}, ${row.categoryUserDecided},
+        ${row.categoryId}, ${row.notes}, ${DateTime.toDateUtc(row.occurredAt)}, ${row.categoryUserDecided},
         ${row.counterpartyUserDecided}, ${row.notesUserDecided}
       )
       RETURNING ${sql.literal(transactionColumns)}
@@ -103,7 +103,7 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
       UPDATE transactions SET
         amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
         direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
-        occurred_at = ${row.occurredAt}, facts_corrected_at = now(),
+        occurred_at = ${DateTime.toDateUtc(row.occurredAt)}, facts_corrected_at = now(),
         category_user_decided = ${row.categoryUserDecided},
         counterparty_user_decided = ${row.counterpartyUserDecided},
         notes_user_decided = ${row.notesUserDecided}

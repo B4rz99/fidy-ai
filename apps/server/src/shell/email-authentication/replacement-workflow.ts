@@ -226,7 +226,7 @@ const delayFailedTake = Effect.catch(() => Effect.sleep("1 second"));
 /** Queue consumers durably submit without holding a queue lease for the entire proof lifetime. */
 export const EmailReplacementDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
     // The Work remains the existing Workflow submission; this boundary changes only its failure
     // projection, so a second span or operation metric would duplicate the Workflow observation.

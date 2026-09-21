@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
@@ -69,13 +70,13 @@ export const insertDashboardInScope = Effect.fn("insertDashboardInScope")(functi
   userId: UserId,
   document: DashboardDocument
 ) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   return yield* SqlSchema.findOne({
     Request: DashboardWrite,
     Result: DashboardRow,
     execute: (row) => sql`
       INSERT INTO dashboards (user_id, document)
-      VALUES (${row.userId}, ${row.document}::jsonb)
+      VALUES (${row.userId}, ${sql.json(row.document)}::jsonb)
       RETURNING document
     `,
   })({ userId, document }).pipe(
@@ -89,13 +90,13 @@ export const updateDashboardInScope = Effect.fn("updateDashboardInScope")(functi
   userId: UserId,
   document: DashboardDocument
 ) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   return yield* SqlSchema.findOne({
     Request: DashboardWrite,
     Result: DashboardRow,
     execute: (row) => sql`
       UPDATE dashboards
-      SET document = ${row.document}::jsonb, updated_at = now()
+      SET document = ${sql.json(row.document)}::jsonb, updated_at = now()
       WHERE user_id = ${row.userId}
       RETURNING document
     `,

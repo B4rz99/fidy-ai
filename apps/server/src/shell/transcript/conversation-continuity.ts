@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import {
   Array as Arr,
   Context,
@@ -211,7 +212,7 @@ export type ConversationContinuityService = Readonly<{
 type CryptoService = Effect.Success<typeof Crypto.Crypto>;
 type Dependencies = {
   readonly crypto: CryptoService;
-  readonly sql: SqlClient.SqlClient;
+  readonly sql: PgClient.PgClient;
   readonly inference: ConversationCompactionInferenceService;
   readonly compactionPolicy: ConversationCompactionPolicy;
   readonly observeCompactionCommit: (tag: CompactionCommitTag) => Effect.Effect<void>;
@@ -231,18 +232,18 @@ type PreparedPersistence = {
   }>;
   readonly consentStands: boolean;
 };
-const RevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
-const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
+const RevisionRow = Schema.Struct({ revision: Schema.BigInt });
+const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigInt });
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const SequencedTranscriptEntryRow = Schema.Struct({
-  sequence: Schema.BigIntFromString,
+  sequence: Schema.BigInt,
   entry: PersistedTranscriptEntry,
 });
 const CompactedConversationRow = Schema.Struct({
   text: Schema.String,
-  throughSequence: Schema.BigIntFromString,
-  revision: Schema.BigIntFromString,
+  throughSequence: Schema.BigInt,
+  revision: Schema.BigInt,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 const OptionalFailureReason = Schema.OptionFromNullOr(TurnFailureReason);
@@ -333,13 +334,13 @@ const readRevision = Effect.fn("ConversationContinuity.readRevision")(function* 
     execute: (ownedUserId) =>
       lock
         ? sql`
-            SELECT revision::text AS revision
+            SELECT revision
             FROM conversation_continuity
             WHERE user_id = ${ownedUserId}
             FOR UPDATE
           `
         : sql`
-            SELECT revision::text AS revision
+            SELECT revision
             FROM conversation_continuity
             WHERE user_id = ${ownedUserId}
           `,
@@ -355,7 +356,7 @@ const readMemoryRevision = Effect.fn("ConversationContinuity.readMemoryRevision"
     Request: UserId,
     Result: MemoryRevisionRow,
     execute: (ownedUserId) => sql`
-      SELECT COALESCE(memory.revision, 0)::text AS revision
+      SELECT COALESCE(memory.revision, 0::bigint) AS revision
       FROM users AS subject
       LEFT JOIN memory_revisions AS memory ON memory.user_id = subject.id
       WHERE subject.id = ${ownedUserId}
@@ -435,7 +436,7 @@ const readCompactedConversation = Effect.fn("ConversationContinuity.readCompacte
     Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
     Result: CompactedConversationRow,
     execute: (owned) => sql`
-      SELECT text, through_sequence::text AS "throughSequence", revision::text AS revision,
+      SELECT text, through_sequence AS "throughSequence", revision,
         updated_at AS "updatedAt"
       FROM compacted_conversations
       WHERE user_id = ${owned.userId} AND session_id = ${owned.hostedAgentSessionId}
@@ -455,7 +456,7 @@ const observePersisted = Effect.fn("ConversationContinuity.observePersisted")(fu
 });
 
 const appendEntry = Effect.fn("ConversationContinuity.appendEntry")(function* (
-  sql: SqlClient.SqlClient,
+  sql: PgClient.PgClient,
   userId: UserId,
   entry: TranscriptEntry
 ) {
@@ -469,7 +470,7 @@ const appendEntry = Effect.fn("ConversationContinuity.appendEntry")(function* (
     Result: Schema.Struct({ entryId: TranscriptEntryId }),
     execute: (row) => sql`
       INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
-      VALUES (${row.userId}, ${row.entryId}, ${row.turnId}, ${row.entry}::jsonb)
+      VALUES (${row.userId}, ${row.entryId}, ${row.turnId}, ${sql.json(row.entry)}::jsonb)
       RETURNING entry_id AS "entryId"
     `,
   })({ userId, entryId: entry.id, turnId: entry.turnId, entry });
@@ -556,13 +557,14 @@ const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(functi
       })
     );
     yield* sql`
-      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${terminalAt}
+      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${DateTime.toDateUtc(terminalAt)}
       WHERE user_id = ${userId} AND id = ${turn.id} AND state = 'Pending'
     `;
     yield* sql`
       UPDATE hosted_agent_sessions
       SET last_terminal_turn_at = GREATEST(
-        COALESCE(last_terminal_turn_at, ${terminalAt}), ${terminalAt}
+        COALESCE(last_terminal_turn_at, ${DateTime.toDateUtc(terminalAt)}),
+        ${DateTime.toDateUtc(terminalAt)}
       )
       WHERE user_id = ${userId} AND id = ${turn.hostedAgentSessionId}
     `;
@@ -621,7 +623,7 @@ const preparePersisted = Effect.fn("ConversationContinuity.prepare")(function* (
           Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
           Result: SequencedTranscriptEntryRow,
           execute: (owned) => dependencies.sql`
-            SELECT entry.sequence::text AS sequence, entry.entry
+            SELECT entry.sequence, entry.entry
             FROM transcript_entries AS entry
             JOIN conversation_turns AS turn
               ON turn.user_id = entry.user_id AND turn.id = entry.turn_id
@@ -745,7 +747,7 @@ const readCompactionPreconditions = Effect.fn("ConversationContinuity.readCompac
       Request: Schema.Struct({ userId: UserId, hostedAgentSessionId: HostedAgentSessionId }),
       Result: SequencedTranscriptEntryRow,
       execute: (owned) => dependencies.sql`
-      SELECT entry.sequence::text AS sequence, entry.entry
+      SELECT entry.sequence, entry.entry
       FROM transcript_entries AS entry
       JOIN conversation_turns AS turn
         ON turn.user_id = entry.user_id AND turn.id = entry.turn_id
@@ -773,7 +775,7 @@ const replaceCompaction = Effect.fn("ConversationContinuity.replaceCompaction")(
       (user_id, session_id, text, through_sequence, revision, updated_at)
     VALUES (
       ${userId}, ${persisted.hostedAgentSessionId}, ${text},
-      ${selection.throughSequence}, ${nextRevision}, ${now}
+      ${selection.throughSequence}, ${nextRevision}, ${DateTime.toDateUtc(now)}
     )
     ON CONFLICT (user_id, session_id) DO UPDATE SET
       text = EXCLUDED.text,
@@ -896,7 +898,7 @@ const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
         yield* dependencies.sql`
           INSERT INTO conversation_turns (user_id, session_id, id, state, started_at)
           VALUES (
-            ${userId}, ${hostedAgentSessionId}, ${entry.turnId}, 'Pending', ${entry.occurredAt}
+            ${userId}, ${hostedAgentSessionId}, ${entry.turnId}, 'Pending', ${DateTime.toDateUtc(entry.occurredAt)}
           )
         `;
         yield* appendEntry(dependencies.sql, userId, entry);
@@ -1035,14 +1037,15 @@ const terminalizePersisted = Effect.fn("ConversationContinuity.terminalize")(fun
       yield* appendEntry(dependencies.sql, userId, terminal.entry);
       yield* dependencies.sql`
         UPDATE conversation_turns
-        SET state = ${terminal._tag}, terminal_at = ${terminalAt},
+        SET state = ${terminal._tag}, terminal_at = ${DateTime.toDateUtc(terminalAt)},
           failure_reason = ${terminal._tag === "Failed" ? terminal.entry.reason : null}
         WHERE user_id = ${userId} AND id = ${turnId} AND state = 'Pending'
       `;
       yield* dependencies.sql`
         UPDATE hosted_agent_sessions AS session
         SET last_terminal_turn_at = GREATEST(
-          COALESCE(session.last_terminal_turn_at, ${terminalAt}), ${terminalAt}
+          COALESCE(session.last_terminal_turn_at, ${DateTime.toDateUtc(terminalAt)}),
+          ${DateTime.toDateUtc(terminalAt)}
         )
         FROM conversation_turns AS turn
         WHERE turn.user_id = ${userId} AND turn.id = ${turnId}
@@ -1176,7 +1179,7 @@ const admitTurnOwned = Effect.fn("ConversationContinuity.admitTurn")(function* (
 const makeConversationContinuity = Effect.gen(function* () {
   const dependencies: Dependencies = {
     crypto: yield* Crypto.Crypto,
-    sql: yield* SqlClient.SqlClient,
+    sql: yield* PgClient.PgClient,
     inference: yield* ConversationCompactionInference,
     compactionPolicy: yield* ConversationCompactionPolicy,
     observeCompactionCommit: yield* CompactionCommitObserver,

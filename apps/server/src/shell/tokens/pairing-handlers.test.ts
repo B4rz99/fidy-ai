@@ -62,8 +62,9 @@ const seedFreshWebSessionFor = Effect.fn("test.seedFreshWebSession")(function* (
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${input.sessionId}, ${input.subjectUserId}, ${bearerDigest}, ${now},
-      ${deadlines.freshUntil}, ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${input.sessionId}, ${input.subjectUserId}, ${bearerDigest}, ${DateTime.toDateUtc(now)},
+      ${DateTime.toDateUtc(deadlines.freshUntil)}, ${DateTime.toDateUtc(deadlines.idleExpiresAt)},
+      ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
 });
@@ -317,17 +318,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           CREATE FUNCTION public.fidy_test_reject_pairing_consent() RETURNS trigger
           LANGUAGE plpgsql AS $function$
           BEGIN RAISE EXCEPTION 'forced pairing Consent failure'; END
-          $function$;
+          $function$
+        `;
+        yield* sql`
           CREATE TRIGGER fidy_test_reject_pairing_consent
           BEFORE INSERT ON consent_records FOR EACH ROW
           EXECUTE FUNCTION public.fidy_test_reject_pairing_consent()
         `;
         const failed = yield* approvePairing(review.data.pairingId, review.data.patExpiresAt).pipe(
           Effect.ensuring(
-            sql`
-              DROP TRIGGER fidy_test_reject_pairing_consent ON consent_records;
-              DROP FUNCTION public.fidy_test_reject_pairing_consent()
-            `.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER fidy_test_reject_pairing_consent ON consent_records`,
+                sql`DROP FUNCTION public.fidy_test_reject_pairing_consent()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           )
         );
         expect(failed.status).toBe(500);
@@ -681,7 +687,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         yield* sql`
           UPDATE pat_pairing_start_attempts
-          SET attempted_at = attempted_at - interval '11 minutes';
+          SET attempted_at = attempted_at - interval '11 minutes'
+        `;
+        yield* sql`
           UPDATE pat_pairing_claim_attempts
           SET attempted_at = attempted_at - interval '11 minutes'
         `;

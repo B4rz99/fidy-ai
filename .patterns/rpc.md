@@ -1,6 +1,7 @@
 # Effect v4 unstable RPC
 
-Project baseline: `effect@4.0.0-rc.112`; source checkout `.repos/effect` at `f239b5b6cc`.
+Audit baseline: `effect@4.0.0-rc.116` (`d62dd0d6…`) plus the vendored upstream snapshot
+`8d40572d…`, which contains post-rc.116 changes.
 
 Use this pattern for `effect/unstable/rpc`. RPC is an internal, typed Effect-to-Effect protocol. It is not the public HTTP API contract: define public operations with HttpApi, and use RPC only behind internal transports or Cluster entities.
 

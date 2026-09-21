@@ -19,6 +19,7 @@ import {
   type HttpClientError,
   type HttpPlatform,
   HttpServer,
+  type HttpServerError,
 } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import type { PgClient } from "@effect/sql-pg/PgClient";
@@ -343,6 +344,7 @@ type SupportAccessApiHarnessOutput =
 type SupportAccessApiHarnessError =
   | Config.ConfigError
   | Migrator.MigrationError
+  | HttpServerError.ServeError
   | SqlError.SqlError;
 type SupportAccessApiHarness = Layer.Layer<
   SupportAccessApiHarnessOutput,
@@ -429,7 +431,10 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
 }: {
   readonly certificate: Bun.BunFile;
   readonly privateKey: Bun.BunFile;
-}): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
+}): Layer.Layer<
+  never,
+  Config.ConfigError | Migrator.MigrationError | HttpServerError.ServeError | SqlError.SqlError
+> =>
   HttpLive.pipe(
     Layer.provide(SqlQueueHarness),
     Layer.provide(MigratorLive),

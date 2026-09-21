@@ -14,12 +14,24 @@ import { deriveEmailCredentialLookupKey } from "~/shell/secret-material/operatio
 export const hmacKeyByteSemantics = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    DELETE FROM email_pairing_login_admission_attempts;
-    DELETE FROM email_pairing_login_admission_scopes;
-    DELETE FROM email_delivery_admission_budgets;
-    DELETE FROM browser_pairing_email_start_requests;
-    DELETE FROM browser_login_start_attempts;
-    DELETE FROM pat_pairing_start_attempts;
+    DELETE FROM email_pairing_login_admission_attempts
+  `;
+  yield* sql`
+    DELETE FROM email_pairing_login_admission_scopes
+  `;
+  yield* sql`
+    DELETE FROM email_delivery_admission_budgets
+  `;
+  yield* sql`
+    DELETE FROM browser_pairing_email_start_requests
+  `;
+  yield* sql`
+    DELETE FROM browser_login_start_attempts
+  `;
+  yield* sql`
+    DELETE FROM pat_pairing_start_attempts
+  `;
+  yield* sql`
     DELETE FROM pat_pairing_claim_attempts
   `;
   const credentials = yield* SqlSchema.findAll({

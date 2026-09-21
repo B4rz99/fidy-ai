@@ -153,11 +153,11 @@ declare const FIDY_CONTRACT_DIGEST: string;
 
 const ProductionGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u));
 const gitRevision = Effect.gen(function* () {
-  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+  const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
   if (environment === "production") {
     return yield* Config.schema(ProductionGitRevision, "RAILWAY_GIT_COMMIT_SHA");
   }
-  return yield* Config.string("RAILWAY_GIT_COMMIT_SHA").pipe(Config.withDefault("development"));
+  return yield* Config.String("RAILWAY_GIT_COMMIT_SHA").pipe(Config.withDefault("development"));
 });
 const contractDigest =
   typeof FIDY_CONTRACT_DIGEST === "undefined" ? "development" : FIDY_CONTRACT_DIGEST;

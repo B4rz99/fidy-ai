@@ -43,13 +43,11 @@ const prepareLegacyTableShape = Effect.gen(function* () {
   yield* sql`TRUNCATE TABLE users CASCADE`;
   // Recreate the schema boundary that existed before migration 0029. Its deferred complete-User
   // triggers otherwise leave pending events on legacy tables that migration 0028 must alter.
-  yield* sql`
-    DROP TRIGGER complete_user_from_users ON users;
-    DROP TRIGGER complete_user_from_whatsapp ON whatsapp_identities;
-    DROP TRIGGER complete_user_from_consent ON consent_records;
-    DROP TRIGGER complete_user_from_email ON verified_email_credentials;
-    DROP TRIGGER complete_user_from_recovery ON backup_recovery_credentials
-  `;
+  yield* sql`DROP TRIGGER complete_user_from_users ON users`;
+  yield* sql`DROP TRIGGER complete_user_from_whatsapp ON whatsapp_identities`;
+  yield* sql`DROP TRIGGER complete_user_from_consent ON consent_records`;
+  yield* sql`DROP TRIGGER complete_user_from_email ON verified_email_credentials`;
+  yield* sql`DROP TRIGGER complete_user_from_recovery ON backup_recovery_credentials`;
   yield* sql`ALTER TABLE users ADD COLUMN paid_tier text NOT NULL DEFAULT 'free'`;
   yield* sql`ALTER TABLE tokens RENAME TO agent_tokens`;
   yield* sql`ALTER TABLE agent_tokens RENAME COLUMN expires_at TO idle_expires_at`;

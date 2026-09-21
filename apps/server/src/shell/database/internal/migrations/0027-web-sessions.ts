@@ -10,11 +10,14 @@ export const webSessions = Effect.gen(function* () {
       ADD COLUMN minimum_poll_interval_seconds integer NOT NULL DEFAULT 5
         CHECK (minimum_poll_interval_seconds >= 5
           AND minimum_poll_interval_seconds % 5 = 0),
-      ADD COLUMN last_accepted_poll_at timestamptz;
-
+      ADD COLUMN last_accepted_poll_at timestamptz
+  `;
+  yield* sql`
     ALTER TABLE browser_login_pairings
       DROP CONSTRAINT IF EXISTS browser_login_pairings_check,
-      DROP CONSTRAINT IF EXISTS browser_login_pairings_check1;
+      DROP CONSTRAINT IF EXISTS browser_login_pairings_check1
+  `;
+  yield* sql`
     ALTER TABLE browser_login_pairings
       ADD CONSTRAINT browser_login_pairings_subject_lifecycle_check CHECK (
         (lifecycle = 'pending_approval' AND user_id IS NULL AND approved_at IS NULL)
@@ -43,19 +46,28 @@ export const webSessions = Effect.gen(function* () {
       CHECK (idle_expires_at <= hard_expires_at),
       CHECK (last_used_at IS NULL OR last_used_at >= paired_at),
       CHECK (revoked_at IS NULL OR revoked_at >= paired_at)
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX web_sessions_user_active_idx
-      ON web_sessions (user_id, idle_expires_at) WHERE revoked_at IS NULL;
-
-    ALTER TABLE web_sessions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE web_sessions FORCE ROW LEVEL SECURITY;
+      ON web_sessions (user_id, idle_expires_at) WHERE revoked_at IS NULL
+  `;
+  yield* sql`
+    ALTER TABLE web_sessions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE web_sessions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY web_sessions_by_user ON web_sessions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
 
   yield* sql`
-    GRANT SELECT, INSERT, UPDATE ON web_sessions TO fidy_gateway;
+    GRANT SELECT, INSERT, UPDATE ON web_sessions TO fidy_gateway
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, UPDATE ON browser_login_pairings TO fidy_gateway
   `;
 
@@ -79,8 +91,9 @@ export const webSessions = Effect.gen(function* () {
       FROM public.browser_login_pairings AS pairing
       WHERE pairing.id = requested_pairing_id
       FOR UPDATE
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_accept_browser_login_poll(
       requested_pairing_id uuid, accepted_at timestamptz
     ) RETURNS boolean
@@ -93,8 +106,9 @@ export const webSessions = Effect.gen(function* () {
           AND expires_at > accepted_at
         RETURNING id
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_slow_browser_login_poll(
       requested_pairing_id uuid, next_minimum_seconds integer
     ) RETURNS boolean
@@ -107,8 +121,9 @@ export const webSessions = Effect.gen(function* () {
           AND next_minimum_seconds = minimum_poll_interval_seconds + 5
         RETURNING id
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_reject_browser_login_verifier(
       requested_pairing_id uuid,
       requested_attempts integer,
@@ -131,8 +146,9 @@ export const webSessions = Effect.gen(function* () {
           AND requested_lifecycle IN (lifecycle, 'invalidated')
         RETURNING id
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_expire_browser_login_pairing(
       requested_pairing_id uuid, transitioned_at timestamptz
     ) RETURNS boolean
@@ -146,8 +162,9 @@ export const webSessions = Effect.gen(function* () {
           AND expires_at <= transitioned_at
         RETURNING id
       ) SELECT EXISTS (SELECT 1 FROM changed)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_redeem_pairing_to_web_session(
       requested_pairing_id uuid,
       requested_session_id uuid,
@@ -174,8 +191,9 @@ export const webSessions = Effect.gen(function* () {
         FROM consumed
         RETURNING id
       ) SELECT EXISTS (SELECT 1 FROM inserted)
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_use_web_session(
       requested_bearer_digest bytea,
       used_at timestamptz,
@@ -203,8 +221,9 @@ export const webSessions = Effect.gen(function* () {
         AND hard_expires_at > used_at
       RETURNING id, user_id, web_sessions.paired_at, web_sessions.fresh_until,
         web_sessions.last_used_at, web_sessions.idle_expires_at, web_sessions.hard_expires_at
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_revoke_web_session(
       requested_bearer_digest bytea, revocation_time timestamptz
     ) RETURNS boolean
@@ -219,44 +238,88 @@ export const webSessions = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER FUNCTION fidy_lock_browser_login_pairing(uuid) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_slow_browser_login_poll(uuid, integer) OWNER TO fidy_gateway;
+    ALTER FUNCTION fidy_lock_browser_login_pairing(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_slow_browser_login_poll(uuid, integer) OWNER TO fidy_gateway
+  `;
+  yield* sql`
     ALTER FUNCTION fidy_reject_browser_login_verifier(uuid, integer, text, timestamptz)
-      OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) OWNER TO fidy_gateway;
+      OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
     ALTER FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
-    ) OWNER TO fidy_gateway;
+    ) OWNER TO fidy_gateway
+  `;
+  yield* sql`
     ALTER FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz)
-      OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_revoke_web_session(bytea, timestamptz) OWNER TO fidy_gateway;
-
-    REVOKE ALL ON FUNCTION fidy_lock_browser_login_pairing(uuid) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_slow_browser_login_poll(uuid, integer) FROM PUBLIC;
+      OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_revoke_web_session(bytea, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_lock_browser_login_pairing(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_slow_browser_login_poll(uuid, integer) FROM PUBLIC
+  `;
+  yield* sql`
     REVOKE ALL ON FUNCTION fidy_reject_browser_login_verifier(
       uuid, integer, text, timestamptz
-    ) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) FROM PUBLIC;
+    ) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
     REVOKE ALL ON FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
-    ) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_revoke_web_session(bytea, timestamptz) FROM PUBLIC;
-
-    GRANT EXECUTE ON FUNCTION fidy_lock_browser_login_pairing(uuid) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_slow_browser_login_poll(uuid, integer) TO fidy_runtime;
+    ) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_revoke_web_session(bytea, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_lock_browser_login_pairing(uuid) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_accept_browser_login_poll(uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_slow_browser_login_poll(uuid, integer) TO fidy_runtime
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_reject_browser_login_verifier(
       uuid, integer, text, timestamptz
-    ) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) TO fidy_runtime;
+    ) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_expire_browser_login_pairing(uuid, timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
-    ) TO fidy_runtime;
+    ) TO fidy_runtime
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz)
-      TO fidy_runtime;
+      TO fidy_runtime
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_revoke_web_session(bytea, timestamptz) TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

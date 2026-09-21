@@ -54,7 +54,7 @@ import {
 
 /** The one approved Cluster wire codec, bounded by the deployment compatibility contract. */
 export const ClusterSerializationLive: Layer.Layer<RpcSerialization.RpcSerialization> =
-  RpcSerialization.layerMsgPackWith({ maxBufferSize: clusterSerializationMaxBufferSizeBytes });
+  RpcSerialization.layerSchemaBinary({ maxFrameSize: clusterSerializationMaxBufferSizeBytes });
 // Avoid presenting HttpRouter's non-React `use` API as a hook call to the React Hooks linter.
 const registerRouterMiddleware = HttpRouter.use;
 

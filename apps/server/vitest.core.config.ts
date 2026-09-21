@@ -19,6 +19,9 @@ export default defineConfig({
   },
   test: {
     include: ["src/core/**/*.test.ts"],
+    // Isolate mock call history explicitly rather than relying on Vitest 5's default.
+    clearMocks: true,
+    // Vitest 5's failure for unawaited asynchronous assertions is deliberate.
     environment: "node",
     pool: "forks",
     coverage: {
@@ -26,7 +29,10 @@ export default defineConfig({
       provider: "istanbul",
       enabled: true,
       all: true,
+      reportsDirectory: "coverage",
       reporter: ["text", "json"],
+      // Vitest 5 resolves coverage paths from apps/server; CI uploads the JSON reporter's
+      // coverage/coverage-final.json from that same project root.
       include: CORE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...CORE_EXCLUDE],
       thresholds: {

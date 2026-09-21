@@ -78,7 +78,7 @@ const cleanQueue = Effect.fn("Test.cleanCompatibilityQueue")(function* () {
 const readQueueRows = Effect.fn("Test.readCompatibilityQueueRows")(function* () {
   const admin = yield* MigrationSqlClient;
   return yield* Schema.decodeUnknownEffect(Schema.Array(QueueRowState))(
-    yield* admin`SELECT id, completed, attempts, last_failure AS "lastFailure", element
+    yield* admin`SELECT id, state = 'completed' AS completed, attempts, last_failure AS "lastFailure", element
       FROM fidy_durable.fidy_queue WHERE queue_name = ${whatsappInboundQueueName}
       ORDER BY sequence`
   );
@@ -113,8 +113,8 @@ const recordCompletion = (
     yield* Ref.update(seen, (values) => [...values, work]);
   });
 
-describe.sequential("Queue compatibility over PostgreSQL", () => {
-  it.live("consumes attempts on decode failures and retires the exhausted row", () =>
+describe("Queue compatibility over PostgreSQL", { concurrent: false }, () => {
+  it.live("dead-letters a future-revision element without spending the retry budget", () =>
     runWithCompatibilityHarness(
       Effect.gen(function* () {
         yield* cleanQueue();
@@ -130,42 +130,35 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
         yield* admin`UPDATE fidy_durable.fidy_queue
           SET element = jsonb_set(element::jsonb, '{version}', '99')::text
           WHERE id = ${rowId} AND queue_name = ${whatsappInboundQueueName}`;
-        for (let attempt = 0; attempt < maximumWhatsAppInboundAttempts; attempt += 1) {
-          const error = yield* queue
-            .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
-              maxAttempts: maximumWhatsAppInboundAttempts,
-            })
-            .pipe(Effect.flip);
-          expect(Schema.isSchemaError(error), `attempt ${attempt}`).toBe(true);
-        }
+        // The store decodes the element before the consumer sees it: a payload the current schema
+        // cannot read is dead-lettered on its first claim, so the consumer observes absence
+        // instead of a schema failure, and no attempt budget is spent on a payload that can
+        // never succeed.
+        const missed = yield* queue
+          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy)
+          .pipe(Effect.timeoutOption("500 millis"));
+        expect(Option.isNone(missed)).toBe(true);
         const rows = yield* readQueueRows();
         expect(rows).toHaveLength(1);
         const [row] = rows;
         if (row === undefined) return yield* Effect.die("expected compatibility row");
         expect(row.id).toBe(rowId);
         expect(row.completed).toBe(false);
-        expect(row.attempts).toBe(maximumWhatsAppInboundAttempts);
+        expect(row.attempts).toBe(1);
         expect(Option.isSome(row.lastFailure)).toBe(true);
         expect(yield* parseElement(row.element)).toEqual({
           version: unknownFutureRevision,
           userId,
           inboundJobId,
         });
-        // The exhausted row is no longer eligible: the consumer observes absence,
-        // never a silent drop.
-        const missed = yield* queue
-          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy, {
-            maxAttempts: maximumWhatsAppInboundAttempts,
-          })
+        // Dead-lettered work is never redelivered...
+        const redelivered = yield* queue
+          .handleNext(() => Effect.void, compatibilityQueueHandlerPolicy)
           .pipe(Effect.timeoutOption("500 millis"));
-        expect(Option.isNone(missed)).toBe(true);
-        // The reviewed exhausted-item policy retires the row with its domain identity
-        // instead of leaving it stranded behind the attempt ceiling.
-        const retired = yield* retireExhaustedWhatsAppWork(yield* DateTime.now);
-        expect(retired).toEqual([{ userId, inboundJobId }]);
-        const retiredRows = yield* readQueueRows();
-        expect(retiredRows).toHaveLength(1);
-        expect(retiredRows[0]?.completed).toBe(true);
+        expect(Option.isNone(redelivered)).toBe(true);
+        // ...and it is not retry-exhaustion work, so the reviewed exhausted-item policy leaves
+        // the failed row as the durable dead-letter record.
+        expect(yield* retireExhaustedWhatsAppWork(yield* DateTime.now)).toEqual([]);
       })
     )
   );
@@ -179,9 +172,9 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           yield* Effect.addFinalizer(() => cleanQueue().pipe(Effect.orDie));
           const admin = yield* MigrationSqlClient;
           yield* admin`INSERT INTO fidy_durable.fidy_queue
-          (id, queue_name, element, completed, attempts, created_at, updated_at)
+          (id, queue_name, element, state, visible_at, attempts, created_at, updated_at)
           VALUES ('f1d1a000-0000-4000-8000-00000000c024', ${whatsappInboundQueueName},
-            'not-json', FALSE, ${maximumWhatsAppInboundAttempts}, now(), now())`;
+            'not-json', 'pending', now(), ${maximumWhatsAppInboundAttempts}, now(), now())`;
           const userId = UserId.make("f1d1a000-0000-4000-8000-00000000c025");
           const inboundJobId = WhatsAppInboundJobId.make("f1d1a000-0000-4000-8000-00000000c026");
           const queue = whatsappInboundQueue;
@@ -225,9 +218,9 @@ describe.sequential("Queue compatibility over PostgreSQL", () => {
           const admin = yield* MigrationSqlClient;
           // The oldest supported bytes: markerless and keyed by the domain identity.
           yield* admin`INSERT INTO fidy_durable.fidy_queue
-          (id, queue_name, element, completed, attempts, created_at, updated_at)
+          (id, queue_name, element, state, visible_at, attempts, created_at, updated_at)
           VALUES (${old.inboundJobId}, ${whatsappInboundQueueName}, ${oldElement},
-            FALSE, 0, now(), now())`;
+            'pending', now(), 0, now(), now())`;
           const queue = whatsappInboundQueue;
           // A new-deployment duplicate offer converges on the old row instead of forking work.
           const decoded = yield* Schema.decodeUnknownEffect(WhatsAppInboundWork)(oldJson);

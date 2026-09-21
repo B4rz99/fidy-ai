@@ -80,6 +80,13 @@ with strategies `"suspend"` (backpressure, default) | `"dropping"` | `"sliding"`
 | `Queue.interrupt`              | drained first                 | interrupted            | `Queue.ts:1077`, test `test/Queue.test.ts:171-194` |
 | `Queue.shutdown`               | **discarded immediately**     | resumed immediately    | `Queue.ts:1114-1131`                               |
 
+`Queue.shutdown` is effectful; `Queue.shutdownUnsafe` performs the same teardown synchronously.
+Both return `true` only when that call shuts down a queue that was not already done, and return
+`false` after prior shutdown or completion. Shutdown clears buffered messages and settles pending
+offers (`Queue.ts:1098-1177`; tests `test/Queue.test.ts:405-469`). When synchronous offers must
+release waiting takers before returning, use `Queue.flushUnsafe`; `Queue.flush` provides the same
+release pass as an Effect. Flushing does not terminate the queue (`Queue.ts:1585-1667`).
+
 After any termination, `offer` returns `false` rather than failing (`test/Queue.test.ts:181`).
 Batch consumption (the burst-collapse primitives): `takeAll` waits for ≥1 then drains
 everything buffered, returning a `NonEmptyArray` (`Queue.ts:1218`); `takeBetween(q, min, max)`
@@ -132,10 +139,17 @@ onExceeded?: "delay" | "fail", window, limit, key, tokens? }` (`:45-60`). Semant
 - **fixed-window**: counter per key; refill rate = `window / limit` (`:126-170`). This is **not**
   a sliding log or a calendar-aligned fixed window: first consumption sets TTL to
   `tokens * refillRate`, later accepted consumption extends that expiry by the same amount
-  (`:721-738`, Redis Lua `:1020-1051` in RC.112). At 5/min, one token expires after 12s;
+  (`:721-738`, Redis Lua `:1020-1051`). At 5/min, one token expires after 12s;
   five more can then pass within the original minute. Do not substitute it for “5 in any minute”.
 - **token-bucket**: bucket of `limit` tokens refilled at `window / limit` per token — this is
   the burst-friendly one for "60 req/min with burst" (`:171-227`).
+- Adaptive limiting is a separate API, not a third `consume` algorithm. `adaptiveConsume` returns
+  `{ delay, epoch, phase }`, where phase is `"inactive" | "cooldown" | "learning" | "learned"`;
+  callers report the corresponding HTTP outcome through `adaptiveFeedback` (`:45-60`, `:505-590`).
+  Adaptive state remains inactive until feedback contains status 429 and a parsed `Retry-After`; it
+  then enters cooldown and can learn a provider limit from subsequent feedback. Preserve the
+  returned epoch when reporting feedback so stale responses cannot update newer state (`:775-879`;
+  tests `test/unstable/persistence/RateLimiter.test.ts:263-329`).
 - `onExceeded: "fail"` fails typed with `RateLimiterError` wrapping `RateLimitExceeded
 { key, retryAfter, limit, remaining }` (`:106-118`) — `retryAfter` maps directly onto a 429
   `Retry-After` header. `"delay"` returns the wait instead; `makeWithRateLimiter` wraps an

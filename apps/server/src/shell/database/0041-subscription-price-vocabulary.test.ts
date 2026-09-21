@@ -28,10 +28,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
               expect(
                 yield* admin`
-                  SELECT to_regclass('public.prices') AS "prices",
-                    to_regclass('public.price_revisions') AS "legacyPrices",
-                    to_regclass('public.published_prices') AS "publishedPrices",
-                    to_regclass('public.published_price_revisions') AS "legacyPublishedPrices"
+                  SELECT to_regclass('public.prices')::text AS "prices",
+                    to_regclass('public.price_revisions')::text AS "legacyPrices",
+                    to_regclass('public.published_prices')::text AS "publishedPrices",
+                    to_regclass('public.published_price_revisions')::text AS "legacyPublishedPrices"
                 `
               ).toEqual([
                 {
@@ -61,8 +61,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(result).toBe("rolled back");
         expect(
           yield* admin`
-            SELECT to_regclass('public.prices') AS "prices",
-              to_regclass('public.price_revisions') AS "legacyPrices"
+            SELECT to_regclass('public.prices')::text AS "prices",
+              to_regclass('public.price_revisions')::text AS "legacyPrices"
           `
         ).toEqual([{ prices: "prices", legacyPrices: null }]);
       })

@@ -1,4 +1,4 @@
-import { Config, type DateTime, Effect, Schema } from "effect";
+import { Config, DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 const minimumEmailIngestRetentionDays = 1;
@@ -24,7 +24,7 @@ export const runEmailIngestRetention = Effect.fn("runEmailIngestRetention")(func
     Request: Schema.DateTimeUtc,
     Result: Schema.Struct({ removed: Schema.Int }),
     execute: (cutoff) => sql`
-      SELECT fidy_expire_email_ingest_samples(${cutoff}) AS removed
+      SELECT fidy_expire_email_ingest_samples(${DateTime.toDateUtc(cutoff)}) AS removed
     `,
   })(now).pipe(
     Effect.map((row) => row.removed),

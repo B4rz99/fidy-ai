@@ -1,5 +1,6 @@
+import { PgClient } from "@effect/sql-pg";
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
-import { type DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   CapturedInterpretationContext,
@@ -183,7 +184,7 @@ export const insertSubmissionInScope = Effect.fn("insertSubmissionInScope")(func
       ) VALUES (
         ${row.id}, ${row.userId}, ${row.idempotencyKey}, ${row.contentHash},
         ${row.sourceFormat}, ${row.fileContent}, 'queued', ${row.serviceMarket}, ${row.locale},
-        ${row.timeZone}, ${row.parserRevision}, ${row.submittedAt}
+        ${row.timeZone}, ${row.parserRevision}, ${DateTime.toDateUtc(row.submittedAt)}
       )
       RETURNING ${sql.literal(submissionColumns)}
     `,
@@ -267,7 +268,7 @@ export const startQueuedStatement = Effect.fn("startQueuedStatement")(function* 
         }),
         Result: QueuedStatement,
         execute: (input) => sql`
-          UPDATE statement_submissions SET started_at = coalesce(started_at, ${input.startedAt})
+          UPDATE statement_submissions SET started_at = coalesce(started_at, ${DateTime.toDateUtc(input.startedAt)})
           WHERE id = ${input.id} AND user_id = ${input.userId} AND status = 'queued'
           RETURNING id, user_id AS "userId", content_hash AS "contentHash",
             source_format AS "sourceFormat", file_content AS "fileContent",
@@ -325,7 +326,7 @@ export const findQueuedStatementSubmissions = Effect.fn("findQueuedStatementSubm
       execute: (request) => sql`
         SELECT id, user_id AS "userId", submitted_at AS "submittedAt"
         FROM fidy_list_queued_statement_submissions(
-          ${request.afterSubmittedAt}, ${request.afterId}, ${request.pageSize}
+          ${Option.map(Option.fromNullishOr(request.afterSubmittedAt), DateTime.toDateUtc).pipe(Option.getOrNull)}, ${request.afterId}, ${request.pageSize}
         )
       `,
     })({ afterSubmittedAt, afterId, pageSize: 100 }).pipe(Effect.orDie);
@@ -360,7 +361,7 @@ export const findTerminalStatementExecutions = Effect.fn("findTerminalStatementE
       execute: (request) => sql`
         SELECT id, completed_at AS "completedAt"
         FROM fidy_list_terminal_statement_executions(
-          ${request.afterCompletedAt}, ${request.afterId}, ${request.pageSize}
+          ${Option.map(Option.fromNullishOr(request.afterCompletedAt), DateTime.toDateUtc).pipe(Option.getOrNull)}, ${request.afterId}, ${request.pageSize}
         )
       `,
     })({ afterCompletedAt, afterId, pageSize: 100 }).pipe(Effect.orDie);
@@ -411,13 +412,13 @@ export const insertStatementMappingInScope = Effect.fn("insertStatementMappingIn
   }>
 ) {
   const { userId, fingerprint, mapping, extractorRevision } = input;
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   const encoded = yield* Schema.encodeUnknownEffect(StatementColumnMapping)(mapping).pipe(
     Effect.orDie
   );
   yield* sql`
     INSERT INTO statement_format_profiles (user_id, fingerprint, mapping, extractor_revision)
-    VALUES (${userId}, ${fingerprint}, ${encoded}, ${extractorRevision})
+    VALUES (${userId}, ${fingerprint}, ${sql.json(encoded)}::jsonb, ${extractorRevision})
     ON CONFLICT (user_id, fingerprint) DO NOTHING
   `.pipe(Effect.orDie);
 });
@@ -439,7 +440,7 @@ export const insertNeedsReviewItemInScope = Effect.fn("insertNeedsReviewItemInSc
     extractorRevision: string;
   }>
 ) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   const evidence = yield* reviewEvidence(input.outcome.evidence);
   const known = Option.map(input.outcome.knownMoney, (money) => ({
     amount: encodeMoneyAmount(money.amount),
@@ -459,8 +460,9 @@ export const insertNeedsReviewItemInScope = Effect.fn("insertNeedsReviewItemInSc
       ${input.id}, ${input.userId}, ${input.submissionId}, ${input.outcome.recordNumber},
       ${input.outcome.reason}, ${knownAmount}, ${knownCurrency}, ${input.context.serviceMarket},
       ${input.context.locale}, ${input.context.timeZone}, ${input.sourceFormat},
-      'statement-upload', ${input.parserRevision}, ${input.extractorRevision}, ${evidence},
-      ${issues}, 'pending'
+      'statement-upload', ${input.parserRevision}, ${input.extractorRevision},
+      ${sql.json(evidence)}::jsonb,
+      ${issues}::jsonb, 'pending'
     )
   `.pipe(Effect.orDie);
 });
@@ -480,14 +482,14 @@ export const completeSubmissionInScope = Effect.fn("completeSubmissionInScope")(
   yield* sql`
     WITH completed AS (
       UPDATE statement_submissions SET status = 'completed', file_content = NULL,
-        started_at = coalesce(started_at, ${completedAt}), input_rows = ${accounting.inputRows},
+        started_at = coalesce(started_at, ${DateTime.toDateUtc(completedAt)}), input_rows = ${accounting.inputRows},
         accepted_rows = ${accounting.acceptedRows},
-        needs_review_rows = ${accounting.needsReviewRows}, completed_at = ${completedAt}
+        needs_review_rows = ${accounting.needsReviewRows}, completed_at = ${DateTime.toDateUtc(completedAt)}
       WHERE id = ${id} AND user_id = ${userId} AND status = 'queued'
       RETURNING id
     )
     UPDATE statement_backfill_entitlements SET
-      consumed_at = CASE WHEN ${usefulOutcome} THEN ${completedAt} ELSE consumed_at END,
+      consumed_at = CASE WHEN ${usefulOutcome} THEN ${DateTime.toDateUtc(completedAt)} ELSE consumed_at END,
       submission_id = CASE WHEN ${usefulOutcome} THEN submission_id ELSE NULL END
     WHERE user_id = ${userId} AND submission_id = ${id} AND consumed_at IS NULL
       AND EXISTS (SELECT 1 FROM completed)
@@ -515,8 +517,8 @@ export const failSubmission = Effect.fn("failSubmission")(function* (
         sql`
         WITH failed AS (
           UPDATE statement_submissions SET status = 'failed', file_content = NULL,
-            started_at = coalesce(started_at, ${input.completedAt}),
-            failure_reason = ${input.failureReason}, completed_at = ${input.completedAt}
+            started_at = coalesce(started_at, ${DateTime.toDateUtc(input.completedAt)}),
+            failure_reason = ${input.failureReason}, completed_at = ${DateTime.toDateUtc(input.completedAt)}
           WHERE id = ${input.id} AND user_id = ${input.userId} AND status = 'queued'
           RETURNING id
         )
@@ -687,7 +689,7 @@ export const resolveNeedsReviewItemInScope = Effect.fn("resolveNeedsReviewItemIn
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     UPDATE needs_review_items SET status = 'resolved', transaction_id = ${transactionId},
-      resolved_at = ${resolvedAt}, original_evidence = NULL
+      resolved_at = ${DateTime.toDateUtc(resolvedAt)}, original_evidence = NULL
     WHERE id = ${id} AND user_id = ${userId} AND status = 'pending'
   `.pipe(Effect.orDie);
 });

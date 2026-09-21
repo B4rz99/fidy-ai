@@ -20,7 +20,7 @@ const PairingServer = HttpRouter.serve(
 const Ready = Layer.effectDiscard(
   Effect.gen(function* () {
     const server = yield* HttpServer.HttpServer;
-    if (server.address._tag !== "TcpAddress") return yield* Effect.die("Expected TCP socket");
+    if (server.address._tag === "UnixPathAddress") return yield* Effect.die("Expected TCP socket");
     process.send?.({ port: server.address.port, pid: process.pid });
   })
 ).pipe(Layer.provide(PairingServer));

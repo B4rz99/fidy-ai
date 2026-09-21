@@ -228,16 +228,23 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* admin`
         CREATE FUNCTION test_reject_disclosure_retention() RETURNS trigger LANGUAGE plpgsql AS \$body\$
         BEGIN RAISE EXCEPTION 'retention fixture rejects deletion'; END
-        \$body\$;
+        \$body\$
+      `;
+        yield* admin`
         CREATE TRIGGER test_reject_disclosure_retention BEFORE DELETE ON whatsapp_consent_disclosure_requests
         FOR EACH ROW WHEN (OLD.exchange_id = ${admin.literal(`'${payload.exchangeId}'::uuid`)})
         EXECUTE FUNCTION test_reject_disclosure_retention()
       `;
         yield* Effect.addFinalizer(() =>
-          admin`
-        DROP TRIGGER test_reject_disclosure_retention ON whatsapp_consent_disclosure_requests;
-        DROP FUNCTION test_reject_disclosure_retention()
-      `.pipe(Effect.orDie)
+          Effect.all(
+            [
+              admin`
+        DROP TRIGGER test_reject_disclosure_retention ON whatsapp_consent_disclosure_requests
+      `,
+              admin`DROP FUNCTION test_reject_disclosure_retention()`,
+            ],
+            { concurrency: 1, discard: true }
+          ).pipe(Effect.orDie)
         );
         const result = yield* Effect.exit(pruneConsentDisclosureDelivery(yield* DateTime.now));
         expect(Exit.isFailure(result)).toBe(true);
@@ -247,7 +254,7 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const rows = yield* Schema.decodeUnknownEffect(
           Schema.Array(Schema.Struct({ completed: Schema.Boolean }))
         )(
-          yield* admin`SELECT completed FROM fidy_durable.fidy_queue WHERE queue_name = 'whatsapp-consent-disclosure' AND id = ${payload.exchangeId}`
+          yield* admin`SELECT state = 'completed' AS completed FROM fidy_durable.fidy_queue WHERE queue_name = 'whatsapp-consent-disclosure' AND id = ${payload.exchangeId}`
         );
         expect(rows).toEqual([{ completed: true }]);
       })

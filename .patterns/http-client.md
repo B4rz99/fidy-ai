@@ -36,7 +36,8 @@ Use `HttpClientResponse.matchStatus` for an explicit exact/class table
 `HttpClientResponse.schemaBodyJson(Schema, { errors: "all" })`; it parses JSON and decodes the
 **JSON codec** of the schema, so transformations such as DateTime are honored
 (`HttpIncomingMessage.ts:74-94`). `schemaJson` can decode status + headers + body as one schema when
-that whole envelope is the provider contract (`HttpClientResponse.ts:82-115`).
+that whole envelope is the provider contract, and both `schemaJson` and `schemaNoBody` pass their
+parse options into the final envelope decoder (`HttpClientResponse.ts:82-143`).
 
 The Web response's `text`/`arrayBuffer` accessors cache the complete body in memory
 (`HttpClientResponse.ts:305-356`). That is not a size limit. For hostile or provider-controlled
@@ -56,6 +57,15 @@ Preference order:
 
 Provider SDK types are not runtime evidence. Decode provider bodies with their owning Schema even
 when TypeScript says the response is typed.
+
+## `QUERY` requests
+
+`HttpClient.query(url, options)` executes the `QUERY` method and
+`HttpClientRequest.query(url, options)` constructs one (`HttpClient.ts:187-196`;
+`HttpClientRequest.ts:180-185`). Effect treats `QUERY` as body-capable: only
+`GET | HEAD | OPTIONS | TRACE` are `HttpMethod.NoBody`, and `HttpMethod.hasBody("QUERY")` is true
+(`HttpMethod.ts:18-52`, `:71-106`). Apply the same body encoding, bounds, retry-safety, and
+observability decisions as for other body-capable methods; do not infer GET semantics from the name.
 
 ## Timeouts, retries, and mutation certainty
 

@@ -10,7 +10,7 @@ export const maximumPublicRequestBodySizeBytes = oneMebibyteInBytes;
  * defaults to 0.0.0.0. A malformed or out-of-range PORT fails with ConfigError before binding.
  */
 export const serverConfig = Config.all({
-  port: Config.port("PORT").pipe(Config.withDefault(defaultHttpPort)),
-  hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
+  port: Config.Port("PORT").pipe(Config.withDefault(defaultHttpPort)),
+  hostname: Config.String("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
   maxRequestBodySize: Config.succeed(maximumPublicRequestBodySizeBytes),
 });

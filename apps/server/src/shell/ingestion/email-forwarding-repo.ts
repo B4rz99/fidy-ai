@@ -1,3 +1,4 @@
+import { PgClient } from "@effect/sql-pg";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -67,7 +68,7 @@ export const enableEmailForwardingAddressInScope = Effect.fn("enableEmailForward
       Result: AddressRow,
       execute: (row) => sql`
       INSERT INTO email_forwarding_addresses (id, user_id, local_part, created_at)
-      VALUES (${row.id}, ${row.userId}, ${row.localPart}, ${row.createdAt})
+      VALUES (${row.id}, ${row.userId}, ${row.localPart}, ${DateTime.toDateUtc(row.createdAt)})
       ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
       RETURNING id, local_part AS "localPart", created_at AS "createdAt"
     `,
@@ -214,7 +215,7 @@ export const countForwardedEmailsInPeriodInScope = Effect.fn("countForwardedEmai
       execute: (row) => sql`
       SELECT count(*)::int AS count FROM forwarded_email_receipts
       WHERE user_id = ${row.userId} AND consumes_free_allowance
-        AND period_start >= ${row.from} AND period_start < ${row.to}
+        AND period_start >= ${DateTime.toDateUtc(row.from)} AND period_start < ${DateTime.toDateUtc(row.to)}
     `,
     })({ userId, from: period.from, to: period.toExclusive }).pipe(
       Effect.map((row) => row.count),
@@ -292,8 +293,8 @@ export const insertForwardedEmailReceiptInScope = Effect.fn("insertForwardedEmai
         time_zone, period_start, consumes_free_allowance, resume_at, admitted_at
       ) VALUES (
         ${row.receivedEmailId}, ${row.userId}, ${row.webhookDeliveryId}, ${row.status},
-        ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.periodStart},
-        ${row.consumesFreeAllowance}, ${row.resumeAt}, ${row.admittedAt}
+        ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${DateTime.toDateUtc(row.periodStart)},
+        ${row.consumesFreeAllowance}, ${row.resumeAt === null ? null : DateTime.toDateUtc(row.resumeAt)}, ${DateTime.toDateUtc(row.admittedAt)}
       ) ON CONFLICT (received_email_id) DO NOTHING
       RETURNING received_email_id AS "receivedEmailId", status
     `,
@@ -447,8 +448,8 @@ const lockDeferredActivationSnapshotInScope = Effect.fn("lockDeferredActivationS
           WHERE user_id = subject.id
             AND consumes_free_allowance
             AND status <> 'deferred'
-            AND period_start >= ${period.from}
-            AND period_start < ${period.toExclusive}) AS consumed,
+            AND period_start >= ${DateTime.toDateUtc(period.from)}
+            AND period_start < ${DateTime.toDateUtc(period.toExclusive)}) AS consumed,
         receipt.resume_at AS "resumeAt"
       FROM subject, receipt
     `,
@@ -481,8 +482,8 @@ export const activateDeferredForwardedEmail = Effect.fn("activateDeferredForward
         yield* sql`
           UPDATE forwarded_email_receipts
           SET status = ${activated ? "accepted" : "deferred"},
-            resume_at = ${activated ? null : decision.resumeAt},
-            period_start = ${activated ? period.from : context.periodStart},
+            resume_at = ${activated ? null : DateTime.toDateUtc(decision.resumeAt)},
+            period_start = ${DateTime.toDateUtc(activated ? period.from : context.periodStart)},
             consumes_free_allowance = ${
               decision._tag === "Activate" ? decision.consumesFreeAllowance : true
             }
@@ -529,7 +530,7 @@ export const findExpiredForwardedEmailExecutions = Effect.fn("findExpiredForward
       execute: (cutoff) => sql`
         SELECT received_email_id AS "receivedEmailId", user_id AS "userId",
           cleanup_started_at AS "cleanupStartedAt"
-        FROM fidy_resolve_expired_forwarded_email_executions(${cutoff})
+        FROM fidy_resolve_expired_forwarded_email_executions(${DateTime.toDateUtc(cutoff)})
       `,
     })(completedBefore).pipe(Effect.orDie);
   }
@@ -546,7 +547,7 @@ export const markForwardedEmailCleanupChecked = Effect.fn("markForwardedEmailCle
   function* (input: typeof ForwardedEmailCleanupRequest.Type) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`SELECT fidy_mark_forwarded_email_cleanup_checked(
-    ${input.receivedEmailId}, ${input.userId}, ${input.observedAt}
+    ${input.receivedEmailId}, ${input.userId}, ${DateTime.toDateUtc(input.observedAt)}
   )`.pipe(Effect.orDie);
   }
 );
@@ -561,7 +562,7 @@ export const startForwardedEmailCleanup = Effect.fn("startForwardedEmailCleanup"
     Result: Schema.Struct({ started: Schema.Boolean }),
     execute: (request) => sql`
       SELECT fidy_start_forwarded_email_cleanup(
-        ${request.receivedEmailId}, ${request.userId}, ${request.observedAt}
+        ${request.receivedEmailId}, ${request.userId}, ${DateTime.toDateUtc(request.observedAt)}
       ) AS started
     `,
   })(input).pipe(
@@ -576,7 +577,7 @@ export const completeForwardedEmailCleanup = Effect.fn("completeForwardedEmailCl
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`SELECT fidy_complete_forwarded_email_cleanup(
-      ${input.receivedEmailId}, ${input.userId}, ${input.observedAt}
+      ${input.receivedEmailId}, ${input.userId}, ${DateTime.toDateUtc(input.observedAt)}
     )`.pipe(Effect.orDie);
 });
 
@@ -590,7 +591,10 @@ export const insertRawEmailSampleInScope = Effect.fn("insertRawEmailSampleInScop
     readonly anonymizationCandidate: string;
     readonly anonymizationRevision: string;
   }) {
-    const sql = yield* SqlClient.SqlClient;
+    const sql = yield* PgClient.PgClient;
+    const content = yield* Schema.decodeEffect(UnknownJsonString)(input.encodedContent).pipe(
+      Effect.orDie
+    );
     return yield* SqlSchema.findOne({
       Request: Schema.Struct({ id: IngestSampleId }),
       Result: Schema.Struct({ id: IngestSampleId }),
@@ -603,8 +607,8 @@ export const insertRawEmailSampleInScope = Effect.fn("insertRawEmailSampleInScop
         ${input.sample.id}, ${input.userId}, ${input.sample.receivedEmailId},
         ${input.sample.serviceMarket}, ${input.sample.locale}, ${input.sample.timeZone},
         ${input.sample.sourceFormat}, ${input.sample.sourceProvider}, ${input.sample.parserRevision},
-        ${input.encodedContent}::jsonb, ${input.contentHash}, ${input.anonymizationCandidate},
-        ${input.anonymizationRevision}, ${input.sample.retainedAt}, ${input.sample.expiresAt}
+        ${sql.json(content)}::jsonb, ${input.contentHash}, ${input.anonymizationCandidate},
+        ${input.anonymizationRevision}, ${DateTime.toDateUtc(input.sample.retainedAt)}, ${DateTime.toDateUtc(input.sample.expiresAt)}
       ) ON CONFLICT (received_email_id) DO UPDATE SET received_email_id = EXCLUDED.received_email_id
       RETURNING id
     `,
@@ -668,21 +672,17 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
   context: ForwardedEmailExecutionContext,
   interpretation: ForwardedEmailInterpretation
 ) {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* PgClient.PgClient;
   const extraction =
     interpretation._tag === "Interpreted"
-      ? yield* Schema.encodeEffect(UnknownJsonString)(
-          yield* Schema.encodeEffect(TransactionExtraction)(interpretation.extraction).pipe(
-            Effect.orDie
-          )
-        ).pipe(Effect.orDie)
+      ? yield* Schema.encodeEffect(TransactionExtraction)(interpretation.extraction).pipe(
+          Effect.orDie
+        )
       : null;
   const evidence =
     interpretation._tag === "Interpreted"
-      ? yield* Schema.encodeEffect(UnknownJsonString)(
-          yield* Schema.encodeEffect(NotificationEmailInterpretationEvidence)(
-            interpretation.evidence
-          ).pipe(Effect.orDie)
+      ? yield* Schema.encodeEffect(NotificationEmailInterpretationEvidence)(
+          interpretation.evidence
         ).pipe(Effect.orDie)
       : null;
   const inserted = yield* SqlSchema.findOneOption({
@@ -694,7 +694,8 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
         review_reason, created_at, expires_at
       )
       SELECT ${context.receivedEmailId}, ${context.userId}, ${interpretation._tag === "Interpreted" ? "interpreted" : "needs-review"},
-        ${extraction}::jsonb, ${evidence}::jsonb,
+        ${extraction === null ? null : sql.json(extraction)}::jsonb,
+        ${evidence === null ? null : sql.json(evidence)}::jsonb,
         ${interpretation._tag === "NeedsReview" ? interpretation.reason : null}, now(), sample.expires_at
       FROM forwarded_email_receipts AS receipt
       JOIN raw_email_ingest_samples AS sample
@@ -760,7 +761,7 @@ export const deferForwardedEmailForConsentInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     UPDATE forwarded_email_receipts
-    SET status = 'deferred', resume_at = ${DateTime.add(yield* DateTime.now, { days: 1 })}
+    SET status = 'deferred', resume_at = ${DateTime.toDateUtc(DateTime.add(yield* DateTime.now, { days: 1 }))}
     WHERE user_id = ${context.userId} AND received_email_id = ${context.receivedEmailId}
       AND status = 'accepted'
   `.pipe(Effect.orDie);
@@ -777,7 +778,7 @@ export const revokeForwardedEmailForConsentInScope = Effect.fn(
   yield* sql`
     WITH revoked AS (
       UPDATE forwarded_email_receipts
-      SET status = 'revoked', resume_at = NULL, completed_at = ${input.revokedAt}
+      SET status = 'revoked', resume_at = NULL, completed_at = ${DateTime.toDateUtc(input.revokedAt)}
       WHERE user_id = ${input.context.userId}
         AND received_email_id = ${input.context.receivedEmailId}
         AND status IN ('accepted', 'deferred')
@@ -881,7 +882,7 @@ export const completeForwardedEmailWithTransactionInScope = Effect.fn(
   yield* sql`
     WITH completed AS (
       UPDATE forwarded_email_receipts SET status = 'completed',
-        transaction_id = ${transactionId}, completed_at = ${completedAt}
+        transaction_id = ${transactionId}, completed_at = ${DateTime.toDateUtc(completedAt)}
       WHERE user_id = ${context.userId} AND received_email_id = ${context.receivedEmailId}
         AND status = 'accepted'
     )
@@ -906,26 +907,30 @@ type CompleteForwardedEmailReviewInput = Readonly<{
   createdAt: DateTime.Utc;
 }>;
 
-const prepareForwardedEmailReview = Effect.fnUntraced(function* (
-  input: CompleteForwardedEmailReviewInput
-) {
-  const sampleId = input.evidence._tag === "RawSample" ? input.evidence.sampleId : null;
+type PreparedReview = Readonly<{
+  issues: CompleteForwardedEmailReviewInput["issues"];
+  money: Option.Option<Money>;
+  sampleId: Option.Option<IngestSampleId>;
+}>;
+
+const prepareForwardedEmailReview = (input: CompleteForwardedEmailReviewInput): PreparedReview => {
+  const sampleId =
+    input.evidence._tag === "RawSample"
+      ? Option.some(input.evidence.sampleId)
+      : Option.none<IngestSampleId>();
   const money =
     input.evidence._tag === "RawSample"
       ? Option.map(input.evidence.extraction, (value) => value.money)
       : Option.none<Money>();
-  const encodedIssues = yield* Schema.encodeEffect(UnknownJsonString)(input.issues).pipe(
-    Effect.orDie
-  );
-  return { encodedIssues, money, sampleId };
-});
+  return { issues: input.issues, money, sampleId };
+};
 
 /** Inserts one visible email NeedsReviewItem and closes the matching receipt atomically. */
 export const completeForwardedEmailWithReviewInScope = Effect.fn(
   "completeForwardedEmailWithReviewInScope"
 )(function* (input: CompleteForwardedEmailReviewInput) {
-  const sql = yield* SqlClient.SqlClient;
-  const { encodedIssues, money, sampleId } = yield* prepareForwardedEmailReview(input);
+  const sql = yield* PgClient.PgClient;
+  const { issues, money, sampleId } = prepareForwardedEmailReview(input);
   yield* sql`
     WITH inserted AS (
       INSERT INTO email_needs_review_items (
@@ -935,13 +940,13 @@ export const completeForwardedEmailWithReviewInScope = Effect.fn(
       )
       SELECT
         ${input.reviewId}, ${input.context.userId}, ${input.context.receivedEmailId},
-        ${sampleId},
+        ${Option.getOrNull(sampleId)},
         ${input.evidence.reason}, ${Option.getOrNull(Option.map(money, (value) => value.amount))},
         ${Option.getOrNull(Option.map(money, (value) => value.currency))},
         ${input.context.serviceMarket},
         ${input.context.locale}, ${input.context.timeZone}, 'notification-email', 'forwarded-email',
         'resend', ${input.context.receivedEmailId}, ${input.context.parserRevision},
-        ${input.extractorRevision}, ${encodedIssues}::jsonb, 'pending', ${input.createdAt}
+        ${input.extractorRevision}, ${sql.json(issues)}::jsonb, 'pending', ${DateTime.toDateUtc(input.createdAt)}
       FROM forwarded_email_receipts AS receipt
       WHERE receipt.user_id = ${input.context.userId}
         AND receipt.received_email_id = ${input.context.receivedEmailId}
@@ -951,7 +956,7 @@ export const completeForwardedEmailWithReviewInScope = Effect.fn(
     )
     , completed AS (
       UPDATE forwarded_email_receipts SET status = 'completed',
-        review_item_id = inserted.id, completed_at = ${input.createdAt}
+        review_item_id = inserted.id, completed_at = ${DateTime.toDateUtc(input.createdAt)}
       FROM inserted
       WHERE user_id = ${input.context.userId}
         AND received_email_id = ${input.context.receivedEmailId}

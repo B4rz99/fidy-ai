@@ -303,11 +303,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         yield* sql`
           INSERT INTO fidy_durable.fidy_queue (
-            id, queue_name, element, completed, attempts, created_at, updated_at
+            id, queue_name, element, state, visible_at, attempts, created_at, updated_at
           ) VALUES
             (
               'malformed-forwarded-email-envelope', 'forwarded-email-ingestion', '{}',
-              false, 0, now(), now()
+              'pending', now(), 0, now(), now()
             ),
             (
               'stale-forwarded-email-envelope', 'forwarded-email-ingestion',
@@ -316,7 +316,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 receivedEmailId: "sender-recipient-subject-body-attachment-sentinel",
                 revision: 1,
               })},
-              false, 0, now(), now()
+              'pending', now(), 0, now(), now()
             )
         `;
         const accepted = yield* makeDelivery("email_known_1", first.data.address);
@@ -422,7 +422,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               lastFailure: Schema.OptionFromNullOr(Schema.String),
             }),
             sql`
-              SELECT completed, last_failure AS "lastFailure"
+              SELECT state = 'completed' AS completed, last_failure AS "lastFailure"
               FROM fidy_durable.fidy_queue
               WHERE id = 'stale-forwarded-email-envelope'
             `
@@ -558,8 +558,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ) VALUES (
             'email_consent_deferred_expiry', ${defaultUserId},
             'delivery_consent_deferred_expiry', 'deferred', 'CO', 'es-CO',
-            'America/Bogota', ${approvedAt}, true, ${DateTime.add(approvedAt, { days: 1 })},
-            ${approvedAt}
+            'America/Bogota', ${DateTime.toDateUtc(approvedAt)}, true,
+            ${DateTime.toDateUtc(DateTime.add(approvedAt, { days: 1 }))},
+            ${DateTime.toDateUtc(approvedAt)}
           )
         `;
         const approvalContext = yield* Layer.build(ForwardedEmailSampleApproval.layer);
@@ -972,7 +973,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 lastFailure: Schema.OptionFromNullOr(Schema.String),
               }),
               sql`
-                SELECT attempts, completed, last_failure AS "lastFailure"
+                SELECT attempts, state = 'completed' AS completed, last_failure AS "lastFailure"
                 FROM fidy_durable.fidy_queue
                 WHERE queue_name = 'forwarded-email-ingestion'
                   AND element::jsonb->>'receivedEmailId' = 'email_external_work_interrupted'
@@ -1080,7 +1081,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           }),
           sql`
             SELECT
-              q.completed,
+              q.state = 'completed' AS completed,
               q.attempts,
               q.last_failure AS "lastFailure",
               r.status AS "receiptStatus",
@@ -1133,7 +1134,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           sql`
             SELECT
               q.attempts,
-              q.completed,
+              q.state = 'completed' AS completed,
               q.last_failure AS "lastFailure",
               r.status AS "receiptStatus"
             FROM fidy_durable.fidy_queue q

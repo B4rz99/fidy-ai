@@ -84,7 +84,7 @@ const requestStart = Effect.fn(function* () {
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* seedConsentedPatIdentity({ userId, bearer });
   const lookup = yield* deriveEmailCredentialLookupKey(email);
-  yield* sql`UPDATE verified_email_credentials SET email_address = ${email}, verified_at = ${yield* DateTime.now} WHERE user_id = ${userId}`;
+  yield* sql`UPDATE verified_email_credentials SET email_address = ${email}, verified_at = ${DateTime.toDateUtc(yield* DateTime.now)} WHERE user_id = ${userId}`;
   yield* sql`INSERT INTO verified_email_credential_authentication_lookups (user_id, authentication_lookup_key)
     VALUES (${userId}, ${lookup}) ON CONFLICT (user_id) DO UPDATE SET authentication_lookup_key = EXCLUDED.authentication_lookup_key`;
   const pairing = yield* Schema.decodeUnknownEffect(StartedBrowserLoginPairing)(
@@ -197,15 +197,22 @@ const killAtBoundary = Effect.fn(function* (
         runner.kill("SIGKILL");
       }).pipe(Effect.andThen(Effect.tryPromise(() => runner.exited)), Effect.orDie)
   );
+  const stdout = child.stdout;
+  if (!(stdout instanceof ReadableStream)) {
+    return yield* Effect.die("Crash runner stdout pipe was unavailable");
+  }
   const output = yield* Stream.fromReadableStream({
-    evaluate: () => child.stdout,
+    evaluate: () => stdout,
     onError: () => "crash-runner-output-failed" as const,
   }).pipe(
+    Stream.mapEffect((chunk) => Schema.decodeEffect(Schema.Uint8Array)(chunk).pipe(Effect.orDie)),
     Stream.decodeText(),
-    Stream.scanEffect("", (text, chunk) =>
-      text.length + chunk.length > 16_384
-        ? Effect.die("crash runner output exceeded bound")
-        : Effect.succeed(text + chunk)
+    Stream.scanEffect(
+      () => "",
+      (text, chunk) =>
+        text.length + chunk.length > 16_384
+          ? Effect.die("crash runner output exceeded bound")
+          : Effect.succeed(text + chunk)
     ),
     Stream.takeUntil((text) => text.includes("crash-boundary-ready")),
     Stream.runLast,
@@ -357,15 +364,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(new Set(attempts.map((input) => input.idempotencyKey)).size).toBe(3);
           // Native storage is an explicit security observer: no bearer-equivalent values may reach it.
           const sql = yield* MigrationSqlClient;
-          const history = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-            yield* sql`SELECT * FROM fidy_durable.${sql(clusterMessagesTable)}`
-          );
-          const replies = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-            yield* sql`SELECT * FROM fidy_durable.${sql(clusterRepliesTable)}`
-          );
+          // Serialize rows inside PostgreSQL: the driver decodes timestamps as `Date` values and
+          // `int8` as `bigint`, which no JSON codec accepts directly.
+          const history = yield* sql`SELECT to_jsonb(message)::text AS payload
+            FROM fidy_durable.${sql(clusterMessagesTable)} AS message`;
+          const replies = yield* sql`SELECT to_jsonb(reply)::text AS payload
+            FROM fidy_durable.${sql(clusterRepliesTable)} AS reply`;
+          const serialized = [...history, ...replies].map((row) => String(row.payload)).join("\n");
           for (const input of attempts) {
-            expect(history + replies).not.toContain(input.combinedCode);
-            expect(history + replies).not.toContain(input.to);
+            expect(serialized).not.toContain(input.combinedCode);
+            expect(serialized).not.toContain(input.to);
           }
         }),
       30_000
@@ -512,7 +520,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const { payload } = yield* admit();
           const sql = yield* MigrationSqlClient;
-          yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${DateTime.add(yield* DateTime.now, { seconds: 10 })}
+          yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${DateTime.toDateUtc(DateTime.add(yield* DateTime.now, { seconds: 10 }))}
             WHERE user_id = ${payload.userId}`;
           const runtime = yield* runtimeFor(
             EmailDeliveryPort.of({
@@ -544,16 +552,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               })
             )
           );
-          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, completed, created_at, updated_at)
+          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, state, visible_at, created_at, updated_at)
             SELECT gen_random_uuid()::text, 'browser-pairing-email-start',
-              jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, TRUE, now(), now()
+              jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, 'completed', now(), now(), now()
             FROM generate_series(1, 100)`;
           yield* sql`UPDATE fidy_durable.fidy_queue SET updated_at = now() - interval '25 hours'
             WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-expiry')`;
           const cursor = yield* Effect.tryPromise(() =>
             runtime.runPromise(purgeBrowserPairingEmailExecutionHistory())
           );
-          expect(cursor).toBeGreaterThan(0);
+          expect(cursor).toBeGreaterThan(0n);
           expect(
             yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
           ).toHaveLength(2);
@@ -561,7 +569,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* Effect.tryPromise(() =>
               runtime.runPromise(purgeBrowserPairingEmailExecutionHistory(cursor))
             )
-          ).toBe(0);
+          ).toBe(0n);
           expect(
             yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
           ).toEqual([]);
@@ -589,7 +597,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* Effect.tryPromise(() =>
               runtime.runPromise(purgeBrowserPairingEmailExecutionHistory())
             )
-          ).toBe(0);
+          ).toBe(0n);
           expect(
             yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-expiry'`
           ).toEqual([]);
@@ -647,8 +655,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             RAISE EXCEPTION 'sql-detail-sentinel provider-diagnostic-sentinel secret-sentinel'
               USING ERRCODE = '40001';
           END
-        $$;
-        CREATE TRIGGER fidy_test_pairing_start_retry BEFORE DELETE ON browser_pairing_email_start_requests
+        $$`;
+        yield* sql`CREATE TRIGGER fidy_test_pairing_start_retry
+          BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_retry()`;
         const exit = yield* Effect.exit(
           pairingStartQueue
@@ -656,8 +665,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
         ).pipe(
           Effect.ensuring(
-            sql`DROP TRIGGER fidy_test_pairing_start_retry ON browser_pairing_email_start_requests;
-              DROP FUNCTION fidy_test_pairing_start_retry()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER fidy_test_pairing_start_retry
+                  ON browser_pairing_email_start_requests`,
+                sql`DROP FUNCTION fidy_test_pairing_start_retry()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           )
         );
 
@@ -696,8 +711,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             RAISE EXCEPTION 'sql-defect-sentinel provider-defect-sentinel secret-defect-sentinel'
               USING ERRCODE = '23514';
           END
-        $$;
-        CREATE TRIGGER fidy_test_pairing_start_defect BEFORE DELETE ON browser_pairing_email_start_requests
+        $$`;
+        yield* sql`CREATE TRIGGER fidy_test_pairing_start_defect
+          BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_defect()`;
         const exit = yield* Effect.exit(
           pairingStartQueue
@@ -705,8 +721,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             .pipe(Effect.provide(telemetry), Effect.withLogger(logger))
         ).pipe(
           Effect.ensuring(
-            sql`DROP TRIGGER fidy_test_pairing_start_defect ON browser_pairing_email_start_requests;
-              DROP FUNCTION fidy_test_pairing_start_defect()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER fidy_test_pairing_start_defect
+                  ON browser_pairing_email_start_requests`,
+                sql`DROP FUNCTION fidy_test_pairing_start_defect()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           )
         );
 
@@ -843,8 +865,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             PERFORM pg_sleep(30);
             RETURN OLD;
           END
-        $$;
-        CREATE TRIGGER fidy_test_pairing_start_pause BEFORE DELETE ON browser_pairing_email_start_requests
+        $$`;
+        yield* sql`CREATE TRIGGER fidy_test_pairing_start_pause
+          BEFORE DELETE ON browser_pairing_email_start_requests
           FOR EACH ROW EXECUTE FUNCTION fidy_test_pairing_start_pause()`;
         yield* Effect.gen(function* () {
           const fiber = yield* pairingStartQueue
@@ -865,8 +888,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* Fiber.interrupt(fiber);
         }).pipe(
           Effect.ensuring(
-            sql`DROP TRIGGER fidy_test_pairing_start_pause ON browser_pairing_email_start_requests;
-              DROP FUNCTION fidy_test_pairing_start_pause()`.pipe(Effect.orDie)
+            Effect.all(
+              [
+                sql`DROP TRIGGER fidy_test_pairing_start_pause
+                  ON browser_pairing_email_start_requests`,
+                sql`DROP FUNCTION fidy_test_pairing_start_pause()`,
+              ],
+              { concurrency: 1, discard: true }
+            ).pipe(Effect.orDie)
           )
         );
 
@@ -924,7 +953,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         expect(
-          yield* sql`SELECT queue_name, completed, attempts, last_failure
+          yield* sql`SELECT queue_name, state = 'completed' AS completed, attempts, last_failure
             FROM fidy_durable.fidy_queue
             WHERE id IN (${startPayload.requestId}, ${deliveryPayload.intentId}, ${expiryPayload.workflowId})
             ORDER BY queue_name`
@@ -1026,7 +1055,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const { payload } = yield* admit();
           const sql = yield* MigrationSqlClient;
           const deadline = DateTime.add(yield* DateTime.now, { seconds: 5 });
-          yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${deadline} WHERE user_id = ${payload.userId}`;
+          yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${DateTime.toDateUtc(deadline)} WHERE user_id = ${payload.userId}`;
           const expiries = yield* Schema.decodeUnknownEffect(Schema.Array(PairingExpiryPayload))(
             yield* sql`SELECT 1 AS revision, id AS "workflowId", user_id AS "userId" FROM browser_pairing_email_workflows WHERE user_id = ${payload.userId}`
           );

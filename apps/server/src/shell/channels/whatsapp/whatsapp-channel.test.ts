@@ -636,7 +636,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* withUserTransaction(
             defaultUserId,
             sql`UPDATE whatsapp_conversation_windows
-                SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+                SET window_open_until = ${DateTime.toDateUtc(DateTime.add(yield* DateTime.now, { hours: 1 }))}
                 WHERE user_id = ${defaultUserId}`
           );
 
@@ -706,7 +706,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* withUserTransaction(
           defaultUserId,
           sql`UPDATE whatsapp_conversation_windows
-              SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+              SET window_open_until = ${DateTime.toDateUtc(DateTime.add(yield* DateTime.now, { hours: 1 }))}
               WHERE user_id = ${defaultUserId}`
         );
         const before = yield* withUserTransaction(
@@ -985,12 +985,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* admin`UPDATE whatsapp_inbound_jobs
           SET turn_id = id, content = NULL, completed_at = now(), terminal_outcome = 'delivered'`;
         yield* admin`UPDATE fidy_durable.fidy_queue
-          SET completed = TRUE, updated_at = now() - interval '25 hours'
+          SET state = 'completed', updated_at = now() - interval '25 hours'
           WHERE queue_name = 'whatsapp-inbound-turn'`;
         yield* admin`INSERT INTO fidy_durable.fidy_queue
-          (id, queue_name, element, completed, attempts, created_at, updated_at)
+          (id, queue_name, element, state, visible_at, attempts, created_at, updated_at)
           VALUES ('f1d1a000-0000-4000-8000-000000000467', 'whatsapp-inbound-turn', '{}',
-            FALSE, 0, now() - interval '25 hours', now() - interval '25 hours')`;
+            'pending', now(), 0, now() - interval '25 hours', now() - interval '25 hours')`;
         yield* runWhatsAppRetention.pipe(
           Effect.provideService(Telemetry, makeTelemetryService(DisabledTelemetryResource.adapter))
         );
@@ -1027,9 +1027,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           WHERE sequence = (SELECT max(sequence) FROM fidy_durable.fidy_queue
             WHERE queue_name = 'whatsapp-inbound-turn')`;
         yield* admin`INSERT INTO fidy_durable.fidy_queue
-          (id, queue_name, element, completed, attempts, created_at, updated_at)
+          (id, queue_name, element, state, visible_at, attempts, created_at, updated_at)
           VALUES ('00000000-0000-4000-8000-000000000099', 'whatsapp-inbound-turn',
-            'not-json', FALSE, 10, now(), now())`;
+            'not-json', 'pending', now(), 10, now(), now())`;
         const telemetry = yield* Layer.build(telemetryEnvelopeRecording());
         yield* runWhatsAppRetention.pipe(
           Effect.provideService(Telemetry, Context.get(telemetry, Telemetry))
@@ -1042,7 +1042,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           { content: null, terminalOutcome: "agent_failed" },
         ]);
         expect(
-          yield* admin`SELECT completed, last_failure AS "lastFailure"
+          yield* admin`SELECT state = 'completed' AS completed, last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue WHERE queue_name = 'whatsapp-inbound-turn'
             ORDER BY sequence`
         ).toEqual([
@@ -1884,7 +1884,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* withUserTransaction(
           defaultUserId,
           sql`UPDATE whatsapp_conversation_windows
-              SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+              SET window_open_until = ${DateTime.toDateUtc(DateTime.add(yield* DateTime.now, { hours: 1 }))}
               WHERE user_id = ${defaultUserId}`
         );
         const admin = yield* MigrationSqlClient;
@@ -2647,7 +2647,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           UPDATE pending_consent_exchanges
           SET lifecycle = 'awaiting-decision', disclosure_channel = 'test',
             disclosure_provider = 'test', disclosure_provider_message_id = 'test',
-            disclosed_at = ${now}
+            disclosed_at = ${DateTime.toDateUtc(now)}
           WHERE id = ${admission.exchangeId}
         `;
         const failure = yield* applyConsentDisclosureLifecycle({
@@ -3019,7 +3019,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* withUserTransaction(
           defaultUserId,
           sql`UPDATE whatsapp_conversation_windows
-              SET window_open_until = ${DateTime.add(eventTime, { hours: 1 })}
+              SET window_open_until = ${DateTime.toDateUtc(DateTime.add(eventTime, { hours: 1 }))}
               WHERE user_id = ${defaultUserId}`
         );
         const sentText = yield* Ref.make(Option.none<TranscriptText>());
@@ -3279,7 +3279,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           defaultUserId,
           sql`SELECT trace_version AS "traceVersion", trace_id AS "traceId",
             parent_span_id AS "parentSpanId", trace_sampled AS "sampled",
-            trace_captured_at AS "capturedAt", processing_attempt AS "processingAttempt"
+            trace_captured_at::text AS "capturedAt", processing_attempt AS "processingAttempt"
           FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
         );
         expect(stored).toHaveLength(1);

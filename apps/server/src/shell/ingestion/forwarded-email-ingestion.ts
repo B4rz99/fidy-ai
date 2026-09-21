@@ -95,7 +95,7 @@ const authenticateResendEvent = Effect.fn(function* (input: ResendWebhookInput) 
     timestamp: input.headers["svix-timestamp"],
     signature: input.headers["svix-signature"],
   }).pipe(Effect.mapError(() => new InvalidResendWebhookProof()));
-  const secret = yield* Config.redacted("RESEND_WEBHOOK_SECRET");
+  const secret = yield* Config.Redacted("RESEND_WEBHOOK_SECRET");
   const exactBody = Buffer.from(input.exactBody);
   yield* Effect.try({
     try: () =>

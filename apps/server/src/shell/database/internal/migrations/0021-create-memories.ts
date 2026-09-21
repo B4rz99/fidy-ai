@@ -18,8 +18,12 @@ export const createMemories = Effect.gen(function* () {
   `;
   yield* sql`CREATE INDEX memories_user_recall ON memories (user_id, created_at, id)`;
   yield* sql`
-    ALTER TABLE memories ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE memories FORCE ROW LEVEL SECURITY;
+    ALTER TABLE memories ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE memories FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY memories_by_user ON memories
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)

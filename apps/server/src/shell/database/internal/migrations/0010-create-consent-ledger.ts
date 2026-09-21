@@ -134,8 +134,12 @@ const restrictConsentLedgerToAppendOnly = Effect.gen(function* () {
   `;
   yield* sql`GRANT SELECT ON consent_records TO fidy_gateway`;
   yield* sql`
-    ALTER TABLE consent_records ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE consent_records FORCE ROW LEVEL SECURITY;
+    ALTER TABLE consent_records ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE consent_records FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY consent_records_by_user ON consent_records
       USING (subject_user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (subject_user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)

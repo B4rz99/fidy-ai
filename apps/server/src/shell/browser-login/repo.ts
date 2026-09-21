@@ -82,12 +82,12 @@ export const purgeExpiredAnonymousEvidence = Effect.fn(
 )(function* (sql: SqlClient.SqlClient, attemptedAt: DateTime.Utc) {
   yield* sql`
       DELETE FROM browser_login_start_attempts
-      WHERE attempted_at <= ${attemptedAt}::timestamptz - interval '10 minutes'
+      WHERE attempted_at <= ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '10 minutes'
     `;
   yield* sql`
       UPDATE browser_login_pairings
-      SET lifecycle = 'expired', expired_at = ${attemptedAt}
-      WHERE lifecycle = 'pending_approval' AND expires_at <= ${attemptedAt}
+      SET lifecycle = 'expired', expired_at = ${DateTime.toDateUtc(attemptedAt)}
+      WHERE lifecycle = 'pending_approval' AND expires_at <= ${DateTime.toDateUtc(attemptedAt)}
     `;
 }, Effect.orDie);
 
@@ -156,7 +156,7 @@ export const insertPendingBrowserLoginPairing = Effect.fn("BrowserLogin.insertPe
 const ApprovalCandidate = Schema.Struct({
   id: BrowserLoginPairingId,
   createdAt: Schema.DateTimeUtcFromDate,
-  createdOrdinal: Schema.BigIntFromString,
+  createdOrdinal: Schema.BigInt,
   expiresAt: Schema.DateTimeUtcFromDate,
 });
 
@@ -244,7 +244,7 @@ export const approveLockedBrowserLoginPairingInScope = Effect.fn(
 ): Effect.fn.Return<void, ReturnType<typeof browserLoginApprovalRejected>, never> {
   const readyOrdinal = yield* SqlSchema.findOneOption({
     Request: UserId,
-    Result: Schema.Struct({ createdOrdinal: Schema.BigIntFromString }),
+    Result: Schema.Struct({ createdOrdinal: Schema.BigInt }),
     execute: (userId) => sql`
       SELECT created_ordinal AS "createdOrdinal" FROM browser_login_pairings
       WHERE user_id = ${userId}::uuid AND lifecycle = 'ready'
@@ -261,13 +261,13 @@ export const approveLockedBrowserLoginPairingInScope = Effect.fn(
 
   yield* sql`
       UPDATE browser_login_pairings
-      SET lifecycle = 'superseded', superseded_at = ${attemptedAt},
+      SET lifecycle = 'superseded', superseded_at = ${DateTime.toDateUtc(attemptedAt)},
         replacement_id = ${input.candidate.id}
       WHERE user_id = ${input.userId}::uuid AND lifecycle = 'ready'
     `.pipe(Effect.orDie);
   yield* sql`
       UPDATE browser_login_pairings
-      SET user_id = ${input.userId}::uuid, lifecycle = 'ready', approved_at = ${attemptedAt}
+      SET user_id = ${input.userId}::uuid, lifecycle = 'ready', approved_at = ${DateTime.toDateUtc(attemptedAt)}
       WHERE id = ${input.candidate.id} AND lifecycle = 'pending_approval'
     `.pipe(Effect.orDie);
 });
@@ -320,7 +320,7 @@ export const acceptBrowserLoginPoll = Effect.fn("BrowserLogin.acceptPoll")(funct
     Request: Schema.Void,
     Result: GatewayChanged,
     execute: () => sql`
-      SELECT fidy_accept_browser_login_poll(${pairingId}::uuid, ${acceptedAt}) AS changed
+      SELECT fidy_accept_browser_login_poll(${pairingId}::uuid, ${DateTime.toDateUtc(acceptedAt)}) AS changed
     `,
   })(undefined).pipe(Effect.orDie);
   return changed;
@@ -362,7 +362,7 @@ export const rejectBrowserLoginVerifier = Effect.fn("BrowserLogin.rejectVerifier
         ${input.pairingId}::uuid,
         ${input.wrongVerifierAttempts}::integer,
         ${input.lifecycle}::text,
-        ${input.rejectedAt}
+        ${DateTime.toDateUtc(input.rejectedAt)}
       ) AS changed
     `,
   })(undefined).pipe(Effect.orDie);
@@ -379,7 +379,7 @@ export const expireBrowserLoginPairing = Effect.fn("BrowserLogin.expirePairing")
     Request: Schema.Void,
     Result: GatewayChanged,
     execute: () => sql`
-      SELECT fidy_expire_browser_login_pairing(${pairingId}::uuid, ${expiredAt}) AS changed
+      SELECT fidy_expire_browser_login_pairing(${pairingId}::uuid, ${DateTime.toDateUtc(expiredAt)}) AS changed
     `,
   })(undefined).pipe(Effect.orDie);
   return changed;

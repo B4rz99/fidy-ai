@@ -123,7 +123,7 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
             yield* sql`UPDATE pending_consent_exchanges SET
               decision_channel = 'whatsapp', decision_provider = 'kapso',
               decision_provider_message_id = 'wamid.retention-incomplete-decision',
-              accepted_at = ${createdAt}
+              accepted_at = ${DateTime.toDateUtc(createdAt)}
               WHERE id = ${exchangeId}`;
             yield* sql`INSERT INTO email_enrollments (
               id, public_code, business_portfolio_id, business_scoped_user_id,
@@ -131,14 +131,14 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
               resend_available_at
             ) VALUES (
               ${enrollmentId}, ${EmailVerificationPublicCode.make("RSTU-WXYZ")},
-              ${caller.businessPortfolioId}, ${caller.businessScopedUserId}, ${exchangeId}, ${now},
-              'incomplete@example.com', 1, ${createdAt}
+              ${caller.businessPortfolioId}, ${caller.businessScopedUserId}, ${exchangeId}, ${DateTime.toDateUtc(now)},
+              'incomplete@example.com', 1, ${DateTime.toDateUtc(createdAt)}
             )`;
             yield* sql`INSERT INTO email_delivery_intents (
               id, enrollment_id, generation, email_address, status, idempotency_key, created_at
             ) VALUES (
               ${intentId}, ${enrollmentId}, 1, 'incomplete@example.com', 'pending',
-              'f1d1a000-0000-4000-8000-000000000868', ${createdAt}
+              'f1d1a000-0000-4000-8000-000000000868', ${DateTime.toDateUtc(createdAt)}
             )`;
             const queue = onboardingEmailDeliveryQueue;
             yield* queue.offer({ intentId, revision: 1 }, { id: intentId });
@@ -156,7 +156,7 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
         expect(
           yield* sql`SELECT id FROM fidy_queue
             WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}
-              AND completed = FALSE`
+              AND state <> 'completed'`
         ).toHaveLength(1);
 
         yield* sql`DELETE FROM fidy_queue
@@ -199,7 +199,7 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
             yield* sql`UPDATE pending_consent_exchanges SET
               decision_channel = 'whatsapp', decision_provider = 'kapso',
               decision_provider_message_id = 'wamid.retention-accepted-decision',
-              accepted_at = ${DateTime.makeUnsafe("2026-08-02T12:00:00Z")}
+              accepted_at = ${DateTime.toDateUtc(DateTime.makeUnsafe("2026-08-02T12:00:00Z"))}
               WHERE id = ${exchangeId}`;
             yield* sql`INSERT INTO email_enrollments (
               id, public_code, business_portfolio_id, business_scoped_user_id,
@@ -208,16 +208,16 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
             ) VALUES (
               ${EmailEnrollmentId.make("f1d1a000-0000-4000-8000-000000000864")},
               ${EmailVerificationPublicCode.make("JKLM-NPQR")}, ${caller.businessPortfolioId},
-              ${caller.businessScopedUserId}, ${exchangeId}, ${expiresAt},
-              'legacy-terminal@example.com', 1, decode(repeat('00', 32), 'hex'), ${expiresAt},
-              ${expiresAt}
+              ${caller.businessScopedUserId}, ${exchangeId}, ${DateTime.toDateUtc(expiresAt)},
+              'legacy-terminal@example.com', 1, decode(repeat('00', 32), 'hex'), ${DateTime.toDateUtc(expiresAt)},
+              ${DateTime.toDateUtc(expiresAt)}
             )`;
             yield* sql`INSERT INTO email_delivery_intents (
               id, enrollment_id, generation, email_address, status, idempotency_key, created_at
             ) VALUES (
               ${legacyIntentId}, ${EmailEnrollmentId.make("f1d1a000-0000-4000-8000-000000000864")},
               1, 'legacy-terminal@example.com', 'sent',
-              'f1d1a000-0000-4000-8000-000000000870', ${expiresAt}
+              'f1d1a000-0000-4000-8000-000000000870', ${DateTime.toDateUtc(expiresAt)}
             )`;
           })
         );

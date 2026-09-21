@@ -42,7 +42,7 @@ type DeterministicRequest = Readonly<{
 type DeterministicContinuation = ReadonlyArray<Prompt.MessageEncoded>;
 
 const modelFailure = (
-  failure: Effect.Error<ReturnType<LanguageModel.Service["generateText"]>>
+  failure: Effect.Error<ReturnType<LanguageModel.LanguageModel["generateText"]>>
 ): HostedInferenceError =>
   new HostedInferenceError({
     reason:
@@ -127,7 +127,7 @@ const decodeDeterministicToolCalls = (
   );
 
 const makeDeterministicExecute =
-  (model: LanguageModel.Service): DeterministicAdapter["execute"] =>
+  (model: LanguageModel.LanguageModel): DeterministicAdapter["execute"] =>
   (request) => {
     const generated = model.generateText({
       prompt: request.prompt,
@@ -176,7 +176,7 @@ const makeDeterministicExecute =
 
 /** Adapts one deterministic model without exposing private prompt preparation. @internal */
 export const makeDeterministicHostedInference = (
-  model: LanguageModel.Service
+  model: LanguageModel.LanguageModel
 ): HostedInferenceService =>
   makeHostedInferenceInternal({
     countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),

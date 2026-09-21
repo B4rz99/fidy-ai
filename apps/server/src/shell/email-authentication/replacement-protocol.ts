@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { Workflow } from "effect/unstable/workflow";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
@@ -87,7 +87,7 @@ export const publishReplacementDelivery = Effect.fn("EmailReplacement.publish")(
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`INSERT INTO email_replacement_executions (id, user_id, kind, expires_at)
-    VALUES (${payload.intentId}, ${payload.userId}, 'delivery', ${expiresAt}) ON CONFLICT DO NOTHING`.pipe(
+    VALUES (${payload.intentId}, ${payload.userId}, 'delivery', ${DateTime.toDateUtc(expiresAt)}) ON CONFLICT DO NOTHING`.pipe(
     Effect.orDie
   );
   const queue = replacementDeliveryQueue;
@@ -101,7 +101,7 @@ export const publishReplacementExpiry = Effect.fn("EmailReplacement.publishExpir
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`INSERT INTO email_replacement_executions (id, user_id, kind, expires_at)
-    VALUES (${payload.workflowId}, ${payload.userId}, 'expiry', ${expiresAt}) ON CONFLICT DO NOTHING`.pipe(
+    VALUES (${payload.workflowId}, ${payload.userId}, 'expiry', ${DateTime.toDateUtc(expiresAt)}) ON CONFLICT DO NOTHING`.pipe(
     Effect.orDie
   );
   const queue = replacementExpiryQueue;

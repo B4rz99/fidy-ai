@@ -1,4 +1,4 @@
-import { type DateTime, Effect, type Option, Schema, Struct } from "effect";
+import { DateTime, Effect, type Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/database/operations";
@@ -174,7 +174,7 @@ export const revokeApprovedPATPairingsInScope = Effect.fn("revokeApprovedPATPair
   function* (subjectUserId: UserId, revokedAt: DateTime.Utc) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-    UPDATE pat_pairings SET lifecycle = 'revoked_unclaimed', revoked_at = ${revokedAt}
+    UPDATE pat_pairings SET lifecycle = 'revoked_unclaimed', revoked_at = ${DateTime.toDateUtc(revokedAt)}
     WHERE user_id = ${subjectUserId} AND lifecycle = 'approved_awaiting_claim'
   `.pipe(Effect.orDie);
   }

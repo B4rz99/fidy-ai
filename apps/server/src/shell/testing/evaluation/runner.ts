@@ -213,8 +213,8 @@ const writeReport = Effect.fn("Evaluation.writeReport")(function* (report: RunRe
 });
 
 const assertLocalDatabase = Effect.fn("Evaluation.assertLocalDatabase")(function* () {
-  const runtime = Redacted.value(yield* Config.redacted("DATABASE_URL"));
-  const migration = Redacted.value(yield* Config.redacted("MIGRATION_DATABASE_URL"));
+  const runtime = Redacted.value(yield* Config.Redacted("DATABASE_URL"));
+  const migration = Redacted.value(yield* Config.Redacted("MIGRATION_DATABASE_URL"));
   const safe = yield* Effect.try({
     try: () => [new URL(runtime), new URL(migration)] as const,
     catch: () => new EvaluationFailure({ reason: "unsafe-environment" }),
@@ -255,7 +255,7 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
   yield* assertLocalDatabase();
   const startedAt = yield* DateTime.now;
   const startedMillis = yield* Clock.currentTimeMillis;
-  const sourceCommit = yield* Config.string("FIDY_EVALUATION_SOURCE_COMMIT").pipe(
+  const sourceCommit = yield* Config.String("FIDY_EVALUATION_SOURCE_COMMIT").pipe(
     Effect.flatMap(Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u))))
   );
   const corpus = yield* loadCorpus;

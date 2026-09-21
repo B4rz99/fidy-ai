@@ -1,6 +1,6 @@
 # Effect v4 Cluster and the production workflow engine
 
-> Source: Effect checkout at `.repos/effect`, version RC.112. Citations below are relative to `.repos/effect/packages/`.
+> Source: `effect@4.0.0-rc.116` (`d62dd0d6…`) and the checked-in `.repos/effect` source. Post-rc.116 behavior is identified explicitly. Citations below are relative to `.repos/effect/packages/`.
 
 Use this reference before introducing `ClusterWorkflowEngine`, cluster entities, SQL message storage, multiple workflow runners, or a client-only cluster process.
 
@@ -58,6 +58,13 @@ Saving a request uses its RPC primary key for deduplication and can return the o
 
 `clearReplies(requestId)` resets one request for processing; `clearAddress(address)` deletes all replies and messages for the entity address (`effect/src/unstable/cluster/SqlMessageStorage.ts:570-592`, `:714-736`). These are lifecycle mechanisms, not an automatic time-based retention service. No general TTL cleanup is installed by the store: workflow requests/replies and deduplication state otherwise remain durable. Define conservative, monitored retention only after proving which completed addresses can never be polled, resumed, deduplicated, or interrupted again.
 
+Current vendored main, newer than rc.116, also exposes `resetRequests(requestIds)` alongside
+address-level resets. Sharding uses it when a completed request was claimed but skipped by in-memory
+deduplication, releasing the storage claim so the reset can be redelivered immediately
+(`effect/src/unstable/cluster/MessageStorage.ts:181-184`,
+`effect/src/unstable/cluster/Sharding.ts:635-653`, `:868-873`). Do not assume that targeted reset
+exists in rc.116.
+
 ### `SqlRunnerStorage`
 
 Runner storage registers runner addresses/heartbeats and owns shard locks. On PostgreSQL and MySQL it uses a reserved connection and advisory locks by default; it can use lock rows when advisory locks are disabled. Scope finalization attempts to release advisory locks, and lock operations/rebuilds are deadline-bounded (`effect/src/unstable/cluster/SqlRunnerStorage.ts:90-179`, `:181-260`). Do not preserve Fidy's broad advisory-lock registry alongside this for the same execution ownership.
@@ -72,11 +79,23 @@ The engine's activity request has primary key `${activity name}/${attempt}` and 
 
 Workflow entities use a short 10-second idle lifetime because completed/suspended state can be rebuilt from storage (`effect/src/unstable/cluster/ClusterWorkflowEngine.ts:700-741`). Memory residency is therefore a cache, not durable state. Never store correctness-critical workflow facts only in captured mutable variables or runner-local services.
 
+The engine retains durable-deferred completions received before an activation's first local run and
+scopes pending results per activation. It tracks the deferred names awaited by the current run,
+waits for that run's reply to be persisted, and serializes resume attempts. These guarantees prevent
+lost wake-ups for discarded executions, stale results crossing activations, and unrelated deferred
+completions starving the mailbox (`effect/src/unstable/cluster/ClusterWorkflowEngine.ts:400-443`).
+
 ## Shutdown and failover
 
 Cluster's default configuration enables preemptive shutdown, refreshes shard locks every 10 seconds, expires them after 35 seconds, caps resident entities at 10,000, and polls persisted entity messages every 10 seconds (`effect/src/unstable/cluster/ShardingConfig.ts:176-207`). Defaults are not production capacity decisions.
 
 Application shutdown must close the cluster Layer scope and leave enough grace for entity termination and runner finalizers. Then another healthy runner can acquire shards and recover persisted mailboxes. Validate behavior against the deployment platform's termination deadline. Test hard loss too: graceful finalizers cannot be the correctness mechanism.
+
+When a caller disconnects, `RunnerServer` releases non-persisted interruptible handlers and their
+mailbox slots. Interrupted RPC stream and queue write fibers also release their consumers. Persisted
+requests remain governed by message-storage replay semantics
+(`effect/CHANGELOG.md:76-82`, `:100-103`; regression coverage in
+`effect/test/cluster/RunnerServer.test.ts:165-260`).
 
 Tune and alert on at least runner health, shard ownership/assignment lag, lock refresh failure, persisted mailbox age/depth, entity capacity, request retry rate, and workflow completion/suspension/failure. Keep entity type, workflow tag, and operation as bounded dimensions; never put entity ids, User ids, payloads, tokens, or provider bodies into metric labels.
 

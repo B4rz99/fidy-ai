@@ -610,7 +610,7 @@ layer(OnboardingHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* sql.withTransaction(
             sql`UPDATE email_enrollments
               SET proof_digest = decode(repeat('00', 32), 'hex'),
-                proof_expires_at = ${DateTime.add(startedAt, { minutes: 10 })}
+                proof_expires_at = ${DateTime.toDateUtc(DateTime.add(startedAt, { minutes: 10 }))}
               WHERE id = ${enrollmentId}`
           );
           const futureIntent = yield* Effect.exit(
@@ -621,7 +621,7 @@ layer(OnboardingHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 ) VALUES (
                   ${yield* crypto.randomUUIDv7.pipe(Effect.orDie)}, ${enrollmentId}, 5,
                   'future@example.com', 'sent', ${yield* crypto.randomUUIDv7.pipe(Effect.orDie)},
-                  ${DateTime.add(startedAt, { seconds: 10 })}
+                  ${DateTime.toDateUtc(DateTime.add(startedAt, { seconds: 10 }))}
                 )
               `
             )
@@ -927,7 +927,7 @@ const findQueueItemState = Effect.fn("testFindOnboardingQueueItemState")(functio
 ) {
   const sql = yield* MigrationSqlClient;
   const [state] = yield* Schema.decodeUnknownEffect(Schema.Array(QueueItemState))(
-    yield* sql`SELECT attempts, completed, last_failure AS "lastFailure"
+    yield* sql`SELECT attempts, state = 'completed' AS completed, last_failure AS "lastFailure"
       FROM fidy_durable.fidy_queue
       WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}`
   );

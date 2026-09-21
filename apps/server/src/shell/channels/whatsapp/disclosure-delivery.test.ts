@@ -135,7 +135,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
 
         const admin = yield* MigrationSqlClient;
         expect(
-          yield* admin`SELECT queue_name AS "queueName", completed, attempts,
+          yield* admin`SELECT queue_name AS "queueName", state = 'completed' AS completed, attempts,
               last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE (queue_name = ${consentDisclosureQueueName} AND id = ${exchangeId})
@@ -222,7 +222,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
           expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
           const admin = yield* MigrationSqlClient;
           expect(
-            yield* admin`SELECT completed, attempts, last_failure AS "lastFailure"
+            yield* admin`SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
             FROM fidy_durable.fidy_queue
             WHERE queue_name = ${consentDisclosureQueueName} AND id = ${exchangeId}`
           ).toEqual([{ completed: false, attempts: 0, lastFailure: null }]);
@@ -364,13 +364,17 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "60 seconds" })
           Effect.flatMap(Effect.fromOption)
         );
         const admin = yield* MigrationSqlClient;
-        yield* admin`CREATE FUNCTION test_decline_disclosure_advancement() RETURNS trigger LANGUAGE plpgsql AS \$body\$ BEGIN RETURN NULL; END \$body\$;
-        CREATE TRIGGER test_decline_disclosure_advancement BEFORE UPDATE ON pending_consent_exchanges
+        yield* admin`CREATE FUNCTION test_decline_disclosure_advancement() RETURNS trigger LANGUAGE plpgsql AS \$body\$ BEGIN RETURN NULL; END \$body\$`;
+        yield* admin`CREATE TRIGGER test_decline_disclosure_advancement BEFORE UPDATE ON pending_consent_exchanges
         FOR EACH ROW WHEN (OLD.id = ${admin.literal(`'${input.exchangeId}'::uuid`)} AND NEW.lifecycle = 'awaiting-decision') EXECUTE FUNCTION test_decline_disclosure_advancement()`;
         yield* Effect.addFinalizer(() =>
-          admin`DROP TRIGGER test_decline_disclosure_advancement ON pending_consent_exchanges; DROP FUNCTION test_decline_disclosure_advancement()`.pipe(
-            Effect.orDie
-          )
+          Effect.all(
+            [
+              admin`DROP TRIGGER test_decline_disclosure_advancement ON pending_consent_exchanges`,
+              admin`DROP FUNCTION test_decline_disclosure_advancement()`,
+            ],
+            { concurrency: 1, discard: true }
+          ).pipe(Effect.orDie)
         );
         const failure = yield* applyConsentDisclosureLifecycle({
           outcome: "accepted",

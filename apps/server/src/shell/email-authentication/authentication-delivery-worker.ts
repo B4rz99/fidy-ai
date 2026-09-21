@@ -176,7 +176,7 @@ const prepare = Effect.fn(function* (payload: PairingDeliveryPayload, attempt: n
     Effect.orDie
   );
   yield* sql`UPDATE browser_pairing_email_workflows SET proof_digest = ${digest},
-    proof_expires_at = LEAST(${proofExpiry(now)}, expires_at), wrong_proof_attempts = 0
+    proof_expires_at = LEAST(${DateTime.toDateUtc(proofExpiry(now))}, expires_at), wrong_proof_attempts = 0
     WHERE id = ${row.workflowId}`.pipe(Effect.orDie);
   return {
     row,
@@ -205,7 +205,7 @@ const settle = Effect.fn(function* ({
   const status = deliveryStatus(result);
   const updated = yield* sql`
     UPDATE browser_pairing_email_delivery_intents intent
-    SET status = ${status}, retry_at = ${result.outcome === "retry" ? sql`${result.retryAt}` : sql`NULL`}
+    SET status = ${status}, retry_at = ${result.outcome === "retry" ? sql`${DateTime.toDateUtc(result.retryAt)}` : sql`NULL`}
     FROM browser_pairing_email_workflows workflow
     WHERE intent.id = ${payload.intentId} AND workflow.id = intent.workflow_id
       AND workflow.id = ${prepared.row.workflowId} AND workflow.user_id = ${payload.userId}
@@ -280,9 +280,8 @@ const expirePairingEmail = Effect.fn(function* (payload: PairingExpiryPayload) {
       withUserLockInScope(
         advisoryLockKey.browserLoginApproval(payload.userId),
         sql`DELETE FROM browser_pairing_email_workflows
-        WHERE id = ${payload.workflowId} AND user_id = ${payload.userId} AND expires_at <= ${now}`.pipe(
-          Effect.orDie
-        )
+        WHERE id = ${payload.workflowId} AND user_id = ${payload.userId}
+          AND expires_at <= ${DateTime.toDateUtc(now)}`.pipe(Effect.orDie)
       )
     )
   );
@@ -423,7 +422,7 @@ export const processPairingExpiryQueueItem = Effect.fn(function* (payload: Pairi
 export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
     if (
-      (yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"))) !== "production"
+      (yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"))) !== "production"
     ) {
       return;
     }

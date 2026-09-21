@@ -116,7 +116,7 @@ const lockAndPurgeAdmissionEvidenceInScope = Effect.fn(function* (
   })(undefined);
   if (!lock.acquired) return false;
   yield* sql`
-    DELETE FROM email_pairing_login_admission_scopes WHERE expires_at <= ${attemptedAt}
+    DELETE FROM email_pairing_login_admission_scopes WHERE expires_at <= ${DateTime.toDateUtc(attemptedAt)}
   `;
   return true;
 });
@@ -149,7 +149,7 @@ const checksAllowAdmissionInScope = Effect.fn(function* (
       Result: AdmissionAttemptCount,
       execute: () => sql`
         SELECT count(*)::int AS count FROM email_pairing_login_admission_attempts
-        WHERE scope_key = ${check.key} AND attempted_at > ${check.startsAt}
+        WHERE scope_key = ${check.key} AND attempted_at > ${DateTime.toDateUtc(check.startsAt)}
       `,
     })(undefined).pipe(Effect.map(({ count }) => count < check.maximumAttempts))
   );
@@ -165,7 +165,7 @@ const persistAdmissionEvidenceInScope = Effect.fn(function* (
     (scope) =>
       sql`
       INSERT INTO email_pairing_login_admission_scopes (scope_key, scope_kind, expires_at)
-      VALUES (${scope.key}, ${scope.kind}, ${scope.expiresAt})
+      VALUES (${scope.key}, ${scope.kind}, ${DateTime.toDateUtc(scope.expiresAt)})
       ON CONFLICT (scope_key) DO UPDATE SET expires_at = EXCLUDED.expires_at
     `
   );
@@ -174,7 +174,7 @@ const persistAdmissionEvidenceInScope = Effect.fn(function* (
     (scope) =>
       sql`
       INSERT INTO email_pairing_login_admission_attempts (scope_key, attempted_at)
-      VALUES (${scope.key}, ${input.attemptedAt})
+      VALUES (${scope.key}, ${DateTime.toDateUtc(input.attemptedAt)})
     `
   );
 });
@@ -340,7 +340,7 @@ const credentialRevisionRemainsCurrent = Effect.fn(function* (credential: Resolv
       SELECT EXISTS (
         SELECT 1 FROM verified_email_credentials
         WHERE user_id = ${credential.userId}
-          AND verified_at = ${credential.credentialVerifiedAt}
+          AND verified_at = ${DateTime.toDateUtc(credential.credentialVerifiedAt)}
       ) AS current
     `,
   })(undefined).pipe(Effect.orDie);
@@ -417,8 +417,8 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
         delivery_generation, resend_available_at
       ) VALUES (
         ${id}, ${input.credential.userId}, ${input.pairingId},
-        ${input.credential.credentialVerifiedAt}, ${publicCode}, ${input.requestedAt},
-        ${input.pairingExpiresAt}, 1, ${resendAvailability(input.requestedAt)}
+        ${DateTime.toDateUtc(input.credential.credentialVerifiedAt)}, ${publicCode}, ${DateTime.toDateUtc(input.requestedAt)},
+        ${DateTime.toDateUtc(input.pairingExpiresAt)}, 1, ${DateTime.toDateUtc(resendAvailability(input.requestedAt))}
       ) ON CONFLICT (pairing_id) DO NOTHING RETURNING id
     `.pipe(Effect.orDie);
     if (inserted.length === 0) return;
@@ -426,7 +426,7 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
     yield* sql`
       INSERT INTO browser_pairing_email_delivery_intents (
         id, workflow_id, generation, email_address, status, created_at
-      ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${input.requestedAt})
+      ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${DateTime.toDateUtc(input.requestedAt)})
     `.pipe(Effect.orDie);
     yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });
     yield* publishPairingExpiry({ revision: 1, userId: input.credential.userId, workflowId: id });
@@ -441,7 +441,7 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
   yield* sql`
     UPDATE browser_pairing_email_workflows SET public_code = ${publicCode},
       delivery_generation = delivery_generation + 1,
-      resend_available_at = ${resendAvailability(input.requestedAt)}, proof_digest = NULL,
+      resend_available_at = ${DateTime.toDateUtc(resendAvailability(input.requestedAt))}, proof_digest = NULL,
       proof_expires_at = NULL, wrong_proof_attempts = 0
     WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
@@ -450,7 +450,7 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
     INSERT INTO browser_pairing_email_delivery_intents (
       id, workflow_id, generation, email_address, status, created_at
     ) SELECT ${intentId}, id, delivery_generation, ${input.email}, 'pending',
-      ${input.requestedAt} FROM browser_pairing_email_workflows WHERE id = ${workflowId}
+      ${DateTime.toDateUtc(input.requestedAt)} FROM browser_pairing_email_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
   yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });
 });
@@ -626,7 +626,7 @@ export const processBrowserPairingEmailStartRequest = Effect.fn(
           Request: Schema.Void,
           Result: Schema.Struct({ userId: UserId }),
           execute: () => sql`SELECT user_id AS "userId"
-        FROM fidy_resolve_browser_pairing_email_start_request(${requestId}, ${processedAt})`,
+        FROM fidy_resolve_browser_pairing_email_start_request(${requestId}, ${DateTime.toDateUtc(processedAt)})`,
         })(undefined).pipe(Effect.orDie);
         if (Option.isNone(owner)) return "not-current" as const;
         const userId = owner.value.userId;

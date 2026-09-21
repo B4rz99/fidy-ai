@@ -5,7 +5,6 @@ import {
   Context,
   Deferred,
   Effect,
-  Exit,
   Fiber,
   Layer,
   Option,
@@ -26,6 +25,7 @@ import { ProjectedTransaction } from "~/shell/observability/contract";
 import { Telemetry, runScheduledWork } from "~/shell/observability/operations";
 
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
+import { eventually } from "~/shell/testing/eventually";
 import {
   durableQueueAttentionLogAnnotations,
   durableQueueHealthSchedule,
@@ -45,7 +45,6 @@ const testQueueName = DurableQueueName.make(whatsappInboundQueueName);
 const lostWorkerId = "f1d1a000-0000-4000-8000-00000000dead";
 
 const TestPayload = Schema.Struct({ note: Schema.String });
-const makeTestQueue = PersistedQueue.make({ name: testQueueName, schema: TestPayload });
 
 /**
  * Independent store runtime: every fresh build opens its own worker identity, pool, and poll
@@ -89,10 +88,10 @@ const insertTestRow = (
   Effect.gen(function* () {
     const admin = yield* MigrationSqlClient;
     yield* admin`INSERT INTO ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
-      (id, queue_name, element, completed, attempts, last_failure, acquired_at, acquired_by,
+      (id, queue_name, element, state, visible_at, attempts, last_failure, acquired_at, acquired_by,
         acquisition_count, created_at, updated_at)
       VALUES (
-        ${input.id}, ${testQueueName}, ${input.element}, FALSE, ${input.attempts},
+        ${input.id}, ${testQueueName}, ${input.element}, 'pending', now(), ${input.attempts},
         ${Option.getOrNull(input.lastFailure)},
         now() - ((${Option.getOrNull(input.acquiredMinutesAgo)} || ' minutes')::interval),
         ${Option.getOrNull(input.acquiredBy)},
@@ -118,16 +117,27 @@ const pendingRow = (
   });
 
 /** Builds one queue handle from a freshly provisioned independent store runtime. */
-const buildTestQueue = Effect.gen(function* () {
-  const context = yield* Layer.build(Layer.fresh(IndependentQueueRuntimeHarness));
-  return yield* makeTestQueue.pipe(Effect.provide(context));
-});
+const buildTestQueue = (
+  maxAttempts = 10
+): Effect.Effect<
+  PersistedQueue.PersistedQueue<typeof TestPayload.Type>,
+  Config.ConfigError | SqlError.SqlError,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const context = yield* Layer.build(Layer.fresh(IndependentQueueRuntimeHarness));
+    return yield* PersistedQueue.make({
+      name: testQueueName,
+      schema: TestPayload,
+      maxAttempts,
+    }).pipe(Effect.provide(context));
+  });
 
 /** Starts an independent queue runtime that the test can terminate without running finalizers. */
 const startCrashRuntime = Effect.gen(function* () {
   const { databaseUrl, path } = yield* Config.all({
-    databaseUrl: Config.string("DATABASE_URL"),
-    path: Config.string("PATH"),
+    databaseUrl: Config.String("DATABASE_URL"),
+    path: Config.String("PATH"),
   });
   return yield* Effect.acquireRelease(
     Effect.sync(() => {
@@ -229,8 +239,8 @@ const defineDurableQueueHealthTests = (
   it.effect("keeps a live lease invisible to a second runtime until its handler settles", () =>
     Effect.gen(function* () {
       yield* clearTestQueue;
-      const queueA = yield* buildTestQueue;
-      const queueB = yield* buildTestQueue;
+      const queueA = yield* buildTestQueue();
+      const queueB = yield* buildTestQueue();
       yield* queueA.offer({ note: "held" }, { id: "health-test-held" });
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
@@ -251,7 +261,7 @@ const defineDurableQueueHealthTests = (
       const rows = yield* admin`SELECT attempts, acquired_by IS NOT NULL AS "held"
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-held'`;
-      expect(rows).toEqual([{ attempts: 0, held: true }]);
+      expect(rows).toEqual([{ attempts: 1, held: true }]);
       yield* Deferred.succeed(release, undefined);
       expect(yield* Fiber.join(fiberA)).toEqual({ note: "held" });
     })
@@ -269,20 +279,20 @@ const defineDurableQueueHealthTests = (
       yield* Effect.sync(() => crashRuntime.child.kill("SIGKILL"));
       yield* Effect.tryPromise(() => crashRuntime.child.exited).pipe(Effect.orDie);
 
-      const replacement = yield* buildTestQueue;
+      const replacement = yield* buildTestQueue();
       const redelivered = yield* replacement
         .take((payload, { attempts }) => Effect.succeed({ payload, attempts }))
         .pipe(Effect.timeoutOption("5 seconds"));
       expect(Option.isSome(redelivered)).toBe(true);
       if (Option.isSome(redelivered)) {
         expect(redelivered.value.payload).toEqual({ note: "lost" });
-        expect(redelivered.value.attempts).toBe(0);
+        expect(redelivered.value.attempts).toBe(2);
       }
       const admin = yield* MigrationSqlClient;
-      const rows = yield* admin`SELECT attempts, completed
+      const rows = yield* admin`SELECT attempts, state
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-lost'`;
-      expect(rows).toEqual([{ attempts: 1, completed: true }]);
+      expect(rows).toEqual([{ attempts: 2, state: "completed" }]);
       const health = yield* getDurableQueueHealthFor([testQueueName]);
       expect(health[0]?.redeliveryCount).toBe(1);
     })
@@ -291,7 +301,7 @@ const defineDurableQueueHealthTests = (
   it.effect("counts a stale lease reacquired by the same store runtime as redelivery", () =>
     Effect.gen(function* () {
       yield* clearTestQueue;
-      const queue = yield* buildTestQueue;
+      const queue = yield* buildTestQueue();
       yield* queue.offer({ note: "worker-id" }, { id: "health-test-worker-id" });
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
@@ -333,7 +343,7 @@ const defineDurableQueueHealthTests = (
       yield* pendingRow("health-test-graceful", { element: '{"note":"graceful"}' });
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const queue = yield* buildTestQueue;
+          const queue = yield* buildTestQueue();
           const entered = yield* Deferred.make<void>();
           const holdUntilShutdown = (): Effect.Effect<never> =>
             Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never));
@@ -342,11 +352,11 @@ const defineDurableQueueHealthTests = (
         })
       );
       const admin = yield* MigrationSqlClient;
-      const released = yield* admin`SELECT attempts, completed, acquired_by IS NULL AS "released"
+      const released = yield* admin`SELECT attempts, state, acquired_by IS NULL AS "released"
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
           WHERE queue_name = ${testQueueName} AND id = 'health-test-graceful'`;
-      expect(released).toEqual([{ attempts: 0, completed: false, released: true }]);
-      const replacement = yield* buildTestQueue;
+      expect(released).toEqual([{ attempts: 0, state: "pending", released: true }]);
+      const replacement = yield* buildTestQueue();
       const recovered = yield* replacement
         .take((payload) => Effect.succeed(payload))
         .pipe(Effect.timeoutOption("5 seconds"));
@@ -366,16 +376,24 @@ const defineDurableQueueHealthTests = (
         acquiredMinutesAgo: Option.none(),
         createdMinutesAgo: 0,
       });
-      const queue = yield* buildTestQueue;
-      const error = yield* queue.take(Effect.succeed, { maxAttempts: 10 }).pipe(Effect.flip);
-      expect(Schema.isSchemaError(error)).toBe(true);
+      const queue = yield* buildTestQueue();
+      // An undecodable payload is native decode work, so the store dead-letters the row with the
+      // SchemaError cause and keeps waiting for eligible work: the failure is observable through the
+      // recorded row and health probe, never through the taker's exit.
+      const pending = yield* queue.take(Effect.succeed).pipe(Effect.forkScoped);
       const admin = yield* MigrationSqlClient;
-      const rows = yield* admin`SELECT attempts, completed
+      const rows = yield* eventually(
+        admin`SELECT attempts, state
           FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
-          WHERE queue_name = ${testQueueName} AND id = 'health-test-broken'`;
-      expect(rows).toEqual([{ attempts: 1, completed: false }]);
-      const exhausted = yield* queue
-        .take(Effect.succeed, { maxAttempts: 1 })
+          WHERE queue_name = ${testQueueName} AND id = 'health-test-broken'`,
+        (observed) => observed[0]?.state === "failed",
+        { timeout: "5 seconds", interval: "25 millis" }
+      );
+      expect(rows).toEqual([{ attempts: 1, state: "failed" }]);
+      yield* Fiber.interrupt(pending);
+      const oneAttemptQueue = yield* buildTestQueue(1);
+      const exhausted = yield* oneAttemptQueue
+        .take(Effect.succeed)
         .pipe(Effect.timeoutOption("500 millis"));
       expect(Option.isNone(exhausted)).toBe(true);
       const queues = yield* getDurableQueueHealthFor([testQueueName]);
@@ -413,9 +431,22 @@ const defineDurableQueueHealthTests = (
         acquiredMinutesAgo: Option.none(),
         createdMinutesAgo: 0,
       });
-      const queue = yield* buildTestQueue;
-      const exit = yield* Effect.exit(queue.take(Effect.succeed, { maxAttempts: 10 }));
-      expect(Exit.isFailure(exit)).toBe(true);
+      // The store's own JSON parse failure dead-letters the row from inside its take loop, where
+      // the recursive take keeps the fiber uninterruptible until that loop hands out work again. An
+      // isolated runtime therefore performs the take, and this runtime kills it once the failed row
+      // is observable.
+      const crashRuntime = yield* startCrashRuntime;
+      const admin = yield* MigrationSqlClient;
+      const rows = yield* eventually(
+        admin`SELECT attempts, state
+          FROM ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
+          WHERE queue_name = ${testQueueName} AND id = 'health-test-invalid-json'`,
+        (observed) => observed[0]?.state === "failed",
+        { timeout: "5 seconds", interval: "25 millis" }
+      );
+      expect(rows).toEqual([{ attempts: 1, state: "failed" }]);
+      yield* Effect.sync(() => crashRuntime.child.kill("SIGKILL"));
+      yield* Effect.tryPromise(() => crashRuntime.child.exited).pipe(Effect.orDie);
       const queues = yield* getDurableQueueHealthFor([testQueueName]);
       const row = queues.find((candidate) => candidate.queueName === testQueueName);
       expect(row?.redeliveryCount).toBe(0);
@@ -575,7 +606,7 @@ const defineDurableQueueHealthTests = (
       yield* pendingRow("health-retained");
       const admin = yield* MigrationSqlClient;
       yield* admin`UPDATE ${admin.literal(`fidy_durable.${durableQueueTableName}`)}
-          SET completed = TRUE, updated_at = now() - interval '30 minutes'
+          SET state = 'completed', updated_at = now() - interval '30 minutes'
           WHERE queue_name = ${testQueueName} AND id = 'health-retained'`;
       const queues = yield* getDurableQueueHealthFor([testQueueName]);
       const row = queues.find((candidate) => candidate.queueName === testQueueName);
@@ -652,7 +683,7 @@ const defineDurableQueueHealthTests = (
   );
 };
 
-describe.sequential("durable queue health", () => {
+describe("durable queue health", { concurrent: false }, () => {
   layer(HealthHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     "two-runtime behavior",
     defineDurableQueueHealthTests

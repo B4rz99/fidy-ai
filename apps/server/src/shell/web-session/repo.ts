@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { WebSessionId } from "~/core/web-session/reference";
@@ -36,7 +36,7 @@ export const useWebSession = Effect.fn("WebSession.use")(function* (
         last_used_at AS "lastUsedAt",
         idle_expires_at AS "idleExpiresAt",
         hard_expires_at AS "hardExpiresAt"
-      FROM fidy_use_web_session(${bearerDigest}, ${usedAt}, ${requestedIdleExpiresAt})
+      FROM fidy_use_web_session(${bearerDigest}, ${DateTime.toDateUtc(usedAt)}, ${DateTime.toDateUtc(requestedIdleExpiresAt)})
     `,
   })(undefined).pipe(Effect.orDie);
 });
@@ -54,7 +54,7 @@ export const lockFreshWebSessionInScope = Effect.fn("WebSession.lockFreshInScope
       Result: Schema.Struct({ fresh: Schema.Boolean }),
       execute: () => sql`
         SELECT fidy_lock_fresh_web_session_for_user(
-          ${input.webSessionId}, ${input.subjectUserId}, ${input.attemptedAt}
+          ${input.webSessionId}, ${input.subjectUserId}, ${DateTime.toDateUtc(input.attemptedAt)}
         ) AS fresh
       `,
     })(undefined).pipe(Effect.orDie);
@@ -72,7 +72,7 @@ export const revokeWebSession = Effect.fn("WebSession.revoke")(function* (
     Request: Schema.Void,
     Result: Schema.Struct({ revoked: Schema.Boolean }),
     execute: () => sql`
-      SELECT fidy_revoke_web_session(${bearerDigest}, ${revokedAt}) AS revoked
+      SELECT fidy_revoke_web_session(${bearerDigest}, ${DateTime.toDateUtc(revokedAt)}) AS revoked
     `,
   })(undefined).pipe(Effect.orDie);
   return revoked;

@@ -39,6 +39,7 @@ import {
   TelemetryAttempt,
   TelemetryDuration,
 } from "~/shell/observability/contract";
+import { FiniteFromBigInt } from "~/shell/schema-codecs/contract";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -172,7 +173,7 @@ export const pruneWhatsAppOperationalData = Effect.fn("WhatsApp.pruneOperational
 );
 
 const ExhaustedWhatsAppQueueItem = Schema.Struct({
-  sequence: Schema.Int,
+  sequence: Schema.BigInt,
   element: Schema.String,
 });
 const WhatsAppInboundIdentity = Schema.fromJsonString(
@@ -193,7 +194,7 @@ export const failWhatsAppInboundBurst = Effect.fn("WhatsApp.failInboundBurst")(f
   yield* withUserTransaction(
     work.userId,
     sql`UPDATE public.whatsapp_inbound_jobs AS job
-      SET turn_id = coalesce(job.turn_id, job.id), content = NULL, completed_at = ${failedAt},
+      SET turn_id = coalesce(job.turn_id, job.id), content = NULL, completed_at = ${DateTime.toDateUtc(failedAt)},
         terminal_outcome = ${terminalOutcome}
       WHERE job.user_id = ${work.userId} AND job.completed_at IS NULL
         AND (job.id = ${work.inboundJobId} OR job.turn_id = (
@@ -216,7 +217,7 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
     Request: Schema.Void,
     Result: ExhaustedWhatsAppQueueItem,
     execute: () => sql`SELECT sequence, element FROM ${sql(durableQueueTableName)}
-      WHERE queue_name = ${whatsappInboundQueueName} AND completed = FALSE
+      WHERE queue_name = ${whatsappInboundQueueName} AND state <> 'completed'
         AND attempts >= ${maximumWhatsAppInboundAttempts}
       ORDER BY sequence LIMIT 256`,
   })(undefined).pipe(Effect.orDie);
@@ -227,7 +228,7 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
     const identity = Schema.decodeOption(WhatsAppInboundIdentity)(item.element);
     if (Option.isNone(identity)) {
       yield* sql`UPDATE ${sql(durableQueueTableName)} SET last_failure = ${durableQueueSchemaIncompatibleMarker},
-        updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(
+        updated_at = ${DateTime.toDateUtc(now)} WHERE sequence = ${item.sequence} AND state <> 'completed'`.pipe(
         Effect.asVoid,
         Effect.orDie
       );
@@ -237,8 +238,8 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
       continue;
     }
     yield* failWhatsAppInboundBurst(identity.value, "agent_failed", now);
-    yield* sql`UPDATE ${sql(durableQueueTableName)} SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
-      updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE
+    yield* sql`UPDATE ${sql(durableQueueTableName)} SET state = 'completed', acquired_at = NULL, acquired_by = NULL,
+      updated_at = ${DateTime.toDateUtc(now)} WHERE sequence = ${item.sequence} AND state <> 'completed'
         AND attempts >= ${maximumWhatsAppInboundAttempts}`.pipe(Effect.asVoid, Effect.orDie);
     retired.push(identity.value);
   }
@@ -249,7 +250,7 @@ export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWo
 });
 
 const QueueHistoryCandidate = Schema.Struct({
-  sequence: Schema.Int,
+  sequence: Schema.BigInt,
   element: Schema.String,
   id: Schema.String,
 });
@@ -265,7 +266,7 @@ export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")
     Request: Schema.DateTimeUtc,
     Result: QueueHistoryCandidate,
     execute: (before) => sql`SELECT sequence, element, id FROM ${sql(durableQueueTableName)}
-      WHERE queue_name = ${whatsappInboundQueueName} AND completed = TRUE AND updated_at < ${before}
+      WHERE queue_name = ${whatsappInboundQueueName} AND state = 'completed' AND updated_at < ${DateTime.toDateUtc(before)}
       ORDER BY sequence LIMIT 256`,
   })(cutoff).pipe(Effect.orDie);
   for (const candidate of candidates) {
@@ -286,7 +287,7 @@ export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")
       })(candidate.id).pipe(Effect.orDie)
     );
     if (unfinished.length === 0) {
-      yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE sequence = ${candidate.sequence} AND completed = TRUE`.pipe(
+      yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE sequence = ${candidate.sequence} AND state = 'completed'`.pipe(
         Effect.asVoid,
         Effect.orDie
       );
@@ -633,7 +634,7 @@ const StoredDurableTraceContext = Schema.Struct({
   traceId: DurableTraceContext.fields.traceId,
   parentSpanId: DurableTraceContext.fields.parentSpanId,
   sampled: DurableTraceContext.fields.sampled,
-  capturedAtUnixMilliseconds: Schema.FiniteFromString.pipe(
+  capturedAtUnixMilliseconds: FiniteFromBigInt.pipe(
     Schema.decodeTo(DurableTraceContext.fields.capturedAtUnixMilliseconds)
   ),
 });
@@ -846,7 +847,7 @@ const settleWhatsAppTurn = Effect.fn(function* (
     turn.userId,
     sql`
       UPDATE whatsapp_inbound_jobs
-      SET content = NULL, completed_at = ${settledAt}, terminal_outcome = ${outcome}
+      SET content = NULL, completed_at = ${DateTime.toDateUtc(settledAt)}, terminal_outcome = ${outcome}
       WHERE user_id = ${turn.userId} AND turn_id = ${turn.turnId}
         AND completed_at IS NULL
     `.pipe(Effect.asVoid, Effect.catchTag("SqlError", Effect.die))

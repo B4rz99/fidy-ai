@@ -5,15 +5,29 @@ import { SqlClient } from "effect/unstable/sql";
 export const effectPairingEmail = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    DROP FUNCTION fidy_claim_browser_pairing_email_start_request(timestamptz, uuid, timestamptz);
-    DROP FUNCTION fidy_claim_browser_pairing_email_delivery(timestamptz, uuid, timestamptz);
-    DROP FUNCTION fidy_claim_expired_browser_pairing_email_workflow(timestamptz, uuid, timestamptz);
-    DROP INDEX browser_pairing_email_start_request_claimable_idx;
-    DROP INDEX browser_pairing_email_delivery_claimable_idx;
+    DROP FUNCTION fidy_claim_browser_pairing_email_start_request(timestamptz, uuid, timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_claim_browser_pairing_email_delivery(timestamptz, uuid, timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_claim_expired_browser_pairing_email_workflow(timestamptz, uuid, timestamptz)
+  `;
+  yield* sql`
+    DROP INDEX browser_pairing_email_start_request_claimable_idx
+  `;
+  yield* sql`
+    DROP INDEX browser_pairing_email_delivery_claimable_idx
+  `;
+  yield* sql`
     ALTER TABLE browser_pairing_email_start_requests
-      DROP COLUMN claim_token, DROP COLUMN claim_expires_at, DROP COLUMN status;
+      DROP COLUMN claim_token, DROP COLUMN claim_expires_at, DROP COLUMN status
+  `;
+  yield* sql`
     ALTER TABLE browser_pairing_email_workflows
-      DROP COLUMN retention_claim_token, DROP COLUMN retention_claim_expires_at;
+      DROP COLUMN retention_claim_token, DROP COLUMN retention_claim_expires_at
+  `;
+  yield* sql`
     ALTER TABLE browser_pairing_email_delivery_intents
       DROP COLUMN claim_token, DROP COLUMN claim_expires_at, DROP COLUMN idempotency_key,
       DROP CONSTRAINT browser_pairing_email_delivery_intents_status_check,
@@ -21,9 +35,13 @@ export const effectPairingEmail = Effect.gen(function* () {
         'pending', 'armed', 'sent', 'rejected', 'uncertain', 'superseded', 'temporarily-refused', 'retry-exhausted'
       )),
       ADD COLUMN provider_attempt integer NOT NULL DEFAULT 0 CHECK (provider_attempt BETWEEN 0 AND 3),
-      ADD COLUMN retry_at timestamptz;
+      ADD COLUMN retry_at timestamptz
+  `;
+  yield* sql`
     COMMENT ON COLUMN browser_pairing_email_delivery_intents.provider_attempt IS
-      'Provider evidence fence: binds Armed/refusal evidence to one immutable send body, not an execution retry counter';
+      'Provider evidence fence: binds Armed/refusal evidence to one immutable send body, not an execution retry counter'
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz)
     RETURNS TABLE (user_id uuid)
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -42,9 +60,15 @@ export const effectPairingEmail = Effect.gen(function* () {
         WHERE request.id = $1 AND lookup.authentication_lookup_key = request.address_lookup_key
           AND (request.user_id IS NULL OR request.user_id = lookup.user_id)
         RETURNING request.user_id;
-    END $$;
-    ALTER FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) OWNER TO fidy_gateway;
-    REVOKE ALL ON FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) TO fidy_runtime;
+    END $$
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_resolve_browser_pairing_email_start_request(uuid, timestamptz) TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

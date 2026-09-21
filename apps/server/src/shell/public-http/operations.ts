@@ -32,7 +32,7 @@ const HttpOrigin = Schema.URL.check(
 export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
   webOrigin: Config.schema(HttpOrigin, "PUBLIC_WEB_ORIGIN"),
   apiOrigin: Config.schema(HttpOrigin, "PUBLIC_API_ORIGIN"),
-  ingestDomain: Config.nonEmptyString("INGEST_EMAIL_DOMAIN"),
+  ingestDomain: Config.NonEmptyString("INGEST_EMAIL_DOMAIN"),
 }).pipe(
   Config.map(({ apiOrigin, ingestDomain, webOrigin }) => ({
     webOrigin: webOrigin.origin,

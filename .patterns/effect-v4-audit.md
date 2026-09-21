@@ -4,9 +4,11 @@
 > and internal RPC and remediated some review candidates below. The dedicated current pattern for
 > each API is authoritative where this report's original ownership snapshot differs.
 
-Source of truth: checked-in `.repos/effect` at the repository's installed `effect@4.0.0-rc.112`.
-This report compared the application usage that existed when the audit was performed with Effect's
-migration notes, ai-docs, implementation, and tests.
+Historical source of truth: `effect@4.0.0-rc.112` at `7105c732…`. This document is not the
+current API reference. Current guidance comes from the topic-specific pattern documents audited
+against rc.116 and the checked-in `.repos/effect` source. This report compared the application usage
+that existed when the audit was performed with Effect's migration notes, ai-docs, implementation,
+and tests.
 
 ## Outcome
 
@@ -170,7 +172,8 @@ decision for Workflow and Cluster; EventLog remains trigger-only.
 ## Verification performed
 
 - Read every pre-existing Effect pattern file.
-- Compared the installed package version and Effect checkout (`4.0.0-rc.112`).
+- Compared the installed package version and Effect checkout as they existed at the historical
+  RC.112 audit point.
 - Read all focused migration notes and relevant ai-docs for HTTP client, batching, streams, and
   observability.
 - Checked current source for Option/Result generator behavior, Effect function tracing,

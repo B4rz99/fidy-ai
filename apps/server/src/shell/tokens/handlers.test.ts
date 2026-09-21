@@ -77,8 +77,8 @@ const seedWebSession = Effect.fn("seedWebSession")(function* (pairedAt: DateTime
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${webSessionId}, ${userId}, ${bearerDigest}, ${pairedAt}, ${deadlines.freshUntil},
-      ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${webSessionId}, ${userId}, ${bearerDigest}, ${DateTime.toDateUtc(pairedAt)}, ${DateTime.toDateUtc(deadlines.freshUntil)},
+      ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
 });
@@ -453,8 +453,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           INSERT INTO web_sessions (
             id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
           ) VALUES (
-            ${secondWebSessionId}, ${userId}, ${secondDigest}, ${now}, ${deadlines.freshUntil},
-            ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+            ${secondWebSessionId}, ${userId}, ${secondDigest}, ${DateTime.toDateUtc(now)},
+            ${DateTime.toDateUtc(deadlines.freshUntil)},
+            ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
           )
         `;
         const rejected = yield* requestPAT(secondWebSessionBearer, "Rejected bounded PAT");

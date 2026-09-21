@@ -8,14 +8,16 @@ import { SqlClient } from "effect/unstable/sql";
 export const effectWhatsAppInbound = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  // Keep infrastructure DDL under the migration credential; Effect's runtime
-  // store will observe this migration as already applied.
+  // Keep infrastructure DDL under the migration credential; Effect's runtime store observes both
+  // native queue migrations as already applied. The table carries the store's post-`0002_upgrade_schema`
+  // shape because that migration requires ownership the runtime role does not have.
   yield* sql`CREATE TABLE IF NOT EXISTS fidy_durable.fidy_queue (
-    sequence SERIAL PRIMARY KEY,
-    id VARCHAR(36) NOT NULL,
-    queue_name VARCHAR(100) NOT NULL,
+    sequence BIGSERIAL PRIMARY KEY,
+    id VARCHAR(255) NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
     element TEXT NOT NULL,
-    completed BOOLEAN NOT NULL,
+    state VARCHAR(10) NOT NULL,
+    visible_at TIMESTAMP NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_failure TEXT NULL,
     acquired_at TIMESTAMP NULL,
@@ -26,7 +28,7 @@ export const effectWhatsAppInbound = Effect.gen(function* () {
   yield* sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_fidy_queue_id
     ON fidy_durable.fidy_queue (id, queue_name)`;
   yield* sql`CREATE INDEX IF NOT EXISTS idx_fidy_queue_take
-    ON fidy_durable.fidy_queue (queue_name, completed, attempts, acquired_at)`;
+    ON fidy_durable.fidy_queue (queue_name, state, visible_at, sequence)`;
   yield* sql`CREATE INDEX IF NOT EXISTS idx_fidy_queue_update
     ON fidy_durable.fidy_queue (sequence, acquired_by)`;
   yield* sql`CREATE TABLE IF NOT EXISTS fidy_durable.fidy_queue_migrations (
@@ -35,7 +37,7 @@ export const effectWhatsAppInbound = Effect.gen(function* () {
     name TEXT NOT NULL
   )`;
   yield* sql`INSERT INTO fidy_durable.fidy_queue_migrations (migration_id, name)
-    VALUES (1, 'create_table') ON CONFLICT (migration_id) DO NOTHING`;
+    VALUES (1, 'create_table'), (2, 'upgrade_schema') ON CONFLICT (migration_id) DO NOTHING`;
   yield* sql`GRANT SELECT, INSERT, UPDATE, DELETE
     ON fidy_durable.fidy_queue TO fidy_runtime`;
   yield* sql`GRANT USAGE, SELECT
@@ -55,14 +57,14 @@ export const effectWhatsAppInbound = Effect.gen(function* () {
   yield* sql`UPDATE whatsapp_inbound_jobs SET turn_id = claim_id
     WHERE completed_at IS NULL AND claim_id IS NOT NULL`;
   yield* sql`INSERT INTO fidy_durable.fidy_queue
-    (id, queue_name, element, completed, attempts, created_at, updated_at)
+    (id, queue_name, element, state, visible_at, attempts, created_at, updated_at)
     SELECT trigger.id::text, 'whatsapp-inbound-turn',
       jsonb_build_object(
         'version', 1,
         'userId', trigger.user_id,
         'inboundJobId', trigger.id
       )::text,
-      FALSE, 0, now(), now()
+      'pending', now(), 0, now(), now()
     FROM (
       SELECT DISTINCT ON (user_id, coalesce(claim_id, id)) id, user_id
       FROM whatsapp_inbound_jobs

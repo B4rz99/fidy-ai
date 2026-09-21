@@ -99,9 +99,9 @@ export const CanonicalTelemetryLive = Layer.effect(
 );
 
 const sentrySmokeIdentity = Config.all({
-  dsn: Config.redacted("SENTRY_NON_PRODUCTION_DSN"),
-  release: Config.string("SENTRY_RELEASE"),
-  environment: Config.literals(["local", "ci"], "SENTRY_ENVIRONMENT"),
+  dsn: Config.Redacted("SENTRY_NON_PRODUCTION_DSN"),
+  release: Config.String("SENTRY_RELEASE"),
+  environment: Config.Literals(["local", "ci"], "SENTRY_ENVIRONMENT"),
 });
 
 /** Networked exporter runtime for the bounded operator-only account smoke command. */
@@ -129,7 +129,7 @@ export const recordSentryAccountSmoke = (telemetry: TelemetryService): Effect.Ef
   });
 
 const LoggerLive = Layer.unwrap(
-  Effect.map(Config.string("NODE_ENV").pipe(Config.withDefault("development")), (environment) =>
+  Effect.map(Config.String("NODE_ENV").pipe(Config.withDefault("development")), (environment) =>
     environment === "production"
       ? Logger.layer([Logger.consoleJson])
       : Logger.layer([Logger.defaultLogger])
@@ -137,7 +137,7 @@ const LoggerLive = Layer.unwrap(
 );
 
 const MinimumLogLevelLive = Layer.unwrap(
-  Effect.map(Config.logLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), (minimumLogLevel) =>
+  Effect.map(Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info")), (minimumLogLevel) =>
     Layer.succeed(References.MinimumLogLevel, minimumLogLevel)
   )
 );

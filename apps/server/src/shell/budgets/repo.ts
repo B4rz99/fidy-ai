@@ -176,7 +176,7 @@ export const initializeBudgetMonthLatchInScope = Effect.fn("initializeBudgetMont
       execute: (latch) => sql`
         INSERT INTO budget_month_latches
           (budget_id, period_from, period_to, applied_time_zone, reached_80, reached_100)
-        VALUES (${latch.budgetId}, ${latch.from}, ${latch.to}, ${latch.timeZone}, false, false)
+        VALUES (${latch.budgetId}, ${DateTime.toDateUtc(latch.from)}, ${DateTime.toDateUtc(latch.to)}, ${latch.timeZone}, false, false)
         ON CONFLICT (budget_id, period_from) DO UPDATE SET
           period_to = EXCLUDED.period_to,
           applied_time_zone = EXCLUDED.applied_time_zone,

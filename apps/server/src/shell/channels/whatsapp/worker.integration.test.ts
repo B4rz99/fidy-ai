@@ -64,7 +64,7 @@ const offerQueueWork = Effect.fn("Test.offerWhatsAppWorkerQueueWork")(function* 
 const readOnlyQueueRow = Effect.fn("Test.readOnlyWhatsAppWorkerQueueRow")(function* () {
   const sql = yield* MigrationSqlClient;
   return yield* Schema.decodeUnknownEffect(Schema.Array(QueueRow))(
-    yield* sql`SELECT completed, attempts, last_failure AS "lastFailure"
+    yield* sql`SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
       FROM fidy_durable.fidy_queue WHERE queue_name = ${whatsappInboundQueueName}`
   ).pipe(
     Effect.flatMap((rows) =>

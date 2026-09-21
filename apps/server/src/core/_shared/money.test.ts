@@ -1,6 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Exit, Result, Schema } from "effect";
-import * as FastCheck from "effect/testing/FastCheck";
+import * as Arbitrary from "effect/unstable/arbitrary/Arbitrary";
 import {
   Currency,
   CurrencyMismatch,
@@ -20,32 +20,28 @@ const encodeMoney = Schema.encodeSync(Money);
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
   Money.make({ amount: BigDecimal.fromStringUnsafe(amount), currency });
 
-const moneyArbitrary = FastCheck.oneof(
-  FastCheck.tuple(FastCheck.bigInt({ min: 0n }), FastCheck.constant(0), FastCheck.constant("JPY")),
-  FastCheck.tuple(
-    FastCheck.bigInt({ min: 0n }),
-    FastCheck.integer({ min: 0, max: 2 }),
-    FastCheck.constant("COP")
-  ),
-  FastCheck.tuple(
-    FastCheck.bigInt({ min: 0n }),
-    FastCheck.integer({ min: 0, max: 3 }),
-    FastCheck.constant("KWD")
-  ),
-  FastCheck.tuple(
-    FastCheck.bigInt({ min: 0n }),
-    FastCheck.integer({ min: 0, max: 4 }),
-    FastCheck.constant("UYW")
+const nonNegativeCoefficient = Arbitrary.schema(
+  Schema.BigInt.check(Schema.isGreaterThanOrEqualToBigInt(0n))
+);
+const moneyArbitrary = Arbitrary.schema(Schema.Literals(["JPY", "COP", "KWD", "UYW"])).pipe(
+  Arbitrary.flatMap((currency) =>
+    Arbitrary.all([
+      nonNegativeCoefficient,
+      Arbitrary.schema(
+        Schema.Int.check(
+          Schema.isBetween({
+            minimum: 0,
+            maximum: currencyMetadata(currency).fractionalDigits,
+          })
+        )
+      ),
+    ]).pipe(
+      Arbitrary.map(([coefficient, scale]: readonly [bigint, number]): ReadonlyMoney => ({
+        amount: BigDecimal.make(coefficient, scale),
+        currency,
+      }))
+    )
   )
-).map(
-  ([coefficient, scale, currency]: readonly [
-    bigint,
-    number,
-    "JPY" | "COP" | "KWD" | "UYW",
-  ]): ReadonlyMoney => ({
-    amount: BigDecimal.make(coefficient, scale),
-    currency: Currency.make(currency),
-  })
 );
 
 it("accepts zero Money because the owning operation decides whether zero is meaningful", () => {

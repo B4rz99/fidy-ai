@@ -477,10 +477,9 @@ export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosur
       disclosureQueueHandlerPolicy
     )
     .pipe(
-      Effect.catchTags({
-        PersistedQueueError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
-        SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
-      })
+      Effect.catchTag("PersistedQueueError", (error) =>
+        observeConsentDisclosureQueue(Effect.fail(error), "start")
+      )
     );
 });
 
@@ -507,11 +506,9 @@ export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisc
         disclosureQueueHandlerPolicy
       )
       .pipe(
-        Effect.catchTags({
-          PersistedQueueError: (error) =>
-            observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
-          SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
-        })
+        Effect.catchTag("PersistedQueueError", (error) =>
+          observeConsentDisclosureQueue(Effect.fail(error), "evidence")
+        )
       );
   }
 );
@@ -531,7 +528,7 @@ const superviseDisclosureQueue = <E, R>(
 /** Production queue handoff and a bounded, paced startup translation of drained legacy requests. */
 export const ConsentDisclosureQueueLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
     if (environment !== "production") return;
     const queue = consentDisclosureQueue;
     const publishPage = Effect.fn(function* (after: Option.Option<PendingConsentExchangeId>) {

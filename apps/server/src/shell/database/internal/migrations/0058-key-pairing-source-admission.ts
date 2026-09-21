@@ -12,14 +12,23 @@ import { SqlClient } from "effect/unstable/sql";
 export const keyPairingSourceAdmission = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    DELETE FROM browser_login_start_attempts;
-    DELETE FROM pat_pairing_start_attempts;
-    DELETE FROM pat_pairing_claim_attempts;
-
+    DELETE FROM browser_login_start_attempts
+  `;
+  yield* sql`
+    DELETE FROM pat_pairing_start_attempts
+  `;
+  yield* sql`
+    DELETE FROM pat_pairing_claim_attempts
+  `;
+  yield* sql`
     COMMENT ON COLUMN browser_login_start_attempts.source_digest IS
-      'Purpose-scoped keyed source identifier for abuse admission only; never identity or authorization evidence';
+      'Purpose-scoped keyed source identifier for abuse admission only; never identity or authorization evidence'
+  `;
+  yield* sql`
     COMMENT ON COLUMN pat_pairing_start_attempts.source_digest IS
-      'Purpose-scoped keyed source identifier for abuse admission only; never identity or authorization evidence';
+      'Purpose-scoped keyed source identifier for abuse admission only; never identity or authorization evidence'
+  `;
+  yield* sql`
     COMMENT ON COLUMN pat_pairing_claim_attempts.source_digest IS
       'Purpose-scoped keyed source identifier for abuse admission only; never identity or authorization evidence'
   `;

@@ -55,7 +55,7 @@ export const expireReplacement = Effect.fn("EmailReplacementRetention.expire")(f
         const sql = yield* SqlClient.SqlClient;
         const now = yield* DateTime.now;
         const deleted = yield* sql`DELETE FROM email_replacement_workflows
-      WHERE id = ${payload.workflowId} AND user_id = ${payload.userId} AND expires_at <= ${now}
+      WHERE id = ${payload.workflowId} AND user_id = ${payload.userId} AND expires_at <= ${DateTime.toDateUtc(now)}
       RETURNING id`.pipe(Effect.orDie);
         return deleted.length === 1;
       })
@@ -144,7 +144,9 @@ const removeExecutionReceipt = Effect.fn(function* (receipt: ExecutionReceipt, n
     Effect.gen(function* () {
       yield* durableQueueRetention.removeCompleted(state.queueName, [receipt.id]);
       yield* sql`DELETE FROM email_replacement_executions WHERE id = ${receipt.id}
-      AND user_id = ${receipt.userId} AND expires_at <= ${now}`.pipe(Effect.orDie);
+      AND user_id = ${receipt.userId} AND expires_at <= ${DateTime.toDateUtc(now)}`.pipe(
+        Effect.orDie
+      );
     })
   );
   return true;
@@ -166,7 +168,7 @@ export const removeExpiredReplacementExecutions = Effect.fn("EmailReplacementRet
       execute: (
         cursor
       ) => sql`SELECT id, user_id AS "userId", kind, terminal_observed AS "terminalObserved"
-        FROM fidy_expired_email_replacement_executions(${now}, ${Option.getOrNull(cursor)}::uuid)`,
+        FROM fidy_expired_email_replacement_executions(${DateTime.toDateUtc(now)}, ${Option.getOrNull(cursor)}::uuid)`,
     });
     const receipts: ReadonlyArray<ExecutionReceipt> = yield* page(afterId).pipe(Effect.orDie);
     let nextCursor = Option.none<string>();
@@ -181,7 +183,7 @@ export const removeExpiredReplacementExecutions = Effect.fn("EmailReplacementRet
 /** Owner operation for lifecycle evidence; rows exactly at the cutoff remain retained. */
 export const removeReplacementLifecycleEventsBefore = Effect.fn(function* (cutoff: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`SELECT fidy_delete_verified_email_lifecycle_events_before(${cutoff}) AS deleted_count`;
+  yield* sql`SELECT fidy_delete_verified_email_lifecycle_events_before(${DateTime.toDateUtc(cutoff)}) AS deleted_count`;
 });
 
 class ReplacementRetentionOverdue extends Data.TaggedError("ReplacementRetentionOverdue")<{

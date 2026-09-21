@@ -264,6 +264,7 @@ export const TelemetryExternalHttpMethod = Schema.Literals([
   "DELETE",
   "HEAD",
   "OPTIONS",
+  "QUERY",
   "TRACE",
 ]);
 export type TelemetryExternalHttpMethod = typeof TelemetryExternalHttpMethod.Type;

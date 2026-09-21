@@ -55,16 +55,16 @@ export const durableQueueRetention = {
     const [state] =
       requiredItemIds.length === 0
         ? yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
-            yield* sql`SELECT count(*) FILTER (WHERE completed = FALSE)::int AS incomplete,
+            yield* sql`SELECT count(*) FILTER (WHERE state <> 'completed')::int AS incomplete,
                 0::int AS "requiredCompleted"
               FROM ${sql(durableQueueTableName)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
           ).pipe(Effect.orDie)
         : yield* Schema.decodeUnknownEffect(QueueCompletionRows)(
             yield* sql`SELECT
-                count(*) FILTER (WHERE completed = FALSE)::int AS incomplete,
+                count(*) FILTER (WHERE state <> 'completed')::int AS incomplete,
                 count(*) FILTER (
-                  WHERE completed = TRUE AND id IN ${sql.in(requiredItemIds)}
+                  WHERE state = 'completed' AND id IN ${sql.in(requiredItemIds)}
                 )::int AS "requiredCompleted"
               FROM ${sql(durableQueueTableName)}
               WHERE queue_name = ${queueName} AND id IN ${sql.in(itemIds)}`
@@ -87,7 +87,7 @@ export const durableQueueRetention = {
       DELETE FROM ${sql(durableQueueTableName)} WHERE sequence IN (
         SELECT sequence FROM ${sql(durableQueueTableName)}
         WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
-          AND completed = TRUE
+          AND state = 'completed'
         ORDER BY sequence LIMIT 100
       )
     `.pipe(Effect.orDie);
@@ -109,7 +109,7 @@ export const durableQueueRetention = {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
       DELETE FROM ${sql(durableQueueTableName)}
-      WHERE queue_name = ${queueName} AND completed = TRUE AND id IN ${sql.in(itemIds)}
+      WHERE queue_name = ${queueName} AND state = 'completed' AND id IN ${sql.in(itemIds)}
     `;
   }),
 };

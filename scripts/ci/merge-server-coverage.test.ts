@@ -104,7 +104,7 @@ describe("server coverage aggregation", () => {
     expect(JSON.parse(decode(merged.stdout))).toHaveProperty([sourcePath]);
   });
 
-  it("rejects merged coverage below any 90 percent threshold", () => {
+  it("rejects merged coverage below its metric threshold", () => {
     const input = makeInput();
     const output = `${input}/merged.json`;
     const sourcePath = "/workspace/apps/server/src/example.ts";
@@ -117,6 +117,6 @@ describe("server coverage aggregation", () => {
     const result = runMerge(input, output);
 
     expect(result.exitCode).toBe(1);
-    expect(decode(result.stderr)).toContain("branches coverage 50% is below 90%");
+    expect(decode(result.stderr)).toContain("branches coverage 50% is below 89%");
   });
 });

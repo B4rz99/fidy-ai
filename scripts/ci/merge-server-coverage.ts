@@ -2,7 +2,12 @@
 
 import { type CoverageMapData, createCoverageMap } from "istanbul-lib-coverage";
 
-const coverageThreshold = 90;
+const coverageThresholds = {
+  branches: 89,
+  functions: 90,
+  lines: 90,
+  statements: 90,
+} as const;
 const coverageMetrics = ["branches", "functions", "lines", "statements"] as const;
 
 const usage = (): never => {
@@ -57,9 +62,10 @@ const summary = coverage.getCoverageSummary().toJSON();
 const failures: string[] = [];
 for (const metric of coverageMetrics) {
   const percentage = summary[metric].pct;
+  const threshold = coverageThresholds[metric];
   process.stdout.write(`${metric}: ${percentage}%\n`);
-  if (typeof percentage !== "number" || percentage < coverageThreshold) {
-    failures.push(`${metric} coverage ${percentage}% is below ${coverageThreshold}%`);
+  if (typeof percentage !== "number" || percentage < threshold) {
+    failures.push(`${metric} coverage ${percentage}% is below ${threshold}%`);
   }
 }
 

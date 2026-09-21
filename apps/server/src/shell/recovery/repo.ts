@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import type { BrowserLoginPublicCode } from "~/core/browser-login/rules";
@@ -25,7 +25,7 @@ export const installBackupRecoveryCredentialInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at)
-    VALUES (${input.userId}, ${input.codeDigest}, ${input.createdAt})
+    VALUES (${input.userId}, ${input.codeDigest}, ${DateTime.toDateUtc(input.createdAt)})
   `;
 }, Effect.orDie);
 
@@ -42,7 +42,7 @@ export const upsertDevelopmentBackupRecoveryCredentialInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at)
-    VALUES (${input.userId}, ${input.codeDigest}, ${input.createdAt})
+    VALUES (${input.userId}, ${input.codeDigest}, ${DateTime.toDateUtc(input.createdAt)})
     ON CONFLICT (user_id) DO UPDATE SET code_digest = EXCLUDED.code_digest,
       created_at = EXCLUDED.created_at, consumed_at = NULL, consumed_by_case_id = NULL,
       revision = backup_recovery_credentials.revision + 1
@@ -88,13 +88,13 @@ const recordAdmission = Effect.fn(function* (
   yield* sql`SELECT pg_advisory_xact_lock(hashtextextended('support-recovery:admission', 0))`;
   yield* sql`
     DELETE FROM support_recovery_admission_attempts
-    WHERE attempted_at <= ${attemptedAt}::timestamptz - interval '1 hour'
+    WHERE attempted_at <= ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 hour'
   `;
   yield* sql`
     INSERT INTO support_recovery_admission_attempts (
       operator_issuer, operator_subject, attempted_at, invocation_count
     ) VALUES (
-      ${operatorId.issuer}, ${operatorId.subject}, ${attemptedAt}, 1
+      ${operatorId.issuer}, ${operatorId.subject}, ${DateTime.toDateUtc(attemptedAt)}, 1
     ) ON CONFLICT (operator_issuer, operator_subject, attempted_at)
     DO UPDATE SET invocation_count = support_recovery_admission_attempts.invocation_count + 1
   `;
@@ -112,35 +112,35 @@ const readAdmission = Effect.fn(function* (
       SELECT
         COALESCE(sum(invocation_count) FILTER (
           WHERE operator_issuer = ${operatorId.issuer} AND operator_subject = ${operatorId.subject}
-            AND attempted_at > ${attemptedAt}::timestamptz - interval '1 minute'
+            AND attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 minute'
         ), 0)::int AS "operatorMinute",
         COALESCE(sum(invocation_count) FILTER (
           WHERE operator_issuer = ${operatorId.issuer} AND operator_subject = ${operatorId.subject}
-            AND attempted_at > ${attemptedAt}::timestamptz - interval '1 hour'
+            AND attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 hour'
         ), 0)::int AS "operatorHour",
         COALESCE(sum(invocation_count) FILTER (
-          WHERE attempted_at > ${attemptedAt}::timestamptz - interval '1 minute'
+          WHERE attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 minute'
         ), 0)::int AS "globalMinute",
         COALESCE(sum(invocation_count), 0)::int AS "globalHour",
         COALESCE(CEIL(EXTRACT(EPOCH FROM (
           min(attempted_at) FILTER (
             WHERE operator_issuer = ${operatorId.issuer} AND operator_subject = ${operatorId.subject}
-              AND attempted_at > ${attemptedAt}::timestamptz - interval '1 minute'
-          ) + interval '1 minute' - ${attemptedAt}::timestamptz
+              AND attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 minute'
+          ) + interval '1 minute' - ${DateTime.toDateUtc(attemptedAt)}::timestamptz
         )))::int, 1) AS "operatorMinuteRetry",
         COALESCE(CEIL(EXTRACT(EPOCH FROM (
           min(attempted_at) FILTER (
             WHERE operator_issuer = ${operatorId.issuer} AND operator_subject = ${operatorId.subject}
-              AND attempted_at > ${attemptedAt}::timestamptz - interval '1 hour'
-          ) + interval '1 hour' - ${attemptedAt}::timestamptz
+              AND attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 hour'
+          ) + interval '1 hour' - ${DateTime.toDateUtc(attemptedAt)}::timestamptz
         )))::int, 1) AS "operatorHourRetry",
         COALESCE(CEIL(EXTRACT(EPOCH FROM (
           min(attempted_at) FILTER (
-            WHERE attempted_at > ${attemptedAt}::timestamptz - interval '1 minute'
-          ) + interval '1 minute' - ${attemptedAt}::timestamptz
+            WHERE attempted_at > ${DateTime.toDateUtc(attemptedAt)}::timestamptz - interval '1 minute'
+          ) + interval '1 minute' - ${DateTime.toDateUtc(attemptedAt)}::timestamptz
         )))::int, 1) AS "globalMinuteRetry",
         COALESCE(CEIL(EXTRACT(EPOCH FROM (
-          min(attempted_at) + interval '1 hour' - ${attemptedAt}::timestamptz
+          min(attempted_at) + interval '1 hour' - ${DateTime.toDateUtc(attemptedAt)}::timestamptz
         )))::int, 1) AS "globalHourRetry"
       FROM support_recovery_admission_attempts
     `,
@@ -336,7 +336,7 @@ export const insertSupportRecoveryCase = Effect.fn("Recovery.insertCase")(functi
       id, user_id, pairing_id, credential_revision, lifecycle, opened_at, expires_at
     ) VALUES (
       ${input.id}, ${input.userId}, ${input.pairingId}, ${input.credentialRevision}, 'open',
-      ${input.openedAt}, ${input.expiresAt}
+      ${DateTime.toDateUtc(input.openedAt)}, ${DateTime.toDateUtc(input.expiresAt)}
     )
   `.pipe(Effect.orDie);
   yield* appendOperatorEvent({
@@ -368,7 +368,7 @@ export const appendOperatorEvent = Effect.fn("Recovery.appendOperatorEvent")(fun
       id, case_id, ordinal, operator_issuer, operator_subject, action, outcome, occurred_at
     ) VALUES (
       ${input.eventId}, ${input.caseId}, ${input.ordinal}, ${input.operatorId.issuer},
-      ${input.operatorId.subject}, ${input.action}, ${input.outcome}, ${input.occurredAt}
+      ${input.operatorId.subject}, ${input.action}, ${input.outcome}, ${DateTime.toDateUtc(input.occurredAt)}
     )
   `.pipe(Effect.orDie);
 });
@@ -384,12 +384,12 @@ export const expireSupportRecoveryCase = Effect.fn("Recovery.expireCase")(functi
       id, case_id, ordinal, policy_revision, action, outcome, occurred_at
     ) VALUES (
       ${input.eventId}, ${input.recoveryCase.id}, ${input.recoveryCase.nextOrdinal},
-      'support-recovery-expiry-v1', 'expire', 'expired', ${input.recoveryCase.expiresAt}
+      'support-recovery-expiry-v1', 'expire', 'expired', ${DateTime.toDateUtc(input.recoveryCase.expiresAt)}
     )
   `.pipe(Effect.orDie);
   yield* sql`
     UPDATE support_recovery_cases SET lifecycle = 'expired',
-      closed_at = ${input.recoveryCase.expiresAt}
+      closed_at = ${DateTime.toDateUtc(input.recoveryCase.expiresAt)}
     WHERE id = ${input.recoveryCase.id} AND lifecycle = 'open'
   `.pipe(Effect.orDie);
 });
@@ -423,7 +423,7 @@ export const rejectSupportRecoveryCase = Effect.fn("Recovery.rejectCase")(functi
     occurredAt: input.rejectedAt,
   });
   yield* sql`
-    UPDATE support_recovery_cases SET lifecycle = 'refused', closed_at = ${input.rejectedAt}
+    UPDATE support_recovery_cases SET lifecycle = 'refused', closed_at = ${DateTime.toDateUtc(input.rejectedAt)}
     WHERE id = ${input.recoveryCase.id} AND lifecycle = 'open'
   `.pipe(Effect.orDie);
 });
@@ -438,7 +438,7 @@ export const approveSupportRecoveryCase = Effect.fn("Recovery.approveCase")(func
 }) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    UPDATE backup_recovery_credentials SET code_digest = NULL, consumed_at = ${input.approvedAt},
+    UPDATE backup_recovery_credentials SET code_digest = NULL, consumed_at = ${DateTime.toDateUtc(input.approvedAt)},
       consumed_by_case_id = ${input.recoveryCase.id}
     WHERE user_id = ${input.userId} AND revision = ${input.recoveryCase.credentialRevision}
       AND code_digest IS NOT NULL AND consumed_at IS NULL
@@ -453,7 +453,7 @@ export const approveSupportRecoveryCase = Effect.fn("Recovery.approveCase")(func
     occurredAt: input.approvedAt,
   });
   yield* sql`
-    UPDATE support_recovery_cases SET lifecycle = 'approved', closed_at = ${input.approvedAt}
+    UPDATE support_recovery_cases SET lifecycle = 'approved', closed_at = ${DateTime.toDateUtc(input.approvedAt)}
     WHERE id = ${input.recoveryCase.id} AND lifecycle = 'open'
   `.pipe(Effect.orDie);
 });
@@ -469,7 +469,7 @@ export const rotateBackupRecoveryDigestInScope = Effect.fn("Recovery.rotateDiges
     const sql = yield* SqlClient.SqlClient;
     const rows = yield* sql`
       UPDATE backup_recovery_credentials SET code_digest = ${input.codeDigest},
-        revision = revision + 1, created_at = ${input.rotatedAt}, consumed_at = NULL,
+        revision = revision + 1, created_at = ${DateTime.toDateUtc(input.rotatedAt)}, consumed_at = NULL,
         consumed_by_case_id = NULL,
         last_rotated_by_web_session_id = ${input.webSessionId}
       WHERE user_id = ${input.userId}
@@ -489,7 +489,7 @@ export const purgeSupportRecoveryAdmissionEvidence = Effect.fn("Recovery.purgeAd
       DELETE FROM support_recovery_admission_attempts
       WHERE ctid IN (
         SELECT ctid FROM support_recovery_admission_attempts
-        WHERE attempted_at <= ${observedAt}::timestamptz - interval '1 hour'
+        WHERE attempted_at <= ${DateTime.toDateUtc(observedAt)}::timestamptz - interval '1 hour'
         ORDER BY attempted_at LIMIT 500
       )
     `.pipe(Effect.orDie);
@@ -505,7 +505,7 @@ export const expireDueSupportRecoveryCases = Effect.fn("Recovery.expireDueCases"
     Request: Schema.Void,
     Result: Schema.Struct({ count: Schema.BigInt }),
     execute: () => sql`
-        SELECT fidy_expire_support_recovery_cases(${observedAt}) AS count
+        SELECT fidy_expire_support_recovery_cases(${DateTime.toDateUtc(observedAt)}) AS count
       `,
   })(undefined).pipe(Effect.orDie);
   return count;
@@ -525,7 +525,7 @@ export const deleteExpiredSupportRecoveryEvidence = Effect.fn("Recovery.deleteEx
       Request: Schema.Void,
       Result: Schema.Struct({ count: Schema.BigInt }),
       execute: () => sql`
-        SELECT fidy_delete_expired_support_recovery(${observedAt}) AS count
+        SELECT fidy_delete_expired_support_recovery(${DateTime.toDateUtc(observedAt)}) AS count
       `,
     })(undefined).pipe(Effect.orDie);
     return count;

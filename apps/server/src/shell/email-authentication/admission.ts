@@ -51,8 +51,8 @@ export const admitEmailDeliveryInScope = Effect.fn("EmailAuthentication.admitDel
     ).pipe(Effect.orDie);
     yield* sql`
       INSERT INTO email_delivery_admission_budgets (scope_key, delivery_count, expires_at)
-      VALUES (${requesterBudgetKey}, 0, ${input.attemptedAt}),
-        (${recipientBudgetKey}, 0, ${input.attemptedAt})
+      VALUES (${requesterBudgetKey}, 0, ${DateTime.toDateUtc(input.attemptedAt)}),
+        (${recipientBudgetKey}, 0, ${DateTime.toDateUtc(input.attemptedAt)})
       ON CONFLICT (scope_key) DO NOTHING
     `.pipe(Effect.orDie);
     const admitted = yield* SqlSchema.findOne({
@@ -65,14 +65,14 @@ export const admitEmailDeliveryInScope = Effect.fn("EmailAuthentication.admitDel
           ORDER BY scope_key FOR UPDATE
         ), eligible AS (
           SELECT count(*) = ${requiredAdmissionBudgetCount}
-            AND bool_and(expires_at <= ${input.attemptedAt}
+            AND bool_and(expires_at <= ${DateTime.toDateUtc(input.attemptedAt)}
               OR delivery_count < ${maximumEmailDeliveryGenerations}) AS admitted FROM locked
         ), updated_budgets AS (
           UPDATE email_delivery_admission_budgets budget SET
-            delivery_count = CASE WHEN expires_at <= ${input.attemptedAt}
+            delivery_count = CASE WHEN expires_at <= ${DateTime.toDateUtc(input.attemptedAt)}
               THEN 1 ELSE delivery_count + 1 END,
-            expires_at = CASE WHEN expires_at <= ${input.attemptedAt}
-              THEN ${DateTime.add(input.attemptedAt, { hours: 24 })} ELSE expires_at END
+            expires_at = CASE WHEN expires_at <= ${DateTime.toDateUtc(input.attemptedAt)}
+              THEN ${DateTime.toDateUtc(DateTime.add(input.attemptedAt, { hours: 24 }))} ELSE expires_at END
           WHERE scope_key IN (${requesterBudgetKey}, ${recipientBudgetKey})
             AND (SELECT admitted FROM eligible) RETURNING scope_key
         ) SELECT count(*)::int AS count FROM updated_budgets

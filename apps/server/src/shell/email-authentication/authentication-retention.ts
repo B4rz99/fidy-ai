@@ -20,7 +20,7 @@ import {
 } from "./pairing-email-execution";
 
 const CompletedQueueItem = Schema.Struct({
-  sequence: Schema.Int,
+  sequence: Schema.BigInt,
   id: Schema.String,
   queueName: Schema.Literals([
     pairingStartQueueName,
@@ -104,7 +104,7 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
             })
           );
         }
-        yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE id = ${row.id} AND queue_name = ${row.queueName} AND completed = TRUE`;
+        yield* sql`DELETE FROM ${sql(durableQueueTableName)} WHERE id = ${row.id} AND queue_name = ${row.queueName} AND state = 'completed'`;
       })
     )
     .pipe(Effect.orDie);
@@ -114,7 +114,7 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
  * Native queue payloads retain identifiers after proof erasure; no cleanup ledger is needed.
  * History and completed queue deletion share the SQL transaction, including crash recovery.
  */
-export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (afterSequence = 0) {
+export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (afterSequence = 0n) {
   const sql = yield* SqlClient.SqlClient;
   const cutoff = DateTime.subtract(yield* DateTime.now, { hours: 24 });
   const rows = yield* SqlSchema.findAll({
@@ -122,7 +122,7 @@ export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (aft
     Result: CompletedQueueItem,
     execute:
       () => sql`SELECT sequence, id, queue_name AS "queueName", element FROM ${sql(durableQueueTableName)}
-      WHERE sequence > ${afterSequence} AND completed = TRUE AND updated_at < ${cutoff}
+      WHERE sequence > ${afterSequence} AND state = 'completed' AND updated_at < ${DateTime.toDateUtc(cutoff)}
         AND queue_name IN (${pairingStartQueueName}, ${pairingDeliveryQueueName}, ${pairingExpiryQueueName})
       ORDER BY sequence LIMIT 100`,
   })(undefined).pipe(Effect.orDie);
@@ -130,14 +130,16 @@ export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (aft
   if (rows.length === 100) {
     yield* Effect.logWarning("Browser pairing email history cleanup has an overdue full page");
   }
-  return rows.length === 100 ? Option.getOrThrow(Option.fromNullishOr(rows.at(-1))).sequence : 0;
+  return rows.length === 100 ? Option.getOrThrow(Option.fromNullishOr(rows.at(-1))).sequence : 0n;
 });
 
 /** Purges one bounded batch of expired anonymous admission evidence. */
 export const purgeBrowserPairingEmailAdmissionEvidence = Effect.fn(function* () {
   const sql = yield* SqlClient.SqlClient;
   const now = yield* DateTime.now;
-  yield* sql`SELECT fidy_purge_email_pairing_login_admission_evidence(${now})`.pipe(Effect.orDie);
+  yield* sql`SELECT fidy_purge_email_pairing_login_admission_evidence(${DateTime.toDateUtc(now)})`.pipe(
+    Effect.orDie
+  );
 });
 
 /** Best-effort bounded evidence/history maintenance, not a domain-expiry polling executor. */
@@ -151,7 +153,7 @@ export const BrowserPairingEmailRetentionLive = Layer.effectDiscard(
       }).pipe(Effect.forkScoped),
       Effect.gen(function* () {
         // This process-local scan cursor provides fairness; it owns no execution or lease.
-        const cursor = yield* Ref.make(0);
+        const cursor = yield* Ref.make(0n);
         return yield* runBestEffortMaintenance({
           timing: "best-effort",
           cadence: "1 minute",

@@ -1,4 +1,4 @@
-import { type DateTime, Effect } from "effect";
+import { DateTime, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 
@@ -13,6 +13,6 @@ export const revokePendingForwardedEmailsForConsentInScope = Effect.fn(
 )(function* (input: { readonly userId: UserId; readonly revokedAt: DateTime.Utc }) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    SELECT fidy_revoke_pending_forwarded_emails(${input.userId}, ${input.revokedAt})
+    SELECT fidy_revoke_pending_forwarded_emails(${input.userId}, ${DateTime.toDateUtc(input.revokedAt)})
   `.pipe(Effect.orDie);
 });

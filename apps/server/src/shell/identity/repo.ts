@@ -130,7 +130,9 @@ export const createVerifiedOnboardingIdentityInScope = Effect.fn(
       id, service_market, locale, time_zone, trial_started_at, trial_ends_at, created_at
     ) VALUES (
       ${input.userId}, 'CO', 'es-CO', 'America/Bogota',
-      ${input.createdAt}, ${DateTime.add(input.createdAt, { hours: 168 })}, ${input.createdAt}
+      ${DateTime.toDateUtc(input.createdAt)},
+      ${DateTime.toDateUtc(DateTime.add(input.createdAt, { hours: 168 }))},
+      ${DateTime.toDateUtc(input.createdAt)}
     )
   `;
   yield* sql`
@@ -142,7 +144,7 @@ export const createVerifiedOnboardingIdentityInScope = Effect.fn(
       ${input.caller.businessScopedUserId},
       ${Option.getOrNull(input.caller.parentBusinessScopedUserId)},
       ${Option.getOrNull(input.caller.username)}, ${Option.getOrNull(input.caller.phoneNumber)},
-      ${input.createdAt}
+      ${DateTime.toDateUtc(input.createdAt)}
     )
   `;
 }, Effect.orDie);

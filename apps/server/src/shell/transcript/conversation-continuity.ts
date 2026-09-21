@@ -557,13 +557,14 @@ const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(functi
       })
     );
     yield* sql`
-      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${terminalAt}
+      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${DateTime.toDateUtc(terminalAt)}
       WHERE user_id = ${userId} AND id = ${turn.id} AND state = 'Pending'
     `;
     yield* sql`
       UPDATE hosted_agent_sessions
       SET last_terminal_turn_at = GREATEST(
-        COALESCE(last_terminal_turn_at, ${terminalAt}), ${terminalAt}
+        COALESCE(last_terminal_turn_at, ${DateTime.toDateUtc(terminalAt)}),
+        ${DateTime.toDateUtc(terminalAt)}
       )
       WHERE user_id = ${userId} AND id = ${turn.hostedAgentSessionId}
     `;
@@ -774,7 +775,7 @@ const replaceCompaction = Effect.fn("ConversationContinuity.replaceCompaction")(
       (user_id, session_id, text, through_sequence, revision, updated_at)
     VALUES (
       ${userId}, ${persisted.hostedAgentSessionId}, ${text},
-      ${selection.throughSequence}, ${nextRevision}, ${now}
+      ${selection.throughSequence}, ${nextRevision}, ${DateTime.toDateUtc(now)}
     )
     ON CONFLICT (user_id, session_id) DO UPDATE SET
       text = EXCLUDED.text,
@@ -897,7 +898,7 @@ const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
         yield* dependencies.sql`
           INSERT INTO conversation_turns (user_id, session_id, id, state, started_at)
           VALUES (
-            ${userId}, ${hostedAgentSessionId}, ${entry.turnId}, 'Pending', ${entry.occurredAt}
+            ${userId}, ${hostedAgentSessionId}, ${entry.turnId}, 'Pending', ${DateTime.toDateUtc(entry.occurredAt)}
           )
         `;
         yield* appendEntry(dependencies.sql, userId, entry);
@@ -1036,14 +1037,15 @@ const terminalizePersisted = Effect.fn("ConversationContinuity.terminalize")(fun
       yield* appendEntry(dependencies.sql, userId, terminal.entry);
       yield* dependencies.sql`
         UPDATE conversation_turns
-        SET state = ${terminal._tag}, terminal_at = ${terminalAt},
+        SET state = ${terminal._tag}, terminal_at = ${DateTime.toDateUtc(terminalAt)},
           failure_reason = ${terminal._tag === "Failed" ? terminal.entry.reason : null}
         WHERE user_id = ${userId} AND id = ${turnId} AND state = 'Pending'
       `;
       yield* dependencies.sql`
         UPDATE hosted_agent_sessions AS session
         SET last_terminal_turn_at = GREATEST(
-          COALESCE(session.last_terminal_turn_at, ${terminalAt}), ${terminalAt}
+          COALESCE(session.last_terminal_turn_at, ${DateTime.toDateUtc(terminalAt)}),
+          ${DateTime.toDateUtc(terminalAt)}
         )
         FROM conversation_turns AS turn
         WHERE turn.user_id = ${userId} AND turn.id = ${turnId}

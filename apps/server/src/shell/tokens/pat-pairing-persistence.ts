@@ -1,4 +1,4 @@
-import { Data, type DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { PATPairingId, PATPairingLifecycle, PATPairingPublicCode } from "~/core/tokens/pairing";
@@ -323,7 +323,7 @@ export const acceptPATPairingPoll = Effect.fn("PATPairing.acceptPoll")(function*
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    SELECT fidy_accept_pat_pairing_poll(${pairingId}::uuid, ${acceptedAt}) AS changed
+    SELECT fidy_accept_pat_pairing_poll(${pairingId}::uuid, ${DateTime.toDateUtc(acceptedAt)}) AS changed
   `.pipe(Effect.orDie, Effect.asVoid);
 });
 export const slowPATPairingPoll = Effect.fn("PATPairing.slowPoll")(function* (
@@ -350,7 +350,7 @@ export const expireUnapprovedPATPairing = Effect.fn("PATPairing.expireUnapproved
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    SELECT fidy_expire_unapproved_pat_pairing(${pairingId}::uuid, ${expiredAt}) AS changed
+    SELECT fidy_expire_unapproved_pat_pairing(${pairingId}::uuid, ${DateTime.toDateUtc(expiredAt)}) AS changed
   `.pipe(Effect.orDie, Effect.asVoid);
 });
 export const claimPATPairing = Effect.fn("PATPairing.claim")(function* (
@@ -363,7 +363,7 @@ export const claimPATPairing = Effect.fn("PATPairing.claim")(function* (
     Request: Schema.Void,
     Result: Changed,
     execute: () => sql`
-      SELECT fidy_claim_pat_pairing(${pairingId}::uuid, ${tokenHash}, ${claimedAt}) AS changed
+      SELECT fidy_claim_pat_pairing(${pairingId}::uuid, ${tokenHash}, ${DateTime.toDateUtc(claimedAt)}) AS changed
     `,
   })(undefined).pipe(Effect.orDie);
   return result.changed;
@@ -424,7 +424,7 @@ export const reservePATPairingInspectionAttempt = Effect.fn("PATPairing.reserveI
           Result: InspectionAdmission,
           execute: () => sql`
             SELECT admitted, retry_after_seconds AS "retryAfterSeconds"
-            FROM fidy_reserve_pat_pairing_inspection(${input.userId}, ${input.attemptedAt})
+            FROM fidy_reserve_pat_pairing_inspection(${input.userId}, ${DateTime.toDateUtc(input.attemptedAt)})
           `,
         })(undefined);
       }).pipe(Effect.orDie)
@@ -485,7 +485,7 @@ export const markPATPairingApprovedInScope = Effect.fn("PATPairing.markApprovedI
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    SELECT fidy_mark_pat_pairing_approved(${userId}, ${pairingId}, ${approvedAt})
+    SELECT fidy_mark_pat_pairing_approved(${userId}, ${pairingId}, ${DateTime.toDateUtc(approvedAt)})
   `.pipe(Effect.orDie);
 });
 
@@ -494,7 +494,7 @@ export const purgeExpiredPATPairingEvidence = Effect.fn("PATPairing.purgeAttempt
   function* (attemptedAt: DateTime.Utc) {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`
-      SELECT fidy_purge_pat_pairing_attempt_evidence(${attemptedAt})
+      SELECT fidy_purge_pat_pairing_attempt_evidence(${DateTime.toDateUtc(attemptedAt)})
     `.pipe(Effect.orDie, Effect.asVoid);
   }
 );
@@ -507,7 +507,7 @@ export const expireDueUnapprovedPATPairings = Effect.fn("PATPairing.expireDueUna
       Request: Schema.Void,
       Result: Schema.Struct({ expired: Schema.Int }),
       execute: () => sql`
-        SELECT fidy_expire_unapproved_pat_pairings(${attemptedAt}) AS expired
+        SELECT fidy_expire_unapproved_pat_pairings(${DateTime.toDateUtc(attemptedAt)}) AS expired
       `,
     })(undefined).pipe(Effect.orDie);
     return row.expired;
@@ -523,7 +523,7 @@ export const purgeRetainedTerminalPATPairings = Effect.fn("PATPairing.purgeTermi
     Request: Schema.Void,
     Result: Schema.Struct({ removed: Schema.Int }),
     execute: () => sql`
-        SELECT fidy_purge_terminal_pat_pairings(${retentionBefore}) AS removed
+        SELECT fidy_purge_terminal_pat_pairings(${DateTime.toDateUtc(retentionBefore)}) AS removed
       `,
   })(undefined).pipe(Effect.orDie);
   return row.removed;
@@ -539,7 +539,7 @@ export const listDueApprovedPATPairings = Effect.fn("PATPairing.listDueApproved"
     Result: Schema.Struct({ pairingId: PATPairingId, userId: UserId }),
     execute: () => sql`
       SELECT pairing_id AS "pairingId", subject_user_id AS "userId"
-      FROM fidy_due_approved_pat_pairings(${attemptedAt}, ${limit}::integer)
+      FROM fidy_due_approved_pat_pairings(${DateTime.toDateUtc(attemptedAt)}, ${limit}::integer)
     `,
   })(undefined).pipe(Effect.orDie);
 });
@@ -578,6 +578,6 @@ export const markPATPairingRevokedInScope = Effect.fn("PATPairing.markRevokedInS
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    SELECT fidy_revoke_unclaimed_pat_pairing(${userId}, ${pairingId}, ${revokedAt})
+    SELECT fidy_revoke_unclaimed_pat_pairing(${userId}, ${pairingId}, ${DateTime.toDateUtc(revokedAt)})
   `.pipe(Effect.orDie);
 });

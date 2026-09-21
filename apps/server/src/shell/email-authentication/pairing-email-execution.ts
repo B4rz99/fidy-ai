@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { Workflow } from "effect/unstable/workflow";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -136,7 +136,7 @@ export const publishPairingStart = Effect.fn(function* (request: {
       id, pairing_id, address_lookup_key, requested_at, expires_at
     ) VALUES (
       ${request.requestId}, ${request.pairingId}, ${request.addressLookupKey},
-      ${request.requestedAt}, ${request.expiresAt}
+      ${DateTime.toDateUtc(request.requestedAt)}, ${DateTime.toDateUtc(request.expiresAt)}
     )`;
         const payload: PairingStartPayload = {
           revision: 1,

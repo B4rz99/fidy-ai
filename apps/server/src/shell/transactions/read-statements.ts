@@ -1,4 +1,4 @@
-import { type DateTime, Option } from "effect";
+import { DateTime, Option } from "effect";
 import type { SqlClient, Statement } from "effect/unstable/sql";
 import { type CategoryId } from "~/core/categories/reference";
 import { type MoneyAggregation } from "~/core/dashboard/model";
@@ -22,8 +22,8 @@ const dashboardMetricConditions = (
   const conditions = [
     sql`user_id = ${userId}`,
     sql`deleted_at IS NULL`,
-    sql`occurred_at >= ${query.from}`,
-    sql`occurred_at < ${query.toExclusive}`,
+    sql`occurred_at >= ${DateTime.toDateUtc(query.from)}`,
+    sql`occurred_at < ${DateTime.toDateUtc(query.toExclusive)}`,
   ];
   if (query.categories.length > 0) {
     conditions.push(sql`category_id IN ${sql.in(query.categories)}`);

@@ -45,7 +45,7 @@ const approveAnonymizedEmailSample = Effect.fn(function* (input: {
               anonymization_revision AS "anonymizationRevision",
               anonymization_candidate AS structure, retained_at AS "retainedAt"
             FROM raw_email_ingest_samples
-            WHERE id = ${request.id} AND expires_at > ${request.approvedAt}
+            WHERE id = ${request.id} AND expires_at > ${DateTime.toDateUtc(request.approvedAt)}
             FOR UPDATE
           `,
       })({ id: input.sampleId, approvedAt });
@@ -57,8 +57,9 @@ const approveAnonymizedEmailSample = Effect.fn(function* (input: {
           ) VALUES (
             ${IngestSampleId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie))}, ${candidate.value.serviceMarket}, 'notification-email', 'resend',
             ${candidate.value.parserRevision}, ${candidate.value.anonymizationRevision},
-            ${candidate.value.structure}, ${input.approvedBy}, ${approvedAt},
-            ${candidate.value.retainedAt}
+            ${candidate.value.structure}, ${input.approvedBy},
+            ${DateTime.toDateUtc(approvedAt)},
+            ${DateTime.toDateUtc(candidate.value.retainedAt)}
           ) ON CONFLICT (id) DO NOTHING
         `;
       return true;

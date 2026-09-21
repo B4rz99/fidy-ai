@@ -85,7 +85,7 @@ const reset = Effect.gen(function* () {
   );
   yield* sql`
     INSERT INTO verified_email_credentials (user_id, email_address, verified_at)
-    VALUES (${acceptanceUserId}, ${acceptanceEmail}, ${yield* DateTime.now})
+    VALUES (${acceptanceUserId}, ${acceptanceEmail}, ${DateTime.toDateUtc(yield* DateTime.now)})
     ON CONFLICT (user_id) DO UPDATE SET email_address = EXCLUDED.email_address,
       verified_at = EXCLUDED.verified_at
   `;

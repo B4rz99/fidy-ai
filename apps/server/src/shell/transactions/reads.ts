@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema, type Statement } from "effect/unstable/sql";
 import { CategoryId } from "~/core/categories/reference";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
@@ -108,8 +108,12 @@ const selectTransactionRowsInScope = Effect.fn(function* (
 ) {
   const sql = yield* SqlClient.SqlClient;
   const conditions = [sql`user_id = ${userId}`, sql`deleted_at IS NULL`];
-  if (Option.isSome(query.from)) conditions.push(sql`occurred_at >= ${query.from.value}`);
-  if (Option.isSome(query.to)) conditions.push(sql`occurred_at < ${query.to.value}`);
+  if (Option.isSome(query.from)) {
+    conditions.push(sql`occurred_at >= ${DateTime.toDateUtc(query.from.value)}`);
+  }
+  if (Option.isSome(query.to)) {
+    conditions.push(sql`occurred_at < ${DateTime.toDateUtc(query.to.value)}`);
+  }
   if (Option.isSome(query.categoryId)) {
     conditions.push(sql`category_id = ${query.categoryId.value}`);
   }
@@ -263,8 +267,8 @@ export const selectDashboardTransactionSumsInScope = Effect.fn(
   const conditions = [
     sql`transaction.user_id = ${userId}`,
     sql`transaction.deleted_at IS NULL`,
-    sql`transaction.occurred_at >= ${query.from}`,
-    sql`transaction.occurred_at < ${query.toExclusive}`,
+    sql`transaction.occurred_at >= ${DateTime.toDateUtc(query.from)}`,
+    sql`transaction.occurred_at < ${DateTime.toDateUtc(query.toExclusive)}`,
   ];
   if (query.categories.length > 0) {
     conditions.push(sql`transaction.category_id IN ${sql.in(query.categories)}`);
@@ -472,8 +476,8 @@ export const selectBudgetContributionsInScope = Effect.fn("selectBudgetContribut
           ON scope.category_id = transaction.category_id
           AND scope.currency = transaction.currency
         WHERE transaction.user_id = ${request.userId} AND transaction.deleted_at IS NULL
-          AND transaction.direction = 'outflow' AND transaction.occurred_at >= ${request.from}
-          AND transaction.occurred_at < ${request.to}
+          AND transaction.direction = 'outflow' AND transaction.occurred_at >= ${DateTime.toDateUtc(request.from)}
+          AND transaction.occurred_at < ${DateTime.toDateUtc(request.to)}
         GROUP BY transaction.category_id, transaction.currency
         ORDER BY transaction.currency, transaction.category_id
       `,

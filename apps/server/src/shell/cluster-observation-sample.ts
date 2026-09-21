@@ -68,7 +68,7 @@ const readQueueSample: (
   sql`
     SELECT
       COALESCE(SUM(GREATEST(attempts - 1, 0)), 0)::float8 AS "retries",
-      count(*) FILTER (WHERE completed = false AND attempts > 0)::int AS "pendingRetries"
+      count(*) FILTER (WHERE state <> 'completed' AND attempts > 0)::int AS "pendingRetries"
     FROM fidy_durable.${sql(durableQueueTable)}
   `.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(QueueSample))), Effect.orDie);
 

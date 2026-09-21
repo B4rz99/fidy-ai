@@ -215,8 +215,9 @@ const persistReplacementGeneration = Effect.fn(function* (
         delivery_generation, resend_available_at, credential_verified_at
       ) VALUES (
         ${workflowId}, ${input.userId}, ${input.candidateEmail}, ${publicCode},
-        ${input.requestedAt}, ${emailWorkflowExpiry(input.requestedAt)}, 1,
-        ${resendAvailability(input.requestedAt)},
+        ${DateTime.toDateUtc(input.requestedAt)},
+        ${DateTime.toDateUtc(emailWorkflowExpiry(input.requestedAt))}, 1,
+        ${DateTime.toDateUtc(resendAvailability(input.requestedAt))},
         (SELECT verified_at FROM verified_email_credentials WHERE user_id = ${input.userId})
       ) ON CONFLICT DO NOTHING RETURNING id
     `.pipe(Effect.orDie);
@@ -230,7 +231,7 @@ const persistReplacementGeneration = Effect.fn(function* (
       UPDATE email_replacement_workflows SET
         candidate_email_address = ${input.candidateEmail}, public_code = ${publicCode},
         delivery_generation = delivery_generation + 1,
-        resend_available_at = ${resendAvailability(input.requestedAt)},
+        resend_available_at = ${DateTime.toDateUtc(resendAvailability(input.requestedAt))},
         proof_digest = NULL, proof_expires_at = NULL, wrong_proof_attempts = 0
       WHERE id = ${workflowId}
     `.pipe(Effect.orDie);
@@ -239,7 +240,7 @@ const persistReplacementGeneration = Effect.fn(function* (
     INSERT INTO email_replacement_delivery_intents (
       id, workflow_id, generation, email_address, status, idempotency_key, created_at
     ) SELECT ${intentId}, id, delivery_generation, candidate_email_address, 'pending',
-      ${intentId}, ${input.requestedAt}
+      ${intentId}, ${DateTime.toDateUtc(input.requestedAt)}
     FROM email_replacement_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
   const expiresAt = Option.isSome(existing)
@@ -354,7 +355,7 @@ const appendReplacedLifecycleEvent = Effect.fn(function* (input: {
   yield* sql`
     INSERT INTO verified_email_credential_lifecycle_events (
       subject_user_id, authorizing_web_session_id, occurred_at
-    ) VALUES (${input.userId}, ${input.authorizingWebSessionId}, ${input.occurredAt})
+    ) VALUES (${input.userId}, ${input.authorizingWebSessionId}, ${DateTime.toDateUtc(input.occurredAt)})
   `.pipe(Effect.orDie);
 });
 
@@ -371,7 +372,7 @@ const commitReplacement = Effect.fn(function* (
       Effect.gen(function* () {
         const updated = yield* sql`
           UPDATE verified_email_credentials SET email_address = ${workflow.candidateEmailAddress},
-            verified_at = ${input.attemptedAt}
+            verified_at = ${DateTime.toDateUtc(input.attemptedAt)}
           WHERE user_id = ${input.userId}
             AND verified_at = (SELECT credential_verified_at FROM email_replacement_workflows
               WHERE id = ${workflow.id} AND user_id = ${input.userId})

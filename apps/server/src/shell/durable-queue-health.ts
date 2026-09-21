@@ -125,51 +125,51 @@ const readDurableQueueCounts = (
     execute: (request) => sql`
       SELECT
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND attempts < ${request.maxAttempts}
+          WHERE state <> 'completed' AND attempts < ${request.maxAttempts}
             AND (acquired_at IS NULL
               OR acquired_at < now() - ${request.expirySeconds} * interval '1 second')
         ), ${maximumTelemetryCount})::int AS "pendingDepth",
         LEAST(GREATEST(COALESCE(EXTRACT(EPOCH FROM (
           now() - min(created_at) FILTER (
-            WHERE completed = FALSE AND attempts < ${request.maxAttempts}
+            WHERE state <> 'completed' AND attempts < ${request.maxAttempts}
               AND (acquired_at IS NULL
                 OR acquired_at < now() - ${request.expirySeconds} * interval '1 second')
           )
         ))::int, 0), 0), ${maximumDurableQueueAgeSeconds}) AS "oldestPendingAgeSeconds",
         LEAST(count(*) FILTER (
-          WHERE completed = TRUE
+          WHERE state = 'completed'
         ), ${maximumTelemetryCount})::int AS "retainedCount",
         LEAST(GREATEST(COALESCE(EXTRACT(EPOCH FROM (
-          now() - min(updated_at) FILTER (WHERE completed = TRUE)
+          now() - min(updated_at) FILTER (WHERE state = 'completed')
         ))::int, 0), 0), ${maximumDurableQueueAgeSeconds}) AS "oldestRetainedAgeSeconds",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND acquired_at IS NOT NULL
+          WHERE state <> 'completed' AND acquired_at IS NOT NULL
             AND acquired_at >= now() - ${request.expirySeconds} * interval '1 second'
         ), ${maximumTelemetryCount})::int AS "activeLeaseCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND acquired_at IS NOT NULL
+          WHERE state <> 'completed' AND acquired_at IS NOT NULL
             AND acquired_at < now() - ${request.expirySeconds} * interval '1 second'
         ), ${maximumTelemetryCount})::int AS "staleLeaseCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND acquired_at IS NOT NULL
+          WHERE state <> 'completed' AND acquired_at IS NOT NULL
             AND acquired_at < now() - ${request.stallSeconds} * interval '1 second'
             AND acquired_at >= now() - ${request.expirySeconds} * interval '1 second'
         ), ${maximumTelemetryCount})::int AS "stalledLeaseCount",
         LEAST(COALESCE(sum(GREATEST(acquisition_count - 1, 0)), 0),
           ${maximumTelemetryCount})::int AS "redeliveryCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND last_failure IS NOT NULL
+          WHERE state <> 'completed' AND last_failure IS NOT NULL
             AND attempts < ${request.maxAttempts}
         ), ${maximumTelemetryCount})::int AS "failedCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND (
+          WHERE state <> 'completed' AND (
             last_failure = ${request.schemaMarker}
             OR last_failure LIKE ${request.decodeFailurePattern}
             OR last_failure LIKE ${request.jsonFailurePattern}
           )
         ), ${maximumTelemetryCount})::int AS "decodeFailureCount",
         LEAST(count(*) FILTER (
-          WHERE completed = FALSE AND attempts >= ${request.maxAttempts}
+          WHERE state <> 'completed' AND attempts >= ${request.maxAttempts}
         ), ${maximumTelemetryCount})::int AS "exhaustedCount"
       FROM ${sql(durableQueueTableName)} WHERE queue_name = ${request.queueName}
     `,

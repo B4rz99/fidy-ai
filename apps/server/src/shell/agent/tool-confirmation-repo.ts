@@ -1,4 +1,4 @@
-import { type DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/database/operations";
@@ -27,7 +27,7 @@ export const consumeConfirmation = Effect.fn("consumeAgentConfirmation")(functio
       Result: Schema.Struct({ consumed: Schema.Boolean }),
       execute: (request) => sql`
         INSERT INTO agent_confirmation_consumptions (user_id, digest, consumed_at)
-        VALUES (${request.userId}, ${request.digest}, ${request.consumedAt})
+        VALUES (${request.userId}, ${request.digest}, ${DateTime.toDateUtc(request.consumedAt)})
         ON CONFLICT (user_id, digest) DO NOTHING
         RETURNING true AS consumed
       `,

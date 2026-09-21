@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, Struct } from "effect";
+import { DateTime, Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { Memory, MemoryId } from "~/core/memory/model";
@@ -60,7 +60,7 @@ export const insertMemoryInScope = Effect.fn("insertMemoryInScope")(function* (
     Result: MemoryRow,
     execute: (request) => sql`
       INSERT INTO memories (user_id, id, text, created_at, updated_at)
-      VALUES (${request.userId}, ${request.id}, ${request.text}, ${request.createdAt}, ${request.updatedAt})
+      VALUES (${request.userId}, ${request.id}, ${request.text}, ${DateTime.toDateUtc(request.createdAt)}, ${DateTime.toDateUtc(request.updatedAt)})
       RETURNING id, text, created_at AS "createdAt", updated_at AS "updatedAt"
     `,
   })({ userId, ...memory }).pipe(Effect.orDie);

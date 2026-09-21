@@ -254,7 +254,7 @@ const openSessionInScope = Effect.fn("HostedAgentSession.open")(function* (
       policy_revision, policy_sha256, status, started_at
     ) VALUES (
       ${userId}, ${id}, ${consent.id}, ${basis.revision}, ${basis.contentSha256},
-      ${basis.policy.revision}, ${basis.policy.contentSha256}, 'active', ${now}
+      ${basis.policy.revision}, ${basis.policy.contentSha256}, 'active', ${DateTime.toDateUtc(now)}
     )
   `;
   return HostedAgentSession.make({

@@ -1,0 +1,27 @@
+apps/web/package.json
+  s_9690e1fb9f4dca::t_d4431fbeb545cf 27,35
+apps/server/src/core/_shared/money.ts
+  s_9690e1fb9f4dca::t_f9bbc982736bb8 281-284
+apps/server/package.json
+  s_9690e1fb9f4dca::t_b4d51173ff0f31 32,38
+package.json
+  s_9690e1fb9f4dca::t_cc7c6a527d7b2f 53
+bun.lock
+  s_9690e1fb9f4dca::t_612062a06c9f45 14,28,34,49,57,211,229,851,1281,1439,1561-1562,1601-1602
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0e04e25acdbf706f70e03da53f080e0425955800",
+  "prompts": {},
+  "sessions": {
+    "s_9690e1fb9f4dca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c52e-2f09-77d2-a4a4-6e594c90e197",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

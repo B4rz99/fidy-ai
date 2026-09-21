@@ -239,7 +239,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 UPDATE pending_consent_exchanges SET
                   decision_channel = 'whatsapp', decision_provider = 'kapso',
                   decision_provider_message_id = 'wamid.repo-retention-decision',
-                  accepted_at = ${acceptedAt}
+                  accepted_at = ${DateTime.toDateUtc(acceptedAt)}
                 WHERE id = ${exchangeId}
               `;
               yield* sql`
@@ -252,7 +252,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   ${EmailVerificationPublicCode.make("ABCD-EFGH")}, ${caller.businessPortfolioId},
                   ${caller.businessScopedUserId}, ${Option.getOrNull(caller.parentBusinessScopedUserId)},
                   ${Option.getOrNull(caller.username)}, ${Option.getOrNull(caller.phoneNumber)},
-                  ${exchangeId}, ${enrollmentExpiresAt}
+                  ${exchangeId}, ${DateTime.toDateUtc(enrollmentExpiresAt)}
                 )
               `;
             })

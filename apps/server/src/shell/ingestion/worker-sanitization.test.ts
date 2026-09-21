@@ -104,7 +104,7 @@ const captureQueueAttempt = Effect.fn(function* (id: string) {
 
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(QueueFailureRow))(
     yield* sql`
-      SELECT attempts, completed, last_failure AS "lastFailure"
+      SELECT attempts, state = 'completed' AS completed, last_failure AS "lastFailure"
       FROM fidy_durable.fidy_queue
       WHERE queue_name = 'statement-ingestion' AND id = ${id}
     `

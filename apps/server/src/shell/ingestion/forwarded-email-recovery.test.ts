@@ -81,7 +81,7 @@ const waitForRecoveredQueue = Effect.fn("test.waitForRecoveredQueue")(function* 
   const sql = yield* MigrationSqlClient;
   const recoveryClock = yield* TestClock.testClockWith(Effect.succeed);
   return yield* TestClock.withLive(
-    sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion' AND completed = true`.pipe(
+    sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion' AND state = 'completed'`.pipe(
       Effect.flatMap(
         Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ count: Schema.Int })))
       ),
@@ -163,7 +163,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               if (mode === "production-full") {
                 const staleHandoff = yield* TestClock.withLive(
                   sql`
-                    SELECT completed, attempts, last_failure AS "lastFailure"
+                    SELECT state = 'completed' AS completed, attempts, last_failure AS "lastFailure"
                     FROM fidy_durable.fidy_queue
                     WHERE id = 'wrong-forwarded-email-queue-identity'
                   `.pipe(

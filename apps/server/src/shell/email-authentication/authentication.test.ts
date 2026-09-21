@@ -88,7 +88,7 @@ const resetAuthentication = Effect.gen(function* () {
   );
   yield* sql`
     UPDATE verified_email_credentials SET email_address = ${knownEmail},
-      verified_at = ${yield* DateTime.now} WHERE user_id = ${userId}
+      verified_at = ${DateTime.toDateUtc(yield* DateTime.now)} WHERE user_id = ${userId}
   `;
   yield* sql`
     INSERT INTO verified_email_credential_authentication_lookups (
@@ -340,9 +340,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           yield* resetAuthentication;
           const sql = yield* MigrationSqlClient;
-          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, completed, created_at, updated_at)
+          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, state, visible_at, created_at, updated_at)
           SELECT gen_random_uuid()::text, 'browser-pairing-email-start',
-            jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, TRUE, now(), now()
+            jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, 'completed', now(), now(), now()
           FROM generate_series(1, 49999)`;
           const pairings = yield* Effect.forEach([0, 1, 2], () => startBudgetPairing);
           const sends = yield* Ref.make(0);
@@ -1044,7 +1044,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const sql = yield* MigrationSqlClient;
           yield* sql`
             UPDATE verified_email_credentials
-            SET email_address = ${otherEmail}, verified_at = ${yield* DateTime.now}
+            SET email_address = ${otherEmail}, verified_at = ${DateTime.toDateUtc(yield* DateTime.now)}
             WHERE user_id = ${otherUserId}
           `;
           yield* sql`

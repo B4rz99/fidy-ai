@@ -19,9 +19,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               Effect.gen(function* () {
                 yield* admin`
                 INSERT INTO browser_login_start_attempts (source_digest, attempted_at)
-                VALUES (decode(repeat('11', 32), 'hex'), now());
+                VALUES (decode(repeat('11', 32), 'hex'), now())
+              `;
+                yield* admin`
                 INSERT INTO pat_pairing_start_attempts (source_digest, attempted_at)
-                VALUES (decode(repeat('22', 32), 'hex'), now());
+                VALUES (decode(repeat('22', 32), 'hex'), now())
+              `;
+                yield* admin`
                 INSERT INTO pat_pairing_claim_attempts (source_digest, attempted_at)
                 VALUES (decode(repeat('33', 32), 'hex'), now())
               `;

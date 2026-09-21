@@ -87,15 +87,16 @@ const seedReplacementSession = Effect.fn("seedReplacementSession")(function* (in
   yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${input.subjectUserId}`;
   yield* sql`
     UPDATE verified_email_credentials SET email_address = ${`seed-${input.subjectUserId}@fidyapp.com`},
-      verified_at = ${now} WHERE user_id = ${input.subjectUserId}
+      verified_at = ${DateTime.toDateUtc(now)} WHERE user_id = ${input.subjectUserId}
   `;
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${input.subjectUserId}`;
   yield* sql`
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${input.sessionId}, ${input.subjectUserId}, ${digest}, ${now}, ${deadlines.freshUntil},
-      ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${input.sessionId}, ${input.subjectUserId}, ${digest}, ${DateTime.toDateUtc(now)},
+      ${DateTime.toDateUtc(deadlines.freshUntil)},
+      ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
 });
@@ -454,9 +455,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           INSERT INTO web_sessions (
             id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
           ) VALUES (
-            ${alternateWebSessionId}, ${userId}, ${alternateDigest}, ${now},
-            ${alternateDeadlines.freshUntil}, ${alternateDeadlines.idleExpiresAt},
-            ${alternateDeadlines.hardExpiresAt}
+            ${alternateWebSessionId}, ${userId}, ${alternateDigest}, ${DateTime.toDateUtc(now)},
+            ${DateTime.toDateUtc(alternateDeadlines.freshUntil)},
+            ${DateTime.toDateUtc(alternateDeadlines.idleExpiresAt)},
+            ${DateTime.toDateUtc(alternateDeadlines.hardExpiresAt)}
           )
         `;
         const providerSends = yield* Ref.make(0);
@@ -1017,7 +1019,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         );
         const attemptedAt = yield* DateTime.now;
-        yield* sql`UPDATE web_sessions SET revoked_at = ${attemptedAt} WHERE id = ${webSessionId}`;
+        yield* sql`UPDATE web_sessions SET revoked_at = ${DateTime.toDateUtc(attemptedAt)} WHERE id = ${webSessionId}`;
         const result = yield* completeEmailReplacement({
           subjectUserId: userId,
           authorizingWebSessionId: webSessionId,
@@ -1099,7 +1101,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const firstCode = yield* captureNextDelivery();
         yield* sql`
           CREATE OR REPLACE FUNCTION fidy_test_delay_replacement_workflow_update()
-          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$;
+          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$
+        `;
+        yield* sql`
           CREATE TRIGGER fidy_test_delay_replacement_workflow_update
           BEFORE UPDATE ON email_replacement_workflows
           FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_replacement_workflow_update()
@@ -1113,9 +1117,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect((yield* Fiber.join(completionSecond)).status).toBe(400);
         yield* sql`
           DROP TRIGGER fidy_test_delay_replacement_workflow_update
-            ON email_replacement_workflows;
-          DROP FUNCTION fidy_test_delay_replacement_workflow_update()
+            ON email_replacement_workflows
         `;
+        yield* sql`DROP FUNCTION fidy_test_delay_replacement_workflow_update()`;
         expect(
           yield* sql`SELECT email_address FROM verified_email_credentials WHERE user_id = ${userId}`
         ).toEqual([{ email_address: `seed-${userId}@fidyapp.com` }]);
@@ -1129,7 +1133,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const secondCode = yield* captureNextDelivery();
         yield* sql`
           CREATE OR REPLACE FUNCTION fidy_test_delay_replacement_credential_update()
-          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$;
+          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$
+        `;
+        yield* sql`
           CREATE TRIGGER fidy_test_delay_replacement_credential_update
           BEFORE UPDATE ON verified_email_credentials
           FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_replacement_credential_update()
@@ -1143,9 +1149,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect((yield* Fiber.join(initiationSecond)).status).toBe(200);
         yield* sql`
           DROP TRIGGER fidy_test_delay_replacement_credential_update
-            ON verified_email_credentials;
-          DROP FUNCTION fidy_test_delay_replacement_credential_update()
+            ON verified_email_credentials
         `;
+        yield* sql`DROP FUNCTION fidy_test_delay_replacement_credential_update()`;
         expect(
           yield* sql`SELECT email_address FROM verified_email_credentials WHERE user_id = ${userId}`
         ).toEqual([{ email_address: "second-lock-order@example.com" }]);
@@ -1340,7 +1346,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           BEGIN
             IF NEW.user_id = '${userId}'::uuid THEN PERFORM pg_sleep(0.2); END IF;
             RETURN NEW;
-          END $$;
+          END $$
+        `);
+          yield* sql.unsafe(`
           CREATE TRIGGER fidy_test_delay_owner_credential_update
           BEFORE UPDATE ON verified_email_credentials
           FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_owner_credential_update()
@@ -1354,9 +1362,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         `;
           expect((yield* Fiber.join(completion)).status).toBe(400);
           yield* sql`
-          DROP TRIGGER fidy_test_delay_owner_credential_update ON verified_email_credentials;
-          DROP FUNCTION fidy_test_delay_owner_credential_update()
+          DROP TRIGGER fidy_test_delay_owner_credential_update ON verified_email_credentials
         `;
+          yield* sql`DROP FUNCTION fidy_test_delay_owner_credential_update()`;
           expect(
             yield* sql`SELECT email_address FROM verified_email_credentials WHERE user_id = ${userId}`
           ).toEqual([{ email_address: `seed-${userId}@fidyapp.com` }]);
@@ -1389,7 +1397,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         yield* sql`
           CREATE OR REPLACE FUNCTION fidy_test_reject_lifecycle_event() RETURNS trigger
-          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test evidence failure'; END $$;
+          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test evidence failure'; END $$
+        `;
+        yield* sql`
           CREATE TRIGGER fidy_test_reject_lifecycle_event
           BEFORE INSERT ON verified_email_credential_lifecycle_events
           FOR EACH ROW EXECUTE FUNCTION fidy_test_reject_lifecycle_event()
@@ -1413,9 +1423,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toHaveLength(1);
         yield* sql`
           DROP TRIGGER fidy_test_reject_lifecycle_event
-            ON verified_email_credential_lifecycle_events;
-          DROP FUNCTION fidy_test_reject_lifecycle_event()
+            ON verified_email_credential_lifecycle_events
         `;
+        yield* sql`DROP FUNCTION fidy_test_reject_lifecycle_event()`;
       })
     );
 
@@ -1452,10 +1462,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             id, subject_user_id, authorizing_web_session_id, occurred_at
           ) VALUES
             ('f1d1a000-0000-4000-8000-000000000331', ${userId}, ${webSessionId},
-              ${DateTime.makeUnsafe("2025-12-31T23:59:59.999Z")}),
-            ('f1d1a000-0000-4000-8000-000000000332', ${userId}, ${webSessionId}, ${cutoff}),
+              ${DateTime.toDateUtc(DateTime.makeUnsafe("2025-12-31T23:59:59.999Z"))}),
+            ('f1d1a000-0000-4000-8000-000000000332', ${userId}, ${webSessionId}, ${DateTime.toDateUtc(cutoff)}),
             ('f1d1a000-0000-4000-8000-000000000333', ${userId}, ${webSessionId},
-              ${DateTime.makeUnsafe("2026-01-01T00:00:00.001Z")})
+              ${DateTime.toDateUtc(DateTime.makeUnsafe("2026-01-01T00:00:00.001Z"))})
         `;
         const privileges = yield* sql`
           SELECT

@@ -287,8 +287,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_login_pairings
-          SET created_at = ${DateTime.subtractDuration(started.expiresAt, "30 minutes")},
-            expires_at = ${DateTime.subtractDuration(started.expiresAt, "20 minutes")}
+          SET created_at = ${DateTime.toDateUtc(DateTime.subtractDuration(started.expiresAt, "30 minutes"))},
+            expires_at = ${DateTime.toDateUtc(DateTime.subtractDuration(started.expiresAt, "20 minutes"))}
           WHERE id = ${started.pairingId}::uuid
         `;
         const attempts = [
@@ -370,7 +370,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect((yield* HttpClient.post("/web/pairings")).status).toBe(200);
         const admin = yield* MigrationSqlClient;
         yield* admin`
-          UPDATE browser_login_start_attempts SET attempted_at = now() - interval '2 minutes';
+          UPDATE browser_login_start_attempts SET attempted_at = now() - interval '2 minutes'
+        `;
+        yield* admin`
           INSERT INTO browser_login_start_attempts (source_digest, attempted_at)
           SELECT source_digest, now() - interval '2 minutes'
           FROM browser_login_start_attempts, generate_series(1, 9)
@@ -449,7 +451,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const admin = yield* MigrationSqlClient;
         yield* admin`
           INSERT INTO browser_login_start_attempts (source_digest, attempted_at)
-          VALUES (decode(repeat('00', 32), 'hex'), now() - interval '20 minutes');
+          VALUES (decode(repeat('00', 32), 'hex'), now() - interval '20 minutes')
+        `;
+        yield* admin`
           INSERT INTO browser_login_pairings (
             public_code, verifier_digest, created_at, expires_at
           ) VALUES (

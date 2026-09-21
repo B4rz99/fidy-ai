@@ -384,9 +384,16 @@ const contract: Record<HostedTurnTag, HostedTurnContract> = {
   Recover: recoverContract,
 };
 
-/** The codec's complete JSON Schema document with every reference inlined into the pinned shape. */
+/**
+ * The codec's complete JSON Schema document with every reference inlined into the pinned shape,
+ * generated with the same excess-property stance the public OpenAPI contract uses so the pinned
+ * shape stays closed.
+ */
 const wireDocument = (schema: Schema.Top): unknown =>
-  Schema.toJsonSchemaDocument(schema, { referencePolicy: () => undefined });
+  Schema.toJsonSchemaDocument(schema, {
+    referencePolicy: () => undefined,
+    onExcessProperty: "error",
+  });
 
 const checkContract = (
   tag: HostedTurnTag,

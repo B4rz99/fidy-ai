@@ -98,7 +98,7 @@ const IsolationWorkerHarness = makeApiClientLive({ tag: OtherApiClient, bearer: 
 const expectQueueCompletedOnce = Effect.fn(function* (id: string) {
   const sql = yield* MigrationSqlClient;
   const rows = yield* sql`
-    SELECT attempts, completed, last_failure AS "lastFailure"
+    SELECT attempts, state = 'completed' AS completed, last_failure AS "lastFailure"
     FROM fidy_durable.fidy_queue
     WHERE queue_name = 'statement-ingestion' AND id = ${id}
   `;
@@ -751,7 +751,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* Fiber.interrupt(worker);
         const sql = yield* MigrationSqlClient;
         const released = yield* sql`
-          SELECT attempts, completed, acquired_by IS NULL AS "released"
+          SELECT attempts, state = 'completed' AS completed, acquired_by IS NULL AS "released"
           FROM fidy_durable.fidy_queue
           WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
         `;
@@ -769,7 +769,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         expect(status.data).toMatchObject({ status: "completed" });
         const completed = yield* sql`
-          SELECT attempts, completed FROM fidy_durable.fidy_queue
+          SELECT attempts, state = 'completed' AS completed FROM fidy_durable.fidy_queue
           WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
         `;
         expect(completed).toEqual([{ attempts: 1, completed: true }]);

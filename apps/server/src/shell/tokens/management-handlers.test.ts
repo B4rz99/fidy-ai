@@ -65,8 +65,9 @@ const seedFreshWebSessionFor = Effect.fn("test.seedFreshWebSessionFor")(function
     INSERT INTO web_sessions (
       id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
     ) VALUES (
-      ${input.sessionId}, ${input.subjectUserId}, ${bearerDigest}, ${now}, ${deadlines.freshUntil},
-      ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+      ${input.sessionId}, ${input.subjectUserId}, ${bearerDigest}, ${DateTime.toDateUtc(now)},
+      ${DateTime.toDateUtc(deadlines.freshUntil)},
+      ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     )
   `;
 });
@@ -94,8 +95,8 @@ const makeWebSessionStale = Effect.gen(function* () {
   const deadlines = calculateWebSessionDeadlines(pairedAt);
   yield* sql`
     UPDATE web_sessions
-    SET paired_at = ${pairedAt}, fresh_until = ${deadlines.freshUntil},
-      idle_expires_at = ${deadlines.idleExpiresAt}, hard_expires_at = ${deadlines.hardExpiresAt}
+    SET paired_at = ${DateTime.toDateUtc(pairedAt)}, fresh_until = ${DateTime.toDateUtc(deadlines.freshUntil)},
+      idle_expires_at = ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, hard_expires_at = ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
     WHERE id = ${webSessionId}
   `;
 });

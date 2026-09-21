@@ -96,7 +96,8 @@ const admit = Effect.fn("test.admitForwardedEmailWorkflow")(function* (receivedE
       time_zone, period_start, consumes_free_allowance, admitted_at
     ) VALUES (
       ${receivedEmailId}, ${defaultUserId}, ${`workflow-${receivedEmailId}`}, 'accepted',
-      'CO', 'es-CO', 'America/Bogota', ${admittedAt}, true, ${admittedAt}
+      'CO', 'es-CO', 'America/Bogota', ${DateTime.toDateUtc(admittedAt)}, true,
+      ${DateTime.toDateUtc(admittedAt)}
     )
   `;
   const durableReceivedEmailId = ResendReceivedEmailId.make(receivedEmailId);
@@ -234,7 +235,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(durableText).not.toContain("Compra aprobada");
           expect(durableText).not.toContain("Compra por COP 25000");
           expect(durableText).not.toContain(admitted.address);
-          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET completed = true
+          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET state = 'completed'
             WHERE queue_name = 'forwarded-email-ingestion'
               AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`;
           yield* cleanupIsolatedUser();
@@ -257,7 +258,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           `;
           yield* sql`
             INSERT INTO fidy_durable.${sql(durableQueueTable)} (
-              id, queue_name, element, completed, attempts, created_at, updated_at
+              id, queue_name, element, state, visible_at, attempts, created_at, updated_at
             )
             SELECT receipt.received_email_id, 'forwarded-email-ingestion',
               json_build_object(
@@ -265,7 +266,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 'receivedEmailId', receipt.received_email_id,
                 'revision', 1
               )::text,
-              true, 0, now() - interval '1 day', now() - interval '1 day'
+              'pending', now(), 0, now() - interval '1 day', now() - interval '1 day'
             FROM forwarded_email_receipts AS receipt
             WHERE receipt.received_email_id LIKE 'blocked-retention-%'
           `;
@@ -313,7 +314,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             SET status = 'expired', completed_at = now() - interval '91 days',
               durable_cleanup_checked_at = now(), durable_cleanup_started_at = now()
             WHERE received_email_id = ${admitted.payload.receivedEmailId}`;
-          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET completed = true
+          yield* sql`UPDATE fidy_durable.${sql(durableQueueTable)} SET state = 'completed'
             WHERE queue_name = 'forwarded-email-ingestion'
               AND element::jsonb->>'receivedEmailId' = ${admitted.payload.receivedEmailId}`;
           const provider = ResendReceivingClient.of({
@@ -488,8 +489,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               time_zone, period_start, consumes_free_allowance, resume_at, admitted_at
             ) VALUES (
               ${deferredId}, ${defaultUserId}, ${`workflow-${deferredId}`}, 'deferred',
-              'CO', 'es-CO', 'America/Bogota', ${now}, true,
-              ${DateTime.add(now, { seconds: 1 })}, ${now}
+              'CO', 'es-CO', 'America/Bogota', ${DateTime.toDateUtc(now)}, true,
+              ${DateTime.toDateUtc(DateTime.add(now, { seconds: 1 }))}, ${DateTime.toDateUtc(now)}
             )
           `;
           const calls = yield* Ref.make(0);

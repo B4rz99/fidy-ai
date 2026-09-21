@@ -521,7 +521,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const sql = yield* MigrationSqlClient;
           expect(
             yield* sql`SELECT pid FROM pg_stat_activity WHERE datname = current_database()
-      AND state = 'idle in transaction' AND xact_start < ${blockedAt}`
+      AND state = 'idle in transaction' AND xact_start < ${DateTime.toDateUtc(blockedAt)}`
           ).toEqual([]);
           yield* Deferred.succeed(modelRelease, undefined);
           yield* Deferred.await(deliveryEntered);

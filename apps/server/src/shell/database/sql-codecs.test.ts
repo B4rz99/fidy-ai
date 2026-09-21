@@ -1,8 +1,9 @@
 import * as PgTypes from "@effect/sql-pg/PgTypes";
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
+import { pgTypeRegistry, regclassCodec } from "~/shell/database/internal/pg-type-registry";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
 const NativeCodec = Schema.Struct({
@@ -139,6 +140,36 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "fidy_durable",
           "public",
         ]);
+      })
+    );
+
+    it.effect("decodes the Migrator's regclass ledger probe as a relation OID", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const row = yield* SqlSchema.findOne({
+          Request: Schema.Void,
+          Result: Schema.Struct({ relationOid: Schema.Finite }),
+          execute: () => sql`SELECT 'effect_sql_migrations'::regclass AS "relationOid"`,
+        })(undefined);
+
+        expect(row.relationOid).toBeGreaterThan(0);
+      })
+    );
+
+    it.effect("round-trips the installed regclass codec and rejects invalid bytes and values", () =>
+      Effect.sync(() => {
+        const encoded = regclassCodec.encode(42_424);
+        expect(Result.isSuccess(encoded)).toBe(true);
+        if (Result.isFailure(encoded)) return;
+        expect(Array.from(encoded.success)).toEqual([0, 0, 165, 184]);
+        const decoded = regclassCodec.decode(encoded.success);
+        expect(Result.isSuccess(decoded)).toBe(true);
+        if (Result.isSuccess(decoded)) expect(decoded.success).toBe(42_424);
+        expect(Result.isFailure(regclassCodec.decode(Uint8Array.from([1, 2])))).toBe(true);
+        expect(Result.isFailure(regclassCodec.encode(-1))).toBe(true);
+        expect(Result.isFailure(regclassCodec.encode(1.5))).toBe(true);
+        expect(Result.isFailure(regclassCodec.encode(4_294_967_296))).toBe(true);
+        expect(PgTypes.arrayOidFor(2205, pgTypeRegistry)).toBe(2210);
       })
     );
 

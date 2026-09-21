@@ -2487,8 +2487,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         INSERT INTO web_sessions (
           id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
         ) VALUES (
-          ${webSessionId}, ${defaultUserId}, decode(repeat('25', 32), 'hex'), ${createdAt},
-          ${deadlines.freshUntil}, ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+          ${webSessionId}, ${defaultUserId}, decode(repeat('25', 32), 'hex'),
+          ${DateTime.toDateUtc(createdAt)}, ${DateTime.toDateUtc(deadlines.freshUntil)},
+          ${DateTime.toDateUtc(deadlines.idleExpiresAt)}, ${DateTime.toDateUtc(deadlines.hardExpiresAt)}
         )
       `;
       const issued = yield* withUserTransaction(

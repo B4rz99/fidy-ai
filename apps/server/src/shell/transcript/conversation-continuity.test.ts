@@ -1625,8 +1625,8 @@ const concurrentCompactionProgram = Effect.scoped(
               WHERE user_id = ${defaultUserId} AND status = 'active'),
             ${protectedTurnId},
             'Completed',
-            ${protectedEntry.occurredAt},
-            ${protectedEntry.occurredAt}
+            ${DateTime.toDateUtc(protectedEntry.occurredAt)},
+            ${DateTime.toDateUtc(protectedEntry.occurredAt)}
           )
         `;
     yield* sql`
@@ -2334,7 +2334,10 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       "round-trips schema-generated semantic content through PostgreSQL exactly",
       [TranscriptContentEntry],
       ([entry]) => generatedContentProgram(entry),
-      { timeout: 30_000, arbitrary: { runs: 40 } }
+      // Canonical storage checks (well-formed Unicode, no NUL, no negative zero) are filters the
+      // native generator cannot target, so roughly nine of ten generated roots are discarded
+      // before one evaluation; keep the forty runs and raise only the discard ceiling.
+      { timeout: 30_000, arbitrary: { runs: 40, maxDiscards: 2_000 } }
     );
     it.effect(
       "rejects malformed request content with a content-free defect",

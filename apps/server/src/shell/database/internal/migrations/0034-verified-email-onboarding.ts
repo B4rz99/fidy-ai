@@ -15,7 +15,9 @@ const createEmailEnrollments = Effect.gen(function* () {
         OR
         (decision_channel IS NOT NULL AND decision_provider IS NOT NULL
           AND decision_provider_message_id IS NOT NULL AND accepted_at IS NOT NULL)
-      );
+      )
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX pending_consent_decision_evidence_unique
       ON pending_consent_exchanges (
         decision_channel, decision_provider, decision_provider_message_id
@@ -48,8 +50,12 @@ const createEmailEnrollments = Effect.gen(function* () {
         (email_address IS NOT NULL AND delivery_generation > 0 AND resend_available_at IS NOT NULL)
       ),
       UNIQUE (business_portfolio_id, business_scoped_user_id)
-    );
-    CREATE INDEX email_enrollments_expiry_idx ON email_enrollments (expires_at, id);
+    )
+  `;
+  yield* sql`
+    CREATE INDEX email_enrollments_expiry_idx ON email_enrollments (expires_at, id)
+  `;
+  yield* sql`
     CREATE INDEX pending_consent_exchanges_expiry_idx
       ON pending_consent_exchanges (expires_at, id)
   `;
@@ -81,14 +87,18 @@ const createEmailEnrollments = Effect.gen(function* () {
       scope_key text PRIMARY KEY CHECK (scope_key ~ '^[0-9a-f]{64}$'),
       delivery_count integer NOT NULL CHECK (delivery_count BETWEEN 0 AND 5),
       expires_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX email_delivery_admission_budgets_expiry_idx
       ON email_delivery_admission_budgets (expires_at)
   `;
   yield* sql`
     CREATE TABLE email_verification_admission_slots (
       slot integer PRIMARY KEY CHECK (slot BETWEEN 1 AND 4)
-    );
+    )
+  `;
+  yield* sql`
     INSERT INTO email_verification_admission_slots (slot) VALUES (1), (2), (3), (4)
   `;
 });
@@ -100,7 +110,9 @@ const createStableCredentials = Effect.gen(function* () {
       user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       email_address text NOT NULL CHECK (email_address = lower(btrim(email_address))),
       verified_at timestamptz NOT NULL
-    );
+    )
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX verified_email_credentials_normalized_email_unique
       ON verified_email_credentials (lower(email_address))
   `;
@@ -112,13 +124,23 @@ const createStableCredentials = Effect.gen(function* () {
     )
   `;
   yield* sql`
-    ALTER TABLE verified_email_credentials ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE verified_email_credentials FORCE ROW LEVEL SECURITY;
+    ALTER TABLE verified_email_credentials ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE verified_email_credentials FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY verified_email_credentials_by_user ON verified_email_credentials
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE backup_recovery_credentials ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE backup_recovery_credentials FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE backup_recovery_credentials ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE backup_recovery_credentials FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY backup_recovery_credentials_by_user ON backup_recovery_credentials
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
@@ -173,11 +195,15 @@ const createOnboardingConstraintTriggers = Effect.gen(function* () {
         RAISE EXCEPTION 'email delivery intent must fence the current enrollment generation';
       END IF;
       RETURN NULL;
-    END $$;
+    END $$
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER current_email_delivery_from_enrollment
       AFTER INSERT OR UPDATE ON email_enrollments
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-      EXECUTE FUNCTION fidy_assert_current_email_delivery_generation();
+      EXECUTE FUNCTION fidy_assert_current_email_delivery_generation()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER current_email_delivery_from_intent
       AFTER INSERT OR UPDATE OR DELETE ON email_delivery_intents
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
@@ -216,11 +242,15 @@ const createOnboardingConstraintTriggers = Effect.gen(function* () {
         RAISE EXCEPTION 'email enrollment requires complete accepted Consent evidence';
       END IF;
       RETURN NULL;
-    END $$;
+    END $$
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER pending_onboarding_complete_from_consent
       AFTER INSERT OR UPDATE OR DELETE ON pending_consent_exchanges
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-      EXECUTE FUNCTION fidy_assert_pending_onboarding_complete();
+      EXECUTE FUNCTION fidy_assert_pending_onboarding_complete()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER pending_onboarding_complete_from_enrollment
       AFTER INSERT OR UPDATE OR DELETE ON email_enrollments
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
@@ -253,19 +283,29 @@ const createOnboardingConstraintTriggers = Effect.gen(function* () {
         RAISE EXCEPTION 'stable User requires WhatsAppIdentity, ConsentRecord, VerifiedEmailCredential, BackupRecoveryCode, and TrialPeriod';
       END IF;
       RETURN NULL;
-    END $$;
+    END $$
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER complete_user_from_users
       AFTER INSERT OR UPDATE ON users DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-      EXECUTE FUNCTION fidy_assert_complete_user();
+      EXECUTE FUNCTION fidy_assert_complete_user()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER complete_user_from_whatsapp
       AFTER INSERT OR UPDATE OR DELETE ON whatsapp_identities
-      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user();
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER complete_user_from_consent
       AFTER INSERT OR UPDATE OR DELETE ON consent_records
-      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user();
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER complete_user_from_email
       AFTER INSERT OR UPDATE OR DELETE ON verified_email_credentials
-      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user();
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user()
+  `;
+  yield* sql`
     CREATE CONSTRAINT TRIGGER complete_user_from_recovery
       AFTER INSERT OR UPDATE OR DELETE ON backup_recovery_credentials
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fidy_assert_complete_user()
@@ -275,12 +315,24 @@ const createOnboardingConstraintTriggers = Effect.gen(function* () {
 const grantAccess = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    GRANT UPDATE ON pending_consent_exchanges TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON email_enrollments TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON email_delivery_intents TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON email_delivery_admission_budgets TO fidy_runtime;
-    GRANT SELECT, UPDATE ON email_verification_admission_slots TO fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON verified_email_credentials TO fidy_runtime;
+    GRANT UPDATE ON pending_consent_exchanges TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON email_enrollments TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON email_delivery_intents TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON email_delivery_admission_budgets TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE ON email_verification_admission_slots TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON verified_email_credentials TO fidy_runtime
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON backup_recovery_credentials TO fidy_runtime
   `;
 });

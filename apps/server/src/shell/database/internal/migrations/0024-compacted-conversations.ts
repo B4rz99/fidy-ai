@@ -20,8 +20,12 @@ export const compactedConversations = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE compacted_conversations ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE compacted_conversations FORCE ROW LEVEL SECURITY;
+    ALTER TABLE compacted_conversations ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE compacted_conversations FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY compacted_conversations_by_user ON compacted_conversations
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)

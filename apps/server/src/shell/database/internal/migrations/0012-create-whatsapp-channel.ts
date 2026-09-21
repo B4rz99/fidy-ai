@@ -97,23 +97,45 @@ const createReceiptAndWindowTables = Effect.gen(function* () {
 const restrictChannelTablesToOwner = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE whatsapp_message_evidence ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_message_evidence FORCE ROW LEVEL SECURITY;
+    ALTER TABLE whatsapp_message_evidence ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_message_evidence FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_message_evidence_by_user ON whatsapp_message_evidence
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE whatsapp_inbound_jobs ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_inbound_jobs FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_inbound_jobs ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_inbound_jobs FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_inbound_jobs_by_user ON whatsapp_inbound_jobs
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE whatsapp_turn_claims ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_turn_claims FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_turn_claims ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_turn_claims FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_turn_claims_by_user ON whatsapp_turn_claims
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-    ALTER TABLE whatsapp_conversation_windows ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_conversation_windows FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_conversation_windows ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_conversation_windows FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_conversation_windows_by_user ON whatsapp_conversation_windows
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
@@ -222,7 +244,9 @@ const createSingleUseIngressBudgetGateway = Effect.gen(function* () {
   `;
   yield* sql`
     REVOKE ALL ON FUNCTION
-      fidy_consume_whatsapp_budget_once(text, text, timestamptz, integer) FROM PUBLIC;
+      fidy_consume_whatsapp_budget_once(text, text, timestamptz, integer) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION
       fidy_consume_whatsapp_budget_once(text, text, timestamptz, integer) TO fidy_runtime
   `;
@@ -248,7 +272,9 @@ const createOperationalPruningGateway = Effect.gen(function* () {
     ALTER FUNCTION fidy_prune_whatsapp_operational_data() OWNER TO fidy_gateway
   `;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_prune_whatsapp_operational_data() FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_prune_whatsapp_operational_data() FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_prune_whatsapp_operational_data() TO fidy_runtime
   `;
 });
@@ -295,7 +321,9 @@ const createReceiptClaimGateway = Effect.gen(function* () {
     ALTER FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) OWNER TO fidy_gateway
   `;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) TO fidy_runtime
   `;
 });
@@ -322,7 +350,9 @@ const createReceiptOutboundStartGateway = Effect.gen(function* () {
     OWNER TO fidy_gateway
   `;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_mark_whatsapp_receipt_outbound_started(text, uuid) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_mark_whatsapp_receipt_outbound_started(text, uuid) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_mark_whatsapp_receipt_outbound_started(text, uuid)
       TO fidy_runtime
   `;
@@ -348,7 +378,9 @@ const createReceiptReleaseGateway = Effect.gen(function* () {
     ALTER FUNCTION fidy_release_whatsapp_receipt(text, uuid) OWNER TO fidy_gateway
   `;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_release_whatsapp_receipt(text, uuid) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_release_whatsapp_receipt(text, uuid) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_release_whatsapp_receipt(text, uuid) TO fidy_runtime
   `;
 });
@@ -375,7 +407,9 @@ const createReceiptCompletionGateway = Effect.gen(function* () {
     ALTER FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) OWNER TO fidy_gateway
   `;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) TO fidy_runtime
   `;
 });

@@ -6,8 +6,9 @@ export const fixedPATLifetimes = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    DROP FUNCTION IF EXISTS public.fidy_use_token(text, timestamptz, timestamptz);
-
+    DROP FUNCTION IF EXISTS public.fidy_use_token(text, timestamptz, timestamptz)
+  `;
+  yield* sql`
     DO $migration$
     DECLARE lifecycle_constraint record;
     BEGIN
@@ -29,12 +30,21 @@ export const fixedPATLifetimes = Effect.gen(function* () {
         );
       END LOOP;
     END
-    $migration$;
-
-    ALTER TABLE tokens RENAME COLUMN idle_expires_at TO expires_at;
-    ALTER TABLE tokens ADD COLUMN lifetime_days integer NOT NULL DEFAULT 90;
-    UPDATE tokens SET expires_at = created_at + INTERVAL '90 days';
-    ALTER TABLE tokens ALTER COLUMN lifetime_days DROP DEFAULT;
+    $migration$
+  `;
+  yield* sql`
+    ALTER TABLE tokens RENAME COLUMN idle_expires_at TO expires_at
+  `;
+  yield* sql`
+    ALTER TABLE tokens ADD COLUMN lifetime_days integer NOT NULL DEFAULT 90
+  `;
+  yield* sql`
+    UPDATE tokens SET expires_at = created_at + INTERVAL '90 days'
+  `;
+  yield* sql`
+    ALTER TABLE tokens ALTER COLUMN lifetime_days DROP DEFAULT
+  `;
+  yield* sql`
     ALTER TABLE tokens
       ADD CONSTRAINT tokens_lifetime_days_check
         CHECK (lifetime_days IN (7, 30, 90, 365)),
@@ -46,8 +56,9 @@ export const fixedPATLifetimes = Effect.gen(function* () {
       ADD CONSTRAINT tokens_last_used_lifecycle_check
         CHECK (last_used_at IS NULL OR (last_used_at >= created_at AND last_used_at < expires_at)),
       ADD CONSTRAINT tokens_revocation_after_use_check
-        CHECK (revoked_at IS NULL OR last_used_at IS NULL OR revoked_at >= last_used_at);
-
+        CHECK (revoked_at IS NULL OR last_used_at IS NULL OR revoked_at >= last_used_at)
+  `;
+  yield* sql`
     ALTER TABLE consent_records
       DROP CONSTRAINT consent_records_decision_origin_check,
       ADD CONSTRAINT consent_records_decision_origin_check CHECK (
@@ -84,8 +95,9 @@ export const fixedPATLifetimes = Effect.gen(function* () {
             'pat-approved-unclaimed-expiry', 'pat-fixed-lifetime-expiry'
           )
         )
-      );
-
+      )
+  `;
+  yield* sql`
     CREATE FUNCTION public.fidy_use_token(
       lookup_token_hash text,
       use_time timestamptz
@@ -121,10 +133,15 @@ export const fixedPATLifetimes = Effect.gen(function* () {
         RETURNING token.id, token.user_id, token.scopes, token.last_used_at
       )
       SELECT active.id, active.user_id, active.scopes, active.last_used_at FROM active
-    $function$;
-
-    ALTER FUNCTION public.fidy_use_token(text, timestamptz) OWNER TO fidy_gateway;
-    REVOKE ALL ON FUNCTION public.fidy_use_token(text, timestamptz) FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION public.fidy_use_token(text, timestamptz) TO fidy_runtime;
+    $function$
+  `;
+  yield* sql`
+    ALTER FUNCTION public.fidy_use_token(text, timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION public.fidy_use_token(text, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION public.fidy_use_token(text, timestamptz) TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

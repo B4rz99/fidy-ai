@@ -1,53 +1,92 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/** Drained-worker cutover: retains provider evidence and removes the legacy executor. */
-export const effectWhatsAppDisclosure = Effect.gen(function* () {
+const replaceWhatsAppDisclosureStorage = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    DROP FUNCTION fidy_claim_whatsapp_disclosure_delivery(uuid,uuid,text,timestamptz);
-    DROP FUNCTION fidy_release_whatsapp_disclosure_claim(uuid,uuid);
-    DROP FUNCTION fidy_find_due_whatsapp_disclosure_retry(timestamptz);
-    DROP FUNCTION fidy_claim_whatsapp_disclosure_retry(uuid,uuid,text,timestamptz);
-    DROP FUNCTION fidy_mark_whatsapp_disclosure_attempt_started(uuid,uuid,text,timestamptz);
-    DROP FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid);
-    DROP FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text);
-    DROP FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,timestamptz);
+    DROP FUNCTION fidy_claim_whatsapp_disclosure_delivery(uuid,uuid,text,timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_release_whatsapp_disclosure_claim(uuid,uuid)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_find_due_whatsapp_disclosure_retry(timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_claim_whatsapp_disclosure_retry(uuid,uuid,text,timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_mark_whatsapp_disclosure_attempt_started(uuid,uuid,text,timestamptz)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text)
+  `;
+  yield* sql`
+    DROP FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,timestamptz)
+  `;
+  yield* sql`
     CREATE TABLE whatsapp_consent_disclosure_requests (
       exchange_id uuid PRIMARY KEY,
       expires_at timestamptz NOT NULL,
       business_phone_number_id text NOT NULL CHECK (length(business_phone_number_id) BETWEEN 1 AND 256),
       sandbox_phone text CHECK (sandbox_phone ~ '^[+][1-9][0-9]{6,14}$')
-    );
-    REVOKE ALL ON whatsapp_consent_disclosure_requests FROM PUBLIC, fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON whatsapp_consent_disclosure_requests TO fidy_gateway;
+    )
+  `;
+  yield* sql`
+    REVOKE ALL ON whatsapp_consent_disclosure_requests FROM PUBLIC, fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE, DELETE ON whatsapp_consent_disclosure_requests TO fidy_gateway
+  `;
+  yield* sql`
     INSERT INTO whatsapp_consent_disclosure_requests(exchange_id, expires_at, business_phone_number_id)
       SELECT DISTINCT ON (a.exchange_id) a.exchange_id, e.expires_at, a.business_phone_number_id
       FROM whatsapp_consent_disclosure_delivery_attempts a
       JOIN pending_consent_exchanges e ON e.id = a.exchange_id
-      WHERE a.business_phone_number_id IS NOT NULL ORDER BY a.exchange_id, a.attempt_number DESC;
-    DELETE FROM whatsapp_consent_disclosure_delivery_attempts WHERE status = 'claimed';
-    DROP INDEX consent_disclosure_one_active_attempt;
-    DROP INDEX consent_disclosure_due_retries;
+      WHERE a.business_phone_number_id IS NOT NULL ORDER BY a.exchange_id, a.attempt_number DESC
+  `;
+  yield* sql`
+    DELETE FROM whatsapp_consent_disclosure_delivery_attempts WHERE status = 'claimed'
+  `;
+  yield* sql`
+    DROP INDEX consent_disclosure_one_active_attempt
+  `;
+  yield* sql`
+    DROP INDEX consent_disclosure_due_retries
+  `;
+  yield* sql`
     ALTER TABLE whatsapp_consent_disclosure_delivery_attempts
       DROP CONSTRAINT whatsapp_consent_disclosure_delivery_attempts_status_check,
       DROP CONSTRAINT whatsapp_consent_disclosure_delivery_attempts_check,
       DROP CONSTRAINT whatsapp_consent_disclosure_delivery_attempts_check3,
       ADD COLUMN retryable boolean NOT NULL DEFAULT false,
-      ADD COLUMN evidence_revision integer NOT NULL DEFAULT 0 CHECK (evidence_revision >= 0);
+      ADD COLUMN evidence_revision integer NOT NULL DEFAULT 0 CHECK (evidence_revision >= 0)
+  `;
+  yield* sql`
     UPDATE whatsapp_consent_disclosure_delivery_attempts SET
       retryable = status = 'retry-scheduled',
       status = CASE WHEN status = 'started' THEN 'reconciliation-required'
-        WHEN status = 'retry-scheduled' THEN 'definitively-failed' ELSE status END;
+        WHEN status = 'retry-scheduled' THEN 'definitively-failed' ELSE status END
+  `;
+  yield* sql`
     ALTER TABLE whatsapp_consent_disclosure_delivery_attempts
       DROP COLUMN claim_expires_at, DROP COLUMN retry_at,
       ADD CHECK (status IN ('started','reconciliation-required','delivered','definitively-failed','retry-exhausted')),
       ADD CHECK (started_at IS NOT NULL),
-      ADD UNIQUE(exchange_id, attempt_number);
+      ADD UNIQUE(exchange_id, attempt_number)
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX consent_disclosure_one_active_attempt
       ON whatsapp_consent_disclosure_delivery_attempts(exchange_id)
-      WHERE status IN ('started','reconciliation-required');
+      WHERE status IN ('started','reconciliation-required')
   `;
+});
+
+const replaceWhatsAppDisclosureFunctions = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
     CREATE OR REPLACE FUNCTION fidy_lock_whatsapp_disclosure(target_exchange_id uuid) RETURNS void
@@ -56,10 +95,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       PERFORM 1 FROM public.pending_consent_exchanges WHERE id = target_exchange_id FOR UPDATE;
       PERFORM 1 FROM public.whatsapp_consent_disclosure_requests WHERE exchange_id = target_exchange_id FOR UPDATE;
     END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_lock_whatsapp_disclosure(uuid) FROM PUBLIC;
-    ALTER FUNCTION fidy_lock_whatsapp_disclosure(uuid) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_lock_whatsapp_disclosure(uuid) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_lock_whatsapp_disclosure(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_lock_whatsapp_disclosure(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_lock_whatsapp_disclosure(uuid) TO fidy_runtime
   `;
 
   yield* sql`
@@ -75,10 +120,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
         ON CONFLICT DO NOTHING;
       RETURN true;
     END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_request_whatsapp_disclosure(uuid,text,text,timestamptz) TO fidy_runtime
   `;
 
   yield* sql`
@@ -87,10 +138,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       SELECT r.business_phone_number_id, r.sandbox_phone FROM public.whatsapp_consent_disclosure_requests r
       JOIN public.pending_consent_exchanges e ON e.id = r.exchange_id
       WHERE e.id = target_exchange_id AND e.lifecycle = 'awaiting-disclosure-delivery' AND e.expires_at > at_time
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_request(uuid,timestamptz) TO fidy_runtime
   `;
 
   yield* sql`
@@ -101,10 +158,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       WHERE e.lifecycle = 'awaiting-disclosure-delivery' AND e.expires_at > at_time
         AND (after_id IS NULL OR r.exchange_id > after_id)
       ORDER BY r.exchange_id LIMIT 100
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) FROM PUBLIC;
-    ALTER FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_find_pending_whatsapp_disclosure_requests(timestamptz,uuid) TO fidy_runtime
   `;
 
   yield* sql`
@@ -135,10 +198,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
         FROM public.whatsapp_consent_disclosure_requests r WHERE r.exchange_id = target_exchange_id;
       RETURN QUERY SELECT target_attempt_id, ordinal;
     END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) FROM PUBLIC;
-    ALTER FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) TO fidy_runtime
   `;
 
   yield* sql`
@@ -147,10 +216,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       SELECT id,status,safe_reason,attempt_number,retryable,failure_occurred_at,evidence_revision
       FROM public.whatsapp_consent_disclosure_delivery_attempts WHERE exchange_id = target_exchange_id
       ORDER BY attempt_number DESC LIMIT 1
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) FROM PUBLIC;
-    ALTER FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_delivery_state(uuid) TO fidy_runtime
   `;
 
   yield* sql`
@@ -158,88 +233,112 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
     LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
       SELECT exchange_id,id,attempt_number,status,evidence_revision
       FROM public.whatsapp_consent_disclosure_delivery_attempts WHERE correlation_hash = target_correlation_token
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) FROM PUBLIC;
-    ALTER FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_find_whatsapp_disclosure_attempt_by_correlation(text) TO fidy_runtime
   `;
 
   yield* sql`
-    CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_accepted_at timestamptz) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
-    BEGIN
-      PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
-      UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'reconciliation-required', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1
-        WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
-          AND correlation_hash = target_correlation_token
-          AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
-            JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
-            WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
-          AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
-            WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
-          AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
-          AND target_accepted_at >= date_trunc('second', started_at)
-          AND status = 'started' AND latest_evidence_at IS NULL
-;
-      RETURN FOUND;
-    END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) TO fidy_runtime;
+        CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_accepted_at timestamptz) RETURNS boolean
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
+        BEGIN
+          PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
+          UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'reconciliation-required', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1
+            WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
+              AND correlation_hash = target_correlation_token
+              AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
+                JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
+                WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
+              AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
+                WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
+              AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
+              AND target_accepted_at >= date_trunc('second', started_at)
+              AND status = 'started' AND latest_evidence_at IS NULL
+    ;
+          RETURN FOUND;
+        END
+        \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_accepted(uuid,uuid,text,text,timestamptz) TO fidy_runtime
   `;
 
   yield* sql`
-    CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_occurred_at timestamptz) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
-    BEGIN
-      PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
-      UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'reconciliation-required', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1, latest_evidence_at = target_occurred_at, retryable = false
-        WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
-          AND correlation_hash = target_correlation_token
-          AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
-            JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
-            WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
-          AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
-            WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
-          AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
-          AND target_occurred_at >= date_trunc('second', started_at)
-          AND status IN ('started','reconciliation-required','definitively-failed','retry-exhausted')
-          AND target_occurred_at >= COALESCE(latest_evidence_at, '-infinity'::timestamptz)
-          AND NOT (status = 'reconciliation-required' AND latest_evidence_at IS NOT NULL AND provider_message_id IS NOT DISTINCT FROM target_provider_message_id AND latest_evidence_at = target_occurred_at)
-;
-      RETURN FOUND;
-    END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) TO fidy_runtime;
+        CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_occurred_at timestamptz) RETURNS boolean
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
+        BEGIN
+          PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
+          UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'reconciliation-required', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1, latest_evidence_at = target_occurred_at, retryable = false
+            WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
+              AND correlation_hash = target_correlation_token
+              AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
+                JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
+                WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
+              AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
+                WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
+              AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
+              AND target_occurred_at >= date_trunc('second', started_at)
+              AND status IN ('started','reconciliation-required','definitively-failed','retry-exhausted')
+              AND target_occurred_at >= COALESCE(latest_evidence_at, '-infinity'::timestamptz)
+              AND NOT (status = 'reconciliation-required' AND latest_evidence_at IS NOT NULL AND provider_message_id IS NOT DISTINCT FROM target_provider_message_id AND latest_evidence_at = target_occurred_at)
+    ;
+          RETURN FOUND;
+        END
+        \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_sent(uuid,uuid,text,text,timestamptz) TO fidy_runtime
   `;
 
   yield* sql`
-    CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_delivered_at timestamptz) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
-    BEGIN
-      PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
-      UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'delivered', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1, latest_evidence_at = target_delivered_at, retryable = false, delivered_at = target_delivered_at
-        WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
-          AND correlation_hash = target_correlation_token
-          AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
-            JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
-            WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
-          AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
-            WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
-          AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
-          AND target_delivered_at >= date_trunc('second', started_at)
-          AND status IN ('started','reconciliation-required','definitively-failed','retry-exhausted')
-          AND target_delivered_at >= COALESCE(latest_evidence_at, '-infinity'::timestamptz)
-;
-      RETURN FOUND;
-    END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) TO fidy_runtime;
+        CREATE OR REPLACE FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(target_exchange_id uuid, target_attempt_id uuid, target_correlation_token text, target_provider_message_id text, target_delivered_at timestamptz) RETURNS boolean
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
+        BEGIN
+          PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
+          UPDATE public.whatsapp_consent_disclosure_delivery_attempts attempt SET status = 'delivered', provider_message_id = target_provider_message_id, evidence_revision = evidence_revision + 1, latest_evidence_at = target_delivered_at, retryable = false, delivered_at = target_delivered_at
+            WHERE           id = target_attempt_id AND exchange_id = target_exchange_id
+              AND correlation_hash = target_correlation_token
+              AND EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
+                JOIN public.pending_consent_exchanges owner ON owner.id = request.exchange_id
+                WHERE request.exchange_id = target_exchange_id AND owner.lifecycle = 'awaiting-disclosure-delivery')
+              AND NOT EXISTS (SELECT 1 FROM public.whatsapp_consent_disclosure_delivery_attempts successor
+                WHERE successor.exchange_id = target_exchange_id AND successor.attempt_number > attempt.attempt_number)
+              AND (provider_message_id IS NULL OR provider_message_id = target_provider_message_id)
+              AND target_delivered_at >= date_trunc('second', started_at)
+              AND status IN ('started','reconciliation-required','definitively-failed','retry-exhausted')
+              AND target_delivered_at >= COALESCE(latest_evidence_at, '-infinity'::timestamptz)
+    ;
+          RETURN FOUND;
+        END
+        \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_delivered(uuid,uuid,text,text,timestamptz) TO fidy_runtime
   `;
 
   yield* sql`
@@ -277,10 +376,16 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
           AND failure_occurred_at IS NOT DISTINCT FROM target_occurred_at);
       RETURN FOUND;
     END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) FROM PUBLIC;
-    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) TO fidy_runtime;
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_record_whatsapp_disclosure_attempt_failure(uuid,uuid,text,text,text,timestamptz,boolean,boolean,text) TO fidy_runtime
   `;
   yield* sql`
     CREATE FUNCTION fidy_find_expired_whatsapp_disclosure_requests(at_time timestamptz)
@@ -290,11 +395,18 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       WHERE r.expires_at <= at_time OR NOT EXISTS (
         SELECT 1 FROM public.pending_consent_exchanges e WHERE e.id = r.exchange_id
       ) ORDER BY r.expires_at, r.exchange_id LIMIT 100
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) TO fidy_runtime;
-
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_is_whatsapp_disclosure_request_expired(target_exchange_id uuid, at_time timestamptz)
     RETURNS boolean LANGUAGE sql SECURITY DEFINER
     SET search_path = pg_catalog, public AS \$function\$
@@ -306,11 +418,18 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
           )
         )
       )
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) TO fidy_runtime;
-
+    \$function\$
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_remove_whatsapp_disclosure_request(target_exchange_id uuid)
     RETURNS void LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = pg_catalog, public AS \$function\$
@@ -319,9 +438,21 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       DELETE FROM public.whatsapp_consent_disclosure_delivery_attempts WHERE exchange_id = target_exchange_id;
       DELETE FROM public.whatsapp_consent_disclosure_requests WHERE exchange_id = target_exchange_id;
     END
-    \$function\$;
-    REVOKE ALL ON FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) FROM PUBLIC;
-    ALTER FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) TO fidy_runtime;
+    \$function\$
   `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_remove_whatsapp_disclosure_request(uuid) TO fidy_runtime
+  `;
+});
+
+/** Drained-worker cutover: retains provider evidence and removes the legacy executor. */
+export const effectWhatsAppDisclosure = Effect.gen(function* () {
+  yield* replaceWhatsAppDisclosureStorage;
+  yield* replaceWhatsAppDisclosureFunctions;
 }).pipe(Effect.asVoid);

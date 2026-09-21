@@ -142,8 +142,10 @@ const prepareTokenVariantColumns = Effect.gen(function* () {
   `;
 
   yield* sql`
-    DROP INDEX IF EXISTS public.agent_tokens_hosted_expiry_idx;
-    DROP INDEX IF EXISTS public.tokens_hosted_turn_expiry_idx;
+    DROP INDEX IF EXISTS public.agent_tokens_hosted_expiry_idx
+  `;
+  yield* sql`
+    DROP INDEX IF EXISTS public.tokens_hosted_turn_expiry_idx
   `;
 });
 
@@ -237,8 +239,12 @@ const reconcileHostedAgentSessionBase = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE public.hosted_agent_sessions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE public.hosted_agent_sessions FORCE ROW LEVEL SECURITY;
+    ALTER TABLE public.hosted_agent_sessions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE public.hosted_agent_sessions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.hosted_agent_sessions TO fidy_runtime
   `;
 
@@ -958,8 +964,9 @@ const reconcileTokenGateway = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    DROP FUNCTION IF EXISTS public.fidy_use_agent_token(text, timestamptz, timestamptz);
-
+    DROP FUNCTION IF EXISTS public.fidy_use_agent_token(text, timestamptz, timestamptz)
+  `;
+  yield* sql`
     CREATE OR REPLACE FUNCTION public.fidy_use_token(
       lookup_token_hash text,
       use_time timestamptz,
@@ -997,13 +1004,18 @@ const reconcileTokenGateway = Effect.gen(function* () {
         RETURNING token.id, token.user_id, token.scopes, token.last_used_at
       )
       SELECT active.id, active.user_id, active.scopes, active.last_used_at FROM active
-    $function$;
-
+    $function$
+  `;
+  yield* sql`
     ALTER FUNCTION public.fidy_use_token(text, timestamptz, timestamptz)
-      OWNER TO fidy_gateway;
-    REVOKE ALL ON FUNCTION public.fidy_use_token(text, timestamptz, timestamptz) FROM PUBLIC;
+      OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION public.fidy_use_token(text, timestamptz, timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION public.fidy_use_token(text, timestamptz, timestamptz)
-      TO fidy_runtime;
+      TO fidy_runtime
   `;
 });
 

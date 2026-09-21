@@ -36,7 +36,7 @@ const moneyArbitrary = Arbitrary.schema(Schema.Literals(["JPY", "COP", "KWD", "U
         )
       ),
     ]).pipe(
-      Arbitrary.map(([coefficient, scale]): ReadonlyMoney => ({
+      Arbitrary.map(([coefficient, scale]: readonly [bigint, number]): ReadonlyMoney => ({
         amount: BigDecimal.make(coefficient, scale),
         currency,
       }))

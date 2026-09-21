@@ -6,8 +6,12 @@ export const manualPATIssuance = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    ALTER TABLE tokens ADD COLUMN recipient_label text;
-    UPDATE tokens SET recipient_label = 'PAT ' || short_id;
+    ALTER TABLE tokens ADD COLUMN recipient_label text
+  `;
+  yield* sql`
+    UPDATE tokens SET recipient_label = 'PAT ' || short_id
+  `;
+  yield* sql`
     ALTER TABLE tokens
       ALTER COLUMN recipient_label SET NOT NULL,
       ADD CONSTRAINT tokens_recipient_label_check CHECK (

@@ -36,15 +36,23 @@ export const monthlyBudgets = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE budgets FORCE ROW LEVEL SECURITY;
+    ALTER TABLE budgets ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE budgets FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY budgets_by_user ON budgets
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE budget_month_latches ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE budget_month_latches FORCE ROW LEVEL SECURITY;
+    ALTER TABLE budget_month_latches ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE budget_month_latches FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY budget_month_latches_by_user ON budget_month_latches
       USING (EXISTS (
         SELECT 1 FROM budgets

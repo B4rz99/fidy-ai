@@ -74,29 +74,45 @@ const grantRuntimeTableAuthority = Effect.gen(function* () {
 const restrictIdentityTablesToOwner = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE users FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY users_by_user ON users
       USING (id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE whatsapp_identities ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_identities FORCE ROW LEVEL SECURITY;
+    ALTER TABLE whatsapp_identities ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_identities FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_identities_by_user ON whatsapp_identities
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE tokens ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE tokens FORCE ROW LEVEL SECURITY;
+    ALTER TABLE tokens ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE tokens FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY tokens_by_user ON tokens
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE audit_log_entries ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE audit_log_entries FORCE ROW LEVEL SECURITY;
+    ALTER TABLE audit_log_entries ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE audit_log_entries FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY audit_log_entries_by_user ON audit_log_entries
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
@@ -106,22 +122,34 @@ const restrictIdentityTablesToOwner = Effect.gen(function* () {
 const restrictTransactionTablesToOwner = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
+    ALTER TABLE transactions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE transactions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY transactions_by_user ON transactions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE keyword_rules ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE keyword_rules FORCE ROW LEVEL SECURITY;
+    ALTER TABLE keyword_rules ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE keyword_rules FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY keyword_rules_by_user ON keyword_rules
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE source_attestations ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE source_attestations FORCE ROW LEVEL SECURITY;
+    ALTER TABLE source_attestations ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE source_attestations FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY source_attestations_by_user ON source_attestations
       USING (EXISTS (
         SELECT 1 FROM transactions
@@ -139,15 +167,23 @@ const restrictTransactionTablesToOwner = Effect.gen(function* () {
 const restrictInsightTablesToOwner = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE insight_events ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE insight_events FORCE ROW LEVEL SECURITY;
+    ALTER TABLE insight_events ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE insight_events FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY insight_events_by_user ON insight_events
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE insight_money_groups ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE insight_money_groups FORCE ROW LEVEL SECURITY;
+    ALTER TABLE insight_money_groups ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE insight_money_groups FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY insight_money_groups_by_user ON insight_money_groups
       USING (EXISTS (
         SELECT 1 FROM insight_events
@@ -161,8 +197,12 @@ const restrictInsightTablesToOwner = Effect.gen(function* () {
       ))
   `;
   yield* sql`
-    ALTER TABLE insight_delivery_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE insight_delivery_attempts FORCE ROW LEVEL SECURITY;
+    ALTER TABLE insight_delivery_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE insight_delivery_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY insight_delivery_attempts_by_user ON insight_delivery_attempts
       USING (EXISTS (
         SELECT 1 FROM insight_events
@@ -180,15 +220,23 @@ const restrictInsightTablesToOwner = Effect.gen(function* () {
 const restrictDashboardAndTranscriptTablesToOwner = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE dashboards ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE dashboards FORCE ROW LEVEL SECURITY;
+    ALTER TABLE dashboards ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE dashboards FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY dashboards_by_user ON dashboards
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE transcript_entries ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE transcript_entries FORCE ROW LEVEL SECURITY;
+    ALTER TABLE transcript_entries ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE transcript_entries FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY transcript_entries_by_user ON transcript_entries
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)

@@ -7,8 +7,9 @@ export const supportRecovery = Effect.gen(function* () {
 
   yield* sql`
     ALTER TABLE web_sessions ADD COLUMN source_pairing_id uuid
-      REFERENCES browser_login_pairings(id) ON DELETE SET NULL;
-
+      REFERENCES browser_login_pairings(id) ON DELETE SET NULL
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_capture_web_session_source_pairing() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
     AS $function$
@@ -22,11 +23,15 @@ export const supportRecovery = Effect.gen(function* () {
       );
       RETURN NEW;
     END
-    $function$;
+    $function$
+  `;
+  yield* sql`
     CREATE TRIGGER web_session_source_pairing
       BEFORE INSERT ON web_sessions FOR EACH ROW
-      EXECUTE FUNCTION fidy_capture_web_session_source_pairing();
-    REVOKE ALL ON FUNCTION fidy_capture_web_session_source_pairing() FROM PUBLIC;
+      EXECUTE FUNCTION fidy_capture_web_session_source_pairing()
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_capture_web_session_source_pairing() FROM PUBLIC
   `;
 
   yield* sql`
@@ -54,12 +59,17 @@ export const supportRecovery = Effect.gen(function* () {
       closed_at timestamptz,
       CHECK ((lifecycle = 'open') = (closed_at IS NULL)),
       CHECK (closed_at IS NULL OR (closed_at >= opened_at AND closed_at <= expires_at))
-    );
+    )
+  `;
+  yield* sql`
     CREATE UNIQUE INDEX support_recovery_one_open_case_per_user
-      ON support_recovery_cases (user_id) WHERE lifecycle = 'open';
+      ON support_recovery_cases (user_id) WHERE lifecycle = 'open'
+  `;
+  yield* sql`
     CREATE INDEX support_recovery_terminal_retention
-      ON support_recovery_cases (closed_at, id) WHERE lifecycle <> 'open';
-
+      ON support_recovery_cases (closed_at, id) WHERE lifecycle <> 'open'
+  `;
+  yield* sql`
     ALTER TABLE backup_recovery_credentials
       ADD COLUMN consumed_by_case_id uuid
         REFERENCES support_recovery_cases(id) ON DELETE SET NULL,
@@ -93,15 +103,18 @@ export const supportRecovery = Effect.gen(function* () {
         OR (action = 'expire' AND outcome = 'expired')
       ),
       CHECK ((action = 'expire') = (policy_revision IS NOT NULL))
-    );
-
+    )
+  `;
+  yield* sql`
     CREATE TABLE support_recovery_admission_attempts (
       operator_issuer text NOT NULL,
       operator_subject text NOT NULL,
       attempted_at timestamptz NOT NULL,
       invocation_count integer NOT NULL CHECK (invocation_count > 0),
       PRIMARY KEY (operator_issuer, operator_subject, attempted_at)
-    );
+    )
+  `;
+  yield* sql`
     CREATE INDEX support_recovery_admission_global_time
       ON support_recovery_admission_attempts (attempted_at DESC)
   `;
@@ -126,7 +139,9 @@ export const supportRecovery = Effect.gen(function* () {
         RAISE EXCEPTION 'SupportRecoveryCase requires one live bounded pairing';
       END IF;
       RETURN NEW;
-    END $$;
+    END $$
+  `;
+  yield* sql`
     CREATE TRIGGER support_recovery_case_transition
       BEFORE INSERT OR UPDATE ON support_recovery_cases
       FOR EACH ROW EXECUTE FUNCTION fidy_assert_support_recovery_case()
@@ -169,31 +184,47 @@ export const supportRecovery = Effect.gen(function* () {
         END IF;
       END IF;
       RETURN NEW;
-    END $$;
+    END $$
+  `;
+  yield* sql`
     CREATE TRIGGER support_recovery_event_append
       BEFORE INSERT ON support_recovery_case_events
       FOR EACH ROW EXECUTE FUNCTION fidy_assert_support_recovery_event()
   `;
 
   yield* sql`
-    ALTER TABLE support_recovery_cases ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE support_recovery_cases FORCE ROW LEVEL SECURITY;
+    ALTER TABLE support_recovery_cases ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE support_recovery_cases FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY support_recovery_cases_by_user ON support_recovery_cases
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE support_recovery_case_events ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE support_recovery_case_events FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE support_recovery_case_events ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE support_recovery_case_events FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY support_recovery_case_events_by_user ON support_recovery_case_events
       USING (EXISTS (SELECT 1 FROM support_recovery_cases recovery_case
         WHERE recovery_case.id = case_id
           AND recovery_case.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid))
       WITH CHECK (EXISTS (SELECT 1 FROM support_recovery_cases recovery_case
         WHERE recovery_case.id = case_id
-          AND recovery_case.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid));
-
-    ALTER TABLE support_recovery_admission_attempts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE support_recovery_admission_attempts FORCE ROW LEVEL SECURITY;
+          AND recovery_case.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid))
+  `;
+  yield* sql`
+    ALTER TABLE support_recovery_admission_attempts ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE support_recovery_admission_attempts FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY support_recovery_admission_anonymous ON support_recovery_admission_attempts
       USING (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
       WITH CHECK (NULLIF(current_setting('fidy.user_id', true), '') IS NULL)
@@ -217,8 +248,9 @@ export const supportRecovery = Effect.gen(function* () {
             AND matching_credential.consumed_at IS NULL
         )
       LIMIT 1
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_resolve_attributed_support_recovery(text)
     RETURNS TABLE (user_id uuid, credential_revision integer, pairing_id uuid,
       pairing_expires_at timestamptz)
@@ -231,14 +263,16 @@ export const supportRecovery = Effect.gen(function* () {
       WHERE pairing.public_code = $1 AND recovery_case.lifecycle = 'open'
         AND pairing.lifecycle = 'pending_approval' AND pairing.expires_at > clock_timestamp()
       LIMIT 1
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_support_recovery_pairing_has_case(uuid)
     RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
       SELECT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = $1)
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid)
     RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -252,8 +286,9 @@ export const supportRecovery = Effect.gen(function* () {
         ON recovery_case.pairing_id = session.source_pairing_id
         AND recovery_case.lifecycle = 'approved'
       WHERE credential.user_id = $1
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_has_support_recovery_open_capacity()
     RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -263,8 +298,9 @@ export const supportRecovery = Effect.gen(function* () {
       SELECT count(*)::integer INTO open_case_count
       FROM support_recovery_cases WHERE lifecycle = 'open';
       RETURN open_case_count < 100;
-    END $$;
-
+    END $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_expire_support_recovery_cases(timestamptz)
     RETURNS bigint LANGUAGE sql SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -289,8 +325,9 @@ export const supportRecovery = Effect.gen(function* () {
         SET lifecycle = 'expired', closed_at = inserted.occurred_at
         FROM inserted WHERE recovery_case.id = inserted.case_id RETURNING 1
       ) SELECT count(*) FROM updated
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_delete_expired_support_recovery(timestamptz)
     RETURNS bigint LANGUAGE sql SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -302,8 +339,9 @@ export const supportRecovery = Effect.gen(function* () {
         DELETE FROM support_recovery_cases recovery_case USING expired
         WHERE recovery_case.id = expired.id RETURNING 1
       ) SELECT count(*) FROM deleted
-    $$;
-
+    $$
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_delete_support_recovery_for_titular()
     RETURNS void LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -319,38 +357,99 @@ export const supportRecovery = Effect.gen(function* () {
   `;
 
   yield* sql`
-    GRANT SELECT, DELETE ON backup_recovery_credentials TO fidy_gateway;
-    GRANT SELECT ON browser_login_pairings TO fidy_gateway;
-    GRANT SELECT, UPDATE, DELETE ON support_recovery_cases TO fidy_gateway;
-    GRANT SELECT, INSERT ON support_recovery_case_events TO fidy_gateway;
-    ALTER FUNCTION fidy_resolve_support_recovery(bytea, text) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_resolve_attributed_support_recovery(text) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_support_recovery_pairing_has_case(uuid) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_has_support_recovery_open_capacity() OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_expire_support_recovery_cases(timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_delete_expired_support_recovery(timestamptz) OWNER TO fidy_gateway;
-    ALTER FUNCTION fidy_delete_support_recovery_for_titular() OWNER TO fidy_gateway;
-    REVOKE ALL ON FUNCTION fidy_resolve_support_recovery(bytea, text) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_resolve_attributed_support_recovery(text) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_has_support_recovery_open_capacity() FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_expire_support_recovery_cases(timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_delete_expired_support_recovery(timestamptz) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION fidy_delete_support_recovery_for_titular() FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION fidy_resolve_support_recovery(bytea, text) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_resolve_attributed_support_recovery(text) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_has_support_recovery_open_capacity() TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_expire_support_recovery_cases(timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_delete_expired_support_recovery(timestamptz) TO fidy_runtime;
-    GRANT EXECUTE ON FUNCTION fidy_delete_support_recovery_for_titular() TO fidy_runtime;
-
-    REVOKE DELETE ON backup_recovery_credentials FROM fidy_runtime;
-    GRANT SELECT, INSERT, UPDATE ON support_recovery_cases TO fidy_runtime;
-    GRANT SELECT, INSERT ON support_recovery_case_events TO fidy_runtime;
+    GRANT SELECT, DELETE ON backup_recovery_credentials TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT ON browser_login_pairings TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, UPDATE, DELETE ON support_recovery_cases TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT ON support_recovery_case_events TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_resolve_support_recovery(bytea, text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_resolve_attributed_support_recovery(text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_support_recovery_pairing_has_case(uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_has_support_recovery_open_capacity() OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_expire_support_recovery_cases(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_delete_expired_support_recovery(timestamptz) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_delete_support_recovery_for_titular() OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_support_recovery(bytea, text) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_attributed_support_recovery(text) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_has_support_recovery_open_capacity() FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_expire_support_recovery_cases(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_delete_expired_support_recovery(timestamptz) FROM PUBLIC
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_delete_support_recovery_for_titular() FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_resolve_support_recovery(bytea, text) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_resolve_attributed_support_recovery(text) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_has_support_recovery_open_capacity() TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_expire_support_recovery_cases(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_delete_expired_support_recovery(timestamptz) TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_delete_support_recovery_for_titular() TO fidy_runtime
+  `;
+  yield* sql`
+    REVOKE DELETE ON backup_recovery_credentials FROM fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT, UPDATE ON support_recovery_cases TO fidy_runtime
+  `;
+  yield* sql`
+    GRANT SELECT, INSERT ON support_recovery_case_events TO fidy_runtime
+  `;
+  yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON support_recovery_admission_attempts TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

@@ -12,10 +12,12 @@ export const effectOnboardingDelivery = Effect.gen(function* () {
       ELSE 'uncertain'
     END
     FROM email_enrollments AS enrollment
-    WHERE intent.enrollment_id = enrollment.id AND intent.status = 'claimed';
-
-    DROP INDEX email_delivery_intents_claimable_idx;
-
+    WHERE intent.enrollment_id = enrollment.id AND intent.status = 'claimed'
+  `;
+  yield* sql`
+    DROP INDEX email_delivery_intents_claimable_idx
+  `;
+  yield* sql`
     ALTER TABLE email_delivery_intents
       DROP CONSTRAINT email_delivery_intents_status_check,
       DROP CONSTRAINT email_delivery_intents_check,
@@ -75,9 +77,15 @@ export const effectOnboardingDelivery = Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE SCHEMA IF NOT EXISTS fidy_durable;
-    ALTER SCHEMA fidy_durable OWNER TO CURRENT_USER;
-    REVOKE ALL ON SCHEMA fidy_durable FROM PUBLIC;
+    CREATE SCHEMA IF NOT EXISTS fidy_durable
+  `;
+  yield* sql`
+    ALTER SCHEMA fidy_durable OWNER TO CURRENT_USER
+  `;
+  yield* sql`
+    REVOKE ALL ON SCHEMA fidy_durable FROM PUBLIC
+  `;
+  yield* sql`
     GRANT USAGE, CREATE ON SCHEMA fidy_durable TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

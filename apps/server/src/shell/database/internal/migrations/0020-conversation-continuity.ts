@@ -68,24 +68,37 @@ export const conversationContinuity = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE conversation_continuity ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE conversation_continuity FORCE ROW LEVEL SECURITY;
+    ALTER TABLE conversation_continuity ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE conversation_continuity FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY conversation_continuity_by_user ON conversation_continuity
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE hosted_agent_sessions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE hosted_agent_sessions FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE hosted_agent_sessions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE hosted_agent_sessions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY hosted_agent_sessions_by_user ON hosted_agent_sessions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
-    ALTER TABLE conversation_turns ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE conversation_turns FORCE ROW LEVEL SECURITY;
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+  `;
+  yield* sql`
+    ALTER TABLE conversation_turns ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE conversation_turns FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY conversation_turns_by_user ON conversation_turns
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
-      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
-
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
 
   yield* sql`

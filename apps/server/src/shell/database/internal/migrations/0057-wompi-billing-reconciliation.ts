@@ -10,12 +10,16 @@ import { SqlClient } from "effect/unstable/sql";
 export const wompiBillingReconciliation = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE billing_attempts ADD COLUMN awaiting_reference_since timestamptz;
-    ALTER TABLE billing_attempts ADD COLUMN manual_reconciliation_since timestamptz;
-
+    ALTER TABLE billing_attempts ADD COLUMN awaiting_reference_since timestamptz
+  `;
+  yield* sql`
+    ALTER TABLE billing_attempts ADD COLUMN manual_reconciliation_since timestamptz
+  `;
+  yield* sql`
     GRANT UPDATE (awaiting_reference_since, manual_reconciliation_since)
-      ON billing_attempts TO fidy_runtime;
-
+      ON billing_attempts TO fidy_runtime
+  `;
+  yield* sql`
     CREATE FUNCTION fidy_billing_reconciliation_escalations() RETURNS TABLE (
       "awaitingReferenceCount" int,
       "awaitingReferenceMaxAgeSeconds" int,
@@ -43,10 +47,18 @@ export const wompiBillingReconciliation = Effect.gen(function* () {
           FILTER (WHERE manual_reconciliation_since IS NOT NULL), 0)::int
       FROM public.billing_attempts
       WHERE status = 'pending'
-    $$;
-    ALTER FUNCTION fidy_billing_reconciliation_escalations() OWNER TO fidy_gateway;
-    GRANT SELECT ON billing_attempts TO fidy_gateway;
-    REVOKE ALL ON FUNCTION fidy_billing_reconciliation_escalations() FROM PUBLIC;
-    GRANT EXECUTE ON FUNCTION fidy_billing_reconciliation_escalations() TO fidy_runtime;
+    $$
+  `;
+  yield* sql`
+    ALTER FUNCTION fidy_billing_reconciliation_escalations() OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    GRANT SELECT ON billing_attempts TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_billing_reconciliation_escalations() FROM PUBLIC
+  `;
+  yield* sql`
+    GRANT EXECUTE ON FUNCTION fidy_billing_reconciliation_escalations() TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

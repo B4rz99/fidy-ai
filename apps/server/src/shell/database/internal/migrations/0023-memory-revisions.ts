@@ -18,8 +18,12 @@ export const memoryRevisions = Effect.gen(function* () {
   `;
 
   yield* sql`
-    ALTER TABLE memory_revisions ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE memory_revisions FORCE ROW LEVEL SECURITY;
+    ALTER TABLE memory_revisions ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE memory_revisions FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY memory_revisions_by_user ON memory_revisions
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
@@ -53,7 +57,9 @@ export const memoryRevisions = Effect.gen(function* () {
   `;
 
   yield* sql`
-    GRANT SELECT ON memory_revisions TO fidy_runtime;
+    GRANT SELECT ON memory_revisions TO fidy_runtime
+  `;
+  yield* sql`
     GRANT UPDATE, DELETE ON memories TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

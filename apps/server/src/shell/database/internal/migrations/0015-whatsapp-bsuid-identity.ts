@@ -86,8 +86,12 @@ const createIdentityChangeEvidence = Effect.gen(function* () {
     )
   `;
   yield* sql`
-    ALTER TABLE whatsapp_identity_change_evidence ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE whatsapp_identity_change_evidence FORCE ROW LEVEL SECURITY;
+    ALTER TABLE whatsapp_identity_change_evidence ENABLE ROW LEVEL SECURITY
+  `;
+  yield* sql`
+    ALTER TABLE whatsapp_identity_change_evidence FORCE ROW LEVEL SECURITY
+  `;
+  yield* sql`
     CREATE POLICY whatsapp_identity_change_evidence_by_user
     ON whatsapp_identity_change_evidence
     USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
@@ -116,8 +120,12 @@ const replaceWhatsAppUserResolver = Effect.gen(function* () {
     $function$
   `;
   yield* sql`
-    ALTER FUNCTION fidy_resolve_whatsapp_user(text, text) OWNER TO fidy_gateway;
-    REVOKE ALL ON FUNCTION fidy_resolve_whatsapp_user(text, text) FROM PUBLIC;
+    ALTER FUNCTION fidy_resolve_whatsapp_user(text, text) OWNER TO fidy_gateway
+  `;
+  yield* sql`
+    REVOKE ALL ON FUNCTION fidy_resolve_whatsapp_user(text, text) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_resolve_whatsapp_user(text, text) TO fidy_runtime
   `;
 });
@@ -236,10 +244,14 @@ const createIdentityReassociationGateway = Effect.gen(function* () {
   yield* sql`
     ALTER FUNCTION fidy_reassociate_whatsapp_user(
       text, text, text, text, text, text, timestamptz, text
-    ) OWNER TO fidy_gateway;
+    ) OWNER TO fidy_gateway
+  `;
+  yield* sql`
     REVOKE ALL ON FUNCTION fidy_reassociate_whatsapp_user(
       text, text, text, text, text, text, timestamptz, text
-    ) FROM PUBLIC;
+    ) FROM PUBLIC
+  `;
+  yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_reassociate_whatsapp_user(
       text, text, text, text, text, text, timestamptz, text
     ) TO fidy_runtime

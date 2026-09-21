@@ -76,30 +76,14 @@ const SIBLING_IMPLEMENTATION = dir("sibling-implementation");
 const TYPE_ONLY = dir("type-only");
 const CORE_TO_SHELL = dir("core-imports-shell");
 const CORE_TO_WORLD = dir("core-imports-the-world");
-const ENTRYPOINT = dir("entrypoint");
 const CLIENT_SEAM_ALLOWED = sourceDir("client-seam-allowed");
 const CLIENT_SEAM_BYPASS = sourceDir("client-seam-bypass");
-const SENTRY_OUTSIDE_OBSERVABILITY = dir("sentry-outside-observability");
 const CYCLE = dir("cycle");
 const BARREL = dir("barrel");
 const ALIAS_SAME_DIRECTORY = dir("alias-same-directory");
 const RELATIVE_CROSS_DIRECTORY = dir("relative-cross-directory");
-const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
-const HOSTED_JS_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-js-tokenizer`;
-const HOSTED_MEMORY_PROVIDER = `src/shell/memory/${PROBE_PREFIX}hosted-provider`;
-const ADAPTER_TO_HANDLER = `src/shell/${PROBE_PREFIX}adapter-to-handler`;
-const REGISTRY_TO_HANDLER = `src/shell/_shared/${PROBE_PREFIX}registry-to-handler`;
-const ADAPTER_TO_COORDINATION = `src/shell/${PROBE_PREFIX}adapter-to-coordination`;
-const REGISTRY_TO_COORDINATION = `src/shell/_shared/${PROBE_PREFIX}registry-to-coordination`;
-const ADAPTER_TO_REPO = `src/shell/${PROBE_PREFIX}adapter-to-repo`;
-const ADAPTER_TO_QUERIES = `src/shell/${PROBE_PREFIX}adapter-to-queries`;
-const CONTINUITY_OUTSIDE = `src/shell/audit/${PROBE_PREFIX}continuity-outside-runtime`;
-const CONTINUITY_SIBLING = `src/shell/agent/${PROBE_PREFIX}continuity-runtime-sibling`;
-const CONTINUITY_TYPE_ONLY = `src/shell/agent/${PROBE_PREFIX}continuity-type-only`;
-const CONTINUITY_OUTSIDE_TEST = `src/shell/audit/${PROBE_PREFIX}continuity-outside-test`;
-const CONTINUITY_RUNTIME_TEST = `src/shell/agent/${PROBE_PREFIX}continuity-runtime-test`;
 
 const ownInternal = `src/core/${PROBE_PREFIX}own-internal`;
 const foreignInternalSource = `src/core/${PROBE_PREFIX}foreign-internal-source`;
@@ -641,19 +625,6 @@ const PROBES: readonly Probe[] = [
     name: "core-imports-the-world rejects a core module importing an I/O builtin",
   },
   {
-    expect: {
-      kind: "rejected",
-      mustContain: [`error entrypoint-is-imported: ${ENTRYPOINT}/probe.ts → src/main.ts`],
-    },
-    files: [
-      {
-        path: `${ENTRYPOINT}/probe.ts`,
-        source: 'import "~/main";\n\nexport const entrypointProbe = true;\n',
-      },
-    ],
-    name: "entrypoint-is-imported rejects importing src/main.ts",
-  },
-  {
     expect: { kind: "allowed" },
     files: [
       {
@@ -678,192 +649,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "browser-facing code cannot bypass the package-level client facade",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_OUTSIDE}/probe.ts → src/shell/transcript/conversation-continuity.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${CONTINUITY_OUTSIDE}/probe.ts`,
-        source:
-          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
-          "export const continuityOutsideProbe = ConversationContinuity;\n",
-      },
-    ],
-    name: "continuity is unreachable from outside the hosted agent runtime",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_SIBLING}/probe.ts \u2192 src/shell/transcript/conversation-continuity.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${CONTINUITY_SIBLING}/probe.ts`,
-        source:
-          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
-          "export const continuitySiblingProbe = ConversationContinuity;\n",
-      },
-    ],
-    name: "continuity is unreachable even from a sibling of the hosted agent runtime",
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `${CONTINUITY_TYPE_ONLY}/probe.ts`,
-        source:
-          "import type { ConversationContinuityService } " +
-          'from "~/shell/transcript/conversation-continuity";\n\n' +
-          "export type ContinuityTypeOnlyProbe = ConversationContinuityService;\n",
-      },
-    ],
-    name: "a type carries no capability, so a type-only continuity import stays legal",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_OUTSIDE_TEST}/probe.test.ts → src/shell/transcript/conversation-continuity.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${CONTINUITY_OUTSIDE_TEST}/probe.test.ts`,
-        source:
-          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
-          "export const continuityOutsideTestProbe = ConversationContinuity;\n",
-      },
-    ],
-    name: "a test outside the hosted agent runtime buys no continuity exemption",
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `${CONTINUITY_RUNTIME_TEST}/probe.test.ts`,
-        source:
-          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
-          "export const continuityRuntimeTestProbe = ConversationContinuity;\n",
-      },
-    ],
-    name: "a test inside the hosted agent runtime may build continuity directly",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error adapter-imports-handler-adapter: ${ADAPTER_TO_HANDLER}/handlers.ts \u2192 src/shell/budgets/handlers.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${ADAPTER_TO_HANDLER}/handlers.ts`,
-        source:
-          'import { BudgetsLive } from "~/shell/budgets/handlers";\n\n' +
-          "export const adapterToHandlerProbe = BudgetsLive;\n",
-      },
-    ],
-    name: "an HTTP handler cannot import another HTTP handler adapter",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error adapter-imports-handler-adapter: ${REGISTRY_TO_HANDLER}/canonical-operation-registry.ts \u2192 src/shell/budgets/handlers.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${REGISTRY_TO_HANDLER}/canonical-operation-registry.ts`,
-        source:
-          'import { BudgetsLive } from "~/shell/budgets/handlers";\n\n' +
-          "export const registryToHandlerProbe = BudgetsLive;\n",
-      },
-    ],
-    name: "a canonical registry cannot import an HTTP handler adapter",
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `${ADAPTER_TO_COORDINATION}/handlers.ts`,
-        source:
-          'import { executeAtomicBatch } from "~/shell/operations/atomic-batch";\n\n' +
-          "export const adapterToCoordinationProbe = executeAtomicBatch;\n",
-      },
-    ],
-    name: "an HTTP handler may delegate to the atomic batch coordination module",
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `${REGISTRY_TO_COORDINATION}/canonical-operation-registry.ts`,
-        source:
-          'import { executeAtomicBatch } from "~/shell/operations/atomic-batch";\n\n' +
-          "export const registryToCoordinationProbe = executeAtomicBatch;\n",
-      },
-    ],
-    name: "a canonical registry may delegate to the atomic batch coordination module",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error adapter-reaches-slice-persistence: ${ADAPTER_TO_REPO}/handlers.ts \u2192 src/shell/budgets/repo.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${ADAPTER_TO_REPO}/handlers.ts`,
-        source:
-          'import { selectBudgets } from "~/shell/budgets/repo";\n\n' +
-          "export const adapterToRepoProbe = selectBudgets;\n",
-      },
-    ],
-    name: "an adapter cannot reach a slice repo around its one operation implementation",
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `${ADAPTER_TO_QUERIES}/handlers.ts`,
-        source:
-          'import { probeQuery } from "./queries";\n\n' +
-          "export const adapterToQueriesProbe = probeQuery;\n",
-      },
-      {
-        path: `${ADAPTER_TO_QUERIES}/queries.ts`,
-        source:
-          'import { selectBudgets } from "~/shell/budgets/repo";\n\n' +
-          "export const probeQuery = selectBudgets;\n",
-      },
-    ],
-    name: "an adapter delegating to its slice queries module is how persistence is reached",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error sentry-imported-outside-observability: ${SENTRY_OUTSIDE_OBSERVABILITY}/probe.ts → node_modules/@sentry/bun/build/types/index.d.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${SENTRY_OUTSIDE_OBSERVABILITY}/probe.ts`,
-        source:
-          'import { captureEvent } from "@sentry/bun";\n\n' +
-          "export const sentryOutsideObservabilityProbe = captureEvent;\n",
-      },
-    ],
-    name: "sentry-imported-outside-observability rejects direct SDK access",
   },
   {
     expect: {
@@ -955,47 +740,6 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error hosted-inference-orchestration-imports-provider: ${HOSTED_JS_TOKENIZER}/probe.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${HOSTED_JS_TOKENIZER}/probe.ts`,
-        source:
-          'import { encodingForModel } from "js-tiktoken";\n\n' +
-          "export const hostedJsTokenizerProbe = encodingForModel;\n",
-      },
-    ],
-    name: "hosted inference orchestration rejects js-tiktoken imports",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error hosted-inference-orchestration-imports-provider: ${HOSTED_PROVIDER}/probe.ts → src/shell/hosted-inference/internal/openai.ts`,
-        `error agent-imports-provider-wire-codec: ${HOSTED_PROVIDER}/wire.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${HOSTED_PROVIDER}/probe.ts`,
-        source:
-          'import { FidyAgentModel } from "~/shell/hosted-inference/internal/openai";\n\n' +
-          "export const hostedProviderProbe = FidyAgentModel;\n",
-      },
-      {
-        path: `${HOSTED_PROVIDER}/wire.ts`,
-        source:
-          'import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";\n\n' +
-          "export const hostedProviderWireProbe = toCodecOpenAI;\n",
-      },
-    ],
-    name: "hosted inference orchestration rejects provider-specific imports",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
         `error hosted-inference-orchestration-imports-provider: ${HOSTED_MODEL}/probe.ts`,
       ],
     },
@@ -1008,24 +752,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "hosted inference orchestration rejects generic model imports",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error hosted-inference-orchestration-imports-provider: ${HOSTED_MEMORY_PROVIDER}/probe.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${HOSTED_MEMORY_PROVIDER}/probe.ts`,
-        source:
-          'import { Tiktoken } from "js-tiktoken/lite";\n' +
-          'import { LanguageModel } from "effect/unstable/ai";\n\n' +
-          "export const memoryProviderProbe = [Tiktoken, LanguageModel] as const;\n",
-      },
-    ],
-    name: "Memory orchestration rejects provider models and tokenizers",
   },
 ];
 

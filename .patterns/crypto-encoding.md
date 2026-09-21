@@ -20,7 +20,9 @@ Never describe Base64, Base64Url, or hex as encryption. Never describe `Redacted
 
 ## Entropy and digests
 
-Request `Crypto.Crypto` inside the effect and provide the platform layer once at the runtime edge. Bun's layer delegates to the shared Node-compatible implementation, which uses `node:crypto.randomBytes` and `createHash` (`.repos/effect/packages/platform/bun/src/BunCrypto.ts:14-31`, `.repos/effect/packages/platform/node-shared/src/NodeCrypto.ts:16-61`).
+Request `Crypto.Crypto` inside the effect and provide the platform layer once at the runtime edge.
+The Cloudflare Worker adapter uses Web Crypto for entropy and digests; portable tests use the
+repository's deterministic `TestCrypto` seam rather than a process-runtime service.
 
 ```ts
 const makeBearer = Effect.gen(function* () {
@@ -93,7 +95,9 @@ const sameDigest = (left: Uint8Array, right: Uint8Array): boolean =>
 
 Constant-time equality does not repair a weak protocol. Verify the exact signed bytes, preserve raw request bodies when required by webhook protocols, reject stale/replayed messages where the protocol supports timestamps/nonces, and use the vendor's maintained verification library when available.
 
-Direct `node:crypto`/Bun crypto is appropriate at a platform adapter for primitives Effect does not expose, such as constant-time equality or HMAC. Keep direct imports out of pure domain modules and hide them behind a small named function/port when behavior needs deterministic testing.
+Direct platform crypto is appropriate at an adapter for primitives Effect does not expose, such as
+constant-time equality or HMAC. Keep platform imports out of pure domain modules and hide them behind
+a small named function/port when behavior needs deterministic testing.
 
 ## Storage patterns
 
@@ -120,7 +124,8 @@ Direct `node:crypto`/Bun crypto is appropriate at a platform adapter for primiti
 
 ## Testing
 
-Prefer a deterministic `Crypto.make` service for focused logic tests; return fresh byte arrays and model digest failure when relevant. Keep integration coverage with the real Bun crypto layer.
+Prefer a deterministic `Crypto.make` service for focused logic tests; return fresh byte arrays and
+model digest failure when relevant. Keep integration coverage with the Cloudflare Web Crypto adapter.
 
 Test:
 

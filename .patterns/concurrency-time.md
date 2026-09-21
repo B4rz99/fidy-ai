@@ -155,24 +155,20 @@ onExceeded?: "delay" | "fail", window, limit, key, tokens? }` (`:45-60`). Semant
   `Retry-After` header. `"delay"` returns the wait instead; `makeWithRateLimiter` wraps an
   effect and sleeps the delay (`:261`), `makeSleep` just sleeps (`:330`).
 - Stores: `layerStoreMemory` — **process-local, resets on restart** (`:656-663`) — and Redis
-  (Lua-scripted, `:874`, `:1321`). **No SQL store for RateLimiter**; in a single-process
-  monolith the memory store is fine for req/min limits, but tight _daily_ caps that must
-  survive restarts need Redis or a hand-built Postgres counter.
+  (Lua-scripted, `:874`, `:1321`). **No SQL store for RateLimiter**; process-local memory is
+  suitable only for explicitly volatile test seams. Production admission that must survive Worker
+  replacement belongs in a Cloudflare Durable Object or another approved remote authority.
 - Stream-level shaping: `Stream.throttle({ cost, units, duration, burst?, strategy:
 "shape" | "enforce" })` is a token bucket holding up to `units + burst`; `"shape"` delays,
   `"enforce"` drops (`Stream.ts:8073-8090`, `:8119`).
 
-Fidy's [#470 evaluation](../docs/research/distributed-admission-rate-limiter.md) records the complete
-control classification, executable algorithm counterexamples, and two-OS-process PostgreSQL proof.
-[ADR 0025](../docs/adr/0025-retain-postgresql-admission.md) retains the current PostgreSQL controls:
-stock `consume` handles one key, has no joint-consume/rollback seam, and neither stock algorithm
-preserves the existing rolling logs unchanged. Fail-mode rejection also does not persist over-limit
-consumption; this matters for controls that deliberately count rejected attempts.
+The project does not use the memory store as an authority. A future Cloudflare admission adapter
+must prove joint-key consumption, rejection accounting, expiry, replacement recovery, and
+cross-Worker isolation at its platform seam. Until then, the operation fails closed.
 
-Related: `PersistedQueue` (same package) is a durable, schema-encoded work queue with
-**in-memory, Redis, and SQL store layers**, id-based de-duplication and retry handling
-(`unstable/persistence/PersistedQueue.ts:1-11`, `layerStoreSql` `:1187`) — the primitive to
-reach for before hand-rolling a Postgres outbox/scheduler table.
+Cloudflare Queues and Workflows are the production asynchronous primitives. Their messages carry
+bounded identifiers and facts; domain state remains in D1 and consumers assume redelivery. Do not
+introduce a local claim table, polling loop, lock, or in-process durable queue as a substitute.
 
 ## Schedule
 
@@ -210,8 +206,9 @@ nonexistent days (tests `test/Cron.test.ts:319-341`).
 
 `Schedule.cron(expr, tz?)` sleeps until `Cron.next(cron, now)` each step (`Schedule.ts:969-1010`)
 — so "Monday 9:00 in America/Bogota" is `Schedule.cron("0 9 * * 1", "America/Bogota")`
-driving `Effect.repeat`. Per-user cron rows in Postgres need a hand-built loop, but the
-next-occurrence math is `Cron.next(Cron.parseUnsafe(expr, userZone))` — don't reimplement it.
+driving `Effect.repeat`. Per-user cron rows in D1 still need an explicit Worker/Workflow adapter
+loop, but the next-occurrence math is `Cron.next(Cron.parseUnsafe(expr, userZone))` — don't
+reimplement it.
 
 ## Clock & DateTime
 

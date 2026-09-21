@@ -30,39 +30,17 @@ describe("pull-request preview workflow policy", () => {
     expect(checksWorkflow).not.toContain("preview-artifact:");
   });
 
-  it("shards server validation and aggregates its coverage once", () => {
-    const serverJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("  server:"),
-      checksWorkflow.indexOf("  quality:")
-    );
-    const qualityJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("  quality:"),
-      checksWorkflow.indexOf("  production-image:")
-    );
-
-    expect(serverJob).toContain("matrix:");
-    expect(serverJob).toContain("shard: [1, 2, 3, 4, 5]");
-    expect(serverJob).toContain("SERVER_TEST_SHARD");
-    expect(serverJob).toContain("Restore server test timings");
-    expect(serverJob).toContain("server-coverage-${{ matrix.shard }}");
-    expect(checksWorkflow).toContain("name: server-coverage-core");
-    expect(serverJob).toContain("server-slow:");
-    expect(serverJob).toContain("test:slow:ci");
-    expect(serverJob).toContain("name: server-coverage-slow");
-    expect(qualityJob).toContain("      - server\n      - server-slow\n      - unit");
-    expect(qualityJob).toContain("actions/download-artifact@");
-    expect(qualityJob).toContain("services:");
-    expect(qualityJob).toContain("Create restricted runtime role");
-    expect(qualityJob).toContain("DATABASE_URL:");
-    expect(qualityJob).toContain("bun run verify -- --group quality");
-    expect(qualityJob).toContain("Collect server test timings");
-    expect(qualityJob).toContain("Save server test timings");
+  it("keeps the required checks focused on static and browser validation", () => {
+    expect(checksWorkflow).not.toContain("server-runtime:");
+    expect(checksWorkflow).not.toContain("database-runtime:");
+    expect(checksWorkflow).not.toContain("container-image:");
+    expect(checksWorkflow).toContain("Web browser and accessibility checks");
   });
 
   it("reuses browser downloads without restoring stale dependency caches", () => {
     const browserJob = checksWorkflow.slice(
       checksWorkflow.indexOf("  browser:"),
-      checksWorkflow.indexOf("  server:")
+      checksWorkflow.indexOf("  security-secrets:")
     );
 
     expect(browserJob).toContain("~/.cache/ms-playwright");

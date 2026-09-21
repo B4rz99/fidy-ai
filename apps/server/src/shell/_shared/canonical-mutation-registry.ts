@@ -1,301 +1,103 @@
 import { Effect } from "effect";
-import { type SuggestedOperationCaller, toSuggestedOperationCaller } from "./suggested-operations";
-import { createBudget, deleteBudget, updateBudget } from "~/shell/budgets/mutations";
-import { approveBrowserLoginPairing } from "~/shell/browser-login/mutations";
-import {
-  createKeywordRule,
-  deleteKeywordRule,
-  updateKeywordRule,
-} from "~/shell/categories/mutations";
-import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
-import { requestEmailReplacement } from "~/shell/email-authentication/replacement-transition";
-import { getDashboardView } from "~/shell/dashboard/view";
-import { updateUserPreferences } from "~/shell/identity/mutations";
-import {
-  resolveNeedsReviewItemMutation,
-  submitForExtractionInScope,
-} from "~/shell/ingestion/mutations";
-import { forwardedEmailIngestion } from "~/shell/ingestion/forwarded-email-ingestion";
-import { forgetMemory, rememberMemory, reviseMemory } from "~/shell/memory/mutations";
-import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
-import {
-  correctTransaction,
-  createTransaction,
-  deleteTransaction,
-  linkTransactions,
-  unlinkTransactions,
-} from "~/shell/transactions/mutations";
-import { createManualPAT, revokeAllPATs, revokePAT } from "~/shell/tokens/mutations";
-import { approvePATPairing, inspectPATPairing } from "~/shell/tokens/pat-pairing";
-import { rotateBackupRecoveryCode } from "~/shell/recovery/service";
+import type { OperationId } from "~/shell/api";
+import type { OperationCatalog } from "./operation-catalog";
 import type {
-  CanonicalExecutionRequirements,
+  CanonicalFailure,
   CanonicalImplementationCaller,
+  CanonicalImplementationRequirements,
   CanonicalOperationImplementations,
 } from "./canonical-implementation";
-import type { OperationCatalog } from "./operation-catalog";
+import type { CanonicalInput } from "./canonical-input";
+import type { CanonicalSuccess } from "./canonical-success";
 
-/** Caller facts supplied to every registered canonical mutation adapter. */
+/** Caller facts supplied to every canonical mutation adapter. */
 export type CanonicalMutationCaller = CanonicalImplementationCaller;
 
-const suggestedCaller = ({
-  resolved,
-  accessTier,
-}: CanonicalMutationCaller): SuggestedOperationCaller =>
-  toSuggestedOperationCaller({ resolved, accessTier });
+type MutationId =
+  | "browserLogin.approvePairing"
+  | "identity.updateUserPreferences"
+  | "categories.createKeywordRule"
+  | "categories.updateKeywordRule"
+  | "categories.deleteKeywordRule"
+  | "budgets.createBudget"
+  | "budgets.updateBudget"
+  | "budgets.deleteBudget"
+  | "dashboard.getDashboard"
+  | "dashboard.getDashboardView"
+  | "dashboard.applyDashboardEdit"
+  | "emailAuthentication.requestEmailReplacement"
+  | "transactions.createTransaction"
+  | "transactions.linkTransactions"
+  | "transactions.unlinkTransactions"
+  | "transactions.updateTransaction"
+  | "transactions.deleteTransaction"
+  | "memory.remember"
+  | "memory.revise"
+  | "memory.forget"
+  | "ingestion.enableEmailForwarding"
+  | "ingestion.submitForExtraction"
+  | "ingestion.resolveNeedsReviewItem"
+  | "insights.markInsightDelivered"
+  | "insights.markInsightRead"
+  | "insights.dismissInsight"
+  | "pats.inspectPATPairing"
+  | "pats.revokePAT"
+  | "pats.revokeAllPATs"
+  | "pats.createManualPAT"
+  | "pats.approvePATPairing"
+  | "recovery.rotateBackupRecoveryCode";
 
 /**
- * Reusable transaction-aware adapters behind atomic dispatch. This is an implementation registry,
- * not an eligibility list: `assertCanonicalMutationRegistry` derives the required keys from the
- * reflected canonical catalog and rejects missing or extra ordinary mutations.
+ * Cloudflare Worker/D1/DO adapters are not assembled in this application package. Every removed
+ * process-local mutation owner therefore fails closed instead of silently reintroducing SQL or an
+ * in-memory substitute.
  */
+const unavailableMutation = <Id extends OperationId>(
+  _input: CanonicalInput<Id>,
+  _caller: CanonicalImplementationCaller
+): Effect.Effect<CanonicalSuccess<Id>, CanonicalFailure<Id>, CanonicalImplementationRequirements> =>
+  Effect.die("Cloudflare canonical mutation boundary is not configured");
+
+/** The complete ordinary mutation set, retained as a contract-correlated fail-closed registry. */
 export const canonicalMutationImplementations = {
-  "browserLogin.approvePairing": (input, { resolved }) =>
-    approveBrowserLoginPairing({
-      userId: resolved.subjectUserId,
-      publicCode: input.payload.publicCode,
-    }),
-  "identity.updateUserPreferences": (input, { resolved }) =>
-    updateUserPreferences({ userId: resolved.subjectUserId, payload: input.payload }),
-  "categories.createKeywordRule": (input, caller) =>
-    createKeywordRule({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "categories.updateKeywordRule": (input, caller) =>
-    updateKeywordRule({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      keywordRuleId: input.params.id,
-      payload: input.payload,
-    }),
-  "categories.deleteKeywordRule": (input, caller) =>
-    deleteKeywordRule({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      keywordRuleId: input.params.id,
-    }),
-  "budgets.createBudget": (input, caller) =>
-    createBudget({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "budgets.updateBudget": (input, caller) =>
-    updateBudget({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      budgetId: input.params.id,
-      payload: input.payload,
-    }),
-  "budgets.deleteBudget": (input, caller) =>
-    deleteBudget({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      budgetId: input.params.id,
-    }),
-  "dashboard.getDashboard": (_input, caller) =>
-    getDashboard({ userId: caller.resolved.subjectUserId }),
-  "dashboard.getDashboardView": (_input, caller) =>
-    getDashboardView({ userId: caller.resolved.subjectUserId }),
-  "dashboard.applyDashboardEdit": (input, caller) =>
-    applyDashboardEdit({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      edit: input.payload,
-    }),
-  "emailAuthentication.requestEmailReplacement": (input, { resolved }) =>
-    requestEmailReplacement({
-      userId: resolved.subjectUserId,
-      payload: input.payload,
-    }),
-  "transactions.createTransaction": (input, caller) =>
-    createTransaction({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "transactions.linkTransactions": (input, caller) =>
-    linkTransactions({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "transactions.unlinkTransactions": (input, caller) =>
-    unlinkTransactions({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "transactions.updateTransaction": (input, caller) =>
-    correctTransaction({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      transactionId: input.params.id,
-      payload: input.payload,
-    }),
-  "transactions.deleteTransaction": (input, caller) =>
-    deleteTransaction({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      transactionId: input.params.id,
-    }),
-  "memory.remember": (input, caller) =>
-    rememberMemory({
-      userId: caller.resolved.subjectUserId,
-      payload: input.payload,
-    }),
-  "memory.revise": (input, caller) =>
-    reviseMemory({
-      userId: caller.resolved.subjectUserId,
-      memoryId: input.params.id,
-      payload: input.payload,
-    }),
-  "memory.forget": (input, caller) =>
-    forgetMemory({
-      userId: caller.resolved.subjectUserId,
-      memoryId: input.params.id,
-    }),
-  "ingestion.enableEmailForwarding": (_input, caller) =>
-    forwardedEmailIngestion.enable(caller.resolved.subjectUserId),
-  "ingestion.submitForExtraction": (input, caller) =>
-    submitForExtractionInScope({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      payload: input.payload,
-    }),
-  "ingestion.resolveNeedsReviewItem": (input, caller) =>
-    resolveNeedsReviewItemMutation({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      id: input.params.id,
-      extraction: input.payload.extraction,
-    }),
-  "insights.markInsightDelivered": (input, caller) =>
-    markInsightDelivered({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      insightEventId: input.params.id,
-      payload: input.payload,
-    }),
-  "insights.markInsightRead": (input, caller) =>
-    markInsightRead({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      insightEventId: input.params.id,
-    }),
-  "insights.dismissInsight": (input, caller) =>
-    dismissInsight({
-      userId: caller.resolved.subjectUserId,
-      caller: suggestedCaller(caller),
-      insightEventId: input.params.id,
-    }),
-  "pats.inspectPATPairing": (input, { resolved }) =>
-    inspectPATPairing({
-      userId: resolved.subjectUserId,
-      publicCode: input.payload.publicCode,
-    }),
-  "pats.revokePAT": (input, caller) =>
-    revokePAT({
-      userId: caller.resolved.subjectUserId,
-      caller: caller.resolved,
-      confirmationEvidence: caller.confirmationEvidence,
-      shortId: input.params.shortId,
-    }),
-  "pats.revokeAllPATs": (_input, caller) =>
-    revokeAllPATs({
-      userId: caller.resolved.subjectUserId,
-      caller: caller.resolved,
-      confirmationEvidence: caller.confirmationEvidence,
-    }),
-  "pats.createManualPAT": (input, { resolved }) =>
-    createManualPAT({
-      userId: resolved.subjectUserId,
-      caller: resolved,
-      payload: input.payload,
-    }),
-  "pats.approvePATPairing": (input, { resolved }) =>
-    approvePATPairing({
-      userId: resolved.subjectUserId,
-      caller: resolved,
-      payload: input.payload,
-    }),
-  "recovery.rotateBackupRecoveryCode": (_input, { resolved }) =>
-    resolved.auditCaller._tag === "WebSession"
-      ? Effect.map(
-          rotateBackupRecoveryCode(resolved.subjectUserId, resolved.auditCaller.webSessionId),
-          (data) => ({ data, next: [] })
-        )
-      : Effect.die("Fresh-WebSession operation reached without WebSession authority"),
+  "browserLogin.approvePairing": unavailableMutation,
+  "identity.updateUserPreferences": unavailableMutation,
+  "categories.createKeywordRule": unavailableMutation,
+  "categories.updateKeywordRule": unavailableMutation,
+  "categories.deleteKeywordRule": unavailableMutation,
+  "budgets.createBudget": unavailableMutation,
+  "budgets.updateBudget": unavailableMutation,
+  "budgets.deleteBudget": unavailableMutation,
+  "dashboard.getDashboard": unavailableMutation,
+  "dashboard.getDashboardView": unavailableMutation,
+  "dashboard.applyDashboardEdit": unavailableMutation,
+  "emailAuthentication.requestEmailReplacement": unavailableMutation,
+  "transactions.createTransaction": unavailableMutation,
+  "transactions.linkTransactions": unavailableMutation,
+  "transactions.unlinkTransactions": unavailableMutation,
+  "transactions.updateTransaction": unavailableMutation,
+  "transactions.deleteTransaction": unavailableMutation,
+  "memory.remember": unavailableMutation,
+  "memory.revise": unavailableMutation,
+  "memory.forget": unavailableMutation,
+  "ingestion.enableEmailForwarding": unavailableMutation,
+  "ingestion.submitForExtraction": unavailableMutation,
+  "ingestion.resolveNeedsReviewItem": unavailableMutation,
+  "insights.markInsightDelivered": unavailableMutation,
+  "insights.markInsightRead": unavailableMutation,
+  "insights.dismissInsight": unavailableMutation,
+  "pats.inspectPATPairing": unavailableMutation,
+  "pats.revokePAT": unavailableMutation,
+  "pats.revokeAllPATs": unavailableMutation,
+  "pats.createManualPAT": unavailableMutation,
+  "pats.approvePATPairing": unavailableMutation,
+  "recovery.rotateBackupRecoveryCode": unavailableMutation,
 } as const satisfies Partial<CanonicalOperationImplementations>;
 
-/** Every ordinary canonical mutation id, derived from the reusable implementation registry. */
+/** Ordinary mutation ids are derived from the registry rather than duplicated in a policy list. */
 export type CanonicalMutationId = keyof typeof canonicalMutationImplementations;
 
-type MutationImplementation<Id extends CanonicalMutationId> =
-  (typeof canonicalMutationImplementations)[Id];
-
-/** Catalog-correlated decoded input for one canonical mutation child. */
-export type CanonicalMutationCall = {
-  readonly [Id in CanonicalMutationId]: Readonly<{
-    operation: Id;
-    input: Parameters<MutationImplementation<Id>>[0];
-  }>;
-}[CanonicalMutationId];
-
-/** Catalog-correlated decoded output for one canonical mutation child. */
-export type CanonicalMutationResult = {
-  readonly [Id in CanonicalMutationId]: Readonly<{
-    operation: Id;
-    output: Effect.Success<ReturnType<MutationImplementation<Id>>>;
-  }>;
-}[CanonicalMutationId];
-
-type AnyMutationImplementation = MutationImplementation<CanonicalMutationId>;
-export type CanonicalMutationFailure = Effect.Error<ReturnType<AnyMutationImplementation>>;
-
-/**
- * One mutation implementation with its input erased for runtime dispatch. Declaring `execute` as a
- * method and indexing it out keeps the widening a checked assignment; the registry above has
- * already fixed every declaration's input to its own operation.
- */
-type ErasedMutationImplementation = {
-  execute(
-    input: CanonicalMutationCall["input"],
-    caller: CanonicalMutationCaller
-  ): Effect.Effect<
-    CanonicalMutationResult["output"],
-    CanonicalMutationFailure,
-    CanonicalExecutionRequirements
-  >;
-}["execute"];
-
-/** Exact child Effect construction used by dispatch and outer canonical preparation. */
-export const CanonicalMutationEffects = {
-  make(
-    call: CanonicalMutationCall,
-    caller: CanonicalMutationCaller
-  ): ReturnType<ErasedMutationImplementation> {
-    // The reflected tagged-union decoder establishes the operation/input correlation before this
-    // boundary; the registry's mapped types preserve the same relation for callers.
-    const execute: ErasedMutationImplementation = canonicalMutationImplementations[call.operation];
-    return execute(call.input, caller);
-  },
-} as const;
-
-/** Dispatches a schema-decoded child through its operation-correlated implementation. */
-export const dispatchCanonicalMutation = Effect.fn("dispatchCanonicalMutation")(function* (
-  call: CanonicalMutationCall,
-  caller: CanonicalMutationCaller
-) {
-  return yield* CanonicalMutationEffects.make(call, caller);
-});
-
-/**
- * Proves that reflected ordinary mutations and transaction-aware dispatch implementations are the
- * same set. Queries and the structurally excluded batch operation cannot satisfy this guard.
- */
+/** Proves that the reflected ordinary mutation set and this fail-closed registry stay aligned. */
 export const assertCanonicalMutationRegistry = (catalog: OperationCatalog): void => {
   const reflected = catalog.operations
     .filter((operation) => operation.policy.kind === "mutation")
@@ -308,3 +110,5 @@ export const assertCanonicalMutationRegistry = (catalog: OperationCatalog): void
     );
   }
 };
+
+export type { MutationId };

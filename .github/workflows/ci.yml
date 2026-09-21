@@ -1,15 +1,12 @@
 name: Checks
 
-# Pull requests only. The `protect` ruleset requires the branch to be up to date
-# with trunk before merging, so a pull-request run already grades the head on top
-# of the current tip — a `push: trunk` trigger would re-grade an identical tree.
+# Pull requests only. The protect ruleset requires the branch to be up to date
+# with trunk before merging.
 on:
   pull_request:
     branches:
       - trunk
 
-# A new push to a pull request makes the run in flight worthless. Cancel it
-# rather than paying for a verdict on a superseded commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -18,16 +15,8 @@ jobs:
   static:
     name: Workspace Gate
     runs-on: ubuntu-latest
-    # This is the mandatory repository-owned static verdict. The longer-running
-    # repository-owned checks are separate sibling jobs below so one failure does
-    # not hide the result of unrelated checks behind a serial verifier.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # The *tip* of the base branch, not the merge base. A branch cut before a
-      # higher migration id landed on trunk must still be measured against that
-      # id — the merge base predates it, so comparing there would wave through
-      # exactly the migration the migrator will silently skip. Depth 1 suffices:
-      # only the tip's copy of the registry is read.
       - name: Fetch base branch tip
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
@@ -49,9 +38,6 @@ jobs:
         env:
           RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun run verify -- --group builds
-      # Construct the credential-free preview while this runner is already warm.
-      # The trusted workflow_run consumer still publishes it only after every
-      # required check succeeds.
       - name: Check out the exact preview source without credentials
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -95,27 +81,9 @@ jobs:
   browser:
     name: Web browser and accessibility checks
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
       - name: Restore Playwright browser cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -124,169 +92,7 @@ jobs:
       - name: Install Chromium
         run: bunx --bun playwright install --with-deps chromium
       - name: Static-shell browser validation
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
         run: bun run verify -- --group browser
-
-  server:
-    name: Server integration (${{ matrix.shard }}/5)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5]
-    services:
-      postgres:
-        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Restore server test timings
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: scripts/ci/server-test-timings-cache.ts
-          key: ${{ runner.os }}-server-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ${{ runner.os }}-server-test-timings-
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
-      - name: Server integration validation
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          SERVER_TEST_SHARD: ${{ matrix.shard }}/5
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run verify -- --group server
-      - name: Preserve server coverage and test evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: server-coverage-${{ matrix.shard }}
-          path: |
-            apps/server/coverage/coverage-final.json
-            apps/server/reports/server-tests.xml
-          if-no-files-found: warn
-          retention-days: 7
-          overwrite: true
-
-  server-slow:
-    name: Server durable-runtime tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
-      - name: Durable-runtime integration validation
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run --cwd apps/server test:slow:ci
-      - name: Preserve durable-runtime coverage and test evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: server-coverage-slow
-          path: |
-            apps/server/coverage-slow/coverage-final.json
-            apps/server/reports/server-slow-tests.xml
-          if-no-files-found: warn
-          retention-days: 7
-          overwrite: true
-
-  quality:
-    name: Quality thresholds
-    needs:
-      - server
-      - server-slow
-      - unit
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
-      - name: Download server shard coverage
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: server-coverage-*
-          path: server-coverage
-      - name: Aggregate coverage and quality thresholds
-        env:
-          SERVER_COVERAGE_INPUT: ../../server-coverage
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run verify -- --group quality
-      - name: Collect server test timings
-        run: >-
-          bun scripts/ci/collect-server-test-timings.ts
-          --input server-coverage
-          --output scripts/ci/server-test-timings-cache.ts
-      - name: Save server test timings
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: scripts/ci/server-test-timings-cache.ts
-          key: ${{ runner.os }}-server-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
-
-  production-image:
-    name: Production image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Production image validation
-        run: bun run verify -- --group image
 
   security-secrets:
     name: Secrets
@@ -311,7 +117,7 @@ jobs:
       - name: Fluid Attacks secret scan
         run: >-
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss:latest
-          ss scan --strict --config .fluidattacks/secrets.yaml
+          ss scan --strict --config /src/.fluidattacks/secrets.yaml
 
   security-sast:
     name: SAST
@@ -344,17 +150,11 @@ jobs:
       - builds
       - unit
       - browser
-      - server
-      - quality
-      - production-image
       - security-secrets
       - security-sast
       - security-sca
     if: ${{ always() }}
     steps:
-      # Every needed job must report `success`. Enumerating the bad outcomes
-      # instead would let `skipped` through, and a gate turned off by a mistaken
-      # `if:` would then report green while grading nothing.
       - name: Verify required jobs
         env:
           RESULTS: ${{ toJSON(needs) }}

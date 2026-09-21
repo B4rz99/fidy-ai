@@ -1,7 +1,9 @@
-// Node crypto keeps this focused provider-signature fixture synchronous and independent.
+// Node standard-library seams keep these focused fixtures independent of a production runtime.
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHash } from "node:crypto";
-import { BunServices } from "@effect/platform-bun";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { readFile } from "node:fs/promises";
+import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
@@ -36,15 +38,18 @@ const config = ConfigProvider.layer(
   })
 );
 
-const recordedCreatedTransaction = await Bun.file(
-  new URL("./fixtures/wompi-transaction-created.sandbox.json", import.meta.url)
-).text();
-const recordedApprovedTransaction = await Bun.file(
-  new URL("./fixtures/wompi-transaction-approved.sandbox.json", import.meta.url)
-).text();
-const recordedDeclinedTransaction = await Bun.file(
-  new URL("./fixtures/wompi-transaction-declined.sandbox.json", import.meta.url)
-).text();
+const recordedCreatedTransaction = await readFile(
+  new URL("./fixtures/wompi-transaction-created.sandbox.json", import.meta.url),
+  "utf8"
+);
+const recordedApprovedTransaction = await readFile(
+  new URL("./fixtures/wompi-transaction-approved.sandbox.json", import.meta.url),
+  "utf8"
+);
+const recordedDeclinedTransaction = await readFile(
+  new URL("./fixtures/wompi-transaction-declined.sandbox.json", import.meta.url),
+  "utf8"
+);
 const successResponse = (method: string): Response =>
   method === "GET"
     ? new Response(recordedApprovedTransaction)
@@ -63,7 +68,7 @@ const clientLayer = (
           return Effect.succeed(response(request.method));
         }),
         configLayer,
-        BunServices.layer
+        TestCrypto
       )
     )
   );

@@ -2,68 +2,49 @@
 
 Fidy's stable public namespace is decided in
 [ADR-0002](../adr/0002-fidy-product-identity-and-public-namespace.md). This runbook records the
-operational state expected by dependent deployments.
+Cloudflare-owned endpoint boundary.
 
 ## Ownership and routing
 
-- `fidyapp.com` is registered in the operator's Spaceship account.
-- `apps/web` owns the portable static web artifact. Cloudflare hosts Production at `fidyapp.com`;
-  Railway hosts the independently deployed API at `api.fidyapp.com`.
-- Google Workspace handles mail for `@fidyapp.com`.
-- Resend is configured to send and receive for `ingest.fidyapp.com`; the domain uses the São Paulo
-  sending region and enforced TLS.
+- `fidyapp.com` is the Cloudflare custom domain for the static web Worker.
+- The future API Worker uses the configured API origin only after its Cloudflare adapter and smoke
+  checks are present. The current static Worker does not impersonate an API.
+- Google Workspace remains authoritative for mail at `@fidyapp.com`.
+- Email Workers own inbound email admission and handoff. Resend is outbound-only and is never an
+  inbound webhook authority.
+- Kapso/Meta and Wompi remain specialist callback and egress boundaries. Their credentials and
+  verification live in the Cloudflare adapter configuration, not in browser assets.
 
-The root and ingestion domains deliberately have separate MX records. Never replace the root Google
-Workspace MX record with Resend's inbound record. The production DNS reconciler writes only the exact
-`ingest.fidyapp.com`, `send.ingest.fidyapp.com`, and Resend-provided DKIM names; its negative test
-proves it never queries or mutates a root MX record.
+Do not add a process server, a local database, or a provider-owned source deployment to repair an
+unavailable endpoint. Add the corresponding Worker binding and typed adapter instead.
 
 ## Runtime configuration
 
-The Public HTTP module's `externalEndpoints` operation in
-[`apps/server/src/shell/public-http/operations.ts`](../../apps/server/src/shell/public-http/operations.ts)
-derives all stable paths from these variables. The web build validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT management uses
-`/settings/pats`. The former `/auth/magic` entry is retired by ADR 0015:
+The public HTTP contract derives stable web and API origins from these variables. The web build
+validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT management uses
+`/settings/pats`. The retired `/auth/magic` path is not an endpoint.
 
-| Variable              | Production value          |
-| --------------------- | ------------------------- |
-| `PUBLIC_WEB_ORIGIN`   | `https://fidyapp.com`     |
-| `PUBLIC_API_ORIGIN`   | `https://api.fidyapp.com` |
-| `VITE_API_ORIGIN`     | `https://api.fidyapp.com` |
-| `INGEST_EMAIL_DOMAIN` | `ingest.fidyapp.com`      |
+| Variable            | Local example           | Production value          |
+| ------------------- | ----------------------- | ------------------------- |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost:5173` | `https://fidyapp.com`     |
+| `PUBLIC_API_ORIGIN` | `http://localhost:3000` | Cloudflare API Worker URL |
+| `VITE_API_ORIGIN`   | `http://localhost:3000` | Cloudflare API Worker URL |
 
-Every deployment must set the variables applicable to its process or build. Production uses the
-values above; local and preview deployments use their own origins and ingestion domain so they cannot
-silently call production addresses. See the [Production release runbook](production-releases.md) for
-the provider and GitHub environment configuration.
+Only variables applicable to the selected Worker or build may be configured. A missing API Worker is
+an explicit unavailable boundary, not permission to route the browser to a legacy host.
 
 ## Verification
 
-Check the authoritative nameservers and mail routing:
+Check the authoritative nameservers and intended web custom domain:
 
 ```sh
 dig +short NS fidyapp.com
-dig +short MX fidyapp.com
-dig +short MX ingest.fidyapp.com
+dig +short A fidyapp.com
+dig +short AAAA fidyapp.com
+curl --fail --silent --dump-header - https://fidyapp.com/ --output /dev/null
 ```
 
-The expected nameservers are the two assigned by the active Cloudflare zone. The root MX must remain
-Google Workspace, while the ingestion MX must resolve to Resend's inbound SMTP target. Follow the
-[DNS and registrar migration runbook](dns-and-registrar-migration.md) when moving authority or
-registration.
-
-Check Resend after DNS propagation:
-
-```sh
-resend domains list
-resend domains get <domain-id>
-```
-
-The `ingest.fidyapp.com` Receiving record must report `verified` before ingestion starts. Copy the
-exact Receiving MX, sending MX, SPF, and DKIM values returned by Resend into the
-`RESEND_INGEST_*` production variables, run `bun scripts/production/cloudflare-dns.ts`, and then
-request Resend verification. Provision the callback with
-`resend webhooks create --endpoint https://api.fidyapp.com/webhooks/resend --events email.received`
-and immediately store its one-time `signing_secret` as Railway's `RESEND_WEBHOOK_SECRET`; never
-print or commit it. Its Receiving, DKIM, and SPF records must all report `verified`, and
-`resend webhooks list` must show that enabled endpoint, before ingestion or outbound mail starts.
+Verify that the root mail records remain owned by the approved mail provider. When an Email Worker is
+introduced, provision its MX route through Cloudflare and verify that the Worker authenticates and
+bounds forwarded content before handing off provider-neutral work. Do not create a Resend receiving
+MX record or Resend webhook for inbound Fidy mail.

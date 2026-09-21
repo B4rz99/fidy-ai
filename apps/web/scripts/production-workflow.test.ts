@@ -11,15 +11,14 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("environment: production");
   });
 
-  it("deploys and verifies Railway before building or uploading the web artifact", () => {
-    const railway = workflow.indexOf("scripts/production/railway-release.ts");
+  it("builds and validates the static artifact before uploading Cloudflare", () => {
     const webBuild = workflow.indexOf("build:production");
     const cloudflare = workflow.indexOf("versions upload");
 
-    expect(workflow).toContain("RAILWAY_API_TOKEN");
+    expect(workflow).not.toContain("Dockerfile");
+    expect(workflow).not.toContain("docker ");
     expect(workflow).toContain("RELEASE_GIT_SHA: ${{ github.sha }}");
-    expect(railway).toBeGreaterThan(0);
-    expect(railway).toBeLessThan(webBuild);
+    expect(webBuild).toBeGreaterThan(0);
     expect(webBuild).toBeLessThan(cloudflare);
   });
 
@@ -43,7 +42,7 @@ describe("Production release workflow policy", () => {
     expect(parse).toBeLessThan(recheck);
     expect(recheck).toBeLessThan(deploy);
     expect(workflow).toContain("steps.cloudflare-version.outputs.version-id");
-    expect(workflow).not.toContain("railway up");
+    expect(workflow).not.toContain("docker push");
   });
 
   it("pins every external Action to a complete commit SHA", () => {

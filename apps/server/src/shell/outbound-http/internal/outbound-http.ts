@@ -1,47 +1,32 @@
-import { type Crypto, Effect, Encoding, Match, Option, Redacted, Result, Schema } from "effect";
+import { type Crypto, Effect, Encoding, Match, Option, Redacted } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
   type HttpClient,
   HttpClientRequest,
 } from "effect/unstable/http";
-import { cloudflareAccessSupportRecoveryUrl } from "./cloudflare-access";
 import { makeProviderTransport } from "./transport";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import {
   OutboundHttpFailure,
   type OutboundHttpRequest,
   type OutboundHttpResponse,
-  type SentryAccountResource,
   type WompiTransactionBody,
 } from "~/shell/outbound-http/contract";
 
+const cloudflareAccessSupportRecoveryUrl = "https://api.fidyapp.com/internal/support-recovery";
 const kapsoMessagesBaseUrl = "https://api.kapso.ai/meta/whatsapp/v24.0";
-const mistralChatCompletionsUrl = "https://api.mistral.ai/v1/chat/completions";
 const resendApiBaseUrl = "https://api.resend.com";
 const wompiSandboxOrigin = "https://sandbox.wompi.co";
 const wompiProductionOrigin = "https://production.wompi.co";
-const sentryAccountBaseUrl = "https://sentry.io/api/0";
 const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
 const maximumWompiResponseKibibytes = 16;
 const maximumResendDeliveryResponseKibibytes = 4;
-const maximumResendMetadataResponseKibibytes = 1_024;
-const maximumResendAttachmentResponseKibibytes = 4;
-const maximumResendInlineImageResponseKibibytes = 1_024;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
 const maximumWompiResponseBytes = maximumWompiResponseKibibytes * bytesPerKibibyte;
-const maximumHostedInferenceResponseBytes = 1_000_000;
-const maximumSentryResponseBytes = 65_536;
 const maximumCloudflareAccessResponseBytes = 1_024;
 const maximumResendDeliveryResponseBytes =
   maximumResendDeliveryResponseKibibytes * bytesPerKibibyte;
-const maximumResendMetadataResponseBytes =
-  maximumResendMetadataResponseKibibytes * bytesPerKibibyte;
-const maximumResendAttachmentResponseBytes =
-  maximumResendAttachmentResponseKibibytes * bytesPerKibibyte;
-const maximumResendInlineImageResponseBytes =
-  maximumResendInlineImageResponseKibibytes * bytesPerKibibyte;
 
 type PreparedRequest = Readonly<{
   http: ReturnType<ReturnType<typeof makeProviderTransport>>;
@@ -65,25 +50,14 @@ type PrivateOutboundHttpService = Readonly<{
 
 type OutboundHttpConfig = Readonly<{
   kapsoApiKey: Option.Option<Redacted.Redacted<string>>;
-  openAiApiKey: Option.Option<Redacted.Redacted<string>>;
-  openAiApiUrl: string;
-  mistralApiKey: Option.Option<Redacted.Redacted<string>>;
   resendEmailDeliveryApiKey: Option.Option<Redacted.Redacted<string>>;
-  resendReceivingApiKey: Option.Option<Redacted.Redacted<string>>;
   wompi: Option.Option<WompiTransportConfig>;
   httpClient: HttpClient.HttpClient;
   crypto: Option.Option<Crypto.Crypto>;
 }>;
 
-type ResendAttachmentDownloadRequest = Extract<
-  OutboundHttpRequest,
-  { readonly _tag: "ResendAttachmentDownload" }
->;
-type ResendRequest = Exclude<
-  Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>,
-  ResendAttachmentDownloadRequest
->;
-type StandardOutboundHttpRequest = Exclude<OutboundHttpRequest, ResendAttachmentDownloadRequest>;
+type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
+type StandardOutboundHttpRequest = OutboundHttpRequest;
 type WompiRequest = Extract<OutboundHttpRequest, { readonly _tag: `Wompi${string}` }>;
 
 const unavailableTransport = (): OutboundHttpFailure =>
@@ -96,13 +70,6 @@ const unavailableTransport = (): OutboundHttpFailure =>
 const rejectRequest = (): Effect.Effect<never, OutboundHttpFailure> =>
   Effect.fail(unavailableTransport());
 
-const invalidDestination = (): OutboundHttpFailure =>
-  new OutboundHttpFailure({
-    reason: "invalid-destination",
-    responseStatus: Option.none(),
-    responseHeaders: {},
-  });
-
 const jsonRequest = (
   url: string,
   body: string,
@@ -113,58 +80,27 @@ const jsonRequest = (
     HttpClientRequest.setBody(HttpBody.text(body, "application/json"))
   );
 
-const joinUrl = (baseUrl: string, path: string): string =>
-  `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-
 const resendAuthorization = (
   apiKey: Redacted.Redacted<string>
 ): Readonly<Record<string, string>> => ({ authorization: `Bearer ${Redacted.value(apiKey)}` });
-
-const ResendInboundDownloadUrl = Schema.URLFromString.check(
-  Schema.makeFilter((url) =>
-    url.protocol === "https:" &&
-    url.hostname === "inbound-cdn.resend.com" &&
-    url.port === "" &&
-    url.username === "" &&
-    url.password === ""
-      ? undefined
-      : "Expected a direct Resend inbound CDN URL"
-  )
-);
-const ResendAttachmentDescriptor = Schema.Struct({
-  download_url: ResendInboundDownloadUrl,
-});
-const decodeResendAttachmentDescriptor = Schema.decodeUnknownResult(ResendAttachmentDescriptor);
 
 const makeResendRequest = (
   request: ResendRequest,
   apiKey: Redacted.Redacted<string>
 ): Effect.Effect<Omit<PreparedRequest, "http">, OutboundHttpFailure> => {
   const authorization = resendAuthorization(apiKey);
-  switch (request._tag) {
-    case "ResendEmailDelivery":
-      return Effect.succeed({
-        request: HttpClientRequest.post(`${resendApiBaseUrl}/emails`, {
-          headers: {
-            ...authorization,
-            "content-type": "application/json",
-            "idempotency-key": request.idempotencyKey,
-          },
-          body: HttpBody.text(request.body, "application/json"),
-        }),
-        maximumResponseBytes: maximumResendDeliveryResponseBytes,
-        redirect: "error",
-      });
-    case "ResendReceivedEmail":
-      return Effect.succeed({
-        request: HttpClientRequest.get(
-          `${resendApiBaseUrl}/emails/receiving/${encodeURIComponent(request.receivedEmailId)}`,
-          { headers: authorization }
-        ),
-        maximumResponseBytes: maximumResendMetadataResponseBytes,
-        redirect: "manual",
-      });
-  }
+  return Effect.succeed({
+    request: HttpClientRequest.post(`${resendApiBaseUrl}/emails`, {
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": request.idempotencyKey,
+      },
+      body: HttpBody.text(request.body, "application/json"),
+    }),
+    maximumResponseBytes: maximumResendDeliveryResponseBytes,
+    redirect: "error",
+  });
 };
 
 const transactionSignature = (
@@ -237,30 +173,6 @@ const makeWompiRequest = (
   }
 };
 
-const sentryResourcePath = (resource: SentryAccountResource): string => {
-  switch (resource._tag) {
-    case "Organization":
-      return `/organizations/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/`;
-    case "OrganizationProjects":
-      return `/organizations/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/projects/`;
-    case "ProjectKeys":
-      return `/projects/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/${encodeURIComponent(Redacted.value(resource.projectSlug))}/keys/`;
-    case "ProjectEnvironments":
-      return `/projects/${encodeURIComponent(Redacted.value(resource.organizationSlug))}/${encodeURIComponent(Redacted.value(resource.projectSlug))}/environments/`;
-  }
-};
-
-const makeSentryRequest = (
-  request: Extract<OutboundHttpRequest, { readonly _tag: "SentryAccount" }>,
-  authToken: Redacted.Redacted<string>
-): Omit<PreparedRequest, "http"> => ({
-  request: HttpClientRequest.get(
-    `${sentryAccountBaseUrl}${sentryResourcePath(request.resource)}`
-  ).pipe(HttpClientRequest.setHeaders({ authorization: `Bearer ${Redacted.value(authToken)}` })),
-  maximumResponseBytes: maximumSentryResponseBytes,
-  redirect: "error",
-});
-
 const makeCloudflareAccessRequest = (
   request: Extract<OutboundHttpRequest, { readonly _tag: "CloudflareAccessSupportRecovery" }>,
   accessToken: Redacted.Redacted<string>
@@ -275,8 +187,6 @@ const makeCloudflareAccessRequest = (
 type RequestPreparationContext = Readonly<{
   config: OutboundHttpConfig;
   kapsoHttp: PreparedRequest["http"];
-  openAiHttp: PreparedRequest["http"];
-  mistralHttp: PreparedRequest["http"];
   resendHttp: PreparedRequest["http"];
   wompiHttp: PreparedRequest["http"];
 }>;
@@ -285,10 +195,7 @@ const prepareResend = (
   request: ResendRequest,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
-  const apiKey =
-    request._tag === "ResendEmailDelivery"
-      ? context.config.resendEmailDeliveryApiKey
-      : context.config.resendReceivingApiKey;
+  const apiKey = context.config.resendEmailDeliveryApiKey;
   return Option.match(apiKey, {
     onNone: () => Effect.fail(unavailableTransport()),
     onSome: (key) =>
@@ -338,39 +245,6 @@ const prepareNonProviderGroup = (
             redirect: "error" as const,
           }),
       });
-    case "OpenAiResponses":
-    case "OpenAiInputTokens":
-      return Option.match(config.openAiApiKey, {
-        onNone: () => Effect.fail(unavailableTransport()),
-        onSome: (apiKey) =>
-          Effect.succeed({
-            http: context.openAiHttp,
-            request: jsonRequest(
-              joinUrl(
-                config.openAiApiUrl,
-                request._tag === "OpenAiResponses" ? "responses" : "responses/input_tokens"
-              ),
-              request.body,
-              { authorization: `Bearer ${Redacted.value(apiKey)}` }
-            ),
-            maximumResponseBytes: maximumHostedInferenceResponseBytes,
-            redirect: "error" as const,
-          }),
-      });
-    case "MistralChatCompletions":
-      return Option.match(config.mistralApiKey, {
-        onNone: () => Effect.fail(unavailableTransport()),
-        onSome: (apiKey) =>
-          Effect.succeed({
-            http: context.mistralHttp,
-            request: jsonRequest(mistralChatCompletionsUrl, request.body, {
-              authorization: `Bearer ${Redacted.value(apiKey)}`,
-            }),
-            maximumResponseBytes: maximumHostedInferenceResponseBytes,
-            redirect: "error" as const,
-          }),
-      });
-    case "SentryAccount":
     case "CloudflareAccessSupportRecovery":
       return rejectRequest();
   }
@@ -383,13 +257,8 @@ const prepareRequest = (
   Match.value(request).pipe(
     Match.tagsExhaustive({
       KapsoMessages: (value) => prepareNonProviderGroup(value, context),
-      OpenAiResponses: (value) => prepareNonProviderGroup(value, context),
-      OpenAiInputTokens: (value) => prepareNonProviderGroup(value, context),
-      MistralChatCompletions: (value) => prepareNonProviderGroup(value, context),
-      SentryAccount: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
-      ResendReceivedEmail: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
@@ -419,46 +288,6 @@ const makeService = (
   execute: (request) => prepare(request).pipe(Effect.flatMap(executePrepared)),
 });
 
-const firstSuccessfulStatus = 200;
-const firstRedirectStatus = 300;
-const successfulStatus = (status: number): boolean =>
-  status >= firstSuccessfulStatus && status < firstRedirectStatus;
-
-const executeResendAttachmentDownload = (
-  request: ResendAttachmentDownloadRequest,
-  context: RequestPreparationContext
-): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
-  Effect.gen(function* () {
-    const apiKey = yield* Effect.fromOption(
-      context.config.resendReceivingApiKey,
-      unavailableTransport
-    );
-    const descriptorResponse = yield* executePrepared({
-      http: context.resendHttp,
-      request: HttpClientRequest.get(
-        `${resendApiBaseUrl}/emails/receiving/${encodeURIComponent(request.receivedEmailId)}/attachments/${encodeURIComponent(request.attachmentId)}`,
-        { headers: resendAuthorization(apiKey) }
-      ),
-      maximumResponseBytes: maximumResendAttachmentResponseBytes,
-      redirect: "manual",
-    });
-    if (!successfulStatus(descriptorResponse.status)) return descriptorResponse;
-
-    const json = Schema.decodeResult(UnknownJsonString)(
-      new TextDecoder().decode(descriptorResponse.body)
-    );
-    if (Result.isFailure(json)) return yield* invalidDestination();
-    const descriptor = decodeResendAttachmentDescriptor(json.success);
-    if (Result.isFailure(descriptor)) return yield* invalidDestination();
-
-    return yield* executePrepared({
-      http: context.resendHttp,
-      request: HttpClientRequest.get(descriptor.success.download_url.href),
-      maximumResponseBytes: maximumResendInlineImageResponseBytes,
-      redirect: "manual",
-    });
-  });
-
 /**
  * Creates fixed-destination provider transport that owns credentials, rejects redirects, suppresses
  * trace propagation, bounds response bytes, and returns only retained response facts or failures.
@@ -467,32 +296,12 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
   const context: RequestPreparationContext = {
     config,
     kapsoHttp: makeProviderTransport("kapso")(config.httpClient),
-    openAiHttp: makeProviderTransport("openai")(config.httpClient),
-    mistralHttp: makeProviderTransport("mistral")(config.httpClient),
     resendHttp: makeProviderTransport("resend")(config.httpClient),
     wompiHttp: makeProviderTransport("wompi")(config.httpClient),
   };
   return {
-    execute: (request) =>
-      request._tag === "ResendAttachmentDownload"
-        ? executeResendAttachmentDownload(request, context)
-        : prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
+    execute: (request) => prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
   };
-};
-
-export const makeSentryOutboundHttp = ({
-  authToken,
-  httpClient,
-}: Readonly<{
-  authToken: Redacted.Redacted<string>;
-  httpClient: HttpClient.HttpClient;
-}>): PrivateOutboundHttpService => {
-  const http = makeProviderTransport("sentry")(httpClient);
-  return makeService((request) =>
-    request._tag === "SentryAccount"
-      ? Effect.succeed({ ...makeSentryRequest(request, authToken), http })
-      : rejectRequest()
-  );
 };
 
 export const makeCloudflareAccessOutboundHttp = ({

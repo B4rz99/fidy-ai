@@ -38,13 +38,10 @@ const safeDependency = [
 
 const forbiddenDependency = [
   /^node_modules\/effect\/dist\/unstable\/sql(?:\/|$)/u,
-  /^node_modules\/@effect\/ai-openai(?:\/|$)/u,
-  /^node_modules\/@effect\/platform(?:\/|$)/u,
-  /^node_modules\/@effect\/platform-bun(?:\/|$)/u,
-  /^node_modules\/@effect\/sql-pg(?:\/|$)/u,
+  /^node_modules\/@effect\/ai(?:-|\/)/u,
+  /^node_modules\/@effect\/platform(?:-|\/)/u,
+  /^node_modules\/@effect\/sql(?:-|\/)/u,
   /^node_modules\/@kapso\//u,
-  /^node_modules\/@sentry\//u,
-  /^node_modules\/(?:pg|postgres|postgres-array|postgres-bytea)(?:\/|$)/u,
   /^(?:node:|bun:)?(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u,
 ] as const;
 

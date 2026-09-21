@@ -9,7 +9,7 @@ import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import {
   EmailSourceFormat,
-  ResendReceivedEmailId,
+  ReceivedEmailId,
   StatementSourceFormat,
   StatementSubmissionId,
 } from "~/core/ingestion/reference";
@@ -254,11 +254,11 @@ export const StatementLineSourceAttestation = Schema.Struct({
 });
 export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
 
-/** Immutable provenance linking one captured Transaction to one authenticated Resend email. */
+/** Immutable provenance linking one captured Transaction to one authenticated forwarded-email email. */
 export const NotificationEmailSourceAttestation = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("notification-email"),
-  receivedEmailId: ResendReceivedEmailId,
+  receivedEmailId: ReceivedEmailId,
   messageEvidence: ProviderMessageEvidence,
   messageContentSha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   sourceFormat: EmailSourceFormat,

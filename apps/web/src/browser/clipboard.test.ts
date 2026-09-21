@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { Deferred, Effect, Exit, Option, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { it as effectIt, expect } from "@effect/vitest";
@@ -19,13 +18,13 @@ it("reports clipboard rejection through the typed failure channel", async () => 
 
   const exit = await Effect.runPromiseExit(writeClipboardText(Option.some({ writeText }), "texto"));
 
-  assert.deepStrictEqual(exit, Exit.fail(new ClipboardAccessFailed()));
+  expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
 });
 
 it("reports an unavailable clipboard through the typed failure channel", async () => {
   const exit = await Effect.runPromiseExit(writeClipboardText(Option.none(), "texto"));
 
-  assert.deepStrictEqual(exit, Exit.fail(new ClipboardAccessFailed()));
+  expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
 });
 
 type ClipboardStub = Readonly<{

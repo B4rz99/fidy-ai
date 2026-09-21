@@ -20,11 +20,12 @@ Use a layer-major source tree:
 
 - `src/core/` contains pure business decisions typed `Effect<A, E, never>`.
 - `src/shell/` contains repositories, handlers, adapters, API assembly, and other effects.
-- `src/main.ts` is the only production entrypoint.
+- `src/client.ts` is the browser-safe declaration seam; Cloudflare adapters compose production
+  entrypoints outside this package.
 - A slice's core files and shell files live in their respective trees; the directory boundary is
   the purity boundary.
-- `api.ts` assembles operation definitions. Handlers import the assembled API as required by the
-  HTTP builder, while `http.ts` composes the handler layers.
+- `api.ts` assembles operation definitions. Cloudflare adapters consume the assembled API and
+  compose the platform bindings without importing core implementation details.
 
 Use the rule **“a slice owns data; a process coordinates slices.”** A process that touches one
 slice's data lives inside that slice. A process that owns data nobody else owns is a slice. A
@@ -34,8 +35,8 @@ the owning slice's operations.
 Slices are drawn using three checks:
 
 1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
-   explicitly composes owner operations: canonical state plus Audit evidence in ADR 0005, legal
-   bootstrap in ADR 0009, and consent-serialized authorized work in ADR 0008.
+   explicitly composes owner operations: canonical state plus Audit evidence in ADR 0005 and legal
+   bootstrap in ADR 0009. Cloudflare adapters provide the atomic and coordination boundaries.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 

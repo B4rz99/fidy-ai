@@ -1,9 +1,9 @@
-import { DateTime, Effect, Function, type Option, Schema } from "effect";
+import { Effect, Function, type Option, Schema } from "effect";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { type CanonicalCaller, ResolvedCaller, toAccessCaller } from "./authz";
-import { resolveAccessTierInScope } from "~/shell/access-tier/operations";
+import { type CanonicalCaller, type ResolvedCaller, toAccessCaller } from "./authz";
+import type { UserId } from "~/core/identity/reference";
 import type { CanonicalInput } from "./canonical-input";
 import {
   type OperationAccessCaller,
@@ -60,15 +60,12 @@ export const freePatCaller = (
   capabilities: ReadonlyArray<CanonicalCapability>
 ): SuggestedOperationCaller => ({ accessCaller: { _tag: "PAT", capabilities }, tier: "free" });
 
-/** Resolves the owner and current AccessTier inside the canonical User-scoped transaction. */
-export const resolveSuggestedOperationCaller = Effect.gen(function* () {
-  const resolved = yield* ResolvedCaller;
-  const tier = yield* resolveAccessTierInScope(resolved.subjectUserId, yield* DateTime.now);
-  return {
-    userId: resolved.subjectUserId,
-    caller: toSuggestedOperationCaller({ resolved, accessTier: tier }),
-  };
-});
+/** Cloudflare authorization supplies the User and AccessTier in the Worker adapter. */
+export const resolveSuggestedOperationCaller: Effect.Effect<
+  Readonly<{ readonly userId: UserId; readonly caller: SuggestedOperationCaller }>,
+  never,
+  ResolvedCaller
+> = Effect.die("Cloudflare authorization boundary is not configured");
 
 /** Whether current capabilities satisfy one canonical operation's declared tier. */
 export const grantsRequiredTier = (input: {

@@ -196,9 +196,9 @@ describe("public web application routes", () => {
         name: "Política de tratamiento de datos personales",
       })
     ).toBeVisible();
-    expect(screen.getByText("policy-2026-08-03")).toBeVisible();
-    expect(screen.getByText(/Fidy usa OpenAI/iu)).toBeVisible();
-    expect(screen.getByText(/Estados Unidos/iu)).toBeVisible();
+    expect(screen.getByText("policy-2026-09-21")).toBeVisible();
+    expect(screen.getByText(/Cloudflare Workers AI/iu)).toBeVisible();
+    expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
     expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /términos de servicio/iu })).not.toBeInTheDocument();
   });

@@ -7,8 +7,8 @@ import { Effect, Option } from "effect";
 
 /**
  * Every production redacted credential must have one focused test proving its adapter path keeps the
- * secret out of failures, logs, and model context. Direct reads and the shared credential loaders
- * (`configuredSecret`, `configuredHmacKey`) carry the same obligation, and the pairing is stated
+ * secret out of failures, logs, and model context. Direct reads and the shared `configuredSecret`
+ * loader carry the same obligation, and the pairing is stated
  * here rather than inferred, so adding a credential without that evidence fails the gate instead of
  * shipping unproven. The scan rejects any non-literal loader use rather than skipping it.
  */
@@ -20,54 +20,14 @@ type CredentialEvidence = Readonly<{
 
 const credentialEvidence = [
   {
-    configuration: "OPENAI_API_KEY",
-    testFile: "apps/server/src/shell/hosted-inference/internal/openai.test.ts",
-    testName: "counts complete framing and executes the exact prepared request",
-  },
-  {
-    configuration: "MISTRAL_API_KEY",
-    testFile: "apps/server/src/shell/hosted-inference/internal/mistral-conformance.test.ts",
-    testName: "fails without exposing the credential or provider body",
-  },
-  {
-    configuration: "EMAIL_ADMISSION_HMAC_KEY",
-    testFile: "apps/server/src/shell/onboarding/onboarding-turn.test.ts",
-    testName: "keeps the email admission HMAC credential out of persistence and outcomes",
-  },
-  {
-    configuration: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY",
-    testFile: "apps/server/src/shell/email-authentication/replacement.test.ts",
-    testName: "keeps the credential lookup HMAC key out of persistence and outcomes",
-  },
-  {
-    configuration: "SOURCE_ADMISSION_HMAC_KEY",
-    testFile: "apps/server/src/shell/secret-material/operations.test.ts",
-    testName: "keeps the source admission HMAC key out of identifiers and failures",
-  },
-  {
-    configuration: "FIDY_CLUSTER_AUTH_TOKEN",
-    testFile: "apps/server/src/shell/authenticated-cluster-http.test.ts",
-    testName: "keeps Cluster credentials out of authentication failures",
-  },
-  {
     configuration: "RESEND_API_KEY",
-    testFile: "apps/server/src/shell/email-authentication/delivery.test.ts",
-    testName: "keeps Resend credentials out of typed failures",
-  },
-  {
-    configuration: "RESEND_WEBHOOK_SECRET",
-    testFile: "apps/server/src/shell/ingestion/email-forwarding.test.ts",
-    testName: "enables one permanent address and securely admits durable authenticated work",
+    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testName: "owns the Resend delivery destination, authorization, and idempotency",
   },
   {
     configuration: "KAPSO_API_KEY",
-    testFile: "apps/server/src/shell/channels/whatsapp/kapso-client.test.ts",
-    testName: "keeps provider bodies and send inputs out of typed failures",
-  },
-  {
-    configuration: "KAPSO_WEBHOOK_SECRET",
-    testFile: "apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts",
-    testName: "rejects lifecycle proof that does not identify one valid latest event",
+    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
+    testName: "keeps the configured Kapso API key redacted while sending it only as a header",
   },
   {
     configuration: "WOMPI_PRIVATE_KEY",
@@ -78,61 +38,6 @@ const credentialEvidence = [
     configuration: "WOMPI_INTEGRITY_SECRET",
     testFile: "apps/server/src/shell/subscription/wompi-billing-client.test.ts",
     testName: "keeps Wompi integrity credentials and response bodies out of failures",
-  },
-  {
-    configuration: "WOMPI_EVENT_SECRET",
-    testFile: "apps/server/src/shell/subscription/enrollment-handlers.test.ts",
-    testName: "keeps Wompi event secrets out of authentication failures",
-  },
-  {
-    configuration: "WOMPI_RECONCILIATION_SOURCE_ID",
-    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
-    testName: "keeps reconciliation source IDs out of lookup failures",
-  },
-  {
-    configuration: "WOMPI_SANDBOX_CARD_TOKEN",
-    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
-    testName: "keeps provider credentials, card tokens, and response bodies out of failures",
-  },
-  {
-    configuration: "DATABASE_URL",
-    testFile: "apps/server/src/shell/database/row-level-security.test.ts",
-    testName: "starts only with a restricted runtime role and complete forced policy coverage",
-  },
-  {
-    configuration: "MIGRATION_DATABASE_URL",
-    testFile: "apps/server/src/shell/database/row-level-security.test.ts",
-    testName: "fails closed when the runtime connection uses the migration authority",
-  },
-  {
-    configuration: "SENTRY_PRODUCTION_DSN",
-    testFile: "apps/server/src/shell/observability/telemetry-config.test.ts",
-    testName: "keeps enabled capture closed while deployment project identities are unprovisioned",
-  },
-  {
-    configuration: "SENTRY_NON_PRODUCTION_DSN",
-    testFile: "apps/server/src/shell/observability/telemetry-config.test.ts",
-    testName: "validates a full-capture non-production account smoke identity",
-  },
-  {
-    configuration: "SENTRY_AUTH_TOKEN",
-    testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
-    testName: "loads all operator Sentry account credentials as redacted values",
-  },
-  {
-    configuration: "SENTRY_ORGANIZATION_SLUG",
-    testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads operator Sentry account locators as redacted values",
-  },
-  {
-    configuration: "SENTRY_PRODUCTION_PROJECT_SLUG",
-    testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads operator Sentry account locators as redacted values",
-  },
-  {
-    configuration: "SENTRY_NON_PRODUCTION_PROJECT_SLUG",
-    testFile: "apps/server/src/shell/observability/sentry-account-reader.test.ts",
-    testName: "loads operator Sentry account locators as redacted values",
   },
 ] as const satisfies ReadonlyArray<CredentialEvidence>;
 
@@ -432,11 +337,6 @@ const credentialLoaders = [
     call: "configuredSecret",
     moduleSuffix: "secret-material/internal/configured-secret",
     nameProperty: "name",
-  },
-  {
-    call: "configuredHmacKey",
-    moduleSuffix: "secret-material/internal/keyed-digest",
-    nameProperty: "variable",
   },
 ] as const satisfies ReadonlyArray<CredentialLoader>;
 

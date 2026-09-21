@@ -1,118 +1,49 @@
-# Effect v4 durable workflows
+# Effect workflows at the Cloudflare boundary
 
-> Source: `effect@4.0.0-rc.116` (`d62dd0d6…`) and the checked-in `.repos/effect` source. Post-rc.116 behavior is identified explicitly. Citations below are relative to `.repos/effect/packages/`.
+Use this reference before introducing durable multi-step execution. A Workflow owns orchestration,
+not Fidy domain authority. The Cloudflare Workflow adapter is the production seam; until it exists,
+durable operations fail closed rather than using a process-local loop.
 
-Use this reference before implementing a multi-step durable operation, replacing workflow state columns, scheduling durable waits, awaiting a callback, or dispatching workflow-owned external work.
+## Boundary and atomicity
 
-## Mental model
+A domain mutation followed by Workflow start is a dual write unless an outbox or a platform-proven
+atomic submission couples them. Prefer:
 
-`Workflow.make` defines a named protocol with payload, success, and error schemas plus an explicit idempotency-key function. The engine hashes the workflow tag and that key into the execution id; repeated execution with the same pair addresses the same durable execution (`effect/src/unstable/workflow/Workflow.ts:316-365`, `:429-466`). Use a stable domain operation id as the key. Do not derive it from mutable fields or secrets.
+1. commit the canonical state and a bounded outbox intent in one D1 atomic unit;
+2. let a Queue or Worker claim the intent idempotently; and
+3. start or resume the Workflow with a stable identity and bounded payload.
 
-A workflow body is ordinary Effect code registered with `Workflow.toLayer`. On suspension or runtime loss the body may be entered again; durability comes from the engine's persisted workflow/activity requests and the durable primitives, **not** from a persisted instruction-by-instruction event history. Keep orchestration pure and cheap between durable boundaries. Never put an unwrapped provider mutation directly in the body.
+Never hold a D1 atomic unit across a provider call. Workflows may retry provider calls, but provider
+ambiguity requires reconciliation rather than blind repetition. Persist correlation facts and
+idempotency keys, not broad provider responses or personal content.
 
-`execute` validates the payload and either waits for the result or, with `{ discard: true }`, submits without waiting. `executionId`, `poll`, `resume`, and `interrupt` use the same derived identity (`effect/src/unstable/workflow/Workflow.ts:327-405`). Production must provide the cluster engine described in `.patterns/cluster.md`; `WorkflowEngine.layerMemory` is only a volatile testing/development engine.
+## Activities and durable waits
 
-### Starting a workflow is a publication boundary
+Use named activities for retry-sensitive steps. Activity names and attempt identities are persisted
+contract data: keep them stable, unique, schema-versioned, and bounded. An activity must tolerate
+redelivery and must not claim exactly-once external effects without provider evidence.
 
-A domain transaction followed by `Workflow.execute` is a dual write unless both are proven to share one storage transaction. Do not assume Cluster persistence makes an earlier domain commit and later workflow submission atomic. Choose explicitly:
+Use durable sleeps for business waits that must survive Worker replacement. Ordinary short pacing is
+not durable and must not be mistaken for a schedule. Cancellation and suspension are explicit domain
+outcomes; compensation is a reviewed operation, not an automatic assumption.
 
-1. execute first only when the workflow can safely observe “not committed yet” and retry;
-2. commit an outbox/`PersistedQueue.offer` in the domain SQL transaction, then let a worker start the idempotent workflow;
-3. use a reviewed `ClusterSchema.WithTransaction` activity only for short database work that truly shares the configured message-storage `SqlClient`—never for provider network calls.
+## Subject and security boundaries
 
-The workflow idempotency key makes repeated publication converge on one execution, but it cannot recover a workflow submission that was never published. Persist enough domain state for the publisher to retry, and test both crash gaps: before publication and after publication before acknowledgment. See `.patterns/persisted-queue.md` for the same-`SqlClient` transactional-offer constraint.
+Every Workflow execution carries an explicit authenticated `UserId` or a narrowly scoped non-User
+correlation identity. A Workflow id or Durable Object key never authorizes a User. Reload current
+subject state at each step and recheck revocation, consent, retention, and provider status before a
+sensitive effect.
 
-## Activities are the durable side-effect boundary
+Payloads contain bounded identifiers and facts only. Do not persist credentials, browser verifiers,
+raw email, prompts, replies, uploaded files, or unbounded provider bodies in Workflow state. Secrets
+are loaded from Cloudflare bindings at the narrow adapter call.
 
-Define external or otherwise retry-sensitive steps with `Activity.make({ name, success, error, execute })`. The activity executes through the current workflow engine; `Activity.idempotencyKey` derives a stable key from the current workflow execution and activity attempt (`effect/src/unstable/workflow/Activity.ts:123-178`, `:246-269`, `:300-324`). In the cluster engine, the persisted activity request primary key is `${activity.name}/${attempt}` (`effect/src/unstable/cluster/ClusterWorkflowEngine.ts:228-250`, `:661-680`, `:743-744`).
+## Testing and evolution
 
-Activity names therefore form persisted identity. Keep them stable and unique for distinct logical steps in one execution. Reusing a name at the same attempt can alias the persisted result; renaming creates a new side effect on re-entry. When one logical durable step can recur in a workflow loop, keep its low-cardinality name stable and give each recurrence a deterministic `Activity.CurrentAttempt` that is unique within the execution; the attempt is part of the persisted activity identity (`effect/src/unstable/workflow/Activity.ts:228-239`; `effect/src/unstable/cluster/ClusterWorkflowEngine.ts:743-744`). A monotonically increasing loop counter is the simplest source. When the recurrence key itself can reset across logical steps — a per-attempt evidence revision, say — no globally increasing integer is derivable from the key alone, so derive an injective attempt from it: uniqueness, not ordering, is what prevents aliasing.
+Portable tests cover activity contracts, state transitions, error classification, idempotency, and
+schema evolution. Cloudflare adapter tests cover suspension/resume, retry, interruption, duplicate
+messages, versioning, retention, and User isolation. A memory implementation may test pure workflow
+logic but cannot claim durable execution evidence.
 
-An activity retries interruption with a built-in schedule capped at ten recurrences before returning suspension (`effect/src/unstable/workflow/Activity.ts:181-210`). `Activity.retry` advances the durable attempt number according to the supplied schedule rather than pretending all attempts are one request (`effect/src/unstable/workflow/Activity.ts:212-244`). Model expected provider/domain failures in the activity error schema and choose retry schedules by error class.
-
-Activity registration is bracketed with `acquireUseRelease`. If interruption occurs after
-registration but before the activity body starts, the registration is still released, preventing
-a leaked activity count from blocking workflow suspension
-(`effect/src/unstable/workflow/Workflow.ts:728-760`,
-`effect/test/unstable/workflow/Workflow.test.ts:6-40`).
-
-### The unavoidable provider ambiguity
-
-An activity can make a provider mutation and crash before its reply is durably stored. On recovery that activity request can run again. The workflow engine cannot infer whether the provider committed. This is at-least-once external execution, not exactly once.
-
-For every mutating provider activity, use one of:
-
-1. a provider idempotency key derived from workflow execution + stable activity name;
-2. reconciliation by provider operation id before repeating;
-3. an explicitly reviewed operation that is safe at least once.
-
-Persist provider correlation facts needed for reconciliation. Do not “fix” ambiguity with a broad PostgreSQL lock or a transaction held across the network.
-
-## Durable waiting and handoff
-
-### `DurableClock`
-
-`DurableClock.sleep` uses an in-memory sleep below a threshold and the workflow engine's durable scheduling at or above it. The default threshold is 60 seconds and can be overridden per call (`effect/src/unstable/workflow/DurableClock.ts:42-61`, `:70-117`). Use it for business waits that must survive restart; use ordinary `Effect.sleep` for short process-local pacing. Test the boundary explicitly if configuration changes it.
-
-### `DurableDeferred`
-
-A durable deferred is named and schema-backed. `await` suspends the workflow until the engine records completion; `done`, `succeed`, and `fail` complete it from another process (`effect/src/unstable/workflow/DurableDeferred.ts:84-161`, `:468-559`). `raceAll` can await multiple deferreds, but the result remains tied to their stable names (`effect/src/unstable/workflow/DurableDeferred.ts:260-315`).
-
-The memory engine handles durable-deferred self-completion without deadlocking. When completion
-interrupts the current workflow run, replay waits for the interrupted run's cleanup to finish before
-starting the next run. Completion may occur from a finalizer or from `DurableDeferred.into` inside
-`raceAll` (`effect/test/unstable/workflow/WorkflowEngine.test.ts:6-84`). This is an engine guarantee,
-not a new public API.
-
-A token serializes workflow name, execution id, and deferred name into base64url; parsing only decodes and validates that tuple (`effect/src/unstable/workflow/DurableDeferred.ts:317-398`). Treat a token as a routing capability, **not as authenticated authorization**. Callback routes must independently authenticate the caller, authorize the target User/workflow, enforce replay policy, and avoid logging tokens.
-
-Names are persisted identity. Keep each deferred name stable and unique in the workflow execution. Store only bounded callback facts in its success/error schema.
-
-### `DurableQueue`
-
-`DurableQueue.process` composes three native primitives: a `PersistedQueue`, an activity-derived stable item id, and a `DurableDeferred`; it offers work and suspends until a worker completes the deferred (`effect/src/unstable/workflow/DurableQueue.ts:117-148`, `:178-242`). Use it when workflow orchestration and work execution belong in different worker pools.
-
-`makeWorker` runs one worker by default, supports explicit concurrency, captures the handler `Exit`, completes the deferred, and only then lets the persisted queue item complete (`effect/src/unstable/workflow/DurableQueue.ts:255-333`). The same crash gap exists between the handler's provider effect and deferred/queue completion, so workers still require provider idempotency or reconciliation. Queue payload and retention rules from `.patterns/persisted-queue.md` apply.
-
-Do not use `DurableQueue` merely to call a local function. Use it when independent scaling, isolation, or durable handoff is a real requirement.
-
-## Failure, suspension, interruption, and compensation
-
-A completed workflow result durably contains a schema-encoded `Exit`; suspension is a distinct result. `Workflow.intoResult` captures typed failure and, by default, defects, while suspension is represented only when the workflow intentionally marks itself suspended (`effect/src/unstable/workflow/Workflow.ts:468-590`, `:862-880`). Keep defects for violated invariants; model operational outcomes as typed errors.
-
-Durable primitives suspend by marking the workflow instance and interrupting its current fiber (`effect/src/unstable/workflow/Workflow.ts:859-866`). Suspension is not failure and must not trigger domain failure handling. An explicit workflow interrupt is terminal intent; define who may request it and what compensation means.
-
-`Workflow.withCompensation(step, compensate)` registers compensation only after `step` succeeds and runs it if the **overall** workflow later fails. The source explicitly warns that this is for top-level effects and does not work for nested activities (`effect/src/unstable/workflow/Workflow.ts:807-857`). Compensation is itself an external effect with retry/crash ambiguity. Make it idempotent. If reliable provider compensation needs its own durable attempts, model an explicit compensation phase and Activity in the top-level orchestration rather than assuming a finalizer is exactly once.
-
-## Schema evolution
-
-Payloads, activity results, workflow results, deferred completions, and durable-queue items are decoded later with the currently deployed schemas. There is no application payload migration registry in these APIs. Apply the compatibility discipline from `.patterns/schema.md`:
-
-- prefer additive optional fields and tolerant decoding;
-- retain decoders for every in-flight encoded form;
-- version a workflow/activity/deferred name only when deliberately creating new persisted identity;
-- drain or explicitly migrate incompatible in-flight executions before removing old decoders;
-- never change an idempotency-key algorithm for an existing workflow name without treating old executions separately.
-
-Because workflow names and execution ids are cluster entity/message keys, deployment skew matters. During rolling deploys, every runner that can own the shard must understand all in-flight request and result schemas.
-
-## User and data boundaries
-
-Every workflow payload must carry explicit `UserId` plus bounded domain identifiers. At every activity or repository boundary, activate the User database scope before reading/writing. The generic workflow engine does not establish Fidy's RLS context or infer ownership.
-
-Do not persist access tokens, credentials, raw emails, unbounded provider responses, or browser/session objects in workflow payloads/results. Persist references and minimal reconciliation facts. Apply safe span attributes: execution ids and low-cardinality operation names are useful; User data, provider payloads, deferred tokens, and error bodies are not.
-
-## Tests required before adoption
-
-Use the memory engine for fast orchestration tests and the cluster SQL engine for durable integration tests. Cover:
-
-1. duplicate execute calls with one idempotency key produce one logical execution;
-2. suspension and later callback/sleep resume after runtime replacement;
-3. crash after simulated provider commit but before activity reply does not duplicate the provider outcome;
-4. typed activity retries and terminal failures preserve the expected workflow `Exit`;
-5. interruption produces the intended compensation exactly in domain outcome terms;
-6. old payload, activity-result, and deferred-result encodings decode under the new deployment;
-7. callback authorization rejects a valid token belonging to another User;
-8. no sensitive values enter durable rows, errors, logs, or spans.
-
-The upstream suites exercise memory-engine retry/suspend/deferred behavior and cluster-engine replay, interruption, polling, and activities (`effect/test/unstable/workflow/WorkflowEngine.test.ts:1-285`, `effect/test/cluster/ClusterWorkflowEngine.test.ts:1-1482`). Mirror the relevant contract, but do not treat memory tests as proof of SQL/process-loss behavior.
+New workflow code needs an explicit payload version and a migration/retention decision. Do not silently
+change the meaning of an existing execution id or activity name.

@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import {
   maximumEmailEvidenceIdCharacters,
-  maximumResendWebhookDeliveryIdCharacters,
+  maximumForwardedEmailDeliveryIdCharacters,
 } from "./email-policy";
 
 /** Stable kind code for deterministic tabular statement formats. */
@@ -44,16 +44,16 @@ export const IngestSampleId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "IngestSampleId" });
 export type IngestSampleId = typeof IngestSampleId.Type;
 
-/** Resend's stable identity for one received provider email. */
-export const ResendReceivedEmailId = Schema.NonEmptyString.check(
+/** Stable identity of one received forwarded email. */
+export const ReceivedEmailId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumEmailEvidenceIdCharacters)
-).pipe(Schema.brand("ResendReceivedEmailId"));
-export type ResendReceivedEmailId = typeof ResendReceivedEmailId.Type;
+).pipe(Schema.brand("ReceivedEmailId"));
+export type ReceivedEmailId = typeof ReceivedEmailId.Type;
 
-/** Svix's stable identity for one webhook delivery, used only as replay evidence. */
-export const ResendWebhookDeliveryId = Schema.NonEmptyString.check(
+/** Stable identity of one authenticated email delivery, used only as replay evidence. */
+export const ForwardedEmailDeliveryId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(maximumResendWebhookDeliveryIdCharacters)
-).pipe(Schema.brand("ResendWebhookDeliveryId"));
-export type ResendWebhookDeliveryId = typeof ResendWebhookDeliveryId.Type;
+  Schema.isMaxLength(maximumForwardedEmailDeliveryIdCharacters)
+).pipe(Schema.brand("ForwardedEmailDeliveryId"));
+export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;

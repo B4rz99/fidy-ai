@@ -18,8 +18,8 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "VITE_API_ORIGIN=https://127.0.0.1:4174 bun --bun vite build --mode production --outDir playwright-dist && cd ../server && DATABASE_URL=${DATABASE_URL:-postgres://fidy_runtime:fidy_runtime@127.0.0.1:5433/fidy} MIGRATION_DATABASE_URL=${MIGRATION_DATABASE_URL:-postgres://fidy:fidy@127.0.0.1:5433/fidy} bun scripts/run-browser-pairing-acceptance-server-runtime.ts",
-    url: "https://127.0.0.1:4174/health",
+      "openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/fidy-playwright-key.pem -out /tmp/fidy-playwright-cert.pem -subj /CN=127.0.0.1 -days 1 >/dev/null 2>&1 && VITE_API_ORIGIN=https://127.0.0.1:4174 bun --bun vite build --mode production --outDir playwright-dist && PLAYWRIGHT_TLS_KEY=/tmp/fidy-playwright-key.pem PLAYWRIGHT_TLS_CERT=/tmp/fidy-playwright-cert.pem PREVIEW_ROOT=playwright-dist PREVIEW_PORT=4173 bun scripts/serve-preview.ts",
+    url: "https://127.0.0.1:4173/",
     ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

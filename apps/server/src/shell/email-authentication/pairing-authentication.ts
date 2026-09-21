@@ -1,21 +1,57 @@
-import {
-  type BrowserPairingEmailBackgroundStepOutcome,
-  processNextBackgroundStep,
-} from "./authentication-delivery-worker";
-import {
-  requestBrowserPairingEmailCode,
-  submitBrowserPairingEmailCode,
-} from "./browser-pairing-authentication";
+import { Data, Effect, type Redacted } from "effect";
+import type { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+import type { BrowserLoginPrivateVerifier } from "~/core/browser-login/model";
+import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingInvalid } from "~/shell/browser-login/errors";
+
+/** The removed process-local delivery authority never accepts a browser pairing request. */
+export class BrowserPairingEmailAuthenticationUnavailable extends Data.TaggedError(
+  "BrowserPairingEmailAuthenticationUnavailable"
+)<{}> {}
 
 /**
- * Deep verified-email BrowserLogin approval interface. Request and resend share `requestCode`;
- * `submitCode` may only approve the existing pairing; the background entry point hides request,
- * delivery, claim, lock, and provider-settlement identities from its worker caller.
+ * Browser authentication remains a contract-only seam until the Cloudflare Worker/Email Worker
+ * adapter owns the pairing state and delivery. It must not fall back to the deleted SQL/workflow
+ * implementation.
  */
-export const browserPairingEmailAuthentication = {
-  requestCode: requestBrowserPairingEmailCode,
-  submitCode: submitBrowserPairingEmailCode,
-  processNextBackgroundStep,
-} as const;
+const browserPairingRetryAfterSeconds = 60;
 
-export type { BrowserPairingEmailBackgroundStepOutcome };
+export const browserPairingEmailAuthentication: {
+  readonly requestCode: (input: {
+    readonly pairingId: BrowserLoginPairingId;
+    readonly privateVerifier: BrowserLoginPrivateVerifier;
+    readonly email: EmailAddress;
+    readonly sourceAddress: string;
+  }) => Effect.Effect<
+    Readonly<{
+      readonly status: "pending";
+      readonly retryAfterSeconds: typeof browserPairingRetryAfterSeconds;
+    }>,
+    BrowserLoginPairingInvalid
+  >;
+  readonly submitCode: (input: {
+    readonly pairingId: BrowserLoginPairingId;
+    readonly privateVerifier: BrowserLoginPrivateVerifier;
+    readonly combinedCode: Redacted.Redacted<EmailVerificationCode>;
+    readonly sourceAddress: string;
+  }) => Effect.Effect<boolean>;
+} = {
+  requestCode: (_input: {
+    readonly pairingId: BrowserLoginPairingId;
+    readonly privateVerifier: BrowserLoginPrivateVerifier;
+    readonly email: EmailAddress;
+    readonly sourceAddress: string;
+  }): Effect.Effect<
+    Readonly<{
+      readonly status: "pending";
+      readonly retryAfterSeconds: typeof browserPairingRetryAfterSeconds;
+    }>,
+    BrowserLoginPairingInvalid
+  > => Effect.fail(new BrowserLoginPairingInvalid()),
+  submitCode: (_input: {
+    readonly pairingId: BrowserLoginPairingId;
+    readonly privateVerifier: BrowserLoginPrivateVerifier;
+    readonly combinedCode: Redacted.Redacted<EmailVerificationCode>;
+    readonly sourceAddress: string;
+  }) => Effect.succeed(false),
+};

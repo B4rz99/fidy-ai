@@ -149,7 +149,7 @@ suffixes, overlong labels, duplicate/conflicting fields, misleading reference/au
 numbers, hidden text/attributes, and ambiguous recognition. Such mutations prove rejection for
 those cases; they do not expand supported source formats.
 
-At the real-PostgreSQL ingestion/API seam, prove exact prospective persistence, source-attached
+At the real Cloudflare ingestion/API adapter seam, prove exact prospective persistence, source-attached
 retention, immutable attestations, replay safety, and explicit User isolation. Assert no raw-email
 model call and no unsafe data in any downstream model request, errors, or telemetry. Keep external
 provider/model substitutions at their actual seams; do not mock repositories or owner operations.

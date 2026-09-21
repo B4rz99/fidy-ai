@@ -1,250 +1,87 @@
 # Server architecture
 
-This document owns the stable internal architecture of `@fidy/server`. Read the repository
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) first for system shape, cross-application contracts,
-production topology, and browser-to-server ownership.
-
-This is an orientation map of server boundaries, ownership, and durable invariants. It does not
-repeat domain definitions, ADR rationale, operational procedures, migration inventories, or
-implementation-level configuration. Those belong in `CONTEXT.md`, the relevant
-[ADRs](../../docs/adr/), [security and coding standards](../../SECURITY_STANDARDS.md),
-the [durable-execution inventory](../../docs/architecture/durable-execution-inventory.md), and
-[operational runbooks](../../docs/operations/).
+Read the repository [`ARCHITECTURE.md`](../../ARCHITECTURE.md) first. This document owns the stable
+boundaries of `@fidy/server`; it does not describe a process deployment because this package has no
+production listener.
 
 ## 1. Application shape
 
-`apps/server` is the `@fidy/server` application package. Its source tree is layer-major:
+`apps/server` is the canonical contract and domain package for the Cloudflare application:
 
-- `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
-  service.
-- `shell/` contains repositories, handlers, API assembly, adapters, and all other effects.
-- `src/main.ts` is the only production entrypoint. Scripts compose shell layers and contain no
-  domain decisions.
+- `core/` contains pure business decisions and schemas. Core code has no platform requirements.
+- `shell/` contains operation declarations, provider-boundary contracts, policy projection, and
+  portable adapter code. It must not manufacture a local runtime authority.
+- `contracts/` contains generated OpenAPI and operation-policy evidence owned by the canonical API.
+- `src/client.ts` is the browser-safe declaration seam. It exports no server implementation.
 
-The API assembly imports slice operation definitions. Handlers use the assembled API as required by
-the HTTP builder, and `http.ts` composes the handler layers. This direction is acyclic and is
-protected by the dependency graph. Server-specific build and deployment adapters remain with the
-package; production topology and release procedures remain in the repository-level architecture and
-runbook.
+The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
+provider-specific hosted inference implementations are not compatibility surfaces. A future
+Cloudflare Worker composes the published contracts with D1, Durable Objects, Queues, Workflows, R2,
+Workers AI, or Email Workers. Until then, unavailable operations fail closed.
 
 ## 2. Slices and ownership
 
-> **A slice owns data. A process coordinates slices.**
+A slice owns its domain decisions and published schemas. Cross-slice references use stable ids and
+published interfaces; implementation files and `internal/` modules remain private. Core does not
+import shell or platform code. Shell adapters load external values, pass plain values to core, and
+map typed domain failures to the public contract.
 
-A process that touches one slice's data lives inside that slice. A process that owns data nobody
-else owns is a slice; a process that owns no data is shell-only. A process never writes another
-slice's tables. It calls the owning slice's operations so that invariants and atomicity remain in
-one place. The nested WhatsApp operational slice follows the same rule for its delivery and ingress
-state.
+The canonical operation definition is the source for reflected operation ids, access metadata,
+suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptions. The reflected
+registries remain complete even when their execution implementation is unavailable; a registry entry
+must never silently fall back to local state.
 
-Use three checks when drawing a boundary:
+## 3. Security and subject boundaries
 
-1. Data that must commit atomically has one owner unless an accepted coordination decision composes
-   owner-published operations.
-2. Cross-slice references use stable ids, not embedded objects.
-3. An invariant that must hold immediately is enforceable inside one slice.
+`UserId` is explicit wherever a decision needs a subject. No ambient process-local current-user
+service, claim id, provider id, or opaque identifier grants authorization. Browser login keeps the
+private verifier in the browser and treats the server/Worker as the proof-verification authority.
 
-A slice is not a bounded context or a use case. Fidy is one bounded context with one vocabulary;
-API groups are presentation choices. See [ADR 0003](../../docs/adr/0003-layer-major-core-shell-and-slice-ownership.md)
-and [ADR 0010](../../docs/adr/0010-whatsapp-channel-operational-slice.md).
+Cloudflare storage adapters must preserve the same subject boundary: D1 queries receive an explicit
+subject, Durable Object keys are coordination identities rather than authorization, and Queue or
+Workflow payloads contain only bounded, secret-free projections. Email Worker admission and R2
+content retrieval are external to this package's inbound forwarding seam. The application accepts
+only the provider-neutral forwarded-email contract and remains fail closed without an adapter.
 
-### Core references
+Telemetry is metadata-only and provider-neutral. Secrets, request bodies, model content, provider
+responses, and personal data do not cross the telemetry contract.
 
-The functional core's Shared Kernel contains only Money, product context, and time. Core imports
-those values from `core/_shared`; every other cross-module dependency uses a published interface.
-The Published Trio consists of `contract.ts`, `operations.ts`, and `runtime.ts`; core may use the
-first two because runtime authority remains in shell composition. Modules not migrated to the trio
-publish through `reference.ts`.
+## 4. External providers
 
-A published interface may use its own `internal/` implementation but must not expose it. Transitive
-exposure that cannot be deterministically gated is review-only. Core may not import a sibling's
-model, rules, errors, taxonomy, `internal/`, or other unpublished file. Shell loads data and passes
-plain values to core decisions.
+`shell/outbound-http` is the only raw outbound provider transport boundary. It publishes closed
+requests for the retained specialist providers—Kapso/Meta, Wompi, and outbound Resend—and owns fixed
+destinations, credential handling, redirects, byte limits, status projection, and safe failures.
+Provider adapters cannot import raw transport or private implementation modules.
 
-## 3. The functional core
+Hosted inference exposes a provider-neutral contract and a typed unavailable result until the
+Workers AI adapter is implemented. There is no external-model fallback. Provider-controlled inbound
+webhook authority is removed; Cloudflare Email Workers own admission and handoff instead.
 
-Core code returns `Effect<A, E, never>`. The `never` requirement is the compiler-visible purity
-fence: requesting a service does not compile. Core takes time, generated ids, user context, and
-already-loaded values as inputs. The shell supplies those values, performs I/O, and coordinates
-processes around the decisions.
+## 5. Persistence and asynchronous execution
 
-## 4. Canonical operations and agent surface
+This package contains schemas and operation contracts, not a process-local database, SQL transaction,
+queue, lock, workflow, or migration authority. The Cloudflare implementation will make D1 the
+application state authority, Durable Objects the keyed coordination authority, Queues the redelivery
+mechanism, Workflows the durable multi-step mechanism, and R2 the bounded content authority. Those
+platform services must remain infrastructure, not alternate domain models.
 
-The canonical schema for a domain entity lives in `core/<slice>/model.ts`. The canonical operation
-lives in `shell/<slice>/operations.ts`, where transport and access policy belong: path, status,
-caller requirement, tier, cost class, hosted-agent confirmation policy, and query-or-mutation kind.
-The operation references the core schema rather than maintaining a transport model.
+Atomic domain mutation and outbox behavior belong in the future D1/Worker adapter. If that adapter is
+absent, canonical mutation execution returns the closed unavailable failure. It must not use an
+in-memory map, local queue, process lock, or best-effort continuation as a substitute.
 
-The assembled `FidyApi` is the source for reflected operation ids, access metadata, suggested
-operations, OpenAPI, MCP definitions, and the hosted-agent toolkit. The browser consumes one
-server-owned declaration seam and never imports server implementations. Derived shapes and
-relational projections are built from their source schemas; parallel operation maps and DTOs are
-not maintained. See [ADR 0004](../../docs/adr/0004-canonical-operation-derivation.md).
+## 6. Testing seams
 
-A canonical query observes domain state without requesting a domain transition or external effect.
-A canonical mutation requests a domain transition, records durable work, or causes an external
-effect. Mutations are transaction-composable: individual and atomic-batch execution share the same
-implementation, and the batch child union is derived from canonical mutations rather than a
-feature-specific allowlist. See [ADR 0012](../../docs/adr/0012-canonical-mutations-are-transaction-composable.md).
+Use the smallest seam that proves the behavior:
 
-Proof-bearing bootstrap APIs and browser-only payment-credential enrollment are deliberate narrow
-exceptions when transient credentials must remain unrepresentable to canonical callers, hosted
-agents, OpenAPI, logs, or persistence. They end at stable-User canonical authority and do not
-create parallel domain contracts. The payment boundary requires exact Origin, a fresh WebSession,
-current Consent, no-store responses, bounded JSON, User-stable provider admission, and browser-safe
-outputs. Read-only BillingAttempt observation still requires exact Origin and an active WebSession,
-but not session freshness, and never replays submission. The boundary starts first collection with a
-browser-generated `PaymentRequestId`; provider responses and redirects are observations, never
-settlement authority. See
-[ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md) and
-[ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
+- core tests call pure decisions and schemas directly;
+- contract tests validate canonical ids, reflected policy, OpenAPI, and compatibility artifacts;
+- security tests cover proof handling, redaction, bounded input, provider authentication, and
+  subject isolation;
+- provider-boundary tests use the published outbound transport seam;
+- browser tests exercise the built static shell with explicit HTTP fixtures;
+- Cloudflare adapter tests, when an adapter exists, must exercise D1/DO/Queue/Workflow/R2/Workers AI
+  behavior through platform seams rather than recreating the removed local runtime.
 
-### Hosted agent
-
-`AgentService` owns the hosted runtime and is its only public lifecycle boundary. Its closed
-source-specific entrypoints lexically own session and Turn admission, WorkingContext construction,
-canonical execution, delivery, and terminalization. WorkingContext and ConversationContinuity
-remain private Agent concerns; executable lifecycle capabilities do not cross that interface.
-HostedInference is a separate deep module whose provider-neutral contract is shared by Agent and
-Memory. Provider clients, prompt conversion, raw responses, token accounting, transport failures,
-and adapter conformance stay inside its visible internals. Hosted calls use the same canonical
-authorization and confirmation policy as other callers. See
-[ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md) and
-[ADR 0019](../../docs/adr/0019-hosted-runtime-owns-conversation-continuity.md).
-
-### Browser authentication and delegated authority
-
-Browser login is a browser-held proof paired with an established User proof. Browser Login alone
-creates the WebSession; email authentication, recovery, WhatsApp approval, and PAT lifecycle do not
-create parallel Users or sessions. Identity, EmailAuthentication, Recovery, Consent, and PAT owners
-publish operations for the shell to compose without transferring data ownership. Details belong in
-[ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md),
-[ADR 0016](../../docs/adr/0016-web-authorized-pat-issuance.md),
-[ADR 0017](../../docs/adr/0017-atomic-pat-consent-lifecycle.md), and
-[ADR 0020](../../docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md).
-
-## 5. User context and isolation
-
-`UserId` is an explicit argument to every repository and core function that needs user context. The
-caller is resolved at the adapter boundary and passed inward; there is no ambient `CurrentUser`
-service. Ordinary aggregates do not carry an owner field because the User is the operation context.
-`ConsentRecord` and `AuditLogEntry` carry an explicit subject because they attest who acted.
-
-PostgreSQL RLS reinforces the same boundary. Every User-owned path activates transaction-local
-User context before reading or writing data, and background work carries its `UserId` explicitly.
-A claim, provider id, entity id, execution id, or opaque UUID is never authorization. No database
-transaction spans model or provider work. See [ADR 0005](../../docs/adr/0005-explicit-user-context-and-isolation.md),
-[ADR 0007](../../docs/adr/0007-postgresql-row-level-user-isolation.md), and
-[SECURITY_STANDARDS.md](../../SECURITY_STANDARDS.md).
-
-Authorization is derived from the canonical operation and is applied consistently to HTTP, hosted,
-MCP, CLI, and suggested-operation surfaces. The operation-derived API seam proves User isolation;
-non-request paths use the same explicit subject flow rather than a separate ownership mechanism.
-
-## 6. Errors and external effects
-
-Core exposes domain failures without HTTP vocabulary. Shell adapters map those failures to the
-transport contract and keep each mapping exhaustive.
-
-External providers stay at narrow shell boundaries. `shell/outbound-http` owns the only raw external
-provider client and publishes closed requests through `contract.ts`, execution authority through
-`operations.ts`, and production composition through `runtime.ts`. Its private implementation owns
-fixed destinations, credentials, redirects, tracing, telemetry, streamed byte limits, and projected
-coordinate-free failures. Provider adapters, their tests, scripts, and tools use that published
-interface rather than shared transport helpers or private implementation imports; a provider library
-may observe only a response reconstructed from bytes already bounded by the interface. The provider
-adapter owns request encoding, status interpretation, runtime decoding, retry certainty, and
-workflow-failure mapping. Raw provider responses and bodies do not cross the boundary. Provider work
-never runs inside a PostgreSQL transaction; ambiguous external outcomes are handled by the owning
-durable workflow or domain state. See [CODING_STANDARDS.md](../../CODING_STANDARDS.md) and
-[SECURITY_STANDARDS.md](../../SECURITY_STANDARDS.md).
-
-## 7. Persistence and durable execution
-
-Migrations form one globally ordered history in `shell/database/internal/migrations/`. Relational rows are
-projections of core models, not parallel domain models. Repositories may flatten values for storage
-and queries, but reconstruct the canonical value on every read.
-
-PostgreSQL owns User isolation and immediate invariants: constraints, atomic statements, short
-transactions, and commit-time locks. Effect's SQL-backed `PersistedQueue`, `Workflow`, and Cluster
-facilities own durable execution mechanics. Slices retain domain lifecycle, authorization and RLS,
-provider idempotency or reconciliation, retention policy, and safe observability. Every durable
-path that can reach User data carries an explicit `UserId` and only a bounded resume projection.
-
-Production PersistedQueue payloads and identities form an executable compatibility contract in
-`shell/queue-compatibility/`. Every queue has a checked-in fixture for its oldest supported
-encoding, and the tests decode it with the current schema into unchanged ownership and operation
-identity. Additive payload changes use backward-readable defaults or unions. Queue names and
-custom ids stay inside Effect's `VARCHAR(100)`/`VARCHAR(36)` bounds, and an incompatible payload
-change requires a named new queue or an explicit drain/migration plan recorded with its fixture.
-
-Application queues are declared only through `shell/persisted-queue/operations.ts`; its private
-constructor and raw persistence Layer assembly remain under `shell/persisted-queue/internal/`.
-`shell/persisted-queue/runtime.ts` publishes SQL and volatile compositions typed only as the
-application queue requirement. Those boundaries keep Effect's factory, queue, and raw `take`
-private: producers receive only `offer`, while `handleNext` requires
-exhaustive failure classification and idempotent terminal settlement before applying the closed
-redaction, defect-observation, and interruption contract. Every defect emits a metadata-only log,
-and configured telemetry captures it additionally, so disabled telemetry cannot silence observation.
-Each declaration carries an immutable protocol definition containing its exact queue name and schema.
-Compatibility evidence derives both values from that definition instead of restating them, while the
-runtime construction remains private. Declaration also registers each validated queue identity for
-complete process-local health coverage; this set is derived rather than maintained as a separate
-catalog.
-
-**Review-only queue boundary:** production code may access raw Effect persistence only in the
-constructor and storage adapters. Queue adapter, storage, compatibility, and health tests may import
-it to exercise the seam; the crash harness may import it to prove process-loss behavior. The exported
-`ApplicationPersistedQueueRequirement` is only a type-level name for an Effect requirement: it does
-not export the raw Context service identifier or grant construction access. Reviewers must reject raw
-imports, re-exports, dynamic imports, aliases, or factory service access in other production modules.
-Every new `declarePersistedQueue` declaration must add one colocated compatibility contract and oldest
-readable fixture. This is deliberately review-only: local static alias or source scanning cannot
-prove the complete JavaScript module graph and must not be presented as exhaustive enforcement.
-Decode failures consume attempts; exhausted work follows the owning queue's reviewed retirement
-policy where one exists and otherwise stays visible and incomplete, never disappearing silently.
-
-Distributed security and spend admission remains PostgreSQL-backed; process-local Effect limits
-only own restart-safe resource bounds. Best-effort maintenance may delay cleanup but cannot authorize
-expired work. Correctness-critical continuation uses durable execution. No Fidy queue, lease,
-workflow, or runner framework should be layered over the Effect substrate.
-
-Production Cluster topology is explicit and fail-closed: one module owns every Sharding setting that
-affects ownership, polling, capacity, shutdown, lock recovery, and retry, and every runner and
-client publishes or validates a bounded compatibility identity (shard count and groups,
-serialization, storage namespace, protocol generation) before accepting ownership. A disagreement
-refuses startup with a bounded `Cluster topology incompatible` diagnostic naming the differing fields
-instead of splitting the hash ring or mailbox. `GET /ready` distinguishes a bound listener from a
-runner able to refresh runner state, route over the private transport, and use durable message
-storage, and each runner logs bounded, dimension-free Cluster telemetry. See
-[cluster-topology.md](../../docs/operations/cluster-topology.md).
-
-Subscription atomically persists and publishes an immutable pending `BillingAttempt` before arming
-a provider mutation once. An ambiguous armed mutation is never resent. Reconciliation uses retained
-Wompi transaction identity because Wompi does not document merchant-reference lookup. Only bounded,
-authoritative evidence matching the attempt may atomically create its paid period and activate paid
-Pro.
-
-See [ADR 0024](../../docs/adr/0024-effect-durable-execution.md),
-[ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md), the
-[durable-execution inventory](../../docs/architecture/durable-execution-inventory.md), and the
-[durable execution deployment runbook](../../docs/operations/durable-execution-deployments.md) for
-substrate choices, per-flow mechanics, migration status, retention details, and the
-reader-before-writer deployment check.
-
-## 8. Testing seams
-
-Use the smallest seam that proves the behaviour:
-
-- **Core:** call exported pure decisions directly, without a server or database.
-- **API:** traverse the assembled operations with real PostgreSQL to prove decoding, authorization,
-  persistence, responses, derived suggestions, and User isolation.
-- **Agent:** call `AgentService` through the CLI harness with language-model and terminal adapters
-  substituted while canonical application paths remain real.
-- **Asynchronous and public-channel:** exercise the exported worker step and signed provider ingress
-  with real Consent, Identity, repositories, PostgreSQL, durable execution, and canonical paths;
-  substitute only external provider and model behaviour.
-
-Core tests do not mock shell collaborators. A stable pure policy may be tested directly, but its
-integration remains covered at the API seam. Exact mutation, coverage, and acceptance gate settings
-belong to the test configuration and [ADR 0006](../../docs/adr/0006-test-seams-and-core-mutation-gate.md).
+Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
+domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains
+authoritative.

@@ -209,7 +209,7 @@ describe("preview artifact policy", () => {
 
   it("rejects Secret and Production server material", async () => {
     await Promise.all(
-      ["DATABASE_URL", "HTTPS://API.FIDYAPP.COM"].map((marker) => {
+      ["RESEND_API_KEY", "CLOUDFLARE_ACCESS_AUDIENCE", "HTTPS://API.FIDYAPP.COM"].map((marker) => {
         const entries = validEntries().map((entry) =>
           entry.path === "assets/app-a1b2c3.js" ? regular(entry.path, marker) : entry
         );

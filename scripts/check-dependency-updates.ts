@@ -47,7 +47,6 @@
 // whose exclusion is gone fails, so a standing permission to ship a
 // vulnerability cannot outlive the vulnerability it was written for.
 
-import { BunRuntime } from "@effect/platform-bun";
 import { Array as Arr, Console, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
@@ -789,4 +788,7 @@ const main = Effect.scoped(
   Effect.flatMap((failed) => Effect.sync(() => process.exit(failed ? 1 : 0)))
 );
 
-BunRuntime.runMain(main);
+Effect.runPromise(main).catch((error: unknown) => {
+  process.stderr.write(`${String(error)}\n`);
+  process.exitCode = 1;
+});

@@ -22,7 +22,7 @@ import {
   EmailSourceFormat,
   IngestSampleId,
   NeedsReviewItemId,
-  ResendReceivedEmailId,
+  ReceivedEmailId,
   StatementSourceFormat,
   StatementSubmissionId,
 } from "./reference";
@@ -65,9 +65,9 @@ export const ReceivedInlineImage = Schema.Struct({
 });
 export type ReceivedInlineImage = typeof ReceivedInlineImage.Type;
 
-/** Closed Resend projection retained as raw personal evidence for a configured 90 days. */
+/** Closed Email Worker projection retained as raw personal evidence for a configured 90 days. */
 export const ReceivedEmailContent = Schema.Struct({
-  receivedEmailId: ResendReceivedEmailId,
+  receivedEmailId: ReceivedEmailId,
   from: Schema.String.check(Schema.isMaxLength(maximumEmailAddressCharacters)),
   to: Schema.Array(Schema.String.check(Schema.isMaxLength(maximumEmailAddressCharacters))).check(
     Schema.isMaxLength(maximumEmailRecipients)
@@ -91,10 +91,10 @@ export type ReceivedEmailContent = typeof ReceivedEmailContent.Type;
 
 const RawEmailIngestSampleFields = Schema.Struct({
   id: IngestSampleId,
-  receivedEmailId: ResendReceivedEmailId,
+  receivedEmailId: ReceivedEmailId,
   ...CapturedInterpretationContext.fields,
   sourceFormat: EmailSourceFormat,
-  sourceProvider: Schema.Literal("resend"),
+  sourceProvider: Schema.Literal("cloudflare-email"),
   parserRevision: InterpretationRevision,
   content: ReceivedEmailContent,
   retainedAt: UtcTimestamp,
@@ -119,7 +119,7 @@ export const AnonymizedEmailIngestSample = Schema.Struct({
   id: IngestSampleId,
   serviceMarket: ServiceMarket,
   sourceFormat: EmailSourceFormat,
-  sourceProvider: Schema.Literal("resend"),
+  sourceProvider: Schema.Literal("cloudflare-email"),
   parserRevision: InterpretationRevision,
   anonymizationRevision: InterpretationRevision,
   structure: Schema.NonEmptyString,
@@ -362,13 +362,13 @@ export type StatementNeedsReviewItem = typeof StatementNeedsReviewItem.Type;
 
 const EmailNeedsReviewFields = {
   id: NeedsReviewItemId,
-  receivedEmailId: ResendReceivedEmailId,
+  receivedEmailId: ReceivedEmailId,
   reason: EmailNeedsReviewReason,
   knownMoney: Schema.OptionFromOptionalKey(Money),
   ...CapturedInterpretationContext.fields,
   sourceFormat: EmailSourceFormat,
   sourceChannel: Schema.Literal("forwarded-email"),
-  sourceProvider: Schema.Literal("resend"),
+  sourceProvider: Schema.Literal("cloudflare-email"),
   messageEvidence: ProviderMessageEvidence,
   parserRevision: InterpretationRevision,
   extractorRevision: InterpretationRevision,

@@ -4,18 +4,14 @@ import { Option } from "effect";
 import { decodeBuildMetafile } from "./build-metafile";
 
 const forbiddenDependencies = [
-  /(^|\/)node_modules\/@effect\/ai-openai\//u,
-  /(^|\/)node_modules\/@effect\/platform\//u,
-  /(^|\/)node_modules\/@effect\/platform-bun\//u,
-  /(^|\/)node_modules\/@effect\/sql-pg\//u,
+  /(^|\/)node_modules\/@effect\/ai(?:-|\/)/u,
+  /(^|\/)node_modules\/@effect\/platform(?:-|\/)/u,
   /(^|\/)node_modules\/@kapso\//u,
-  /(^|\/)node_modules\/@sentry\//u,
-  /(^|\/)node_modules\/pg\//u,
-  /(^|\/)node_modules\/postgres\//u,
+  /(^|\/)node_modules\/@wompi\//u,
+  /(^|\/)node_modules\/resend\//u,
 ] as const;
 
-const forbiddenNodeModules =
-  /(^|\/)node_modules\/(?:effect\/dist\/unstable\/sql|(?:pg|postgres|postgres-array|postgres-bytea)(?:\/|$))/u;
+const forbiddenNodeModules = /(^|\/)node_modules\/effect\/dist\/unstable\/sql(?:\/|$)/u;
 const forbiddenNodeBuiltin =
   /^(?:node:|bun:)[^/]+(?:\/|$)|^(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u;
 
@@ -248,6 +244,9 @@ const assertSourceBoundary = (
 ): void => {
   const imports = sourceImports(sources);
   const forbiddenServerImport = findForbiddenServerImport(imports, webRoot, workspaceRoot);
+  const forbiddenSourceImport = imports.find(({ importPath }) =>
+    forbiddenNodeBuiltin.test(importPath)
+  );
   const directFetch = sources.find(({ source }) => /\bfetch\s*\(/u.test(source));
   const alternateStateClient = imports.find(({ importPath }) =>
     /^(?:@apollo\/client|@tanstack\/(?:query|react-query)|redux|swr|zustand)(?:\/|$)/u.test(
@@ -260,6 +259,11 @@ const assertSourceBoundary = (
   if (Option.isSome(forbiddenServerImport)) {
     throw new Error(
       `${forbiddenServerImport.value.sourceFile} imports a server client outside transport: ${forbiddenServerImport.value.importPath}`
+    );
+  }
+  if (forbiddenSourceImport !== undefined) {
+    throw new Error(
+      `Browser-incompatible runtime modules entered the web source graph: ${forbiddenSourceImport.sourceFile} imports ${forbiddenSourceImport.importPath}`
     );
   }
   if (directFetch !== undefined) {
@@ -287,12 +291,12 @@ export const checkBrowserBundle = async (options: BrowserBundleCheckOptions): Pr
   try {
     const metafile = decodeBuildMetafile(await buildBrowserBundle(options));
     const inputs = validateForbiddenInputs(metafile, options.webRoot, options.workspaceRoot);
-    assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
     assertSourceBoundary(
       await readWebSources(options.webRoot),
       options.webRoot,
       options.workspaceRoot
     );
+    assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
     process.stdout.write(`web browser graph clean: ${inputs} bundled modules\n`);
   } finally {
     removeOutput(options.outdir);

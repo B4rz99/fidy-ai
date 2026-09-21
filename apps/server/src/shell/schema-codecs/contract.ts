@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-/** Decodes a native PostgreSQL bigint into a finite JavaScript number. */
+/** Decodes a native bigint-shaped value into a finite JavaScript number. */
 export const FiniteFromBigInt = Schema.flip(Schema.BigIntFromString).pipe(
   Schema.decodeTo(Schema.FiniteFromString)
 );

@@ -6,8 +6,8 @@ export type EventuallyPolicy = Readonly<{
 }>;
 
 /**
- * Bounded live-system observation for PostgreSQL, HTTP, and multi-runtime state that cannot use
- * TestClock. It is a liveness guard only: tests must use Deferred or database locks to create the
+ * Bounded live-system observation for remote state, HTTP, and multi-runtime state that cannot use
+ * TestClock. It is a liveness guard only: tests must use Deferred or remote coordination to create the
  * condition being observed rather than relying on this polling cadence for coordination.
  */
 export const eventually: {

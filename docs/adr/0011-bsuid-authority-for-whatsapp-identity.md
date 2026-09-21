@@ -3,7 +3,6 @@
 - **Status:** Accepted
 - **Date:** 2026-08-04
 - **Amends:** [ADR-0002 Fidy product identity and public namespace](./0002-fidy-product-identity-and-public-namespace.md)
-- **Amends:** [ADR-0007 PostgreSQL row-level User isolation](./0007-postgresql-row-level-user-isolation.md)
 - **Amends:** [ADR-0010 WhatsApp channel operational slice](./0010-whatsapp-channel-operational-slice.md)
 - **Active specification:** [WhatsApp channel adapter (Kapso)](https://github.com/B4rz99/fidy-ai/issues/10)
 
@@ -35,7 +34,7 @@ association.
 
 A cross-slice WhatsApp caller reference contains only Business Portfolio and BSUID. Mutable caller
 evidence remains in Identity or the WhatsApp operational adapter and is not embedded in Consent.
-Pending consent and caller-scoped locks use only the stable reference.
+Pending consent and caller-scoped coordination use only the stable reference.
 
 Outbound WhatsApp delivery uses the resolved BSUID as Kapso's `recipient` by default. An explicit
 `sandbox-phone` deployment mode may instead address Kapso's sandbox with `to`, because Kapso rejects
@@ -48,9 +47,9 @@ BSUID and are deleted during migration rather than assigned fabricated provider 
 ## Consequences
 
 ADR-0002's fixed Kapso callback gains `/webhooks/kapso/meta` as a second provider-only forwarding
-endpoint for exact raw Meta events; it is not a canonical product API route. ADR-0007's phone-only
-WhatsApp gateway is replaced by a portfolio-plus-BSUID gateway while its
-narrow-output and privilege rules remain. ADR-0010's phone-scoped ingress wording and phone-addressed
+endpoint for exact raw Meta events; it is not a canonical product API route. The phone-only
+WhatsApp gateway is replaced by a portfolio-plus-BSUID gateway with narrow output and privilege
+rules. ADR-0010's phone-scoped ingress wording and phone-addressed
 delivery no longer apply; ingress, windows, and delivery bind to the authoritative association.
 Users who lose that association may recover browser access through their independently established
 VerifiedEmailCredential or BackupRecoveryCode, but recovery never replaces or reassociates

@@ -1,254 +1,58 @@
-# AI (`effect/unstable/ai` + `@effect/ai-openai`)
+# Effect v4 AI boundaries and Workers AI
 
-How Effect v4's AI support actually works, read from the source. Citations: bare paths are
-relative to `packages/effect/src/unstable/ai/`, `openai/...` to `packages/ai/openai/src/`,
-`compat/...` to `packages/ai/openai-compat/src/`, `test/...` to
-`packages/effect/test/unstable/ai/`. Canonical walkthroughs: `ai-docs/src/71_ai/`
-(`10_language-model.ts`, `20_tools.ts`, `30_chat.ts`) — read them before wiring a model.
+Use this reference when working with `effect/unstable/ai`. The application-facing boundary is a
+provider-neutral `LanguageModel`; the production adapter will use a Cloudflare Workers AI binding.
+No direct external-model adapter or local model fallback is an authority.
 
-## Core shape
+## Core mechanics
 
-`LanguageModel` is a plain `Context.Service` with three methods: `generateText`,
-`generateObject`, `streamText` (`LanguageModel.ts:71-73`, `:81-180`). Providers plug in as
-layers: `OpenAiLanguageModel.model("gpt-5-nano", config?)` returns a
-`Model<"openai", LanguageModel, OpenAiClient>` (`openai/OpenAiLanguageModel.ts:543-547`) —
-a `Layer` that also provides `Model.ProviderName`/`Model.ModelName` string services
-(`Model.ts:141-166`). Use `Effect.provide(model)` per call site, or
-`model.captureRequirements` to lift the client requirement into a service layer, or
-`ExecutionPlan.make({provide: model, attempts})` for multi-provider fallback (ai-docs
-`10_language-model.ts:44-57`, `:73-79`).
+`LanguageModel` supplies model execution, `Prompt` represents bounded messages, and `Tool` describes
+schema-validated capabilities. Toolkit construction derives tool metadata and handlers, but a model
+round does not constitute a built-in agent loop. The hosted AgentService owns the explicit loop,
+round budget, cancellation, context bounds, and terminal state.
 
-Every failure is one error class: `AiError { module, method, reason }` with `isRetryable`
-and `retryAfter` delegating to the reason (`AiError.ts:1461-1493`). `reason` is a schema
-union (`AiErrorReason`, `:1380`) of `NetworkError | RateLimitError | QuotaExhaustedError |
-AuthenticationError | ContentPolicyError | InvalidRequestError | InternalProviderError |
-InvalidOutputError | StructuredOutputError | UnsupportedSchemaError | UnknownError |
-ToolNotFoundError | ToolParameterValidationError | InvalidToolResultError |
-ToolResultEncodingError | ToolConfigurationError | ToolkitRequiredError |
-InvalidUserInputError`. `AiErrorReason` is itself a schema, embeddable in domain errors
-(ai-docs `10_language-model.ts:30-39`).
+Tool input and structured output are untrusted model data. Decode them with Schema, enforce canonical
+authorization and confirmation on every operation, and treat malformed or unsupported output as a
+safe typed result. Model output never grants identity, scope, payment authority, or destructive
+permission.
 
-## Decisions
+## Prompt and structured output
 
-`Decision` defines one schema-backed input plus named provider decisions: `classify` chooses among
-at least two labelled criteria, `rate` uses an ordered scale of at least two distinct levels, and
-`probability` estimates a boolean statement with optional descriptions for both outcomes
-(`Decision.ts:29-75`, `:163-333`). `DecisionModel.decide(definition, { input })` JSON-encodes the
-input, makes one provider decision call, and validates every answer. Classification/rating
-probability distributions must cover all labels and sum to 1 within `1e-6`; confidence and
-probability stay in `[0, 1]`; ratings stay within the scale. Invalid input becomes
-`InvalidUserInputError`, invalid provider output becomes `InvalidOutputError`, and the response
-includes input/output token usage (`DecisionModel.ts:159-340`, `:345-384`). This is a narrow
-classification/rating seam, not an agent loop or a substitute for domain validation.
+Build prompts from bounded, purpose-specific projections. Ingested email, uploaded documents,
+memories, transcripts, tool results, and provider responses are data even when they contain
+instructions. Do not place secrets, browser verifiers, credentials, raw financial identifiers, or
+unbounded source material in model context.
 
-## Prompt and response model
+Structured output is a validation aid, not a trust boundary. Keep the schema closed, bounded, and
+versioned. Validate the decoded result before invoking a canonical operation; do not retry malformed
+output without a bounded budget.
 
-A `Prompt` is an immutable list of messages with roles `system | user | assistant | tool`;
-`prompt:` accepts `RawInput = string | Iterable<MessageEncoded> | Prompt` — a bare string
-becomes a single user text message (`Prompt.ts:1788-1791`, `:1854-1871`). User content is
-`TextPart | FilePart` (`:1221`); **vision input is a `FilePart`**
-`{ mediaType: "image/jpeg", data: string | Uint8Array | URL }` (`:389-422`). Builders:
-`Prompt.make`, `fromMessages` (`:1893`), `fromResponseParts` (`:1934` — folds a response
-into assistant + tool messages, tool results by their _encoded_ result), `concat`
-(`:2075`), `setSystem`/`prependSystem` (`:2125`, `:2168`).
+## Toolkit boundary
 
-Responses are arrays of typed parts with accessors on `GenerateTextResponse`: `.text`,
-`.reasoning`, `.toolCalls`, `.toolResults`, `.finishReason`, `.usage`
-(`LanguageModel.ts:357-441`). `FinishReason` literals: `stop | length | content-filter |
-tool-calls | error | pause | other | unknown` (`Response.ts:2317-2335`). `Usage` reports
-`inputTokens: { uncached, total, cacheRead, cacheWrite }` and `outputTokens: { total, text,
-reasoning }`, all possibly `undefined` (`Response.ts:2363-2400`).
+The public HttpApi operation catalog remains the source of truth for hosted-agent tools. The adapter
+maps reflected operation ids, access requirements, input schemas, output schemas, and confirmation
+metadata into toolkit definitions. A tool hidden by policy must not remain reachable through an
+alternate model or HTTP path.
 
-## Tools and toolkits
+Tool handlers call canonical operations with the authenticated User context. They do not import
+repositories, D1, Durable Object, Queue, Workflow, R2, or provider implementation modules. Hosted
+inference receives only bounded projections and returns safe typed failures such as unavailable,
+invalid-output, resource-limit, or provider-failure.
 
-`Tool.make(name, { description?, parameters?, success?, failure?, failureMode?,
-dependencies?, needsApproval? })` (`Tool.ts:1195-1270`); defaults: parameters
-`EmptyParams`, success `Schema.Void`, failure `Schema.Never`, `failureMode: "error"`
-(`:1258-1266`). Parameter/`description` annotations feed the model (ai-docs
-`20_tools.ts:31-56`). The wire JSON Schema derives from the parameters schema via
-`Tool.getJsonSchema` → `Schema.toJsonSchemaDocument` (+ provider transformer)
-(`Tool.ts:1647-1682`). `Tool.dynamic` takes a raw JSON Schema (runtime/MCP-discovered
-tools, handler gets `unknown`, `:1315`); `Tool.providerDefined` models provider-executed
-tools (web search etc.). Annotations: `Tool.Title`, `Readonly`, `Destructive`,
-`Idempotent`, `OpenWorld`, `Meta` — read by the MCP server — plus `Tool.Strict`, a per-tool strict
-JSON Schema override. OpenAI resolves strict mode as
-`Tool.getStrictMode(tool) ?? Config.strictJsonSchema ?? true`, so explicit `false` overrides the
-provider default (`Tool.ts:1860-1908`; `openai/OpenAiLanguageModel.ts:2766-2778`).
+## Workers AI adapter
 
-`Toolkit.make(...tools)` / `Toolkit.merge` group tools (`Toolkit.ts:474-476`, `:541-554`).
-Handlers are Effects `(params, ctx) => Effect<Success, Failure | AiError | AiErrorReason,
-Deps>` (`:162-171`), provided by `toolkit.toLayer(handlers | Effect<handlers>)` (`:93-98`);
-`toolkit.of({...})` is the type-safety helper. Yielding the toolkit gives `WithHandler`
-with `handle(name, params)` (`:194-210`).
+The Workers AI adapter owns binding lookup, model selection, request/response bounds, timeout and
+cancellation behavior, provider error mapping, and metadata-only telemetry. It must fail closed when
+the binding or configured model is absent. It must not expose raw prompts, replies, tool arguments, or
+provider payloads to logs or telemetry.
 
-Execution semantics of `handle` (`Toolkit.ts:260-374`): unknown tool →
-`ToolNotFoundError`; params are **decoded through the parameters schema** — failure is
-`ToolParameterValidationError` (`:283-296`); the result is encoded through the success
-schema (encode failure `ToolResultEncodingError`). `failureMode` dispatch (`:362-367`):
-`"error"` re-fails the calling effect; `"return"` converts the failure into a tool-result
-part with `isFailure: true`, encoded through `Union([success, failure, AiError])`
-(`:240-242`) — i.e. **the model sees the error and generation continues**.
+Provider-specific wire details remain inside the adapter. Do not leak a provider SDK type, token
+counter, error class, model name, or request shape into core or the provider-neutral contract unless
+that fact is deliberately part of the closed application contract.
 
-## Tool rounds — there is NO built-in agent loop
+## Testing
 
-`generateText` performs **exactly one provider call**: it sends the toolkit's tool
-definitions, then resolves the tool calls the model returned (concurrently — default
-`"unbounded"`, `LanguageModel.ts:2142-2144`; set `concurrency: 1` for sequential) and
-returns the response content _merged with_ the tool results (`:1185-1212`,
-`resolveToolCalls` `:2049-2150`). It never sends results back to the model; there is no
-`maxSteps`/iteration option anywhere in the module. The agentic loop is yours:
-
-```ts
-let prompt = Prompt.concat(system, userTurn);
-for (let i = 0; i < MAX_ITERATIONS; i++) {
-  const response = yield * LanguageModel.generateText({ prompt, toolkit });
-  prompt = Prompt.concat(prompt, Prompt.fromResponseParts(response.content));
-  if (response.toolCalls.length === 0) return response; // or finishReason !== "tool-calls"
-}
-```
-
-`Prompt.fromResponseParts` puts tool calls in an assistant message and non-preliminary
-tool results in a tool message (`Prompt.ts:1895-1899`); the OpenAI provider maps tool
-results to `function_call_output` items (`openai/OpenAiLanguageModel.ts:1155`). Options per
-round: `toolChoice: "auto" | "none" | "required" | { tool } | { oneOf, mode? }`
-(`LanguageModel.ts:320-330`); `disableToolCallResolution: true` returns raw tool calls
-without running handlers — full manual control (`:265-273`, `:1173-1183`).
-`Tool.needsApproval` inserts `tool-approval-request` parts instead of executing; resolved
-approvals in the next round's prompt are executed pre-flight (`:1106-1135`).
-
-**Tool-error feedback trap**: with the default `failureMode: "error"`, a handler failure
-fails the _entire_ `generateText` effect — no tool result exists to feed back. For fidy's
-"tool errors go back to the model" guard, declare a `failure` schema and
-`failureMode: "return"` (or catch inside the handler and return a typed result).
-
-`Chat` (`Chat.ts:67`) is the history holder: `Chat.fromPrompt`/`empty`, a public
-`history: Ref<Prompt>` (`:109`), and `generateText` that concats prompt + response parts
-into history per call (`:388-393`) — still one provider round per call, so the loop above
-applies with `Prompt.empty` as the follow-up prompt. `Chat.makePersisted(:767)` /
-`layerPersisted(:929)` add pluggable persistence; `export`/`exportJson` snapshot history.
-
-## HttpApi → Toolkit derivation: does not exist — hand-build it
-
-There is **no** `Toolkit.fromHttpApi`, no HttpApi reference anywhere in
-`packages/effect/src/unstable/ai/` or `packages/ai/` (verified by grep across the
-checkout), and `McpServer` has no HttpApi integration either. What IS provided: the target
-types are small — a derived tool needs `name` (use the OpenAPI convention
-`${group.identifier}.${endpoint.identifier}`), `description` (OpenAPI annotations),
-`parameters` (one `Schema.Struct` combining the operation's `payload`/`params`/`query`
-schemas), `success`/`failure` (the operation's schemas) — all of which live on
-`HttpApiEndpoint` values reachable by iterating `api.groups[*].endpoints`. Handlers close
-over `HttpApiClient.endpoint(api, {group, endpoint})` (or the full client), so request
-encode / response decode reuse the operation definition. That mapper is the only
-hand-built piece; `Tool.make` + `Toolkit.make` + `McpServer.toolkit` consume its output
-unchanged — one derivation feeds both the agent loop and the MCP server.
-
-## MCP server
-
-`McpServer.layerStdio({ name, version, protocols })` runs the server over stdio using framed
-NDJSON-RPC and requires `Stdio`; `McpServer.layerHttp({ name, version, path, protocols })` registers
-the single-endpoint Streamable HTTP topology on an existing `HttpRouter`. Both now require a non-empty
-array of explicit `McpProtocol.ProtocolAdapter`s, so protocol-version and batch behavior are chosen
-at composition rather than hidden in a default (`McpServer.ts:1410-1458`, `:1514-1563`). Keep stdio
-logging on stderr; for HTTP, independently install authentication and an exact `allowedOrigins`
-allowlist when browsers can call it.
-
-`McpServer.toolkit(toolkit)` registers every tool through `registerToolkit`
-(`McpServer.ts:1789-1949`). Input validation failures become MCP `InvalidParams`; a declared handler
-failure becomes `CallToolResult { isError: true }` with its encoded payload (or its caller-visible
-`Error.message`, which must itself be safe). Undeclared typed failures and result-encoding failures remain failed effects for the MCP protocol
-boundary. Defects are logged/reported and scrubbed to the generic
-`"Tool execution failed due to an internal server error."` result; interruption propagates
-(`:1770-1922`). Successes return `structuredContent` plus JSON text. Also available:
-`McpServer.resource` (URI templates with completions), `prompt`, and `elicit`.
-
-## Structured output (`generateObject`)
-
-`generateObject({ prompt, schema, objectName? })` sets provider `responseFormat = { type:
-"json", objectName, schema }` (`LanguageModel.ts:865-877`); `objectName` defaults to the
-schema's `identifier` annotation, else `"generateObject"` (`:2164-2179`). The response
-text is decoded through `Schema.fromJsonString(schema)` — failure is
-`StructuredOutputError` carrying the raw text (`:2181-2211`). So the wire value round-trips
-the canonical schema: encoded side out as JSON Schema, decoded side back as domain types.
-
-OpenAI mapping (`openai/OpenAiLanguageModel.ts:2990-3020`): Responses-API
-`text.format = { type: "json_schema", name, schema, strict: config.strictJsonSchema ?? true }`.
-The JSON Schema comes from `toCodecOpenAI`, which rewrites to OpenAI's subset **and returns a
-matching codec** so decoding still lands on your type: tuples → objects with numeric-string keys,
-records → `[key, value]` pair arrays, optional properties → required nullable, and `oneOf` →
-`anyOf` (`OpenAiStructuredOutput.ts:24-82`; `internal/structured-output.ts:45-188`). There is no
-longer a blanket unsupported-AST-kind blacklist. Unsupported constraints and formats are omitted or
-moved into descriptions while the returned codec remains authoritative. Conversion still throws —
-and the provider maps that to `UnsupportedSchemaError` — for invalid/unsupported references or when
-the rewritten root is not an object or contains top-level `anyOf` (`OpenAiStructuredOutput.ts:53-82`;
-`internal/structured-output.ts:20-43`; `openai/OpenAiLanguageModel.ts:2980-3006`). Tool parameters
-use the same transformer; their strict flag follows the per-tool precedence described above.
-
-## OpenAI provider
-
-Two packages, same module names, different wire APIs: `@effect/ai-openai` targets the
-**Responses API** (`POST /responses`, `openai/OpenAiLanguageModel.ts:1-9`,
-`openai/OpenAiClient.ts:237`); `@effect/ai-openai-compat` targets **`/chat/completions`**
-for OpenAI-compatible providers/gateways (`compat/OpenAiClient.ts:180`) with the same
-`OpenAiLanguageModel.model(...)` surface (`compat/OpenAiLanguageModel.ts:531`). A gateway
-move is a package + client-layer swap, not a rewrite.
-
-- **Client**: `OpenAiClient.layerConfig({ apiKey: Config.redacted(...) })` +
-  `FetchHttpClient.layer` (ai-docs `10_language-model.ts:22-27`); options `apiUrl`
-  (default `https://api.openai.com/v1`, `openai/OpenAiClient.ts:191`), `organizationId`,
-  `projectId`, `transformClient` (`:134-149`).
-- **Config**: `OpenAiLanguageModel.Config` is a typed passthrough of
-  `OpenAiSchema.CreateResponse` fields — `temperature`, `max_output_tokens`,
-  `max_tool_calls`, `reasoning.effort`, `service_tier`, `store`, `instructions`,
-  `truncation`, `seed`, plus `strictJsonSchema` (default true) and `fileIdPrefixes`
-  (`openai/OpenAiLanguageModel.ts:80-119`; field list `openai/OpenAiSchema.ts:655-697`).
-  Precedence: `model` arg < config arg < context `Config` (`:589-590`). System messages
-  are re-roled to `developer` for reasoning models (`getModelCapabilities`,
-  `:2941-2970`).
-- **Vision**: image `FilePart` maps to `input_image` — `URL` → `image_url`, `Uint8Array` →
-  base64 data-URI, string → `file_id` _only if_ it matches `config.fileIdPrefixes`
-  (`:836-852`, `isFileId :2857-2858`). **A plain/base64 string that isn't a configured
-  file-id matches no branch and is silently dropped from the request** — always pass
-  `Uint8Array` or `URL`. Non-image, non-PDF media types fail with `InvalidRequestError`
-  (`:870-876`). Per-part `options: { openai: { imageDetail } }` (`:133-148`).
-- **Prompt caching**: OpenAI Responses caching is implicit; hits surface as
-  `usage.inputTokens.cacheRead` (from `input_tokens_details.cached_tokens`,
-  `:3037-3063`). `prompt_cache_key`/`prompt_cache_retention` are **not** in the typed
-  `CreateResponse` config of `@effect/ai-openai` (`openai/OpenAiSchema.ts:655-697`) — the
-  body is posted with `HttpBody.jsonUnsafe` so nothing strips extra keys at runtime
-  (`openai/OpenAiClient.ts:236-239`), but typing them requires a cast. In
-  `@effect/ai-openai-compat` they're accepted (`compat/OpenAiClient.ts:650-653`) yet the
-  chat-completions mapping never forwards them — known-but-unmapped keys are silently
-  dropped (`compat/OpenAiLanguageModel.ts:1490-1539`).
-
-## Streaming vs non-streaming
-
-`streamText` yields `Response.StreamPart`s (`text-start/-delta/-end`, tool parts, finish);
-tool handlers run as calls arrive, with finish parts deferred until handlers complete
-(`LanguageModel.ts:1526-1574`). For a non-streaming turn loop (WhatsApp), use
-`generateText` — one Effect per round, accessors on the result; streaming buys nothing
-without incremental delivery.
-
-## Testing seams
-
-The stub seam is `LanguageModel.make({ generateText, streamText })` — the same constructor
-providers use — provided as the `LanguageModel` service; hooks return **encoded** response
-parts and receive full `ProviderOptions` (prompt, tools, responseFormat) for asserting
-what would hit the wire (`LanguageModel.ts:748-768`). The repo's own tests wrap this as
-`withLanguageModel({ generateText: parts | (options) => parts })`
-(`test/utils.ts:6-69`; usage e.g. `test/LanguageModel.test.ts:294-330`). Scripted
-multi-turn conversations = a hook closing over a call counter returning different part
-arrays. Provider-level tests instead stub `HttpClient` with a request-capturing mock under
-a real `OpenAiClient` (`packages/ai/openai/test/OpenAiLanguageModel.test.ts:1317`,
-`:1395`), asserting the exact JSON request body.
-
-## Traps recap
-
-| Trap                                   | Consequence                                                                         | Fix                                                                |
-| -------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| No built-in loop / iteration cap       | one round per `generateText`, silent stop after tool round                          | own loop + `MAX_ITERATIONS` + `finishReason` check                 |
-| `failureMode: "error"` (default)       | handler failure kills the turn, model never sees it                                 | `failure` schema + `failureMode: "return"`                         |
-| string image data, no `fileIdPrefixes` | image silently omitted from request                                                 | pass `Uint8Array` or `URL`                                         |
-| tool concurrency default `"unbounded"` | parallel side-effectful API calls                                                   | `concurrency: 1`                                                   |
-| `Schema.optional` in structured output | encoded as required-nullable; `Undefined` kind throws                               | `Schema.optionalKey`                                               |
-| `prompt_cache_key` in config           | not typeable (openai) / silently dropped (compat)                                   | rely on implicit caching; verify via `usage.inputTokens.cacheRead` |
-| empty toolkit vs no toolkit            | both skip tool wiring but still error on pending approvals (`ToolkitRequiredError`) | keep the toolkit attached across rounds                            |
+Portable tests use a stub LanguageModel to prove prompt projection, tool authorization, confirmation,
+round limits, structured decoding, interruption, and redaction. Adapter tests use the Workers AI
+binding seam or an explicit transport fixture to prove bounds and safe failure classification. A stub
+model cannot claim model availability, provider latency, or production retention behavior.

@@ -1,6 +1,5 @@
 // @vitest-environment node
 
-import assert from "node:assert/strict";
 import {
   Cause,
   Context,
@@ -147,8 +146,7 @@ describe("browser HTTP policy", () => {
       yield* TestClock.adjust("15 seconds");
       const exit = yield* Fiber.await(fiber);
 
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -176,8 +174,7 @@ describe("browser HTTP policy", () => {
       const exit = yield* client.get("https://attacker.example/collect").pipe(Effect.exit);
 
       expect(executions).toBe(0);
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -205,8 +202,7 @@ describe("browser HTTP policy", () => {
       const exit = yield* client.get("not a URL").pipe(Effect.exit);
 
       expect(executions).toBe(0);
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -240,8 +236,7 @@ describe("browser HTTP policy", () => {
 
       expect(executions).toBe(1);
       const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.DecodeError({
@@ -277,8 +272,7 @@ describe("browser HTTP policy", () => {
       const exit = yield* client.get("https://api.test.fidyapp.com/large").pipe(Effect.exit);
 
       const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.DecodeError({
@@ -319,8 +313,7 @@ describe("browser HTTP policy", () => {
       const exit = yield* client.get("https://api.test.fidyapp.com/large").pipe(Effect.exit);
 
       const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.DecodeError({
@@ -362,8 +355,7 @@ describe("browser HTTP policy", () => {
 
       const exit = yield* client.post("https://api.test.fidyapp.com/submit").pipe(Effect.exit);
 
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({
@@ -391,8 +383,7 @@ describe("browser HTTP policy", () => {
 
       const exit = yield* client.post("https://api.test.fidyapp.com/write").pipe(Effect.exit);
 
-      assert.deepStrictEqual(
-        exit,
+      expect(exit).toEqual(
         Exit.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.EncodeError({

@@ -9,7 +9,7 @@ const rawSample = {
   locale: "es-CO",
   timeZone: "America/Bogota",
   sourceFormat: "notification-email",
-  sourceProvider: "resend",
+  sourceProvider: "cloudflare-email",
   parserRevision: "notification-email-parser-v1",
   content: {
     receivedEmailId: "received-email-1",
@@ -40,10 +40,10 @@ const reviewBase = {
   timeZone: "America/Bogota",
   sourceFormat: "notification-email",
   sourceChannel: "forwarded-email",
-  sourceProvider: "resend",
+  sourceProvider: "cloudflare-email",
   messageEvidence: {
     channel: "email",
-    provider: "resend",
+    provider: "cloudflare-email",
     providerMessageId: "received-email-1",
   },
   parserRevision: "notification-email-parser-v1",

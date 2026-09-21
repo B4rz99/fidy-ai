@@ -184,7 +184,7 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
     })
       .annotate(
         OpenApi.Description,
-        "Execute a non-empty ordered set of canonical mutations in one User-scoped PostgreSQL transaction. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children."
+        "Execute a non-empty ordered set of canonical mutations in one User-scoped atomic commit. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children."
       )
       .annotateMerge(
         operationPolicy({

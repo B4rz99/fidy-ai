@@ -100,7 +100,7 @@ All three candidates share one boundary principle: **free = deterministic, paid 
 - **Free:** as above, no agent conversations (or 3/mo).
 - **Básico ~COP 9,900/mo** (anchor: Netflix extra member $9,900, Spotify student $10,100): capped agent — e.g., 100 messages/mo, cheap-model routing, monthly insight digest.
 - **Pro ~COP 24,900–29,900/mo** (anchor: Netflix Estándar $29,900): high/dynamic caps, frontier-model reasoning, automations, proactive alerts.
-- **Pros:** ladder mirrors OpenAI's proven LatAm playbook (Go under Plus); low entry price fights the zero-fee reflex; caps make COGS per tier calculable. **Cons:** two tiers to explain; the cheap tier can cannibalize if caps are too generous.
+- **Pros:** ladder mirrors an established LatAm playbook (Go under Plus); low entry price fights the zero-fee reflex; caps make COGS per tier calculable. **Cons:** two tiers to explain; the cheap tier can cannibalize if caps are too generous.
 
 ### Candidate C — "Subscription + top-up credits" (hybrid, RevenueCat-trend model)
 
@@ -170,9 +170,6 @@ Start with **Candidate A's simplicity at Candidate B's discipline**: one paid ti
 - https://newsroom.rcnradio.com/actualidad/cuales-son-los-nuevos-precios-de-netflix-en-2026-y-de-cuanto-es-el-incremento-en-colombia
 - https://www.noticiasrcn.com/tendencias/spotify-sube-de-precio-en-colombia-este-es-su-valor-923070
 - https://www.elcolombiano.com/tecnologia/spotify-aumento-precio-premium-colombia-2025-NI28575923
-- https://www.eltiempo.com/tecnosfera/apps/openai-lanza-chatgpt-go-en-colombia-costara-20-900-pesos-y-podra-tener-meses-gratis-con-rappi-3515980
-- https://impactotic.co/inteligencia-artificial/openai-lanza-chatgpt-go-en-colombia-con-gpt-5-y-beneficios-en-rappi/
-- https://www.infobae.com/tecno/2025/12/16/openai-ya-esta-disponible-en-colombia-anuncian-plan-economico-para-chatgpt-premium/
 - https://www.nequi.com.co/tarifas-nequi
 - https://www.daviplata.com/documents/d/guest/daviplata-tasas-y-tarifas
 - https://www.infobae.com/colombia/2026/01/08/nequi-y-daviplata-tienen-nuevos-topes-y-reglas-en-2026-asi-cobran-ahora-por-el-impuesto-del-4x1000-en-las-transferencias/

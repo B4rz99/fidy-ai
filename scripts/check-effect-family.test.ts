@@ -80,12 +80,12 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
     dependencies: {
       effect: effectVersion,
       "@effect/ai": aiVersion,
-      "@effect/platform-bun": platformVersion,
-      "@effect/sql-pg": sqlVersion,
+      "@effect/platform-cloudflare": platformVersion,
+      "@effect/sql-d1": sqlVersion,
       "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
-    ...(includeOverride ? { overrides: { "@effect/platform-node-shared": overrideVersion } } : {}),
+    ...(includeOverride ? { overrides: { "@effect/platform-shared": overrideVersion } } : {}),
   };
   const lockfile = {
     lockfileVersion: 1,
@@ -100,9 +100,9 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
     packages: {
       effect: [`effect@${effectVersion}`, ""],
       "@effect/ai": [`@effect/ai@${aiVersion}`, ""],
-      "@effect/platform-bun": [`@effect/platform-bun@${platformVersion}`, ""],
-      "@effect/platform-node-shared": [`@effect/platform-node-shared@${transitiveVersion}`, ""],
-      "@effect/sql-pg": [`@effect/sql-pg@${sqlVersion}`, ""],
+      "@effect/platform-cloudflare": [`@effect/platform-cloudflare@${platformVersion}`, ""],
+      "@effect/platform-shared": [`@effect/platform-shared@${transitiveVersion}`, ""],
+      "@effect/sql-d1": [`@effect/sql-d1@${sqlVersion}`, ""],
       "@effect/vitest": [`@effect/vitest@${vitestVersion}`, ""],
       "@effect/atom-react": [`@effect/atom-react@${atomReactVersion}`, ""],
       ...qualifiedPackage(Option.fromUndefinedOr(overrides.qualifiedEffectVersion)),
@@ -164,7 +164,7 @@ it("reports a beta package mixed into the selected RC family", () => {
   );
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/platform-bun: 4.0.0-beta.98");
+  expect(decode(result.stderr)).toContain("@effect/platform-cloudflare: 4.0.0-beta.98");
 });
 
 it("reports an Effect package from a different RC family", () => {
@@ -173,14 +173,14 @@ it("reports an Effect package from a different RC family", () => {
   );
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/sql-pg: 4.0.0-rc.4");
+  expect(decode(result.stderr)).toContain("@effect/sql-d1: 4.0.0-rc.4");
 });
 
 it("reports a directly selected Effect package from another release channel", () => {
   const result = checkFixture(makeFixture({ platformVersion: "3.19.4" }));
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/platform-bun: 3.19.4");
+  expect(decode(result.stderr)).toContain("@effect/platform-cloudflare: 3.19.4");
 });
 
 it("reports a directly selected base package from an unrelated release channel", () => {
@@ -201,14 +201,14 @@ it("reports a transitive platform package that advanced beyond the selected beta
   const result = checkFixture(makeFixture({ transitiveVersion: "4.0.0-beta.105" }));
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/platform-node-shared: 4.0.0-beta.105");
+  expect(decode(result.stderr)).toContain("@effect/platform-shared: 4.0.0-beta.105");
 });
 
 it("requires transitive platform overrides to pin the selected beta exactly", () => {
   const result = checkFixture(makeFixture({ overrideVersion: "^4.0.0-beta.98" }));
 
   expect(result.exitCode).toBe(1);
-  expect(decode(result.stderr)).toContain("@effect/platform-node-shared override: ^4.0.0-beta.98");
+  expect(decode(result.stderr)).toContain("@effect/platform-shared override: ^4.0.0-beta.98");
 });
 
 it("reports a missing transitive platform override with its manifest location", () => {
@@ -216,6 +216,6 @@ it("reports a missing transitive platform override with its manifest location", 
 
   expect(result.exitCode).toBe(1);
   expect(decode(result.stderr)).toContain(
-    "@effect/platform-node-shared override: missing (package.json)"
+    "@effect/platform-shared override: missing (package.json)"
   );
 });

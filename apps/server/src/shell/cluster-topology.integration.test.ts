@@ -413,14 +413,15 @@ const registerClusterTopologyScenarios = (): void => {
             available_shard_groups AS "availableShardGroups"
             FROM fidy_durable.${sql(topologyIdentityTable)}`
           ).toEqual([{ shardsPerGroup: shardCount, availableShardGroups: ["default"] }]);
+          const expectedSharingRunners = [
+            { address: `127.0.0.1:${sharingFirstPort}`, healthy: true },
+            { address: `127.0.0.1:${sharingSecondPort}`, healthy: true },
+          ].toSorted((left, right) => left.address.localeCompare(right.address));
           expect(
             yield* sql`SELECT address, healthy FROM fidy_durable.${sql(clusterRunnersTable)}
             WHERE address IN (${`127.0.0.1:${sharingFirstPort}`}, ${`127.0.0.1:${sharingSecondPort}`})
             ORDER BY address`
-          ).toEqual([
-            { address: `127.0.0.1:${sharingFirstPort}`, healthy: true },
-            { address: `127.0.0.1:${sharingSecondPort}`, healthy: true },
-          ]);
+          ).toEqual(expectedSharingRunners);
         }),
       60_000
     );

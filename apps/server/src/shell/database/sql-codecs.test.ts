@@ -28,6 +28,7 @@ const TimestampRow = Schema.Struct({
 const SearchPathRow = Schema.Struct({ searchPath: Schema.String });
 
 const DatabaseTypeColumn = Schema.Struct({
+  tableSchema: Schema.String,
   tableName: Schema.String,
   columnName: Schema.String,
   dataType: Schema.String,
@@ -148,16 +149,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Request: Schema.Void,
           Result: DatabaseTypeColumn,
           execute: () => sql`
-            SELECT table_name AS "tableName", column_name AS "columnName",
-              data_type AS "dataType", udt_name AS "udtName"
+            SELECT table_schema AS "tableSchema", table_name AS "tableName",
+              column_name AS "columnName", data_type AS "dataType", udt_name AS "udtName"
             FROM information_schema.columns
-            WHERE table_schema = 'public'
+            WHERE table_schema IN ('public', 'fidy_durable')
               AND (data_type = 'ARRAY' OR data_type = 'USER-DEFINED')
-            ORDER BY table_name, ordinal_position
+            ORDER BY table_schema, table_name, ordinal_position
           `,
         })(undefined);
 
-        expect(columns.length).toBeGreaterThan(0);
+        expect(columns).toContainEqual({
+          tableSchema: "fidy_durable",
+          tableName: "cluster_topology_identity",
+          columnName: "available_shard_groups",
+          dataType: "ARRAY",
+          udtName: "_text",
+        });
         expect(
           columns.every((column) => column.dataType === "ARRAY" && column.udtName === "_text")
         ).toBe(true);

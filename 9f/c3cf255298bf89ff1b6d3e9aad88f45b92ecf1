@@ -1,0 +1,42 @@
+apps/server/src/shell/consent/ingress.ts
+  s_81d86442ec05b7::t_0929140b76f18a 52
+  s_81d86442ec05b7::t_914d4926639d33 99
+infra/cloudflare/migrations/0004_onboarding_email.sql
+  s_81d86442ec05b7::t_54f558704aeb47 7-8
+infra/cloudflare/workflow-test-runtime.ts
+  s_81d86442ec05b7::t_704e74c12153b2 1-2
+  s_81d86442ec05b7::t_384f05ab5242f8 5
+infra/cloudflare/onboarding-email.ts
+  s_81d86442ec05b7::t_007c45b29262b5 75,77-81,83-89,91-93,95,97
+  s_81d86442ec05b7::t_042a028d5c7c6b 152
+infra/cloudflare/consent-ingress.test.ts
+  s_81d86442ec05b7::t_c8e377271cfbdd 10,274,354,515-535,540-542,550-564
+  s_81d86442ec05b7::t_e811fa7166f85a 275-294
+  s_81d86442ec05b7::t_b92599676dd0b6 414,510
+  s_81d86442ec05b7::t_96285a7de26077 544,547-549
+  s_81d86442ec05b7::t_3020af87b38083 545-546
+  s_81d86442ec05b7::t_530fbf5ef2694f 355-383,389-413,415-420
+  s_81d86442ec05b7::t_4ae94be1c81530 6,536-539,543
+  s_81d86442ec05b7::t_aaee3b739fec68 508-509,511-514
+  s_81d86442ec05b7::t_e79847fbfbc873 384-388
+infra/cloudflare/consent-ingress.ts
+  s_81d86442ec05b7::t_2e788da7918a14 578-579
+  s_81d86442ec05b7::t_0571da6614f678 149,311-312,485-487,606,608
+  s_81d86442ec05b7::t_5b4efff582ce7e 568-577,580-588,607
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9fc3cf255298bf89ff1b6d3e9aad88f45b92ecf1",
+  "prompts": {},
+  "sessions": {
+    "s_81d86442ec05b7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0caf7-1cbc-7741-be57-867feab19b1e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

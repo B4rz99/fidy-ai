@@ -12,8 +12,8 @@ import { CORE_SRC } from "./source-scope.mjs";
  * mutants cannot be killed from any seam a test can reach.
  */
 export default {
-  // The command runner, not @stryker-mutator/vitest-runner. The vitest runner
-  // drives vitest through its Node API, so every mutant would be judged on
+  // The command runner, not a framework-specific Vitest runner. That runner
+  // drives Vitest through its Node API, so every mutant would be judged on
   // Node while the project validates Worker-compatible boundaries. This runs the same command
   // `bun run test:core` runs, so a mutant survives or dies under the runtime
   // that would have shipped it. The cost is the whole core suite per mutant
@@ -46,8 +46,7 @@ export default {
     // spec, which only exists in the shell. Killing them from here would mean
     // asserting against `schema.ast.checks[…].annotations`, coupling tests to
     // Effect's AST internals to protect a string; and the shell has already
-    // decided field descriptions are a review matter rather than a guard
-    // (src/shell/testing/descriptions.test.ts).
+    // decided field descriptions are a review matter rather than a guard.
     //
     // The price is real and worth naming: `Schema.Literals(["inflow", ""])` and
     // `Schema.Literal("")` for the currency are behaviour, and this gate stops

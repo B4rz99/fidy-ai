@@ -172,46 +172,6 @@
                 "missingPipeableSignature": "off"
               }
             }
-          },
-          {
-            "include": ["./apps/server/tools/observability-compatibility/**/*.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "asyncFunction": "off",
-                "globalDate": "off",
-                "globalFetchInEffect": "off",
-                "globalTimers": "off",
-                "lazyPromiseInEffectSync": "off",
-                "preferSchemaOverJson": "off",
-                "processEnv": "off",
-                "runEffectInsideEffect": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./apps/server/src/shell/observability/internal/release-preparation*.ts",
-              "./apps/server/src/shell/observability/release-preparation*.test.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "asyncFunction": "off",
-                "globalTimers": "off",
-                "nodeBuiltinImport": "off",
-                "processEnv": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./apps/server/src/shell/testing/durable-compatibility.ts",
-              "./apps/server/src/shell/testing/durable-compatibility/fixture-registry.compatibility.test.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
           }
         ]
       }

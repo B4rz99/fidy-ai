@@ -83,11 +83,3 @@ export const WhatsAppCallerReference = Schema.Struct({
   businessScopedUserId: WhatsAppBusinessScopedUserId,
 }).annotate({ identifier: "WhatsAppCallerReference" });
 export type WhatsAppCallerReference = typeof WhatsAppCallerReference.Type;
-
-/** Projects a caller-like value to the stable reference safe for cross-slice use. */
-export const whatsAppCallerReference = (
-  caller: Readonly<WhatsAppCallerReference>
-): WhatsAppCallerReference => ({
-  businessPortfolioId: caller.businessPortfolioId,
-  businessScopedUserId: caller.businessScopedUserId,
-});

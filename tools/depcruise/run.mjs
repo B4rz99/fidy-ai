@@ -4,7 +4,7 @@
 // and the tsconfig `paths` aliases through the classic TypeScript compiler API,
 // which the root's Effect tsgo `typescript` build does not expose — so it is
 // resolved from this directory's isolated install, the same arrangement
-// tools/crap uses and for the same reason. And when that API is missing the
+// tools/mutation uses and for the same reason. And when that API is missing the
 // cruiser does not fail: it cruises zero modules, reports no violations and
 // exits 0. A gate that enforces nothing while looking green is the exact
 // failure this repo already had once, so `assertCruisedSomething` below turns

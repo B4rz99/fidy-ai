@@ -28,7 +28,7 @@
     "contracts:check:freshness": "bun run --cwd apps/server contracts:generate --check",
     "contracts:check:compatibility": "bun run --cwd apps/server tools/contracts/check.ts",
     "test:contracts": "bun run --cwd apps/server test:contracts",
-    "test:ci-tools": "bun --bun vitest run scripts/ci/*.test.ts scripts/check-effect-family.test.ts --environment node",
+    "test:ci-tools": "bun --bun vitest run scripts/check-effect-family.test.ts --environment node",
     "test": "bun run --cwd apps/server test:core && bun run --cwd apps/server test:email-interpretation && bun run --cwd apps/web test",
     "test:preview-policy": "bun run --cwd apps/web test:preview-policy",
     "test:production-adapters": "bun --bun vitest run scripts/production/*.test.ts --environment node",

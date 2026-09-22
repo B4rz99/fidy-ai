@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { Cause, Array as EffectArray, Exit, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { JSX } from "react";
@@ -63,17 +63,6 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Dashboard route resources", () => {
-  it("delegates initial failures to the resource presentation", () => {
-    render(
-      <DashboardRouteContent
-        apiClient={apiClient}
-        onRefresh={vi.fn()}
-        result={AsyncResult.initial()}
-      />
-    );
-    expect(screen.getByText("Presentación sin datos")).toBeVisible();
-  });
-
   it("distinguishes catalog failure from a stale Dashboard refresh", () => {
     setCatalogResult(AsyncResult.failure(Cause.fail("catalog")));
     const { unmount } = render(

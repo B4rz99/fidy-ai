@@ -189,11 +189,20 @@
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/core-worker.ts",
         "infra/cloudflare/public-worker.ts",
+        "infra/cloudflare/resource-admission-worker.fixture.ts",
         "infra/cloudflare/vitest.config.ts"
       ],
       "rules": {
         "import/no-default-export": "off",
         "max-lines-per-function": "off"
+      }
+    },
+    // Rolldown publishes its package-root entrypoint without an extension; this fixture imports
+    // that public entrypoint to bundle the Worker used by Miniflare's multi-runtime test.
+    {
+      "files": ["infra/cloudflare/resource-admission.test.ts"],
+      "rules": {
+        "import/extensions": "off"
       }
     },
     {

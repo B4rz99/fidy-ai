@@ -22,6 +22,8 @@ jobs:
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
       ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -50,9 +52,6 @@ jobs:
         run: bun run --cwd apps/web build:production
 
       - name: Configure Alchemy's ephemeral Cloudflare profile
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           bunx alchemy profile create "$ALCHEMY_PROFILE" --no-input
           bunx alchemy profile edit \

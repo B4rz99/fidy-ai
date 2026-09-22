@@ -24,6 +24,9 @@ describe("Production release workflow policy", () => {
 
   it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
     expect(workflow).toContain('echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"');
+    expect(workflow).toContain(
+      "ALCHEMY_PROFILE: ci\n      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}\n      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}"
+    );
     expect(workflow).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
     expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
   });

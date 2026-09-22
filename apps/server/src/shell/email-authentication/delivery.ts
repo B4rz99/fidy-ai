@@ -1,12 +1,27 @@
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import { Config, Context, Data, Effect, Layer, Option, Result, Schema } from "effect";
+import {
+  Config,
+  Context,
+  Data,
+  Effect,
+  Layer,
+  Option,
+  type Redacted,
+  Result,
+  Schema,
+} from "effect";
+import type { HttpClient } from "effect/unstable/http";
 import type {
   EmailAddress,
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
-import { OutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  OutboundHttp,
+  type OutboundHttpService,
+  makeResendOutboundHttp,
+} from "~/shell/outbound-http/operations";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -140,6 +155,41 @@ const mapResendRequestFailure = (
   return new EmailSendFailed({ certainty, retryable: false });
 };
 
+const deliverySender = (
+  outboundHttp: OutboundHttpService,
+  from: string
+): EmailDeliveryPortService => ({
+  send: (input) => {
+    const projection = verificationEmailFor(input.purpose, input.combinedCode);
+    return outboundHttp
+      .execute({
+        _tag: "ResendEmailDelivery",
+        idempotencyKey: input.idempotencyKey,
+        body: encodeResendRequest({
+          from,
+          to: [input.to],
+          subject: projection.subject,
+          text: projection.text,
+          html: projection.html,
+        }),
+      })
+      .pipe(
+        Effect.timeout("14 seconds"),
+        Effect.mapError(mapResendRequestFailure),
+        Effect.flatMap(classifyResendResponse)
+      );
+  },
+});
+
+/** Send onboarding verification with the supplied Resend key; no other provider or local stub is used. */
+export const makeOnboardingEmailDelivery = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+): EmailDeliveryPortService =>
+  deliverySender(makeResendOutboundHttp(input), "Fidy <obarboza@fidyapp.com>");
+
 export class EmailDeliveryPort extends Context.Service<
   EmailDeliveryPort,
   EmailDeliveryPortService
@@ -159,28 +209,7 @@ export class EmailDeliveryPort extends Context.Service<
         "RESEND_FROM_EMAIL"
       );
       const fromName = yield* Config.schema(Schema.Literal("Fidy"), "RESEND_FROM_NAME");
-      return EmailDeliveryPort.of({
-        send: (input) => {
-          const projection = verificationEmailFor(input.purpose, input.combinedCode);
-          return outboundHttp
-            .execute({
-              _tag: "ResendEmailDelivery",
-              idempotencyKey: input.idempotencyKey,
-              body: encodeResendRequest({
-                from: `${fromName} <${fromEmail}>`,
-                to: [input.to],
-                subject: projection.subject,
-                text: projection.text,
-                html: projection.html,
-              }),
-            })
-            .pipe(
-              Effect.timeout("14 seconds"),
-              Effect.mapError(mapResendRequestFailure),
-              Effect.flatMap(classifyResendResponse)
-            );
-        },
-      });
+      return EmailDeliveryPort.of(deliverySender(outboundHttp, `${fromName} <${fromEmail}>`));
     })
   );
 }

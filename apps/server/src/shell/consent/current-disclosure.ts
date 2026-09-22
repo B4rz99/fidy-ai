@@ -8,7 +8,7 @@ Política completa: https://app.fidyapp.com/politica
 
 Si activas el reenvío de correos financieros, Fidy procesa su texto, HTML e imágenes integradas para registrar movimientos. Conserva el correo original hasta 90 días. Una muestra estructural solo puede conservarse indefinidamente después de anonimización automática y aprobación humana.
 
-Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”.`;
+Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”. Después de aceptar, responde con tu correo electrónico para recibir un código de verificación. Puedes escribir “Estado” para consultar el envío.`;
 
 /**
  * Current immutable disclosure facts, including the exact policy URL named in the sent text.
@@ -18,8 +18,8 @@ export const currentDisclosureFor = (): DisclosureSnapshot =>
   Schema.decodeSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
-    revision: "onboarding-2026-09-22",
-    contentSha256: "6bf9276d0ae4118ca597f056cf54c3cd7119cfd25304e570fe54bd4c23cad706",
+    revision: "onboarding-2026-09-22-email",
+    contentSha256: "710323f8bbaa4578863edf346774379a4592780e99cf6f809b45a2621c810808",
     text: CURRENT_DISCLOSURE_TEXT,
     policy: {
       publicUrl: "https://app.fidyapp.com/politica",

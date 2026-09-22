@@ -39,6 +39,21 @@ export const makeKapsoOutboundHttp = (
     crypto: Option.none(),
   });
 
+/** Execute only Resend requests using the supplied credential and client; other providers fail closed. */
+export const makeResendOutboundHttp = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+): OutboundHttpService =>
+  makeOutboundHttp({
+    kapsoApiKey: Option.none(),
+    resendEmailDeliveryApiKey: Option.some(input.apiKey),
+    wompi: Option.none(),
+    httpClient: input.httpClient,
+    crypto: Option.none(),
+  });
+
 /** Authority to reach an external provider through the published Outbound HTTP policy. */
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(
   "@fidy/server/shell/outbound-http/operations/OutboundHttp"

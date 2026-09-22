@@ -5,6 +5,12 @@ import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
 import { Effect, Schema } from "effect";
 import { sweepExpiredConsent } from "./consent-ingress";
+import {
+  deliverOnboardingEmail,
+  dispatchOnboardingEmail,
+  receiveOnboardingEmail,
+  runOnboardingEmailWorkflow,
+} from "./onboarding-email";
 import { afterEach, expect, it, vi } from "vitest";
 import coreWorker from "./core-worker";
 import publicWorker from "./public-worker";
@@ -14,6 +20,7 @@ import { maxKapsoWebhookBytes } from "@fidy/server/consent-ingress";
 const secret = "kapso-webhook-secret-for-consent-tests";
 const portfolio = "portfolio-1";
 const dayMs = 86_400_000;
+const statusCooldownElapsedMs = 61_000;
 const bsuid = "CO.13491208655302741918";
 // @effect-diagnostics-next-line globalDate:off
 const nowSeconds = Math.floor(Date.now() / 1000);
@@ -68,7 +75,7 @@ const setup = async (): Promise<{
       sql
         .replace(/^--.*$/gmu, "")
         .trim()
-        .split(/;\s*\n(?=CREATE |$)/u)
+        .split(/;\s*\n(?=CREATE |ALTER |$)/u)
         .reduce<Promise<unknown>>(
           (previous, statement) => previous.then(() => db.prepare(statement).run()),
           Promise.resolve()
@@ -76,6 +83,7 @@ const setup = async (): Promise<{
     );
   await applyMigration(new URL("./migrations/0002_resource_admission.sql", import.meta.url));
   await applyMigration(migration);
+  await applyMigration(new URL("./migrations/0004_onboarding_email.sql", import.meta.url));
   const send = (
     body: string,
     signature?: string,
@@ -259,6 +267,570 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
   ]);
   expect((await db.prepare("SELECT state FROM pending_consent_exchanges").first())?.state).toBe(
     "accepted"
+  );
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("does not enroll a replay of the mailbox message that initiated disclosure", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send, "test@example.com");
+  expect(
+    (
+      await db
+        .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
+        .first()
+    )?.email_preaccept_latest_occurred_ms
+  ).toBe(nowSeconds * 1_000);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(inbound("wamid.first", "test@example.com"))).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("remembers a mailbox seen before disclosure delivery, without creating work", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const preDeliveryEmail = inbound(
+    "wamid.pre-delivery-email",
+    "test@example.com",
+    String(nowSeconds + 20)
+  );
+  expect((await send(preDeliveryEmail)).status).toBe(200);
+  const guarded = await db
+    .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
+    .first();
+  expect(guarded?.email_preaccept_latest_occurred_ms).toBe((nowSeconds + 20) * 1_000);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(preDeliveryEmail)).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("cannot replay a previously seen future-dated pre-Consent email into an enrollment", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  const earlyEmail = inbound(
+    "wamid.early-email",
+    "test@example.com",
+    String(Number(decisionTime) + 20)
+  );
+  expect((await send(earlyEmail)).status).toBe(200);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(earlyEmail)).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("commits one pending mailbox and outbox identity for an accepted Consent reply", async () => {
+  const { db, send, forbiddenEffects } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  const occurred = String(Math.ceil(Number(created?.created_at_ms) / 1000));
+  expect((await deliver(send, token, occurred)).status).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.decision-1", "Acepto", decisionTime))).status).toBe(200);
+  const mailboxTime = String(Number(decisionTime) + 1);
+  const wrongPhone = inbound("wamid.wrong-phone", "test@example.com", mailboxTime).replace(
+    "123456789012345",
+    "123456789012346"
+  );
+  expect((await send(wrongPhone)).status).toBe(409);
+  expect((await send(inbound("wamid.bad-email", "not an address", mailboxTime))).status).toBe(422);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+  const submission = inbound("wamid.email-1", "  Test@Example.com  ", mailboxTime);
+  expect((await send(submission)).status).toBe(200);
+  expect((await send(submission)).status).toBe(200);
+  expect((await send(inbound("wamid.email-2", "else@example.com", mailboxTime))).status).toBe(409);
+  expect(
+    (await db.prepare("SELECT email_address FROM pending_email_enrollments").all()).results
+  ).toMatchObject([{ email_address: "test@example.com" }]);
+  expect(
+    (await db.prepare("SELECT id, version FROM onboarding_email_outbox").all()).results
+  ).toMatchObject([{ version: 1 }]);
+  expect(forbiddenEffects.queue).not.toHaveBeenCalled();
+  expect(forbiddenEffects.workflow).not.toHaveBeenCalled();
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("reoffers the same bounded work after publication settlement is lost", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const offered = vi.fn((work: { readonly version: 1; readonly id: string }) =>
+    Promise.resolve(work)
+  );
+  const dispatcher = { DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } };
+  await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
+  await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
+  expect(offered).toHaveBeenCalledTimes(1);
+  await db.prepare("UPDATE onboarding_email_outbox SET last_attempt_at_ms = NULL").run();
+  await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
+  expect(offered).toHaveBeenCalledTimes(2);
+  expect(offered.mock.calls[0]).toEqual(offered.mock.calls[1]);
+  expect(offered.mock.calls[0]?.[0]).toMatchObject({ version: 1 });
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("continues to publish other identities when one Queue offer fails", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const secondExchange = "00000000-0000-4000-8000-000000000002";
+  const secondToken = "00000000-0000-4000-8000-000000000003";
+  const secondEnrollment = "00000000-0000-4000-8000-000000000004";
+  await db
+    .prepare(`INSERT INTO pending_consent_exchanges
+    (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+     correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
+    SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
+      disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
+    FROM pending_consent_exchanges LIMIT 1`)
+    .bind(secondExchange, "CO.23491208655302741918", "wamid.second-first", secondToken)
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_consent_delivery
+    (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
+    SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
+    FROM pending_consent_delivery LIMIT 1`)
+    .bind(secondToken)
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_consent_decisions
+    (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
+     decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
+    SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
+      ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
+    FROM pending_consent_decisions LIMIT 1`)
+    .bind(secondExchange, "CO.23491208655302741918", "wamid.second-accept")
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_email_enrollments
+    (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
+    SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
+    FROM pending_email_enrollments LIMIT 1`)
+    .bind(secondEnrollment, secondExchange, "wamid.second-email")
+    .run();
+  const offered = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("queue unavailable"))
+    .mockResolvedValue(undefined);
+  await expect(
+    Effect.runPromise(
+      dispatchOnboardingEmail({
+        DB: db,
+        ONBOARDING_EMAIL_QUEUE: { send: offered },
+      })
+    )
+  ).rejects.toBeUndefined();
+  expect(offered).toHaveBeenCalledTimes(2);
+  await Effect.runPromise(
+    dispatchOnboardingEmail({ DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } })
+  );
+  expect(offered).toHaveBeenCalledTimes(2);
+  const states = await db
+    .prepare("SELECT published_at_ms, last_attempt_at_ms FROM onboarding_email_outbox")
+    .all();
+  expect(states.results.every((row) => row.last_attempt_at_ms !== null)).toBe(true);
+  expect(states.results.filter((row) => row.published_at_ms === null)).toHaveLength(1);
+  expect(states.results.filter((row) => row.published_at_ms !== null)).toHaveLength(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("offers the 33rd identity after an entire failing Queue batch cools down", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const syntheticEnrollments = 32;
+  await Promise.all(
+    // @effect-diagnostics-next-line asyncFunction:off
+    Array.from({ length: syntheticEnrollments }, (_, index) => index + 1).map(async (index) => {
+      const suffix = String(index).padStart(12, "0");
+      const exchange = `00000000-0000-4000-8000-${suffix}`;
+      const token = `00000001-0000-4000-8000-${suffix}`;
+      const enrollment = `00000002-0000-4000-8000-${suffix}`;
+      const caller = `CO.${String(index).padStart(20, "0")}`;
+      await db
+        .prepare(`INSERT INTO pending_consent_exchanges
+      (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+       correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
+      SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
+        disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
+      FROM pending_consent_exchanges WHERE bsuid = ?`)
+        .bind(exchange, caller, `wamid.first-${index}`, token, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_consent_delivery
+      (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
+      SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
+      FROM pending_consent_delivery WHERE correlation_token = (
+        SELECT correlation_token FROM pending_consent_exchanges WHERE bsuid = ?)`)
+        .bind(token, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_consent_decisions
+      (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
+       decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
+      SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
+        ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
+      FROM pending_consent_decisions WHERE bsuid = ?`)
+        .bind(exchange, caller, `wamid.accept-${index}`, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_email_enrollments
+      (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
+      SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
+      FROM pending_email_enrollments WHERE exchange_id = (
+        SELECT id FROM pending_consent_exchanges WHERE bsuid = ?)`)
+        .bind(enrollment, exchange, `wamid.email-${index}`, bsuid)
+        .run();
+    })
+  );
+  const offered = vi.fn().mockRejectedValue(new Error("Queue unavailable"));
+  const dispatcher = { DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } };
+  await expect(Effect.runPromise(dispatchOnboardingEmail(dispatcher))).rejects.toBeUndefined();
+  expect(offered).toHaveBeenCalledTimes(32);
+  const unattempted = await db
+    .prepare(`SELECT id FROM onboarding_email_outbox
+    WHERE last_attempt_at_ms IS NULL`)
+    .first();
+  expect(unattempted?.id).toBeDefined();
+  offered.mockResolvedValueOnce(undefined);
+  await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
+  expect(offered).toHaveBeenCalledTimes(33);
+  expect(offered.mock.calls[32]?.[0]).toEqual({ version: 1, id: unattempted?.id });
+  expect(
+    (
+      await db
+        .prepare(`SELECT COUNT(*) AS count FROM onboarding_email_outbox
+    WHERE last_attempt_at_ms IS NULL`)
+        .first()
+    )?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects malformed Queue work before Workflow creation or provider delivery", async () => {
+  const { db } = await setup();
+  const created = vi.fn(() => Promise.resolve({}));
+  const found = vi.fn(() => Promise.resolve({}));
+  const ack = vi.fn();
+  const batch: MessageBatch<unknown> = {
+    queue: "onboarding-email",
+    metadata: { metrics: { backlogCount: 1, backlogBytes: 20 } },
+    ackAll: vi.fn(),
+    retryAll: vi.fn(),
+    messages: [
+      {
+        id: "malformed",
+        body: { version: 1, id: "not-a-uuid", secret: "unexpected" },
+        attempts: 1,
+        // @effect-diagnostics-next-line globalDate:off
+        timestamp: new Date(0),
+        retry: vi.fn(),
+        ack,
+      },
+    ],
+  };
+  await Effect.runPromise(
+    receiveOnboardingEmail({
+      DB: db,
+      ONBOARDING_EMAIL_WORKFLOW: { create: created, get: found },
+    })(batch)
+  );
+  expect(ack).toHaveBeenCalledTimes(1);
+  expect(created).not.toHaveBeenCalled();
+  expect(found).not.toHaveBeenCalled();
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("starts one deterministic Workflow identity despite Queue redelivery", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const createdWorkflow = vi
+    .fn((work: { id: string; params: { version: 1; id: string } }) =>
+      Promise.resolve({ id: work.id })
+    )
+    .mockImplementationOnce((work) => Promise.resolve({ id: work.id }))
+    .mockRejectedValueOnce(new Error("already exists"));
+  const found = vi.fn(() => Promise.resolve({ id }));
+  const ack = vi.fn();
+  const batch: MessageBatch<unknown> = {
+    queue: "onboarding-email",
+    metadata: { metrics: { backlogCount: 1, backlogBytes: 60 } },
+    ackAll: vi.fn(),
+    retryAll: vi.fn(),
+    messages: [
+      {
+        id: "work-1",
+        body: { version: 1, id },
+        attempts: 1,
+        // @effect-diagnostics-next-line globalDate:off
+        timestamp: new Date(0),
+        retry: vi.fn(),
+        ack,
+      },
+    ],
+  };
+  const worker = receiveOnboardingEmail({
+    DB: db,
+    ONBOARDING_EMAIL_WORKFLOW: { create: createdWorkflow, get: found },
+  });
+  await Effect.runPromise(worker(batch));
+  await Effect.runPromise(worker(batch));
+  expect(createdWorkflow).toHaveBeenCalledTimes(2);
+  expect(createdWorkflow.mock.calls[0]).toEqual(createdWorkflow.mock.calls[1]);
+  expect(createdWorkflow.mock.calls[0]?.[0]).toEqual({ id, params: { version: 1, id } });
+  expect(found).toHaveBeenCalledWith(id);
+  expect(ack).toHaveBeenCalledTimes(2);
+  createdWorkflow.mockRejectedValueOnce(new Error("uncertain start"));
+  found.mockRejectedValueOnce(new Error("cannot confirm instance"));
+  await expect(Effect.runPromise(worker(batch))).rejects.toBeUndefined();
+  expect(ack).toHaveBeenCalledTimes(2);
+  await Effect.runPromise(worker(batch));
+  expect(createdWorkflow).toHaveBeenCalledTimes(4);
+  expect(ack).toHaveBeenCalledTimes(3);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("runs the versioned Workflow Activity under replay without repeating provider delivery", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const provider = vi.fn(() => Promise.resolve(Response.json({ id: "resend-message-id" })));
+  vi.stubGlobal("fetch", provider);
+  const steps: Array<string> = [];
+  const activity = (name: string, _options: unknown, run: () => Promise<void>): Promise<void> => {
+    steps.push(name);
+    return run();
+  };
+  const environment = { DB: db, RESEND_API_KEY: "test-provider-key" };
+  await runOnboardingEmailWorkflow(environment, { version: 1, id }, activity);
+  await runOnboardingEmailWorkflow(environment, { version: 1, id }, activity);
+  await runOnboardingEmailWorkflow(environment, { version: 2, id }, activity);
+  expect(steps).toEqual(["send-onboarding-verification-v1", "send-onboarding-verification-v1"]);
+  expect(provider).toHaveBeenCalledTimes(1);
+  expect((await db.prepare("SELECT state FROM pending_email_enrollments").first())?.state).toBe(
+    "awaiting_proof"
+  );
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("keeps only a digest after one Resend acceptance and cannot send again on Activity replay", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const provider = vi.fn(() => Promise.resolve(Response.json({ id: "email_provider_1" })));
+  vi.stubGlobal("fetch", provider);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  expect(provider).toHaveBeenCalledTimes(1);
+  const proof = await db
+    .prepare(`SELECT state, public_code, proof_digest, proof_expires_at_ms
+    FROM pending_email_enrollments WHERE id = ?`)
+    .bind(id)
+    .first();
+  expect(proof?.state).toBe("awaiting_proof");
+  expect(proof?.public_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/u);
+  const digest = proof?.proof_digest;
+  expect(
+    Schema.decodeUnknownSync(
+      Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 })))
+    )(digest)
+  ).toHaveLength(32);
+  expect(
+    JSON.stringify(await db.prepare("SELECT * FROM onboarding_email_outbox").all())
+  ).not.toContain("email_provider_1");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("treats malformed Resend acceptance as ambiguous rather than sending another proof", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const provider = vi.fn(() => Promise.resolve(Response.json({ bogus: "not a message id" })));
+  vi.stubGlobal("fetch", provider);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  expect(provider).toHaveBeenCalledTimes(1);
+  expect((await db.prepare("SELECT state FROM pending_email_enrollments").first())?.state).toBe(
+    "ambiguous"
+  );
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("lets only the accepted WhatsApp caller request a bounded, proof-free delivery status", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  await db.prepare("UPDATE pending_email_enrollments SET state = 'rejected'").run();
+  const provider = vi.fn((_url: string, _init: RequestInit) =>
+    Promise.resolve(
+      Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.status" }] })
+    )
+  );
+  vi.stubGlobal("fetch", provider);
+  const status = inbound("wamid.status-request", "Estado", String(Number(decisionTime) + 2));
+  expect((await send(status, "invalid-signature")).status).toBe(401);
+  expect((await send(status.replaceAll(bsuid, "CO.23491208655302741918"))).status).toBe(409);
+  expect((await send(status.replace("123456789012345", "123456789012346"))).status).toBe(409);
+  expect(provider).not.toHaveBeenCalled();
+  expect((await send(status)).status).toBe(200);
+  expect((await send(status)).status).toBe(200);
+  expect(provider).toHaveBeenCalledTimes(1);
+  const payload = Schema.decodeUnknownSync(
+    Schema.Struct({
+      text: Schema.Struct({ body: Schema.String }),
+    })
+  )(JSON.parse(providerBody(provider.mock.calls[0]?.[1])));
+  expect(payload.text.body).toContain("rechazó");
+  expect(payload.text.body).not.toContain("test@example.com");
+  expect(payload.text.body).not.toMatch(/[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}/u);
+  expect(
+    (await db.prepare("SELECT email_status_attempts FROM pending_consent_exchanges").first())
+      ?.email_status_attempts
+  ).toBe(1);
+  await db
+    .prepare("UPDATE pending_consent_exchanges SET email_status_last_ms = email_status_last_ms - ?")
+    .bind(statusCooldownElapsedMs)
+    .run();
+  await db.prepare("UPDATE pending_email_enrollments SET state = 'ambiguous'").run();
+  expect(
+    (await send(inbound("wamid.status-uncertain", "Estado", String(Number(decisionTime) + 3))))
+      .status
+  ).toBe(200);
+  expect(provider).toHaveBeenCalledTimes(2);
+  const uncertain = Schema.decodeUnknownSync(
+    Schema.Struct({
+      text: Schema.Struct({ body: Schema.String }),
+    })
+  )(JSON.parse(providerBody(provider.mock.calls[1]?.[1])));
+  expect(uncertain.text.body).toContain("No podemos confirmar");
+  expect(uncertain.text.body).not.toContain("test@example.com");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("marks an interrupted provider call ambiguous without repeating the send", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const provider = vi.fn(() => Promise.reject(new Error("connection lost after request")));
+  vi.stubGlobal("fetch", provider);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  await deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id);
+  expect(provider).toHaveBeenCalledTimes(1);
+  expect((await db.prepare("SELECT state FROM pending_email_enrollments").first())?.state).toBe(
+    "ambiguous"
   );
 });
 

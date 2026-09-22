@@ -9,6 +9,11 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
+    "./onboarding-email-delivery": {
+      "types": "./src/shell/email-authentication/delivery.ts",
+      "import": "./src/shell/email-authentication/delivery.ts",
+      "default": "./src/shell/email-authentication/delivery.ts"
+    },
     "./consent-ingress": {
       "types": "./src/shell/consent/ingress.ts",
       "import": "./src/shell/consent/ingress.ts",

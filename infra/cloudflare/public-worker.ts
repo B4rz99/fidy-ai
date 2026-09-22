@@ -95,10 +95,8 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
   const requestedHeaders = Option.fromNullishOr(
     request.headers.get("access-control-request-headers")
   );
-  if (
-    !Option.exists(requestedMethod, (method) => method === "GET" || method === "POST") ||
-    !isAllowedPreflightHeaders(requestedHeaders)
-  ) {
+  const method = allowedMethod(new URL(request.url).pathname);
+  if (!Option.contains(requestedMethod, method) || !isAllowedPreflightHeaders(requestedHeaders)) {
     return forbiddenOrigin();
   }
 
@@ -107,7 +105,7 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
       onNone: () => "",
       onSome: (value) => value.toLowerCase(),
     }),
-    "access-control-allow-methods": "GET, POST",
+    "access-control-allow-methods": method,
     "access-control-max-age": "600",
   });
   return applyApiPolicy(

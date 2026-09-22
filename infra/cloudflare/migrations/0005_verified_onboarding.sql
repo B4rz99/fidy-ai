@@ -22,7 +22,7 @@ CREATE TABLE verified_email_credentials (
   CHECK (email_address = lower(trim(email_address)))
 ) STRICT;
 CREATE TABLE onboarding_consent_records (
-  id TEXT PRIMARY KEY NOT NULL REFERENCES pending_consent_exchanges(id),
+  id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
   disclosure_json TEXT NOT NULL,
   disclosure_message_id TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE backup_recovery_credentials (
   created_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE TABLE completed_email_enrollments (
-  enrollment_id TEXT PRIMARY KEY NOT NULL REFERENCES pending_email_enrollments(id),
+  enrollment_id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
   completed_at_ms INTEGER NOT NULL
 ) STRICT;

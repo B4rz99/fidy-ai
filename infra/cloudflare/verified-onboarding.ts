@@ -1,5 +1,9 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import { Option, Schema } from "effect";
+import {
+  canRedeemOnboardingProof,
+  verifiedOnboardingContext,
+} from "@fidy/server/onboarding-verification";
+import { DateTime, Option, Schema } from "effect";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({
@@ -9,7 +13,13 @@ const ProofRow = Schema.Struct({
   proof_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   expires_at_ms: Schema.Finite,
   proof_expires_at_ms: Schema.Finite,
-  state: Schema.String,
+  state: Schema.Literals([
+    "awaiting_delivery",
+    "sending",
+    "awaiting_proof",
+    "rejected",
+    "ambiguous",
+  ]),
 });
 type Enrollment = typeof ProofRow.Type;
 const maximumBodyBytes = 512;
@@ -17,7 +27,6 @@ const digestLength = 32;
 const recoverySymbols = 25;
 const publicCodeLength = 9;
 const proofOffset = 10;
-const trialDurationMs = 604_800_000;
 const invalid = (): Response =>
   Response.json(
     {
@@ -53,6 +62,36 @@ const equalDigest = (left: Uint8Array, right: Uint8Array): boolean => {
 };
 
 // @effect-diagnostics-next-line asyncFunction:off
+const readBody = async (request: Request): Promise<Option.Option<string>> => {
+  if (request.body === null) return Option.none();
+  const reader = request.body.getReader();
+  const chunks: Array<Uint8Array> = [];
+  let length = 0;
+  try {
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop
+      const part = await reader.read();
+      if (part.done) break;
+      length += part.value.byteLength;
+      if (length > maximumBodyBytes) return Option.none();
+      chunks.push(part.value);
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return Option.some(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return Option.none();
+  } finally {
+    if (length > maximumBodyBytes) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
 const readCode = async (request: Request): Promise<Option.Option<string>> => {
   if (
     request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json" ||
@@ -60,18 +99,15 @@ const readCode = async (request: Request): Promise<Option.Option<string>> => {
   ) {
     return Option.none();
   }
+  const text = await readBody(request);
+  if (Option.isNone(text)) return Option.none();
   try {
-    const text = await request.text();
-    if (new TextEncoder().encode(text).length > maximumBodyBytes) return Option.none();
-    const input: unknown = JSON.parse(text);
+    const input: unknown = JSON.parse(text.value);
     return Option.map(Schema.decodeUnknownOption(Payload)(input), (value) => value.combinedCode);
   } catch {
     return Option.none();
   }
 };
-
-const proofIsCurrent = (row: Enrollment, now: number): boolean =>
-  row.state === "awaiting_proof" && row.expires_at_ms > now && row.proof_expires_at_ms > now;
 
 // @effect-diagnostics-next-line asyncFunction:off
 const createUser = async (db: D1Database, row: Enrollment, now: number): Promise<Response> => {
@@ -79,11 +115,12 @@ const createUser = async (db: D1Database, row: Enrollment, now: number): Promise
   const userId = crypto.randomUUID();
   const recoveryCode = randomCode();
   const recoveryDigest = await digest(recoveryCode.replaceAll("-", ""));
+  const context = verifiedOnboardingContext(now);
   await db.batch([
     db
       .prepare(`INSERT INTO users (id, service_market, locale, time_zone, created_at_ms)
-      VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)`)
-      .bind(userId, now),
+      VALUES (?, ?, ?, ?, ?)`)
+      .bind(userId, context.serviceMarket, context.locale, context.timeZone, now),
     db
       .prepare(`INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms)
       SELECT ?, portfolio_id, bsuid, ? FROM pending_consent_exchanges WHERE id = ? AND state = 'accepted'`)
@@ -102,7 +139,11 @@ const createUser = async (db: D1Database, row: Enrollment, now: number): Promise
     db
       .prepare(`INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms)
       VALUES (?, ?, ?)`)
-      .bind(userId, now, now + trialDurationMs),
+      .bind(
+        userId,
+        DateTime.toEpochMillis(context.trialPeriod.startedAt),
+        DateTime.toEpochMillis(context.trialPeriod.endsAt)
+      ),
     db
       .prepare(`INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms)
       VALUES (?, ?, ?)`)
@@ -136,12 +177,31 @@ export const verifyOnboarding = async (request: Request, db: D1Database): Promis
     // @effect-diagnostics-next-line globalDate:off
     const now = Date.now();
     if (
-      !proofIsCurrent(row.value, now) ||
+      !canRedeemOnboardingProof({
+        state: row.value.state,
+        expiresAtMs: row.value.expires_at_ms,
+        proofExpiresAtMs: row.value.proof_expires_at_ms,
+        nowMs: now,
+      })
+    ) {
+      return invalid();
+    }
+    if (
       !equalDigest(
         Uint8Array.from(row.value.proof_digest),
-        await digest(code.value.slice(proofOffset).replaceAll("-", ""))
+        await digest(code.value.slice(proofOffset))
       )
     ) {
+      await db
+        .prepare(`UPDATE pending_email_enrollments SET
+        wrong_proof_attempts = wrong_proof_attempts + 1,
+        state = CASE WHEN wrong_proof_attempts >= 3 THEN 'rejected' ELSE state END,
+        proof_digest = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE proof_digest END,
+        public_code = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE public_code END,
+        proof_expires_at_ms = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE proof_expires_at_ms END
+        WHERE id = ? AND state = 'awaiting_proof' AND wrong_proof_attempts < 4`)
+        .bind(row.value.id)
+        .run();
       return invalid();
     }
     return await createUser(db, row.value, now);

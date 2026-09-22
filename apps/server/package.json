@@ -9,6 +9,11 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
+    "./onboarding-verification": {
+      "types": "./src/shell/email-authentication/onboarding.ts",
+      "import": "./src/shell/email-authentication/onboarding.ts",
+      "default": "./src/shell/email-authentication/onboarding.ts"
+    },
     "./onboarding-email-delivery": {
       "types": "./src/shell/email-authentication/delivery.ts",
       "import": "./src/shell/email-authentication/delivery.ts",

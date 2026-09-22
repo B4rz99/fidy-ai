@@ -23,6 +23,7 @@ const setup = async (
 ): Promise<{
   db: D1Database;
   send: (combinedCode: unknown) => Promise<Response>;
+  sendRequest: (request: Request) => Promise<Response>;
 }> => {
   const mf = new Miniflare({
     workers: [
@@ -127,37 +128,38 @@ const setup = async (
       now - 60000,
       now + 600000,
       "ABCD-EFGH",
-      await digest("JKLMNPQRSTUV WXYZ".replace(" ", "")),
+      await digest("JKLM-NPQR-STUV-WXYZ"),
       now + 600000
     )
     .run();
+  const sendRequest = (request: Request): Promise<Response> =>
+    publicWorker.fetch(request, {
+      BROWSER_ORIGIN: "https://app.fidyapp.com",
+      LOCAL_CANONICAL_READ_BEARER: "",
+      RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+      CORE: {
+        fetch: (request) =>
+          coreWorker.fetch(new Request(request), {
+            DB: db,
+            AI: { run: () => Promise.reject(new Error("unused")) },
+            CONTRACT_DIGEST: "a".repeat(64),
+            RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            KAPSO_API_KEY: "",
+            KAPSO_WEBHOOK_SECRET: "",
+            WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+          }),
+      },
+    });
   const send = (combinedCode: unknown): Promise<Response> =>
-    publicWorker.fetch(
+    sendRequest(
       new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
         method: "POST",
         headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
         body: JSON.stringify({ combinedCode }),
-      }),
-      {
-        BROWSER_ORIGIN: "https://app.fidyapp.com",
-        LOCAL_CANONICAL_READ_BEARER: "",
-        RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-        CORE: {
-          fetch: (request) =>
-            coreWorker.fetch(new Request(request), {
-              DB: db,
-              AI: { run: () => Promise.reject(new Error("unused")) },
-              CONTRACT_DIGEST: "a".repeat(64),
-              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-              HOSTED_AI_MODEL: approvedWorkersAiModel,
-              KAPSO_API_KEY: "",
-              KAPSO_WEBHOOK_SECRET: "",
-              WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
-            }),
-        },
-      }
+      })
     );
-  return { db, send };
+  return { db, send, sendRequest };
 };
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -197,6 +199,14 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
   expect(
     await db.prepare("SELECT proof_digest, public_code FROM pending_email_enrollments").first()
   ).toMatchObject({ proof_digest: null, public_code: null });
+  await db.prepare("DELETE FROM pending_consent_exchanges WHERE id = ?").bind(exchange).run();
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM onboarding_consent_records")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -260,6 +270,46 @@ it("serializes simultaneous redemptions so only one User receives the proof", as
   expect(
     (await db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>())?.count
   ).toBe(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("bounds failed mailbox proofs and never creates a User after the fourth attempt", async () => {
+  const { db, send } = await setup();
+  const wrong = "ABCD-EFGH-JKLM-NPQR-STUV-WXY2";
+  const attempts = await Promise.all([send(wrong), send(wrong), send(wrong), send(wrong)]);
+  expect(attempts.map((response) => response.status)).toEqual([400, 400, 400, 400]);
+  expect((await send(code)).status).toBe(400);
+  expect(
+    await db
+      .prepare("SELECT wrong_proof_attempts, proof_digest FROM pending_email_enrollments")
+      .first()
+  ).toMatchObject({ wrong_proof_attempts: 4, proof_digest: null });
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>())?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects an oversized streaming request before it can reach D1", async () => {
+  const { db, sendRequest } = await setup();
+  const oversized = new ReadableStream<Uint8Array>({
+    start(controller): void {
+      controller.enqueue(new Uint8Array(513));
+      controller.close();
+    },
+  });
+  const result = await sendRequest(
+    new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
+      body: oversized,
+      duplex: "half",
+    })
+  );
+  expect(result.status).toBe(400);
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>())?.count
+  ).toBe(0);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

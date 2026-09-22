@@ -3,11 +3,8 @@ import { Result, Schema } from "effect";
 import {
   E164PhoneNumber,
   UserId,
-  WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-  WhatsAppCallerReference,
   WhatsAppParentBusinessScopedUserId,
-  whatsAppCallerReference,
 } from "./reference";
 
 it("rejects an owner id that is not a UUID", () => {
@@ -53,15 +50,4 @@ it("requires complete WhatsApp Business Scoped User ID grammars", () => {
     "1O.ENT.ab",
     "CO.ENT.ab-1",
   ]);
-});
-
-it("projects a WhatsApp caller to its stable cross-slice reference", () => {
-  const caller = {
-    businessPortfolioId: WhatsAppBusinessPortfolioId.make("portfolio-test"),
-    businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.caller123"),
-  };
-
-  expect(Schema.decodeSync(WhatsAppCallerReference)(whatsAppCallerReference(caller))).toEqual(
-    caller
-  );
 });

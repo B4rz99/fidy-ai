@@ -3,11 +3,9 @@
 //
 // Stryker is spawned from this directory's isolated node_modules so it resolves
 // the classic `typescript` pinned here rather than the root's Effect tsgo build,
-// which it cannot rewrite the sandbox tsconfig with. Node resolution walks
-// upward from the package doing the importing, so the vitest runner plugin —
-// living here — still finds the workspace's `vitest`, which is the one
-// vitest.core.config.ts configures. That asymmetry is the whole trick: classic
-// typescript is shadowed locally, vitest deliberately is not (see bunfig.toml).
+// which it cannot rewrite the sandbox tsconfig with. The configured command runner
+// invokes the server workspace's Bun/Vitest directly, so no local Vitest runner
+// plugin or duplicate Vitest installation is needed.
 //
 // The child inherits this process's cwd (the server package root), so every path
 // in the config is package-root-relative, exactly as the vitest and coverage configs are.

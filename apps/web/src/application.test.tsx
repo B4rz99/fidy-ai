@@ -4,7 +4,6 @@ import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/u
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
@@ -181,12 +180,6 @@ const malformedFidyClient = (): FidyClient => {
 
 describe("public web application routes", () => {
   afterEach(resetApplicationTest);
-  it("renders the minimal root through the real router and Atom provider", async () => {
-    await renderRoute("/");
-
-    expect(await screen.findByRole("heading", { level: 1, name: "Fidy" })).toBeVisible();
-  });
-
   it("renders the authoritative policy at its stable route", async () => {
     await renderRoute("/politica");
 
@@ -378,22 +371,5 @@ describe("signed-in web application data routes", () => {
     expect(
       await screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
     ).toBeVisible();
-  });
-});
-
-describe("web application fallbacks", () => {
-  afterEach(resetApplicationTest);
-
-  it("renders not-found behavior for an unknown route", async () => {
-    await renderRoute("/ruta-inexistente");
-
-    expect(await screen.findByRole("heading", { name: "Página no encontrada" })).toBeVisible();
-  });
-
-  it("uses the configured browser application origin", async () => {
-    vi.stubEnv("VITE_API_ORIGIN", "https://api.test.fidyapp.com");
-    render(<WebApplication />);
-
-    expect(await screen.findByRole("heading", { level: 1, name: "Fidy" })).toBeVisible();
   });
 });

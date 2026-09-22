@@ -339,7 +339,7 @@ const Policy = Schema.Struct({
       name: Schema.String,
       /**
        * Which manifest the deferral speaks for, as `manifestPaths` spells it —
-       * `tools/crap/package.json`. Absent means every manifest that pins the
+       * `tools/depcruise/package.json` or `tools/mutation/package.json`. Absent means every manifest that pins the
        * package. Name it whenever the same package is pinned in more than one
        * place for different reasons: the isolated tool installs hold classic
        * TypeScript on purpose, and a name-only deferral for `typescript` would

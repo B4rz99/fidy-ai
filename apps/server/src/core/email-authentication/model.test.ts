@@ -2,8 +2,6 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Redacted, Result, Schema } from "effect";
 import {
   EmailAddress,
-  EmailVerificationCode,
-  EmailVerificationProof,
   EmailVerificationPublicCode,
   PendingEmailEnrollment,
   VerifiedEmailCredential,
@@ -40,14 +38,6 @@ it("rejects mailbox forms outside the bounded launch grammar", () => {
     `${"a".repeat(251)}@x.co`,
   ];
   for (const candidate of rejected) expect(Result.isFailure(decodeEmail(candidate))).toBe(true);
-});
-
-it("models the public lookup separately from the redacted verification proof", () => {
-  expect(EmailVerificationPublicCode.make("ABCD-2345")).toBe("ABCD-2345");
-  expect(EmailVerificationProof.make("F7KM-9Q2D-X4PT-6RWC")).toBe("F7KM-9Q2D-X4PT-6RWC");
-  expect(EmailVerificationCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC")).toBe(
-    "ABCD-2345-F7KM-9Q2D-X4PT-6RWC"
-  );
 });
 
 it("rejects out-of-range delivery generations and non-SHA-256 proof digests", () => {

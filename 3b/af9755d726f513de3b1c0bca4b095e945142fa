@@ -151,6 +151,7 @@ apps/server/src/shell/hosted-inference/internal/adapter.ts
   s_f8a23c727129ad::t_5a17b15e7bcdee 1-53
 apps/server/ARCHITECTURE.md
   s_f8a23c727129ad::t_1ee7aceb5b6310 20,60-63
+  s_f8a23c727129ad::t_0bf35ca3b6a830 21-24,95-96
 infra/cloudflare/scripts/print-approved-workers-ai-model.ts
   s_f8a23c727129ad::t_ae8ae52c17500e 1
   s_f8a23c727129ad::t_11695f925b7034 2-3
@@ -174,6 +175,12 @@ apps/server/src/shell/hosted-inference/contract.ts
   s_f8a23c727129ad::t_1a84b143dbf6f5 7,149-152
 apps/server/src/shell/hosted-inference/test-fixtures.ts
   s_f8a23c727129ad::t_d2e532373c532f 1-21
+ARCHITECTURE.md
+  s_f8a23c727129ad::t_e28d477ff7c599 93-95
+infra/cloudflare/verify-edge-policy.test.ts
+  s_f8a23c727129ad::t_1d8fd45f234bcd 7
+infra/cloudflare/verify-edge-policy.ts
+  s_f8a23c727129ad::t_30dbf73a991ceb 5
 ---
 {
   "schema_version": "authorship/3.0.0",

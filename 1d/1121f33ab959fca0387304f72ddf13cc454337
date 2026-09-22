@@ -1,0 +1,26 @@
+infra/cloudflare/verified-onboarding.test.ts
+  s_e3fd5727aca99a::t_7537f37c9073ab 52-61
+  s_e3fd5727aca99a::t_a20ee996fd12bc 62-67,276-278
+apps/server/src/core/email-authentication/onboarding.ts
+  s_e3fd5727aca99a::t_1ad4dd8c13c6df 1,28,33-36
+infra/cloudflare/verified-onboarding.ts
+  s_e3fd5727aca99a::t_d209eeee5b08e3 27,66,68-85,87,89-92,98
+  s_e3fd5727aca99a::t_1cd8b4e8532f20 7,155
+  s_e3fd5727aca99a::t_d34011c7f6b365 67,86,88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1d1121f33ab959fca0387304f72ddf13cc454337",
+  "prompts": {},
+  "sessions": {
+    "s_e3fd5727aca99a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cb3a-bced-70b8-bb4c-aae4994ab589",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

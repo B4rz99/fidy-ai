@@ -65,6 +65,20 @@ jobs:
       - name: Ensure Alchemy's Cloudflare state authority exists
         run: bunx alchemy provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input
 
+      - name: Reject drift from the deployed Cloudflare topology
+        working-directory: infra/cloudflare
+        run: |
+          drift=$(NO_COLOR=1 bunx alchemy drift --stage production --no-input 2>&1)
+          printf '%s\n' "$drift"
+          if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
+            echo "The deployed topology has drifted from Alchemy state; refusing promotion." >&2
+            exit 1
+          fi
+
+      - name: Require the reviewed Cloudflare security policy
+        working-directory: infra/cloudflare
+        run: bun ./verify-edge-policy.ts
+
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         run: bunx alchemy plan --stage production --no-input
@@ -113,6 +127,16 @@ jobs:
 
           if [[ "$verified" != true ]]; then
             echo "The migrated public topology did not expose the exact deployed release." >&2
+            exit 1
+          fi
+
+      - name: Reject post-deployment Cloudflare drift
+        working-directory: infra/cloudflare
+        run: |
+          drift=$(NO_COLOR=1 bunx alchemy drift --stage production --no-input 2>&1)
+          printf '%s\n' "$drift"
+          if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
+            echo "The deployed topology drifted before promotion completed." >&2
             exit 1
           fi
 

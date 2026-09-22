@@ -15,8 +15,8 @@ import {
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { listCategoriesPath } from "./path";
 
-export const listCategoriesPath = "/categories";
 export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
 
 const read = operationPolicy({

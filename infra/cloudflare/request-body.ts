@@ -38,7 +38,10 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
 
 const readNextChunk = (
   reader: ReadableStreamDefaultReader<unknown>
-): Effect.Effect<ReadableStreamReadResult<unknown>, RequestBodyUnreadable> =>
+): Effect.Effect<
+  Awaited<ReturnType<ReadableStreamDefaultReader<unknown>["read"]>>,
+  RequestBodyUnreadable
+> =>
   Effect.tryPromise({
     try: () => reader.read(),
     catch: () => new RequestBodyUnreadable(),

@@ -20,8 +20,15 @@ export const productionTopology = {
   web: {
     adoptExistingWorker: true,
     hostname: "app.fidyapp.com",
+    localPort: 5173,
     redirects: ["fidyapp.com"],
     workerName: "fidy-web",
     workersDev: false,
   },
+} as const;
+
+/** Closed browser origins accepted by the public Worker in each complete topology mode. */
+export const browserOrigins = {
+  local: `http://127.0.0.1:${productionTopology.web.localPort}`,
+  production: `https://${productionTopology.web.hostname}`,
 } as const;

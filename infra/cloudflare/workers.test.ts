@@ -4,6 +4,7 @@ import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
 import coreWorker, { makeCoreWorker } from "./core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
+import { edgeSecurityPolicy } from "./edge-security";
 import publicWorker, { makePublicWorker } from "./public-worker";
 import { makeWorkerTelemetry } from "./telemetry";
 import { localCanonicalReadBearer, productionTopology } from "./topology";
@@ -36,6 +37,16 @@ const collectingTelemetry = (records: Array<TelemetryWorkRecord>): TelemetryServ
   makeWorkerTelemetry((record) => {
     records.push(record);
   });
+
+type PublicEnvironment = Parameters<typeof publicWorker.fetch>[1];
+
+const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): PublicEnvironment => ({
+  BROWSER_ORIGIN: "https://app.fidyapp.com",
+  CORE: { fetch: () => Promise.reject(new Error("unexpected Core delegation")) },
+  LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+  RELEASE_GIT_SHA: gitRevision,
+  ...overrides,
+});
 
 describe("Deployment configuration", () => {
   it("selects remote state only for the supported Production stage", () => {
@@ -97,6 +108,7 @@ describe("Production topology contract", () => {
     expect(productionTopology.web).toEqual({
       adoptExistingWorker: true,
       hostname: "app.fidyapp.com",
+      localPort: 5173,
       redirects: ["fidyapp.com"],
       workerName: "fidy-web",
       workersDev: false,
@@ -107,6 +119,63 @@ describe("Production topology contract", () => {
       localPort: 8788,
       workersDev: false,
     });
+  });
+
+  it("keeps every edge enforcement path free of human challenges", () => {
+    expect(Object.values(edgeSecurityPolicy.rulesets).map(({ phase }) => phase)).toEqual([
+      "http_request_firewall_custom",
+      "ddos_l7",
+      "http_request_firewall_managed",
+      "http_ratelimit",
+    ]);
+    expect(JSON.stringify(edgeSecurityPolicy.rulesets)).not.toContain("challenge");
+    expect(edgeSecurityPolicy.rulesets.customFirewall.rules[0]).toMatchObject({
+      action: "skip",
+      actionParameters: {
+        phases: ["http_request_sbfm"],
+        products: ["bic", "hot", "securityLevel", "uaBlock", "zoneLockdown"],
+      },
+      expression: '(http.host eq "api.fidyapp.com")',
+    });
+    expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
+      actionParameters: { overrides: { action: "block" } },
+    });
+    expect(edgeSecurityPolicy.rulesets.httpDdos.rules[0]).toMatchObject({
+      actionParameters: { overrides: { action: "block", sensitivityLevel: "default" } },
+    });
+  });
+
+  it("assigns independent edge budgets to each published or reserved HTTP operation", () => {
+    const rateLimits = edgeSecurityPolicy.rulesets.rateLimits.rules;
+
+    expect(rateLimits).toHaveLength(4);
+    expect(rateLimits.map(({ expression }) => expression)).toEqual([
+      '(http.host eq "api.fidyapp.com" and http.request.method eq "GET" and http.request.uri.path eq "/health")',
+      '(http.host eq "api.fidyapp.com" and http.request.method eq "GET" and http.request.uri.path eq "/categories")',
+      '(http.host eq "api.fidyapp.com" and http.request.method eq "POST" and http.request.uri.path eq "/providers/kapso/callback")',
+      '(http.host eq "api.fidyapp.com" and http.request.method eq "POST" and http.request.uri.path eq "/providers/wompi/callback")',
+    ]);
+  });
+
+  it("assigns proof and replay ownership to every reserved provider ingress", () => {
+    const providerPolicies = [
+      edgeSecurityPolicy.reservedIngress.emailEvent,
+      ...Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks),
+    ];
+
+    expect(providerPolicies.map(({ provider }) => provider)).toEqual([
+      "cloudflare-email",
+      "kapso",
+      "wompi",
+    ]);
+    expect(providerPolicies.every(({ proof }) => proof.includes("replay"))).toBe(true);
+    for (const callback of Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks)) {
+      expect(
+        edgeSecurityPolicy.rulesets.rateLimits.rules.some(({ expression }) =>
+          (expression ?? "").includes(callback.path)
+        )
+      ).toBe(true);
+    }
   });
 
   it("pins local ports for the browser-to-ingress and ingress-to-Core path", () => {
@@ -162,17 +231,18 @@ describe("Cloudflare Worker topology", () => {
     Effect.gen(function* () {
       const requests: Array<Request> = [];
       const response = yield* Effect.promise(() =>
-        publicWorker.fetch(new Request("https://api.fidyapp.com/health"), {
-          CORE: {
-            fetch: (request) => {
-              const coreRequest = new Request(request);
-              requests.push(coreRequest);
-              return Promise.resolve(coreWorker.fetch(coreRequest, coreEnvironment));
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/health"),
+          makePublicEnvironment({
+            CORE: {
+              fetch: (request) => {
+                const coreRequest = new Request(request);
+                requests.push(coreRequest);
+                return Promise.resolve(coreWorker.fetch(coreRequest, coreEnvironment));
+              },
             },
-          },
-          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-          RELEASE_GIT_SHA: gitRevision,
-        })
+          })
+        )
       );
       const body = yield* Effect.promise(() => response.json());
 
@@ -196,13 +266,14 @@ describe("Cloudflare Worker topology", () => {
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
       const response = yield* Effect.promise(() =>
-        observedPublic.fetch(new Request("https://api.fidyapp.com/health"), {
-          CORE: {
-            fetch: (request) => observedCore.fetch(new Request(request), coreEnvironment),
-          },
-          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-          RELEASE_GIT_SHA: gitRevision,
-        })
+        observedPublic.fetch(
+          new Request("https://api.fidyapp.com/health"),
+          makePublicEnvironment({
+            CORE: {
+              fetch: (request) => observedCore.fetch(new Request(request), coreEnvironment),
+            },
+          })
+        )
       );
 
       expect(response.status).toBe(200);
@@ -237,11 +308,13 @@ describe("Cloudflare Worker topology", () => {
       const records: Array<TelemetryWorkRecord> = [];
       const observedPublic = makePublicWorker(collectingTelemetry(records));
       const response = yield* Effect.promise(() =>
-        observedPublic.fetch(new Request("https://api.fidyapp.com/not-published"), {
-          CORE: { fetch: () => Promise.resolve(Response.json({ unexpected: true })) },
-          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-          RELEASE_GIT_SHA: "not-a-release",
-        })
+        observedPublic.fetch(
+          new Request("https://api.fidyapp.com/not-published"),
+          makePublicEnvironment({
+            CORE: { fetch: () => Promise.resolve(Response.json({ unexpected: true })) },
+            RELEASE_GIT_SHA: "not-a-release",
+          })
+        )
       );
 
       expect(response.status).toBe(404);
@@ -255,14 +328,129 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
+  it.effect("permits credentialed browser reads only from the configured application origin", () =>
+    Effect.gen(function* () {
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/categories", {
+            headers: {
+              authorization: `Bearer ${localCanonicalReadBearer}`,
+              origin: "https://app.fidyapp.com",
+            },
+          }),
+          makePublicEnvironment({
+            CORE: { fetch: () => Promise.resolve(Response.json({ data: [], next: [] })) },
+          })
+        )
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://app.fidyapp.com");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(response.headers.get("vary")).toContain("Origin");
+    })
+  );
+
+  it.effect("rejects an unapproved browser origin before invoking Core", () =>
+    Effect.gen(function* () {
+      let delegated = false;
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/categories", {
+            headers: { origin: "https://attacker.example" },
+          }),
+          makePublicEnvironment({
+            CORE: {
+              fetch: () => {
+                delegated = true;
+                return Promise.resolve(Response.json({}));
+              },
+            },
+          })
+        )
+      );
+
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      expect(delegated).toBe(false);
+    })
+  );
+
+  it.effect("fails closed when the configured browser origin is outside the topology", () =>
+    Effect.gen(function* () {
+      let delegated = false;
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/health"),
+          makePublicEnvironment({
+            BROWSER_ORIGIN: "https://attacker.example",
+            CORE: {
+              fetch: () => {
+                delegated = true;
+                return Promise.resolve(Response.json({}));
+              },
+            },
+          })
+        )
+      );
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      expect(delegated).toBe(false);
+    })
+  );
+
+  it.effect("answers only bounded preflight requests for an owned browser route", () =>
+    Effect.gen(function* () {
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/categories", {
+            headers: {
+              "access-control-request-headers": "authorization",
+              "access-control-request-method": "GET",
+              origin: "https://app.fidyapp.com",
+            },
+            method: "OPTIONS",
+          }),
+          makePublicEnvironment()
+        )
+      );
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://app.fidyapp.com");
+      expect(response.headers.get("access-control-allow-methods")).toBe("GET");
+      expect(response.headers.get("access-control-allow-headers")).toBe("authorization");
+      expect(response.headers.get("access-control-max-age")).toBe("600");
+    })
+  );
+
+  it.effect("applies non-cacheable API security headers to rejection responses", () =>
+    Effect.gen(function* () {
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(new Request("https://api.fidyapp.com/internal"), makePublicEnvironment())
+      );
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("content-security-policy")).toBe(
+        "default-src 'none'; frame-ancestors 'none'"
+      );
+      expect(response.headers.get("cross-origin-resource-policy")).toBe("same-site");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("x-frame-options")).toBe("DENY");
+    })
+  );
+
   it.effect("rejects an unauthenticated Categories request before querying D1", () =>
     Effect.gen(function* () {
       const response = yield* Effect.promise(() =>
-        publicWorker.fetch(new Request("https://api.fidyapp.com/categories"), {
-          CORE: { fetch: (request) => coreWorker.fetch(new Request(request), coreEnvironment) },
-          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-          RELEASE_GIT_SHA: gitRevision,
-        })
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/categories"),
+          makePublicEnvironment({
+            CORE: { fetch: (request) => coreWorker.fetch(new Request(request), coreEnvironment) },
+          })
+        )
       );
       const body = yield* Effect.promise(() => response.json());
 
@@ -285,7 +473,7 @@ describe("Cloudflare Worker topology", () => {
           new Request("https://api.fidyapp.com/categories", {
             headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
           }),
-          {
+          makePublicEnvironment({
             CORE: {
               fetch: (request) =>
                 observedCore.fetch(new Request(request), {
@@ -293,9 +481,7 @@ describe("Cloudflare Worker topology", () => {
                   DB: failingDatabase,
                 }),
             },
-            LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-            RELEASE_GIT_SHA: gitRevision,
-          }
+          })
         )
       );
       const text = yield* Effect.promise(() => response.text());
@@ -323,16 +509,17 @@ describe("Cloudflare Worker topology", () => {
     Effect.gen(function* () {
       let delegated = false;
       const response = yield* Effect.promise(() =>
-        publicWorker.fetch(new Request("https://api.fidyapp.com/internal"), {
-          CORE: {
-            fetch: () => {
-              delegated = true;
-              return Promise.resolve(Response.json({}));
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/internal"),
+          makePublicEnvironment({
+            CORE: {
+              fetch: () => {
+                delegated = true;
+                return Promise.resolve(Response.json({}));
+              },
             },
-          },
-          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
-          RELEASE_GIT_SHA: gitRevision,
-        })
+          })
+        )
       );
 
       expect(response.status).toBe(404);

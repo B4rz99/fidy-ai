@@ -5,10 +5,14 @@ import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
-import { productionTopology, resolveLocalCanonicalReadBearer } from "./topology";
+import { edgeSecurityPolicy } from "./edge-security";
+import { browserOrigins, productionTopology, resolveLocalCanonicalReadBearer } from "./topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
+
+const resolveBrowserOrigin = (production: boolean): string =>
+  production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;
 
 const deploymentConfigError = (error: { readonly reason: string }): Config.ConfigError =>
   new Config.ConfigError(
@@ -17,6 +21,38 @@ const deploymentConfigError = (error: { readonly reason: string }): Config.Confi
       message: `Invalid Cloudflare deployment configuration: ${error.reason}`,
     })
   );
+
+const provisionEdgeSecurity = Effect.gen(function* () {
+  const zone = yield* Cloudflare.Zone.Zone("ProductionZone", {
+    name: "fidyapp.com",
+  }).pipe(Alchemy.AdoptPolicy.adopt(true));
+  const { customFirewall, httpDdos, managedFirewall, rateLimits } = edgeSecurityPolicy.rulesets;
+
+  yield* Cloudflare.Ruleset.Ruleset(customFirewall.logicalId, {
+    description: "Fidy host and public-ingress method allowlist",
+    phase: customFirewall.phase,
+    rules: [...customFirewall.rules],
+    zone,
+  });
+  yield* Cloudflare.Ruleset.Ruleset(managedFirewall.logicalId, {
+    description: "Fidy managed application WAF baseline",
+    phase: managedFirewall.phase,
+    rules: [...managedFirewall.rules],
+    zone,
+  });
+  yield* Cloudflare.Ruleset.Ruleset(httpDdos.logicalId, {
+    description: "Fidy always-on non-interactive HTTP DDoS baseline",
+    phase: httpDdos.phase,
+    rules: [...httpDdos.rules],
+    zone,
+  });
+  yield* Cloudflare.Ruleset.Ruleset(rateLimits.logicalId, {
+    description: "Fidy operation-aware public edge limits",
+    phase: rateLimits.phase,
+    rules: [...rateLimits.rules],
+    zone,
+  });
+});
 
 const state = Layer.unwrap(
   Effect.gen(function* () {
@@ -49,6 +85,8 @@ export default Alchemy.Stack(
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
 
+    yield* provisionEdgeSecurity.pipe(Effect.when(Effect.succeed(production)));
+
     const database = yield* Cloudflare.D1.Database("Database", {
       migrations: "./migrations",
       readReplication: { mode: "disabled" },
@@ -80,6 +118,7 @@ export default Alchemy.Stack(
       },
       domain: production ? productionTopology.ingress.hostname : undefined,
       env: {
+        BROWSER_ORIGIN: resolveBrowserOrigin(production),
         [productionTopology.ingress.coreBinding]: core,
         LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
@@ -97,7 +136,7 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       dev: {
-        command: "bun run dev -- --host 127.0.0.1",
+        command: `bun run dev -- --host 127.0.0.1 --port ${productionTopology.web.localPort} --strictPort`,
         cwd: "../../apps/web",
         env: {
           VITE_API_ORIGIN: `http://127.0.0.1:${productionTopology.ingress.localPort}`,

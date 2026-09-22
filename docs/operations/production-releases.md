@@ -14,14 +14,14 @@ and owns no Production route.
 
 Create the GitHub `production` environment and configure:
 
-| Kind     | Name                    | Purpose                                                |
-| -------- | ----------------------- | ------------------------------------------------------ |
-| Secret   | `CLOUDFLARE_API_TOKEN`  | Alchemy-managed Worker, custom-domain, and DNS changes |
-| Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account owning the Fidy resources           |
+| Kind     | Name                    | Purpose                                                     |
+| -------- | ----------------------- | ----------------------------------------------------------- |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | Alchemy-managed Workers, D1, DNS, and edge security changes |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account owning the Fidy resources                |
 
-Scope the token to that account and the `fidyapp.com` zone, with only the Worker and DNS permissions
-needed by the declared resources. Branch protection on `trunk` must require the complete pull-request
-gate. The deployment workflow is a post-merge consequence, not a replacement for that gate.
+Scope the token to that account and the `fidyapp.com` zone, with only the permissions needed by the
+declared resources, including Worker, D1, DNS, Zone WAF, and HTTP DDoS Managed Ruleset writes. Branch
+protection on `trunk` must require the complete pull-request gate. The deployment workflow is a post-merge consequence, not a replacement for that gate.
 
 Railway, PostgreSQL, and a Bun process are superseded Production architecture under
 [ADR 0026](../adr/0026-cloudflare-native-production-replatform.md). Remove provider repository

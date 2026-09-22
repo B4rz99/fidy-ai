@@ -4,11 +4,10 @@ import { browserOrigins, productionTopology } from "./topology";
 
 const kapsoCallbackPath = "/providers/kapso/callback";
 const wompiCallbackPath = "/providers/wompi/callback";
-const cloudflareManagedRulesetId = "efb7b8c949ac4650a09736fc376e9aee";
+const cloudflareFreeManagedRulesetId = "77454fe2d30c4220b5701f6fdfb893ba";
 const cloudflareHttpDdosRulesetId = "4d21379b4f9f4bb088e0729962c8b3cf";
-const healthRequestsPerPeriod = 60;
-const canonicalReadRequestsPerPeriod = 120;
-const providerCallbackRequestsPerPeriod = 60;
+const freePlanRateLimitPeriod = 10;
+const freePlanRequestsPerPeriod = 60;
 const apiHostname = productionTopology.ingress.hostname;
 const ownedHostnames = [
   ...productionTopology.web.redirects,
@@ -66,12 +65,11 @@ const managedFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   {
     action: "execute",
     actionParameters: {
-      id: cloudflareManagedRulesetId,
-      // Preserve Cloudflare's enabled-rule selection while ensuring a WAF decision blocks rather
-      // than presenting a browser challenge to machine callers.
-      overrides: { action: "block" },
+      // The Free Managed Ruleset is available on the launch zone's plan. Its defaults provide
+      // non-interactive enforcement; plan-specific overrides are not sent here.
+      id: cloudflareFreeManagedRulesetId,
     },
-    description: "Execute Cloudflare managed WAF rules with non-interactive enforcement",
+    description: "Execute the Cloudflare Free Managed Ruleset",
     enabled: true,
     expression: "true",
   },
@@ -90,56 +88,32 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   },
 ];
 
-type RateLimitPolicy = {
-  readonly description: string;
-  readonly method: "GET" | "POST";
-  readonly path: string;
-  readonly requestsPerPeriod: number;
-};
+// The launch zone's Free plan permits one path-based rule, so all owned ingress paths share one
+// source-IP budget instead of pretending that four independent budgets can be deployed.
+const rateLimitPaths = [
+  "/health",
+  listCategoriesPath,
+  reservedIngress.httpCallbacks.kapso.path,
+  reservedIngress.httpCallbacks.wompi.path,
+] as const;
 
-const rateLimitRule = ({
-  description,
-  method,
-  path,
-  requestsPerPeriod,
-}: RateLimitPolicy): Cloudflare.Ruleset.Rule => ({
-  action: "block",
-  description,
-  enabled: true,
-  expression: `(http.host eq "${apiHostname}" and http.request.method eq "${method}" and http.request.uri.path eq "${path}")`,
-  ratelimit: {
-    characteristics: ["cf.colo.id", "ip.src"],
-    mitigationTimeout: 10,
-    period: 10,
-    requestsPerPeriod,
-  },
-});
+const rateLimitExpression = `http.request.uri.path in {${rateLimitPaths
+  .map((path) => `"${path}"`)
+  .join(" ")}}`;
 
 const rateLimitRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
-  rateLimitRule({
-    description: "Bound public health probes per network source",
-    method: "GET",
-    path: "/health",
-    requestsPerPeriod: healthRequestsPerPeriod,
-  }),
-  rateLimitRule({
-    description: "Bound Categories reads per network source without inspecting bearer material",
-    method: "GET",
-    path: listCategoriesPath,
-    requestsPerPeriod: canonicalReadRequestsPerPeriod,
-  }),
-  rateLimitRule({
-    description: "Reserve an independent Kapso callback budget",
-    method: "POST",
-    path: reservedIngress.httpCallbacks.kapso.path,
-    requestsPerPeriod: providerCallbackRequestsPerPeriod,
-  }),
-  rateLimitRule({
-    description: "Reserve an independent Wompi callback budget",
-    method: "POST",
-    path: reservedIngress.httpCallbacks.wompi.path,
-    requestsPerPeriod: providerCallbackRequestsPerPeriod,
-  }),
+  {
+    action: "block",
+    description: "Bound public and provider ingress by source IP",
+    enabled: true,
+    expression: rateLimitExpression,
+    ratelimit: {
+      characteristics: ["cf.colo.id", "ip.src"],
+      mitigationTimeout: freePlanRateLimitPeriod,
+      period: freePlanRateLimitPeriod,
+      requestsPerPeriod: freePlanRequestsPerPeriod,
+    },
+  },
 ];
 
 /**

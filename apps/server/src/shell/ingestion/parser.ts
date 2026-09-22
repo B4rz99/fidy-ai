@@ -17,6 +17,12 @@ const maximumExpandedMebibytes = 25;
 const maximumCsvRecordKibibytes = 256;
 const maximumDecodedBytes = maximumDecodedMebibytes * bytesPerKibibyte * bytesPerKibibyte;
 const maximumExpandedBytes = maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte;
+
+/** Compressed-input and in-parser expanded-content ceilings for one statement parse. */
+export const statementParserLimits = {
+  maximumDecodedBytes,
+  maximumExpandedBytes,
+} as const;
 const maximumZipEntries = 1_000;
 const maximumRows = 20_000;
 const maximumColumns = 200;
@@ -358,7 +364,22 @@ const parseXlsx = (bytes: Uint8Array): ParsedStatement => {
   };
 };
 
-const detectedFormat = (bytes: Uint8Array): StatementSourceFormat => statementSourceFormat(bytes);
+const unsupportedSignatures = ["JVBERg==", "iVBORw==", "/9j/", "R0lGOA==", "Qk0=", "UklGRg=="].map(
+  (signature) => Uint8Array.fromBase64(signature)
+);
+
+const startsWith = (bytes: Uint8Array, signature: Uint8Array): boolean =>
+  signature.every((value, index) => bytes[index] === value);
+
+const knownUnsupportedSignature = (bytes: Uint8Array): boolean =>
+  unsupportedSignatures.some((signature) => startsWith(bytes, signature));
+
+const detectedFormat = (bytes: Uint8Array): StatementSourceFormat => {
+  if (knownUnsupportedSignature(bytes)) {
+    throw new StatementParseFailed({ safeReason: "unsupported-format" });
+  }
+  return statementSourceFormat(bytes);
+};
 
 /** Decodes one bounded untrusted statement without executing workbook active content. */
 export const parseStatementFile = (

@@ -113,6 +113,7 @@ const checks: Array<Check> = [
     env: { ...Bun.env, RELEASE_GIT_SHA: gitRevision },
   },
   rootCheck("builds", "Portable web build", ["bun", "run", "build"]),
+  rootCheck("builds", "Worker document parsing proof", ["bun", "run", "check:document-parsing"]),
   // Preserve the core tier's proof that business decisions need no platform services.
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),

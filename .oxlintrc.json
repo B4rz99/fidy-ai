@@ -188,6 +188,9 @@
       "files": [
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/core-worker.ts",
+        "infra/cloudflare/document-extraction-worker.ts",
+        "infra/cloudflare/document-parsing-worker.ts",
+        "infra/cloudflare/protected-document-worker.ts",
         "infra/cloudflare/public-worker.ts",
         "infra/cloudflare/resource-admission-worker.fixture.ts",
         "infra/cloudflare/vitest.config.ts"

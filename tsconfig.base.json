@@ -147,6 +147,16 @@
             }
           },
           {
+            "include": ["./scripts/document-parsing/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "globalFetch": "off",
+                "newPromise": "off",
+                "nodeBuiltinImport": "off"
+              }
+            }
+          },
+          {
             "include": ["./apps/web/src/transport/client.ts"],
             "options": {
               "diagnosticSeverity": {

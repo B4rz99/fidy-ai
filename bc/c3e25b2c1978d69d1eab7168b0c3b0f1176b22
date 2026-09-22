@@ -1,0 +1,34 @@
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_3466adb67b1143::t_b890957056cfd9 257-269
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_3466adb67b1143::t_b2a2a26b06cb2b 30,41,43,45-46,48-55,57-65,374-379,384-405,407-422,433,436,441,446
+  s_3466adb67b1143::t_a4c7cbc3f76639 406
+  s_3466adb67b1143::t_f80b1179616100 42,44,47,56,380-383
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_3466adb67b1143::t_67b1f974dc5cda 13,314
+  s_3466adb67b1143::t_4f3f77d33b9dfd 310
+  s_3466adb67b1143::t_a4c7cbc3f76639 14
+  s_3466adb67b1143::t_cf8fbf9accb9f6 295-309,311-313,315-321
+apps/server/src/shell/email-authentication/delivery.test.ts
+  s_3466adb67b1143::t_6c531c3d7291da 1-2,4-37,39-47
+  s_3466adb67b1143::t_a4c7cbc3f76639 3,38
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_3466adb67b1143::t_18bb745cebda32 292-294
+  s_3466adb67b1143::t_e895e0c0f3b232 102,221,245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bcc3e25b2c1978d69d1eab7168b0c3b0f1176b22",
+  "prompts": {},
+  "sessions": {
+    "s_3466adb67b1143": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c962-e4da-76de-aa45-cc7bc2fb6fa1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

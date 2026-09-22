@@ -6,4 +6,5 @@ export {
   categoryUnavailable,
   listCategoriesResponse,
 } from "./list-categories";
-export { listCategoriesPath, ListCategoriesResponse } from "./operations";
+export { ListCategoriesResponse } from "./operations";
+export { listCategoriesPath } from "./path";

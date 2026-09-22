@@ -9,6 +9,11 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
+    "./categories-path": {
+      "types": "./src/shell/categories/path.ts",
+      "import": "./src/shell/categories/path.ts",
+      "default": "./src/shell/categories/path.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",

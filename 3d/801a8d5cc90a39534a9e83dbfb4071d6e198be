@@ -1,0 +1,31 @@
+infra/cloudflare/verified-onboarding.test.ts
+  s_e3fd5727aca99a::t_8da744f9182797 204
+  s_e3fd5727aca99a::t_c0b0c67171da7d 188-189
+  s_e3fd5727aca99a::t_03af78ad5c6de3 175-176,180-187,190,201-203,205
+  s_e3fd5727aca99a::t_b1445c4a3233d6 178-179,194-199
+apps/server/src/core/email-authentication/onboarding.ts
+  s_e3fd5727aca99a::t_12e08345c58c52 6
+  s_e3fd5727aca99a::t_dbeb374757c207 7
+apps/server/src/shell/email-authentication/onboarding.ts
+  s_e3fd5727aca99a::t_66d6cab5858572 3
+infra/cloudflare/verified-onboarding.ts
+  s_e3fd5727aca99a::t_b1445c4a3233d6 204-211
+  s_e3fd5727aca99a::t_5039f7b630072f 4,199-203
+  s_e3fd5727aca99a::t_ed8f906ab82ce1 90,118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3d801a8d5cc90a39534a9e83dbfb4071d6e198be",
+  "prompts": {},
+  "sessions": {
+    "s_e3fd5727aca99a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cb3a-bced-70b8-bb4c-aae4994ab589",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

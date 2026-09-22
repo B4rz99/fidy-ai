@@ -1,0 +1,38 @@
+tsconfig.json
+  s_9690e1fb9f4dca::t_f44ff34356d8bc 5
+package.json
+  s_9690e1fb9f4dca::t_46dc85ee692b9c 31
+tools/mutation/run.mjs
+  s_9690e1fb9f4dca::t_9f85ed8e3f8072 6-8
+apps/web/src/features/dashboard/presentation.test.ts
+  s_9690e1fb9f4dca::t_8ff8c43fcce2d1 2
+apps/server/stryker.config.mjs
+  s_9690e1fb9f4dca::t_ed6556dd838cb3 15-16
+  s_9690e1fb9f4dca::t_f2bb22f27d9b9a 49
+scripts/check-dependency-updates.ts
+  s_9690e1fb9f4dca::t_fa7336a92dccf0 342
+tools/depcruise/run.mjs
+  s_9690e1fb9f4dca::t_f9d96693378f31 7
+tools/mutation/package.json
+  s_9690e1fb9f4dca::t_c3da67f26b1de0 12
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_9690e1fb9f4dca::t_e65f7c4584a9a5 1
+tools/mutation/bun.lock
+  s_9690e1fb9f4dca::t_ee7258e6c04fda 136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "89d821a60a660c0db3b25d6b6b689ede1be8ad0f",
+  "prompts": {},
+  "sessions": {
+    "s_9690e1fb9f4dca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c52e-2f09-77d2-a4a4-6e594c90e197",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+apps/web/scripts/production-workflow.test.ts
+  s_42788546421120::t_713cc557ab0bf6 27,29
+  s_42788546421120::t_0e164cb6ebcaa0 28
+.github/workflows/production.yml
+  s_42788546421120::t_583bfff1037361 25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c5ec6f7053875c290bfe7be138cff1899167ec8a",
+  "prompts": {},
+  "sessions": {
+    "s_42788546421120": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c651-b53e-72e8-9481-b1b7d5b85699",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

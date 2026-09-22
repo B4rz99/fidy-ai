@@ -172,30 +172,37 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
   const { db, send } = await setup();
   const first = await send(code);
   expect(first.status).toBe(200);
-  expect(await first.json()).toMatchObject({ status: "created" });
+  const created: { status: string; backupRecoveryCode: string } = await first.json();
+  expect(created.status).toBe("created");
   expect((await send(code)).status).toBe(400);
-  for (const table of [
-    "users",
-    "whatsapp_identities",
-    "verified_email_credentials",
-    "onboarding_consent_records",
-    "trial_periods",
-    "backup_recovery_credentials",
-    "completed_email_enrollments",
-  ]) {
-    // eslint-disable-next-line no-await-in-loop
-    const count = await db
-      .prepare(`SELECT count(*) AS count FROM ${table}`)
-      .first<{ count: number }>();
-    expect(count?.count).toBe(1);
-  }
-  expect(
-    await db.prepare("SELECT service_market, locale, time_zone FROM users").first()
-  ).toMatchObject({
+  const result = await db
+    .prepare(`SELECT u.service_market, u.locale, u.time_zone,
+    w.portfolio_id, w.bsuid, v.email_address, c.disclosure_message_id,
+    c.decision_message_id, t.started_at_ms, t.ends_at_ms, b.code_digest,
+    x.enrollment_id
+    FROM users AS u JOIN whatsapp_identities AS w ON w.user_id = u.id
+    JOIN verified_email_credentials AS v ON v.user_id = u.id
+    JOIN onboarding_consent_records AS c ON c.user_id = u.id
+    JOIN trial_periods AS t ON t.user_id = u.id
+    JOIN backup_recovery_credentials AS b ON b.user_id = u.id
+    JOIN completed_email_enrollments AS x ON x.user_id = u.id`)
+    .first<{ ends_at_ms: number; started_at_ms: number; code_digest: Array<number> }>();
+  expect(result).toMatchObject({
     service_market: "CO",
     locale: "es-CO",
     time_zone: "America/Bogota",
+    portfolio_id: "portfolio",
+    bsuid: "person-1",
+    email_address: "person@example.test",
+    disclosure_message_id: "disclosure",
+    decision_message_id: "decision",
+    enrollment_id: enrollment,
   });
+  expect(result).not.toBeNull();
+  if (result !== null) {
+    expect(result.ends_at_ms - result.started_at_ms).toBe(604_800_000);
+    expect(result.code_digest).toEqual(Array.from(await digest(created.backupRecoveryCode)));
+  }
   expect(
     await db.prepare("SELECT proof_digest, public_code FROM pending_email_enrollments").first()
   ).toMatchObject({ proof_digest: null, public_code: null });

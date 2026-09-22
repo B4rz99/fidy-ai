@@ -3,6 +3,8 @@ import { IanaTimeZone, type Locale, type ServiceMarket } from "~/core/_shared/co
 import { TrialPeriod } from "~/core/identity/model";
 
 const trialHours = 168;
+/** A fourth wrong proof closes the pending enrollment; later attempts cannot revive it. */
+export const maximumOnboardingProofFailures = 4;
 
 /** A proof is redeemable only during both its own lifetime and the pending enrollment's lifetime. */
 export const canRedeemOnboardingProof = (

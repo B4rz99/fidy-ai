@@ -1,6 +1,7 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import {
   canRedeemOnboardingProof,
+  maximumOnboardingProofFailures,
   verifiedOnboardingContext,
 } from "@fidy/server/onboarding-verification";
 import { DateTime, Option, Schema } from "effect";
@@ -86,7 +87,7 @@ const readBody = async (request: Request): Promise<Option.Option<string>> => {
   } catch {
     return Option.none();
   } finally {
-    if (length > maximumBodyBytes) await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 };
@@ -114,7 +115,7 @@ const createUser = async (db: D1Database, row: Enrollment, now: number): Promise
   // @effect-diagnostics-next-line cryptoRandomUUID:off
   const userId = crypto.randomUUID();
   const recoveryCode = randomCode();
-  const recoveryDigest = await digest(recoveryCode.replaceAll("-", ""));
+  const recoveryDigest = await digest(recoveryCode);
   const context = verifiedOnboardingContext(now);
   await db.batch([
     db
@@ -195,12 +196,19 @@ export const verifyOnboarding = async (request: Request, db: D1Database): Promis
       await db
         .prepare(`UPDATE pending_email_enrollments SET
         wrong_proof_attempts = wrong_proof_attempts + 1,
-        state = CASE WHEN wrong_proof_attempts >= 3 THEN 'rejected' ELSE state END,
-        proof_digest = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE proof_digest END,
-        public_code = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE public_code END,
-        proof_expires_at_ms = CASE WHEN wrong_proof_attempts >= 3 THEN NULL ELSE proof_expires_at_ms END
-        WHERE id = ? AND state = 'awaiting_proof' AND wrong_proof_attempts < 4`)
-        .bind(row.value.id)
+        state = CASE WHEN wrong_proof_attempts + 1 >= ? THEN 'rejected' ELSE state END,
+        proof_digest = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE proof_digest END,
+        public_code = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE public_code END,
+        proof_expires_at_ms = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE proof_expires_at_ms END
+        WHERE id = ? AND state = 'awaiting_proof' AND wrong_proof_attempts < ?`)
+        .bind(
+          maximumOnboardingProofFailures,
+          maximumOnboardingProofFailures,
+          maximumOnboardingProofFailures,
+          maximumOnboardingProofFailures,
+          row.value.id,
+          maximumOnboardingProofFailures
+        )
         .run();
       return invalid();
     }

@@ -34,6 +34,7 @@ const publicSymbols = 8;
 const proofSymbols = 16;
 const proofLifetimeMs = 600_000;
 const maximumDispatchEntries = 32;
+const publicationRetryMs = 60_000;
 const group = (text: string): string => text.match(/.{1,4}/gu)?.join("-") ?? "";
 const randomSymbols = (length: number): string =>
   Array.from(
@@ -63,8 +64,9 @@ export const dispatchOnboardingEmail = (
       environment.DB.prepare(`SELECT o.id, o.version
       FROM onboarding_email_outbox AS o JOIN pending_email_enrollments AS e ON e.id = o.id
       WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
-      ORDER BY o.created_at_ms LIMIT ?`)
-        .bind(now, maximumDispatchEntries)
+        AND (o.published_at_ms IS NULL OR o.published_at_ms < ?)
+      ORDER BY (o.published_at_ms IS NOT NULL), o.created_at_ms LIMIT ?`)
+        .bind(now, now - publicationRetryMs, maximumDispatchEntries)
         .all()
     );
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(Outbox))(result.results).pipe(
@@ -77,7 +79,7 @@ export const dispatchOnboardingEmail = (
       );
       yield* attempt(() =>
         environment.DB.prepare(`UPDATE onboarding_email_outbox
-        SET published_at_ms = COALESCE(published_at_ms, ?) WHERE id = ?`)
+        SET published_at_ms = ? WHERE id = ?`)
           .bind(now, entry.id)
           .run()
       );
@@ -86,7 +88,15 @@ export const dispatchOnboardingEmail = (
 
 /** A malformed queued identity cannot select an enrollment or start a Workflow. */
 export const receiveOnboardingEmail =
-  (environment: OnboardingEmailEnvironment) =>
+  (
+    environment: Readonly<{
+      DB: D1Database;
+      ONBOARDING_EMAIL_WORKFLOW: {
+        create: (options: { id: string; params: typeof Work.Type }) => Promise<unknown>;
+        get: (id: string) => Promise<unknown>;
+      };
+    }>
+  ) =>
   (batch: MessageBatch<unknown>): Effect.Effect<void, void> =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;

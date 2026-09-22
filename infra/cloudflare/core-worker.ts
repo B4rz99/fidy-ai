@@ -167,9 +167,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
     }
     return receiveOnboardingEmail({
       DB: environment.DB,
-      ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
       ONBOARDING_EMAIL_WORKFLOW: environment.ONBOARDING_EMAIL_WORKFLOW,
-      RESEND_API_KEY: environment.RESEND_API_KEY,
     })(batch).pipe(Effect.runPromise);
   },
 });

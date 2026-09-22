@@ -39,8 +39,7 @@ export const makeKapsoOutboundHttp = (
     crypto: Option.none(),
   });
 
-/** Authority to reach an external provider through the published Outbound HTTP policy. */
-/** Resend-only outbound authority for the private Core Worker's verification Activity. */
+/** Execute only Resend requests using the supplied credential and client; other providers fail closed. */
 export const makeResendOutboundHttp = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;
@@ -55,6 +54,7 @@ export const makeResendOutboundHttp = (
     crypto: Option.none(),
   });
 
+/** Authority to reach an external provider through the published Outbound HTTP policy. */
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(
   "@fidy/server/shell/outbound-http/operations/OutboundHttp"
 ) {

@@ -50,6 +50,52 @@ export type { WhatsAppInboundEvent, WhatsAppWebhookReceipt } from "~/shell/chann
 export const PendingDisclosureJson = Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot));
 
 /** A narrow provider-send boundary; no browser, SQL, or model authority crosses it. */
+export type EmailStatus =
+  | "awaiting_email"
+  | "awaiting_delivery"
+  | "sending"
+  | "awaiting_proof"
+  | "rejected"
+  | "ambiguous";
+
+const emailStatusMessages: Readonly<Record<EmailStatus, string>> = {
+  awaiting_email:
+    "Consentimiento registrado. Responde con tu correo electrónico para recibir el código de verificación.",
+  awaiting_delivery: "Registramos tu correo; aún no se ha confirmado el envío del código.",
+  sending: "El envío está en curso. Todavía no podemos confirmar si el proveedor lo aceptó.",
+  awaiting_proof:
+    "El proveedor aceptó la solicitud del código. Revisa tu correo; no podemos confirmar su llegada.",
+  rejected: "El proveedor rechazó el envío. No se reenviará automáticamente; contacta a soporte.",
+  ambiguous:
+    "No podemos confirmar si el proveedor envió el código. No lo reenviamos automáticamente; contacta a soporte.",
+};
+
+/** Send only fixed, non-secret onboarding status text to the authenticated WhatsApp caller. */
+export const makeEmailStatusSender = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+) => {
+  const client = makeKapsoClientService({
+    deliveryMode: "bsuid",
+    outboundHttp: makeKapsoOutboundHttp(input),
+  });
+  return (
+    request: Readonly<{
+      caller: WhatsAppInboundEvent["caller"];
+      phoneNumberId: WhatsAppBusinessPhoneNumberId;
+      status: EmailStatus;
+    }>
+  ): ReturnType<KapsoClientService["sendText"]> =>
+    client.sendText({
+      businessPhoneNumberId: request.phoneNumberId,
+      destination: { recipient: request.caller.businessScopedUserId, sandboxPhone: Option.none() },
+      text: TranscriptText.make(emailStatusMessages[request.status]),
+      opaqueCallbackData: Option.none(),
+    });
+};
+
 export const makeDisclosureSender = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;

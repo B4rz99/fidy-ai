@@ -2,6 +2,7 @@ import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
+  type EmailStatus,
   type KapsoSendFailed,
   type KapsoSentMessage,
   PendingConsentExchangeId,
@@ -21,6 +22,7 @@ import {
   decodeKapsoWebhook,
   isConsentIngressDecisionPhase,
   makeDisclosureSender,
+  makeEmailStatusSender,
   maxKapsoFutureTimestampMinutes,
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
@@ -60,6 +62,7 @@ const dayMs = 86_400_000;
 const maxKapsoFutureSkewMs = Duration.toMillis(Duration.minutes(maxKapsoFutureTimestampMinutes));
 const maxInitiatingEventAgeMs = dayMs - maxKapsoFutureSkewMs;
 const hourMs = 3_600_000;
+const statusReplyCooldownMs = 60_000;
 const maximumHourlyDisclosures = 500;
 const expiredExchangeSweepLimit = 32;
 const scheduledExchangeSweepLimit = 128;
@@ -486,6 +489,74 @@ const recordMailbox = (
     return yield* insertMailbox(db, { input, pending, email: email.value });
   });
 
+const EmailState = Schema.Struct({
+  state: Schema.Literals([
+    "awaiting_delivery",
+    "sending",
+    "awaiting_proof",
+    "rejected",
+    "ambiguous",
+  ]),
+});
+
+const reportEmailStatus = (
+  environment: Environment,
+  input: Inbound,
+  pending: StoredExchange
+): Effect.Effect<Response, void, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const proof = yield* attempt(() =>
+      environment.DB.prepare(`SELECT occurred_at_ms FROM pending_consent_decisions
+        WHERE exchange_id = ? AND decision = 'accepted'`)
+        .bind(pending.id)
+        .first()
+    );
+    const accepted = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ occurred_at_ms: Schema.Finite })
+    )(proof).pipe(Effect.mapError(() => undefined));
+    if (
+      pending.phone_number_id !== input.event.businessPhoneNumberId ||
+      DateTime.toEpochMillis(input.event.occurredAt) <= accepted.occurred_at_ms ||
+      input.receivedAtMs >= pending.expires_at_ms
+    ) {
+      return answer(HTTP_CONFLICT);
+    }
+    const stored = yield* attempt(() =>
+      environment.DB.prepare("SELECT state FROM pending_email_enrollments WHERE exchange_id = ?")
+        .bind(pending.id)
+        .first()
+    );
+    const state: EmailStatus =
+      stored === null
+        ? "awaiting_email"
+        : (yield* Schema.decodeUnknownEffect(EmailState)(stored).pipe(
+            Effect.mapError(() => undefined)
+          )).state;
+    if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
+    // The claim bounds pre-User provider spend; uncertainty may lose a status reply, never repeat email.
+    const claimed = yield* attempt(() =>
+      environment.DB.prepare(`UPDATE pending_consent_exchanges
+        SET email_status_attempts = email_status_attempts + 1, email_status_last_ms = ?
+        WHERE id = ? AND state = 'accepted' AND email_status_attempts < 5
+          AND (email_status_last_ms IS NULL OR email_status_last_ms <= ?)`)
+        .bind(input.receivedAtMs, pending.id, input.receivedAtMs - statusReplyCooldownMs)
+        .run()
+    );
+    if (claimed.meta.changes !== 1) return answer(HTTP_OK);
+    const httpClient = yield* HttpClient.HttpClient;
+    yield* Effect.exit(
+      makeEmailStatusSender({
+        apiKey: Redacted.make(environment.KAPSO_API_KEY),
+        httpClient,
+      })({
+        caller: input.event.caller,
+        phoneNumberId: input.event.businessPhoneNumberId,
+        status: state,
+      })
+    );
+    return answer(HTTP_OK);
+  });
+
 const validDisclosure = (json: string): boolean =>
   Option.isSome(Schema.decodeOption(PendingDisclosureJson)(json));
 
@@ -756,6 +827,22 @@ const handleDelivery = (base: WebhookBase, db: D1Database): Effect.Effect<Respon
     });
   });
 
+const requestsEmailStatus = (input: Inbound): boolean =>
+  input.event.content.text.trim().toLocaleLowerCase("es-CO") === "estado";
+
+const routeAcceptedInbound = (
+  environment: Environment,
+  input: Inbound,
+  pending: StoredExchange
+): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const replay = yield* findRecordedDecision(environment.DB, input);
+    if (Option.isSome(replay)) return replay.value;
+    return requestsEmailStatus(input)
+      ? yield* reportEmailStatus(environment, input, pending)
+      : yield* recordMailbox(environment.DB, input, pending);
+  });
+
 const routeConsentInbound = (
   environment: Environment,
   input: Inbound
@@ -763,9 +850,7 @@ const routeConsentInbound = (
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);
     if (Option.isSome(pending) && pending.value.state === "accepted") {
-      const replay = yield* findRecordedDecision(environment.DB, input);
-      if (Option.isSome(replay)) return replay.value;
-      return yield* recordMailbox(environment.DB, input, pending.value);
+      return yield* routeAcceptedInbound(environment, input, pending.value);
     }
     if (
       Option.isSome(pending) &&
@@ -774,6 +859,7 @@ const routeConsentInbound = (
     ) {
       return yield* recordDecision(environment.DB, input);
     }
+    if (requestsEmailStatus(input)) return answer(HTTP_CONFLICT);
     return yield* startExchange(environment, input);
   });
 

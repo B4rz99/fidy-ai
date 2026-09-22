@@ -181,7 +181,7 @@ const deliverySender = (
   },
 });
 
-/** Core Worker Activity authority; only the bounded provider adapter receives the key. */
+/** Send onboarding verification with the supplied Resend key; no other provider or local stub is used. */
 export const makeOnboardingEmailDelivery = (
   input: Readonly<{
     apiKey: Redacted.Redacted<string>;

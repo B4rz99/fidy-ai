@@ -1,11 +1,10 @@
 import { Data, Result } from "effect";
+import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 
 const developmentGitRevision = "0000000000000000000000000000000000000000";
 const developmentContractDigest =
   "0000000000000000000000000000000000000000000000000000000000000000";
 
-const gitRevisionPattern = /^[0-9a-f]{40}$/u;
-const contractDigestPattern = /^[0-9a-f]{64}$/u;
 const zeroValuePattern = /^0+$/u;
 
 export type ReleaseMetadata = {
@@ -29,7 +28,15 @@ export class InvalidDeploymentConfiguration extends Data.TaggedError(
   readonly reason: "invalid_release_metadata" | "unsupported_remote_stage";
 }> {}
 
-/** Resolves the only two topology modes before state or resources are created. */
+export type StateBackend = "cloudflare" | "local" | "memory";
+
+/** Keeps provider discovery and unsupported remote stages away from remote state. */
+export const resolveStateBackend = (input: TopologyModeInput): StateBackend => {
+  if (input.development) return "local";
+  return input.stage === "production" ? "cloudflare" : "memory";
+};
+
+/** Resolves the only two topology modes before resources are created. */
 export const resolveTopologyMode = (
   input: TopologyModeInput
 ): Result.Result<"development" | "production", InvalidDeploymentConfiguration> => {

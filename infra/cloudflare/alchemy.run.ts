@@ -2,18 +2,32 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
-import { resolveDeploymentConfiguration } from "./deployment-configuration";
+import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { productionTopology } from "./topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
 
+const deploymentConfigError = (error: { readonly reason: string }): Config.ConfigError =>
+  new Config.ConfigError(
+    new ConfigProvider.SourceError({
+      cause: error,
+      message: `Invalid Cloudflare deployment configuration: ${error.reason}`,
+    })
+  );
+
 const state = Layer.unwrap(
-  Alchemy.ALCHEMY_DEV.pipe(
-    Effect.orDie,
-    Effect.map((development) => (development ? Alchemy.localState() : Cloudflare.state()))
-  )
+  Effect.gen(function* () {
+    const development = yield* Alchemy.ALCHEMY_DEV;
+    const stage = yield* Alchemy.Stage;
+    const backend = resolveStateBackend({ development, stage });
+
+    if (backend === "cloudflare") return Cloudflare.state();
+    if (backend === "local") return Alchemy.localState();
+    return Alchemy.inMemoryState();
+  }).pipe(Effect.orDie)
 );
 
 export default Alchemy.Stack(
@@ -23,7 +37,7 @@ export default Alchemy.Stack(
     state,
   },
   Effect.gen(function* () {
-    const development = yield* Alchemy.ALCHEMY_DEV.pipe(Effect.orDie);
+    const development = yield* Alchemy.ALCHEMY_DEV;
     const stage = yield* Alchemy.Stack.useSync((stack) => stack.stage);
     const releaseMetadata = yield* Effect.fromResult(
       resolveDeploymentConfiguration({
@@ -32,7 +46,7 @@ export default Alchemy.Stack(
         gitRevision: development ? "" : yield* releaseGitRevision,
         stage,
       })
-    ).pipe(Effect.orDie);
+    ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
 
     const core = yield* Cloudflare.Worker("Core", {
@@ -90,7 +104,7 @@ export default Alchemy.Stack(
           }
         : undefined,
       workersDev: production ? productionTopology.web.workersDev : true,
-    });
+    }).pipe(Alchemy.AdoptPolicy.adopt(production && productionTopology.web.adoptExistingWorker));
 
     return {
       apiUrl: ingress.url,

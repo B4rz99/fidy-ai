@@ -49,12 +49,14 @@ The workflow allows one active release and does not cancel an active deployment.
 3. Run the focused Worker-boundary tests.
 4. Build and validate the Production web artifact, including immutable release metadata, hashed
    assets, headers, and secret-free contents.
-5. Run `alchemy plan --stage production --no-input` from `infra/cloudflare`.
-6. Read the current default-branch head immediately before deployment. If it differs from the release
+5. Create an ephemeral local Alchemy profile and idempotently bootstrap the persistent Cloudflare
+   state authority with `alchemy provider cloudflare bootstrap`.
+6. Run `alchemy plan --stage production --no-input` from `infra/cloudflare`.
+7. Read the current default-branch head immediately before deployment. If it differs from the release
    SHA, fail closed without starting the deployment.
-7. Run `alchemy deploy --stage production --no-input` with the same revision and digest.
-8. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
-9. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+8. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
+9. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
+10. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
 
 A superseded candidate reports:
 
@@ -100,9 +102,11 @@ forward with a new trunk revision. Recovery remains a reviewed change through th
 workflow; do not deploy from a workstation, dashboard, provider source integration, Railway, or the
 preview Wrangler adapter.
 
-The assets Worker keeps the legacy physical name `fidy-web` so the first Alchemy release updates the
-old Wrangler-managed Worker in place, reconciles its custom domains, and disables both workers.dev
-surfaces. The post-deploy exact-release probes fail if traffic still reaches the legacy artifact.
+The assets Worker keeps the legacy physical name `fidy-web` and explicitly opts that resource into
+Alchemy adoption, so the first Alchemy release updates the old Wrangler-managed Worker in place,
+reconciles its custom domains, and disables both workers.dev surfaces. Adoption is scoped to this
+known migration target; other resources retain Alchemy's fail-closed ownership checks. The post-deploy
+exact-release probes fail if traffic still reaches the legacy artifact.
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.

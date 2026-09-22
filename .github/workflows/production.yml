@@ -61,6 +61,9 @@ jobs:
             --set accountId=env:CLOUDFLARE_ACCOUNT_ID \
             --no-input
 
+      - name: Ensure Alchemy's Cloudflare state authority exists
+        run: bunx alchemy provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input
+
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         run: bunx alchemy plan --stage production --no-input
@@ -79,7 +82,7 @@ jobs:
 
       - name: Deploy the exact planned topology with Alchemy
         working-directory: infra/cloudflare
-        run: bunx alchemy deploy --stage production --no-input
+        run: bunx alchemy deploy --stage production --yes --no-input
 
       - name: Verify the migrated public topology
         run: |

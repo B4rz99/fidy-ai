@@ -11,6 +11,7 @@ export const productionTopology = {
     workersDev: false,
   },
   web: {
+    adoptExistingWorker: true,
     hostname: "app.fidyapp.com",
     redirects: ["fidyapp.com"],
     workerName: "fidy-web",

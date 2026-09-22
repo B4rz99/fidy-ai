@@ -1,8 +1,9 @@
 import { Exit, Schema } from "effect";
+import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 
 const ReleaseConfiguration = Schema.Struct({
-  CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
-  RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u)),
+  CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
+  RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
 type CoreEnvironment = typeof ReleaseConfiguration.Type;

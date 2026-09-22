@@ -28,9 +28,19 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
   });
 
+  it("bootstraps Alchemy state before planning and approves the non-interactive deploy", () => {
+    const profile = workflow.indexOf("alchemy profile edit");
+    const bootstrap = workflow.indexOf("alchemy provider cloudflare bootstrap");
+    const plan = workflow.indexOf("alchemy plan");
+
+    expect(profile).toBeLessThan(bootstrap);
+    expect(bootstrap).toBeLessThan(plan);
+    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
+  });
+
   it("makes Alchemy the only Cloudflare deployment authority", () => {
     expect(workflow).toContain("alchemy plan --stage production --no-input");
-    expect(workflow).toContain("alchemy deploy --stage production --no-input");
+    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
     expect(workflow).not.toContain("wrangler");
     expect(workflow).not.toContain("railway");
     expect(workflow).not.toContain("cloudflare/wrangler.json");

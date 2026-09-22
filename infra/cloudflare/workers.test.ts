@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
 import coreWorker from "./core-worker";
-import { resolveDeploymentConfiguration } from "./deployment-configuration";
+import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import publicWorker from "./public-worker";
 import { productionTopology } from "./topology";
 
@@ -12,6 +12,13 @@ const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
 const coreEnvironment = { CONTRACT_DIGEST: contractDigest, RELEASE_GIT_SHA: gitRevision };
 
 describe("Deployment configuration", () => {
+  it("selects remote state only for the supported Production stage", () => {
+    expect(resolveStateBackend({ development: true, stage: "dev-test" })).toBe("local");
+    expect(resolveStateBackend({ development: false, stage: "production" })).toBe("cloudflare");
+    expect(resolveStateBackend({ development: false, stage: "staging" })).toBe("memory");
+    expect(resolveStateBackend({ development: false, stage: "placeholder" })).toBe("memory");
+  });
+
   it("uses bounded placeholder metadata only for local emulation", () => {
     const configuration = resolveDeploymentConfiguration({
       contractDigest: "",
@@ -62,6 +69,7 @@ describe("Deployment configuration", () => {
 describe("Production topology contract", () => {
   it("assigns only the agreed public hostnames and apex redirect", () => {
     expect(productionTopology.web).toEqual({
+      adoptExistingWorker: true,
       hostname: "app.fidyapp.com",
       redirects: ["fidyapp.com"],
       workerName: "fidy-web",

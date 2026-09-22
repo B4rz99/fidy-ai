@@ -1,0 +1,24 @@
+infra/cloudflare/onboarding-email.ts
+  s_81d86442ec05b7::t_3b2018d139a841 164-165,167-170,172-185,191-193
+  s_81d86442ec05b7::t_ac463b00d0447d 7,166,171
+infra/cloudflare/workflow-test-runtime.ts
+  s_81d86442ec05b7::t_8586e339e683ba 1-2
+infra/cloudflare/consent-ingress.test.ts
+  s_81d86442ec05b7::t_47313c2f5398e0 12,671-673,675-678
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a469034423c332a1c691f8ebba74398a9cc0f416",
+  "prompts": {},
+  "sessions": {
+    "s_81d86442ec05b7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0caf7-1cbc-7741-be57-867feab19b1e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

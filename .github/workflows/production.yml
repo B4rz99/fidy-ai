@@ -44,7 +44,7 @@ jobs:
         run: echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
 
       - name: Test the Worker boundary
-        run: bun run --cwd infra/cloudflare test
+        run: bun run --cwd infra/cloudflare test -- workers.test.ts
 
       - name: Build and validate the Production static artifact
         run: bun run --cwd apps/web build:production

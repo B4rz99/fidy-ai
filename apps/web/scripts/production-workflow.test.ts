@@ -28,6 +28,10 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
   });
 
+  it("runs the deterministic Worker boundary suite before deployment", () => {
+    expect(workflow).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
+  });
+
   it("bootstraps Alchemy state before planning and approves the non-interactive deploy", () => {
     const profile = workflow.indexOf("alchemy profile edit");
     const bootstrap = workflow.indexOf("alchemy provider cloudflare bootstrap");

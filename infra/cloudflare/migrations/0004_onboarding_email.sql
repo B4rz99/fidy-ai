@@ -4,6 +4,8 @@
 ALTER TABLE pending_consent_exchanges ADD COLUMN email_status_attempts INTEGER NOT NULL DEFAULT 0
   CHECK (email_status_attempts BETWEEN 0 AND 5);
 ALTER TABLE pending_consent_exchanges ADD COLUMN email_status_last_ms INTEGER;
+-- A signed mailbox event first seen before acceptance cannot later be replayed into enrollment.
+ALTER TABLE pending_consent_exchanges ADD COLUMN email_preaccept_latest_occurred_ms INTEGER;
 CREATE TABLE pending_email_enrollments (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
   exchange_id TEXT NOT NULL UNIQUE REFERENCES pending_consent_exchanges(id) ON DELETE CASCADE,

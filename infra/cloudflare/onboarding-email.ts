@@ -72,18 +72,29 @@ export const dispatchOnboardingEmail = (
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(Outbox))(result.results).pipe(
       Effect.mapError(() => undefined)
     );
+    let failed = false;
     for (const entry of entries) {
-      // An offer and its D1 settlement are not atomic. The same identity may be offered again.
-      yield* attempt(() =>
-        environment.ONBOARDING_EMAIL_QUEUE.send({ version: entry.version, id: entry.id })
+      // An offer and its D1 settlement are not atomic. Keep offering other identities if one fails.
+      const offered = yield* Effect.exit(
+        attempt(() =>
+          environment.ONBOARDING_EMAIL_QUEUE.send({ version: entry.version, id: entry.id })
+        )
       );
-      yield* attempt(() =>
-        environment.DB.prepare(`UPDATE onboarding_email_outbox
+      if (Exit.isFailure(offered)) {
+        failed = true;
+        continue;
+      }
+      const settled = yield* Effect.exit(
+        attempt(() =>
+          environment.DB.prepare(`UPDATE onboarding_email_outbox
         SET published_at_ms = ? WHERE id = ?`)
-          .bind(now, entry.id)
-          .run()
+            .bind(now, entry.id)
+            .run()
+        )
       );
+      if (Exit.isFailure(settled)) failed = true;
     }
+    if (failed) return yield* Effect.fail(undefined);
   });
 
 /** A malformed queued identity cannot select an enrollment or start a Workflow. */
@@ -138,7 +149,7 @@ export const receiveOnboardingEmail =
 
 /** Version 1 stores only a work identity; the named Activity never returns proof material. */
 export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
-  OnboardingEmailEnvironment,
+  Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
   unknown
 > {
   // @effect-diagnostics-next-line asyncFunction:off

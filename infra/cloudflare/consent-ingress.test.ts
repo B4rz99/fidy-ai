@@ -3,9 +3,11 @@ import { createHmac } from "node:crypto";
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { Effect, Schema } from "effect";
 import { sweepExpiredConsent } from "./consent-ingress";
 import {
+  OnboardingEmailWorkflowV1,
   deliverOnboardingEmail,
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
@@ -270,6 +272,27 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("cannot replay a previously seen future-dated pre-Consent email into an enrollment", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  const earlyEmail = inbound(
+    "wamid.early-email",
+    "test@example.com",
+    String(Number(decisionTime) + 20)
+  );
+  expect((await send(earlyEmail)).status).toBe(200);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(earlyEmail)).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("commits one pending mailbox and outbox identity for an accepted Consent reply", async () => {
   const { db, send, forbiddenEffects } = await setup();
   const token = await startDisclosure(send);
@@ -326,6 +349,73 @@ it("reoffers the same bounded work after publication settlement is lost", async 
   expect(offered).toHaveBeenCalledTimes(2);
   expect(offered.mock.calls[0]).toEqual(offered.mock.calls[1]);
   expect(offered.mock.calls[0]?.[0]).toMatchObject({ version: 1 });
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("continues to publish other identities when one Queue offer fails", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const secondExchange = "00000000-0000-4000-8000-000000000002";
+  const secondToken = "00000000-0000-4000-8000-000000000003";
+  const secondEnrollment = "00000000-0000-4000-8000-000000000004";
+  await db
+    .prepare(`INSERT INTO pending_consent_exchanges
+    (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+     correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
+    SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
+      disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
+    FROM pending_consent_exchanges LIMIT 1`)
+    .bind(secondExchange, "CO.23491208655302741918", "wamid.second-first", secondToken)
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_consent_delivery
+    (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
+    SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
+    FROM pending_consent_delivery LIMIT 1`)
+    .bind(secondToken)
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_consent_decisions
+    (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
+     decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
+    SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
+      ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
+    FROM pending_consent_decisions LIMIT 1`)
+    .bind(secondExchange, "CO.23491208655302741918", "wamid.second-accept")
+    .run();
+  await db
+    .prepare(`INSERT INTO pending_email_enrollments
+    (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
+    SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
+    FROM pending_email_enrollments LIMIT 1`)
+    .bind(secondEnrollment, secondExchange, "wamid.second-email")
+    .run();
+  const offered = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("queue unavailable"))
+    .mockResolvedValue(undefined);
+  await expect(
+    Effect.runPromise(
+      dispatchOnboardingEmail({
+        DB: db,
+        ONBOARDING_EMAIL_QUEUE: { send: offered },
+      })
+    )
+  ).rejects.toBeUndefined();
+  expect(offered).toHaveBeenCalledTimes(2);
+  const states = await db.prepare("SELECT published_at_ms FROM onboarding_email_outbox").all();
+  expect(states.results.filter((row) => row.published_at_ms === null)).toHaveLength(1);
+  expect(states.results.filter((row) => row.published_at_ms !== null)).toHaveLength(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -415,6 +505,63 @@ it("starts one deterministic Workflow identity despite Queue redelivery", async 
   expect(createdWorkflow.mock.calls[0]?.[0]).toEqual({ id, params: { version: 1, id } });
   expect(found).toHaveBeenCalledWith(id);
   expect(ack).toHaveBeenCalledTimes(2);
+  createdWorkflow.mockRejectedValueOnce(new Error("uncertain start"));
+  found.mockRejectedValueOnce(new Error("cannot confirm instance"));
+  await expect(Effect.runPromise(worker(batch))).rejects.toBeUndefined();
+  expect(ack).toHaveBeenCalledTimes(2);
+  await Effect.runPromise(worker(batch));
+  expect(createdWorkflow).toHaveBeenCalledTimes(4);
+  expect(ack).toHaveBeenCalledTimes(3);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("runs the versioned Workflow Activity under replay without repeating provider delivery", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const row = await db.prepare("SELECT id FROM pending_email_enrollments").first();
+  const id = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(row).id;
+  const provider = vi.fn(() => Promise.resolve(Response.json({ id: "resend-message-id" })));
+  vi.stubGlobal("fetch", provider);
+  const steps: Array<string> = [];
+  // A deterministic Step substitute; only the do method is exercised by this Workflow.
+  const step: WorkflowStep = Object.create(null);
+  Object.defineProperty(step, "do", {
+    value: (name: string, _options: unknown, run: () => Promise<void>): Promise<void> => {
+      steps.push(name);
+      return run();
+    },
+  });
+  // The native ExecutionContext is not used by the test-only Workflow constructor.
+  const context: ExecutionContext = Object.create(null);
+  const workflow = new OnboardingEmailWorkflowV1(context, {
+    DB: db,
+    RESEND_API_KEY: "test-provider-key",
+  });
+  const event: WorkflowEvent<unknown> = {
+    payload: { version: 1, id },
+    // @effect-diagnostics-next-line globalDate:off
+    timestamp: new Date(0),
+    instanceId: id,
+    workflowName: "OnboardingEmailWorkflowV1",
+  };
+  await workflow.run(event, step);
+  await workflow.run(event, step);
+  await workflow.run({ ...event, payload: { version: 2, id } }, step);
+  expect(steps).toEqual(["send-onboarding-verification-v1", "send-onboarding-verification-v1"]);
+  expect(provider).toHaveBeenCalledTimes(1);
+  expect((await db.prepare("SELECT state FROM pending_email_enrollments").first())?.state).toBe(
+    "awaiting_proof"
+  );
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

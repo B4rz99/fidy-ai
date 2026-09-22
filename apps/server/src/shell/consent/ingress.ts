@@ -49,7 +49,7 @@ export type { WhatsAppInboundEvent, WhatsAppWebhookReceipt } from "~/shell/chann
 /** Persist and decode only a validated version of the exact disclosure shown to the caller. */
 export const PendingDisclosureJson = Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot));
 
-/** A narrow provider-send boundary; no browser, SQL, or model authority crosses it. */
+/** Pre-User mailbox collection and provider-acceptance states safe to disclose to its WhatsApp caller. */
 export type EmailStatus =
   | "awaiting_email"
   | "awaiting_delivery"
@@ -96,6 +96,7 @@ export const makeEmailStatusSender = (
     });
 };
 
+/** Send a versioned disclosure to the authenticated WhatsApp caller, with a delivery correlation token. */
 export const makeDisclosureSender = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;

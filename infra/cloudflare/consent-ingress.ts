@@ -146,6 +146,7 @@ const PendingExchangeRow = Schema.Struct({
   expires_at_ms: Schema.Finite,
   initiating_message_id: WhatsAppProviderMessageId,
   initiating_body_sha256: Sha256Digest,
+  email_preaccept_latest_occurred_ms: Schema.NullOr(Schema.Finite),
   state: Schema.Literals([
     "awaiting_delivery",
     "outbound_started",
@@ -307,7 +308,8 @@ const findExchange = (
     db
       .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, disclosure_json, disclosure_message_id,
     correlation_token, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state,
-    initiating_message_id, initiating_body_sha256 FROM pending_consent_exchanges
+    initiating_message_id, initiating_body_sha256, email_preaccept_latest_occurred_ms
+    FROM pending_consent_exchanges
     WHERE portfolio_id = ? AND bsuid = ? ORDER BY created_at_ms DESC LIMIT 1`)
       .bind(event.caller.businessPortfolioId, event.caller.businessScopedUserId)
       .first()
@@ -480,6 +482,9 @@ const recordMailbox = (
     if (
       pending.phone_number_id !== input.event.businessPhoneNumberId ||
       DateTime.toEpochMillis(input.event.occurredAt) <= proof.occurred_at_ms ||
+      (pending.email_preaccept_latest_occurred_ms !== null &&
+        DateTime.toEpochMillis(input.event.occurredAt) <=
+          pending.email_preaccept_latest_occurred_ms) ||
       input.receivedAtMs >= pending.expires_at_ms
     ) {
       return answer(HTTP_CONFLICT);
@@ -560,12 +565,32 @@ const reportEmailStatus = (
 const validDisclosure = (json: string): boolean =>
   Option.isSome(Schema.decodeOption(PendingDisclosureJson)(json));
 
+const recordPrematureMailbox = (
+  db: D1Database,
+  input: Inbound,
+  exchangeId: PendingConsentExchangeId
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    if (Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))) {
+      return answer(HTTP_OK);
+    }
+    const recorded = yield* attempt(() =>
+      db
+        .prepare(`UPDATE pending_consent_exchanges
+        SET email_preaccept_latest_occurred_ms = MAX(
+          COALESCE(email_preaccept_latest_occurred_ms, 0), ?)
+        WHERE id = ? AND state = 'awaiting_decision'`)
+        .bind(DateTime.toEpochMillis(input.event.occurredAt), exchangeId)
+        .run()
+    );
+    return answer(recorded.meta.changes === 1 ? HTTP_OK : HTTP_CONFLICT);
+  });
+
 const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const replay = yield* findRecordedDecision(db, input);
     if (Option.isSome(replay)) return replay.value;
     const choice = yield* decideConsentReply({ _tag: "Text", text: input.event.content.text });
-    if (choice._tag === "Clarify") return answer(HTTP_OK);
     const decision = choice._tag === "Accepted" ? "accepted" : "declined";
     const pending = yield* findExchange(db, input.event);
     if (
@@ -578,6 +603,9 @@ const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response,
       return answer(HTTP_CONFLICT);
     }
     if (!validDisclosure(pending.value.disclosure_json)) return answer(HTTP_UNAVAILABLE);
+    if (choice._tag === "Clarify") {
+      return yield* recordPrematureMailbox(db, input, pending.value.id);
+    }
     return yield* persistDecision({ db, input, pending: pending.value, decision });
   });
 

@@ -1,0 +1,30 @@
+docs/operations/production-releases.md
+  s_3eb49aaf889075::t_a341630e6c61a3 19
+  s_3eb49aaf889075::t_e573e745ae9791 22-24
+  s_3eb49aaf889075::t_e2f86537a3fa68 17-18,20-21
+infra/cloudflare/verify-edge-policy.test.ts
+  s_3eb49aaf889075::t_395721ce4d49e6 7
+infra/cloudflare/verify-edge-policy.ts
+  s_3eb49aaf889075::t_94f387e5a96500 5
+infra/cloudflare/edge-security.ts
+  s_3eb49aaf889075::t_876bb5cbd5b666 7,9-10,68-70,72,93-98,100-102,105-116
+  s_3eb49aaf889075::t_38f5b5471d2924 91-92
+infra/cloudflare/workers.test.ts
+  s_3eb49aaf889075::t_5a283e87a253e6 141-142,144-146,152,155-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2201886497592aebe0f3d657b8d6ecd8e4339912",
+  "prompts": {},
+  "sessions": {
+    "s_3eb49aaf889075": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c9c5-c283-715b-9e28-a5b19da8fd83",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

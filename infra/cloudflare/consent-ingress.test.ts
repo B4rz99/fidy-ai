@@ -3,14 +3,13 @@ import { createHmac } from "node:crypto";
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
-import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { Effect, Schema } from "effect";
 import { sweepExpiredConsent } from "./consent-ingress";
 import {
-  OnboardingEmailWorkflowV1,
   deliverOnboardingEmail,
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
+  runOnboardingEmailWorkflow,
 } from "./onboarding-email";
 import { afterEach, expect, it, vi } from "vitest";
 import coreWorker from "./core-worker";
@@ -669,30 +668,14 @@ it("runs the versioned Workflow Activity under replay without repeating provider
   const provider = vi.fn(() => Promise.resolve(Response.json({ id: "resend-message-id" })));
   vi.stubGlobal("fetch", provider);
   const steps: Array<string> = [];
-  // A deterministic Step substitute; only the do method is exercised by this Workflow.
-  const step: WorkflowStep = Object.create(null);
-  Object.defineProperty(step, "do", {
-    value: (name: string, _options: unknown, run: () => Promise<void>): Promise<void> => {
-      steps.push(name);
-      return run();
-    },
-  });
-  // The native ExecutionContext is not used by the test-only Workflow constructor.
-  const context: ExecutionContext = Object.create(null);
-  const workflow = new OnboardingEmailWorkflowV1(context, {
-    DB: db,
-    RESEND_API_KEY: "test-provider-key",
-  });
-  const event: WorkflowEvent<unknown> = {
-    payload: { version: 1, id },
-    // @effect-diagnostics-next-line globalDate:off
-    timestamp: new Date(0),
-    instanceId: id,
-    workflowName: "OnboardingEmailWorkflowV1",
+  const activity = (name: string, _options: unknown, run: () => Promise<void>): Promise<void> => {
+    steps.push(name);
+    return run();
   };
-  await workflow.run(event, step);
-  await workflow.run(event, step);
-  await workflow.run({ ...event, payload: { version: 2, id } }, step);
+  const environment = { DB: db, RESEND_API_KEY: "test-provider-key" };
+  await runOnboardingEmailWorkflow(environment, { version: 1, id }, activity);
+  await runOnboardingEmailWorkflow(environment, { version: 1, id }, activity);
+  await runOnboardingEmailWorkflow(environment, { version: 2, id }, activity);
   expect(steps).toEqual(["send-onboarding-verification-v1", "send-onboarding-verification-v1"]);
   expect(provider).toHaveBeenCalledTimes(1);
   expect((await db.prepare("SELECT state FROM pending_email_enrollments").first())?.state).toBe(

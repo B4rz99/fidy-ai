@@ -4,7 +4,7 @@ import {
   makeOnboardingEmailDelivery,
 } from "@fidy/server/onboarding-email-delivery";
 import { WorkflowEntrypoint } from "cloudflare:workers";
-import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
@@ -161,22 +161,36 @@ export const receiveOnboardingEmail =
       }
     });
 
+type DeliveryActivity = (
+  name: string,
+  options: WorkflowStepConfig,
+  run: () => Promise<void>
+) => Promise<void>;
+
+/** Resolve only versioned identity work; the Activity returns no proof material. */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const runOnboardingEmailWorkflow = (
+  environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
+  payload: unknown,
+  activity: DeliveryActivity
+): Promise<void> => {
+  const decoded = Schema.decodeUnknownOption(Work)(payload);
+  if (Option.isNone(decoded)) return Promise.resolve();
+  return activity(
+    "send-onboarding-verification-v1",
+    { retries: { limit: 0, delay: "1 second" } },
+    () => deliverOnboardingEmail(environment)(decoded.value.id)
+  );
+};
+
 /** Version 1 stores only a work identity; the named Activity never returns proof material. */
 export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
   unknown
 > {
-  // @effect-diagnostics-next-line asyncFunction:off
-  async run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    const decoded = Schema.decodeUnknownOption(Work)(event.payload);
-    if (decoded._tag === "None") return;
-    await step.do(
-      "send-onboarding-verification-v1",
-      { retries: { limit: 0, delay: "1 second" } },
-      // @effect-diagnostics-next-line asyncFunction:off
-      async () => {
-        await deliverOnboardingEmail(this.env)(decoded.value.id);
-      }
+  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    return runOnboardingEmailWorkflow(this.env, event.payload, (name, options, activity) =>
+      step.do(name, options, activity)
     );
   }
 }

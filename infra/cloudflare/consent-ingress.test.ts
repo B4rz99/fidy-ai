@@ -62,19 +62,20 @@ const setup = async (): Promise<{
   active.add(mf);
   await mf.ready;
   const db = await mf.getD1Database("DB");
-  for (const source of [
-    new URL("./migrations/0002_resource_admission.sql", import.meta.url),
-    migration,
-  ]) {
-    // Migrations must be read and applied in order.
-    // eslint-disable-next-line no-await-in-loop
-    const sql = (await readFile(source, "utf8")).replace(/^--.*$/gmu, "");
-    for (const statement of sql.trim().split(/;\s*\n(?=CREATE |$)/u)) {
-      // Migration setup runs statements in order; triggers must not be split at BEGIN/END.
-      // eslint-disable-next-line no-await-in-loop
-      await db.prepare(statement).run();
-    }
-  }
+  // Apply migrations and their statements in order; triggers must not be split at BEGIN/END.
+  const applyMigration = (source: URL): Promise<unknown> =>
+    readFile(source, "utf8").then((sql) =>
+      sql
+        .replace(/^--.*$/gmu, "")
+        .trim()
+        .split(/;\s*\n(?=CREATE |$)/u)
+        .reduce<Promise<unknown>>(
+          (previous, statement) => previous.then(() => db.prepare(statement).run()),
+          Promise.resolve()
+        )
+    );
+  await applyMigration(new URL("./migrations/0002_resource_admission.sql", import.meta.url));
+  await applyMigration(migration);
   const send = (
     body: string,
     signature?: string,
@@ -137,6 +138,12 @@ const ProviderSend = Schema.Struct({
   text: Schema.Struct({ body: Schema.String }),
 });
 
+const providerBody = (options?: RequestInit): string => {
+  if (typeof options?.body === "string") return options.body;
+  if (options?.body instanceof Uint8Array) return new TextDecoder().decode(options.body);
+  throw new Error("Expected provider JSON bytes");
+};
+
 // @effect-diagnostics-next-line asyncFunction:off
 const startDisclosure = async (
   send: (body: string, signature?: string, eventName?: string) => Promise<Response>,
@@ -150,9 +157,9 @@ const startDisclosure = async (
   vi.stubGlobal("fetch", provider);
   expect((await send(inbound("wamid.first", firstText))).status).toBe(200);
   expect(provider).toHaveBeenCalledTimes(1);
-  const options = provider.mock.calls[0]?.[1];
-  expect(options).toBeDefined();
-  const payload = Schema.decodeUnknownSync(ProviderSend)(JSON.parse(String(options?.body)));
+  const payload = Schema.decodeUnknownSync(ProviderSend)(
+    JSON.parse(providerBody(provider.mock.calls[0]?.[1]))
+  );
   expect(payload.text.body).toContain("Soy Fidy");
   return payload.biz_opaque_callback_data;
 };
@@ -239,10 +246,13 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
       "SELECT decision, disclosure_json, disclosure_message_id, decision_message_id FROM pending_consent_decisions"
     )
     .all();
-  expect(results).toEqual([
+  expect(results).toHaveLength(1);
+  expect(Schema.decodeUnknownSync(Schema.String)(results[0]?.disclosure_json)).toContain(
+    "onboarding-2026-09-22"
+  );
+  expect(results).toMatchObject([
     {
       decision: "accepted",
-      disclosure_json: expect.stringContaining("onboarding-2026-09-22"),
       disclosure_message_id: "wamid.disclosure-1",
       decision_message_id: "wamid.decision-1",
     },
@@ -417,7 +427,9 @@ it("settles simultaneous conflicting decisions at most once", async () => {
     send(inbound("wamid.concurrent-accept", "Acepto", decisionTime)),
     send(inbound("wamid.concurrent-decline", "No acepto", decisionTime)),
   ]);
-  expect(replies.map((reply) => reply.status).sort()).toEqual([200, 409]);
+  expect(replies.map((reply) => reply.status).sort((left, right) => left - right)).toEqual([
+    200, 409,
+  ]);
   expect(
     (await db.prepare("SELECT decision FROM pending_consent_decisions").all()).results
   ).toHaveLength(1);
@@ -481,7 +493,7 @@ it("requires the provider-returned message ID before any delivery callback may o
   const sending = send(inbound("wamid.first", "Hola"));
   await vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1));
   const payload = Schema.decodeUnknownSync(ProviderSend)(
-    JSON.parse(String(provider.mock.calls[0]?.[1]?.body))
+    JSON.parse(providerBody(provider.mock.calls[0]?.[1]))
   );
   const token = payload.biz_opaque_callback_data;
   const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();

@@ -191,12 +191,14 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
       Effect.gen(function* () {
         const chunks: Array<Uint8Array> = [];
         let length = 0;
-        while (true) {
+        for (;;) {
           const part = yield* attempt(() => reader.read());
           if (part.done) break;
-          length += part.value.byteLength;
+          const chunk: unknown = part.value;
+          if (!(chunk instanceof Uint8Array)) return Option.none();
+          length += chunk.byteLength;
           if (length > maxKapsoWebhookBytes) return Option.none();
-          chunks.push(part.value);
+          chunks.push(chunk);
         }
         const body = new Uint8Array(length);
         let offset = 0;

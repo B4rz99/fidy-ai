@@ -12,6 +12,9 @@ import {
   type TelemetryResource,
   type TelemetryService,
   TelemetrySpan,
+  type TelemetryWorkOptions,
+  type TelemetryWorkRecord,
+  boundedTelemetryDuration,
   TelemetryStrictDecoding as strictDecoding,
 } from "./contract";
 
@@ -73,6 +76,55 @@ const startSafely = (
   );
 
 const activeSpanKey = (traceId: string, spanId: string): string => `${traceId}:${spanId}`;
+
+const isPureInterruption = (cause: Cause.Cause<unknown>): boolean =>
+  Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause);
+
+const workOutcome = (cause: Cause.Cause<unknown>): TelemetryWorkRecord["outcome"] =>
+  isPureInterruption(cause) ? "interrupted" : "failed";
+
+const exportCompletedWork = <A, E>(input: {
+  adapter: TelemetryAdapter;
+  options: TelemetryWorkOptions<A>;
+  exit: Exit.Exit<A, E>;
+  startedAt: number;
+  finishedAt: number;
+}): Effect.Effect<void> =>
+  Effect.ignoreCause(
+    Effect.sync(() => {
+      const success = Exit.isSuccess(input.exit)
+        ? input.options.projectSuccess(input.exit.value)
+        : { outcome: workOutcome(input.exit.cause), statusClass: Option.none() };
+      input.adapter.exportWork({
+        release: input.options.descriptor.release,
+        operation: input.options.descriptor.operation,
+        ...Option.match(input.options.descriptor.provider, {
+          onNone: () => ({}),
+          onSome: (provider) => ({ provider }),
+        }),
+        ...Option.match(success.statusClass, {
+          onNone: () => ({}),
+          onSome: (statusClass) => ({ statusClass }),
+        }),
+        outcome: success.outcome,
+        attempt: input.options.descriptor.attempt,
+        latencyMilliseconds: boundedTelemetryDuration(input.finishedAt - input.startedAt),
+      });
+    })
+  );
+
+const observeWork = <A, E, R>(
+  adapter: TelemetryAdapter,
+  options: TelemetryWorkOptions<A>,
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Clock.currentTimeMillis, (startedAt) =>
+    Effect.onExit(work, (exit) =>
+      Effect.flatMap(Clock.currentTimeMillis, (finishedAt) =>
+        exportCompletedWork({ adapter, options, exit, startedAt, finishedAt })
+      )
+    )
+  );
 
 const observeWith = <A, E, R>(input: {
   readonly adapter: TelemetryAdapter;
@@ -180,6 +232,7 @@ const withActiveSpan = (
 export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService => {
   const activeSpans = new Map<string, SpanDescriptor["operation"]>();
   return Telemetry.of({
+    observeWork: (options, work) => observeWork(adapter, options, work),
     span: (descriptor, work) =>
       Effect.flatMap(CurrentTelemetrySpan, (current) =>
         observeWith({
@@ -294,7 +347,7 @@ const recordScheduledWorkExit = (
 ): Effect.Effect<void> => {
   if (Exit.isSuccess(exit)) return Effect.void;
   const cause = exit.cause;
-  if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
+  if (isPureInterruption(cause)) {
     return telemetry.recordOutcome({
       outcome: "interrupted",
       error: Option.none(),

@@ -31,6 +31,7 @@ const unobservedAdapter: TelemetryAdapter = {
   captureFailure: () => Effect.void,
   addBreadcrumb: () => Effect.void,
   recordModelUsage: () => Effect.void,
+  exportWork: () => undefined,
 };
 
 const makeTelemetryAdapter = (overrides: Partial<TelemetryAdapter> = {}): TelemetryAdapter => ({

@@ -84,6 +84,8 @@ export const TelemetryRegistry = {
     "emailAuthentication.processPairingStart",
     "emailAuthentication.processPairingDelivery",
     "emailAuthentication.processPairingExpiry",
+    "worker.public.fetch",
+    "worker.core.fetch",
   ],
   trigger: ["api", "kapso_webhook", "queue", "schedule", "cli", "ci"],
   outcome: ["succeeded", "rejected", "failed", "interrupted"],
@@ -112,7 +114,7 @@ export const TelemetryRegistry = {
     "disclosure_rejected",
     "disclosure_not_current",
   ],
-  provider: ["cloudflare-access", "kapso", "resend", "wompi"],
+  provider: ["cloudflare-access", "cloudflare-workers", "kapso", "resend", "wompi"],
   workKind: [
     ...TelemetryWorkKindGroup.http,
     ...TelemetryWorkKindGroup.queue,
@@ -233,6 +235,16 @@ export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
     Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMilliseconds)
   );
 
+/** An immutable lowercase Git revision used to identify one deployed release. */
+export const TelemetryGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u)).pipe(
+  Schema.brand("TelemetryGitRevision")
+);
+export type TelemetryGitRevision = typeof TelemetryGitRevision.Type;
+
+/** Validated release identity, with one bounded fallback for invalid runtime configuration. */
+export const TelemetryRelease = Schema.Union([TelemetryGitRevision, Schema.Literal("unknown")]);
+export type TelemetryRelease = typeof TelemetryRelease.Type;
+
 /** An HTTP response status from 100 through 599 used only as bounded diagnostic metadata. */
 export const TelemetryHttpStatus = Schema.Int.check(
   Schema.isBetween({ minimum: 100, maximum: 599 })
@@ -242,6 +254,39 @@ export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 /** Low-cardinality class of a validated provider HTTP response status. */
 export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
 export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
+
+/** The exact fields permitted in a completed Work export record. */
+export const TelemetryWorkRecord = Schema.Struct({
+  release: TelemetryRelease,
+  operation: TelemetryCodeSchema.operation,
+  provider: Schema.optionalKey(TelemetryCodeSchema.provider),
+  statusClass: Schema.optionalKey(TelemetryHttpStatusClass),
+  outcome: TelemetryCodeSchema.outcome,
+  attempt: TelemetryAttempt,
+  latencyMilliseconds: TelemetryDuration,
+});
+export type TelemetryWorkRecord = typeof TelemetryWorkRecord.Type;
+
+/** Immutable coordinates known before one finite Work execution begins. */
+export const TelemetryWorkDescriptor = Schema.Struct({
+  release: TelemetryRelease,
+  operation: TelemetryCodeSchema.operation,
+  provider: Schema.Option(TelemetryCodeSchema.provider),
+  attempt: TelemetryAttempt,
+});
+export type TelemetryWorkDescriptor = typeof TelemetryWorkDescriptor.Type;
+
+/** A successful Work result projected to its approved completion coordinates. */
+export type TelemetryWorkSuccess = Readonly<{
+  outcome: Extract<TelemetryCode<"outcome">, "succeeded" | "rejected" | "failed">;
+  statusClass: Option.Option<TelemetryHttpStatusClass>;
+}>;
+
+/** Closed descriptor and successful-result projection for one observed Work. */
+export type TelemetryWorkOptions<A> = Readonly<{
+  descriptor: TelemetryWorkDescriptor;
+  projectSuccess: (value: A) => TelemetryWorkSuccess;
+}>;
 
 /** Closed transport outcomes emitted by protected external HTTP spans. */
 export const TelemetryTransportOutcome = Schema.Literals(["response", "failure", "interrupted"]);
@@ -480,6 +525,8 @@ export type TelemetryAdapter = {
     span: TelemetrySpan,
     usage: TelemetryModelUsage
   ) => Effect.Effect<void>;
+  /** Emits one already-closed Work-span record synchronously, after authoritative Work exits. */
+  readonly exportWork: (record: TelemetryWorkRecord) => void;
 };
 
 /**
@@ -490,6 +537,11 @@ export type TelemetryService = {
   /** Starts a root or child span; adapter failure runs work unobserved and never changes its exit. */
   readonly span: <A, E, R>(
     descriptor: SpanDescriptor,
+    work: Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>;
+  /** Exports one closed Work span while preserving the wrapped Work's exact Exit. */
+  readonly observeWork: <A, E, R>(
+    options: TelemetryWorkOptions<A>,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
   /** Starts an isolated root even when the calling fiber is already inside unrelated observed work. */
@@ -807,6 +859,7 @@ export const DisabledTelemetryResource: TelemetryResource = {
     captureFailure: () => Effect.void,
     addBreadcrumb: () => Effect.void,
     recordModelUsage: () => Effect.void,
+    exportWork: () => undefined,
   },
   close: Effect.void,
 };

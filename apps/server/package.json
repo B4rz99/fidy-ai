@@ -13,6 +13,11 @@
       "types": "./src/client.ts",
       "import": "./src/client.ts",
       "default": "./src/client.ts"
+    },
+    "./telemetry": {
+      "types": "./src/shell/observability/runtime.ts",
+      "import": "./src/shell/observability/runtime.ts",
+      "default": "./src/shell/observability/runtime.ts"
     }
   },
   "scripts": {

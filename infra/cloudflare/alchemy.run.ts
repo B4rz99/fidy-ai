@@ -82,6 +82,7 @@ export default Alchemy.Stack(
       env: {
         [productionTopology.ingress.coreBinding]: core,
         LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: production ? productionTopology.ingress.workersDev : true,
     });

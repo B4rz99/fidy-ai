@@ -138,23 +138,32 @@ describe("Production topology contract", () => {
       expression: '(http.host eq "api.fidyapp.com")',
     });
     expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
-      actionParameters: { overrides: { action: "block" } },
+      action: "execute",
+      actionParameters: { id: "77454fe2d30c4220b5701f6fdfb893ba" },
     });
+    expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).not.toHaveProperty(
+      "actionParameters.overrides"
+    );
     expect(edgeSecurityPolicy.rulesets.httpDdos.rules[0]).toMatchObject({
       actionParameters: { overrides: { action: "block", sensitivityLevel: "default" } },
     });
   });
 
-  it("assigns independent edge budgets to each published or reserved HTTP operation", () => {
+  it("uses one launch-zone-compatible IP budget for every published or reserved HTTP path", () => {
     const rateLimits = edgeSecurityPolicy.rulesets.rateLimits.rules;
 
-    expect(rateLimits).toHaveLength(4);
-    expect(rateLimits.map(({ expression }) => expression)).toEqual([
-      '(http.host eq "api.fidyapp.com" and http.request.method eq "GET" and http.request.uri.path eq "/health")',
-      '(http.host eq "api.fidyapp.com" and http.request.method eq "GET" and http.request.uri.path eq "/categories")',
-      '(http.host eq "api.fidyapp.com" and http.request.method eq "POST" and http.request.uri.path eq "/providers/kapso/callback")',
-      '(http.host eq "api.fidyapp.com" and http.request.method eq "POST" and http.request.uri.path eq "/providers/wompi/callback")',
-    ]);
+    expect(rateLimits).toHaveLength(1);
+    expect(rateLimits[0]).toMatchObject({
+      action: "block",
+      expression:
+        'http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback"}',
+      ratelimit: {
+        characteristics: ["cf.colo.id", "ip.src"],
+        mitigationTimeout: 10,
+        period: 10,
+        requestsPerPeriod: 60,
+      },
+    });
   });
 
   it("assigns proof and replay ownership to every reserved provider ingress", () => {

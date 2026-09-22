@@ -33,3 +33,11 @@ export const ProviderMessageEvidence = Schema.Struct({
   ),
 }).annotate({ identifier: "ProviderMessageEvidence" });
 export type ProviderMessageEvidence = typeof ProviderMessageEvidence.Type;
+
+/** Immutable WhatsApp message identifier retained as evidence, never identity or authority. */
+export const WhatsAppProviderMessageId = Schema.String.check(
+  Schema.isTrimmed(),
+  Schema.isMinLength(1),
+  Schema.isMaxLength(maximumProviderMessageIdLength)
+).pipe(Schema.brand("WhatsAppProviderMessageId"));
+export type WhatsAppProviderMessageId = typeof WhatsAppProviderMessageId.Type;

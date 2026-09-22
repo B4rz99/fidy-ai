@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
@@ -12,6 +13,32 @@ import { browserOrigins, productionTopology, resolveLocalCanonicalReadBearer } f
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
 const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
+const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
+const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
+const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
+
+const resolveKapsoBindings = (
+  development: boolean
+): Effect.Effect<
+  Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    webhookSecret: Redacted.Redacted<string>;
+    portfolioId: string;
+  }>,
+  Config.ConfigError
+> =>
+  Effect.gen(function* () {
+    const apiKey = yield* development
+      ? kapsoApiKey.pipe(Config.withDefault(Redacted.make("")))
+      : kapsoApiKey;
+    const webhookSecret = yield* development
+      ? kapsoWebhookSecret.pipe(Config.withDefault(Redacted.make("")))
+      : kapsoWebhookSecret;
+    const portfolioId = yield* development
+      ? whatsAppBusinessPortfolioId.pipe(Config.withDefault(""))
+      : whatsAppBusinessPortfolioId;
+    return { apiKey, webhookSecret, portfolioId };
+  });
 
 const resolveBrowserOrigin = (production: boolean): string =>
   production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;
@@ -86,6 +113,7 @@ export default Alchemy.Stack(
       })
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
+    const kapsoBindings = yield* resolveKapsoBindings(development);
 
     yield* provisionEdgeSecurity.pipe(Effect.when(Effect.succeed(production)));
 
@@ -97,6 +125,7 @@ export default Alchemy.Stack(
     const core = yield* Cloudflare.Worker("Core", {
       main: "./core-worker.ts",
       compatibility: { date: "2026-09-08" },
+      crons: ["* * * * *"],
       dev: {
         host: "127.0.0.1",
         port: productionTopology.core.localPort,
@@ -107,6 +136,9 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         HOSTED_AI_MODEL: yield* hostedAiModel,
+        KAPSO_API_KEY: kapsoBindings.apiKey,
+        KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
+        WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,

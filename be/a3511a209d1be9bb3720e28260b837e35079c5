@@ -1,0 +1,46 @@
+apps/server/src/shell/email-authentication/onboarding.ts
+  s_e3fd5727aca99a::t_ea580baac3568a 1-4
+apps/server/src/core/email-authentication/onboarding.ts
+  s_e3fd5727aca99a::t_7b3673e9416e70 8-17,21-23
+  s_e3fd5727aca99a::t_a65b7314f21566 2,5-6,34
+  s_e3fd5727aca99a::t_6a6fbaf741fc39 1,3-4,7,18-20,24-33,35-36
+infra/cloudflare/verified-onboarding.ts
+  s_e3fd5727aca99a::t_5b42677298bbb2 65-93,102-103,105,189,192,195-204
+  s_e3fd5727aca99a::t_7b3673e9416e70 2-5,16-22,142-146,180-185,187
+  s_e3fd5727aca99a::t_20de7c5586372b 6,186,188
+  s_e3fd5727aca99a::t_487671875275f0 118,122-123
+  s_e3fd5727aca99a::t_9927df1b4a2e7c 64
+apps/server/package.json
+  s_e3fd5727aca99a::t_14be7294e03d2b 12-16
+infra/cloudflare/migrations/0005_verified_onboarding.sql
+  s_e3fd5727aca99a::t_ba797e83a7e31d 25,45
+infra/cloudflare/verified-onboarding.test.ts
+  s_e3fd5727aca99a::t_7e23c884ab3d1f 26,135-153,155,160,162
+  s_e3fd5727aca99a::t_7b3673e9416e70 203-209
+  s_e3fd5727aca99a::t_2cacfaff7b33e8 296
+  s_e3fd5727aca99a::t_388acc484b6c17 202
+  s_e3fd5727aca99a::t_7d261fb11d95e0 131
+  s_e3fd5727aca99a::t_d2312bc5cc6606 275-295,297-314
+infra/cloudflare/edge-security.ts
+  s_e3fd5727aca99a::t_db4fa762673440 92,98
+infra/cloudflare/public-worker.ts
+  s_e3fd5727aca99a::t_57e10f21998b01 98-99,108
+infra/cloudflare/workers.test.ts
+  s_e3fd5727aca99a::t_2f2ed3588f5f27 169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bea3511a209d1be9bb3720e28260b837e35079c5",
+  "prompts": {},
+  "sessions": {
+    "s_e3fd5727aca99a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cb3a-bced-70b8-bb4c-aae4994ab589",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

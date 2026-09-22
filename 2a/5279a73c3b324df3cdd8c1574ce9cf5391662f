@@ -1,0 +1,30 @@
+infra/cloudflare/request-body.ts
+  s_5f1bbc15e87d7d::t_9ae922a6b1d17b 1,12,19-21,23-29,71,90
+  s_5f1bbc15e87d7d::t_bd32603ae5f7ff 33,35
+  s_5f1bbc15e87d7d::t_48797ddb25fe74 2-11,13,30,38-68,72-89,91-95
+  s_5f1bbc15e87d7d::t_85e066964837f1 14-18,22,31-32,34,36-37,69-70
+infra/cloudflare/request-body.test.ts
+  s_5f1bbc15e87d7d::t_e739bedfe50f72 97-102,131-136
+  s_5f1bbc15e87d7d::t_fd01a8ebe32ced 32,54,57,114,117
+  s_5f1bbc15e87d7d::t_0c7ef3bc44bb8c 15,82
+  s_5f1bbc15e87d7d::t_ffd7dd47d699c7 18-23,25-27,40,66,80,87,121-124
+  s_5f1bbc15e87d7d::t_5ac776c7b5976f 1,3-7,9-14,28-31,33-39,41-42,44-53,55-56,58-65,67-70,72-79,81,83-85,92-96,103,106-113,115-116,118-120,125-130,137,139-140
+  s_5f1bbc15e87d7d::t_c97b1ecedeefb0 2,8,16-17,24
+  s_5f1bbc15e87d7d::t_12b85da5e4839c 43,71,86,88-91,104-105,138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a5279a73c3b324df3cdd8c1574ce9cf5391662f",
+  "prompts": {},
+  "sessions": {
+    "s_5f1bbc15e87d7d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c962-b71f-778b-b4b4-16f406cea96c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

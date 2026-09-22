@@ -19,6 +19,11 @@
       "import": "./src/client.ts",
       "default": "./src/client.ts"
     },
+    "./statement-parser": {
+      "types": "./src/shell/ingestion/parser.ts",
+      "import": "./src/shell/ingestion/parser.ts",
+      "default": "./src/shell/ingestion/parser.ts"
+    },
     "./telemetry": {
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",

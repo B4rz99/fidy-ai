@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import type { WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
 import { ParsedStatementRow } from "~/core/ingestion/model";
 import { parseStatementFile } from "./parser";
@@ -15,6 +16,16 @@ const zipExpandedSizeOffset = 24;
 const zipLocalOffset = 42;
 const unsupportedZipCompressionMethod = 99;
 const missingOffset = -1;
+
+const statementWorkbook = (): { readonly sheet: WorkSheet; readonly workbook: WorkBook } => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ["Date", "Amount"],
+    ["2026-01-01", 10],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Statement");
+  return { sheet, workbook };
+};
 
 const firstCentralDirectoryOffset = (bytes: Uint8Array): number => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -225,6 +236,36 @@ it.effect("rejects worksheets with incompatible tabular formats", () =>
     expect(Exit.isFailure(yield* Effect.exit(parseStatementFile(new Uint8Array(buffer))))).toBe(
       true
     );
+  })
+);
+
+it.effect("retains an external workbook formula as inert evidence", () =>
+  Effect.gen(function* () {
+    const { sheet, workbook } = statementWorkbook();
+    sheet.B2 = { f: "'[external.xlsx]Sheet1'!A1", t: "n", v: 10 };
+    const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+    if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
+
+    const parsed = yield* parseStatementFile(new Uint8Array(buffer));
+    const evidence = parsed.rows[0]?.evidence;
+    expect(evidence?.sourceFormat).toBe("xlsx");
+    if (evidence?.sourceFormat !== "xlsx") return;
+    expect(evidence.cells[1]?.formula).toEqual(Option.some("'[external.xlsx]Sheet1'!A1"));
+    expect(evidence.cells[1]?.value).toBe("10");
+  })
+);
+
+it.effect("ignores a workbook VBA project while parsing statement cells", () =>
+  Effect.gen(function* () {
+    const { workbook } = statementWorkbook();
+    workbook.vbaraw = Uint8Array.from([1, 2, 3, 4]);
+    const buffer: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsm" });
+    if (!(buffer instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSM ArrayBuffer");
+    const bytes = new Uint8Array(buffer);
+    expect(new TextDecoder().decode(bytes)).toContain("vbaProject.bin");
+
+    const parsed = yield* parseStatementFile(bytes);
+    expect(parsed.rows[0]?.fields).toEqual(["2026-01-01", "10"]);
   })
 );
 

@@ -1,0 +1,19 @@
+bun.lock
+  s_42788546421120::t_612a83e3117651 104,108,112,413,1371,1707
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "339c4c57cee2cf6cf7c23bd3e58e14637057af5b",
+  "prompts": {},
+  "sessions": {
+    "s_42788546421120": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c651-b53e-72e8-9481-b1b7d5b85699",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

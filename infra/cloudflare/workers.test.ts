@@ -1,7 +1,8 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
 import coreWorker from "./core-worker";
+import { resolveDeploymentConfiguration } from "./deployment-configuration";
 import publicWorker from "./public-worker";
 import { productionTopology } from "./topology";
 
@@ -10,15 +11,69 @@ const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
 
 const coreEnvironment = { CONTRACT_DIGEST: contractDigest, RELEASE_GIT_SHA: gitRevision };
 
+describe("Deployment configuration", () => {
+  it("uses bounded placeholder metadata only for local emulation", () => {
+    const configuration = resolveDeploymentConfiguration({
+      contractDigest: "",
+      development: true,
+      gitRevision: "",
+      stage: "dev-test",
+    });
+
+    expect(Result.isSuccess(configuration)).toBe(true);
+    if (Result.isSuccess(configuration)) {
+      expect(configuration.success).toEqual({
+        contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
+        gitRevision: "0000000000000000000000000000000000000000",
+      });
+    }
+  });
+
+  it.each([
+    { contractDigest, gitRevision, stage: "staging" },
+    { contractDigest: "", gitRevision, stage: "production" },
+    { contractDigest, gitRevision: "", stage: "production" },
+    {
+      contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
+      gitRevision,
+      stage: "production",
+    },
+  ])("rejects an unsupported or unidentifiable remote deployment", (input) => {
+    const configuration = resolveDeploymentConfiguration({ development: false, ...input });
+
+    expect(Result.isFailure(configuration)).toBe(true);
+  });
+
+  it("accepts exact immutable Production metadata", () => {
+    const configuration = resolveDeploymentConfiguration({
+      contractDigest,
+      development: false,
+      gitRevision,
+      stage: "production",
+    });
+
+    expect(Result.isSuccess(configuration)).toBe(true);
+    if (Result.isSuccess(configuration)) {
+      expect(configuration.success).toEqual({ contractDigest, gitRevision });
+    }
+  });
+});
+
 describe("Production topology contract", () => {
   it("assigns only the agreed public hostnames and apex redirect", () => {
     expect(productionTopology.web).toEqual({
       hostname: "app.fidyapp.com",
       redirects: ["fidyapp.com"],
+      workerName: "fidy-web",
       workersDev: false,
     });
     expect(productionTopology.ingress.hostname).toBe("api.fidyapp.com");
-    expect(productionTopology.core).toEqual({ workersDev: false });
+    expect(productionTopology.core).toEqual({ localPort: 8788, workersDev: false });
+  });
+
+  it("pins local ports for the browser-to-ingress and ingress-to-Core path", () => {
+    expect(productionTopology.ingress.localPort).toBe(8787);
+    expect(productionTopology.core.localPort).toBe(8788);
   });
 
   it("exposes Core only as the ingress service binding", () => {

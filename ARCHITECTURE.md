@@ -51,13 +51,14 @@ restricted to isolated static pull-request previews and owns no Production route
 The public `/health` request crosses the ingress-to-Core binding. Core returns a closed projection of
 health, Git revision, and contract digest; binding objects, environment values, topology, exception
 text, and Secrets never enter the response. `alchemy dev` executes those same entrypoints and binding
-graph locally. Local and Production are the only complete topology modes; there is no persistent
-staging environment.
+graph locally. Local and Production are the only complete topology modes; the stack rejects every
+other remote stage before resource creation, so there is no persistent staging environment.
 
 GitHub Actions is the release coordinator. A trunk release checks out one exact source revision,
 builds and validates its static artifact, plans the Alchemy stack, rechecks the current trunk
-revision, and deploys only while that revision remains current. Provider-controlled source
-deployments are not used.
+revision, and deploys only while that revision remains current. It then verifies the apex redirect,
+static metadata, and bound health response against that exact release. Provider-controlled source
+deployments and workstation deployments are not used.
 
 Railway, PostgreSQL, and a Bun process are superseded Production architecture under
 [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md); they are not fallback

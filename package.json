@@ -18,7 +18,6 @@
     "dev": "bun run --cwd infra/cloudflare dev",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:cloudflare": "bun run --cwd infra/cloudflare dev",
-    "deploy:cloudflare": "bun run --cwd infra/cloudflare deploy",
     "build": "bun run --cwd apps/web build",
     "agent:repl": "bun run --cwd apps/server agent:repl",
     "shadcn": "bun run --cwd apps/web shadcn",

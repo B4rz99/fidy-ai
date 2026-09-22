@@ -6,9 +6,10 @@ Cloudflare-owned endpoint boundary.
 
 ## Ownership and routing
 
-- `fidyapp.com` is the Cloudflare custom domain for the static web Worker.
-- The future API Worker uses the configured API origin only after its Cloudflare adapter and smoke
-  checks are present. The current static Worker does not impersonate an API.
+- `app.fidyapp.com` is the canonical Cloudflare custom domain for the assets-only web Worker.
+- `fidyapp.com` permanently redirects to `app.fidyapp.com` while preserving path and query.
+- `api.fidyapp.com` reaches the public ingress Worker. Its `/health` route delegates to the private
+  Core Worker through the `CORE` service binding; Core has no public hostname.
 - Google Workspace remains authoritative for mail at `@fidyapp.com`.
 - Email Workers own inbound email admission and handoff. Resend is outbound-only and is never an
   inbound webhook authority.
@@ -26,22 +27,25 @@ validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT man
 
 | Variable            | Local example           | Production value          |
 | ------------------- | ----------------------- | ------------------------- |
-| `PUBLIC_WEB_ORIGIN` | `http://localhost:5173` | `https://fidyapp.com`     |
-| `PUBLIC_API_ORIGIN` | `http://localhost:3000` | Cloudflare API Worker URL |
-| `VITE_API_ORIGIN`   | `http://localhost:3000` | Cloudflare API Worker URL |
+| `PUBLIC_WEB_ORIGIN` | `http://localhost:5173` | `https://app.fidyapp.com` |
+| `PUBLIC_API_ORIGIN` | `http://127.0.0.1:8787` | `https://api.fidyapp.com` |
+| `VITE_API_ORIGIN`   | `http://127.0.0.1:8787` | `https://api.fidyapp.com` |
 
-Only variables applicable to the selected Worker or build may be configured. A missing API Worker is
-an explicit unavailable boundary, not permission to route the browser to a legacy host.
+`alchemy dev` supplies the browser's local API origin from the declared ingress port; it is the
+representative local topology. Only variables applicable to the selected Worker or build may be
+configured. An unavailable API Worker is not permission to route the browser to a legacy host.
 
 ## Verification
 
-Check the authoritative nameservers and intended web custom domain:
+Check the authoritative nameservers and the complete public topology:
 
 ```sh
 dig +short NS fidyapp.com
-dig +short A fidyapp.com
-dig +short AAAA fidyapp.com
+dig +short A app.fidyapp.com
+dig +short AAAA api.fidyapp.com
 curl --fail --silent --dump-header - https://fidyapp.com/ --output /dev/null
+curl --fail --silent https://app.fidyapp.com/deployment-metadata.json | jq
+curl --fail --silent https://api.fidyapp.com/health | jq
 ```
 
 Verify that the root mail records remain owned by the approved mail provider. When an Email Worker is

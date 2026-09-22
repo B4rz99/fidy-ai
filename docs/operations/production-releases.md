@@ -8,8 +8,9 @@ provider repository integration or from a workstation.
 
 `infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. It declares the static
 application, apex redirect, public ingress Worker, private Core Worker, service binding, and release
-metadata bindings as one Alchemy stack. `apps/web/cloudflare/wrangler.json` is restricted to static
-pull-request previews and owns no Production route.
+metadata bindings as one Alchemy stack. Remote stages other than `production` are rejected before
+resource creation. `apps/web/cloudflare/wrangler.json` is restricted to static pull-request previews
+and owns no Production route.
 
 Create the GitHub `production` environment and configure:
 
@@ -52,7 +53,8 @@ The workflow allows one active release and does not cancel an active deployment.
 6. Read the current default-branch head immediately before deployment. If it differs from the release
    SHA, fail closed without starting the deployment.
 7. Run `alchemy deploy --stage production --no-input` with the same revision and digest.
-8. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+8. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
+9. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
 
 A superseded candidate reports:
 
@@ -61,7 +63,8 @@ Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior
 ```
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
-persistent staging sibling.
+persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release
+metadata before creating resources.
 
 ## Local parity and smoke checks
 
@@ -71,9 +74,10 @@ Start the same topology locally:
 bun run dev
 ```
 
-Alchemy assigns local URLs while retaining the ingress-to-Core service binding. This is the
-representative local runtime; starting the web package alone is useful UI work but does not prove the
-Cloudflare topology.
+Alchemy assigns the declared local URLs and injects the ingress origin into Vite while retaining the
+ingress-to-Core service binding. This is the representative local runtime; starting the web package
+alone is useful UI work but does not prove the Cloudflare topology. The local-emulation acceptance
+starts this same CLI stack and probes both browser wiring and bound health.
 
 After deployment, verify the redirect, static host, metadata, and bounded health response:
 
@@ -90,10 +94,15 @@ headers on representative routes.
 
 ## Failure and recovery
 
-A failed build, test, plan, or supersession check makes no Production change. If deployment starts and
-fails, inspect the Alchemy plan/state and Cloudflare resource state before fixing forward with a new
-trunk revision. Use an explicitly reviewed Alchemy deployment for recovery; do not use the dashboard,
-a provider source integration, Railway, or the preview Wrangler adapter as a second authority.
+A failed build, test, plan, supersession check, or public-topology verification fails the release. If
+deployment starts and fails, inspect the Alchemy plan/state and Cloudflare resource state before fixing
+forward with a new trunk revision. Recovery remains a reviewed change through this GitHub Actions
+workflow; do not deploy from a workstation, dashboard, provider source integration, Railway, or the
+preview Wrangler adapter.
+
+The assets Worker keeps the legacy physical name `fidy-web` so the first Alchemy release updates the
+old Wrangler-managed Worker in place, reconciles its custom domains, and disables both workers.dev
+surfaces. The post-deploy exact-release probes fail if traffic still reaches the legacy artifact.
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.

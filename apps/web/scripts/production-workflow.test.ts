@@ -22,6 +22,12 @@ describe("Production release workflow policy", () => {
     expect(webBuild).toBeLessThan(plan);
   });
 
+  it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
+    expect(workflow).toContain("ALCHEMY_HOME: ${{ runner.temp }}/alchemy");
+    expect(workflow).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
+    expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
+  });
+
   it("makes Alchemy the only Cloudflare deployment authority", () => {
     expect(workflow).toContain("alchemy plan --stage production --no-input");
     expect(workflow).toContain("alchemy deploy --stage production --no-input");
@@ -29,6 +35,18 @@ describe("Production release workflow policy", () => {
     expect(workflow).not.toContain("railway");
     expect(workflow).not.toContain("cloudflare/wrangler.json");
     expect(workflow).not.toContain("cloudflare/wrangler-action");
+  });
+
+  it("verifies the migrated public topology after deployment", () => {
+    const deploy = workflow.indexOf("alchemy deploy");
+    const verification = workflow.indexOf("Verify the migrated public topology");
+
+    expect(deploy).toBeLessThan(verification);
+    expect(workflow).toContain("https://fidyapp.com/health-check");
+    expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
+    expect(workflow).toContain("https://api.fidyapp.com/health");
+    expect(workflow).toContain("$RELEASE_GIT_SHA");
+    expect(workflow).toContain("$CONTRACT_DIGEST");
   });
 
   it("rechecks trunk immediately before the Alchemy deployment", () => {

@@ -4,7 +4,7 @@ Use the vendored `.repos/alchemy` source as the authority for Fidy's Alchemy-man
 
 ## One stack owns the topology
 
-Declare the deployment as one `Alchemy.Stack` with `Cloudflare.providers()`. Use `Cloudflare.state()` for non-development stages, but select `Alchemy.localState()` when `Alchemy.ALCHEMY_DEV` is true so local emulation does not bootstrap remote infrastructure. Yield resources in dependency order and return only useful deployment outputs. The upstream local-development example shows the provider and stack composition (`.repos/alchemy/examples/cloudflare-dev/alchemy.run.ts:155-165`), while Alchemy documents `ALCHEMY_DEV` as the CLI-set development discriminator (`.repos/alchemy/packages/alchemy/src/Phase.ts:33-53`).
+Declare the deployment as one `Alchemy.Stack` with `Cloudflare.providers()`. Use `Cloudflare.state()` only for the supported Production stage, and select `Alchemy.localState()` when `Alchemy.ALCHEMY_DEV` is true so local emulation does not bootstrap remote infrastructure. Reject every other remote stage before resource creation. Yield resources in dependency order and return only useful deployment outputs. The upstream local-development example shows the provider and stack composition (`.repos/alchemy/examples/cloudflare-dev/alchemy.run.ts:155-165`), while Alchemy documents `ALCHEMY_DEV` as the CLI-set development discriminator (`.repos/alchemy/packages/alchemy/src/Phase.ts:33-53`).
 
 Alchemy v2 providers require a configured profile even when every resource is locally emulated. Local tooling may create an isolated placeholder profile only when it also uses local state and local resource modes. CI must create an ephemeral profile from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; never put production credentials in command arguments or repository files.
 
@@ -28,10 +28,10 @@ A Worker's `domain.name` is its canonical custom domain. `domain.redirects` crea
 
 ## Local parity
 
-`alchemy dev` uses local Worker URLs while preserving the declared binding graph (`.repos/alchemy/packages/alchemy/src/Cloudflare/Workers/Worker.ts:1888-1899`). Upstream's CLI test proves a caller Worker reaches its peer through the declared service binding and allows bounded startup propagation (`.repos/alchemy/examples/cloudflare-dev/test/dev.test.ts:181-189`).
+`alchemy dev` uses local Worker URLs while preserving the declared binding graph (`.repos/alchemy/packages/alchemy/src/Cloudflare/Workers/Worker.ts:1888-1899`). Give browser-facing local ingress a declared port and inject that origin into the browser dev process rather than relying on a retired process-server default. Upstream's CLI test proves a caller Worker reaches its peer through the declared service binding and allows bounded startup propagation (`.repos/alchemy/examples/cloudflare-dev/test/dev.test.ts:181-189`).
 
 Test Fidy's request behavior directly at the Worker fetch seam, then keep one local-emulation acceptance that starts the same stack and proves the public Worker reaches the private Worker. A fake binding can prove projection and failure behavior, but cannot claim service-binding parity.
 
 ## Release metadata and exposure
 
-Bind immutable Git revision and contract digest values at deployment. Decode them at the private Worker boundary and construct a closed health response. The public Worker delegates only the intended route and does not expose environment objects, binding names, topology, exception text, or Secrets.
+Bind immutable Git revision and contract digest values at deployment. Missing, malformed, or sentinel Production values must stop the stack before resource creation; development placeholders are valid only under `ALCHEMY_DEV`. Decode the values again at the private Worker boundary and construct a closed health response. The public Worker delegates only the intended route and does not expose environment objects, binding names, topology, exception text, or Secrets.

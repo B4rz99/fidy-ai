@@ -1,0 +1,16 @@
+.github/workflows/production.yml
+  h_c6d49c804e0ad2 32-34
+apps/web/scripts/production-workflow.test.ts
+  h_c6d49c804e0ad2 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2b451225b46aadcc986a458f79d461405bfc2896",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { Config, Context, Crypto, Effect, Layer, Option, Schema } from "effect";
+import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import {
   loadResendEmailDeliveryApiKey,
@@ -23,6 +23,21 @@ export type OutboundHttpService = Readonly<{
     request: OutboundHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
+
+/** A Kapso-only Outbound HTTP authority; every other provider request fails closed. */
+export const makeKapsoOutboundHttp = (
+  input: Readonly<{
+    readonly apiKey: Redacted.Redacted<string>;
+    readonly httpClient: HttpClient.HttpClient;
+  }>
+): OutboundHttpService =>
+  makeOutboundHttp({
+    kapsoApiKey: Option.some(input.apiKey),
+    resendEmailDeliveryApiKey: Option.none(),
+    wompi: Option.none(),
+    httpClient: input.httpClient,
+    crypto: Option.none(),
+  });
 
 /** Authority to reach an external provider through the published Outbound HTTP policy. */
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(

@@ -37,6 +37,9 @@ const coreEnvironment = {
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
   HOSTED_AI_MODEL: approvedWorkersAiModel,
+  KAPSO_API_KEY: "",
+  KAPSO_WEBHOOK_SECRET: "",
+  WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
   RELEASE_GIT_SHA: gitRevision,
 };
 
@@ -232,6 +235,9 @@ describe("Cloudflare Worker topology", () => {
           CONTRACT_DIGEST: "secret configuration",
           DB: failingDatabase,
           HOSTED_AI_MODEL: "unsupported private model",
+          KAPSO_API_KEY: "",
+          KAPSO_WEBHOOK_SECRET: "",
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
           RELEASE_GIT_SHA: "wrong",
         })
       );

@@ -53,6 +53,12 @@ export const WhatsAppBusinessScopedUserId = Schema.String.check(
   .annotate({ identifier: "WhatsAppBusinessScopedUserId" });
 export type WhatsAppBusinessScopedUserId = typeof WhatsAppBusinessScopedUserId.Type;
 
+/** Business sender identifier required to route a WhatsApp reply. */
+export const WhatsAppBusinessPhoneNumberId = Schema.String.check(
+  Schema.isPattern(/^[0-9]{1,32}$/u)
+).pipe(Schema.brand("WhatsAppBusinessPhoneNumberId"));
+export type WhatsAppBusinessPhoneNumberId = typeof WhatsAppBusinessPhoneNumberId.Type;
+
 /**
  * Optional cross-portfolio evidence available only to enrolled managed businesses. It follows
  * Meta's two-letter market, `.ENT.`, and 1–128 alphanumeric identifier format and never resolves a

@@ -32,7 +32,7 @@ it.effect("uses the canonical stable policy URL and complete Colombia-first fact
   Effect.gen(function* () {
     const disclosure = yield* loadCurrentDisclosure;
 
-    expect(disclosure.policy.publicUrl).toBe("https://fidyapp.com/politica");
+    expect(disclosure.policy.publicUrl).toBe("https://app.fidyapp.com/politica");
     expect(disclosure.serviceMarket).toBe("CO");
     expect(disclosure.locale).toBe("es-CO");
     expect(disclosure.purposes.length).toBeGreaterThan(0);

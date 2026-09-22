@@ -9,6 +9,11 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
+    "./consent-ingress": {
+      "types": "./src/shell/consent/ingress.ts",
+      "import": "./src/shell/consent/ingress.ts",
+      "default": "./src/shell/consent/ingress.ts"
+    },
     "./categories-path": {
       "types": "./src/shell/categories/path.ts",
       "import": "./src/shell/categories/path.ts",

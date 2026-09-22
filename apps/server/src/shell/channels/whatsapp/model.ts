@@ -1,8 +1,12 @@
 import { Schema, Struct } from "effect";
 import type { DateTime, Array as EffectArray } from "effect";
-import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
+import {
+  ProviderMessageEvidence,
+  WhatsAppProviderMessageId,
+} from "~/core/provider-evidence/contract";
 import {
   E164PhoneNumber,
+  WhatsAppBusinessPhoneNumberId,
   WhatsAppCallerReference,
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
@@ -11,19 +15,13 @@ import type { TranscriptText } from "~/core/transcript/model";
 
 const maximumProviderIdentifierLength = 256;
 
+export { WhatsAppProviderMessageId, WhatsAppBusinessPhoneNumberId };
+
 /** Stable identity of one accepted User-owned inbound message and its durable queue item. */
 export const WhatsAppInboundJobId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("WhatsAppInboundJobId")
 );
 export type WhatsAppInboundJobId = typeof WhatsAppInboundJobId.Type;
-
-/** Immutable WhatsApp message identifier retained as evidence, never identity or authority. */
-export const WhatsAppProviderMessageId = Schema.String.check(
-  Schema.isTrimmed(),
-  Schema.isMinLength(1),
-  Schema.isMaxLength(maximumProviderIdentifierLength)
-).pipe(Schema.brand("WhatsAppProviderMessageId"));
-export type WhatsAppProviderMessageId = typeof WhatsAppProviderMessageId.Type;
 
 /** Opaque retry key for one authenticated WhatsApp delivery. */
 export const WhatsAppDeliveryKey = Schema.String.check(
@@ -32,12 +30,6 @@ export const WhatsAppDeliveryKey = Schema.String.check(
   Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppDeliveryKey"));
 export type WhatsAppDeliveryKey = typeof WhatsAppDeliveryKey.Type;
-
-/** Business sender identifier required to route a WhatsApp reply. */
-export const WhatsAppBusinessPhoneNumberId = Schema.String.check(
-  Schema.isPattern(/^[0-9]{1,32}$/u)
-).pipe(Schema.brand("WhatsAppBusinessPhoneNumberId"));
-export type WhatsAppBusinessPhoneNumberId = typeof WhatsAppBusinessPhoneNumberId.Type;
 
 /** Provider-qualified evidence projected into the WhatsApp operational slice. */
 export const WhatsAppMessageEvidence = Schema.Struct({

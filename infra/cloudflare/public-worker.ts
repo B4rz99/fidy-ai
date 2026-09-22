@@ -128,13 +128,34 @@ const categoryAuthorizationFailure = (
   return Option.some(unauthenticated());
 };
 
+const callbackPath = "/providers/kapso/callback";
+const ownedPath = (path: string): boolean =>
+  path === "/health" || path === listCategoriesPath || path === callbackPath;
+const allowedMethod = (path: string): "GET" | "POST" => (path === callbackPath ? "POST" : "GET");
+const coreRequest = (request: Request, signal: AbortSignal): Request => {
+  const path = new URL(request.url).pathname;
+  const callback = path === callbackPath;
+  return new Request(`https://core.internal${path}`, {
+    headers: callback
+      ? new Headers([
+          ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
+          ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
+          ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
+        ])
+      : request.headers,
+    method: allowedMethod(path),
+    body: callback ? request.body : undefined,
+    signal,
+  });
+};
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
   origin: Option.Option<string>
 ): Promise<Response> => {
   const url = new URL(request.url);
-  if (url.pathname !== "/health" && url.pathname !== listCategoriesPath) {
+  if (!ownedPath(url.pathname)) {
     return Promise.resolve(
       applyApiPolicy(Response.json({}, { status: 404 }), environment.BROWSER_ORIGIN, origin)
     );
@@ -146,10 +167,13 @@ const routeOwnedRequest = (
   ) {
     return Promise.resolve(preflightResponse(request, environment.BROWSER_ORIGIN));
   }
-  if (request.method !== "GET") {
+  if (request.method !== allowedMethod(url.pathname)) {
     return Promise.resolve(
       applyApiPolicy(
-        Response.json({ status: "method_not_allowed" }, { headers: { allow: "GET" }, status: 405 }),
+        Response.json(
+          { status: "method_not_allowed" },
+          { headers: { allow: allowedMethod(url.pathname) }, status: 405 }
+        ),
         environment.BROWSER_ORIGIN,
         origin
       )
@@ -163,14 +187,7 @@ const routeOwnedRequest = (
   }
 
   return Effect.tryPromise({
-    try: (signal) =>
-      environment.CORE.fetch(
-        new Request(`https://core.internal${url.pathname}`, {
-          headers: request.headers,
-          method: "GET",
-          signal,
-        })
-      ),
+    try: (signal) => environment.CORE.fetch(coreRequest(request, signal)),
     catch: () => undefined,
   }).pipe(
     Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),

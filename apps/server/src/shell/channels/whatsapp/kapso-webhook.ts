@@ -38,6 +38,8 @@ import {
 
 /** Maximum raw Kapso delivery accepted before payload decoding. */
 export const maxKapsoWebhookBytes = 1_048_576;
+/** Maximum lead of a signed Kapso event clock over receipt; Consent replay windows must reserve it. */
+export const maxKapsoFutureTimestampMinutes = 5;
 /** Kapso's documented maximum number of events in one buffered delivery. */
 export const maxKapsoDeliveryEvents = 100;
 
@@ -230,7 +232,12 @@ const parseOccurredAt = Effect.fn(function* (timestamp: string, receivedAt: Date
     return yield* invalidKapsoInvariant("Kapso timestamp was outside the supported date range");
   }
   const occurredAt = DateTime.toUtc(parsed.value);
-  if (DateTime.Order(occurredAt, DateTime.add(receivedAt, { minutes: 5 })) > 0) {
+  if (
+    DateTime.Order(
+      occurredAt,
+      DateTime.add(receivedAt, { minutes: maxKapsoFutureTimestampMinutes })
+    ) > 0
+  ) {
     return yield* invalidKapsoInvariant("Kapso timestamp exceeded the future-time tolerance");
   }
   return occurredAt;
@@ -451,7 +458,7 @@ export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (input:
   if (latest.value.status.status !== status || latest.value.status.id !== raw.message.id) {
     return yield* new InvalidKapsoPayload({ cause: "event/status mismatch" });
   }
-  return latest.value.evidence;
+  return { ...latest.value.evidence, businessPhoneNumberId: raw.phone_number_id };
 });
 
 const projectIdentityChange = Effect.fn(function* (

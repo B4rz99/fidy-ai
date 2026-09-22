@@ -6,8 +6,10 @@ import {
 } from "@fidy/server/categories";
 import { HostedInference } from "@fidy/server/hosted-inference";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Effect, Exit, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
+import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -25,10 +27,14 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly AI: WorkersAiEnvironment["AI"];
     readonly DB: D1Database;
     readonly HOSTED_AI_MODEL: string;
+    readonly KAPSO_API_KEY: string;
+    readonly KAPSO_WEBHOOK_SECRET: string;
+    readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
   };
 
 type CoreWorker = Readonly<{
   fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
+  scheduled: (controller: ScheduledController, environment: CoreEnvironment) => Promise<void>;
 }>;
 
 const jsonHeaders = {
@@ -54,29 +60,42 @@ const methodNotAllowed = (): Response =>
   });
 
 const categoriesResponse = (environment: CoreEnvironment): Effect.Effect<Response> =>
-  listCategoriesResponse.pipe(
-    // Effect SQL span attributes contain query text, which must not enter exported telemetry.
-    Effect.withTracerEnabled(false),
-    // The Worker request boundary owns the scoped D1 client lifetime.
-    // @effect-diagnostics-next-line strictEffectProvide:off
-    Effect.provide(D1Client.layer({ db: environment.DB })),
-    Effect.mapError(categoryUnavailable),
-    Effect.withSpan("categories.listCategories"),
-    Effect.match({
-      onFailure: (failure) =>
-        jsonResponse(
-          JSON.stringify({ error: failure.error, next: failure.next }),
-          HTTP_SERVICE_UNAVAILABLE
-        ),
-      onSuccess: (response) => jsonResponse(JSON.stringify(response), HTTP_OK),
+  Effect.scoped(
+    Effect.gen(function* () {
+      const clients = yield* Layer.build(D1Client.layer({ db: environment.DB }));
+      return yield* listCategoriesResponse.pipe(
+        // Effect SQL span attributes contain query text, which must not enter exported telemetry.
+        Effect.withTracerEnabled(false),
+        Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient)),
+        Effect.mapError(categoryUnavailable),
+        Effect.withSpan("categories.listCategories"),
+        Effect.match({
+          onFailure: (failure) =>
+            jsonResponse(
+              JSON.stringify({ error: failure.error, next: failure.next }),
+              HTTP_SERVICE_UNAVAILABLE
+            ),
+          onSuccess: (response) => jsonResponse(JSON.stringify(response), HTTP_OK),
+        })
+      );
     })
-  );
+  ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
+
+const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> =>
+  request.method === "POST"
+    ? receiveConsentWebhook(environment)(request)
+    : Effect.succeed(methodNotAllowed());
 
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
-  if (url.pathname !== "/health" && url.pathname !== listCategoriesPath) {
+  if (
+    url.pathname !== "/health" &&
+    url.pathname !== listCategoriesPath &&
+    url.pathname !== "/providers/kapso/callback"
+  ) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
+  if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
 
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
@@ -99,19 +118,25 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment) =>
-    Effect.gen(function* () {
-      yield* HostedInference;
-      return yield* fetchEffect(request, environment);
-    }).pipe(
-      // This Worker fetch boundary is the Cloudflare-owned application entry point.
-      // @effect-diagnostics-next-line strictEffectProvide:off
-      Effect.provide(cloudflareHostedInferenceLive(environment)),
+    Effect.scoped(
+      Effect.gen(function* () {
+        const inference = yield* Layer.build(cloudflareHostedInferenceLive(environment));
+        return yield* fetchEffect(request, environment).pipe(
+          Effect.provideService(HostedInference, Context.get(inference, HostedInference))
+        );
+      })
+    ).pipe(
       Effect.catchTag("HostedInferenceError", () => Effect.succeed(unavailable())),
       observeWorkerRequest({
         environment,
         telemetry,
         operation: "worker.core.fetch",
       }),
+      Effect.runPromise
+    ),
+  scheduled: (_controller, environment) =>
+    sweepExpiredConsent(environment.DB)().pipe(
+      Effect.withSpan("consent.expiredEvidenceSweep"),
       Effect.runPromise
     ),
 });

@@ -86,6 +86,8 @@
       "name": "@fidy/cloudflare-infra",
       "version": "0.0.0",
       "dependencies": {
+        "@effect/sql-d1": "4.0.0-rc.115",
+        "@fidy/server": "workspace:*",
         "effect": "4.0.0-rc.115",
       },
       "devDependencies": {

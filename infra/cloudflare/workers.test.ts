@@ -4,12 +4,31 @@ import { describe, expect } from "vitest";
 import coreWorker from "./core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import publicWorker from "./public-worker";
-import { productionTopology } from "./topology";
+import { localCanonicalReadBearer, productionTopology } from "./topology";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
-const coreEnvironment = { CONTRACT_DIGEST: contractDigest, RELEASE_GIT_SHA: gitRevision };
+const privateFailureDetail =
+  "D1_ERROR: no such table: categories; SELECT secret_value FROM internal_topology";
+
+const failDatabaseOperation = (): never => {
+  throw new Error(privateFailureDetail);
+};
+
+const failingDatabase: D1Database = {
+  batch: failDatabaseOperation,
+  dump: failDatabaseOperation,
+  exec: failDatabaseOperation,
+  prepare: failDatabaseOperation,
+  withSession: failDatabaseOperation,
+};
+
+const coreEnvironment = {
+  CONTRACT_DIGEST: contractDigest,
+  DB: failingDatabase,
+  RELEASE_GIT_SHA: gitRevision,
+};
 
 describe("Deployment configuration", () => {
   it("selects remote state only for the supported Production stage", () => {
@@ -76,7 +95,11 @@ describe("Production topology contract", () => {
       workersDev: false,
     });
     expect(productionTopology.ingress.hostname).toBe("api.fidyapp.com");
-    expect(productionTopology.core).toEqual({ localPort: 8788, workersDev: false });
+    expect(productionTopology.core).toEqual({
+      d1Binding: "DB",
+      localPort: 8788,
+      workersDev: false,
+    });
   });
 
   it("pins local ports for the browser-to-ingress and ingress-to-Core path", () => {
@@ -94,9 +117,8 @@ describe("Production topology contract", () => {
 describe("Cloudflare Worker topology", () => {
   it.effect("returns only bounded release and health metadata from Core", () =>
     Effect.gen(function* () {
-      const response = coreWorker.fetch(
-        new Request("https://core.internal/health"),
-        coreEnvironment
+      const response = yield* Effect.promise(() =>
+        coreWorker.fetch(new Request("https://core.internal/health"), coreEnvironment)
       );
       const body = yield* Effect.promise(() => response.json());
 
@@ -112,10 +134,13 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("fails closed without disclosing malformed release configuration", () =>
     Effect.gen(function* () {
-      const response = coreWorker.fetch(new Request("https://core.internal/health"), {
-        CONTRACT_DIGEST: "secret configuration",
-        RELEASE_GIT_SHA: "wrong",
-      });
+      const response = yield* Effect.promise(() =>
+        coreWorker.fetch(new Request("https://core.internal/health"), {
+          CONTRACT_DIGEST: "secret configuration",
+          DB: failingDatabase,
+          RELEASE_GIT_SHA: "wrong",
+        })
+      );
       const body = response.clone();
       const json = yield* Effect.promise(() => response.json());
       const text = yield* Effect.promise(() => body.text());
@@ -138,6 +163,7 @@ describe("Cloudflare Worker topology", () => {
               return Promise.resolve(coreWorker.fetch(coreRequest, coreEnvironment));
             },
           },
+          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
         })
       );
       const body = yield* Effect.promise(() => response.json());
@@ -155,6 +181,56 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
+  it.effect("rejects an unauthenticated Categories request before querying D1", () =>
+    Effect.gen(function* () {
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(new Request("https://api.fidyapp.com/categories"), {
+          CORE: { fetch: (request) => coreWorker.fetch(new Request(request), coreEnvironment) },
+          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+        })
+      );
+      const body = yield* Effect.promise(() => response.json());
+
+      expect(response.status).toBe(401);
+      expect(body).toEqual({
+        error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+        next: [],
+      });
+    })
+  );
+
+  it.effect("bounds missing-migration and query failures without exposing SQL or topology", () =>
+    Effect.gen(function* () {
+      const response = yield* Effect.promise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/categories", {
+            headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
+          }),
+          {
+            CORE: {
+              fetch: (request) =>
+                coreWorker.fetch(new Request(request), {
+                  ...coreEnvironment,
+                  DB: failingDatabase,
+                }),
+            },
+            LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          }
+        )
+      );
+      const text = yield* Effect.promise(() => response.text());
+
+      expect(response.status).toBe(503);
+      expect(text).toBe(
+        '{"error":{"code":"unavailable","message":"Categories are temporarily unavailable. Retry later."},"next":[]}'
+      );
+      expect(text).not.toContain("no such table");
+      expect(text).not.toContain("SELECT");
+      expect(text).not.toContain("internal_topology");
+      expect(text).not.toContain("DB");
+    })
+  );
+
   it.effect("rejects other public routes before invoking Core", () =>
     Effect.gen(function* () {
       let delegated = false;
@@ -166,6 +242,7 @@ describe("Cloudflare Worker topology", () => {
               return Promise.resolve(Response.json({}));
             },
           },
+          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
         })
       );
 

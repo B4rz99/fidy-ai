@@ -10,10 +10,14 @@ import {
 import {
   NotFound,
   OperationResponse,
+  Unavailable,
   ValidationFailed,
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+
+export const listCategoriesPath = "/categories";
+export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
 
 const read = operationPolicy({
   access: patScoped("read"),
@@ -37,8 +41,9 @@ const destructiveWrite = operationPolicy({
 /** Public Category discovery and caller-owned keyword-rule management. */
 export const CategoriesGroup = HttpApiGroup.make("categories")
   .add(
-    HttpApiEndpoint.get("listCategories", "/categories", {
-      success: OperationResponse(Schema.Array(Category)),
+    HttpApiEndpoint.get("listCategories", listCategoriesPath, {
+      success: ListCategoriesResponse,
+      error: Unavailable,
     })
       .annotate(
         OpenApi.Description,

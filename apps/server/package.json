@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./categories": {
+      "types": "./src/shell/categories/runtime.ts",
+      "import": "./src/shell/categories/runtime.ts",
+      "default": "./src/shell/categories/runtime.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",

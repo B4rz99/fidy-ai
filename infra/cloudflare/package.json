@@ -10,6 +10,8 @@
     "test": "bun --bun vitest run"
   },
   "dependencies": {
+    "@effect/sql-d1": "4.0.0-rc.115",
+    "@fidy/server": "workspace:0.0.0",
     "effect": "4.0.0-rc.115"
   },
   "devDependencies": {

@@ -152,6 +152,7 @@ export const ErrorCode = Schema.Literals([
   "rate_limited",
   "quota_exhausted",
   "not_found",
+  "unavailable",
 ]);
 export type ErrorCode = typeof ErrorCode.Type;
 
@@ -251,6 +252,7 @@ const consentRequiredTag = "ConsentRequired";
 const userActionRequiredTag = "UserActionRequired";
 const paywallRequiredTag = "PaywallRequired";
 const notFoundTag = "NotFound";
+const unavailableTag = "Unavailable";
 
 /**
  * API failures are schema-backed tagged errors. Their `_tag` supports selective
@@ -330,6 +332,12 @@ export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   { httpApiStatus: 404 }
 ) {}
 
+/** A required private dependency could not complete the canonical operation. */
+export class Unavailable extends Schema.Error<Unavailable>(unavailableTag)(
+  errorResponse(unavailableTag, detail("unavailable")),
+  { httpApiStatus: 503 }
+) {}
+
 const forwardErrorMessage = (
   ...prototypes: ReadonlyArray<{ readonly error: { readonly message: string } }>
 ): void => {
@@ -349,7 +357,8 @@ forwardErrorMessage(
   ConsentRequired.prototype,
   UserActionRequired.prototype,
   PaywallRequired.prototype,
-  NotFound.prototype
+  NotFound.prototype,
+  Unavailable.prototype
 );
 
 /**

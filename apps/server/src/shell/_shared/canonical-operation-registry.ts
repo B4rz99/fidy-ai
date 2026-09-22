@@ -7,6 +7,7 @@ import type {
 } from "./canonical-implementation";
 import type { CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
+import { listCategoriesResponse } from "~/shell/categories/list-categories";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
 
 /**
@@ -19,11 +20,11 @@ const unavailableOperation = <Id extends OperationId>(
 ): Effect.Effect<CanonicalSuccess<Id>, never> =>
   Effect.die("Cloudflare canonical operation boundary is not configured");
 
-/** Every canonical read and mutation remains present for contract derivation and fails closed. */
+/** Every canonical operation is present; operations without a Cloudflare adapter fail closed. */
 export const canonicalOperationImplementations = {
   ...canonicalMutationImplementations,
   "identity.getCurrentUser": unavailableOperation,
-  "categories.listCategories": unavailableOperation,
+  "categories.listCategories": () => listCategoriesResponse,
   "categories.listKeywordRules": unavailableOperation,
   "budgets.listBudgets": unavailableOperation,
   "budgets.getBudget": unavailableOperation,

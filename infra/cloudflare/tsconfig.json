@@ -8,7 +8,10 @@
     "outDir": "../../.tsbuild/cloudflare",
     "tsBuildInfoFile": "../../.tsbuild/cloudflare.tsbuildinfo",
     "lib": ["ESNext", "WebWorker"],
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    "paths": {
+      "~/*": ["../../apps/server/src/*"]
+    }
   },
   "include": ["*.ts"],
   "exclude": ["node_modules"]

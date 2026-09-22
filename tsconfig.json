@@ -4,5 +4,9 @@
   // the package-local alias declared by the server project.
   "include": ["scripts/**/*.ts"],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"],
-  "references": [{ "path": "./apps/server" }, { "path": "./apps/web/tsconfig.app.json" }]
+  "references": [
+    { "path": "./apps/server" },
+    { "path": "./apps/web/tsconfig.app.json" },
+    { "path": "./infra/cloudflare" }
+  ]
 }

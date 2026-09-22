@@ -8,12 +8,14 @@ The repository root is a private Bun workspace. It owns the lockfile, CI, compil
 policy, and stable orchestration commands. Root commands delegate application work to the owning
 workspace package.
 
-The workspace contains two application packages:
+The workspace contains two application packages and one infrastructure package:
 
 - [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operation
   declarations, schemas, and provider-neutral shell contracts. It is not a process runtime.
 - [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and the static
   Cloudflare artifact.
+- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack and the Worker entrypoints that
+  realize Cloudflare topology boundaries. It owns no product domain model.
 
 Cloudflare is the production authority. The intended runtime adapters use Worker entrypoints with D1,
 Durable Objects, Queues, Workflows, R2, Workers AI, and Email Workers as appropriate. Until an adapter
@@ -39,18 +41,28 @@ joins canonical authority only after proof exchange establishes a stable User.
 
 ## 3. Production topology
 
-Cloudflare serves the immutable web artifact at `fidyapp.com`. The artifact is static-only: it
-contains the browser shell, hashed assets, headers, and deployment metadata, and never contains
-server source, source maps, or secrets. The checked-in Wrangler configuration is the sole web
-runtime configuration.
+`infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. Its one stack declares
+an assets-only web Worker at `app.fidyapp.com`, the `fidyapp.com` redirect, an ingress Worker at
+`api.fidyapp.com`, and a Core Worker reachable only through the ingress service binding. The ingress
+has no D1 binding. The artifact contains the browser shell, hashed assets, headers, and deployment
+metadata, and never contains server source, source maps, or secrets. The Wrangler configuration is
+restricted to isolated static pull-request previews and owns no Production route.
+
+The public `/health` request crosses the ingress-to-Core binding. Core returns a closed projection of
+health, Git revision, and contract digest; binding objects, environment values, topology, exception
+text, and Secrets never enter the response. `alchemy dev` executes those same entrypoints and binding
+graph locally. Local and Production are the only complete topology modes; the stack rejects every
+other remote stage before resource creation, so there is no persistent staging environment.
 
 GitHub Actions is the release coordinator. A trunk release checks out one exact source revision,
-builds and validates one artifact, uploads one immutable Cloudflare version, rechecks the current
-trunk revision, and promotes only that uploaded version. If trunk advances before promotion, the
-release fails closed and leaves the prior version active. Provider-controlled source deployments are
-not used.
+builds and validates its static artifact, plans the Alchemy stack, rechecks the current trunk
+revision, and deploys only while that revision remains current. It then verifies the apex redirect,
+static metadata, and bound health response against that exact release. Provider-controlled source
+deployments and workstation deployments are not used.
 
-The server package does not start a local production listener. Cloudflare API, storage, asynchronous
+Railway, PostgreSQL, and a Bun process are superseded Production architecture under
+[ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md); they are not fallback
+authorities. The server package does not start a local production listener. Cloudflare API, storage, asynchronous
 execution, email-ingress, and hosted-inference adapters are separate seams; an unimplemented seam
 returns its typed unavailable result. No deployment step may reintroduce a process-local database,
 queue, lock, workflow, or hosted-model fallback.

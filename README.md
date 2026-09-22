@@ -14,11 +14,13 @@ Requirements: [Bun](https://bun.sh), [Gitleaks](https://github.com/gitleaks/gitl
 ```sh
 bun install
 cp .env.example .env
-bun run dev:web
+bun run dev
 ```
 
-The browser development server is available at <http://localhost:5173>. The built static artifact can
-be checked with:
+Alchemy starts the browser at <http://localhost:5173>, public ingress at
+<http://127.0.0.1:8787>, and private Core at <http://127.0.0.1:8788> with the Production
+service-binding graph. `bun run dev:web` remains available for isolated UI work, but it does not prove
+the Cloudflare boundary. The built static artifact can be checked with:
 
 ```sh
 bun run --cwd apps/web build:preview

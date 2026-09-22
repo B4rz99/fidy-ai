@@ -5,21 +5,21 @@ const cloudflareRoot = `${process.cwd()}/cloudflare`;
 const matchingLines = (text: string, value: string): ReadonlyArray<string> =>
   text.split("\n").filter((line) => line.trim() === value);
 
-describe("Cloudflare static hosting adapter", () => {
-  it("serves the plain web artifact with SPA fallback and no Worker entrypoint", async () => {
+describe("Cloudflare static artifact policy", () => {
+  it("keeps the Wrangler adapter restricted to pull-request previews", async () => {
     const configuration: unknown = await Bun.file(`${cloudflareRoot}/wrangler.json`).json();
 
     expect(configuration).not.toHaveProperty("main");
+    expect(configuration).not.toHaveProperty("routes");
     expect(configuration).toMatchObject({
       assets: {
         directory: "../dist",
         html_handling: "none",
         not_found_handling: "single-page-application",
       },
-      name: "fidy-web",
+      name: "fidy-web-preview",
       preview_urls: true,
       workers_dev: true,
-      routes: [{ pattern: "fidyapp.com", custom_domain: true }],
     });
   });
 

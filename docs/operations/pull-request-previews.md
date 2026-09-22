@@ -43,8 +43,9 @@ permission, review and add only that permission.
 
 ## Hosting behavior
 
-`apps/web/cloudflare/wrangler.json` has no `main`; Cloudflare generates the static-asset serving
-layer. Preview builds alone receive the adapter-owned `_headers` policy. It blocks all browser
+`apps/web/cloudflare/wrangler.json` is a preview-only adapter with no `main`, custom domain, or
+Production route; Cloudflare generates the static-asset serving layer. Alchemy remains the sole
+Production topology authority. Preview builds alone receive the adapter-owned `_headers` policy. It blocks all browser
 connections with `connect-src 'none'`, denies framing and indexing, revalidates the HTML shell, and
 caches fingerprinted assets immutably. Cloudflare's SPA fallback serves `index.html`, after which the
 real TanStack Router preserves `/`, `/politica`, and application not-found behavior.
@@ -71,7 +72,7 @@ PREVIEW_GIT_SHA=$(git rev-parse HEAD) bun run --cwd apps/web build:preview
 bun run test:preview-policy
 ```
 
-Wrangler configuration can be checked without uploading:
+The preview-only Wrangler configuration can be checked without uploading:
 
 ```sh
 bunx wrangler deploy --config apps/web/cloudflare/wrangler.json --dry-run

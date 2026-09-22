@@ -28,8 +28,9 @@ model adapters, and inbound provider-webhook authority. Missing adapters fail cl
 
 The target production shape is:
 
-- a static web Worker at `fidyapp.com`;
-- a public ingress Worker and private Core Worker, with the latter owning canonical execution;
+- an assets-only web Worker at `app.fidyapp.com`, with `fidyapp.com` redirecting to it;
+- a public ingress Worker at `api.fidyapp.com` and private Core Worker connected by a service
+  binding, with the latter owning canonical execution;
 - D1 as the authoritative relational store;
 - one per-User Durable Object for serialized coordination, never as a financial ledger;
 - a D1 transactional outbox and Cloudflare Queues for at-least-once work delivery;
@@ -68,10 +69,11 @@ and provider-authenticity invariants remain in force.
 
 ### Releases
 
-GitHub Actions checks out one exact trunk revision, builds one static artifact, uploads one immutable
-Cloudflare version, rechecks trunk immediately before promotion, and promotes only the captured
-version. A superseded candidate leaves the prior version active. Secrets use Cloudflare secret
-bindings and never enter source, generated browser output, logs, or command arguments.
+Alchemy is the sole Production topology authority. GitHub Actions checks out one exact trunk
+revision, builds and validates its static artifact, plans the complete stack, rechecks trunk
+immediately before deployment, and deploys only while the candidate remains current. A superseded
+candidate leaves the prior topology active. Secrets use Cloudflare secret bindings and never enter
+source, generated browser output, logs, or command arguments.
 
 ## Consequences
 

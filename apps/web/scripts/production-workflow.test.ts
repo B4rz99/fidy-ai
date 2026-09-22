@@ -11,37 +11,61 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("environment: production");
   });
 
-  it("builds and validates the static artifact before uploading Cloudflare", () => {
+  it("builds exact release metadata before planning the Alchemy topology", () => {
+    const metadata = workflow.indexOf("CONTRACT_DIGEST=");
     const webBuild = workflow.indexOf("build:production");
-    const cloudflare = workflow.indexOf("versions upload");
+    const plan = workflow.indexOf("alchemy plan");
 
-    expect(workflow).not.toContain("Dockerfile");
-    expect(workflow).not.toContain("docker ");
     expect(workflow).toContain("RELEASE_GIT_SHA: ${{ github.sha }}");
-    expect(webBuild).toBeGreaterThan(0);
-    expect(webBuild).toBeLessThan(cloudflare);
+    expect(metadata).toBeGreaterThan(0);
+    expect(metadata).toBeLessThan(webBuild);
+    expect(webBuild).toBeLessThan(plan);
   });
 
-  it("validates the static-only Wrangler adapter before uploading a version", () => {
-    const webBuild = workflow.indexOf("build:production");
-    const dryRun = workflow.indexOf("wrangler deploy --dry-run");
-    const upload = workflow.indexOf("versions upload");
-
-    expect(dryRun).toBeGreaterThan(webBuild);
-    expect(dryRun).toBeLessThan(upload);
-    expect(workflow).toContain("--config cloudflare/wrangler.json");
+  it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
+    expect(workflow).toContain("ALCHEMY_HOME: ${{ runner.temp }}/alchemy");
+    expect(workflow).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
+    expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
   });
 
-  it("rechecks trunk and promotes only the exact uploaded Cloudflare version", () => {
-    const upload = workflow.indexOf("versions upload");
-    const parse = workflow.indexOf("scripts/production/cloudflare-version.ts");
-    const recheck = workflow.indexOf("Recheck trunk immediately before promotion");
-    const deploy = workflow.indexOf("versions deploy");
+  it("bootstraps Alchemy state before planning and approves the non-interactive deploy", () => {
+    const profile = workflow.indexOf("alchemy profile edit");
+    const bootstrap = workflow.indexOf("alchemy provider cloudflare bootstrap");
+    const plan = workflow.indexOf("alchemy plan");
 
-    expect(upload).toBeLessThan(parse);
-    expect(parse).toBeLessThan(recheck);
+    expect(profile).toBeLessThan(bootstrap);
+    expect(bootstrap).toBeLessThan(plan);
+    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
+  });
+
+  it("makes Alchemy the only Cloudflare deployment authority", () => {
+    expect(workflow).toContain("alchemy plan --stage production --no-input");
+    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
+    expect(workflow).not.toContain("wrangler");
+    expect(workflow).not.toContain("railway");
+    expect(workflow).not.toContain("cloudflare/wrangler.json");
+    expect(workflow).not.toContain("cloudflare/wrangler-action");
+  });
+
+  it("verifies the migrated public topology after deployment", () => {
+    const deploy = workflow.indexOf("alchemy deploy");
+    const verification = workflow.indexOf("Verify the migrated public topology");
+
+    expect(deploy).toBeLessThan(verification);
+    expect(workflow).toContain("https://fidyapp.com/health-check");
+    expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
+    expect(workflow).toContain("https://api.fidyapp.com/health");
+    expect(workflow).toContain("$RELEASE_GIT_SHA");
+    expect(workflow).toContain("$CONTRACT_DIGEST");
+  });
+
+  it("rechecks trunk immediately before the Alchemy deployment", () => {
+    const plan = workflow.indexOf("alchemy plan");
+    const recheck = workflow.indexOf("Recheck trunk immediately before deployment");
+    const deploy = workflow.indexOf("alchemy deploy");
+
+    expect(plan).toBeLessThan(recheck);
     expect(recheck).toBeLessThan(deploy);
-    expect(workflow).toContain("steps.cloudflare-version.outputs.version-id");
     expect(workflow).not.toContain("docker push");
   });
 

@@ -20,8 +20,9 @@ provider account details and do not belong in the repository.
 1. Add `fidyapp.com` to the intended Cloudflare account without changing nameservers.
 2. Recreate and compare the complete record inventory. Preserve approved root mail records and their
    SPF, DKIM, and verification records.
-3. Create the `fidyapp.com` custom domain for the static web Worker. Add an API Worker custom domain
-   only after that Worker exists and its smoke checks pass.
+3. Deploy the Alchemy Production stack. It creates `app.fidyapp.com` for the assets-only web Worker,
+   `api.fidyapp.com` for public ingress, and the apex redirect to the application host. The private
+   Core Worker receives no DNS name. Do not create these records or Worker attachments by hand.
 4. Provision Email Worker MX routes through Cloudflare when inbound email is enabled. Do not create a
    legacy inbound-provider webhook or MX route.
 5. Review proxy mode and certificate validation for every HTTP record. Mail records follow the owning
@@ -37,7 +38,9 @@ provider account details and do not belong in the repository.
    dig +short NS fidyapp.com
    dig +short MX fidyapp.com
    dig +short TXT fidyapp.com
-   curl --fail https://fidyapp.com/deployment-metadata.json
+   curl --fail --dump-header - https://fidyapp.com/ --output /dev/null
+   curl --fail https://app.fidyapp.com/deployment-metadata.json
+   curl --fail https://api.fidyapp.com/health
    ```
 
 4. Exercise only controlled, synthetic Email Worker input and verify bounded admission and safe

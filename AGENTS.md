@@ -28,9 +28,9 @@ Then read the architecture document for every application the change touches:
 - **`apps/web/ARCHITECTURE.md`** for web changes.
 - **Both application documents** for cross-application changes.
 
-## Effect reference
+## Upstream references
 
-A full checkout of the [Effect](https://effect.website) source lives at `.repos/effect`. This project is built on Effect, so use that checkout as the source of truth: read it to extract best practices, understand how APIs and internals actually work, check idiomatic usage, and verify behavior against the real implementation rather than guessing. Prefer it over memory when working with Effect.
+Full checkouts of [Effect](https://effect.website) and [Alchemy](https://alchemy.run) live at `.repos/effect` and `.repos/alchemy`. Use the relevant checkout as the source of truth: read it to extract best practices, understand APIs and internals, check idiomatic usage, and verify behavior against the real implementation rather than guessing. Prefer it over memory when working with either dependency.
 
 ### Patterns
 
@@ -51,6 +51,7 @@ Distilled research on how Effect actually works, extracted from the `.repos/effe
 - `.patterns/observability.md` — v4 tracing/logging/metrics: Work-boundary spans, named `Effect.fn`, safe attributes and propagation, metrics cardinality, exporters, adapter tests.
 - `.patterns/testing.md` — `@effect/vitest` v4 + `effect/testing`: it.effect/it.live/it.layer semantics, TestClock/TestConsole defaults, layer memoization and teardown fine print, Schema-driven property tests, Exit/Equal assertion idioms, HttpClient stub pattern, and Cloudflare binding seams. Do not recreate deleted runtime owners in tests.
 - `.patterns/effect-atom.md` — Effect Atom + `@effect/atom-react`: state/registry ownership, authentication-lifetime isolation, Layer-backed runtimes, command semantics, complete AsyncResult rendering, AtomHttpApi failure behavior, query invalidation, hydration/persistence, React hooks, and tests.
+- `.patterns/alchemy.md` — Alchemy v2 Cloudflare topology: Stack authority, static assets, public/private Workers, service bindings, domains, local parity, and safe release metadata. Read before changing Alchemy or Cloudflare topology.
 - `.patterns/dnd-kit.md` — `@dnd-kit/react` 0.5: adapter boundaries, provider and hook lifecycles, pointer/touch/keyboard sensors, accessibility, nested collision priority, drop completion, overlays, and Dashboard integration rules. Read before dnd-kit or drag-and-drop work.
 
 ## React reference

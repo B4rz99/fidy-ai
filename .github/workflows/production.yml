@@ -15,10 +15,14 @@ concurrency:
 
 jobs:
   deploy:
-    name: Cloudflare static application
+    name: Alchemy Cloudflare topology
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
+    env:
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      ALCHEMY_HOME: ${{ runner.temp }}/alchemy
+      ALCHEMY_PROFILE: ci
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,84 +38,89 @@ jobs:
       - name: Install the locked workspace
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Capture the immutable contract digest
+        run: echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
+
+      - name: Test the Worker boundary
+        run: bun run --cwd infra/cloudflare test
+
       - name: Build and validate the Production static artifact
-        env:
-          RELEASE_GIT_SHA: ${{ github.sha }}
         run: bun run --cwd apps/web build:production
 
-      - name: Validate the static-only Cloudflare adapter
-        working-directory: apps/web
-        run: >-
-          bunx wrangler deploy --dry-run
-          --config cloudflare/wrangler.json
-          --outdir /tmp/fidy-cloudflare-dry-run
-
-      - name: Bootstrap the static Worker when explicitly requested
-        if: vars.CLOUDFLARE_BOOTSTRAP_REQUIRED == 'true'
-        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web
-          command: >-
-            deploy
-            --config cloudflare/wrangler.json
-            --tag ${{ github.sha }}
-            --message "Initial Production ${{ github.sha }}"
-
-      - name: Upload one immutable Cloudflare version
-        id: cloudflare-upload
-        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web
-          command: >-
-            versions upload
-            --config cloudflare/wrangler.json
-            --tag ${{ github.sha }}
-            --message "Production ${{ github.sha }}"
-
-      - name: Capture the exact uploaded Cloudflare version
-        id: cloudflare-version
+      - name: Configure Alchemy's ephemeral Cloudflare profile
         env:
-          WRANGLER_OUTPUT: ${{ steps.cloudflare-upload.outputs.command-output }}
-        run: bun scripts/production/cloudflare-version.ts
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bunx alchemy profile create "$ALCHEMY_PROFILE" --no-input
+          bunx alchemy profile edit \
+            --profile "$ALCHEMY_PROFILE" \
+            --add Cloudflare \
+            --method stored \
+            --set apiToken=env:CLOUDFLARE_API_TOKEN \
+            --set accountId=env:CLOUDFLARE_ACCOUNT_ID \
+            --no-input
 
-      - name: Recheck trunk immediately before promotion
+      - name: Ensure Alchemy's Cloudflare state authority exists
+        run: bunx alchemy provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input
+
+      - name: Plan the complete Cloudflare topology
+        working-directory: infra/cloudflare
+        run: bunx alchemy plan --stage production --no-input
+
+      - name: Recheck trunk immediately before deployment
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_GIT_SHA: ${{ github.sha }}
         run: |
           CURRENT_TRUNK_SHA=$(gh api \
             "repos/$GITHUB_REPOSITORY/commits/${{ github.event.repository.default_branch }}" \
             --jq .sha)
           if [[ "$CURRENT_TRUNK_SHA" != "$RELEASE_GIT_SHA" ]]; then
-            echo "Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior version active." >&2
+            echo "Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior topology active." >&2
             exit 1
           fi
 
-      - name: Promote only the uploaded Cloudflare version
-        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web
-          command: >-
-            versions deploy
-            ${{ steps.cloudflare-version.outputs.version-id }}
-            --config cloudflare/wrangler.json
-            --message "Production ${{ github.sha }}"
-            --yes
+      - name: Deploy the exact planned topology with Alchemy
+        working-directory: infra/cloudflare
+        run: bunx alchemy deploy --stage production --yes --no-input
+
+      - name: Verify the migrated public topology
+        run: |
+          verified=false
+          for attempt in {1..20}; do
+            redirect=$(curl --silent --show-error --max-time 10 --output /dev/null \
+              --write-out '%{http_code} %{redirect_url}' \
+              'https://fidyapp.com/health-check?probe=1' || true)
+            metadata=$(curl --silent --show-error --max-time 10 \
+              'https://app.fidyapp.com/deployment-metadata.json' || true)
+            health=$(curl --silent --show-error --max-time 10 \
+              'https://api.fidyapp.com/health' || true)
+
+            if [[ "$redirect" == "301 https://app.fidyapp.com/health-check?probe=1" ]] && \
+              jq --exit-status --arg revision "$RELEASE_GIT_SHA" --arg digest "$CONTRACT_DIGEST" \
+                '. == {contractDigest: $digest, gitRevision: $revision}' <<<"$metadata" >/dev/null && \
+              jq --exit-status --arg revision "$RELEASE_GIT_SHA" --arg digest "$CONTRACT_DIGEST" \
+                '. == {contractDigest: $digest, gitRevision: $revision, status: "available"}' \
+                <<<"$health" >/dev/null; then
+              verified=true
+              break
+            fi
+
+            echo "Public topology has not converged yet (attempt $attempt/20)."
+            sleep 3
+          done
+
+          if [[ "$verified" != true ]]; then
+            echo "The migrated public topology did not expose the exact deployed release." >&2
+            exit 1
+          fi
 
       - name: Record the release
         if: ${{ always() }}
-        env:
-          CLOUDFLARE_VERSION_ID: ${{ steps.cloudflare-version.outputs.version-id }}
-          RELEASE_GIT_SHA: ${{ github.sha }}
         run: |
           {
             echo "### Production release"
             echo "- Git revision: \`$RELEASE_GIT_SHA\`"
-            echo "- Cloudflare version: \`${CLOUDFLARE_VERSION_ID:-not-uploaded}\`"
+            echo "- Contract digest: \`${CONTRACT_DIGEST:-not-planned}\`"
+            echo "- Alchemy stack: \`FidyCloudflare/production\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -51,16 +51,18 @@ value enters a URL, browser storage, or application-wide state.
 
 ## 4. Static production artifact
 
-Cloudflare serves only validated static output at `fidyapp.com`; there is no Worker entrypoint. The
-browser Content Security Policy permits connections only to the stable API origin. Cloudflare applies
+Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
+`fidyapp.com` permanently redirected to that canonical host. There is no application Worker
+entrypoint. The browser Content Security Policy permits connections only to the stable API origin. Cloudflare applies
 the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.
 
 Production artifact validation rejects unhashed assets, missing shell entry assets, source maps,
 server-shaped output, and known Secret material. Application build and policy checks own these
-properties; cross-application deployment ordering and rollback behavior remain in the root
-architecture and production runbook.
+properties; `infra/cloudflare` owns Production hosting topology. The checked-in Wrangler adapter is
+restricted to static pull-request previews and has no Production route. Cross-application deployment
+ordering and recovery behavior remain in the root architecture and production runbook.
 
 ## 5. Testing seams
 

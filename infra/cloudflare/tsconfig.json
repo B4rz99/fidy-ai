@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../../.tsbuild/cloudflare",
+    "tsBuildInfoFile": "../../.tsbuild/cloudflare.tsbuildinfo",
+    "lib": ["ESNext", "WebWorker"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["*.ts"],
+  "exclude": ["node_modules"]
+}

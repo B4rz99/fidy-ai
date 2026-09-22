@@ -1,0 +1,114 @@
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Layer from "effect/Layer";
+import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
+import { productionTopology } from "./topology";
+
+const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
+const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
+
+const deploymentConfigError = (error: { readonly reason: string }): Config.ConfigError =>
+  new Config.ConfigError(
+    new ConfigProvider.SourceError({
+      cause: error,
+      message: `Invalid Cloudflare deployment configuration: ${error.reason}`,
+    })
+  );
+
+const state = Layer.unwrap(
+  Effect.gen(function* () {
+    const development = yield* Alchemy.ALCHEMY_DEV;
+    const stage = yield* Alchemy.Stage;
+    const backend = resolveStateBackend({ development, stage });
+
+    if (backend === "cloudflare") return Cloudflare.state();
+    if (backend === "local") return Alchemy.localState();
+    return Alchemy.inMemoryState();
+  }).pipe(Effect.orDie)
+);
+
+export default Alchemy.Stack(
+  "FidyCloudflare",
+  {
+    providers: Cloudflare.providers(),
+    state,
+  },
+  Effect.gen(function* () {
+    const development = yield* Alchemy.ALCHEMY_DEV;
+    const stage = yield* Alchemy.Stack.useSync((stack) => stack.stage);
+    const releaseMetadata = yield* Effect.fromResult(
+      resolveDeploymentConfiguration({
+        contractDigest: development ? "" : yield* contractDigest,
+        development,
+        gitRevision: development ? "" : yield* releaseGitRevision,
+        stage,
+      })
+    ).pipe(Effect.mapError(deploymentConfigError));
+    const production = !development;
+
+    const core = yield* Cloudflare.Worker("Core", {
+      main: "./core-worker.ts",
+      compatibility: { date: "2026-09-08" },
+      dev: {
+        host: "127.0.0.1",
+        port: productionTopology.core.localPort,
+        strictPort: true,
+      },
+      env: {
+        CONTRACT_DIGEST: releaseMetadata.contractDigest,
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
+      },
+      workersDev: productionTopology.core.workersDev,
+    });
+
+    const ingress = yield* Cloudflare.Worker("Ingress", {
+      main: "./public-worker.ts",
+      compatibility: { date: "2026-09-08" },
+      dev: {
+        host: "127.0.0.1",
+        port: productionTopology.ingress.localPort,
+        strictPort: true,
+      },
+      domain: production ? productionTopology.ingress.hostname : undefined,
+      env: { [productionTopology.ingress.coreBinding]: core },
+      workersDev: production ? productionTopology.ingress.workersDev : true,
+    });
+
+    const web = yield* Cloudflare.Website.StaticSite("Web", {
+      name: productionTopology.web.workerName,
+      command: "bun run build:production",
+      cwd: "../../apps/web",
+      outdir: "dist",
+      env: {
+        CONTRACT_DIGEST: releaseMetadata.contractDigest,
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
+      },
+      dev: {
+        command: "bun run dev -- --host 127.0.0.1",
+        cwd: "../../apps/web",
+        env: {
+          VITE_API_ORIGIN: `http://127.0.0.1:${productionTopology.ingress.localPort}`,
+        },
+      },
+      assets: {
+        htmlHandling: "none",
+        notFoundHandling: "single-page-application",
+      },
+      domain: production
+        ? {
+            name: productionTopology.web.hostname,
+            redirects: [...productionTopology.web.redirects],
+          }
+        : undefined,
+      workersDev: production ? productionTopology.web.workersDev : true,
+    }).pipe(Alchemy.AdoptPolicy.adopt(production && productionTopology.web.adoptExistingWorker));
+
+    return {
+      apiUrl: ingress.url,
+      webUrl: web.url,
+    };
+  })
+);

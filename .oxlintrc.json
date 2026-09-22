@@ -181,6 +181,20 @@
         "import/no-default-export": "off"
       }
     },
+    // Cloudflare Worker modules and Alchemy stack entrypoints are discovered through
+    // their platforms' required default-export contracts. Keep the declarative topology
+    // together so resource ownership and dependency order remain visible in one entrypoint.
+    {
+      "files": [
+        "infra/cloudflare/alchemy.run.ts",
+        "infra/cloudflare/core-worker.ts",
+        "infra/cloudflare/public-worker.ts"
+      ],
+      "rules": {
+        "import/no-default-export": "off",
+        "max-lines-per-function": "off"
+      }
+    },
     {
       "files": ["apps/web/src/app/routes.ts"],
       "rules": {

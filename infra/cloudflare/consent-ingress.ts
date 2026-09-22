@@ -579,7 +579,7 @@ const recordPrematureMailbox = (
         .prepare(`UPDATE pending_consent_exchanges
         SET email_preaccept_latest_occurred_ms = MAX(
           COALESCE(email_preaccept_latest_occurred_ms, 0), ?)
-        WHERE id = ? AND state = 'awaiting_decision'`)
+        WHERE id = ? AND state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision')`)
         .bind(DateTime.toEpochMillis(input.event.occurredAt), exchangeId)
         .run()
     );
@@ -714,8 +714,9 @@ const admitExchange = (
     const statement = db
       .prepare(`INSERT INTO pending_consent_exchanges
       (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
-       correlation_token, disclosure_json, created_at_ms, expires_at_ms, state)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+       correlation_token, disclosure_json, created_at_ms, expires_at_ms,
+       email_preaccept_latest_occurred_ms, state)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
       .bind(
         id,
         input.event.caller.businessPortfolioId,
@@ -726,7 +727,10 @@ const admitExchange = (
         correlationToken,
         disclosureJson,
         input.receivedAtMs,
-        input.receivedAtMs + dayMs
+        input.receivedAtMs + dayMs,
+        Option.isSome(Schema.decodeOption(EmailAddress)(input.event.content.text))
+          ? DateTime.toEpochMillis(input.event.occurredAt)
+          : null
       );
     const portfolio = input.event.caller.businessPortfolioId;
     const bsuid = input.event.caller.businessScopedUserId;
@@ -810,12 +814,37 @@ const priorExchangeResponse = (
   return Option.some(answer(verdict === "replay" ? HTTP_OK : HTTP_CONFLICT));
 };
 
+const recordUndeliveredMailbox = (
+  db: D1Database,
+  input: Inbound,
+  pending: Option.Option<StoredExchange>
+): Effect.Effect<Option.Option<Response>, void> =>
+  Effect.gen(function* () {
+    if (
+      Option.isNone(pending) ||
+      (pending.value.state !== "awaiting_delivery" && pending.value.state !== "outbound_started") ||
+      Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))
+    ) {
+      return Option.none();
+    }
+    if (
+      pending.value.phone_number_id !== input.event.businessPhoneNumberId ||
+      input.receivedAtMs >= pending.value.expires_at_ms
+    ) {
+      return Option.some(answer(HTTP_CONFLICT));
+    }
+    return Option.some(yield* recordPrematureMailbox(db, input, pending.value.id));
+  });
+
 const startExchange = (
   environment: Environment,
   input: Inbound
 ): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const prior = priorExchangeResponse(yield* findExchange(environment.DB, input.event), input);
+    const pending = yield* findExchange(environment.DB, input.event);
+    const premature = yield* recordUndeliveredMailbox(environment.DB, input, pending);
+    if (Option.isSome(premature)) return premature.value;
+    const prior = priorExchangeResponse(pending, input);
     if (Option.isSome(prior)) return prior.value;
     if (environment.KAPSO_API_KEY.length === 0) {
       return answer(HTTP_UNAVAILABLE);

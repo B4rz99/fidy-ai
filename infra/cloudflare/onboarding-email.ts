@@ -64,8 +64,8 @@ export const dispatchOnboardingEmail = (
       environment.DB.prepare(`SELECT o.id, o.version
       FROM onboarding_email_outbox AS o JOIN pending_email_enrollments AS e ON e.id = o.id
       WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
-        AND (o.published_at_ms IS NULL OR o.published_at_ms < ?)
-      ORDER BY (o.published_at_ms IS NOT NULL), o.created_at_ms LIMIT ?`)
+        AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+      ORDER BY (o.last_attempt_at_ms IS NOT NULL), o.last_attempt_at_ms, o.created_at_ms LIMIT ?`)
         .bind(now, now - publicationRetryMs, maximumDispatchEntries)
         .all()
     );
@@ -74,6 +74,20 @@ export const dispatchOnboardingEmail = (
     );
     let failed = false;
     for (const entry of entries) {
+      // Claim a cooldown before Queue I/O so a failing oldest batch cannot starve newer work.
+      const claimed = yield* Effect.exit(
+        attempt(() =>
+          environment.DB.prepare(`UPDATE onboarding_email_outbox SET last_attempt_at_ms = ?
+          WHERE id = ? AND (last_attempt_at_ms IS NULL OR last_attempt_at_ms < ?)`)
+            .bind(now, entry.id, now - publicationRetryMs)
+            .run()
+        )
+      );
+      if (Exit.isFailure(claimed)) {
+        failed = true;
+        continue;
+      }
+      if (claimed.value.meta.changes !== 1) continue;
       // An offer and its D1 settlement are not atomic. Keep offering other identities if one fails.
       const offered = yield* Effect.exit(
         attempt(() =>

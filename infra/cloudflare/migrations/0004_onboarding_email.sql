@@ -28,6 +28,7 @@ CREATE TABLE onboarding_email_outbox (
   id TEXT PRIMARY KEY NOT NULL REFERENCES pending_email_enrollments(id) ON DELETE CASCADE,
   version INTEGER NOT NULL CHECK (version = 1),
   published_at_ms INTEGER,
+  last_attempt_at_ms INTEGER,
   created_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE TRIGGER pending_email_requires_accepted_consent BEFORE INSERT ON pending_email_enrollments

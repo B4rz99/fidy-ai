@@ -272,6 +272,31 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("remembers a mailbox seen before disclosure delivery, without creating work", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const preDeliveryEmail = inbound(
+    "wamid.pre-delivery-email",
+    "test@example.com",
+    String(nowSeconds + 20)
+  );
+  expect((await send(preDeliveryEmail)).status).toBe(200);
+  const guarded = await db
+    .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
+    .first();
+  expect(guarded?.email_preaccept_latest_occurred_ms).toBe((nowSeconds + 20) * 1_000);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(preDeliveryEmail)).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("cannot replay a previously seen future-dated pre-Consent email into an enrollment", async () => {
   const { db, send } = await setup();
   const token = await startDisclosure(send);
@@ -344,7 +369,7 @@ it("reoffers the same bounded work after publication settlement is lost", async 
   await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
   await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
   expect(offered).toHaveBeenCalledTimes(1);
-  await db.prepare("UPDATE onboarding_email_outbox SET published_at_ms = NULL").run();
+  await db.prepare("UPDATE onboarding_email_outbox SET last_attempt_at_ms = NULL").run();
   await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
   expect(offered).toHaveBeenCalledTimes(2);
   expect(offered.mock.calls[0]).toEqual(offered.mock.calls[1]);
@@ -413,7 +438,14 @@ it("continues to publish other identities when one Queue offer fails", async () 
     )
   ).rejects.toBeUndefined();
   expect(offered).toHaveBeenCalledTimes(2);
-  const states = await db.prepare("SELECT published_at_ms FROM onboarding_email_outbox").all();
+  await Effect.runPromise(
+    dispatchOnboardingEmail({ DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } })
+  );
+  expect(offered).toHaveBeenCalledTimes(2);
+  const states = await db
+    .prepare("SELECT published_at_ms, last_attempt_at_ms FROM onboarding_email_outbox")
+    .all();
+  expect(states.results.every((row) => row.last_attempt_at_ms !== null)).toBe(true);
   expect(states.results.filter((row) => row.published_at_ms === null)).toHaveLength(1);
   expect(states.results.filter((row) => row.published_at_ms !== null)).toHaveLength(1);
 });

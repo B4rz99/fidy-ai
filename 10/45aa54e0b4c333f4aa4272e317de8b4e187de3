@@ -1,0 +1,22 @@
+.oxlintrc.json
+  s_54b5ecc82eb072::t_9114e42f53aead 58-64,189,193-195,200
+  s_54b5ecc82eb072::t_98fa4e9dcce4dd 162,164-174
+  s_54b5ecc82eb072::t_ea9ed662662b95 142,145-149,152-158,208,222-229
+  s_54b5ecc82eb072::t_012ecd0d6ce664 186-187,190-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1045aa54e0b4c333f4aa4272e317de8b4e187de3",
+  "prompts": {},
+  "sessions": {
+    "s_54b5ecc82eb072": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ca95-e001-74e3-bff0-3f4199bc1de6",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

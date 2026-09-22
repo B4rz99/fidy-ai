@@ -50,8 +50,11 @@ restricted to isolated static pull-request previews and owns no Production route
 
 Public `/health` and canonical Categories requests cross the ingress-to-Core binding. Core returns a
 closed projection of health, Git revision, and contract digest, and is the sole owner of the D1
-binding used to load the stable Category taxonomy. Binding objects, environment values, topology,
-SQL, exception text, and Secrets never enter either response. `alchemy dev` executes those same
+binding used to load the stable Category taxonomy. The Cloudflare infrastructure package also owns
+the reusable admission primitive that later Core adapters install with Worker-owned policy.
+Admission atomically composes security, spend, and outstanding-work claims with proof or outbox
+statements; it is not commercial allowance accounting. Binding objects, environment values, topology, SQL,
+exception text, and Secrets never enter either response. `alchemy dev` executes those same
 entrypoints, D1 migrations, and binding graph locally. Local and Production are the only complete topology modes; the stack rejects every
 other remote stage before resource creation, so there is no persistent staging environment.
 
@@ -86,7 +89,9 @@ The browser acceptance builds the production web mode and checks the checked-in 
 policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cache and security
 headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
 is the first exception: its Cloudflare integration gate exercises public ingress, the private service
-binding, and local D1. DO/Queue/Workflow/R2/Workers AI integration gates remain future work.
+binding, and local D1. Resource-admission integration exercises local D1 directly to prove atomic
+concurrency and restart behavior without inventing a public route. DO/Queue/Workflow/R2/Workers AI
+integration gates remain future work.
 
 Application-local test seams belong to the owning application architecture. Portable core, schema,
 security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests

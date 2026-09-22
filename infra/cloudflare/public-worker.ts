@@ -1,10 +1,20 @@
 import { listCategoriesPath } from "@fidy/server/categories";
+import type { TelemetryService } from "@fidy/server/telemetry";
 import { Effect } from "effect";
+import {
+  type WorkerTelemetryEnvironment,
+  cloudflareWorkerTelemetry,
+  observeWorkerRequest,
+} from "./telemetry";
 
-type PublicEnvironment = {
+type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly CORE: Pick<Fetcher, "fetch">;
   readonly LOCAL_CANONICAL_READ_BEARER: string;
 };
+
+type PublicWorker = Readonly<{
+  fetch: (request: Request, environment: PublicEnvironment) => Promise<Response>;
+}>;
 
 const unauthenticated = (): Response =>
   Response.json(
@@ -27,13 +37,13 @@ const unavailable = (): Response =>
     }
   );
 
-const fetch = (request: Request, environment: PublicEnvironment): Promise<Response> => {
+const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (url.pathname !== "/health" && url.pathname !== listCategoriesPath) {
-    return Promise.resolve(Response.json({}, { status: 404 }));
+    return Effect.succeed(Response.json({}, { status: 404 }));
   }
   if (request.method !== "GET") {
-    return Promise.resolve(
+    return Effect.succeed(
       Response.json(
         { status: "method_not_allowed" },
         { headers: { allow: "GET", "cache-control": "no-store" }, status: 405 }
@@ -46,7 +56,7 @@ const fetch = (request: Request, environment: PublicEnvironment): Promise<Respon
       environment.LOCAL_CANONICAL_READ_BEARER.length === 0 ||
       authorization !== `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`
     ) {
-      return Promise.resolve(unauthenticated());
+      return Effect.succeed(unauthenticated());
     }
   }
 
@@ -60,11 +70,21 @@ const fetch = (request: Request, environment: PublicEnvironment): Promise<Respon
         })
       ),
     catch: () => undefined,
-  }).pipe(
-    Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),
-    Effect.runPromise
-  );
+  }).pipe(Effect.match({ onFailure: unavailable, onSuccess: (response) => response }));
 };
 
+/** Builds the internet-facing ingress with one telemetry service for each request Work span. */
+export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
+  fetch: (request, environment) =>
+    fetchEffect(request, environment).pipe(
+      observeWorkerRequest({
+        environment,
+        telemetry,
+        operation: "worker.public.fetch",
+      }),
+      Effect.runPromise
+    ),
+});
+
 /** Internet-facing ingress that delegates only published routes to the private Core Worker. */
-export default { fetch } satisfies ExportedHandler<PublicEnvironment>;
+export default makePublicWorker(cloudflareWorkerTelemetry);

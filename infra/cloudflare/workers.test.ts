@@ -1,9 +1,11 @@
 import { it } from "@effect/vitest";
+import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
-import coreWorker from "./core-worker";
+import coreWorker, { makeCoreWorker } from "./core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
-import publicWorker from "./public-worker";
+import publicWorker, { makePublicWorker } from "./public-worker";
+import { makeWorkerTelemetry } from "./telemetry";
 import { localCanonicalReadBearer, productionTopology } from "./topology";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
@@ -29,6 +31,11 @@ const coreEnvironment = {
   DB: failingDatabase,
   RELEASE_GIT_SHA: gitRevision,
 };
+
+const collectingTelemetry = (records: Array<TelemetryWorkRecord>): TelemetryService =>
+  makeWorkerTelemetry((record) => {
+    records.push(record);
+  });
 
 describe("Deployment configuration", () => {
   it("selects remote state only for the supported Production stage", () => {
@@ -164,6 +171,7 @@ describe("Cloudflare Worker topology", () => {
             },
           },
           LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          RELEASE_GIT_SHA: gitRevision,
         })
       );
       const body = yield* Effect.promise(() => response.json());
@@ -181,12 +189,79 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
+  it.effect("gives each Worker invocation one closed telemetry span", () =>
+    Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      const telemetry = collectingTelemetry(records);
+      const observedCore = makeCoreWorker(telemetry);
+      const observedPublic = makePublicWorker(telemetry);
+      const response = yield* Effect.promise(() =>
+        observedPublic.fetch(new Request("https://api.fidyapp.com/health"), {
+          CORE: {
+            fetch: (request) => observedCore.fetch(new Request(request), coreEnvironment),
+          },
+          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          RELEASE_GIT_SHA: gitRevision,
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(records).toHaveLength(2);
+      expect(records.map(({ operation }) => operation).sort()).toEqual([
+        "worker.core.fetch",
+        "worker.public.fetch",
+      ]);
+      for (const record of records) {
+        expect(record).toMatchObject({
+          release: gitRevision,
+          provider: "cloudflare-workers",
+          statusClass: "2xx",
+          outcome: "succeeded",
+          attempt: 1,
+        });
+        expect(Object.keys(record).sort()).toEqual([
+          "attempt",
+          "latencyMilliseconds",
+          "operation",
+          "outcome",
+          "provider",
+          "release",
+          "statusClass",
+        ]);
+      }
+    })
+  );
+
+  it.effect("retains one owning span when runtime release metadata is malformed", () =>
+    Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      const observedPublic = makePublicWorker(collectingTelemetry(records));
+      const response = yield* Effect.promise(() =>
+        observedPublic.fetch(new Request("https://api.fidyapp.com/not-published"), {
+          CORE: { fetch: () => Promise.resolve(Response.json({ unexpected: true })) },
+          LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          RELEASE_GIT_SHA: "not-a-release",
+        })
+      );
+
+      expect(response.status).toBe(404);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        release: "unknown",
+        operation: "worker.public.fetch",
+        outcome: "rejected",
+        statusClass: "4xx",
+      });
+    })
+  );
+
   it.effect("rejects an unauthenticated Categories request before querying D1", () =>
     Effect.gen(function* () {
       const response = yield* Effect.promise(() =>
         publicWorker.fetch(new Request("https://api.fidyapp.com/categories"), {
           CORE: { fetch: (request) => coreWorker.fetch(new Request(request), coreEnvironment) },
           LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          RELEASE_GIT_SHA: gitRevision,
         })
       );
       const body = yield* Effect.promise(() => response.json());
@@ -199,22 +274,27 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
-  it.effect("bounds missing-migration and query failures without exposing SQL or topology", () =>
+  it.effect("reports each failed Worker Work once without exposing SQL or topology", () =>
     Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      const telemetry = collectingTelemetry(records);
+      const observedCore = makeCoreWorker(telemetry);
+      const observedPublic = makePublicWorker(telemetry);
       const response = yield* Effect.promise(() =>
-        publicWorker.fetch(
+        observedPublic.fetch(
           new Request("https://api.fidyapp.com/categories", {
             headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
           }),
           {
             CORE: {
               fetch: (request) =>
-                coreWorker.fetch(new Request(request), {
+                observedCore.fetch(new Request(request), {
                   ...coreEnvironment,
                   DB: failingDatabase,
                 }),
             },
             LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+            RELEASE_GIT_SHA: gitRevision,
           }
         )
       );
@@ -228,6 +308,14 @@ describe("Cloudflare Worker topology", () => {
       expect(text).not.toContain("SELECT");
       expect(text).not.toContain("internal_topology");
       expect(text).not.toContain("DB");
+      expect(records).toHaveLength(2);
+      expect(records.every(({ outcome }) => outcome === "failed")).toBe(true);
+      expect(records.every(({ statusClass }) => statusClass === "5xx")).toBe(true);
+      expect(records.filter(({ operation }) => operation === "worker.core.fetch")).toHaveLength(1);
+      expect(records.filter(({ operation }) => operation === "worker.public.fetch")).toHaveLength(
+        1
+      );
+      expect(records).not.toContainEqual(expect.objectContaining({ sql: privateFailureDetail }));
     })
   );
 
@@ -243,6 +331,7 @@ describe("Cloudflare Worker topology", () => {
             },
           },
           LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+          RELEASE_GIT_SHA: gitRevision,
         })
       );
 

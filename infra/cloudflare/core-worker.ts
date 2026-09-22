@@ -5,16 +5,27 @@ import {
   listCategoriesResponse,
 } from "@fidy/server/categories";
 import { Effect, Exit, Schema } from "effect";
+import type { TelemetryService } from "@fidy/server/telemetry";
 import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
+import {
+  type WorkerTelemetryEnvironment,
+  cloudflareWorkerTelemetry,
+  observeWorkerRequest,
+} from "./telemetry";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type CoreEnvironment = typeof ReleaseConfiguration.Type & {
-  readonly DB: D1Database;
-};
+type CoreEnvironment = typeof ReleaseConfiguration.Type &
+  WorkerTelemetryEnvironment & {
+    readonly DB: D1Database;
+  };
+
+type CoreWorker = Readonly<{
+  fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
+}>;
 
 const jsonHeaders = {
   "cache-control": "no-store",
@@ -38,7 +49,7 @@ const methodNotAllowed = (): Response =>
     status: HTTP_METHOD_NOT_ALLOWED,
   });
 
-const categoriesResponse = (environment: CoreEnvironment): Promise<Response> =>
+const categoriesResponse = (environment: CoreEnvironment): Effect.Effect<Response> =>
   listCategoriesResponse.pipe(
     // Effect SQL span attributes contain query text, which must not enter exported telemetry.
     Effect.withTracerEnabled(false),
@@ -54,23 +65,22 @@ const categoriesResponse = (environment: CoreEnvironment): Promise<Response> =>
           HTTP_SERVICE_UNAVAILABLE
         ),
       onSuccess: (response) => jsonResponse(JSON.stringify(response), HTTP_OK),
-    }),
-    Effect.runPromise
+    })
   );
 
-const fetch = (request: Request, environment: CoreEnvironment): Promise<Response> => {
+const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (url.pathname !== "/health" && url.pathname !== listCategoriesPath) {
-    return Promise.resolve(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
+    return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
-  if (request.method !== "GET") return Promise.resolve(methodNotAllowed());
+  if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
 
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
-  if (Exit.isFailure(configuration)) return Promise.resolve(unavailable());
+  if (Exit.isFailure(configuration)) return Effect.succeed(unavailable());
 
   if (url.pathname === listCategoriesPath) return categoriesResponse(environment);
 
-  return Promise.resolve(
+  return Effect.succeed(
     jsonResponse(
       JSON.stringify({
         contractDigest: configuration.value.CONTRACT_DIGEST,
@@ -82,5 +92,18 @@ const fetch = (request: Request, environment: CoreEnvironment): Promise<Response
   );
 };
 
+/** Builds the private Core target with one telemetry service for each request Work span. */
+export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
+  fetch: (request, environment) =>
+    fetchEffect(request, environment).pipe(
+      observeWorkerRequest({
+        environment,
+        telemetry,
+        operation: "worker.core.fetch",
+      }),
+      Effect.runPromise
+    ),
+});
+
 /** Private service-binding target for canonical execution and bounded topology health evidence. */
-export default { fetch } satisfies ExportedHandler<CoreEnvironment>;
+export default makeCoreWorker(cloudflareWorkerTelemetry);

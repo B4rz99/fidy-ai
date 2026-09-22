@@ -1,0 +1,99 @@
+apps/server/src/shell/categories/list-categories.ts
+  s_72088ee5b5e3ae::t_aacbfb6ac6fa9a 34,50
+  s_72088ee5b5e3ae::t_3c836b66971686 1-3,6,9-14,17,20-29
+  s_72088ee5b5e3ae::t_d71cd2b29df759 4,7-8,15-16,18-19,30,35-37,39-49,51
+  s_72088ee5b5e3ae::t_a729f2dac64754 5
+  s_72088ee5b5e3ae::t_7a8b0fbf0a60f5 31-33,38
+.oxlintrc.json
+  s_72088ee5b5e3ae::t_175d47c1b3a28a 184-186,191-192
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_72088ee5b5e3ae::t_0ac47737cf45c0 10
+  s_72088ee5b5e3ae::t_587ce617b8eed6 23
+  s_72088ee5b5e3ae::t_24250e1c4cf143 27
+infra/cloudflare/migrations/0001_categories.sql
+  s_72088ee5b5e3ae::t_5c2183f7dd70f5 2-24
+  s_72088ee5b5e3ae::t_c887f516d5fb63 1
+apps/server/contracts/openapi.json
+  s_72088ee5b5e3ae::t_11ed4414f84f3c 279-280,897,3175,3995,4456,7471,7500-7541,9439,9519,10444-10453
+infra/cloudflare/topology.ts
+  s_72088ee5b5e3ae::t_ef27354ccd6d8e 10
+  s_72088ee5b5e3ae::t_219cb5b3cdf5c2 1,4-6
+  s_72088ee5b5e3ae::t_1efa277683167f 2-3
+infra/cloudflare/package.json
+  s_72088ee5b5e3ae::t_d75ec6b840e30d 13-14
+apps/server/src/shell/categories/operations.ts
+  s_72088ee5b5e3ae::t_9c091effbdf767 13,46
+  s_72088ee5b5e3ae::t_acaefcfe410580 19-21,44-45
+infra/cloudflare/core-worker.ts
+  s_72088ee5b5e3ae::t_421aa41f87e24b 33
+  s_72088ee5b5e3ae::t_837cdee7499a4d 1,7,15,17,26,32,35-40,44,47,50,57-61,64,66,69,72-81,85
+  s_72088ee5b5e3ae::t_990e8fd853066a 16,41
+  s_72088ee5b5e3ae::t_14222784fc09bd 71
+  s_72088ee5b5e3ae::t_7d71bd95ffab07 2-6,48,51,53
+  s_72088ee5b5e3ae::t_4ed1616b4f9817 34,49,52,54-55
+  s_72088ee5b5e3ae::t_b57855183b9de2 42-43,56,63
+  s_72088ee5b5e3ae::t_1747bef45b463a 45-46
+ARCHITECTURE.md
+  s_72088ee5b5e3ae::t_b8afcbb781d25d 51-55,87-89
+infra/cloudflare/tsconfig.json
+  s_72088ee5b5e3ae::t_74d79ce7090167 11-14
+bun.lock
+  s_72088ee5b5e3ae::t_bb2edbccd8fe91 89-90
+apps/server/src/shell/public-http/contract.ts
+  s_72088ee5b5e3ae::t_10575610124f09 155,255,335-340,360-361
+infra/cloudflare/vitest.config.ts
+  s_72088ee5b5e3ae::t_132ee201e318f4 1-9
+infra/cloudflare/workers.test.ts
+  s_72088ee5b5e3ae::t_7e681ca7545469 139,141,143
+  s_72088ee5b5e3ae::t_2be827531791e6 166,189,217,245
+  s_72088ee5b5e3ae::t_e4516780315626 210-212
+  s_72088ee5b5e3ae::t_25d7de7dbd1e01 214-215
+  s_72088ee5b5e3ae::t_78ea071a93a3b9 216,218
+  s_72088ee5b5e3ae::t_8fc9902065ee53 14,26-28,121,138,185-187,220-223,228-232
+  s_72088ee5b5e3ae::t_e1eb82fc864ff3 12-13,202,227
+  s_72088ee5b5e3ae::t_58cc2c643c52c7 30-31,142
+  s_72088ee5b5e3ae::t_0217d30fb1a356 7,184,188,190-201,203-209,219,224-226
+  s_72088ee5b5e3ae::t_8d32c0b7c3997c 98-99,120,137,233
+  s_72088ee5b5e3ae::t_800c5986215524 100-102
+  s_72088ee5b5e3ae::t_3757e3b3035b91 15-25,29,140,213
+infra/cloudflare/alchemy.run.ts
+  s_72088ee5b5e3ae::t_0cd4b79856c5a6 8
+  s_72088ee5b5e3ae::t_b36c452b208db6 52-56,67
+  s_72088ee5b5e3ae::t_b76746b026d0ae 82-85
+apps/server/src/shell/categories/runtime.ts
+  s_72088ee5b5e3ae::t_ea12bc72fe259b 8-9
+  s_72088ee5b5e3ae::t_e392eaf2fc176f 1-7
+apps/server/ARCHITECTURE.md
+  s_72088ee5b5e3ae::t_4660d39e318b85 71-73
+  s_72088ee5b5e3ae::t_7b3fe9f09cbe17 21-23,74-76,88-90
+  s_72088ee5b5e3ae::t_d554e15da27bb8 20
+apps/server/package.json
+  s_72088ee5b5e3ae::t_37b5f7cb604da4 7-11
+infra/cloudflare/local-emulation.test.ts
+  s_72088ee5b5e3ae::t_c5fe527d46ea07 10,67-68,76-77
+  s_72088ee5b5e3ae::t_855b1620393916 13,72-74
+  s_72088ee5b5e3ae::t_1da15eb3aab744 3
+  s_72088ee5b5e3ae::t_ad3dc39b162b91 2,78
+  s_72088ee5b5e3ae::t_809c5ea9f037c3 69-71,75
+  s_72088ee5b5e3ae::t_f3d5a4fe241e0a 79-81
+infra/cloudflare/public-worker.ts
+  s_72088ee5b5e3ae::t_6174172db4a44c 6,9-20,43-50
+  s_72088ee5b5e3ae::t_362fc99ef4c04a 33-34,51,56,69
+  s_72088ee5b5e3ae::t_db2c5d587e52e5 1,32,57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "26545810c5a343e342eea684922ea8a0bed229f8",
+  "prompts": {},
+  "sessions": {
+    "s_72088ee5b5e3ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c8f8-17f8-71c5-b78e-8130ace9b3fd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

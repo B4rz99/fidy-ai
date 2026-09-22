@@ -1,12 +1,16 @@
+import assert from "node:assert/strict";
 import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
 import {
+  Cause,
   type Config,
   ConfigProvider,
   DateTime,
   Effect,
+  Exit,
   Layer,
   ManagedRuntime,
+  Option,
   Redacted,
 } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
@@ -254,16 +258,25 @@ layer(clientLayer(new Response(null, { status: 101 })), {
   );
 });
 
-layer(clientLayer(new Response("redirect body", { status: 300 })), {
-  excludeTestServices: true,
-})("Wompi non-success redirect adapter", (it) => {
-  it.effect("treats a non-success status below provider outages as definitive", () =>
-    Effect.gen(function* () {
-      const failure = yield* Effect.flip(createPaymentSource);
-      expect(failure).toEqual(new WompiSourceCreationFailed({ certainty: "rejected" }));
-    })
-  );
-});
+for (const status of [302, 307, 308]) {
+  layer(clientLayer(new Response("private redirect body", { status })), {
+    excludeTestServices: true,
+  })(`Wompi ${status} redirect adapter`, (it) => {
+    it.effect("maps the response to a closed definitive failure", () =>
+      Effect.gen(function* () {
+        const exit = yield* createPaymentSource.pipe(Effect.exit);
+        const unannotatedExit = Exit.isFailure(exit)
+          ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
+          : exit;
+        assert.deepStrictEqual(
+          unannotatedExit,
+          Exit.fail(new WompiSourceCreationFailed({ certainty: "rejected" }))
+        );
+        expect(String(exit)).not.toContain("private redirect body");
+      })
+    );
+  });
+}
 
 layer(clientLayer(new Response("not-json", { status: 201 })), {
   excludeTestServices: true,

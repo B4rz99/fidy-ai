@@ -39,6 +39,7 @@ npm-debug.log*
 *.orig
 
 # Agent / local tooling
+.alchemy/
 .claude/worktrees/
 .claude/settings.local.json
 .npm/

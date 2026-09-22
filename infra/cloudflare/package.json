@@ -1,0 +1,25 @@
+{
+  "name": "@fidy/cloudflare-infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rm -rf .alchemy/dev-auth && ALCHEMY_HOME=.alchemy/dev-auth alchemy profile create local --no-input && ALCHEMY_HOME=.alchemy/dev-auth alchemy profile edit --profile local --add Cloudflare --method stored --set apiToken=local-development-placeholder --set accountId=00000000000000000000000000000000 --no-input && ALCHEMY_HOME=.alchemy/dev-auth ALCHEMY_PROFILE=local alchemy dev",
+    "deploy": "alchemy deploy --stage production --no-input",
+    "plan": "alchemy plan --stage production --no-input",
+    "typecheck": "tsc --noEmit",
+    "test": "bun --bun vitest run"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.115"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260914.1",
+    "@effect/platform-bun": "4.0.0-rc.115",
+    "@effect/platform-node": "4.0.0-rc.115",
+    "@effect/vitest": "4.0.0-rc.115",
+    "alchemy": "2.0.0-beta.79",
+    "typescript": "7.0.2",
+    "vitest": "5.0.0"
+  }
+}

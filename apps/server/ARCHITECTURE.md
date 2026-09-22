@@ -15,9 +15,12 @@ production listener.
 - `src/client.ts` is the browser-safe declaration seam. It exports no server implementation.
 
 The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
-provider-specific hosted inference implementations are not compatibility surfaces. A future
-Cloudflare Worker composes the published contracts with D1, Durable Objects, Queues, Workflows, R2,
-Workers AI, or Email Workers. Until then, unavailable operations fail closed.
+provider-specific hosted inference implementations are not compatibility surfaces. Railway,
+PostgreSQL, and a Bun process are superseded Production architecture under ADR 0026. The private
+Core Worker in `infra/cloudflare` currently proves the service-binding boundary and bounded health
+projection; later Cloudflare adapters will compose this package's published contracts with D1,
+Durable Objects, Queues, Workflows, R2, Workers AI, or Email Workers. Until then, unavailable
+operations fail closed.
 
 ## 2. Slices and ownership
 

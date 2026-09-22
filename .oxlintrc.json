@@ -181,6 +181,18 @@
         "import/no-default-export": "off"
       }
     },
+    // Cloudflare Worker modules and Alchemy stack entrypoints are discovered through
+    // their platforms' required default-export contracts.
+    {
+      "files": [
+        "infra/cloudflare/alchemy.run.ts",
+        "infra/cloudflare/core-worker.ts",
+        "infra/cloudflare/public-worker.ts"
+      ],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
     {
       "files": ["apps/web/src/app/routes.ts"],
       "rules": {

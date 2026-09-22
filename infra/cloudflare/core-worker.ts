@@ -4,23 +4,27 @@ import {
   listCategoriesPath,
   listCategoriesResponse,
 } from "@fidy/server/categories";
-import { Effect, Exit, Schema } from "effect";
+import { HostedInference } from "@fidy/server/hosted-inference";
 import type { TelemetryService } from "@fidy/server/telemetry";
+import { Effect, Exit, Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./telemetry";
+import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./workers-ai";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type CoreEnvironment = typeof ReleaseConfiguration.Type &
-  WorkerTelemetryEnvironment & {
+type CoreEnvironment = WorkerTelemetryEnvironment &
+  typeof ReleaseConfiguration.Type & {
+    readonly AI: WorkersAiEnvironment["AI"];
     readonly DB: D1Database;
+    readonly HOSTED_AI_MODEL: string;
   };
 
 type CoreWorker = Readonly<{
@@ -95,7 +99,14 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment) =>
-    fetchEffect(request, environment).pipe(
+    Effect.gen(function* () {
+      yield* HostedInference;
+      return yield* fetchEffect(request, environment);
+    }).pipe(
+      // This Worker fetch boundary is the Cloudflare-owned application entry point.
+      // @effect-diagnostics-next-line strictEffectProvide:off
+      Effect.provide(cloudflareHostedInferenceLive(environment)),
+      Effect.catchTag("HostedInferenceError", () => Effect.succeed(unavailable())),
       observeWorkerRequest({
         environment,
         telemetry,

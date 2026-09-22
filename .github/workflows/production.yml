@@ -42,11 +42,19 @@ jobs:
       - name: Install the locked workspace
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Select the server-approved Workers AI model
+        run: |
+          model=$(bun infra/cloudflare/scripts/print-approved-workers-ai-model.ts)
+          echo "HOSTED_AI_MODEL=$model" >> "$GITHUB_ENV"
+
       - name: Capture the immutable contract digest
         run: echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
 
       - name: Test the Worker boundary
         run: bun run --cwd infra/cloudflare test -- workers.test.ts
+
+      - name: Gate the approved Workers AI model against live conformance
+        run: bun run --cwd infra/cloudflare test:workers-ai-conformance
 
       - name: Build and validate the Production static artifact
         run: bun run --cwd apps/web build:production

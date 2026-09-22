@@ -28,6 +28,16 @@
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",
       "default": "./src/shell/observability/runtime.ts"
+    },
+    "./hosted-inference": {
+      "types": "./src/shell/hosted-inference/runtime.ts",
+      "import": "./src/shell/hosted-inference/runtime.ts",
+      "default": "./src/shell/hosted-inference/runtime.ts"
+    },
+    "./hosted-inference-model": {
+      "types": "./src/shell/hosted-inference/model.ts",
+      "import": "./src/shell/hosted-inference/model.ts",
+      "default": "./src/shell/hosted-inference/model.ts"
     }
   },
   "scripts": {
@@ -39,6 +49,7 @@
     "contracts:check": "bun tools/contracts/generate.ts --check && bun tools/contracts/check.ts",
     "test:contracts": "bun --bun vitest run --config tools/contracts/vitest.config.ts",
     "test": "bun --bun vitest run --config vitest.config.ts",
+    "test:hosted-inference": "bun --bun vitest run src/shell/hosted-inference/conformance.test.ts src/shell/hosted-inference/operations.test.ts src/shell/hosted-inference/workers-ai.test.ts --coverage.enabled=false",
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",

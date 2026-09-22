@@ -4,6 +4,7 @@ import type { Response } from "effect/unstable/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/model";
 import type { TranscriptEntry } from "~/core/transcript/model";
+import { maximumToolCallsPerTurn } from "~/shell/_shared/hosted-turn-bounds";
 
 /** Ordered semantic material projected by Agent without exposing provider prompt fragments. */
 export type HostedContextSection =
@@ -145,9 +146,10 @@ export class HostedInferenceError extends Data.TaggedError("HostedInferenceError
 }
 
 /** Positive maximum for one tools-enabled hosted request. */
-export const HostedToolCallMaximum = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
-  Schema.brand("HostedToolCallMaximum")
-);
+export const HostedToolCallMaximum = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(maximumToolCallsPerTurn)
+).pipe(Schema.brand("HostedToolCallMaximum"));
 export type HostedToolCallMaximum = typeof HostedToolCallMaximum.Type;
 
 /** Caller-visible canonical operations plus whether calls are forbidden or bounded. */
@@ -214,14 +216,15 @@ export type HostedInferenceService = Readonly<{
   ) => Effect.Effect<PreparedHostedStructured<Output>, HostedInferenceError>;
 }>;
 
-/** Provider-neutral deterministic behavior for cross-module hosted test doubles. */
+/** Provider-neutral deterministic behavior executed through production inference orchestration. */
 export type HostedInferenceStubBehavior = Readonly<{
   countText: HostedInferenceService["countText"];
   countTranscript: HostedInferenceService["countTranscript"];
-  validateText: HostedInferenceService["validateText"];
-  prepareStructured: HostedInferenceService["prepareStructured"];
+  validate: () => Effect.Effect<void, HostedInferenceError>;
   generate: (
-    contexts: ReadonlyArray<HostedTextContext>,
     policy: HostedTextToolPolicy
   ) => Effect.Effect<Omit<HostedTextResult, "continuation">, HostedInferenceError>;
+  generateStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
+    outputSchema: Schema.Codec<Output, Encoded, never, never>
+  ) => Effect.Effect<Output, HostedInferenceError>;
 }>;

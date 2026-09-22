@@ -1,4 +1,5 @@
 import { it } from "@effect/vitest";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
@@ -27,9 +28,15 @@ const failingDatabase: D1Database = {
   withSession: failDatabaseOperation,
 };
 
+const unusedAiBinding = {
+  run: (): Promise<never> => Promise.reject(new Error("Unused Workers AI binding")),
+};
+
 const coreEnvironment = {
+  AI: unusedAiBinding,
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
+  HOSTED_AI_MODEL: approvedWorkersAiModel,
   RELEASE_GIT_SHA: gitRevision,
 };
 
@@ -221,8 +228,10 @@ describe("Cloudflare Worker topology", () => {
     Effect.gen(function* () {
       const response = yield* Effect.promise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), {
+          AI: unusedAiBinding,
           CONTRACT_DIGEST: "secret configuration",
           DB: failingDatabase,
+          HOSTED_AI_MODEL: "unsupported private model",
           RELEASE_GIT_SHA: "wrong",
         })
       );

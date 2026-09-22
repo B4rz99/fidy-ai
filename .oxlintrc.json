@@ -193,6 +193,7 @@
         "infra/cloudflare/protected-document-worker.ts",
         "infra/cloudflare/public-worker.ts",
         "infra/cloudflare/resource-admission-worker.fixture.ts",
+        "infra/cloudflare/workers-ai-conformance-worker.ts",
         "infra/cloudflare/vitest.config.ts"
       ],
       "rules": {

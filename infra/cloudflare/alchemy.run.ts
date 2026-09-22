@@ -4,12 +4,14 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
+import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import { browserOrigins, productionTopology, resolveLocalCanonicalReadBearer } from "./topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
+const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 
 const resolveBrowserOrigin = (production: boolean): string =>
   production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;
@@ -101,8 +103,10 @@ export default Alchemy.Stack(
         strictPort: true,
       },
       env: {
+        AI: Cloudflare.Workers.AI(),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
+        HOSTED_AI_MODEL: yield* hostedAiModel,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,

@@ -90,8 +90,9 @@ policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cac
 headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
 is the first exception: its Cloudflare integration gate exercises public ingress, the private service
 binding, and local D1. Resource-admission integration exercises local D1 directly to prove atomic
-concurrency and restart behavior without inventing a public route. DO/Queue/Workflow/R2/Workers AI
-integration gates remain future work.
+concurrency and restart behavior without inventing a public route. The Workers AI release gate
+exercises the approved model through the real AI binding without a gateway or external-model
+fallback. DO/Queue/Workflow/R2 integration gates remain future work.
 
 Application-local test seams belong to the owning application architecture. Portable core, schema,
 security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests

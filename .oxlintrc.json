@@ -55,9 +55,13 @@
     ],
     "sort-imports": ["error", { "ignoreDeclarationSort": true }],
     "typescript/explicit-function-return-type": "error",
-    // `.mjs` is the exception for the few Node ESM configuration imports where
-    // the extension is genuinely required to resolve.
-    "import/extensions": ["error", "never", { "pattern": { "mjs": "always" } }],
+    // Node ESM configuration imports and Vite's raw HTML/CSS assets require their
+    // extensions; ordinary source imports do not.
+    "import/extensions": [
+      "error",
+      "never",
+      { "pattern": { "mjs": "always", "css": "always", "html": "always" } }
+    ],
     "no-void": "error",
     "curly": ["error", "multi-line"],
     "default-case-last": "error",
@@ -135,27 +139,40 @@
     "yoda": "error"
   },
   "overrides": [
-    // CI scripts and the tool runners report to a terminal; that is their whole
-    // output channel.
+    // These sequential probes and dependency guards must await each step before advancing.
     {
       "files": [
-        "scripts/**/*.ts",
-        "apps/server/scripts/**/*.ts",
-        "apps/web/scripts/**/*.ts",
-        "tools/**/*.mjs"
+        "scripts/document-parsing/check.ts",
+        "scripts/document-parsing/extraction-proof.ts",
+        "apps/server/scripts/check-dependency-guards.ts",
+        "apps/web/scripts/check-dependency-guards.ts",
+        "apps/web/scripts/check-browser-bundle.ts"
       ],
       "rules": {
-        "no-await-in-loop": "off",
+        "no-await-in-loop": "off"
+      }
+    },
+    // Terminal reporting is the output channel of these two tool runners.
+    {
+      "files": ["tools/depcruise/run.mjs", "tools/mutation/run.mjs"],
+      "rules": {
         "no-console": "off"
       }
     },
-    // Contract tooling reflects raw OpenAPI JSON, whose data model necessarily includes null,
-    // and coordinates a bounded set of parsing and edge steps. Keeping that wire shape literal
-    // is safer than wrapping every JSON leaf in Option; the complexity is isolated from runtime.
+    // The compatibility and generation analyzers coordinate bounded parsing and edge steps.
     {
-      "files": ["apps/server/tools/contracts/**/*.ts"],
+      "files": [
+        "apps/server/tools/contracts/compatibility.ts",
+        "apps/server/tools/contracts/generate.ts"
+      ],
       "rules": {
-        "complexity": "off",
+        "complexity": "off"
+      }
+    },
+    // These two tools reflect raw OpenAPI JSON, whose wire shape necessarily includes null.
+    {
+      "files": ["apps/server/tools/contracts/check.ts", "apps/server/tools/contracts/generate.ts"],
+      "rules": {
         "effect-guards/no-nullable-type": "off"
       }
     },
@@ -166,15 +183,21 @@
         "import/no-default-export": "off"
       }
     },
-    // Vite's source and configuration contracts require extension-bearing asset imports and
-    // default-exported configuration objects. TanStack Router requires interface declaration
-    // merging for its registered router type.
+    // Oxc's extension resolver misclassifies package entrypoints in these existing
+    // UI components and a few test/configuration files. New browser source retains the rule.
     {
-      "files": ["apps/web/**/*.{ts,tsx}"],
+      "files": [
+        "apps/web/src/ui/class-names.ts",
+        "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
+        "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
+        "apps/web/{playwright,vite,vitest}.config.ts",
+        "apps/web/src/testing/setup.ts"
+      ],
       "rules": {
         "import/extensions": "off"
       }
     },
+    // Vite and Vitest require default-exported configuration objects.
     {
       "files": ["apps/web/{playwright,vite,vitest}.config.ts"],
       "rules": {
@@ -182,8 +205,7 @@
       }
     },
     // Cloudflare Worker modules, Alchemy, and Vitest are discovered through their platforms'
-    // required default-export contracts. Keep the declarative topology together so resource
-    // ownership and dependency order remain visible in one entrypoint.
+    // required default-export contracts.
     {
       "files": [
         "infra/cloudflare/alchemy.run.ts",
@@ -197,7 +219,14 @@
         "infra/cloudflare/vitest.config.ts"
       ],
       "rules": {
-        "import/no-default-export": "off",
+        "import/no-default-export": "off"
+      }
+    },
+    // Keep the declarative topology together so resource ownership and dependency order
+    // remain visible in the single Alchemy entrypoint.
+    {
+      "files": ["infra/cloudflare/alchemy.run.ts"],
+      "rules": {
         "max-lines-per-function": "off"
       }
     },
@@ -234,16 +263,6 @@
       "files": ["apps/web/src/app/routes.ts", "apps/web/src/features/public-site/feature.tsx"],
       "rules": {
         "typescript/explicit-function-return-type": "off"
-      }
-    },
-    // The staged generic needs its concrete canonical API to preserve each operation in the
-    // resulting Atom client. Oxc cannot type the workspace source export and marks that one
-    // assignment as `error`; tsc and both browser module-graph checks grade the boundary.
-    {
-      "files": ["apps/web/src/transport/client.ts"],
-      "rules": {
-        "typescript/explicit-function-return-type": "off",
-        "typescript/no-unsafe-assignment": "off"
       }
     },
     // The two tooling locations below also have no types. dependency-cruiser
@@ -440,14 +459,6 @@
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",
         "no-magic-numbers": "off"
-      }
-    },
-    // A `CREATE FUNCTION` is one indivisible statement, so a gateway body longer
-    // than the limit cannot be split without routing DDL through `sql.unsafe`.
-    {
-      "files": ["apps/server/src/shell/database/internal/migrations/*.ts"],
-      "rules": {
-        "max-lines-per-function": "off"
       }
     },
     {

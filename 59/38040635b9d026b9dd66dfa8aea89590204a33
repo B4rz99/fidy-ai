@@ -1,0 +1,91 @@
+scripts/document-parsing/check.ts
+  s_606d25cb938c5b::t_d617085eefb9bb 16,109-116,119-120,124-126,157-158
+  s_606d25cb938c5b::t_24b6e2f17984b4 29,48,87,127-133
+  s_606d25cb938c5b::t_9dd31c802399ac 18,28,31-35,61-65,136-138,160
+  s_606d25cb938c5b::t_8cbb6a23a326b8 23-24,91,96,98-108,121-122,134-135,232-233,247,251
+  s_606d25cb938c5b::t_044e768c89edeb 41
+  s_606d25cb938c5b::t_947c73c5192ce2 163-177
+  s_606d25cb938c5b::t_7afb98402c1212 6-14,47,49,70-86,88,117-118,123,139-156,182-184
+  s_606d25cb938c5b::t_5c99089a5cbd98 46,69,190,194-195,199,202,204-231,237,242
+  s_5f1bbc15e87d7d::t_cad44d9c84433e 1-5,15,17,19-22,25-27,30,36-40,42-45,50-60,66-68,89-90,92-95,97,159,161-162,178-181,185-189,191-193,196-198,200-201,203,234-236,238-241,243-246,248-250
+apps/server/package.json
+  s_606d25cb938c5b::t_5e304bed3a8513 16-20
+docs/research/worker-document-parsing-proof.md
+  s_606d25cb938c5b::t_7537b40a0844f9 1-18,20-34,45-49,63-92
+  s_606d25cb938c5b::t_24b6e2f17984b4 35-36,43-44,50-62
+  s_606d25cb938c5b::t_bf8e0e87341148 19
+  s_606d25cb938c5b::t_2939ca4919e8ec 37-42
+infra/cloudflare/protected-document-worker.ts
+  s_606d25cb938c5b::t_5731f930b6b1e0 1-14
+infra/cloudflare/package.json
+  s_606d25cb938c5b::t_0f40f1665abee0 9
+  s_606d25cb938c5b::t_27b560a54170f1 26-27
+  s_606d25cb938c5b::t_786f900e0fbb6b 24
+infra/cloudflare/document-parsing-worker.test.ts
+  s_606d25cb938c5b::t_0d1ad1b3f2c4bc 55-69
+  s_606d25cb938c5b::t_24b6e2f17984b4 86
+  s_606d25cb938c5b::t_1559c814092845 1-54,70-85,87-95
+package.json
+  s_606d25cb938c5b::t_05e28b827a8442 37
+infra/cloudflare/document-parsing.wrangler.jsonc
+  s_606d25cb938c5b::t_24b6e2f17984b4 7-8
+  s_606d25cb938c5b::t_7d3a2b320d80da 1-6,9
+tsconfig.base.json
+  s_606d25cb938c5b::t_01d7e8080ba1b9 150-158
+  s_3466adb67b1143::t_925d5b32885449 149
+apps/server/src/shell/ingestion/parser.test.ts
+  s_606d25cb938c5b::t_e6b4f9954a2a3d 231-254
+infra/cloudflare/document-parsing-worker.ts
+  s_606d25cb938c5b::t_afd3b5ed63caea 2,43,84
+  s_606d25cb938c5b::t_263bbfa30441fc 1,9-12,16,22,24,32-42,44,46,49,51-74,77-83,85-93,100
+  s_606d25cb938c5b::t_7b3b1ccdc368e0 3-6,8,13-15,17,23,25-26,28-29,45,47-48,50,76,94-99,101-102
+  s_606d25cb938c5b::t_5d788c4ea574ee 7,27,30-31,75
+  s_606d25cb938c5b::t_24b6e2f17984b4 18-21
+scripts/verify.ts
+  s_606d25cb938c5b::t_24b6e2f17984b4 116
+.gitignore
+  s_606d25cb938c5b::t_63e14dd4921032 43-44
+infra/cloudflare/protected-document.wrangler.jsonc
+  s_606d25cb938c5b::t_4f9b6cefbdfda9 1-6,9
+  s_606d25cb938c5b::t_24b6e2f17984b4 7-8
+apps/server/src/shell/ingestion/parser.ts
+  s_606d25cb938c5b::t_114c3fa24a10d9 372-374,376-382
+  s_606d25cb938c5b::t_ad61c938e78aa3 20-25
+  s_606d25cb938c5b::t_9479c1a832bfae 367-371,375
+.oxlintrc.json
+  s_606d25cb938c5b::t_60ac0aecd6cde7 191-192
+bun.lock
+  s_5f1bbc15e87d7d::t_59b1a473d7d8b2 99,102,1421-1422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5938040635b9d026b9dd66dfa8aea89590204a33",
+  "prompts": {},
+  "sessions": {
+    "s_3466adb67b1143": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c962-e4da-76de-aa45-cc7bc2fb6fa1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_5f1bbc15e87d7d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c962-b71f-778b-b4b4-16f406cea96c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_606d25cb938c5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c961-773d-7349-9f4e-e1bd32074edd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,6 +1,5 @@
-import { DateTime, Duration } from "effect";
+import { Duration } from "effect";
 import { IanaTimeZone, type Locale, type ServiceMarket } from "~/core/_shared/context";
-import { TrialPeriod } from "~/core/identity/model";
 
 const trialHours = 168;
 /** A fourth wrong proof closes the pending enrollment; later attempts cannot revive it. */
@@ -26,13 +25,13 @@ export const verifiedOnboardingContext = (
   serviceMarket: ServiceMarket;
   locale: Locale;
   timeZone: IanaTimeZone;
-  trialPeriod: TrialPeriod;
+  trialPeriod: Readonly<{ startedAtMs: number; endsAtMs: number }>;
 }> => ({
   serviceMarket: "CO",
   locale: "es-CO",
   timeZone: IanaTimeZone.make("America/Bogota"),
-  trialPeriod: TrialPeriod.make({
-    startedAt: DateTime.makeUnsafe(nowMs),
-    endsAt: DateTime.makeUnsafe(nowMs + Duration.toMillis(Duration.hours(trialHours))),
-  }),
+  trialPeriod: {
+    startedAtMs: nowMs,
+    endsAtMs: nowMs + Duration.toMillis(Duration.hours(trialHours)),
+  },
 });

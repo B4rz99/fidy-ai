@@ -4,7 +4,7 @@ import {
   maximumOnboardingProofFailures,
   verifiedOnboardingContext,
 } from "@fidy/server/onboarding-verification";
-import { DateTime, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({
@@ -24,6 +24,7 @@ const ProofRow = Schema.Struct({
 });
 type Enrollment = typeof ProofRow.Type;
 const maximumBodyBytes = 512;
+const maximumBodyChunks = 32;
 const digestLength = 32;
 const recoverySymbols = 25;
 const publicCodeLength = 9;
@@ -62,28 +63,39 @@ const equalDigest = (left: Uint8Array, right: Uint8Array): boolean => {
   return difference === 0;
 };
 
+const collectBody = (
+  reader: ReadableStreamDefaultReader<unknown>,
+  chunks: Array<Uint8Array>,
+  length: number
+): Promise<Option.Option<string>> =>
+  reader.read().then((part) => {
+    if (part.done) {
+      const bytes = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return Option.some(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    }
+    const chunk: unknown = part.value;
+    if (
+      !(chunk instanceof Uint8Array) ||
+      chunks.length >= maximumBodyChunks ||
+      length + chunk.byteLength > maximumBodyBytes
+    ) {
+      return Option.none();
+    }
+    chunks.push(chunk);
+    return collectBody(reader, chunks, length + chunk.byteLength);
+  });
+
 // @effect-diagnostics-next-line asyncFunction:off
 const readBody = async (request: Request): Promise<Option.Option<string>> => {
   if (request.body === null) return Option.none();
   const reader = request.body.getReader();
-  const chunks: Array<Uint8Array> = [];
-  let length = 0;
   try {
-    for (;;) {
-      // eslint-disable-next-line no-await-in-loop
-      const part = await reader.read();
-      if (part.done) break;
-      length += part.value.byteLength;
-      if (length > maximumBodyBytes) return Option.none();
-      chunks.push(part.value);
-    }
-    const bytes = new Uint8Array(length);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return Option.some(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return await collectBody(reader, [], 0);
   } catch {
     return Option.none();
   } finally {
@@ -140,11 +152,7 @@ const createUser = async (db: D1Database, row: Enrollment, now: number): Promise
     db
       .prepare(`INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms)
       VALUES (?, ?, ?)`)
-      .bind(
-        userId,
-        DateTime.toEpochMillis(context.trialPeriod.startedAt),
-        DateTime.toEpochMillis(context.trialPeriod.endsAt)
-      ),
+      .bind(userId, context.trialPeriod.startedAtMs, context.trialPeriod.endsAtMs),
     db
       .prepare(`INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms)
       VALUES (?, ?, ?)`)

@@ -49,22 +49,22 @@ const setup = async (
   mfInstances.push(mf);
   await mf.ready;
   const db = await mf.getD1Database("DB");
-  for (const name of [
-    "0003_pending_consent",
-    "0004_onboarding_email",
-    "0005_verified_onboarding",
-  ]) {
-    // Applied migrations depend on the preceding schema.
-    // eslint-disable-next-line no-await-in-loop
-    const sql = await readFile(new URL(`./migrations/${name}.sql`, import.meta.url), "utf8");
-    for (const statement of sql
-      .replace(/^--.*$/gmu, "")
-      .trim()
-      .split(/;\s*\n(?=CREATE |ALTER |$)/u)) {
-      // eslint-disable-next-line no-await-in-loop
-      await db.prepare(statement).run();
-    }
-  }
+  const applyMigration = (name: string): Promise<void> =>
+    readFile(new URL(`./migrations/${name}.sql`, import.meta.url), "utf8").then((sql) =>
+      sql
+        .replace(/^--.*$/gmu, "")
+        .trim()
+        .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+        .reduce<Promise<void>>(
+          (previous, statement) =>
+            previous.then(() => db.prepare(statement).run()).then(() => undefined),
+          Promise.resolve()
+        )
+    );
+  // Applied migrations depend on the preceding schema, so they must run in order.
+  await ["0003_pending_consent", "0004_onboarding_email", "0005_verified_onboarding"].reduce<
+    Promise<void>
+  >((previous, name) => previous.then(() => applyMigration(name)), Promise.resolve());
   // @effect-diagnostics-next-line globalDate:off
   const now = Date.now();
   await db
@@ -273,7 +273,9 @@ it("refuses an already-owned WhatsAppIdentity without consuming another User's p
 it("serializes simultaneous redemptions so only one User receives the proof", async () => {
   const { db, send } = await setup();
   const results = await Promise.all([send(code), send(code)]);
-  expect(results.map((result) => result.status).sort()).toEqual([200, 400]);
+  expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+    200, 400,
+  ]);
   expect(
     (await db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>())?.count
   ).toBe(1);

@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding and architecture standards?), Security (does it satisfy the repo's documented security policy?), and Spec (does the code match what the originating issue/spec asked for?). Runs read-only reviews as parallel Herdr-managed Pi workers using OpenAI Codex gpt-5.6-luna at max reasoning effort, then reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding and architecture standards?), Security (does it satisfy the repo's documented security policy?), and Spec (does the code match what the originating issue/spec asked for?). Runs read-only reviews as parallel Herdr-managed Pi workers using OpenAI Codex gpt-5.6-sol at medium reasoning effort, then reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
 ---
 
 Three-axis review of the diff between `HEAD` and a fixed point the user supplies:
@@ -9,7 +9,7 @@ Three-axis review of the diff between `HEAD` and a fixed point the user supplies
 - **Security** — does the code satisfy this repo's documented security policy?
 - **Spec** — does the code faithfully implement the originating issue / spec?
 
-Each active axis runs as a **parallel Herdr-managed Pi worker** using OpenAI Codex's `gpt-5.6-luna` model at `max` reasoning effort, so the reviews don't pollute each other's context, then this skill aggregates their findings. The workers are read-only and share the caller's checkout.
+Each active axis runs as a **parallel Herdr-managed Pi worker** using OpenAI Codex's `gpt-5.6-sol` model at `medium` reasoning effort, so the reviews don't pollute each other's context, then this skill aggregates their findings. The workers are read-only and share the caller's checkout.
 
 The issue tracker should have been provided to you — run `/setup-matt-pocock-skills` if `docs/agents/issue-tracker.md` is missing.
 
@@ -75,10 +75,10 @@ If the check fails, stop and report that this review requires Herdr. Do not fall
 All active reviewers are read-only, so keep them in the caller's current checkout. Follow `/herdr`'s **Spawn skill-driven Pi workers** procedure exactly:
 
 1. Inspect the current layout and create one sibling pane per active axis with `--no-focus`. Parse the returned pane IDs; never construct them.
-2. Start every worker before sending any task. Launch each with OpenAI Codex `gpt-5.6-luna` at maximum reasoning effort:
+2. Start every worker before sending any task. Launch each with OpenAI Codex `gpt-5.6-sol` at medium reasoning effort:
 
    ```bash
-   herdr pane run <pane-id> "pi --model openai-codex/gpt-5.6-luna --thinking max --exclude-tools edit,write"
+   herdr pane run <pane-id> "pi --model openai-codex/gpt-5.6-sol --thinking medium --exclude-tools edit,write"
    ```
 
    This launches Pi through the current Codex-backed authentication. Do not substitute another model or reasoning level. Do not use `herdr agent start --kind codex`, `--provider openai`, an API key, `-p`, or `--no-session`.

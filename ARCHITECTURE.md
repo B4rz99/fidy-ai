@@ -48,10 +48,11 @@ has no D1 binding. The artifact contains the browser shell, hashed assets, heade
 metadata, and never contains server source, source maps, or secrets. The Wrangler configuration is
 restricted to isolated static pull-request previews and owns no Production route.
 
-The public `/health` request crosses the ingress-to-Core binding. Core returns a closed projection of
-health, Git revision, and contract digest; binding objects, environment values, topology, exception
-text, and Secrets never enter the response. `alchemy dev` executes those same entrypoints and binding
-graph locally. Local and Production are the only complete topology modes; the stack rejects every
+Public `/health` and canonical Categories requests cross the ingress-to-Core binding. Core returns a
+closed projection of health, Git revision, and contract digest, and is the sole owner of the D1
+binding used to load the stable Category taxonomy. Binding objects, environment values, topology,
+SQL, exception text, and Secrets never enter either response. `alchemy dev` executes those same
+entrypoints, D1 migrations, and binding graph locally. Local and Production are the only complete topology modes; the stack rejects every
 other remote stage before resource creation, so there is no persistent staging environment.
 
 GitHub Actions is the release coordinator. A trunk release checks out one exact source revision,
@@ -83,8 +84,9 @@ adapter boundary and do not imply that a removed local server is a production au
 
 The browser acceptance builds the production web mode and checks the checked-in Cloudflare header
 policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cache and security
-headers, and browser proof-handling behavior. API responses are explicit test fixtures; they do not
-stand in for the future Worker/D1/DO/Queue/Workflow/R2/Workers AI integration gates.
+headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
+is the first exception: its Cloudflare integration gate exercises public ingress, the private service
+binding, and local D1. DO/Queue/Workflow/R2/Workers AI integration gates remain future work.
 
 Application-local test seams belong to the owning application architecture. Portable core, schema,
 security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests

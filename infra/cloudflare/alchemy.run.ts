@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
-import { productionTopology } from "./topology";
+import { productionTopology, resolveLocalCanonicalReadBearer } from "./topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
@@ -49,6 +49,11 @@ export default Alchemy.Stack(
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
 
+    const database = yield* Cloudflare.D1.Database("Database", {
+      migrations: "./migrations",
+      readReplication: { mode: "disabled" },
+    });
+
     const core = yield* Cloudflare.Worker("Core", {
       main: "./core-worker.ts",
       compatibility: { date: "2026-09-08" },
@@ -59,6 +64,7 @@ export default Alchemy.Stack(
       },
       env: {
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
+        [productionTopology.core.d1Binding]: database,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
@@ -73,7 +79,10 @@ export default Alchemy.Stack(
         strictPort: true,
       },
       domain: production ? productionTopology.ingress.hostname : undefined,
-      env: { [productionTopology.ingress.coreBinding]: core },
+      env: {
+        [productionTopology.ingress.coreBinding]: core,
+        LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
+      },
       workersDev: production ? productionTopology.ingress.workersDev : true,
     });
 

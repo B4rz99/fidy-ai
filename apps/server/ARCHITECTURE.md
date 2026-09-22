@@ -17,10 +17,10 @@ production listener.
 The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
 provider-specific hosted inference implementations are not compatibility surfaces. Railway,
 PostgreSQL, and a Bun process are superseded Production architecture under ADR 0026. The private
-Core Worker in `infra/cloudflare` currently proves the service-binding boundary and bounded health
-projection; later Cloudflare adapters will compose this package's published contracts with D1,
-Durable Objects, Queues, Workflows, R2, Workers AI, or Email Workers. Until then, unavailable
-operations fail closed.
+Core Worker in `infra/cloudflare` owns the D1-backed Categories adapter path in addition to the
+service-binding boundary and bounded health projection. Later Cloudflare adapters will compose this
+package's published contracts with Durable Objects, Queues, Workflows, R2, Workers AI, or Email
+Workers. Operations without an adapter fail closed.
 
 ## 2. Slices and ownership
 
@@ -68,9 +68,12 @@ application state authority, Durable Objects the keyed coordination authority, Q
 mechanism, Workflows the durable multi-step mechanism, and R2 the bounded content authority. Those
 platform services must remain infrastructure, not alternate domain models.
 
-Atomic domain mutation and outbox behavior belong in the future D1/Worker adapter. If that adapter is
-absent, canonical mutation execution returns the closed unavailable failure. It must not use an
-in-memory map, local queue, process lock, or best-effort continuation as a substitute.
+The first D1 baseline contains the stable Category taxonomy. The canonical Categories implementation
+runs the bounded ordered query, decodes every row through the published Category schema, and is shared
+by the operation registry and the private Core Worker adapter. Atomic domain mutation and outbox behavior
+belong in later D1/Worker adapters. If an adapter is absent, canonical mutation execution returns the
+closed unavailable failure. It must not use an in-memory map, local queue, process lock, or
+best-effort continuation as a substitute.
 
 ## 6. Testing seams
 
@@ -82,8 +85,9 @@ Use the smallest seam that proves the behavior:
   subject isolation;
 - provider-boundary tests use the published outbound transport seam;
 - browser tests exercise the built static shell with explicit HTTP fixtures;
-- Cloudflare adapter tests, when an adapter exists, must exercise D1/DO/Queue/Workflow/R2/Workers AI
-  behavior through platform seams rather than recreating the removed local runtime.
+- Cloudflare adapter tests exercise Categories through public ingress, the real service binding, and
+  local D1; later DO/Queue/Workflow/R2/Workers AI tests use those platform seams rather than
+  recreating the removed local runtime.
 
 Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
 domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains

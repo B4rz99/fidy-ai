@@ -1,0 +1,24 @@
+-- The public integration test checks this baseline against the canonical launch taxonomy.
+CREATE TABLE categories (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  display_order INTEGER NOT NULL UNIQUE CHECK (display_order >= 0)
+) STRICT;
+
+INSERT INTO categories (id, label, display_order) VALUES
+  ('10000000-0000-4000-8000-000000000001', 'Restaurantes', 0),
+  ('10000000-0000-4000-8000-000000000002', 'Domicilios', 1),
+  ('10000000-0000-4000-8000-000000000003', 'Mercado', 2),
+  ('10000000-0000-4000-8000-000000000004', 'Transporte', 3),
+  ('10000000-0000-4000-8000-000000000005', 'Vivienda', 4),
+  ('10000000-0000-4000-8000-000000000006', 'Servicios', 5),
+  ('10000000-0000-4000-8000-000000000007', 'Salud', 6),
+  ('10000000-0000-4000-8000-000000000008', 'Educación', 7),
+  ('10000000-0000-4000-8000-000000000009', 'Compras', 8),
+  ('10000000-0000-4000-8000-000000000010', 'Entretenimiento', 9),
+  ('10000000-0000-4000-8000-000000000011', 'Viajes', 10),
+  ('10000000-0000-4000-8000-000000000012', 'Impuestos', 11),
+  ('10000000-0000-4000-8000-000000000013', 'Transferencias', 12),
+  ('10000000-0000-4000-8000-000000000014', 'Retiros de efectivo', 13),
+  ('10000000-0000-4000-8000-000000000015', 'Ingresos', 14),
+  ('10000000-0000-4000-8000-000000000016', 'Otros', 15);

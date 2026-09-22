@@ -1,89 +1,108 @@
-# Fidy
+<div align="center">
 
-Fidy is an agent-first personal finance product for Colombia. Users manage their finances through
-WhatsApp, and their own agents use the same canonical API as Fidy's hosted agent.
+<a href="https://alchemy.run">
+  <img src="https://raw.githubusercontent.com/alchemy-run/alchemy/main/images/readme-hero.webp" alt="Alchemy — Infrastructure as Effects" width="360" />
+</a>
 
-The project is under development. Cloudflare is the production platform; the server package currently
-provides domain, contract, and provider-boundary code while Cloudflare adapters are added.
+<br />
 
-## Run locally
+[![npm](https://img.shields.io/npm/v/alchemy?style=flat-square&color=3f5a2a&label=alchemy)](https://www.npmjs.com/package/alchemy)
+[![license](https://img.shields.io/badge/license-Apache%202.0-3f5a2a?style=flat-square)](./LICENSE)
+[![discord](https://img.shields.io/badge/discord-join-3f5a2a?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/jwKw8dBJdN)
 
-Requirements: [Bun](https://bun.sh), [Gitleaks](https://github.com/gitleaks/gitleaks), and
-[TruffleHog](https://github.com/trufflesecurity/trufflehog). Secret scans run in the pre-push hook.
+**Infrastructure-as-Effects** — cloud infrastructure and application logic as a single, type-safe [Effect](https://effect.website) program.
 
-```sh
-bun install
-cp .env.example .env
-bun run dev:web
+[Docs](https://alchemy.run) · [Tutorial](https://alchemy.run/tutorial/part-1) · [Examples](./examples) · [Discord](https://discord.gg/jwKw8dBJdN)
+
+</div>
+
+---
+
+A Worker bound to a R2 bucket and serving objects from it:
+
+```typescript
+const Bucket = Cloudflare.R2.Bucket("bucket");
+
+export default Cloudflare.Worker(
+  "api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const object = yield* bucket.get(request.url);
+        return HttpServerResponse.stream(object!.body);
+      })
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+);
 ```
 
-The browser development server is available at <http://localhost:5173>. The built static artifact can
-be checked with:
+One `ReadWriteBucket(Bucket)` call wires the binding, env var, and typed client — at deploy time and at runtime.
+
+---
+
+- **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
+- **Bindings, not glue code.** `S3.GetObject(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
+- **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.
+- **AWS + Cloudflare today.** S3, SQS, DynamoDB, Kinesis, Lambda, EC2 / Workers, R2, D1, Durable Objects, Containers.
+- **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh
-bun run --cwd apps/web build:preview
-bun run --cwd apps/web test:browser
+bun add alchemy@latest effect@rc
 ```
 
-## Tests and checks
+## GitHub Action
 
-```sh
-bun run test:core
-bun run test
-bun run verify
+Use the root action to deploy `prod` from `main`, deploy PR previews as
+`staging-{number}`, and destroy PR previews when the PR closes:
+
+```yaml
+- uses: alchemy-run/alchemy@v1
+  env:
+    CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-See [`.env.example`](./.env.example) for retained local configuration and the project documentation:
+The workflow must install the `alchemy` CLI before this action runs.
 
-- [Domain context](./CONTEXT.md)
-- [System architecture](./ARCHITECTURE.md)
-- [Server architecture](./apps/server/ARCHITECTURE.md)
-- [Web architecture](./apps/web/ARCHITECTURE.md)
-- [Coding standards](./CODING_STANDARDS.md)
+## Bootstrap with an AI coding agent
 
-## Commit messages
+Paste this into Claude Code, Cursor, or any agent that can fetch a URL:
 
-Use `type(scope): #123 summary` followed by one or more `-` body bullets. The `#123` immediately after
-the colon is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description
-when merging should close the issue.
+```
+You are an Alchemy expert. Read https://alchemy.run/llms.txt to load the
+full documentation index, then act as my pair on this project.
 
-Allowed types:
+Goal: help me set up, build, test, and deploy a cloud application with
+`alchemy` (Infrastructure-as-Effects, powered by Effect).
 
-<!-- commit-types -->
+Follow the patterns from the docs and the /examples folder. Stay idiomatic
+to Effect: use Layers for wiring, return Effects from lifecycle code, and
+keep infra and runtime in the same program. Ask before introducing new
+dependencies or breaking conventions.
+```
 
-`feat` · `fix` · `refactor` · `chore` · `docs` · `test` · `ci`
+## Learn more
 
-Slice scopes:
+- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — the framework in 2 minutes
+- [Getting Started](https://alchemy.run/getting-started) — your first Stack
+- [Tutorial](https://alchemy.run/tutorial/part-1) — five-part walkthrough to a tested, CI-deployed app
+- [Examples](./examples) — runnable projects on AWS and Cloudflare
+- [llms.txt](https://alchemy.run/llms.txt) — agent-ready documentation index
 
-<!-- commit-scopes:slices -->
+> **alchemy** is in alpha. Expect breaking changes. Come hang in our [Discord](https://discord.gg/jwKw8dBJdN).
 
-| scope          | when to use                           |
-| -------------- | ------------------------------------- |
-| `identity`     | users, channel identities, sessions   |
-| `consent`      | consent records and revocations       |
-| `transactions` | the ledger and reconciliation         |
-| `categories`   | spending categories and keyword rules |
-| `budgets`      | monthly caps and alerts               |
-| `recurring`    | recurring series                      |
-| `dashboard`    | dashboard read model                  |
-| `insights`     | insight events                        |
-| `ingestion`    | capture and review                    |
-| `tokens`       | PATs and scopes                       |
-| `audit`        | the audit trail                       |
-| `transcript`   | transcript and user notes             |
-| `billing`      | subscriptions and payments            |
+## Credits
 
-Cross-cutting scopes:
+### Blacksmith
 
-<!-- commit-scopes:cross-cutting -->
+Thanks to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. Their fast Linux, macOS, and Windows runners help us test our packages across platforms and deploy our content-heavy website in mere minutes.
 
-| scope        | when to use                                |
-| ------------ | ------------------------------------------ |
-| `api`        | API assembly, transport, and authorization |
-| `channels`   | vendor adapters and callbacks              |
-| `agent`      | hosted agent and its harness               |
-| `frontend`   | web app                                    |
-| `cloudflare` | Worker, D1, DO, Queue, Workflow, R2, or AI |
-| `repo`       | tooling, configuration, hooks, and CI      |
-| `deps`       | dependency updates                         |
-| `docs`       | documentation                              |
+## License
+
+Licensed under the [Apache License 2.0](./LICENSE). See
+[Third-Party Licenses](./THIRD_PARTY_LICENSES.md) for code incorporated from
+upstream projects.

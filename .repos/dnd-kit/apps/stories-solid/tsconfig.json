@@ -1,5 +1,0 @@
-{
-  "extends": "../../config/typescript/solid.json",
-  "include": ["."],
-  "exclude": ["dist", "build", "node_modules"]
-}

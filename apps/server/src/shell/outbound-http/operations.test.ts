@@ -27,7 +27,7 @@ import {
   type HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
-import { OutboundHttpFailure } from "./contract";
+import { OutboundHttpFailure, type OutboundHttpRequest } from "./contract";
 import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import { OutboundHttp, type OutboundHttpService } from "./operations";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
@@ -37,6 +37,31 @@ const kapsoRequest = {
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
   body: '{"messaging_product":"whatsapp"}',
 };
+
+const redirectProviderRequests: ReadonlyArray<
+  Readonly<{ name: string; origin: string; request: OutboundHttpRequest }>
+> = [
+  { name: "Kapso", origin: "https://api.kapso.ai", request: kapsoRequest },
+  {
+    name: "Resend",
+    origin: "https://api.resend.com",
+    request: {
+      _tag: "ResendEmailDelivery",
+      idempotencyKey: "private-delivery-idempotency",
+      body: '{"subject":"private-email-content"}',
+    },
+  },
+  {
+    name: "Wompi",
+    origin: "https://sandbox.wompi.co",
+    request: {
+      _tag: "WompiCreatePaymentSource",
+      body: '{"token":"private-payment-token"}',
+    },
+  },
+];
+
+const redirectStatuses = [302, 307, 308] as const;
 
 const makeTestOutbound = (
   httpClient: HttpClient.HttpClient,
@@ -346,7 +371,55 @@ it.effect(
     })
 );
 
-it.effect("does not follow redirects or propagate trace coordinates to Kapso", () =>
+it.effect(
+  "returns provider redirects without following same-origin or cross-origin destinations",
+  () =>
+    Effect.gen(function* () {
+      for (const provider of redirectProviderRequests) {
+        for (const status of redirectStatuses) {
+          for (const location of [
+            `${provider.origin}/credential-target`,
+            "https://attacker.example/credential-target",
+          ]) {
+            const redirectOptions: Array<Option.Option<string>> = [];
+            let networkRequests = 0;
+            const redirectFetch: typeof globalThis.fetch = Object.assign(
+              (_input: string | URL | globalThis.Request, init?: RequestInit) => {
+                networkRequests += 1;
+                redirectOptions.push(Option.fromUndefinedOr(init?.redirect));
+                return Promise.resolve(
+                  new Response("private redirect body", {
+                    status,
+                    headers: {
+                      location,
+                      "x-private-provider-header": "private redirect header",
+                    },
+                  })
+                );
+              },
+              { preconnect: (): void => undefined }
+            );
+            const fetchLayer = FetchHttpClient.layer.pipe(
+              Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectFetch))
+            );
+            const context = yield* Layer.build(fetchLayer);
+            const outbound = yield* makeTestOutbound(Context.get(context, HttpClient.HttpClient));
+
+            const response = yield* outbound.execute(provider.request);
+
+            expect(response.status, `${provider.name} ${status} ${location}`).toBe(status);
+            expect(networkRequests, `${provider.name} ${status} ${location}`).toBe(1);
+            expect(redirectOptions, `${provider.name} ${status} ${location}`).toEqual([
+              Option.some("manual"),
+            ]);
+            expect(response.headers).toEqual({});
+          }
+        }
+      }
+    })
+);
+
+it.effect("does not propagate trace coordinates or provider details to Kapso", () =>
   Effect.gen(function* () {
     const spans: Array<Tracer.NativeSpan> = [];
     const tracer = Tracer.make({
@@ -356,28 +429,21 @@ it.effect("does not follow redirects or propagate trace coordinates to Kapso", (
         return span;
       },
     });
-    const redirectOptions: Array<Option.Option<string>> = [];
     let propagatedHeaders = new Headers();
-    const redirectFetch: typeof globalThis.fetch = Object.assign(
+    const responseFetch: typeof globalThis.fetch = Object.assign(
       (_input: string | URL | globalThis.Request, init?: RequestInit) => {
-        redirectOptions.push(Option.fromUndefinedOr(init?.redirect));
         propagatedHeaders = new Headers(init?.headers);
-        return Promise.resolve(
-          new Response(null, {
-            status: 302,
-            headers: { location: "https://attacker.example/credential-target" },
-          })
-        );
+        return Promise.resolve(new Response(null, { status: 202 }));
       },
       { preconnect: (): void => undefined }
     );
     const fetchLayer = FetchHttpClient.layer.pipe(
-      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, redirectFetch))
+      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, responseFetch))
     );
     const context = yield* Layer.build(fetchLayer);
     const outbound = yield* makeTestOutbound(Context.get(context, HttpClient.HttpClient));
 
-    const response = yield* outbound
+    yield* outbound
       .execute(kapsoRequest)
       .pipe(
         Effect.withSpan("safe.parent"),
@@ -385,8 +451,6 @@ it.effect("does not follow redirects or propagate trace coordinates to Kapso", (
         Effect.provideService(HttpClient.TracerPropagationEnabled, true)
       );
 
-    expect(response.status).toBe(302);
-    expect(redirectOptions).toEqual([Option.some("error")]);
     expect(Array.from(propagatedHeaders.keys())).not.toEqual(
       expect.arrayContaining(["b3", "baggage", "traceparent", "tracestate"])
     );
@@ -397,7 +461,6 @@ it.effect("does not follow redirects or propagate trace coordinates to Kapso", (
     expect(recorded).not.toContain("api.kapso.ai");
     expect(recorded).not.toContain("123456789");
     expect(recorded).not.toContain("private-kapso-key");
-    expect(recorded).not.toContain("attacker.example");
   })
 );
 

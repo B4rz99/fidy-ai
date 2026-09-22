@@ -99,7 +99,7 @@ const makeResendRequest = (
       body: HttpBody.text(request.body, "application/json"),
     }),
     maximumResponseBytes: maximumResendDeliveryResponseBytes,
-    redirect: "error",
+    redirect: "manual",
   });
 };
 
@@ -218,7 +218,7 @@ const prepareWompi = (
             http: context.wompiHttp,
             maximumResponseBytes: maximumWompiResponseBytes,
             request: providerRequest,
-            redirect: "error" as const,
+            redirect: "manual" as const,
           }))
         ),
     })
@@ -242,7 +242,7 @@ const prepareNonProviderGroup = (
               { "x-api-key": Redacted.value(apiKey) }
             ),
             maximumResponseBytes: maximumKapsoResponseBytes,
-            redirect: "error" as const,
+            redirect: "manual" as const,
           }),
       });
     case "CloudflareAccessSupportRecovery":
@@ -289,8 +289,9 @@ const makeService = (
 });
 
 /**
- * Creates fixed-destination provider transport that owns credentials, rejects redirects, suppresses
- * trace propagation, bounds response bytes, and returns only retained response facts or failures.
+ * Creates fixed-destination provider transport that owns credentials, refuses automatic redirect
+ * following, suppresses trace propagation, bounds response bytes, and returns only retained response
+ * facts or failures.
  */
 export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHttpService => {
   const context: RequestPreparationContext = {

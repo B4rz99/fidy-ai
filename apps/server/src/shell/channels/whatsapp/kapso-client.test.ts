@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
@@ -10,7 +11,8 @@ import {
   type OutboundHttpResponse,
 } from "~/shell/outbound-http/contract";
 import type { OutboundHttpService } from "~/shell/outbound-http/operations";
-import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
+import { type KapsoClientService, KapsoSendFailed, makeKapsoClientService } from "./kapso-client";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
 
@@ -287,6 +289,39 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
           automaticRetry: testCase.expected[1],
         })
       );
+    }
+  })
+);
+
+it.effect("maps redirect responses to closed definitive failures", () =>
+  Effect.gen(function* () {
+    for (const status of [302, 307, 308]) {
+      const service = makeService({
+        execute: () =>
+          Effect.succeed({
+            status,
+            headers: {},
+            body: new TextEncoder().encode("private redirect body"),
+          }),
+      });
+
+      const exit = yield* service.sendText(sendInput()).pipe(Effect.exit);
+      const unannotatedExit = Exit.isFailure(exit)
+        ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
+        : exit;
+
+      assert.deepStrictEqual(
+        unannotatedExit,
+        Exit.fail(
+          new KapsoSendFailed({
+            safeReason: "invalid_response",
+            deliveryCertainty: "rejected",
+            automaticRetry: false,
+            responseStatus: Option.some(TelemetryHttpStatus.make(status)),
+          })
+        )
+      );
+      expect(String(exit)).not.toContain("private redirect body");
     }
   })
 );

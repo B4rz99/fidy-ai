@@ -15,6 +15,7 @@ const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(
 const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
+const resendApiKey = Config.Redacted("RESEND_API_KEY");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
 
 const resolveKapsoBindings = (
@@ -39,6 +40,9 @@ const resolveKapsoBindings = (
       : whatsAppBusinessPortfolioId;
     return { apiKey, webhookSecret, portfolioId };
   });
+
+const resolveResendKey = (development: boolean): typeof resendApiKey =>
+  development ? resendApiKey.pipe(Config.withDefault(Redacted.make(""))) : resendApiKey;
 
 const resolveBrowserOrigin = (production: boolean): string =>
   production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;
@@ -122,6 +126,10 @@ export default Alchemy.Stack(
       readReplication: { mode: "disabled" },
     });
 
+    const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
+    const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
+      className: "OnboardingEmailWorkflowV1",
+    });
     const core = yield* Cloudflare.Worker("Core", {
       main: "./core-worker.ts",
       compatibility: { date: "2026-09-08" },
@@ -138,10 +146,19 @@ export default Alchemy.Stack(
         HOSTED_AI_MODEL: yield* hostedAiModel,
         KAPSO_API_KEY: kapsoBindings.apiKey,
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
+        ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
+        ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
+        RESEND_API_KEY: yield* resolveResendKey(development),
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {
+      queueId: onboardingEmailQueue.queueId,
+      scriptName: core.workerName,
+      settings: { batchSize: 10, maxRetries: 3 },
     });
 
     const ingress = yield* Cloudflare.Worker("Ingress", {

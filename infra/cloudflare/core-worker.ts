@@ -8,14 +8,22 @@ import { HostedInference } from "@fidy/server/hosted-inference";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
+import {
+  type OnboardingEmailEnvironment,
+  dispatchOnboardingEmail,
+  receiveOnboardingEmail,
+  reconcileOnboardingEmail,
+} from "./onboarding-email";
+import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./telemetry";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./workers-ai";
+
+export { OnboardingEmailWorkflowV1 } from "./onboarding-email";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -30,11 +38,12 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  };
+  } & Partial<Omit<OnboardingEmailEnvironment, "DB">>;
 
 type CoreWorker = Readonly<{
   fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
   scheduled: (controller: ScheduledController, environment: CoreEnvironment) => Promise<void>;
+  queue: (batch: MessageBatch<unknown>, environment: CoreEnvironment) => Promise<void>;
 }>;
 
 const jsonHeaders = {
@@ -135,10 +144,34 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       Effect.runPromise
     ),
   scheduled: (_controller, environment) =>
-    sweepExpiredConsent(environment.DB)().pipe(
-      Effect.withSpan("consent.expiredEvidenceSweep"),
-      Effect.runPromise
-    ),
+    Effect.gen(function* () {
+      const dispatched = yield* Effect.exit(
+        environment.ONBOARDING_EMAIL_QUEUE !== undefined
+          ? dispatchOnboardingEmail({
+              DB: environment.DB,
+              ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
+            })
+          : Effect.void
+      );
+      yield* reconcileOnboardingEmail(environment.DB);
+      yield* sweepExpiredConsent(environment.DB)();
+      if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
+    }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
+  queue: (batch, environment) => {
+    if (
+      environment.ONBOARDING_EMAIL_QUEUE === undefined ||
+      environment.ONBOARDING_EMAIL_WORKFLOW === undefined ||
+      environment.RESEND_API_KEY === undefined
+    ) {
+      return Promise.reject(new Error("Onboarding email unavailable"));
+    }
+    return receiveOnboardingEmail({
+      DB: environment.DB,
+      ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
+      ONBOARDING_EMAIL_WORKFLOW: environment.ONBOARDING_EMAIL_WORKFLOW,
+      RESEND_API_KEY: environment.RESEND_API_KEY,
+    })(batch).pipe(Effect.runPromise);
+  },
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

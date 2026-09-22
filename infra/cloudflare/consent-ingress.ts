@@ -24,6 +24,7 @@ import {
   maxKapsoFutureTimestampMinutes,
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
+import { EmailAddress } from "@fidy/server/client";
 import {
   Context,
   Crypto,
@@ -154,6 +155,10 @@ const DecisionRow = Schema.Struct({
   decision_message_id: WhatsAppProviderMessageId,
   body_sha256: Sha256Digest,
   decision: Schema.Literals(["accepted", "declined"]),
+});
+const EnrollmentReplayRow = Schema.Struct({
+  submission_message_id: WhatsAppProviderMessageId,
+  submission_body_sha256: Sha256Digest,
 });
 const DeliveryRow = Schema.Struct({
   message_id: WhatsAppProviderMessageId,
@@ -392,6 +397,94 @@ const persistDecision = ({
       )
     )
   );
+
+const findMailboxReplay = (
+  db: D1Database,
+  input: Inbound,
+  exchangeId: PendingConsentExchangeId
+): Effect.Effect<Option.Option<Response>, void> =>
+  Effect.gen(function* () {
+    const stored = yield* attempt(() =>
+      db
+        .prepare(`SELECT submission_message_id, submission_body_sha256 FROM pending_email_enrollments
+        WHERE exchange_id = ?`)
+        .bind(exchangeId)
+        .first()
+    );
+    if (stored === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(EnrollmentReplayRow)(stored).pipe(
+      Effect.mapError(() => undefined)
+    );
+    const matches =
+      row.submission_message_id === input.event.messageEvidence.providerMessageId &&
+      row.submission_body_sha256 === input.digest;
+    return Option.some(answer(matches ? HTTP_OK : HTTP_CONFLICT));
+  });
+
+const insertMailbox = (
+  db: D1Database,
+  {
+    input,
+    pending,
+    email,
+  }: Readonly<{ input: Inbound; pending: StoredExchange; email: EmailAddress }>
+): Effect.Effect<Response, void, Crypto.Crypto> =>
+  Effect.gen(function* () {
+    const cryptoService = yield* Crypto.Crypto;
+    const id = yield* cryptoService.randomUUIDv4.pipe(Effect.orDie);
+    const inserted = yield* Effect.exit(
+      attempt(() =>
+        db
+          .prepare(`INSERT INTO pending_email_enrollments
+        (id, exchange_id, email_address, submission_message_id, submission_body_sha256,
+         created_at_ms, expires_at_ms, state)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+          .bind(
+            id,
+            pending.id,
+            email,
+            input.event.messageEvidence.providerMessageId,
+            input.digest,
+            input.receivedAtMs,
+            pending.expires_at_ms
+          )
+          .run()
+      )
+    );
+    if (Exit.isSuccess(inserted)) return answer(HTTP_OK);
+    const replay = yield* findMailboxReplay(db, input, pending.id);
+    return Option.getOrElse(replay, () => answer(HTTP_UNAVAILABLE));
+  });
+
+const recordMailbox = (
+  db: D1Database,
+  input: Inbound,
+  pending: StoredExchange
+): Effect.Effect<Response, void, Crypto.Crypto> =>
+  Effect.gen(function* () {
+    const replay = yield* findMailboxReplay(db, input, pending.id);
+    if (Option.isSome(replay)) return replay.value;
+    const decision = yield* attempt(() =>
+      db
+        .prepare(`SELECT occurred_at_ms FROM pending_consent_decisions
+        WHERE exchange_id = ? AND decision = 'accepted'`)
+        .bind(pending.id)
+        .first()
+    );
+    const proof = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ occurred_at_ms: Schema.Finite })
+    )(decision).pipe(Effect.mapError(() => undefined));
+    if (
+      pending.phone_number_id !== input.event.businessPhoneNumberId ||
+      DateTime.toEpochMillis(input.event.occurredAt) <= proof.occurred_at_ms ||
+      input.receivedAtMs >= pending.expires_at_ms
+    ) {
+      return answer(HTTP_CONFLICT);
+    }
+    const email = Schema.decodeOption(EmailAddress)(input.event.content.text);
+    if (Option.isNone(email)) return answer(HTTP_UNPROCESSABLE);
+    return yield* insertMailbox(db, { input, pending, email: email.value });
+  });
 
 const validDisclosure = (json: string): boolean =>
   Option.isSome(Schema.decodeOption(PendingDisclosureJson)(json));
@@ -663,6 +756,27 @@ const handleDelivery = (base: WebhookBase, db: D1Database): Effect.Effect<Respon
     });
   });
 
+const routeConsentInbound = (
+  environment: Environment,
+  input: Inbound
+): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const pending = yield* findExchange(environment.DB, input.event);
+    if (Option.isSome(pending) && pending.value.state === "accepted") {
+      const replay = yield* findRecordedDecision(environment.DB, input);
+      if (Option.isSome(replay)) return replay.value;
+      return yield* recordMailbox(environment.DB, input, pending.value);
+    }
+    if (
+      Option.isSome(pending) &&
+      pending.value.expires_at_ms > input.receivedAtMs &&
+      isConsentIngressDecisionPhase(pending.value.lifecycle)
+    ) {
+      return yield* recordDecision(environment.DB, input);
+    }
+    return yield* startExchange(environment, input);
+  });
+
 const handleInbound = (
   base: WebhookBase,
   request: Request,
@@ -695,15 +809,7 @@ const handleInbound = (
       digest,
       receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
     };
-    const pending = yield* findExchange(environment.DB, input.event);
-    if (
-      Option.isSome(pending) &&
-      pending.value.expires_at_ms > input.receivedAtMs &&
-      isConsentIngressDecisionPhase(pending.value.lifecycle)
-    ) {
-      return yield* recordDecision(environment.DB, input);
-    }
-    return yield* startExchange(environment, input);
+    return yield* routeConsentInbound(environment, input);
   });
 
 const handleWebhook = (

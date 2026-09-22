@@ -1,0 +1,67 @@
+infra/cloudflare/alchemy.run.ts
+  s_42788546421120::t_76573f245b6f94 35
+  s_42788546421120::t_e8d70b2539126d 9-10,26-29,31,33-34,36,41-45,47-48,56-60,67,72-73,78-80
+  s_42788546421120::t_e5739e41f86c24 6
+  s_42788546421120::t_77810c2cbc151a 30,32
+infra/cloudflare/topology.ts
+  s_42788546421120::t_94844a56de8090 4,10,16
+README.md
+  s_42788546421120::t_5c5f0ab072eaed 17,20-23
+infra/cloudflare/package.json
+  s_42788546421120::t_e7a10da441795c 16
+.github/workflows/production.yml
+  s_42788546421120::t_9e60611c27d758 84-114
+  s_42788546421120::t_2368d1218523aa 24
+apps/web/scripts/production-workflow.test.ts
+  s_42788546421120::t_fe422215510fe6 25-30
+  s_42788546421120::t_879746d514f3a0 40-51
+.env.example
+  s_42788546421120::t_d6d6df3ee1bf55 3-4
+docs/operations/external-endpoints.md
+  s_42788546421120::t_c358e44e7e1a74 9-12,34-36,40,44-45,47-48
+  s_42788546421120::t_947fb7f0eb836c 30-32
+docs/operations/production-releases.md
+  s_42788546421120::t_41f1ace3718109 11-13,56-57,66-67,77-80,97-105
+infra/cloudflare/local-emulation.test.ts
+  s_42788546421120::t_99776fc5e7c4f5 46-54,56-61,63
+  s_42788546421120::t_46d3d9ce43c67c 6-7,21-27
+  s_42788546421120::t_d28140c07f0960 65-66
+  s_42788546421120::t_18e13963f1cbfb 12-13,37,67-68
+  s_42788546421120::t_2fe25fa81790c0 1,4-5,8,10-11,14-15,28-30,32-34,55,62
+  s_42788546421120::t_ae79fd8b7378db 2-3,9,16-20,31,35-36,38-45,64
+infra/cloudflare/workers.test.ts
+  s_42788546421120::t_3f6528ccbee35e 17,19,34-35
+  s_42788546421120::t_a3d55adaa40fec 71
+  s_42788546421120::t_f256f2a13139a6 2,5,14-16,18,20-33,36-61,67,72-76
+infra/cloudflare/deployment-configuration.ts
+  s_42788546421120::t_947fb7f0eb836c 38,62
+  s_42788546421120::t_0acd98ce12e1ce 1-10,12-13,15,25-31,45-47,52-58,61,63-69
+  s_42788546421120::t_b4bd5ad7b17b9e 11,14,16,19,21-24,40-42,59-60
+  s_42788546421120::t_18f3c89e0e35d7 17-18,20,32-37,39,43-44,48-51
+docs/operations/dns-and-registrar-migration.md
+  s_42788546421120::t_0f02c53e525920 23-25,41-43
+ARCHITECTURE.md
+  s_42788546421120::t_f53561b8d4a5a2 54-55,59-61
+.patterns/alchemy.md
+  s_42788546421120::t_a4df46364892e4 7,31,37
+.oxlintrc.json
+  s_42788546421120::t_72b2a2de0bad5a 185-186,194-195
+bun.lock
+  s_42788546421120::t_e249895e9e792a 92,248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b7bef42e2ea6e6e0624b34064f044b2efca742a4",
+  "prompts": {},
+  "sessions": {
+    "s_42788546421120": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0c651-b53e-72e8-9481-b1b7d5b85699",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

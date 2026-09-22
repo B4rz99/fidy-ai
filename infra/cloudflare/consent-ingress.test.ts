@@ -272,6 +272,28 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("does not enroll a replay of the mailbox message that initiated disclosure", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send, "test@example.com");
+  expect(
+    (
+      await db
+        .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
+        .first()
+    )?.email_preaccept_latest_occurred_ms
+  ).toBe(nowSeconds * 1_000);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect((await send(inbound("wamid.first", "test@example.com"))).status).toBe(409);
+  expect((await db.prepare("SELECT * FROM pending_email_enrollments").all()).results).toEqual([]);
+  expect((await db.prepare("SELECT * FROM onboarding_email_outbox").all()).results).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("remembers a mailbox seen before disclosure delivery, without creating work", async () => {
   const { db, send } = await setup();
   const token = await startDisclosure(send);
@@ -448,6 +470,88 @@ it("continues to publish other identities when one Queue offer fails", async () 
   expect(states.results.every((row) => row.last_attempt_at_ms !== null)).toBe(true);
   expect(states.results.filter((row) => row.published_at_ms === null)).toHaveLength(1);
   expect(states.results.filter((row) => row.published_at_ms !== null)).toHaveLength(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("offers the 33rd identity after an entire failing Queue batch cools down", async () => {
+  const { db, send } = await setup();
+  const token = await startDisclosure(send);
+  const created = await db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first();
+  expect(
+    (await deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))).status
+  ).toBe(200);
+  const decisionTime = await advancePastDecisionProof(db);
+  expect((await send(inbound("wamid.accept", "Acepto", decisionTime))).status).toBe(200);
+  expect(
+    (await send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1))))
+      .status
+  ).toBe(200);
+  const syntheticEnrollments = 32;
+  await Promise.all(
+    // @effect-diagnostics-next-line asyncFunction:off
+    Array.from({ length: syntheticEnrollments }, (_, index) => index + 1).map(async (index) => {
+      const suffix = String(index).padStart(12, "0");
+      const exchange = `00000000-0000-4000-8000-${suffix}`;
+      const token = `00000001-0000-4000-8000-${suffix}`;
+      const enrollment = `00000002-0000-4000-8000-${suffix}`;
+      const caller = `CO.${String(index).padStart(20, "0")}`;
+      await db
+        .prepare(`INSERT INTO pending_consent_exchanges
+      (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+       correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
+      SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
+        disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
+      FROM pending_consent_exchanges WHERE bsuid = ?`)
+        .bind(exchange, caller, `wamid.first-${index}`, token, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_consent_delivery
+      (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
+      SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
+      FROM pending_consent_delivery WHERE correlation_token = (
+        SELECT correlation_token FROM pending_consent_exchanges WHERE bsuid = ?)`)
+        .bind(token, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_consent_decisions
+      (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
+       decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
+      SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
+        ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
+      FROM pending_consent_decisions WHERE bsuid = ?`)
+        .bind(exchange, caller, `wamid.accept-${index}`, bsuid)
+        .run();
+      await db
+        .prepare(`INSERT INTO pending_email_enrollments
+      (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
+      SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
+      FROM pending_email_enrollments WHERE exchange_id = (
+        SELECT id FROM pending_consent_exchanges WHERE bsuid = ?)`)
+        .bind(enrollment, exchange, `wamid.email-${index}`, bsuid)
+        .run();
+    })
+  );
+  const offered = vi.fn().mockRejectedValue(new Error("Queue unavailable"));
+  const dispatcher = { DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } };
+  await expect(Effect.runPromise(dispatchOnboardingEmail(dispatcher))).rejects.toBeUndefined();
+  expect(offered).toHaveBeenCalledTimes(32);
+  const unattempted = await db
+    .prepare(`SELECT id FROM onboarding_email_outbox
+    WHERE last_attempt_at_ms IS NULL`)
+    .first();
+  expect(unattempted?.id).toBeDefined();
+  offered.mockResolvedValueOnce(undefined);
+  await Effect.runPromise(dispatchOnboardingEmail(dispatcher));
+  expect(offered).toHaveBeenCalledTimes(33);
+  expect(offered.mock.calls[32]?.[0]).toEqual({ version: 1, id: unattempted?.id });
+  expect(
+    (
+      await db
+        .prepare(`SELECT COUNT(*) AS count FROM onboarding_email_outbox
+    WHERE last_attempt_at_ms IS NULL`)
+        .first()
+    )?.count
+  ).toBe(0);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

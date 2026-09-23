@@ -20,6 +20,7 @@ import {
   type TransactionSubject,
   transactionNoStore as noStore,
   transactionNow as now,
+  refusedPATWork,
   transactionFailure,
   transactionUnavailable as unavailable,
   transactionId as uuid,
@@ -55,6 +56,8 @@ const limited = (): Response =>
   transactionFailure("rate_limited", HTTP_RATE_LIMITED, "Manual Transaction budget exhausted.");
 type Subject = TransactionSubject | AuthorizedPAT;
 const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
+const refusedCaptureWork = (db: D1Database, subject: Subject): Promise<Response> =>
+  isPAT(subject) ? refusedPATWork(db, subject.userId) : Promise.resolve(noSession());
 type Refusal = "not_found" | "validation_failed" | "resource_limit";
 
 /** Record a rejected authenticated canonical mutation without retaining its body or granting expired sessions access. */
@@ -94,7 +97,7 @@ export const rejectManualTransaction = async (
               current
             )
     ).run();
-    if (audit.meta.changes !== 1) return noSession();
+    if (audit.meta.changes !== 1) return refusedCaptureWork(db, subject);
     switch (outcome) {
       case "not_found":
         return missing();
@@ -258,7 +261,8 @@ const classifyCaptureAuthority = async (db: D1Database, subject: Subject): Promi
       .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(...authority.bindings)
       .first();
-    return live === null ? noSession() : unavailable();
+    if (live !== null) return unavailable();
+    return refusedCaptureWork(db, subject);
   } catch {
     return unavailable();
   }
@@ -316,9 +320,7 @@ export const createManualTransaction = async (
       }),
       db.prepare(transactionCaptureCompletion),
     ]);
-    if (!captureCompleted(result, isPAT(subject))) {
-      return noSession();
-    }
+    if (!captureCompleted(result, isPAT(subject))) return refusedCaptureWork(db, subject);
     const raw = await db
       .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at
       FROM transactions WHERE user_id = ? AND id = ?`)

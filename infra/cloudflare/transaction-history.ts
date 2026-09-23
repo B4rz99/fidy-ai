@@ -18,6 +18,7 @@ import {
   type TransactionSubject,
   transactionNoStore as noStore,
   transactionNow as now,
+  refusedPATWork,
   transactionAuditExhausted,
   transactionFailure,
   transactionUnavailable as unavailable,
@@ -332,13 +333,17 @@ const patHistoryStatements = (
   ];
 };
 
-const presentPATHistory = (
-  results: ReadonlyArray<D1Result>,
-  selection: PATSelection,
-  query: Option.Option<typeof Query.Type>
-): Response => {
+const presentPATHistory = async (
+  input: Readonly<{
+    db: D1Database;
+    results: ReadonlyArray<D1Result>;
+    selection: PATSelection;
+    query: Option.Option<typeof Query.Type>;
+  }>
+): Promise<Response> => {
+  const { db, results, selection, query } = input;
   if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
-    return noSession();
+    return refusedPATWork(db, selection.subject.userId);
   }
   if (Option.isNone(query)) return Option.isSome(selection.id) ? notFound() : invalid();
   const rows = results[1];
@@ -361,7 +366,7 @@ const readAuthorizedHistory = async (
     const results = await db.batch(
       patHistoryStatements(db, { selection: patSelection, query, current })
     );
-    return presentPATHistory(results, patSelection, query);
+    return presentPATHistory({ db, results, selection: patSelection, query });
   }
   if (Option.isNone(query)) return invalid();
   const [rows, audit] = await db.batch(

@@ -48,7 +48,12 @@ export const transactionUnavailable = (): Response =>
 
 // @effect-diagnostics-next-line missingPipeableSignature:off
 export const transactionFailure = (
-  code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
+  code:
+    | "unauthenticated"
+    | "validation_failed"
+    | "not_found"
+    | "rate_limited"
+    | "user_action_required",
   status: number,
   message: string
 ): Response =>
@@ -56,3 +61,24 @@ export const transactionFailure = (
     { error: { code, message, ...(code === "validation_failed" ? { fields: [] } : {}) }, next: [] },
     { status, headers: transactionNoStore }
   );
+
+/** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
+const HTTP_UNAUTHENTICATED = 401;
+const HTTP_ACTION_REQUIRED = 403;
+export const refusedPATWork = async (db: D1Database, userId: string): Promise<Response> => {
+  const withdrawn = await db
+    .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
+    .bind(userId)
+    .first();
+  return withdrawn === null
+    ? transactionFailure(
+        "unauthenticated",
+        HTTP_UNAUTHENTICATED,
+        "Present a valid credential and retry."
+      )
+    : transactionFailure(
+        "user_action_required",
+        HTTP_ACTION_REQUIRED,
+        "Return to Fidy to review your withdrawn Consent."
+      );
+};

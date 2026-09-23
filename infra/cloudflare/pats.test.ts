@@ -44,7 +44,9 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "DELETE" }> &
   Partial<
     Readonly<{ payload: object; session: string; bearer: string; origin: string; source: string }>
   >;
-const setup = async (): Promise<{
+const setup = async (
+  beforeCoordinate?: (db: D1Database) => Promise<void>
+): Promise<{
   db: D1Database;
   send: (input: Send) => Promise<Response>;
   sessions: readonly [string, string];
@@ -149,7 +151,12 @@ const setup = async (): Promise<{
           coordinator = new UserTransactionCoordinator({ id: { name } }, { DB: db });
           coordinators.set(name, coordinator);
         }
-        return { fetch: (input) => coordinator.fetch(new Request(input)) };
+        return {
+          fetch: async (input) => {
+            if (beforeCoordinate !== undefined) await beforeCoordinate(db);
+            return coordinator.fetch(new Request(input));
+          },
+        };
       },
     },
     AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
@@ -1215,6 +1222,95 @@ it("bounds canonical work across a stable User and multiple PATs", async () => {
         .first<{ total: number }>()
     )?.total
   ).toBe(count);
+});
+
+it("returns user_action_required when Consent is withdrawn between PAT admission and protected Transaction work", async () => {
+  let withdrawOnCapture = false;
+  const grantId = "e0000000-0000-4000-8000-000000000041";
+  const writerGrantId = "e0000000-0000-4000-8000-000000000043";
+  const revoke = (db: D1Database): Promise<D1Result> =>
+    db
+      .prepare(`INSERT INTO consent_user_revocations
+      (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+      .bind(
+        crypto.randomUUID(),
+        userB,
+        writerGrantId,
+        "40000000-0000-4000-8000-000000000002",
+        clock()
+      )
+      .run();
+  const { db, send, sessions } = await setup(async (database) => {
+    if (withdrawOnCapture) await revoke(database);
+  });
+  const issue = async (
+    scope: "read" | "write",
+    requestId: string,
+    session: string
+  ): Promise<typeof Issued.Type> => {
+    const response = await send({
+      path: "/pats",
+      method: "POST",
+      session,
+      payload: {
+        requestId,
+        grant: {
+          recipientLabel: "Consent race agent",
+          scopes: [scope],
+          lifetimeDays: 7,
+          reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+        },
+      },
+    });
+    expect(response.status).toBe(200);
+    return Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(await response.json()).data;
+  };
+  const reader = await issue("read", "70000000-0000-4000-8000-000000000044", sessions[0]);
+  const writer = await issue("write", "70000000-0000-4000-8000-000000000045", sessions[1]);
+  await db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+    .bind(grantId, userA, clock(), clock())
+    .run();
+  await db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+    .bind(writerGrantId, userB, clock(), clock())
+    .run();
+  await db
+    .prepare(`CREATE TRIGGER withdraw_during_pat_read BEFORE UPDATE OF last_used_at_ms ON pats
+    WHEN OLD.short_id = '${reader.pat.shortId}' BEGIN
+    INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
+    VALUES ('e0000000-0000-4000-8000-000000000042','${userA}','${grantId}',
+      '40000000-0000-4000-8000-000000000001',${clock()}); END`)
+    .run();
+  const history = await send({ path: "/transactions", method: "GET", bearer: reader.bearer });
+  expect(history.status).toBe(403);
+  expect(JSON.stringify(await history.json())).toContain("user_action_required");
+  await db.prepare("DROP TRIGGER withdraw_during_pat_read").run();
+  withdrawOnCapture = true;
+  const capture = await send({
+    path: "/transactions",
+    method: "POST",
+    bearer: writer.bearer,
+    payload: {
+      money: { amount: "23.50", currency: "COP" },
+      direction: "outflow",
+      occurredAt: "2026-09-01T12:00:00.000Z",
+    },
+  });
+  expect(capture.status).toBe(403);
+  expect(JSON.stringify(await capture.json())).toContain("user_action_required");
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+        .bind(userB)
+        .first<{ total: number }>()
+    )?.total
+  ).toBe(0);
 });
 
 it("records successful PAT Transaction capture as use activity without extending its expiry", async () => {

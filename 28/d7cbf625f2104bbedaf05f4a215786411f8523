@@ -1,0 +1,21 @@
+infra/cloudflare/browser-pairing-email.ts
+  s_dd21fd8c536cf5::t_0ca9618544e598 60-62,280-282
+infra/cloudflare/support-recovery.ts
+  s_dd21fd8c536cf5::t_0ca9618544e598 65-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "28d7cbf625f2104bbedaf05f4a215786411f8523",
+  "prompts": {},
+  "sessions": {
+    "s_dd21fd8c536cf5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cc49-1bed-723f-922a-37fffaa19faa",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

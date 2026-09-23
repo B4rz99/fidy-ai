@@ -407,7 +407,7 @@ const TransactionResources = ({
 }: Readonly<{ currentUser: CurrentUser }>): JSX.Element => {
   const router = useRouter();
   const { categoryState, period, retry, transactionState } = useTransactionQueries(currentUser);
-  const [captured, setCaptured] = useState<Option.Option<Transaction>>(Option.none());
+  const [captured, setCaptured] = useState<Option.Option<Transaction>>(() => Option.none());
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery

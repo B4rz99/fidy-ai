@@ -322,6 +322,18 @@ describe("signed-in web application routes", () => {
     expect(requests).toContain("POST /transactions");
     expect(capturedInstants).toEqual(["2025-01-10T05:00:00.000Z"]);
   });
+
+  it("refuses malformed Money before sending a canonical create request", async () => {
+    const requests: Array<string> = [];
+    const capturedInstants: Array<string> = [];
+    await renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants));
+    expect(await screen.findByText("Aún no hay transacciones este mes")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "not-a-number" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo guardar la transacción");
+    expect(requests).not.toContain("POST /transactions");
+    expect(capturedInstants).toEqual([]);
+  });
 });
 
 describe("backup recovery route", () => {

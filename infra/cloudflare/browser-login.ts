@@ -3,13 +3,16 @@ import {
   BrowserLoginPublicCodeSymbols,
   User,
   UserId,
+  calculateWebSessionDeadlines,
   decideBrowserLoginRedemption,
   formatPublicCode,
   getCurrentUser,
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
+  webSessionIdleRenewalCandidate,
 } from "@fidy/server/identity-runtime";
 import * as D1Client from "@effect/sql-d1/D1Client";
+import { BackupRecoveryCode } from "@fidy/server/client";
 import { Clock, Context, DateTime, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
@@ -34,7 +37,6 @@ const digestBytes = 32;
 const codeSymbols = 8;
 const sampleBytes = 16;
 const pairingMs = 600_000;
-const sessionMs = 604_800_000;
 const HTTP_OK = 200;
 const HTTP_PENDING = 202;
 const HTTP_RATE_LIMITED = 429;
@@ -83,6 +85,17 @@ const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   responseHeaders.set("cache-control", "no-store");
   return Response.json(body, { status, headers: responseHeaders });
 };
+
+const recoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const recoverySymbolCount = 25;
+const sampleRecoveryCode = (): string =>
+  Array.from(
+    crypto.getRandomValues(new Uint8Array(recoverySymbolCount)),
+    (byte) => recoveryAlphabet[byte % recoveryAlphabet.length]
+  )
+    .join("")
+    .match(/.{5}/gu)
+    ?.join("-") ?? "";
 
 const samplePublicCode = (): string => {
   let symbols = "";
@@ -312,6 +325,7 @@ const createWebSession = async (
   current: number
 ): Promise<Response> => {
   const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
+  const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
   const committed = await db.batch([
     db
       .prepare(
@@ -319,16 +333,28 @@ const createWebSession = async (
       )
       .bind(pairingId, current, maximumWrongVerifierAttempts),
     db
-      .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, expires_at_ms)
-      SELECT ?, p.id, p.user_id, ?, ?, ? FROM browser_login_pairings AS p
+      .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
+        fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
+      SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
       WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`)
-      .bind(uuid(), await sha256(token), current, current + sessionMs, pairingId),
+      .bind(
+        uuid(),
+        await sha256(token),
+        current,
+        DateTime.toEpochMillis(deadlines.freshUntil),
+        DateTime.toEpochMillis(deadlines.idleExpiresAt),
+        DateTime.toEpochMillis(deadlines.hardExpiresAt),
+        pairingId
+      ),
   ]);
   if (committed[1]?.meta.changes !== 1) return invalid();
   return json({ status: "authenticated" }, HTTP_OK, {
-    "set-cookie": `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=604800`,
+    "set-cookie": sessionSetCookie(token),
   });
 };
+
+const sessionSetCookie = (token: string): string =>
+  `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
 
 const sessionCookie = (request: Request): Option.Option<string> => {
   const cookies =
@@ -349,10 +375,13 @@ export const currentUser = async (request: Request, db: D1Database): Promise<Res
   if (Option.isNone(token)) return noSession();
   try {
     const digest = await sha256(token.value);
+    const usedAt = now();
+    const candidate = webSessionIdleRenewalCandidate(DateTime.makeUnsafe(usedAt));
     const rawSession = await db
-      .prepare(`SELECT id, user_id FROM web_sessions
-      WHERE token_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
-      .bind(digest, now())
+      .prepare(`UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
+        max(idle_expires_at_ms, ?)) WHERE token_digest = ? AND revoked_at_ms IS NULL
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`)
+      .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
       .first();
     if (rawSession === null) return noSession();
     const session = Schema.decodeUnknownOption(Session)(rawSession);
@@ -377,13 +406,79 @@ export const currentUser = async (request: Request, db: D1Database): Promise<Res
       )
       .bind(uuid(), session.value.user_id, session.value.id, now())
       .run();
-    return json({
-      data: Schema.encodeSync(Schema.toCodecJson(User))(loaded.value.data),
-      next: loaded.value.next,
-    });
+    return json(
+      {
+        data: Schema.encodeSync(Schema.toCodecJson(User))(loaded.value.data),
+        next: loaded.value.next,
+      },
+      HTTP_OK,
+      { "set-cookie": sessionSetCookie(token.value) }
+    );
   } catch {
     return unavailable();
   }
+};
+
+/** Require a still-fresh browser session before rotating its User's emergency proof. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const rotateBackupRecoveryCode = async (
+  request: Request,
+  db: D1Database
+): Promise<Response> => {
+  const token = sessionCookie(request);
+  if (Option.isNone(token)) return noSession();
+  try {
+    const usedAt = now();
+    const session = await db
+      .prepare(`SELECT id, user_id FROM web_sessions
+      WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      .bind(await sha256(token.value), usedAt, usedAt, usedAt)
+      .first();
+    if (session === null) return noSession();
+    const decoded = Schema.decodeUnknownOption(Session)(session);
+    if (Option.isNone(decoded)) return unavailable();
+    return rotateFreshSessionProof(db, decoded.value, usedAt);
+  } catch {
+    return unavailable();
+  }
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const rotateFreshSessionProof = async (
+  db: D1Database,
+  session: typeof Session.Type,
+  usedAt: number
+): Promise<Response> => {
+  const code = Schema.decodeOption(BackupRecoveryCode)(sampleRecoveryCode());
+  if (Option.isNone(code)) return unavailable();
+  const rotated = await db.batch([
+    db
+      .prepare(`UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
+        consumed_at_ms = NULL, revision = revision + 1
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM web_sessions
+        WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
+      .bind(
+        await sha256(code.value),
+        usedAt,
+        session.user_id,
+        session.id,
+        session.user_id,
+        usedAt,
+        usedAt,
+        usedAt
+      ),
+    db
+      .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
+        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`)
+      .bind(uuid(), session.user_id, session.id, usedAt),
+  ]);
+  if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) return noSession();
+  return json({
+    data: { status: "rotated", backupRecoveryCode: code.value, rotatedAt: instant(usedAt) },
+    next: [],
+  });
 };
 
 /** Revoke the exact cookie's session without disclosing whether it existed. */

@@ -15,7 +15,8 @@
   "dependencies": {
     "@effect/sql-d1": "4.0.0-rc.115",
     "@fidy/server": "workspace:0.0.0",
-    "effect": "4.0.0-rc.115"
+    "effect": "4.0.0-rc.115",
+    "jose": "6.2.12"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260916.1",

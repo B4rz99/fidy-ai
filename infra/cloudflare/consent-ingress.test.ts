@@ -113,6 +113,8 @@ const setup = async (): Promise<{
               DB: db,
               HOSTED_AI_MODEL: approvedWorkersAiModel,
               KAPSO_WEBHOOK_SECRET: secret,
+              CLOUDFLARE_ACCESS_ISSUER: "",
+              CLOUDFLARE_ACCESS_AUDIENCE: "",
               KAPSO_API_KEY: "fake-provider-key",
               WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
               RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",

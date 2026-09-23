@@ -16,6 +16,8 @@ const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
+const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
+const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
 
 const resolveKapsoBindings = (
@@ -43,6 +45,17 @@ const resolveKapsoBindings = (
 
 const resolveResendKey = (development: boolean): typeof resendApiKey =>
   development ? resendApiKey.pipe(Config.withDefault(Redacted.make(""))) : resendApiKey;
+
+const resolveAccessConfig = (
+  development: boolean
+): Effect.Effect<Readonly<{ issuer: string; audience: string }>, Config.ConfigError> =>
+  Effect.gen(function* () {
+    const issuer = yield* development ? accessIssuer.pipe(Config.withDefault("")) : accessIssuer;
+    const audience = yield* development
+      ? accessAudience.pipe(Config.withDefault(""))
+      : accessAudience;
+    return { issuer, audience };
+  });
 
 const resolveBrowserOrigin = (production: boolean): string =>
   production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;
@@ -118,6 +131,7 @@ export default Alchemy.Stack(
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
     const kapsoBindings = yield* resolveKapsoBindings(development);
+    const accessConfig = yield* resolveAccessConfig(development);
 
     yield* provisionEdgeSecurity.pipe(Effect.when(Effect.succeed(production)));
 
@@ -129,6 +143,10 @@ export default Alchemy.Stack(
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
       className: "OnboardingEmailWorkflowV1",
+    });
+    const browserPairingEmailQueue = yield* Cloudflare.Queues.Queue("BrowserPairingEmailQueue");
+    const browserPairingEmailWorkflow = Cloudflare.Workflow("BrowserPairingEmailWorkflowV1", {
+      className: "BrowserPairingEmailWorkflowV1",
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "./core-worker.ts",
@@ -148,7 +166,11 @@ export default Alchemy.Stack(
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
         ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
+        BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
+        BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
         RESEND_API_KEY: yield* resolveResendKey(development),
+        CLOUDFLARE_ACCESS_ISSUER: accessConfig.issuer,
+        CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
@@ -157,6 +179,11 @@ export default Alchemy.Stack(
 
     yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {
       queueId: onboardingEmailQueue.queueId,
+      scriptName: core.workerName,
+      settings: { batchSize: 10, maxRetries: 3 },
+    });
+    yield* Cloudflare.Queues.Consumer("BrowserPairingEmailConsumer", {
+      queueId: browserPairingEmailQueue.queueId,
       scriptName: core.workerName,
       settings: { batchSize: 10, maxRetries: 3 },
     });

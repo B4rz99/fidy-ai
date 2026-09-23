@@ -40,7 +40,9 @@ CREATE TABLE web_sessions (
   user_id TEXT NOT NULL REFERENCES users(id),
   token_digest BLOB NOT NULL UNIQUE CHECK (length(token_digest) = 32),
   created_at_ms INTEGER NOT NULL,
-  expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms = created_at_ms + 604800000),
+  fresh_until_ms INTEGER NOT NULL CHECK (fresh_until_ms = created_at_ms + 600000),
+  idle_expires_at_ms INTEGER NOT NULL CHECK (idle_expires_at_ms >= created_at_ms AND idle_expires_at_ms <= hard_expires_at_ms),
+  hard_expires_at_ms INTEGER NOT NULL CHECK (hard_expires_at_ms = created_at_ms + 7776000000),
   revoked_at_ms INTEGER
 ) STRICT;
 CREATE TRIGGER web_session_requires_pairing BEFORE INSERT ON web_sessions
@@ -57,4 +59,13 @@ CREATE TABLE canonical_user_reads (
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE TRIGGER canonical_user_reads_no_update BEFORE UPDATE ON canonical_user_reads
+BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
+CREATE TABLE canonical_security_mutations (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  session_id TEXT NOT NULL REFERENCES web_sessions(id),
+  operation TEXT NOT NULL CHECK (operation = 'recovery.rotateBackupRecoveryCode'),
+  occurred_at_ms INTEGER NOT NULL
+) STRICT;
+CREATE TRIGGER canonical_security_mutations_no_update BEFORE UPDATE ON canonical_security_mutations
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;

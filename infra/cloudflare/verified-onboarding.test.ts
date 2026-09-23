@@ -5,6 +5,12 @@ import { createHmac } from "node:crypto";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "./browser-login";
+import {
+  deliverBrowserPairingEmail,
+  dispatchBrowserPairingEmail,
+} from "./browser-pairing-email-delivery";
+import { Effect } from "effect";
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker from "./core-worker";
 import publicWorker from "./public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -70,6 +76,8 @@ const setup = async (
     "0004_onboarding_email",
     "0005_verified_onboarding",
     "0006_browser_login",
+    "0007_browser_pairing_email",
+    "0008_support_recovery",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(name)),
     Promise.resolve()
@@ -156,6 +164,8 @@ const setup = async (
             HOSTED_AI_MODEL: approvedWorkersAiModel,
             KAPSO_API_KEY: "",
             KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
+            CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
+            CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",
             WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
           }),
       },
@@ -174,6 +184,7 @@ const setup = async (
 // @effect-diagnostics-next-line asyncFunction:off
 afterEach(async () => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   await Promise.all(mfInstances.splice(0).map((mf) => mf.dispose()));
 });
 
@@ -321,6 +332,7 @@ it("reads the created User through an independently approved browser WebSession"
   expect(cookie).toContain("__Host-fidy_session=");
   expect(cookie).toContain("HttpOnly");
   expect(cookie).toContain("Secure");
+  expect(cookie).toContain("Max-Age=2592000");
   expect((await poll()).status).toBe(400);
   expect((await request("/user", undefined, "__Host-fidy_session=" + "A".repeat(43))).status).toBe(
     401
@@ -340,12 +352,335 @@ it("reads the created User through an independently approved browser WebSession"
       ?.count
   ).toBe(1);
   const activeCookie = cookie?.split(";")[0];
+  const rotated = await request("/recovery/backup-code/rotate", {}, activeCookie);
+  expect(rotated.status).toBe(200);
+  const rotation: { data: { status: string; backupRecoveryCode: string } } = await rotated.json();
+  expect(rotation.data.status).toBe("rotated");
+  expect(
+    (
+      await db.prepare("SELECT code_digest FROM backup_recovery_credentials").first<{
+        code_digest: Array<number>;
+      }>()
+    )?.code_digest
+  ).toEqual(Array.from(await digest(rotation.data.backupRecoveryCode)));
   expect((await request("/web/session/logout", {}, activeCookie)).status).toBe(204);
   expect((await request("/user", undefined, activeCookie)).status).toBe(401);
   expect(
     (await sendRequest(new Request("https://api.fidyapp.com/web/pairings", { method: "POST" })))
       .status
   ).toBe(403);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+const seedWebSession = async (db: D1Database, token: string): Promise<number> => {
+  const pairing: { pairingId: string } = await (await startBrowserPairing(db)).json();
+  // @effect-diagnostics-next-line globalDate:off
+  const started = Date.now();
+  await db
+    .prepare(`UPDATE browser_login_pairings SET state = 'ready',
+      user_id = (SELECT id FROM users) WHERE id = ?`)
+    .bind(pairing.pairingId)
+    .run();
+  await db
+    .prepare("UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ?")
+    .bind(pairing.pairingId)
+    .run();
+  await db
+    .prepare(`INSERT INTO web_sessions
+      (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms,
+       idle_expires_at_ms, hard_expires_at_ms)
+       VALUES (?, ?, (SELECT id FROM users), ?, ?, ?, ?, ?) `)
+    .bind(
+      "10000000-0000-4000-8000-000000000099",
+      pairing.pairingId,
+      await digest(token),
+      started,
+      started + 600_000,
+      started + 2_592_000_000,
+      started + 7_776_000_000
+    )
+    .run();
+  return started;
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("renews an active WebSession until its hard deadline and never revives an expired one", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "B".repeat(43);
+  const started = await seedWebSession(db, token);
+  const use = (): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/user", {
+        headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+      })
+    );
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 29 * 86_400_000);
+  const renewed = await use();
+  expect(renewed.status).toBe(200);
+  expect(renewed.headers.get("set-cookie")).toContain("Max-Age=2592000");
+  vi.setSystemTime(started + 45 * 86_400_000);
+  expect((await use()).status).toBe(200);
+  vi.setSystemTime(started + 90 * 86_400_000);
+  expect((await use()).status).toBe(401);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("refuses an idle-expired WebSession without writing a canonical User read", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "C".repeat(43);
+  const started = await seedWebSession(db, token);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 29 * 86_400_000);
+  const crossSite = await sendRequest(
+    new Request("https://api.fidyapp.com/user", {
+      headers: { cookie: `__Host-fidy_session=${token}` },
+    })
+  );
+  expect(crossSite.status).toBe(403);
+  expect(crossSite.headers.get("set-cookie")).toBeNull();
+  vi.setSystemTime(started + 31 * 86_400_000);
+  const result = await sendRequest(
+    new Request("https://api.fidyapp.com/user", {
+      headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+    })
+  );
+  expect(result.status).toBe(401);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM canonical_user_reads")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("refuses recovery rotation after WebSession freshness expires without changing the proof", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "D".repeat(43);
+  const started = await seedWebSession(db, token);
+  const before = await db.prepare("SELECT code_digest FROM backup_recovery_credentials").first();
+  const rotate = (origin: string): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+        method: "POST",
+        headers: { origin, cookie: `__Host-fidy_session=${token}` },
+      })
+    );
+  expect((await rotate("https://attacker.example")).status).toBe(403);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 600_000);
+  expect((await rotate("https://app.fidyapp.com")).status).toBe(401);
+  expect(await db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()).toEqual(
+    before
+  );
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM canonical_security_mutations")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("admits email approval only for a browser-held verifier and an existing verified mailbox", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const start = await sendRequest(
+    new Request("https://api.fidyapp.com/web/pairings", {
+      method: "POST",
+      headers: { origin: "https://app.fidyapp.com" },
+    })
+  );
+  const pairing: { pairingId: string; privateVerifier: string } = await start.json();
+  const begin = (privateVerifier: string, email: string): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/web/email/authentication/start", {
+        method: "POST",
+        headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+        body: JSON.stringify({ pairingId: pairing.pairingId, privateVerifier, email }),
+      })
+    );
+  expect((await begin("A".repeat(43), "person@example.test")).status).toBe(400);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM browser_pairing_email_outbox")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect((await begin(pairing.privateVerifier, "unknown@example.test")).status).toBe(202);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM browser_pairing_email_outbox")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect((await begin(pairing.privateVerifier, "person@example.test")).status).toBe(202);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM browser_pairing_email_outbox")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
+  let workId = "";
+  await Effect.runPromise(
+    dispatchBrowserPairingEmail({
+      DB: db,
+      BROWSER_PAIRING_EMAIL_QUEUE: {
+        send: (work) => {
+          workId = work.id;
+          return Promise.resolve();
+        },
+      },
+    })
+  );
+  let receivedCode = "";
+  await deliverBrowserPairingEmail(db, (_email, combinedCode) => {
+    receivedCode = combinedCode;
+    return Promise.resolve("succeeded");
+  })(workId);
+  const complete = (combinedCode: string, privateVerifier: string): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/web/email/authentication/complete", {
+        method: "POST",
+        headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+        body: JSON.stringify({ pairingId: pairing.pairingId, privateVerifier, combinedCode }),
+      })
+    );
+  expect((await complete(receivedCode, "A".repeat(43))).status).toBe(400);
+  await db
+    .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms + 1`)
+    .run();
+  expect((await complete(receivedCode, pairing.privateVerifier)).status).toBe(400);
+  await db
+    .prepare(`UPDATE verified_email_credentials
+    SET verified_at_ms = verified_at_ms - 1`)
+    .run();
+  expect((await complete(receivedCode, pairing.privateVerifier)).status).toBe(200);
+  expect((await complete(receivedCode, pairing.privateVerifier)).status).toBe(400);
+  const redeemed = await sendRequest(
+    new Request("https://api.fidyapp.com/web/pairings/redeem", {
+      method: "POST",
+      headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+      body: JSON.stringify({
+        pairingId: pairing.pairingId,
+        privateVerifier: pairing.privateVerifier,
+      }),
+    })
+  );
+  expect(redeemed.status).toBe(200);
+  expect(redeemed.headers.get("set-cookie")).toContain("__Host-fidy_session=");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects unproved support recovery without creating a case or approving a pairing", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const pairing: { pairingId: string; publicCode: string } = await (
+    await startBrowserPairing(db)
+  ).json();
+  const response = await sendRequest(
+    new Request("https://api.fidyapp.com/internal/support-recovery", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pairingCode: pairing.publicCode,
+        backupRecoveryCode: "AAAAA-AAAAA-AAAAA-AAAAA-AAAAA",
+      }),
+    })
+  );
+  expect(response.status).toBe(401);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM support_recovery_cases")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect(
+    await db
+      .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
+      .bind(pairing.pairingId)
+      .first()
+  ).toMatchObject({ state: "pending_approval" });
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("binds an Access-approved recovery case to one stable User, consumes its code and refuses replay", async () => {
+  const { db, send, sendRequest } = await setup();
+  const created: { backupRecoveryCode: string } = await (await send(code)).json();
+  const pairing: { pairingId: string; publicCode: string; privateVerifier: string } = await (
+    await startBrowserPairing(db)
+  ).json();
+  const { publicKey, privateKey } = await generateKeyPair("RS256");
+  const jwk = { ...(await exportJWK(publicKey)), kid: "support-key", alg: "RS256", use: "sig" };
+  vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+    Promise.resolve(Response.json({ keys: [jwk] }))
+  );
+  // @effect-diagnostics-next-line globalDate:off
+  const now = Math.floor(Date.now() / 1000);
+  const assertion = await new SignJWT({})
+    .setProtectedHeader({ alg: "RS256", kid: "support-key" })
+    .setIssuer("https://example.cloudflareaccess.com")
+    .setAudience("test-support-audience")
+    .setSubject("test-operator")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 300)
+    .sign(privateKey);
+  const approve = (backupRecoveryCode: string, token = assertion): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/internal/support-recovery", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
+        body: JSON.stringify({ pairingCode: pairing.publicCode, backupRecoveryCode }),
+      })
+    );
+  expect((await approve(created.backupRecoveryCode, `${assertion}invalid`)).status).toBe(401);
+  expect((await approve("AAAAA-AAAAA-AAAAA-AAAAA-AAAAA")).status).toBe(400);
+  expect((await approve(created.backupRecoveryCode)).status).toBe(200);
+  expect((await approve(created.backupRecoveryCode)).status).toBe(400);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM support_recovery_cases")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM support_recovery_events")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(2);
+  const subject = await db
+    .prepare(`SELECT p.user_id AS paired_user, b.user_id AS proof_user,
+    b.consumed_at_ms AS consumed FROM browser_login_pairings AS p
+    JOIN backup_recovery_credentials AS b ON b.user_id = p.user_id WHERE p.id = ?`)
+    .bind(pairing.pairingId)
+    .first();
+  expect(subject).toMatchObject({ paired_user: subject?.proof_user });
+  expect(subject?.consumed).not.toBeNull();
+  const redeemed = await sendRequest(
+    new Request("https://api.fidyapp.com/web/pairings/redeem", {
+      method: "POST",
+      headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+      body: JSON.stringify({
+        pairingId: pairing.pairingId,
+        privateVerifier: pairing.privateVerifier,
+      }),
+    })
+  );
+  expect(redeemed.status).toBe(200);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

@@ -6,6 +6,7 @@ import {
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
+import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 
 export const pairingMilliseconds = 600_000;
 // One source cannot exhaust this pool under the edge's 60-per-10-second budget.
@@ -100,7 +101,12 @@ export const claimPairingGrant = (
 
 /** Guard protected D1 work with the same live bearer and Consent decision as PAT use. */
 export const livePATAuthority = (
-  subject: Readonly<{ patId: string; userId: string; digest: Uint8Array }>,
+  subject: Readonly<{
+    patId: string;
+    userId: string;
+    digest: Uint8Array;
+    requiredScope: Option.Option<CanonicalCapability>;
+  }>,
   current: number
 ): Readonly<{
   table: "pats";
@@ -109,20 +115,33 @@ export const livePATAuthority = (
 }> => ({
   table: "pats",
   predicate: `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`,
-  bindings: [subject.patId, subject.userId, subject.digest, current],
+    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
+    AND ${Option.isSome(subject.requiredScope) ? "EXISTS (SELECT 1 FROM json_each(pats.scopes_json) WHERE value = ?)" : "0"}`,
+  bindings: [
+    subject.patId,
+    subject.userId,
+    subject.digest,
+    current,
+    ...Option.toArray(subject.requiredScope),
+  ],
 });
 
-/** Recheck bearer digest, lifetime, revocation and withdrawal alongside protected canonical work. */
+/** Recheck bearer, Consent, scope, and lifetime alongside protected canonical work. */
 export const recordLivePATUse = (
-  subject: Readonly<{ patId: string; userId: string; digest: Uint8Array }>,
+  subject: Readonly<{
+    patId: string;
+    userId: string;
+    digest: Uint8Array;
+    requiredScope: Option.Option<CanonicalCapability>;
+  }>,
   current: number
-): OwnedStatement => ({
-  sql: `UPDATE pats SET last_used_at_ms = ? WHERE id = ? AND user_id = ? AND bearer_digest = ?
-    AND revoked_at_ms IS NULL AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`,
-  params: [current, subject.patId, subject.userId, subject.digest, current],
-});
+): OwnedStatement => {
+  const authority = livePATAuthority(subject, current);
+  return {
+    sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate}`,
+    params: [current, ...authority.bindings],
+  };
+};
 
 /** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */
 export const revokeOnePAT = (

@@ -1217,6 +1217,68 @@ it("bounds canonical work across a stable User and multiple PATs", async () => {
   ).toBe(count);
 });
 
+it("rechecks PAT scope after admission at the protected D1 read and audit", async () => {
+  const { db, send, sessions } = await setup();
+  const response = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "70000000-0000-4000-8000-000000000041",
+      grant: {
+        recipientLabel: "Scope race agent",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(response.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await response.json()
+  ).data;
+  const changeScopeOnUse = `CREATE TRIGGER scope_changes_during_use BEFORE UPDATE OF last_used_at_ms ON pats
+    WHEN OLD.scopes_json = '["read"]' BEGIN
+    UPDATE pats SET scopes_json = '["dashboard"]' WHERE id = OLD.id; END`;
+  await db.prepare(changeScopeOnUse).run();
+  expect(
+    (await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status
+  ).not.toBe(200);
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS total FROM pat_audit WHERE operation = 'categories.listCategories'"
+        )
+        .first()
+    )?.total
+  ).toBe(0);
+  await db
+    .prepare("UPDATE pats SET scopes_json = '[\"read\"]' WHERE short_id = ?")
+    .bind(issued.pat.shortId)
+    .run();
+  expect(
+    (await send({ path: "/transactions", method: "GET", bearer: issued.bearer })).status
+  ).not.toBe(200);
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS total FROM pat_audit WHERE operation = 'transactions.listTransactions'"
+        )
+        .first()
+    )?.total
+  ).toBe(0);
+  await db.prepare("DROP TRIGGER scope_changes_during_use").run();
+  await db
+    .prepare("UPDATE pats SET scopes_json = '[\"read\"]' WHERE short_id = ?")
+    .bind(issued.pat.shortId)
+    .run();
+  expect((await send({ path: "/transactions", method: "GET", bearer: issued.bearer })).status).toBe(
+    200
+  );
+});
+
 it("gates every declared canonical path by live PAT and exact operation scope before any unavailable adapter", async () => {
   const { db, send, sessions } = await setup();
   const issue = async (

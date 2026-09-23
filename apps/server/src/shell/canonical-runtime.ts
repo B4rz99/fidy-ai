@@ -2,3 +2,5 @@
 export { operationCatalog } from "./api";
 export { decideOperationAccess } from "./_shared/operation-policy";
 export type { CatalogOperation } from "./_shared/operation-catalog";
+export { CanonicalCapability } from "../core/canonical-operations/contract";
+export { patScopeCapability } from "./_shared/operation-policy";

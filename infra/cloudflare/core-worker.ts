@@ -177,6 +177,7 @@ const dispatchCanonicalCapture = async (
           patId: subject.patId,
           userId: subject.userId,
           digest: Array.from(subject.digest),
+          requiredScope: Option.getOrNull(subject.requiredScope),
           input: encoded,
         }
       : {

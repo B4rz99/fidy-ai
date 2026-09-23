@@ -1,4 +1,5 @@
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
+import { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
 
@@ -16,6 +17,7 @@ const Command = Schema.Union([
   Schema.TaggedStruct("PAT", {
     ...Credentials,
     patId: Schema.String.check(Schema.isUUID()),
+    requiredScope: Schema.NullOr(CanonicalCapability),
   }),
 ]);
 
@@ -48,6 +50,7 @@ export class UserTransactionCoordinator {
                 patId: command.value.patId,
                 userId: command.value.userId,
                 digest: new Uint8Array(command.value.digest),
+                requiredScope: Option.fromNullishOr(command.value.requiredScope),
               }
             : {
                 id: command.value.sessionId,

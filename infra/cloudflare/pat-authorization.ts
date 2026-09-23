@@ -1,4 +1,9 @@
-import { type CatalogOperation, decideOperationAccess } from "@fidy/server/canonical-runtime";
+import {
+  type CatalogOperation,
+  decideOperationAccess,
+  patScopeCapability,
+} from "@fidy/server/canonical-runtime";
+import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
 import {
   PATRow,
@@ -42,7 +47,12 @@ const consentRevoked = async (db: D1Database, userId: string): Promise<boolean> 
     .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
     .bind(userId)
     .first()) !== null;
-export type AuthorizedPAT = Readonly<{ patId: string; userId: string; digest: Uint8Array }>;
+export type AuthorizedPAT = Readonly<{
+  patId: string;
+  userId: string;
+  digest: Uint8Array;
+  requiredScope: Option.Option<CanonicalCapability>;
+}>;
 const scopeDecision = (
   scopes: ReturnType<typeof scopesFrom>,
   operation: CatalogOperation
@@ -70,6 +80,7 @@ export const authorizeCanonicalPAT = async (
         patId: pat.value.id,
         userId: pat.value.user_id,
         digest: new Uint8Array(pat.value.bearer_digest),
+        requiredScope: patScopeCapability(operation.policy.access),
       }
     : decision;
 };

@@ -6,8 +6,14 @@ import {
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
 import { livePATAuthority } from "./pat-write";
+import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 
-type PATSubject = Readonly<{ patId: string; userId: string; digest: Uint8Array }>;
+type PATSubject = Readonly<{
+  patId: string;
+  userId: string;
+  digest: Uint8Array;
+  requiredScope: Option.Option<CanonicalCapability>;
+}>;
 type AuditTime = Readonly<{ id: string; current: number }>;
 
 /** A successful approval or issuance is accounted for only when its preceding owner write succeeded. */

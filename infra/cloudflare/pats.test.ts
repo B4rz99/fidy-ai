@@ -1,9 +1,7 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "@fidy/server/categories";
-import { Context, Data, DateTime, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -48,8 +46,7 @@ const awaitPromise = <A>(
     catch: (cause) => new TestPromiseFailure({ cause }),
   });
 const runTest = <A, E>(work: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(work);
-// @effect-diagnostics-next-line globalDate:off
-const clock = (): number => Date.now();
+const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
 type Send = Readonly<{
   path: string;
   method: "GET" | "POST" | "DELETE";
@@ -117,7 +114,7 @@ const setup = (
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
-          readFile(new URL(`./migrations/${name}.sql`, import.meta.url), "utf8")
+          Bun.file(new URL(`./migrations/${name}.sql`, import.meta.url)).text()
         );
         for (const statement of sql
           .replace(/^--.*$/gmu, "")

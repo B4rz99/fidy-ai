@@ -387,10 +387,9 @@ const authorizedCanonicalResponse = (
         );
       },
     }),
-    Effect.flatMap((result) =>
-      result instanceof Response
-        ? Effect.succeed(result)
-        : executeCanonicalWork({ request, environment, operation, subject: result })
+    Effect.filterOrElse(
+      (result): result is Response => result instanceof Response,
+      (subject) => executeCanonicalWork({ request, environment, operation, subject })
     )
   );
 };

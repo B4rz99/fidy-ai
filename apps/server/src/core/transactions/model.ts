@@ -17,6 +17,7 @@ import { NotificationInterpretationEvidence } from "./account-hints";
 import { TransactionId } from "./reference";
 
 export { TransactionId } from "./reference";
+export { encodeMoneyAmount } from "~/core/_shared/money";
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
@@ -200,6 +201,12 @@ export const TransactionQueryValues = Schema.Struct({
   counterparty: Counterparty,
   direction: Direction,
   currency: Currency,
+  /** A validated keyset position, never authorization evidence. */
+  cursor: Schema.String.check(
+    Schema.isPattern(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[0-9a-f-]{36}$/u
+    )
+  ),
 });
 
 /**
@@ -213,6 +220,7 @@ export const TransactionQuery = Schema.Struct({
   counterparty: Schema.Option(TransactionQueryValues.fields.counterparty),
   direction: Schema.Option(TransactionQueryValues.fields.direction),
   currency: Schema.Option(TransactionQueryValues.fields.currency),
+  cursor: Schema.Option(TransactionQueryValues.fields.cursor),
 }).annotate({ identifier: "TransactionQuery" });
 export type TransactionQuery = typeof TransactionQuery.Type;
 

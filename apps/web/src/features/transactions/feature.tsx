@@ -25,8 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/ui/components/table";
+import { ManualTransactionCapture } from "./manual-capture";
 import {
   type CurrentUser,
+  type Transaction,
   type TransactionListRow,
   deriveCurrentMonthPeriod,
   presentPeriod,
@@ -356,10 +358,56 @@ const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => 
   return { categoryState, period, retry, transactionState };
 };
 
+const CapturedTransactionPreview = ({
+  captured,
+  presentation,
+}: Readonly<{
+  captured: Option.Option<Transaction>;
+  presentation: Omit<TransactionPresentationInput, "transactions">;
+}>): JSX.Element => {
+  const row = Option.flatMap(captured, (transaction) =>
+    EffectArray.head(presentTransactionRows({ ...presentation, transactions: [transaction] }))
+  );
+  if (Option.isNone(row)) return <></>;
+  return (
+    <aside aria-label="Transacción recién registrada" className="rounded-lg border p-4">
+      <p className="font-medium">Transacción registrada</p>
+      <p>
+        {row.value.counterpartyLabel} · {row.value.moneyText} · {row.value.occurredOnText}
+      </p>
+    </aside>
+  );
+};
+
+const readyQueryActivity = (
+  categoryState: Extract<TransactionQueries["categoryState"], { readonly _tag: "Ready" }>,
+  transactionState: Extract<TransactionQueries["transactionState"], { readonly _tag: "Ready" }>,
+  retry: () => void
+): QueryActivity =>
+  queryActivity({
+    categoryFailed: Option.isSome(categoryState.refreshFailure),
+    categoryWaiting: categoryState.waiting,
+    onRetry: retry,
+    transactionFailed: Option.isSome(transactionState.refreshFailure),
+    transactionWaiting: transactionState.waiting,
+  });
+
+const rowPresentation = (
+  currentUser: CurrentUser,
+  categories: TransactionPresentationInput["categories"]
+): Omit<TransactionPresentationInput, "transactions"> => ({
+  categories,
+  counterpartyFallback: "Contraparte no identificada",
+  locale: currentUser.locale,
+  timeZone: currentUser.timeZone,
+});
+
 const TransactionResources = ({
   currentUser,
 }: Readonly<{ currentUser: CurrentUser }>): JSX.Element => {
+  const router = useRouter();
   const { categoryState, period, retry, transactionState } = useTransactionQueries(currentUser);
+  const [captured, setCaptured] = useState<Option.Option<Transaction>>(() => Option.none());
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery
@@ -387,26 +435,29 @@ const TransactionResources = ({
     );
   }
 
+  const presentation = rowPresentation(currentUser, categoryState.value.data);
   const rows = presentTransactionRows({
-    categories: categoryState.value.data,
-    counterpartyFallback: "Contraparte no identificada",
-    locale: currentUser.locale,
-    timeZone: currentUser.timeZone,
+    ...presentation,
     transactions: transactionState.value.data,
   });
   return (
-    <TransactionRows
-      currentUser={currentUser}
-      period={period}
-      query={queryActivity({
-        categoryFailed: Option.isSome(categoryState.refreshFailure),
-        categoryWaiting: categoryState.waiting,
-        onRetry: retry,
-        transactionFailed: Option.isSome(transactionState.refreshFailure),
-        transactionWaiting: transactionState.waiting,
-      })}
-      rows={rows}
-    />
+    <>
+      <ManualTransactionCapture
+        apiClient={router.options.context.apiClient}
+        timeZone={currentUser.timeZone}
+        onCreated={(transaction) => {
+          setCaptured(Option.some(transaction));
+          retry();
+        }}
+      />
+      <CapturedTransactionPreview captured={captured} presentation={presentation} />
+      <TransactionRows
+        currentUser={currentUser}
+        period={period}
+        query={readyQueryActivity(categoryState, transactionState, retry)}
+        rows={rows}
+      />
+    </>
   );
 };
 

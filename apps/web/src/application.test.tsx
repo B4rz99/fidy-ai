@@ -205,6 +205,80 @@ describe("public web application routes", () => {
   });
 });
 
+const transactionCaptureInstant = (request: HttpClientRequest.HttpClientRequest): string => {
+  if (request.body._tag !== "Uint8Array") throw new Error("Expected canonical JSON body");
+  const body: unknown = JSON.parse(new TextDecoder().decode(request.body.body));
+  if (typeof body !== "object" || body === null || !("occurredAt" in body)) {
+    throw new Error("Missing occurredAt");
+  }
+  return String(body.occurredAt);
+};
+
+const httpCreated = 201;
+const httpUnavailable = 503;
+const transactionCaptureClient = (
+  requests: Array<string>,
+  capturedInstants: Array<string>
+): FidyClient => {
+  const categoryId = "24000000-0000-4000-8000-000000000001";
+  const httpClient = makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    requests.push(`${request.method} ${path}`);
+    if (path === "/user") {
+      return Effect.succeed(
+        responseJson(request, {
+          data: {
+            id: "24000000-0000-4000-8000-000000000003",
+            serviceMarket: "CO",
+            locale: "es-CO",
+            timeZone: "America/Bogota",
+            trialPeriod: { startedAt: "2025-01-01T00:00:00Z", endsAt: "2025-01-08T00:00:00Z" },
+            createdAt: "2025-01-01T00:00:00Z",
+          },
+          next: [],
+        })
+      );
+    }
+    if (path === "/categories") {
+      return Effect.succeed(
+        responseJson(request, { data: [{ id: categoryId, label: "Restaurantes" }], next: [] })
+      );
+    }
+    if (path === "/transactions" && request.method === "POST") {
+      capturedInstants.push(transactionCaptureInstant(request));
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            data: {
+              id: "24000000-0000-4000-8000-000000000002",
+              money: { amount: "25000", currency: "COP" },
+              direction: "outflow",
+              counterparty: "El Corral",
+              categoryId,
+              occurredAt: "2025-01-10T05:00:00.000Z",
+              createdAt: "2026-09-08T12:00:00.000Z",
+            },
+            next: [],
+          },
+          httpCreated
+        )
+      );
+    }
+    if (path === "/transactions") {
+      return Effect.succeed(responseJson(request, { data: [], next: [] }));
+    }
+    return Effect.succeed(responseJson(request, { status: "unavailable" }, httpUnavailable));
+  });
+  return makeFidyClient(
+    "https://api.test.fidyapp.com",
+    Layer.succeed(HttpClient.HttpClient, httpClient)
+  );
+};
+
+const requestCount = (requests: ReadonlyArray<string>, target: string): number =>
+  requests.filter((request) => request === target).length;
+
 describe("signed-in web application routes", () => {
   afterEach(resetApplicationTest);
 
@@ -212,6 +286,37 @@ describe("signed-in web application routes", () => {
     await renderRoute("/app/transactions", malformedFidyClient());
 
     expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
+  });
+
+  it("captures through the generated HTTP client and presents the returned Transaction even outside the first history page", async () => {
+    const requests: Array<string> = [];
+    const capturedInstants: Array<string> = [];
+    await renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants));
+    expect(await screen.findByText("Aún no hay transacciones este mes")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "25000" } });
+    fireEvent.change(screen.getByLabelText("Fecha del movimiento"), {
+      target: { value: "2025-01-10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+    expect(await screen.findByLabelText("Transacción recién registrada")).toHaveTextContent(
+      "El Corral"
+    );
+    expect(screen.getByLabelText("Transacción recién registrada")).toHaveTextContent("10-01-2025");
+    await waitFor(() => expect(requestCount(requests, "GET /transactions")).toBe(2));
+    expect(requests).toContain("POST /transactions");
+    expect(capturedInstants).toEqual(["2025-01-10T05:00:00.000Z"]);
+  });
+
+  it("refuses malformed Money before sending a canonical create request", async () => {
+    const requests: Array<string> = [];
+    const capturedInstants: Array<string> = [];
+    await renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants));
+    expect(await screen.findByText("Aún no hay transacciones este mes")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "not-a-number" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo guardar la transacción");
+    expect(requests).not.toContain("POST /transactions");
+    expect(capturedInstants).toEqual([]);
   });
 });
 

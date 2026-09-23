@@ -253,6 +253,7 @@ const userActionRequiredTag = "UserActionRequired";
 const paywallRequiredTag = "PaywallRequired";
 const notFoundTag = "NotFound";
 const unavailableTag = "Unavailable";
+const resourceLimitedTag = "ResourceLimited";
 
 /**
  * API failures are schema-backed tagged errors. Their `_tag` supports selective
@@ -330,6 +331,12 @@ export class PaywallRequired extends Schema.Error<PaywallRequired>(paywallRequir
 export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   errorResponse(notFoundTag, detail("not_found")),
   { httpApiStatus: 404 }
+) {}
+
+/** The caller's stable-User write budget is exhausted for the current admission window. */
+export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimitedTag)(
+  errorResponse(resourceLimitedTag, detail("rate_limited")),
+  { httpApiStatus: 429 }
 ) {}
 
 /** A required private dependency could not complete the canonical operation. */

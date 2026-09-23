@@ -3,7 +3,9 @@ import { BigDecimal, Cause, DateTime, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionListFeature, TransactionListView, type TransactionPageState } from "./feature";
+import { ManualTransactionCapture } from "./manual-capture";
 import type { TransactionListRow } from "./presentation";
+import { makeFidyClient } from "@/transport/client";
 
 const queryKey = (atom: unknown): string => {
   if (!Predicate.isString(atom)) throw new Error("Expected a query key");
@@ -13,10 +15,13 @@ const queryKey = (atom: unknown): string => {
 const queryMocks = vi.hoisted(() => ({
   query: vi.fn((_group: string, operation: string) => operation),
   refresh: vi.fn(),
+  dispatch: vi.fn(),
+  commandAtom: { name: "capture-transaction" },
   values: new Map<string, unknown>(),
 }));
 
 vi.mock("@effect/atom-react", () => ({
+  useAtomSet: (): typeof queryMocks.dispatch => queryMocks.dispatch,
   useAtomRefresh:
     (atom: unknown): (() => void) =>
     () => {
@@ -27,7 +32,14 @@ vi.mock("@effect/atom-react", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useRouter: (): Readonly<Record<"options", unknown>> => ({
-    options: { context: { apiClient: { query: queryMocks.query } } },
+    options: {
+      context: {
+        apiClient: {
+          query: queryMocks.query,
+          runtime: { fn: () => () => () => queryMocks.commandAtom },
+        },
+      },
+    },
   }),
 }));
 
@@ -63,9 +75,28 @@ const row: TransactionListRow = {
 beforeEach(() => {
   queryMocks.query.mockClear();
   queryMocks.refresh.mockClear();
+  queryMocks.dispatch.mockReset();
   queryMocks.values.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+describe("manual Transaction capture", () => {
+  it("defaults to the User's local date across a UTC month boundary", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DateTime.makeUnsafe("2026-09-01T02:00:00Z").epochMilliseconds);
+    render(
+      <ManualTransactionCapture
+        apiClient={makeFidyClient("https://api.test.fidyapp.com")}
+        timeZone="America/Bogota"
+        onCreated={() => undefined}
+      />
+    );
+    expect(screen.getByLabelText("Fecha del movimiento")).toHaveValue("2026-08-31");
+  });
+});
 
 describe("current-month Transaction list presentation", () => {
   it("renders an accessible loading state", () => {

@@ -64,7 +64,7 @@ const noSession = (): Response =>
     },
     { status: 401 }
   );
-const sha256 = (value: string): Promise<Uint8Array> =>
+export const sha256 = (value: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(value))
     .then((digest) => new Uint8Array(digest));
@@ -356,7 +356,7 @@ const createWebSession = async (
 const sessionSetCookie = (token: string): string =>
   `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
 
-const sessionCookie = (request: Request): Option.Option<string> => {
+export const sessionCookie = (request: Request): Option.Option<string> => {
   const cookies =
     request.headers
       .get("cookie")

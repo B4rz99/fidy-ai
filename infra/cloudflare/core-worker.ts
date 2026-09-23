@@ -6,9 +6,21 @@ import {
 } from "@fidy/server/categories";
 import { HostedInference } from "@fidy/server/hosted-inference";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Context, Effect, Exit, Layer, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
+import {
+  ownsTransactionPath as transactionPath,
+  transactionRoute,
+} from "@fidy/server/transaction-routes";
+import { browseTransactions } from "./transaction-history";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
+import {
+  rejectManualTransaction,
+  transactionInput,
+  transactionSession,
+  unauthenticatedTransaction,
+} from "./transactions";
 import { completeBrowserPairingEmail, startBrowserPairingEmail } from "./browser-pairing-email";
 import {
   type BrowserPairingEmailEnvironment,
@@ -41,6 +53,7 @@ import {
 } from "./telemetry";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./workers-ai";
 
+export { UserTransactionCoordinator } from "./transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding-email";
 export { BrowserPairingEmailWorkflowV1 } from "./browser-pairing-email-delivery";
 
@@ -53,6 +66,9 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   typeof ReleaseConfiguration.Type & {
     readonly AI: WorkersAiEnvironment["AI"];
     readonly DB: D1Database;
+    readonly USER_TRANSACTION_COORDINATOR: Readonly<{
+      getByName: (name: string) => Pick<Fetcher, "fetch">;
+    }>;
     readonly HOSTED_AI_MODEL: string;
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
@@ -134,6 +150,57 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
+const transactionsResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    // @effect-diagnostics-next-line asyncFunction:off
+    try: async () => {
+      const subject = await transactionSession(request, environment.DB);
+      if (Option.isNone(subject)) return unauthenticatedTransaction();
+      const path = new URL(request.url).pathname;
+      const operation = transactionRoute(path, request.method);
+      if (Option.isNone(operation)) return methodNotAllowed();
+      if (operation.value.id !== "transactions.createTransaction") {
+        return browseTransactions(environment.DB, {
+          request,
+          subject: subject.value,
+          id:
+            operation.value.id === "transactions.listTransactions"
+              ? Option.none()
+              : Option.some(path.slice(operation.value.route.indexOf(":id"))),
+        });
+      }
+      const input = await transactionInput(request);
+      if (Option.isNone(input)) {
+        return rejectManualTransaction(environment.DB, subject.value, "validation_failed");
+      }
+      // The existing worker.core.fetch and worker.public.fetch Work spans bound latency and
+      // status for this D1/DO workflow. Do not add per-Transaction spans: they would count
+      // failures twice and risk exporting opaque record ids or captured Money.
+      const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
+      const encoded = await Effect.runPromise(
+        Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
+      );
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      const body = JSON.stringify({
+        sessionId: subject.value.id,
+        userId: subject.value.userId,
+        digest: Array.from(subject.value.digest),
+        input: encoded,
+      });
+      return stub.fetch(
+        new Request("https://coordinator.internal/create", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        })
+      );
+    },
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable));
+
 const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
   [
@@ -149,7 +216,8 @@ const ownedCorePath = (path: string): boolean =>
     "/web/email/authentication/complete",
     "/internal/support-recovery",
     "/user",
-  ].includes(path);
+  ].includes(path) ||
+  transactionPath(path);
 
 const browserResponse = (
   request: Request,
@@ -190,11 +258,51 @@ const browserResponse = (
   );
 };
 
+const readCoreResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> => {
+  if (request.method !== "GET") {
+    return Effect.succeed(methodNotAllowed());
+  }
+  const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
+  if (Exit.isFailure(configuration)) {
+    return Effect.succeed(unavailable());
+  }
+  if (new URL(request.url).pathname === listCategoriesPath) {
+    if (!request.headers.has("cookie")) {
+      return categoriesResponse(environment);
+    }
+    return Effect.tryPromise({
+      try: () => transactionSession(request, environment.DB),
+      catch: () => undefined,
+    }).pipe(
+      Effect.flatMap((session) =>
+        Option.isSome(session)
+          ? categoriesResponse(environment)
+          : Effect.succeed(unauthenticatedTransaction())
+      ),
+      Effect.orElseSucceed(unavailable)
+    );
+  }
+  return Effect.succeed(
+    jsonResponse(
+      JSON.stringify({
+        contractDigest: configuration.value.CONTRACT_DIGEST,
+        gitRevision: configuration.value.RELEASE_GIT_SHA,
+        status: "available",
+      }),
+      HTTP_OK
+    )
+  );
+};
+
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
+  if (transactionPath(url.pathname)) return transactionsResponse(request, environment);
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
@@ -219,23 +327,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   ) {
     return browserResponse(request, environment);
   }
-  if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
-
-  const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
-  if (Exit.isFailure(configuration)) return Effect.succeed(unavailable());
-
-  if (url.pathname === listCategoriesPath) return categoriesResponse(environment);
-
-  return Effect.succeed(
-    jsonResponse(
-      JSON.stringify({
-        contractDigest: configuration.value.CONTRACT_DIGEST,
-        gitRevision: configuration.value.RELEASE_GIT_SHA,
-        status: "available",
-      }),
-      HTTP_OK
-    )
-  );
+  return readCoreResponse(request, environment);
 };
 
 const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {

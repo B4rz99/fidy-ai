@@ -14,6 +14,21 @@
       "import": "./src/shell/subscription/runtime.ts",
       "default": "./src/shell/subscription/runtime.ts"
     },
+    "./transaction-continuation": {
+      "types": "./src/shell/transactions/continuation.ts",
+      "import": "./src/shell/transactions/continuation.ts",
+      "default": "./src/shell/transactions/continuation.ts"
+    },
+    "./transaction-routes": {
+      "types": "./src/shell/transactions/cloudflare-routes.ts",
+      "import": "./src/shell/transactions/cloudflare-routes.ts",
+      "default": "./src/shell/transactions/cloudflare-routes.ts"
+    },
+    "./transactions-runtime": {
+      "types": "./src/core/transactions/model.ts",
+      "import": "./src/core/transactions/model.ts",
+      "default": "./src/core/transactions/model.ts"
+    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",

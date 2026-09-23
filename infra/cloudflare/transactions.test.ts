@@ -120,6 +120,10 @@ const setup = async (platform = false): Promise<D1Database> => {
     "0005_verified_onboarding",
     "0006_browser_login",
     "0009_transactions",
+    "0009_pats",
+    "0010_pat_revocation_consents",
+    "0011_explicit_consent_revocations",
+    "0012_pat_work_budget",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(db, name)),
     Promise.resolve()

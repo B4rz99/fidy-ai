@@ -70,7 +70,8 @@ export const rejectManualTransaction = async (
         : db
             .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
           SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
-          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
             .bind(
               uuid(),
               outcome,
@@ -117,7 +118,8 @@ export const transactionSession = async (
   const current = now();
   const raw = await db
     .prepare(
-      `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
+      `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
     )
     .bind(digest, current, current)
     .first();
@@ -154,7 +156,8 @@ const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => 
         .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
     : db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?`)
+        SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)`)
         .bind(uuid(), subject.id, current, subject.userId, id);
 };
 
@@ -178,7 +181,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
     : {
         table: "web_sessions",
         predicate:
-          "id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?",
+          "id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)",
         bindings: [subject.id, subject.userId, subject.digest, current, current],
       };
   return [

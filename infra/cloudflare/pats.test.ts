@@ -85,6 +85,7 @@ const setup = async (): Promise<{
     "0009_transactions",
     "0010_pat_revocation_consents",
     "0011_explicit_consent_revocations",
+    "0012_pat_work_budget",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -854,6 +855,75 @@ it("mints manual PATs for the complete selected lifetime from issuance", async (
   expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(7 * 86_400_000);
 });
 
+it("bounds canonical work across a stable User and multiple PATs", async () => {
+  const { db, send, sessions } = await setup();
+  const issue = async (requestId: string): Promise<typeof Issued.Type> => {
+    const result = await send({
+      path: "/pats",
+      method: "POST",
+      session: sessions[0],
+      payload: {
+        requestId,
+        grant: {
+          recipientLabel: "Budgeted agent",
+          scopes: ["read"],
+          lifetimeDays: 7,
+          reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+        },
+      },
+    });
+    expect(result.status).toBe(200);
+    return Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(await result.json()).data;
+  };
+  const first = await issue("70000000-0000-4000-8000-000000000031");
+  const second = await issue("70000000-0000-4000-8000-000000000032");
+  expect((await send({ path: "/transactions", method: "GET", bearer: first.bearer })).status).toBe(
+    200
+  );
+  expect((await send({ path: "/transactions", method: "GET", bearer: second.bearer })).status).toBe(
+    200
+  );
+  const pat = await db
+    .prepare("SELECT id FROM pats WHERE short_id = ?")
+    .bind(second.pat.shortId)
+    .first<{ id: string }>();
+  expect(pat).not.toBeNull();
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 254)
+    INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+    SELECT lower(hex(randomblob(16))), ?, ?, 'transactions.listTransactions', 'accepted', ? FROM seq`)
+    .bind(userA, pat?.id, clock())
+    .run();
+  const count = (
+    await db
+      .prepare(
+        "SELECT count(*) AS total FROM pat_audit WHERE user_id = ? AND operation = 'transactions.listTransactions'"
+      )
+      .bind(userA)
+      .first<{ total: number }>()
+  )?.total;
+  expect(count).toBe(256);
+  expect((await send({ path: "/transactions", method: "GET", bearer: first.bearer })).status).toBe(
+    429
+  );
+  expect((await send({ path: "/transactions", method: "GET", bearer: second.bearer })).status).toBe(
+    429
+  );
+  expect((await send({ path: "/transactions", method: "GET", session: sessions[0] })).status).toBe(
+    429
+  );
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS total FROM pat_audit WHERE user_id = ? AND operation = 'transactions.listTransactions'"
+        )
+        .bind(userA)
+        .first<{ total: number }>()
+    )?.total
+  ).toBe(count);
+});
+
 it("gates every declared canonical path by live PAT and exact operation scope before any unavailable adapter", async () => {
   const { db, send, sessions } = await setup();
   const issue = async (
@@ -1071,6 +1141,16 @@ it("gates every declared canonical path by live PAT and exact operation scope be
         .first()
     )?.total
   ).toBe(0);
+  expect((await send({ path: "/transactions", method: "GET", session: sessions[0] })).status).toBe(
+    401
+  );
+  expect(
+    (await send({ path: "/transactions", method: "POST", session: sessions[0], payload: capture }))
+      .status
+  ).toBe(401);
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM source_attestations").first())?.total
+  ).toBe(1);
 });
 
 it("rejects invalid grants, expired bearers and stale browser authority without partial effects", async () => {

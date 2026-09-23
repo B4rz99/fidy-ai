@@ -218,7 +218,8 @@ const invalidQueryAudit = async (
     const audit = await db
       .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
       SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
-      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
       .bind(
         uuid(),
         Option.isNone(selection.id)
@@ -257,7 +258,8 @@ export const browseTransactions = async (
         selection,
         query: query.value,
         authority: {
-          predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
+          predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id))`,
           bindings: [subject.userId, subject.id, subject.userId, subject.digest, current, current],
         },
       }),
@@ -266,7 +268,8 @@ export const browseTransactions = async (
         SELECT ?, user_id, id, ?,
           CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
             THEN 'not_found' ELSE 'success' END,
-          ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+          ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
         .bind(
           uuid(),
           Option.isNone(selection.id)
@@ -365,8 +368,12 @@ export const browsePATTransactions = async (
   selection: PATSelection
 ): Promise<Response> => {
   const query = parseQuery(selection);
+  const current = now();
   try {
-    const results = await db.batch(patHistoryStatements(db, { selection, query, current: now() }));
+    if (await transactionAuditExhausted(db, selection.subject.userId, current)) {
+      return rateLimited();
+    }
+    const results = await db.batch(patHistoryStatements(db, { selection, query, current }));
     return presentPATHistory(results, selection, query);
   } catch (error) {
     return failedAudit(error);

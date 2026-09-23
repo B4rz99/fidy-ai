@@ -7,7 +7,7 @@ export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMill
 export const transactionId = (): string => crypto.randomUUID();
 export const transactionNoStore = { "cache-control": "no-store" };
 const utcDayMilliseconds = 86_400_000;
-// Matches the 256-entry stable-User triggers in 0014_canonical_category_budget.sql. These remain the
+// Matches the 256-entry stable-User triggers in 0010_pat_lifecycle.sql. These remain the
 // atomic authority if concurrent browser and PAT requests pass this cheap preflight together.
 const lastAdmissibleAuditOffset = 255;
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off

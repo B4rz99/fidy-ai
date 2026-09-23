@@ -86,15 +86,8 @@ const setup = async (
     "0007_browser_pairing_email",
     "0008_support_recovery",
     "0009_email_replacement",
-    "0009_pats",
     "0009_transactions",
-    "0010_pat_revocation_consents",
-    "0011_explicit_consent_revocations",
-    "0012_pat_work_budget",
-    "0013_pat_atomic_assertion",
-    "0014_canonical_category_budget",
-    "0015_transaction_capture_assertion",
-    "0016_pat_listing_work_budget",
+    "0010_pat_lifecycle",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;

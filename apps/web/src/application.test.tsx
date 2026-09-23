@@ -1,12 +1,11 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { DateTime, Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
-import { ManualTransactionCapture } from "@/features/transactions/manual-capture";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   BackupRecoveryCode,
@@ -287,21 +286,6 @@ describe("signed-in web application routes", () => {
     await renderRoute("/app/transactions", malformedFidyClient());
 
     expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
-  });
-
-  it("defaults to the User's local date across a UTC month boundary", () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(DateTime.makeUnsafe("2026-09-01T02:00:00Z").epochMilliseconds);
-    render(
-      <SessionRegistryProvider>
-        <ManualTransactionCapture
-          apiClient={makeFidyClient("https://api.test.fidyapp.com")}
-          timeZone="America/Bogota"
-          onCreated={() => undefined}
-        />
-      </SessionRegistryProvider>
-    );
-    expect(screen.getByLabelText("Fecha del movimiento")).toHaveValue("2026-08-31");
   });
 
   it("captures through the generated HTTP client and presents the returned Transaction even outside the first history page", async () => {

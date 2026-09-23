@@ -216,7 +216,8 @@ const ownedCorePath = (path: string): boolean =>
     "/web/email/authentication/complete",
     "/internal/support-recovery",
     "/user",
-  ].includes(path) || transactionPath(path);
+  ].includes(path) ||
+  transactionPath(path);
 
 const browserResponse = (
   request: Request,

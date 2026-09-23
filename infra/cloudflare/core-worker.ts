@@ -16,6 +16,7 @@ import {
   reconcileOnboardingEmail,
 } from "./onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
+import { verifyOnboarding } from "./verified-onboarding";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -95,16 +96,30 @@ const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.
     ? receiveConsentWebhook(environment)(request)
     : Effect.succeed(methodNotAllowed());
 
+const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Response> =>
+  request.method === "POST"
+    ? Effect.tryPromise({ try: () => verifyOnboarding(request, db), catch: () => undefined }).pipe(
+        Effect.orElseSucceed(unavailable)
+      )
+    : Effect.succeed(methodNotAllowed());
+
+const ownedCorePath = (path: string): boolean =>
+  [
+    "/health",
+    listCategoriesPath,
+    "/providers/kapso/callback",
+    "/web/onboarding/email/verify",
+  ].includes(path);
+
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
-  if (
-    url.pathname !== "/health" &&
-    url.pathname !== listCategoriesPath &&
-    url.pathname !== "/providers/kapso/callback"
-  ) {
+  if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
+  if (url.pathname === "/web/onboarding/email/verify") {
+    return verificationEffect(request, environment.DB);
+  }
   if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
 
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);

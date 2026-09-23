@@ -95,7 +95,8 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
   const requestedHeaders = Option.fromNullishOr(
     request.headers.get("access-control-request-headers")
   );
-  if (!Option.contains(requestedMethod, "GET") || !isAllowedPreflightHeaders(requestedHeaders)) {
+  const method = allowedMethod(new URL(request.url).pathname);
+  if (!Option.contains(requestedMethod, method) || !isAllowedPreflightHeaders(requestedHeaders)) {
     return forbiddenOrigin();
   }
 
@@ -104,7 +105,7 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
       onNone: () => "",
       onSome: (value) => value.toLowerCase(),
     }),
-    "access-control-allow-methods": "GET",
+    "access-control-allow-methods": method,
     "access-control-max-age": "600",
   });
   return applyApiPolicy(
@@ -129,22 +130,35 @@ const categoryAuthorizationFailure = (
 };
 
 const callbackPath = "/providers/kapso/callback";
+const verificationPath = "/web/onboarding/email/verify";
 const ownedPath = (path: string): boolean =>
-  path === "/health" || path === listCategoriesPath || path === callbackPath;
-const allowedMethod = (path: string): "GET" | "POST" => (path === callbackPath ? "POST" : "GET");
+  path === "/health" ||
+  path === listCategoriesPath ||
+  path === callbackPath ||
+  path === verificationPath;
+const allowedMethod = (path: string): "GET" | "POST" =>
+  path === callbackPath || path === verificationPath ? "POST" : "GET";
+const forwardedHeaders = (request: Request, path: string): Headers => {
+  if (path === callbackPath) {
+    return new Headers([
+      ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
+      ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
+      ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
+    ]);
+  }
+  if (path === verificationPath) {
+    return new Headers({
+      "content-type": request.headers.get("content-type") ?? "",
+    });
+  }
+  return request.headers;
+};
 const coreRequest = (request: Request, signal: AbortSignal): Request => {
   const path = new URL(request.url).pathname;
-  const callback = path === callbackPath;
   return new Request(`https://core.internal${path}`, {
-    headers: callback
-      ? new Headers([
-          ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
-          ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
-          ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
-        ])
-      : request.headers,
+    headers: forwardedHeaders(request, path),
     method: allowedMethod(path),
-    body: callback ? request.body : undefined,
+    body: allowedMethod(path) === "POST" ? request.body : undefined,
     signal,
   });
 };
@@ -162,7 +176,7 @@ const routeOwnedRequest = (
   }
   if (
     request.method === "OPTIONS" &&
-    url.pathname === listCategoriesPath &&
+    (url.pathname === listCategoriesPath || url.pathname === verificationPath) &&
     Option.isSome(origin)
   ) {
     return Promise.resolve(preflightResponse(request, environment.BROWSER_ORIGIN));

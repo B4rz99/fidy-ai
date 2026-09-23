@@ -89,12 +89,13 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
 ];
 
 // The launch zone's Free plan permits one path-based rule, so all owned ingress paths share one
-// source-IP budget instead of pretending that four independent budgets can be deployed.
+// source-IP budget instead of pretending that five independent budgets can be deployed.
 const rateLimitPaths = [
   "/health",
   listCategoriesPath,
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
+  "/web/onboarding/email/verify",
 ] as const;
 
 const rateLimitExpression = `http.request.uri.path in {${rateLimitPaths

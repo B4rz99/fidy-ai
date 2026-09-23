@@ -165,6 +165,9 @@ export default Alchemy.Stack(
         AI: Cloudflare.Workers.AI(),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
+        USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
+          className: "UserTransactionCoordinator",
+        }),
         HOSTED_AI_MODEL: yield* hostedAiModel,
         KAPSO_API_KEY: kapsoBindings.apiKey,
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,

@@ -96,7 +96,14 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
     request.headers.get("access-control-request-headers")
   );
   const method = allowedMethod(new URL(request.url).pathname);
-  if (!Option.contains(requestedMethod, method) || !isAllowedPreflightHeaders(requestedHeaders)) {
+  if (
+    !(
+      Option.contains(requestedMethod, method) ||
+      (new URL(request.url).pathname === "/transactions" &&
+        Option.contains(requestedMethod, "POST"))
+    ) ||
+    !isAllowedPreflightHeaders(requestedHeaders)
+  ) {
     return forbiddenOrigin();
   }
 
@@ -105,7 +112,8 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
       onNone: () => "",
       onSome: (value) => value.toLowerCase(),
     }),
-    "access-control-allow-methods": method,
+    "access-control-allow-methods":
+      new URL(request.url).pathname === "/transactions" ? "GET, POST" : method,
     "access-control-max-age": "600",
   });
   return applyApiPolicy(
@@ -120,6 +128,12 @@ const categoryAuthorizationFailure = (
   environment: PublicEnvironment
 ): Option.Option<Response> => {
   if (new URL(request.url).pathname !== listCategoriesPath) return Option.none();
+  if (
+    request.headers.has("cookie") &&
+    request.headers.get("origin") === environment.BROWSER_ORIGIN
+  ) {
+    return Option.none();
+  }
   if (
     environment.LOCAL_CANONICAL_READ_BEARER.length > 0 &&
     request.headers.get("authorization") === `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`
@@ -141,6 +155,8 @@ const enrollmentPath = (path: string): boolean =>
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);
+const transactionPath = (path: string): boolean =>
+  path === "/transactions" || /^\/transactions\/[0-9a-f-]{36}$/iu.test(path);
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
 const supportRecoveryPath = "/internal/support-recovery";
 const emailAuthenticationPaths = [
@@ -170,7 +186,8 @@ const preflightPaths = new Set<string>([
   ...browserMutationPaths,
 ]);
 const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
-const ownedPath = (path: string): boolean => ownedPaths.has(path) || enrollmentPath(path);
+const ownedPath = (path: string): boolean =>
+  ownedPaths.has(path) || enrollmentPath(path) || transactionPath(path);
 const allowedMethod = (path: string): "GET" | "POST" => (postPaths.has(path) ? "POST" : "GET");
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
@@ -190,6 +207,11 @@ const supportHeaders = (request: Request): Headers =>
     "content-type": request.headers.get("content-type") ?? "",
     "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
   });
+const forwardsSession = (request: Request, path: string): boolean =>
+  path === userPath ||
+  transactionPath(path) ||
+  (path === listCategoriesPath && request.headers.has("cookie"));
+
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === callbackPath) return callbackHeaders(request);
   if (path === supportRecoveryPath) return supportHeaders(request);
@@ -198,21 +220,28 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
     if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
     return headers;
   }
-  return path === userPath
-    ? new Headers({ cookie: request.headers.get("cookie") ?? "" })
+  return forwardsSession(request, path)
+    ? new Headers({
+        cookie: request.headers.get("cookie") ?? "",
+        "content-type": request.headers.get("content-type") ?? "",
+      })
     : request.headers;
 };
 const coreRequest = (request: Request, signal: AbortSignal): Request => {
   const path = new URL(request.url).pathname;
-  return new Request(`https://core.internal${path}`, {
-    headers: forwardedHeaders(request, path),
-    method: allowedMethod(path),
-    body: allowedMethod(path) === "POST" ? request.body : undefined,
-    signal,
-  });
+  return new Request(
+    `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
+    {
+      headers: forwardedHeaders(request, path),
+      method: request.method,
+      body: request.method === "POST" ? request.body : undefined,
+      signal,
+    }
+  );
 };
 
-const hasPreflight = (path: string): boolean => preflightPaths.has(path) || enrollmentPath(path);
+const hasPreflight = (path: string): boolean =>
+  preflightPaths.has(path) || enrollmentPath(path) || transactionPath(path);
 const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
@@ -221,50 +250,61 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
   path === supportRecoveryPath && Option.isSome(origin);
 
+const isAllowedMethod = (request: Request, path: string): boolean =>
+  request.method === allowedMethod(path) || (path === "/transactions" && request.method === "POST");
+const requiresBrowserOrigin = (request: Request, path: string): boolean =>
+  sessionPaths.has(path) ||
+  enrollmentPath(path) ||
+  transactionPath(path) ||
+  (path === listCategoriesPath && request.headers.has("cookie"));
+
+const gateOwnedRequest = (
+  request: Request,
+  environment: PublicEnvironment,
+  origin: Option.Option<string>
+): Option.Option<Response> => {
+  const path = new URL(request.url).pathname;
+  const policy = (response: Response): Option.Option<Response> =>
+    Option.some(applyApiPolicy(response, environment.BROWSER_ORIGIN, origin));
+  if (!ownedPath(path)) {
+    return policy(Response.json({}, { status: 404 }));
+  }
+  if (disallowedSupportOrigin(path, origin)) {
+    return Option.some(
+      applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, Option.none())
+    );
+  }
+  if (isPreflight(request, path, origin)) {
+    return Option.some(preflightResponse(request, environment.BROWSER_ORIGIN));
+  }
+  if (!isAllowedMethod(request, path)) {
+    return policy(
+      Response.json(
+        { status: "method_not_allowed" },
+        { headers: { allow: allowedMethod(path) }, status: 405 }
+      )
+    );
+  }
+  if (
+    requiresBrowserOrigin(request, path) &&
+    !Option.contains(origin, environment.BROWSER_ORIGIN)
+  ) {
+    return policy(forbiddenOrigin());
+  }
+  return Option.map(categoryAuthorizationFailure(request, environment), (response) =>
+    applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)
+  );
+};
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
   origin: Option.Option<string>
 ): Promise<Response> => {
-  const url = new URL(request.url);
-  if (!ownedPath(url.pathname)) {
-    return Promise.resolve(
-      applyApiPolicy(Response.json({}, { status: 404 }), environment.BROWSER_ORIGIN, origin)
-    );
+  const rejection = gateOwnedRequest(request, environment, origin);
+  if (Option.isSome(rejection)) {
+    return Promise.resolve(rejection.value);
   }
-  if (disallowedSupportOrigin(url.pathname, origin)) {
-    return Promise.resolve(
-      applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, Option.none())
-    );
-  }
-  if (isPreflight(request, url.pathname, origin)) {
-    return Promise.resolve(preflightResponse(request, environment.BROWSER_ORIGIN));
-  }
-  if (request.method !== allowedMethod(url.pathname)) {
-    return Promise.resolve(
-      applyApiPolicy(
-        Response.json(
-          { status: "method_not_allowed" },
-          { headers: { allow: allowedMethod(url.pathname) }, status: 405 }
-        ),
-        environment.BROWSER_ORIGIN,
-        origin
-      )
-    );
-  }
-  if (
-    (sessionPaths.has(url.pathname) || enrollmentPath(url.pathname)) &&
-    !Option.contains(origin, environment.BROWSER_ORIGIN)
-  ) {
-    return Promise.resolve(applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, origin));
-  }
-  const authorizationFailure = categoryAuthorizationFailure(request, environment);
-  if (Option.isSome(authorizationFailure)) {
-    return Promise.resolve(
-      applyApiPolicy(authorizationFailure.value, environment.BROWSER_ORIGIN, origin)
-    );
-  }
-
   return Effect.tryPromise({
     try: (signal) => environment.CORE.fetch(coreRequest(request, signal)),
     catch: () => undefined,

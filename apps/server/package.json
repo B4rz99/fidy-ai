@@ -14,6 +14,11 @@
       "import": "./src/shell/subscription/runtime.ts",
       "default": "./src/shell/subscription/runtime.ts"
     },
+    "./transactions-runtime": {
+      "types": "./src/core/transactions/model.ts",
+      "import": "./src/core/transactions/model.ts",
+      "default": "./src/core/transactions/model.ts"
+    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",

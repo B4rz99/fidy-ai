@@ -37,6 +37,11 @@ const coreEnvironment = {
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
   HOSTED_AI_MODEL: approvedWorkersAiModel,
+  USER_TRANSACTION_COORDINATOR: {
+    getByName: (): Pick<Fetcher, "fetch"> => ({
+      fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+    }),
+  },
   KAPSO_API_KEY: "",
   KAPSO_WEBHOOK_SECRET: "",
   CLOUDFLARE_ACCESS_ISSUER: "",
@@ -237,6 +242,11 @@ describe("Cloudflare Worker topology", () => {
           CONTRACT_DIGEST: "secret configuration",
           DB: failingDatabase,
           HOSTED_AI_MODEL: "unsupported private model",
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+            }),
+          },
           KAPSO_API_KEY: "",
           KAPSO_WEBHOOK_SECRET: "",
           CLOUDFLARE_ACCESS_ISSUER: "",

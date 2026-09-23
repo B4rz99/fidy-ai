@@ -162,6 +162,9 @@ const setup = async (
             CONTRACT_DIGEST: "a".repeat(64),
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
             HOSTED_AI_MODEL: approvedWorkersAiModel,
+            USER_TRANSACTION_COORDINATOR: {
+              getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+            },
             KAPSO_API_KEY: "",
             KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
             CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",

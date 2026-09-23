@@ -112,6 +112,9 @@ const setup = async (): Promise<{
               CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
               DB: db,
               HOSTED_AI_MODEL: approvedWorkersAiModel,
+              USER_TRANSACTION_COORDINATOR: {
+                getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+              },
               KAPSO_WEBHOOK_SECRET: secret,
               CLOUDFLARE_ACCESS_ISSUER: "",
               CLOUDFLARE_ACCESS_AUDIENCE: "",

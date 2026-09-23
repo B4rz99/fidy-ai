@@ -17,6 +17,7 @@ import { NotificationInterpretationEvidence } from "./account-hints";
 import { TransactionId } from "./reference";
 
 export { TransactionId } from "./reference";
+export { encodeMoneyAmount } from "~/core/_shared/money";
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;

@@ -13,8 +13,10 @@ other without weakening slice ownership.
 
 The Cloudflare Worker invokes transaction-aware operations from the PAT and Consent owners in one
 User-scoped D1 atomic unit. Manual issuance and approved PAT pairing commit PAT state, fixed lifetime,
-and ConsentRecord together. Revocation, revoke-all, approved-but-unclaimed expiry, and fixed-lifetime
-expiry commit the PAT state and symmetric revocation evidence together. A failure commits neither and
+and ConsentRecord together. PATPairing approval fixes the absolute PAT expiry from the selected lifetime;
+claim receives only the remaining lifetime and cannot reset it. An approval not claimed before the
+bootstrap deadline is revoked with evidence. Revocation, revoke-all, approved-but-unclaimed expiry,
+and fixed-lifetime expiry commit the PAT state and symmetric revocation evidence together. A failure commits neither and
 retries append no duplicate evidence.
 
 The Worker does not write owner tables directly and performs no browser, messaging, model, or other

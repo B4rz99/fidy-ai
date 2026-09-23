@@ -8,6 +8,8 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { prepareOwnedStatement } from "./pat-unit";
 import {
   type TransactionSubject,
   transactionNoStore as noStore,
@@ -310,22 +312,17 @@ const patHistoryStatements = (
 ): Array<D1PreparedStatement> => {
   const { selection, query, current } = input;
   const { subject, id } = selection;
+  const authority = livePATAuthority(subject, current);
   return [
-    db
-      .prepare(`UPDATE pats SET last_used_at_ms = ? WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
-      .bind(current, subject.patId, subject.userId, subject.digest, current),
+    prepareOwnedStatement(db, recordLivePATUse(subject, current)),
     ...(Option.isSome(query)
       ? [
           selectStatement(db, {
             selection,
             query: query.value,
             authority: {
-              predicate: `EXISTS (SELECT 1 FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-                  AND revoked_at_ms IS NULL AND expires_at_ms > ?
-                  AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id))`,
-              bindings: [subject.userId, subject.patId, subject.userId, subject.digest, current],
+              predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+              bindings: [subject.userId, ...authority.bindings],
             },
           }),
         ]

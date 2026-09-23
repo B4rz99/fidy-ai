@@ -3,22 +3,25 @@ import {
   PATScopes,
   TokenBearer,
   TokenShortId,
+  issuanceWindowMilliseconds,
+  maxActivePATs,
+  maxIssuancesPerUserWindow,
+  pairingMilliseconds,
   patPairingUnavailableBody,
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { freshSessionExists, freshSessionParams } from "@fidy/server/identity-runtime";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2_000,
 });
-export const pairingMilliseconds = 600_000;
+export { pairingMilliseconds };
 export const dayMilliseconds = 86_400_000;
 export const digestBytes = 32;
-export const maxActivePATs = 100;
-export const issuanceWindowMilliseconds = 600_000;
-export const maxIssuancesPerUserWindow = 20;
+export { maxActivePATs, issuanceWindowMilliseconds, maxIssuancesPerUserWindow };
 export const shortLength = patShortIdLength;
 const sampleSize = 16;
 export const httpBadRequest = 400;
@@ -159,18 +162,8 @@ export const webSession = async (
   return Schema.decodeUnknownOption(SessionRow)(row);
 };
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
-export const sessionExists = `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
-  AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`;
-export const sessionParams = (
-  session: SessionRow,
-  time: number
-): readonly [string, string, number, number, number] => [
-  session.id,
-  session.user_id,
-  time,
-  time,
-  time,
-];
+export const sessionExists = freshSessionExists;
+export const sessionParams = freshSessionParams;
 export const response = (body: unknown, status = 200): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 export const canonical = (data: unknown): Response => response({ data, next: [] });

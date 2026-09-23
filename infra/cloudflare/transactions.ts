@@ -4,6 +4,7 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { livePATAuthority } from "@fidy/server/tokens-runtime";
 import { sessionCookie, sha256 } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { decodeTransactionRow } from "./transaction-history";
@@ -172,12 +173,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   );
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
   const authority = isPAT(subject)
-    ? {
-        table: "pats",
-        predicate:
-          "id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)",
-        bindings: [subject.patId, subject.userId, subject.digest, current],
-      }
+    ? livePATAuthority(subject, current)
     : {
         table: "web_sessions",
         predicate:

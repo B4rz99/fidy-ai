@@ -4,6 +4,8 @@ import {
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
+import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { prepareOwnedStatement } from "./pat-unit";
 import {
   PATRow,
   currentMillis,
@@ -86,12 +88,17 @@ const recordCategoryUsage = async (
 ): Promise<boolean> => {
   const current = currentMillis();
   const result = await db.batch([
-    db
-      .prepare(
-        `UPDATE pats SET last_used_at_ms = ? WHERE id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`
+    prepareOwnedStatement(
+      db,
+      recordLivePATUse(
+        {
+          patId: pat.id,
+          userId: pat.user_id,
+          digest: new Uint8Array(pat.bearer_digest),
+        },
+        current
       )
-      .bind(current, pat.id, current),
+    ),
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
       SELECT ?,?,?, ?, 'accepted', ? WHERE changes() = 1`)

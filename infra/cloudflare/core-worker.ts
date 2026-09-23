@@ -11,10 +11,7 @@ import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
-import {
-  ownsTransactionPath as transactionPath,
-  transactionRoute,
-} from "@fidy/server/transaction-routes";
+import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browsePATTransactions, browseTransactions } from "./transaction-history";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
@@ -176,24 +173,22 @@ const enrollmentCorePath = (path: string): boolean =>
 
 const transactionsResponse = (
   request: Request,
-  environment: CoreEnvironment
+  environment: CoreEnvironment,
+  operation: CatalogOperation
 ): Effect.Effect<Response> =>
   Effect.tryPromise({
     // @effect-diagnostics-next-line asyncFunction:off
     try: async () => {
       const subject = await transactionSession(request, environment.DB);
       if (Option.isNone(subject)) return unauthenticatedTransaction();
-      const path = new URL(request.url).pathname;
-      const operation = transactionRoute(path, request.method);
-      if (Option.isNone(operation)) return methodNotAllowed();
-      if (operation.value.id !== "transactions.createTransaction") {
+      if (operation.id !== "transactions.createTransaction") {
         return browseTransactions(environment.DB, {
           request,
           subject: subject.value,
           id:
-            operation.value.id === "transactions.listTransactions"
+            operation.id === "transactions.listTransactions"
               ? Option.none()
-              : Option.some(path.slice(operation.value.route.indexOf(":id"))),
+              : Option.some(new URL(request.url).pathname.split("/").at(-1) ?? ""),
         });
       }
       const input = await transactionInput(request);
@@ -406,6 +401,9 @@ const authorizedCanonicalResponse = (
   environment: CoreEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
+  if (transactionPath(new URL(request.url).pathname) && !request.headers.has("authorization")) {
+    return transactionsResponse(request, environment, operation);
+  }
   if (operation.id === "categories.listCategories" && request.headers.has("cookie")) {
     return Effect.tryPromise({
       try: () => transactionSession(request, environment.DB),
@@ -483,11 +481,6 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
-  }
-  if (transactionPath(url.pathname)) {
-    return request.headers.has("authorization")
-      ? canonicalOrHealthResponse(request, environment, url.pathname)
-      : transactionsResponse(request, environment);
   }
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (enrollmentCorePath(url.pathname)) {

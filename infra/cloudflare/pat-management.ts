@@ -1,13 +1,20 @@
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { UserId } from "@fidy/server/identity-runtime";
-import { ActivePATList, listPATsResponse } from "@fidy/server/tokens-runtime";
+import {
+  ActivePATList,
+  listPATsResponse,
+  patRevokeAllCompletion,
+  revokeEveryPAT,
+  revokeEveryPairing,
+  revokeOnePAT,
+} from "@fidy/server/tokens-runtime";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
-  allPATRevocationEvidence,
-  allPairingRevocationEvidence,
-  onePATRevocationEvidence,
-} from "./pat-consent";
+  revokeAllPATConsents,
+  revokeAllPairingConsents,
+  revokeOnePATConsent,
+} from "@fidy/server/consent-pat";
 import {
   canonical,
   currentMillis,
@@ -20,6 +27,7 @@ import {
   serviceUnavailable as unavailable,
   webSession,
 } from "./pat-shared";
+import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 
 export { createManualPAT } from "./pat-manual";
 
@@ -72,45 +80,40 @@ export const revokePAT = async (
   if (Option.isNone(session)) return unauthorized();
   if (!shortIdIsValid(shortId)) return notFound();
   const current = currentMillis();
-  const updated = await db.batch([
-    onePATRevocationEvidence(db, session.value, { shortId, current }),
-    db
-      .prepare(`UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND short_id = ? AND revoked_at_ms IS NULL
-      AND expires_at_ms > ? AND ${sessionExists} AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
-      AND r.session_id = ? AND r.occurred_at_ms = ?)`)
-      .bind(
-        current,
-        session.value.user_id,
-        shortId,
-        current,
-        ...sessionParams(session.value, current),
-        session.value.id,
-        current
+  try {
+    await commitPATUnit(db, [
+      prepareOwnedStatement(
+        db,
+        revokeOnePATConsent(session.value, { id: newId(), shortId, current })
       ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
+      prepareOwnedStatement(db, revokeOnePAT(session.value, { shortId, current })),
+      db
+        .prepare(`INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
       SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM pats
       WHERE user_id = ? AND short_id = ? AND changes() = 1`)
-      .bind(
-        newId(),
-        session.value.user_id,
-        session.value.id,
-        current,
-        session.value.user_id,
-        shortId
-      ),
-  ]);
-  if (updated[1]?.meta.changes !== 1) {
+        .bind(
+          newId(),
+          session.value.user_id,
+          session.value.id,
+          current,
+          session.value.user_id,
+          shortId
+        ),
+    ]);
+    return canonical({ shortId });
+  } catch {
     const owned = await db
       .prepare(
-        `SELECT 1 FROM pats WHERE user_id = ? AND short_id = ? AND revoked_at_ms IS NOT NULL
-        AND ${sessionExists}`
+        `SELECT revoked_at_ms FROM pats WHERE user_id = ? AND short_id = ? AND ${sessionExists}`
       )
       .bind(session.value.user_id, shortId, ...sessionParams(session.value, current))
       .first();
-    if (owned === null) return notFound();
+    const record = Schema.decodeUnknownOption(
+      Schema.Struct({ revoked_at_ms: Schema.NullOr(Schema.Finite) })
+    )(owned);
+    if (Option.isNone(record)) return notFound();
+    return record.value.revoked_at_ms === null ? unavailable() : canonical({ shortId });
   }
-  return canonical({ shortId });
 };
 
 /** Revoke all active grants and close every unclaimed approval under one WebSession check. */
@@ -118,25 +121,12 @@ export const revokeAllPATs = async (request: Request, db: D1Database): Promise<R
   const session = await webSession(request, db, true);
   if (Option.isNone(session)) return unauthorized();
   const current = currentMillis();
-  const committed = await db.batch([
-    allPATRevocationEvidence(db, session.value, current),
-    db
-      .prepare(`UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND revoked_at_ms IS NULL
-      AND expires_at_ms > ? AND ${sessionExists}
-      AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id AND r.session_id = ?)`)
-      .bind(
-        current,
-        session.value.user_id,
-        current,
-        ...sessionParams(session.value, current),
-        session.value.id
-      ),
-    allPairingRevocationEvidence(db, session.value, current),
-    db
-      .prepare(`UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
-      AND state = 'approved_awaiting_claim' AND ${sessionExists}
-      AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`)
-      .bind(session.value.user_id, ...sessionParams(session.value, current), session.value.id),
+  const committed = await commitPATUnit(db, [
+    prepareOwnedStatement(db, revokeAllPATConsents(session.value, current)),
+    prepareOwnedStatement(db, revokeEveryPAT(session.value, current)),
+    prepareOwnedStatement(db, revokeAllPairingConsents(session.value, current)),
+    prepareOwnedStatement(db, revokeEveryPairing(session.value, current)),
+    db.prepare(patRevokeAllCompletion).bind(session.value.user_id, current, session.value.user_id),
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
       SELECT ?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${sessionExists}`)
@@ -148,6 +138,6 @@ export const revokeAllPATs = async (request: Request, db: D1Database): Promise<R
         ...sessionParams(session.value, current)
       ),
   ]);
-  if (committed[4]?.meta.changes !== 1) return unauthorized();
+  if (committed[5]?.meta.changes !== 1) return unauthorized();
   return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });
 };

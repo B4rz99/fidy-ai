@@ -10,9 +10,11 @@ import {
   buildPATDisclosure,
   issuanceConsumedMessage,
   issuanceLimitedMessage,
+  issueManualPAT,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Option, Redacted, Schema } from "effect";
+import { grantManualPATConsent } from "@fidy/server/consent-pat";
 import {
   type SessionRow,
   canonical,
@@ -25,7 +27,6 @@ import {
   httpReviewExpired,
   httpTooManyRequests,
   issuanceWindowMilliseconds,
-  maxActivePATs,
   maxIssuancesPerUserWindow,
   newBearer,
   newId,
@@ -33,12 +34,11 @@ import {
   pairingMilliseconds,
   patFrom,
   response,
-  sessionExists,
-  sessionParams,
   unauthorized,
   serviceUnavailable as unavailable,
   webSession,
 } from "./pat-shared";
+import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 
 const httpForbidden = 403;
 const consentActionRequired = (): Response =>
@@ -109,38 +109,28 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
   const { input, session, current, expires, patId, shortId, bearer } = issue;
   const { grant, requestId } = input;
   const disclosure = buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) });
-  const committed = await db.batch([
-    db
-      .prepare(`INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
-      created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${sessionExists}
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)
-      AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
-      AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`)
-      .bind(
+  const committed = await commitPATUnit(db, [
+    prepareOwnedStatement(
+      db,
+      issueManualPAT(session, {
+        grant,
+        requestId,
         patId,
-        session.user_id,
         shortId,
-        await digest(bearer),
-        grant.recipientLabel,
-        JSON.stringify(grant.scopes),
-        grant.lifetimeDays,
-        current,
+        bearerDigest: await digest(bearer),
         current,
         expires,
+      })
+    ),
+    prepareOwnedStatement(
+      db,
+      grantManualPATConsent(session, {
+        id: newId(),
         requestId,
-        ...sessionParams(session, current),
-        session.user_id,
-        session.user_id,
+        disclosure,
         current,
-        maxActivePATs,
-        session.user_id,
-        current - issuanceWindowMilliseconds,
-        maxIssuancesPerUserWindow
-      ),
-    db
-      .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,request_id,disclosure_revision,disclosure_text,accepted_at_ms)
-      SELECT ?,?,?,?,'pat-grant-2026-09',?,? WHERE changes() = 1`)
-      .bind(newId(), session.user_id, session.id, requestId, disclosure, current),
+      })
+    ),
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
       SELECT ?,?,?,?,'pats.createManualPAT','accepted',? WHERE changes() = 1`)

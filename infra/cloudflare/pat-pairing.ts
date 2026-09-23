@@ -3,11 +3,26 @@ import {
   PATPairingPublicCodeInput,
   PATPairingReview,
   StartPATPairingPayload,
+  admitPairingReview,
+  admitPairingSource,
+  approvePairingGrant,
   buildPairedPATDisclosure,
+  expireApprovedPairings,
+  expireFixedPATs,
+  pairingExpiryCompletion,
+  patExpiryCompletion,
   selectPATPairingPublicCodeSymbols,
+  startPairingGrant,
+  sweepPairingAdmission,
+  sweepPairingReviews,
+  sweepUnapprovedPairings,
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Encoding, Option, Result, Schema } from "effect";
-import { expiredPATRevocationEvidence, expiredPairingRevocationEvidence } from "./pat-consent";
+import {
+  expirePATConsents,
+  expirePairingConsents,
+  grantPairedPATConsent,
+} from "@fidy/server/consent-pat";
 import {
   type SessionRow,
   canonical,
@@ -24,21 +39,16 @@ import {
   rejected,
   response,
   scopesFrom,
-  sessionExists,
-  sessionParams,
   unauthorized,
   unavailable,
   webSession,
 } from "./pat-shared";
+import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 
 const symbolCount = 8;
 const sampleBytes = 16;
-// One source IP cannot exhaust this pool under the edge's 60-per-10-second budget.
-const maxPairingsPerWindow = 4000;
-const maxPairingsPerSource = 20;
 const scheduledSweepLimit = 4000;
 const sourceDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
-const maximumReviewAttempts = 10;
 const reviewRetrySeconds = 60;
 const rateLimited = (): Response =>
   response(
@@ -91,33 +101,15 @@ export type PairingRow = typeof PairingRow.Type;
 export const sweepExpiredPATPairings = async (db: D1Database): Promise<void> => {
   const current = currentMillis();
   await db.batch([
-    expiredPairingRevocationEvidence(db, current, scheduledSweepLimit),
-    db
-      .prepare(`UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE state = 'approved_awaiting_claim'
-      AND expires_at_ms <= ? AND EXISTS (SELECT 1 FROM pat_revocation_consents r
-      WHERE r.pairing_id = pat_pairings.id AND r.policy_reason = 'pat-approved-unclaimed-expiry')`)
-      .bind(current),
-    expiredPATRevocationEvidence(db, current, scheduledSweepLimit),
-    db
-      .prepare(`UPDATE pats SET revoked_at_ms = ? WHERE revoked_at_ms IS NULL AND expires_at_ms <= ?
-      AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
-      AND r.policy_reason = 'pat-fixed-lifetime-expiry')`)
-      .bind(current, current),
-    db
-      .prepare(`DELETE FROM pat_pairings WHERE id IN (
-      SELECT id FROM pat_pairings WHERE state = 'pending_approval' AND user_id IS NULL
-      AND created_at_ms <= ? ORDER BY created_at_ms LIMIT ?)`)
-      .bind(current - pairingMilliseconds, scheduledSweepLimit),
-    db
-      .prepare(`DELETE FROM pat_pairing_admission WHERE source_digest IN (
-      SELECT source_digest FROM pat_pairing_admission WHERE window_start_ms <= ?
-      ORDER BY window_start_ms LIMIT ?)`)
-      .bind(current - pairingMilliseconds * 2, scheduledSweepLimit),
-    db
-      .prepare(`DELETE FROM pat_review_attempts WHERE id IN (
-      SELECT id FROM pat_review_attempts WHERE occurred_at_ms <= ?
-      ORDER BY occurred_at_ms LIMIT ?)`)
-      .bind(current - pairingMilliseconds * 2, scheduledSweepLimit),
+    prepareOwnedStatement(db, expirePairingConsents(current, scheduledSweepLimit)),
+    prepareOwnedStatement(db, expireApprovedPairings(current)),
+    db.prepare(pairingExpiryCompletion).bind(current),
+    prepareOwnedStatement(db, expirePATConsents(current, scheduledSweepLimit)),
+    prepareOwnedStatement(db, expireFixedPATs(current)),
+    db.prepare(patExpiryCompletion).bind(current),
+    prepareOwnedStatement(db, sweepUnapprovedPairings(current, scheduledSweepLimit)),
+    prepareOwnedStatement(db, sweepPairingAdmission(current, scheduledSweepLimit)),
+    prepareOwnedStatement(db, sweepPairingReviews(current, scheduledSweepLimit)),
   ]);
 };
 type StartedPairing = Readonly<{
@@ -132,46 +124,21 @@ type StartedPairing = Readonly<{
 const reservePairing = async (db: D1Database, start: StartedPairing): Promise<boolean> => {
   const { source, payload, current, code, privateCode, pairingId, expires } = start;
   const committed = await db.batch([
-    db
-      .prepare(`DELETE FROM pat_pairing_admission WHERE window_start_ms <= ?`)
-      .bind(current - pairingMilliseconds * 2),
-    db
-      .prepare(`INSERT INTO pat_pairing_admission (source_digest,window_start_ms,started_count)
-        SELECT ?,?,1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?
-        ON CONFLICT(source_digest) DO UPDATE SET
-          window_start_ms = CASE WHEN window_start_ms <= ? THEN excluded.window_start_ms ELSE window_start_ms END,
-          started_count = CASE WHEN window_start_ms <= ? THEN 1 ELSE started_count + 1 END
-        WHERE (window_start_ms <= ? OR started_count < ?)
-          AND (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`)
-      .bind(
-        source,
-        current,
-        current - pairingMilliseconds,
-        maxPairingsPerWindow,
-        current - pairingMilliseconds,
-        current - pairingMilliseconds,
-        current - pairingMilliseconds,
-        maxPairingsPerSource,
-        current - pairingMilliseconds,
-        maxPairingsPerWindow
-      ),
-    db
-      .prepare(`INSERT INTO pat_pairings
-        (id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,expires_at_ms)
-        SELECT ?,?,?,?,?,?,?,? WHERE changes() = 1
-        AND (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`)
-      .bind(
-        pairingId,
-        code,
-        await digest(privateCode),
-        payload.recipientLabel,
-        JSON.stringify(payload.scopes),
-        payload.lifetimeDays,
+    prepareOwnedStatement(db, sweepPairingAdmission(current, scheduledSweepLimit)),
+    prepareOwnedStatement(db, admitPairingSource(source, current)),
+    prepareOwnedStatement(
+      db,
+      startPairingGrant({
+        id: pairingId,
+        publicCode: code,
+        proofDigest: await digest(privateCode),
+        recipientLabel: payload.recipientLabel,
+        scopes: payload.scopes,
+        lifetimeDays: payload.lifetimeDays,
         current,
         expires,
-        current - pairingMilliseconds,
-        maxPairingsPerWindow
-      ),
+      })
+    ),
   ]);
   return committed[2]?.meta.changes === 1;
 };
@@ -219,18 +186,14 @@ const admitReview = async (
   sessionId: string,
   current: number
 ): Promise<boolean> => {
-  const result = await db
-    .prepare(`INSERT INTO pat_review_attempts (id,session_id,occurred_at_ms)
-    SELECT ?,?,? WHERE (SELECT count(*) FROM pat_review_attempts WHERE session_id = ? AND occurred_at_ms > ?) < ?`)
-    .bind(
-      newId(),
+  const result = await prepareOwnedStatement(
+    db,
+    admitPairingReview({
+      id: newId(),
       sessionId,
       current,
-      sessionId,
-      current - pairingMilliseconds,
-      maximumReviewAttempts
-    )
-    .run();
+    })
+  ).run();
   return result.meta.changes === 1;
 };
 /** Inspect a public code only for a fresh browser User, with bounded guessing. */
@@ -274,24 +237,24 @@ type Approval = Readonly<{
 }>;
 const commitApproval = async (db: D1Database, approval: Approval): Promise<boolean> => {
   const { session, pairing, current, expires, disclosure } = approval;
-  const committed = await db.batch([
-    db
-      .prepare(`UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
-      WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${sessionExists}
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`)
-      .bind(
-        session.user_id,
+  const committed = await commitPATUnit(db, [
+    prepareOwnedStatement(
+      db,
+      approvePairingGrant(session, {
+        pairingId: pairing.id,
         current,
         expires,
-        pairing.id,
+      })
+    ),
+    prepareOwnedStatement(
+      db,
+      grantPairedPATConsent(session, {
+        id: newId(),
+        pairingId: pairing.id,
+        disclosure,
         current,
-        ...sessionParams(session, current),
-        session.user_id
-      ),
-    db
-      .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)
-      SELECT ?,?,?,?,'pat-pairing-grant-2026-09',?,? WHERE changes() = 1`)
-      .bind(newId(), session.user_id, session.id, pairing.id, disclosure, current),
+      })
+    ),
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
       SELECT ?,?,?,'pats.approvePATPairing','accepted',? WHERE changes() = 1`)

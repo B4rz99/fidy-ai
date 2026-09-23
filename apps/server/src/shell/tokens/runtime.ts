@@ -26,6 +26,39 @@ export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rule
 export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
 export { PATsGroup } from "~/shell/tokens/operations";
 export { listPATsResponse } from "~/shell/tokens/list-pats";
+export type { OwnedStatement } from "~/shell/_shared/owned-statement";
+export {
+  issueManualPAT,
+  approvePairingGrant,
+  claimPairingGrant,
+  insertClaimedPAT,
+  livePATAuthority,
+  recordLivePATUse,
+  revokeOnePAT,
+  revokeEveryPAT,
+  revokeEveryPairing,
+  expireApprovedPairings,
+  expireFixedPATs,
+  pairingMilliseconds,
+  maxActivePATs,
+  issuanceWindowMilliseconds,
+  maxIssuancesPerUserWindow,
+  sweepUnapprovedPairings,
+  sweepPairingAdmission,
+  sweepPairingReviews,
+  admitPairingSource,
+  startPairingGrant,
+  admitPairingReview,
+  recordWrongPairingProof,
+  slowPairingPoll,
+  recordPendingPoll,
+} from "~/shell/tokens/pat-write";
+export {
+  patAtomicAssertion,
+  patExpiryCompletion,
+  pairingExpiryCompletion,
+  patRevokeAllCompletion,
+} from "~/shell/tokens/pat-atomic-unit";
 export { PATPairingDirectGroup } from "~/pat-pairing-api";
 export { UserActionRequired, ValidationFailed } from "~/shell/public-http/contract";
 export {

@@ -1,5 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { readFile } from "node:fs/promises";
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import { createHmac } from "node:crypto";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import coreWorker from "./core-worker";
@@ -19,7 +21,7 @@ const digest = (text: string): Promise<Uint8Array> =>
 // @effect-diagnostics-next-line asyncFunction:off
 const setup = async (
   email = "person@example.test",
-  bsuid = "person-1"
+  bsuid = "CO.Person1"
 ): Promise<{
   db: D1Database;
   send: (combinedCode: unknown) => Promise<Response>;
@@ -62,9 +64,15 @@ const setup = async (
         )
     );
   // Applied migrations depend on the preceding schema, so they must run in order.
-  await ["0003_pending_consent", "0004_onboarding_email", "0005_verified_onboarding"].reduce<
-    Promise<void>
-  >((previous, name) => previous.then(() => applyMigration(name)), Promise.resolve());
+  await [
+    "0003_pending_consent",
+    "0004_onboarding_email",
+    "0005_verified_onboarding",
+    "0006_browser_login",
+  ].reduce<Promise<void>>(
+    (previous, name) => previous.then(() => applyMigration(name)),
+    Promise.resolve()
+  );
   // @effect-diagnostics-next-line globalDate:off
   const now = Date.now();
   await db
@@ -146,8 +154,8 @@ const setup = async (
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
             HOSTED_AI_MODEL: approvedWorkersAiModel,
             KAPSO_API_KEY: "",
-            KAPSO_WEBHOOK_SECRET: "",
-            WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+            KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
+            WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
           }),
       },
     });
@@ -199,7 +207,7 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
     locale: "es-CO",
     time_zone: "America/Bogota",
     portfolio_id: "portfolio",
-    bsuid: "person-1",
+    bsuid: "CO.Person1",
     email_address: "person@example.test",
     disclosure_message_id: "disclosure",
     decision_message_id: "decision",
@@ -222,6 +230,114 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
         .first<{ count: number }>()
     )?.count
   ).toBe(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("reads the created User through an independently approved browser WebSession", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const request = (path: string, body?: object, cookie?: string): Promise<Response> =>
+    sendRequest(
+      new Request(`https://api.fidyapp.com${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(cookie === undefined ? {} : { cookie }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    );
+  expect((await request("/user")).status).toBe(401);
+  const start = await request("/web/pairings", {});
+  expect(start.status).toBe(200);
+  const pairing: { pairingId: string; privateVerifier: string; publicCode: string } =
+    await start.json();
+  const poll = (): Promise<Response> =>
+    request("/web/pairings/redeem", {
+      pairingId: pairing.pairingId,
+      privateVerifier: pairing.privateVerifier,
+    });
+  expect((await poll()).status).toBe(202);
+  expect(
+    (
+      await request("/web/pairings/redeem", {
+        pairingId: pairing.pairingId,
+        privateVerifier: "A".repeat(43),
+      })
+    ).status
+  ).toBe(400);
+  // @effect-diagnostics-next-line globalDate:off
+  const receivedAtSeconds = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({
+    message: {
+      id: "wamid.approve",
+      timestamp: String(receivedAtSeconds),
+      type: "text",
+      from_user_id: "CO.Person1",
+      text: { body: `Aprueba el código de inicio de sesión ${pairing.publicCode}` },
+    },
+    conversation: { business_scoped_user_id: "CO.Person1" },
+    phone_number_id: "123456789012345",
+  });
+  const signed = (signature: string, from: string): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/providers/kapso/callback", {
+        method: "POST",
+        headers: {
+          "x-webhook-event": "whatsapp.message.received",
+          "x-idempotency-key": "delivery-approve",
+          "x-webhook-signature": signature,
+        },
+        body: from,
+      })
+    );
+  expect((await signed("wrong", body)).status).toBe(401);
+  const alien = body.replaceAll("CO.Person1", "CO.Other2").replace("wamid.approve", "wamid.other");
+  expect(
+    (
+      await signed(
+        createHmac("sha256", "onboarding-test-secret").update(alien).digest("hex"),
+        alien
+      )
+    ).status
+  ).toBe(400);
+  expect((await poll()).status).toBe(202);
+  expect(
+    (await signed(createHmac("sha256", "onboarding-test-secret").update(body).digest("hex"), body))
+      .status
+  ).toBe(200);
+  const completed = await poll();
+  expect(completed.status).toBe(200);
+  const cookie = completed.headers.get("set-cookie");
+  expect(cookie).toContain("__Host-fidy_session=");
+  expect(cookie).toContain("HttpOnly");
+  expect(cookie).toContain("Secure");
+  expect((await poll()).status).toBe(400);
+  expect((await request("/user", undefined, "__Host-fidy_session=" + "A".repeat(43))).status).toBe(
+    401
+  );
+  const current = await request("/user", undefined, cookie?.split(";")[0]);
+  expect(current.status).toBe(200);
+  expect(await current.json()).toMatchObject({
+    data: {
+      serviceMarket: "CO",
+      locale: "es-CO",
+      timeZone: "America/Bogota",
+    },
+    next: [],
+  });
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM web_sessions").first<{ count: number }>())
+      ?.count
+  ).toBe(1);
+  const activeCookie = cookie?.split(";")[0];
+  expect((await request("/web/session/logout", {}, activeCookie)).status).toBe(204);
+  expect((await request("/user", undefined, activeCookie)).status).toBe(401);
+  expect(
+    (await sendRequest(new Request("https://api.fidyapp.com/web/pairings", { method: "POST" })))
+      .status
+  ).toBe(403);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -262,7 +378,7 @@ it("refuses an already-owned WhatsAppIdentity without consuming another User's p
     .run();
   await db
     .prepare("INSERT INTO whatsapp_identities VALUES (?, ?, ?, ?)")
-    .bind(other, "portfolio", "person-1", 1)
+    .bind(other, "portfolio", "CO.Person1", 1)
     .run();
   expect((await send(code)).status).toBe(400);
   expect(

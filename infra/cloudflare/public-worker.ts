@@ -131,27 +131,40 @@ const categoryAuthorizationFailure = (
 
 const callbackPath = "/providers/kapso/callback";
 const verificationPath = "/web/onboarding/email/verify";
+const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
+const userPath = "/user";
 const ownedPath = (path: string): boolean =>
   path === "/health" ||
   path === listCategoriesPath ||
   path === callbackPath ||
-  path === verificationPath;
+  path === verificationPath ||
+  path === userPath ||
+  pairingPaths.some((pairingPath) => path === pairingPath);
 const allowedMethod = (path: string): "GET" | "POST" =>
-  path === callbackPath || path === verificationPath ? "POST" : "GET";
+  path === callbackPath ||
+  path === verificationPath ||
+  pairingPaths.some((pairingPath) => path === pairingPath)
+    ? "POST"
+    : "GET";
+const callbackHeaders = (request: Request): Headers =>
+  new Headers([
+    ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
+    ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
+    ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
+  ]);
+const browserHeaders = (request: Request, path: string): Headers => {
+  const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+  if (path === "/web/session/logout") {
+    headers.set("cookie", request.headers.get("cookie") ?? "");
+  }
+  return headers;
+};
 const forwardedHeaders = (request: Request, path: string): Headers => {
-  if (path === callbackPath) {
-    return new Headers([
-      ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
-      ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
-      ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
-    ]);
-  }
-  if (path === verificationPath) {
-    return new Headers({
-      "content-type": request.headers.get("content-type") ?? "",
-    });
-  }
-  return request.headers;
+  if (path === callbackPath) return callbackHeaders(request);
+  if (path === verificationPath || isBrowserMutation(path)) return browserHeaders(request, path);
+  return path === userPath
+    ? new Headers({ cookie: request.headers.get("cookie") ?? "" })
+    : request.headers;
 };
 const coreRequest = (request: Request, signal: AbortSignal): Request => {
   const path = new URL(request.url).pathname;
@@ -162,6 +175,17 @@ const coreRequest = (request: Request, signal: AbortSignal): Request => {
     signal,
   });
 };
+
+const hasPreflight = (path: string): boolean =>
+  path === listCategoriesPath ||
+  path === verificationPath ||
+  path === userPath ||
+  pairingPaths.some((pairingPath) => pairingPath === path);
+const isBrowserMutation = (path: string): boolean =>
+  pairingPaths.some((pairingPath) => pairingPath === path);
+
+const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
+  request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const routeOwnedRequest = (
   request: Request,
@@ -174,11 +198,7 @@ const routeOwnedRequest = (
       applyApiPolicy(Response.json({}, { status: 404 }), environment.BROWSER_ORIGIN, origin)
     );
   }
-  if (
-    request.method === "OPTIONS" &&
-    (url.pathname === listCategoriesPath || url.pathname === verificationPath) &&
-    Option.isSome(origin)
-  ) {
+  if (isPreflight(request, url.pathname, origin)) {
     return Promise.resolve(preflightResponse(request, environment.BROWSER_ORIGIN));
   }
   if (request.method !== allowedMethod(url.pathname)) {
@@ -192,6 +212,9 @@ const routeOwnedRequest = (
         origin
       )
     );
+  }
+  if (isBrowserMutation(url.pathname) && !Option.contains(origin, environment.BROWSER_ORIGIN)) {
+    return Promise.resolve(applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, origin));
   }
   const authorizationFailure = categoryAuthorizationFailure(request, environment);
   if (Option.isSome(authorizationFailure)) {

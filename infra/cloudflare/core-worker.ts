@@ -154,47 +154,54 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
-// @effect-diagnostics-next-line asyncFunction:off
-const dispatchCanonicalCapture = async (
+const dispatchCanonicalCapture = (
   request: Request,
   environment: CoreEnvironment,
   subject: TransactionSubject | AuthorizedPAT
-): Promise<Response> => {
-  const input = await transactionInput(request);
-  if (Option.isNone(input)) {
-    return rejectManualTransaction(environment.DB, subject, "validation_failed");
-  }
-  // The worker.core.fetch and worker.public.fetch Work spans bound latency and status.
-  // Do not create per-Transaction spans that could expose opaque ids or Money.
-  const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-  const encoded = await Effect.runPromise(
-    Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
-  );
-  const authority =
-    "patId" in subject
-      ? {
-          _tag: "PAT",
-          patId: subject.patId,
-          userId: subject.userId,
-          digest: Array.from(subject.digest),
-          requiredScope: Option.getOrNull(subject.requiredScope),
-          input: encoded,
-        }
-      : {
-          _tag: "WebSession",
-          sessionId: subject.id,
-          userId: subject.userId,
-          digest: Array.from(subject.digest),
-          input: encoded,
-        };
-  return stub.fetch(
-    new Request("https://coordinator.internal/create", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(authority),
+): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = yield* Effect.tryPromise(() => transactionInput(request));
+      if (Option.isNone(input)) {
+        return yield* Effect.tryPromise(() =>
+          rejectManualTransaction(environment.DB, subject, "validation_failed")
+        );
+      }
+      // The worker.core.fetch and worker.public.fetch Work spans bound latency and status.
+      // Do not create per-Transaction spans that could expose opaque ids or Money.
+      const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
+      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
+        input.value
+      );
+      const authority =
+        "patId" in subject
+          ? {
+              _tag: "PAT",
+              patId: subject.patId,
+              userId: subject.userId,
+              digest: Array.from(subject.digest),
+              requiredScope: Option.getOrNull(subject.requiredScope),
+              input: encoded,
+            }
+          : {
+              _tag: "WebSession",
+              sessionId: subject.id,
+              userId: subject.userId,
+              digest: Array.from(subject.digest),
+              input: encoded,
+            };
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(authority);
+      return yield* Effect.tryPromise(() =>
+        stub.fetch(
+          new Request("https://coordinator.internal/create", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          })
+        )
+      );
     })
   );
-};
 
 const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||

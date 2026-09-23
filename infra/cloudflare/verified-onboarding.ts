@@ -4,7 +4,8 @@ import {
   maximumOnboardingProofFailures,
   verifiedOnboardingContext,
 } from "@fidy/server/onboarding-verification";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({
@@ -24,7 +25,10 @@ const ProofRow = Schema.Struct({
 });
 type Enrollment = typeof ProofRow.Type;
 const maximumBodyBytes = 512;
-const maximumBodyChunks = 32;
+const requestBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: maximumBodyBytes,
+  deadlineMilliseconds: 2_000,
+});
 const digestLength = 32;
 const recoverySymbols = 25;
 const publicCodeLength = 9;
@@ -63,44 +67,13 @@ const equalDigest = (left: Uint8Array, right: Uint8Array): boolean => {
   return difference === 0;
 };
 
-const collectBody = (
-  reader: ReadableStreamDefaultReader<unknown>,
-  chunks: Array<Uint8Array>,
-  length: number
-): Promise<Option.Option<string>> =>
-  reader.read().then((part) => {
-    if (part.done) {
-      const bytes = new Uint8Array(length);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return Option.some(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    }
-    const chunk: unknown = part.value;
-    if (
-      !(chunk instanceof Uint8Array) ||
-      chunks.length >= maximumBodyChunks ||
-      length + chunk.byteLength > maximumBodyBytes
-    ) {
-      return Option.none();
-    }
-    chunks.push(chunk);
-    return collectBody(reader, chunks, length + chunk.byteLength);
-  });
-
 // @effect-diagnostics-next-line asyncFunction:off
 const readBody = async (request: Request): Promise<Option.Option<string>> => {
-  if (request.body === null) return Option.none();
-  const reader = request.body.getReader();
   try {
-    return await collectBody(reader, [], 0);
+    const bytes = await Effect.runPromise(readBoundedRequestBody(request, requestBodyPolicy));
+    return Option.some(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     return Option.none();
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
   }
 };
 
@@ -146,9 +119,9 @@ const createUser = async (db: D1Database, row: Enrollment, now: number): Promise
       .prepare(`INSERT INTO onboarding_consent_records
       (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
       SELECT d.exchange_id, ?, d.disclosure_json, d.disclosure_message_id,
-        d.decision_message_id, d.received_at_ms, ? FROM pending_consent_decisions AS d
+        d.decision_message_id, d.received_at_ms, d.occurred_at_ms FROM pending_consent_decisions AS d
       WHERE d.exchange_id = ? AND d.decision = 'accepted'`)
-      .bind(userId, now, row.exchange_id),
+      .bind(userId, row.exchange_id),
     db
       .prepare(`INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms)
       VALUES (?, ?, ?)`)

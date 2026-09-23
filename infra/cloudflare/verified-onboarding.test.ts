@@ -110,7 +110,7 @@ const setup = async (
       "decision",
       "delivery",
       "b".repeat(64),
-      now - 70000,
+      now - 71000,
       now - 70000
     )
     .run();
@@ -178,7 +178,8 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
   const result = await db
     .prepare(`SELECT u.service_market, u.locale, u.time_zone,
     w.portfolio_id, w.bsuid, v.email_address, c.disclosure_message_id,
-    c.decision_message_id, t.started_at_ms, t.ends_at_ms, b.code_digest,
+    c.decision_message_id, c.decision_received_at_ms, c.accepted_at_ms,
+    t.started_at_ms, t.ends_at_ms, b.code_digest,
     x.enrollment_id
     FROM users AS u JOIN whatsapp_identities AS w ON w.user_id = u.id
     JOIN verified_email_credentials AS v ON v.user_id = u.id
@@ -186,7 +187,13 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
     JOIN trial_periods AS t ON t.user_id = u.id
     JOIN backup_recovery_credentials AS b ON b.user_id = u.id
     JOIN completed_email_enrollments AS x ON x.user_id = u.id`)
-    .first<{ ends_at_ms: number; started_at_ms: number; code_digest: Array<number> }>();
+    .first<{
+      ends_at_ms: number;
+      started_at_ms: number;
+      code_digest: Array<number>;
+      accepted_at_ms: number;
+      decision_received_at_ms: number;
+    }>();
   expect(result).toMatchObject({
     service_market: "CO",
     locale: "es-CO",
@@ -201,6 +208,7 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
   expect(result).not.toBeNull();
   if (result !== null) {
     expect(result.ends_at_ms - result.started_at_ms).toBe(604_800_000);
+    expect(result.accepted_at_ms).toBe(result.decision_received_at_ms - 1000);
     expect(result.code_digest).toEqual(Array.from(await digest(created.backupRecoveryCode)));
   }
   expect(

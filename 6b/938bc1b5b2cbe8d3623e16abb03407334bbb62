@@ -1,0 +1,19 @@
+apps/server/src/shell/identity/browser-runtime.ts
+  s_4c02df4101548b::t_68d84cb7018bcb 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6b938bc1b5b2cbe8d3623e16abb03407334bbb62",
+  "prompts": {},
+  "sessions": {
+    "s_4c02df4101548b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cc0b-8b21-723f-922a-37f4dabe583b",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

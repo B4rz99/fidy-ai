@@ -3966,10 +3966,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lifetimeDays": {
-            "enum": [
-              90
-            ],
-            "type": "number"
+            "$ref": "#/components/schemas/PATLifetimeDays"
           },
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"

@@ -48,6 +48,28 @@ it("submits a normalized public code and renders the immutable review", () => {
   expect(screen.getByText(/25 de agosto de 2026/iu)).toBeVisible();
 });
 
+it("reviews and approves a client-selected seven-day pairing without extending its expiration", () => {
+  const sevenDays: PATPairingReview = {
+    ...review,
+    lifetimeDays: 7,
+    patExpiresAt: DateTime.makeUnsafe("2026-09-01T12:00:00.000Z"),
+  };
+  const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
+  render(
+    <PATPairingView approve={approve} inspect={(command) => command.onInspected(sevenDays)} />
+  );
+  fireEvent.change(screen.getByLabelText("Código"), { target: { value: "BCDF-GHJK" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  expect(screen.getByText("7 días", { selector: "dd" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Autorizar acceso" }));
+  expect(approve).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pairingId: sevenDays.pairingId,
+      patExpiresAt: sevenDays.patExpiresAt,
+    })
+  );
+});
+
 it("approves only the inspected identity and exact expiration, then shows no credential", () => {
   const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
   render(<PATPairingView approve={approve} inspect={(command) => command.onInspected(review)} />);

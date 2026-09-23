@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./tokens-runtime": {
+      "types": "./src/shell/tokens/runtime.ts",
+      "import": "./src/shell/tokens/runtime.ts",
+      "default": "./src/shell/tokens/runtime.ts"
+    },
     "./identity-runtime": {
       "types": "./src/shell/identity/browser-runtime.ts",
       "import": "./src/shell/identity/browser-runtime.ts",

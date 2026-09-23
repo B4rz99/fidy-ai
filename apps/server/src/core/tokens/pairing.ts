@@ -2,6 +2,7 @@ import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import {
   IssuedPAT,
+  PATLifetimeDays,
   PATRecipientLabel,
   PATRecipientLabelInput,
   PATScopes,
@@ -73,6 +74,9 @@ export const patPairingExpiry = (createdAt: DateTime.Utc): DateTime.Utc =>
 export const StartPATPairingPayload = Schema.Struct({
   recipientLabel: PATRecipientLabelInput,
   scopes: PATScopes,
+  lifetimeDays: PATLifetimeDays.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
+  ),
 }).annotate({ identifier: "StartPATPairingPayload" });
 export type StartPATPairingPayload = typeof StartPATPairingPayload.Type;
 
@@ -107,7 +111,7 @@ export const PATPairingReview = Schema.Struct({
   pairingId: PATPairingId,
   recipientLabel: PATRecipientLabel,
   scopes: PATScopes,
-  lifetimeDays: Schema.Literal(defaultPATLifetimeDays),
+  lifetimeDays: PATLifetimeDays,
   patExpiresAt: UtcTimestamp,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "PATPairingReview" });

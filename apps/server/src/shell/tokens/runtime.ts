@@ -1,0 +1,30 @@
+// Cloudflare adapter entrypoint for the canonical PAT domain contracts and decisions.
+export {
+  ActivePATMetadata,
+  CreateManualPATPayload,
+  PAT,
+  PATLifetimeDays,
+  PATRecipientLabel,
+  PATScopes,
+  TokenBearer,
+  TokenShortId,
+} from "~/core/tokens/model";
+export {
+  ApprovePATPairingPayload,
+  PATPairingDeviceCode,
+  PATPairingId,
+  PATPairingLifecycle,
+  PATPairingPublicCodeInput,
+  PATPairingReview,
+  StartPATPairingPayload,
+  decidePATPairingClaim,
+  selectPATPairingPublicCodeSymbols,
+} from "~/core/tokens/pairing";
+export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rules";
+export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
+export {
+  ManualPATIssuanceConsumed,
+  ManualPATReviewExpired,
+  issuanceConsumedMessage,
+  reviewExpiredMessage,
+} from "~/shell/tokens/operations";

@@ -44,6 +44,7 @@ const setup = async (): Promise<{
   db: D1Database;
   send: (input: Send) => Promise<Response>;
   sessions: readonly [string, string];
+  scheduled: () => Promise<void>;
 }> => {
   const mf = new Miniflare({
     workers: [
@@ -70,6 +71,8 @@ const setup = async (): Promise<{
   await mf.ready;
   const db = await mf.getD1Database("DB");
   const migrationNames = [
+    "0001_categories",
+    "0002_resource_admission",
     "0003_pending_consent",
     "0004_onboarding_email",
     "0005_verified_onboarding",
@@ -123,6 +126,27 @@ const setup = async (): Promise<{
     return `__Host-fidy_session=${token}`;
   };
   const sessions = [await createSession(userA, 1), await createSession(userB, 2)] as const;
+  const coreEnvironment = {
+    DB: db,
+    AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+    CONTRACT_DIGEST: "a".repeat(64),
+    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+    HOSTED_AI_MODEL: approvedWorkersAiModel,
+    KAPSO_API_KEY: "",
+    KAPSO_WEBHOOK_SECRET: "unused",
+    WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+    CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
+    CLOUDFLARE_ACCESS_AUDIENCE: "test",
+  };
+  const scheduled = (): Promise<void> =>
+    coreWorker.scheduled(
+      {
+        cron: "* * * * *",
+        scheduledTime: clock(),
+        noRetry: () => {},
+      },
+      coreEnvironment
+    );
   const send = ({
     path,
     method,
@@ -147,23 +171,11 @@ const setup = async (): Promise<{
       PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
       RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
       CORE: {
-        fetch: (incoming) =>
-          coreWorker.fetch(new Request(incoming), {
-            DB: db,
-            AI: { run: () => Promise.reject(new Error("unused")) },
-            CONTRACT_DIGEST: "a".repeat(64),
-            RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            KAPSO_API_KEY: "",
-            KAPSO_WEBHOOK_SECRET: "unused",
-            WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-            CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
-            CLOUDFLARE_ACCESS_AUDIENCE: "test",
-          }),
+        fetch: (incoming) => coreWorker.fetch(new Request(incoming), coreEnvironment),
       },
     });
   };
-  return { db, send, sessions };
+  return { db, send, sessions, scheduled };
 };
 // @effect-diagnostics-next-line asyncFunction:off
 afterEach(async () => {
@@ -262,6 +274,64 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", a
   expect(admitted.map((result) => result.status)).toEqual(Array.from({ length: 20 }, () => 200));
   expect((await attempt("198.51.100.10")).status).toBe(429);
   expect((await attempt("203.0.113.20")).status).toBe(200);
+});
+
+it("sweeps expired anonymous pairing metadata but preserves approved grant evidence", async () => {
+  const { db, send, scheduled, sessions } = await setup();
+  const grant = { recipientLabel: "Desktop agent", scopes: ["read"], lifetimeDays: 7 };
+  const pending = Schema.decodeUnknownSync(Started)(
+    await (
+      await send({
+        path: "/pat-pairings",
+        method: "POST",
+        payload: grant,
+      })
+    ).json()
+  );
+  const approved = Schema.decodeUnknownSync(Started)(
+    await (
+      await send({
+        path: "/pat-pairings",
+        method: "POST",
+        payload: grant,
+      })
+    ).json()
+  );
+  const review = Schema.decodeUnknownSync(Review)(
+    await (
+      await send({
+        path: "/pats/pairings/inspect",
+        method: "POST",
+        session: sessions[0],
+        payload: { publicCode: approved.publicCode },
+      })
+    ).json()
+  ).data;
+  expect(
+    (
+      await send({
+        path: "/pats/pairings/approve",
+        method: "POST",
+        session: sessions[0],
+        payload: { pairingId: review.pairingId },
+      })
+    ).status
+  ).toBe(200);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(clock() + 600_001);
+  await scheduled();
+  expect(
+    await db.prepare("SELECT 1 FROM pat_pairings WHERE id = ?").bind(pending.pairingId).first()
+  ).toBeNull();
+  expect(
+    await db.prepare("SELECT 1 FROM pat_pairings WHERE id = ?").bind(approved.pairingId).first()
+  ).not.toBeNull();
+  expect(
+    await db
+      .prepare("SELECT 1 FROM pat_grant_consents WHERE pairing_id = ?")
+      .bind(approved.pairingId)
+      .first()
+  ).not.toBeNull();
 });
 
 it("bounds per-User issuance even when every PAT is revoked immediately", async () => {
@@ -491,6 +561,13 @@ it("isolates management by User and immediately refuses revoked and under-scoped
   const underScoped = await send({ path: "/categories", method: "GET", bearer: writerBearer });
   expect(underScoped.status).toBe(403);
   expect(await underScoped.json()).toMatchObject({ error: { code: "scope_missing" }, next: [] });
+  await db
+    .prepare("UPDATE pats SET revoked_at_ms = ? WHERE bearer_digest = ?")
+    .bind(clock(), await dig(writerBearer))
+    .run();
+  const revokedWriter = await send({ path: "/categories", method: "GET", bearer: writerBearer });
+  expect(revokedWriter.status).toBe(401);
+  expect(await revokedWriter.json()).toMatchObject({ error: { code: "unauthenticated" } });
 });
 
 it("rejects invalid grants, expired bearers and stale browser authority without partial effects", async () => {
@@ -508,7 +585,7 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
     session: sessions[0],
     payload: {
       requestId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      grant: { recipientLabel: "Reader", scopes: ["read"], lifetimeDays: 7 },
+      grant: { recipientLabel: "Reader", scopes: ["write"], lifetimeDays: 7 },
     },
   });
   expect(response.status).toBe(200);

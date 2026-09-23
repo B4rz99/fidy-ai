@@ -84,3 +84,4 @@ CREATE TABLE pat_review_attempts (
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms);
+CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms);

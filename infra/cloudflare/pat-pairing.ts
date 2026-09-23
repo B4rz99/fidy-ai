@@ -35,6 +35,7 @@ const sampleBytes = 16;
 // One source IP cannot exhaust this pool under the edge's 60-per-10-second budget.
 const maxPairingsPerWindow = 4000;
 const maxPairingsPerSource = 20;
+const scheduledSweepLimit = 4000;
 const sourceDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const maximumReviewAttempts = 10;
 const reviewRetrySeconds = 60;
@@ -85,6 +86,27 @@ export const PairingRow = Schema.Struct({
 });
 export type PairingRow = typeof PairingRow.Type;
 
+/** Reclaim unapproved anonymous metadata; never remove approved User-bound grant evidence. */
+export const sweepExpiredPATPairings = async (db: D1Database): Promise<void> => {
+  const current = currentMillis();
+  await db.batch([
+    db
+      .prepare(`DELETE FROM pat_pairings WHERE id IN (
+      SELECT id FROM pat_pairings WHERE state = 'pending_approval' AND user_id IS NULL
+      AND created_at_ms <= ? ORDER BY created_at_ms LIMIT ?)`)
+      .bind(current - pairingMilliseconds, scheduledSweepLimit),
+    db
+      .prepare(`DELETE FROM pat_pairing_admission WHERE source_digest IN (
+      SELECT source_digest FROM pat_pairing_admission WHERE window_start_ms <= ?
+      ORDER BY window_start_ms LIMIT ?)`)
+      .bind(current - pairingMilliseconds * 2, scheduledSweepLimit),
+    db
+      .prepare(`DELETE FROM pat_review_attempts WHERE id IN (
+      SELECT id FROM pat_review_attempts WHERE occurred_at_ms <= ?
+      ORDER BY occurred_at_ms LIMIT ?)`)
+      .bind(current - pairingMilliseconds * 2, scheduledSweepLimit),
+  ]);
+};
 type StartedPairing = Readonly<{
   source: Uint8Array;
   payload: typeof StartPATPairingPayload.Type;

@@ -32,6 +32,9 @@ const authenticate = async (
     .first();
   const pat = Schema.decodeUnknownOption(StoredPAT)(raw);
   if (Option.isNone(pat)) return Option.none();
+  if (pat.value.revoked_at_ms !== null || pat.value.expires_at_ms <= currentMillis()) {
+    return Option.none();
+  }
   return equalsDigest(pat.value.bearer_digest, await digest(bearer)) ? pat : Option.none();
 };
 type CategoryAuthorization = "accepted" | "unauthenticated" | "scope_missing";

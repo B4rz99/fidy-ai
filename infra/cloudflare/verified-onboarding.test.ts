@@ -636,17 +636,79 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
     .setIssuedAt(now)
     .setExpirationTime(now + 300)
     .sign(privateKey);
-  const approve = (backupRecoveryCode: string, token = assertion): Promise<Response> =>
+  const approve = (
+    backupRecoveryCode: string,
+    token = assertion,
+    publicCode = pairing.publicCode
+  ): Promise<Response> =>
     sendRequest(
       new Request("https://api.fidyapp.com/internal/support-recovery", {
         method: "POST",
         headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
-        body: JSON.stringify({ pairingCode: pairing.publicCode, backupRecoveryCode }),
+        body: JSON.stringify({ pairingCode: publicCode, backupRecoveryCode }),
       })
     );
   expect((await approve(created.backupRecoveryCode, `${assertion}invalid`)).status).toBe(401);
   expect((await approve("AAAAA-AAAAA-AAAAA-AAAAA-AAAAA")).status).toBe(400);
-  expect((await approve(created.backupRecoveryCode)).status).toBe(200);
+  const otherPairing: { pairingId: string; publicCode: string } = await (
+    await startBrowserPairing(db)
+  ).json();
+  expect((await approve(created.backupRecoveryCode, assertion, "AAAA-AAAA")).status).toBe(400);
+  const otherUser = "10000000-0000-4000-8000-000000000099";
+  // @effect-diagnostics-next-line globalDate:off
+  const nowMs = Date.now();
+  await db
+    .prepare(`INSERT INTO users (id, service_market, locale, time_zone, created_at_ms)
+    VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)`)
+    .bind(otherUser, nowMs)
+    .run();
+  await db
+    .prepare(`INSERT INTO browser_pairing_email_proofs
+    (pairing_id, work_id, user_id, email_address, credential_verified_at_ms, state,
+     expires_at_ms, generation, last_requested_at_ms)
+    VALUES (?, ?, ?, 'other@example.test', ?, 'awaiting_delivery', ?, 1, ?)`)
+    .bind(
+      otherPairing.pairingId,
+      "10000000-0000-4000-8000-000000000098",
+      otherUser,
+      nowMs,
+      nowMs + 600000,
+      nowMs
+    )
+    .run();
+  const conflicting = await approve(created.backupRecoveryCode, assertion, otherPairing.publicCode);
+  expect(conflicting.status).toBe(400);
+  expect(await conflicting.text()).not.toContain(created.backupRecoveryCode);
+  expect(
+    await db
+      .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")
+      .bind(otherPairing.pairingId)
+      .first()
+  ).toMatchObject({ state: "pending_approval", user_id: null });
+  expect(
+    await db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
+  ).toMatchObject({ consumed_at_ms: null });
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM support_recovery_cases")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  const competing = await Promise.all([
+    approve(created.backupRecoveryCode),
+    approve(created.backupRecoveryCode),
+  ]);
+  expect(competing.filter((result) => result.status === 200)).toHaveLength(1);
+  expect(competing.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+    200, 400,
+  ]);
+  expect(
+    await db
+      .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")
+      .bind(otherPairing.pairingId)
+      .first()
+  ).toMatchObject({ state: "pending_approval", user_id: null });
   expect((await approve(created.backupRecoveryCode)).status).toBe(400);
   expect(
     (

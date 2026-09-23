@@ -4,13 +4,23 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
+import {
+  livePATAuthority,
+  recordCanonicalPATWork,
+  recordCapturedPATUse,
+} from "@fidy/server/tokens-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { sessionCookie, sha256 } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { decodeTransactionRow } from "./transaction-history";
+import type { AuthorizedPAT } from "./pat-authorization";
+import { prepareOwnedStatement } from "./pat-unit";
 import {
   type TransactionSubject,
   transactionNoStore as noStore,
   transactionNow as now,
+  refusedPATWork,
   transactionFailure,
   transactionUnavailable as unavailable,
   transactionId as uuid,
@@ -44,7 +54,10 @@ const missing = (): Response =>
   transactionFailure("not_found", HTTP_NOT_FOUND, "Transaction unavailable.");
 const limited = (): Response =>
   transactionFailure("rate_limited", HTTP_RATE_LIMITED, "Manual Transaction budget exhausted.");
-type Subject = TransactionSubject;
+type Subject = TransactionSubject | AuthorizedPAT;
+const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
+const refusedCaptureWork = (db: D1Database, subject: Subject): Promise<Response> =>
+  isPAT(subject) ? refusedPATWork({ db, userId: subject.userId }) : Promise.resolve(noSession());
 type Refusal = "not_found" | "validation_failed" | "resource_limit";
 
 /** Record a rejected authenticated canonical mutation without retaining its body or granting expired sessions access. */
@@ -56,13 +69,38 @@ export const rejectManualTransaction = async (
 ): Promise<Response> => {
   const current = now();
   try {
-    const audit = await db
-      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
-      AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
-      .bind(uuid(), outcome, current, subject.id, subject.userId, subject.digest, current, current)
-      .run();
-    if (audit.meta.changes !== 1) return noSession();
+    const audit = await (
+      isPAT(subject)
+        ? prepareOwnedStatement({
+            db,
+            statement: recordCanonicalPATWork({
+              subject,
+              input: {
+                id: uuid(),
+                current,
+                operation: "transactions.createTransaction",
+                outcome: "rejected",
+                afterSourceAttestation: false,
+              },
+            }),
+          })
+        : db
+            .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+          SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
+          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+            .bind(
+              uuid(),
+              outcome,
+              current,
+              subject.id,
+              subject.userId,
+              subject.digest,
+              current,
+              current
+            )
+    ).run();
+    if (audit.meta.changes !== 1) return refusedCaptureWork(db, subject);
     switch (outcome) {
       case "not_found":
         return missing();
@@ -81,6 +119,7 @@ type Capture = Readonly<{
   context: typeof UserContext.Type;
   id: string;
   current: number;
+  auditId: string;
 }>;
 
 /** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
@@ -88,7 +127,7 @@ type Capture = Readonly<{
 export const transactionSession = async (
   request: Request,
   db: D1Database
-): Promise<Option.Option<Subject>> => {
+): Promise<Option.Option<TransactionSubject>> => {
   const cookie = sessionCookie(request);
   if (Option.isNone(cookie)) {
     return Option.none();
@@ -97,7 +136,8 @@ export const transactionSession = async (
   const current = now();
   const raw = await db
     .prepare(
-      `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
+      `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
     )
     .bind(digest, current, current)
     .first();
@@ -122,6 +162,30 @@ export const transactionInput = async (
   }
 };
 
+const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
+  const { subject, id, current, auditId } = capture;
+  return isPAT(subject)
+    ? prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          subject,
+          input: {
+            id: auditId,
+            current,
+            operation: "transactions.createTransaction",
+            outcome: "accepted",
+            afterSourceAttestation: true,
+          },
+        }),
+      })
+    : db
+        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+        SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
+        AND changes() = 1`)
+        .bind(uuid(), subject.id, current, subject.userId, id);
+};
+
 const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
   const { input, subject, context, id, current } = capture;
   const categoryId = Option.getOrElse(input.categoryId, () =>
@@ -132,11 +196,18 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
     )
   );
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const authority = isPAT(subject)
+    ? livePATAuthority({ subject, current })
+    : {
+        table: "web_sessions",
+        predicate:
+          "id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)",
+        bindings: [subject.id, subject.userId, subject.digest, current, current],
+      };
   return [
     db
       .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at)
-      SELECT ?, user_id, ?, ?, ?, ?, ?, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
-      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      SELECT ?, user_id, ?, ?, ?, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(
         id,
         encodeMoneyAmount(input.money.amount),
@@ -147,11 +218,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         Option.getOrNull(input.notes),
         DateTime.formatIso(input.occurredAt),
         createdAt,
-        subject.id,
-        subject.userId,
-        subject.digest,
-        current,
-        current
+        ...authority.bindings
       ),
     db
       .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at)
@@ -165,10 +232,18 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         subject.userId,
         id
       ),
-    db
-      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?`)
-      .bind(uuid(), subject.id, current, subject.userId, id),
+    captureAudit(db, capture),
+    ...(isPAT(subject)
+      ? [
+          prepareOwnedStatement({
+            db,
+            statement: recordCapturedPATUse({
+              subject,
+              input: { auditId: capture.auditId, current },
+            }),
+          }),
+        ]
+      : []),
   ];
 };
 
@@ -185,12 +260,38 @@ const hasUnknownCategory = async (
   return category === null;
 };
 
-const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> =>
-  String(error).includes("transaction_resource_limit")
-    ? rejectManualTransaction(db, subject, "resource_limit")
-    : Promise.resolve(
-        String(error).includes("transaction_audit_limit") ? limited() : unavailable()
-      );
+const classifyCaptureAuthority = (db: D1Database, subject: Subject): Promise<Response> => {
+  try {
+    const authority = isPAT(subject)
+      ? livePATAuthority({ subject, current: now() })
+      : liveWebSessionAuthority({ subject, current: now() });
+    return db
+      .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
+      .bind(...authority.bindings)
+      .first()
+      .then((live) => (live !== null ? unavailable() : refusedCaptureWork(db, subject)))
+      .catch(unavailable);
+  } catch {
+    return Promise.resolve(unavailable());
+  }
+};
+
+const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> => {
+  if (String(error).includes("transaction_resource_limit")) {
+    return rejectManualTransaction(db, subject, "resource_limit");
+  }
+  return String(error).includes("transaction_audit_limit")
+    ? Promise.resolve(limited())
+    : classifyCaptureAuthority(db, subject);
+};
+
+const browserCaptureWrites = 3;
+const patCaptureWrites = 4;
+const captureCompleted = (results: ReadonlyArray<D1Result>, pat: boolean): boolean => {
+  const expectedWrites = pat ? patCaptureWrites : browserCaptureWrites;
+  const writes = results.slice(0, expectedWrites);
+  return writes.length === expectedWrites && writes.every((result) => result.meta.changes === 1);
+};
 
 /** Persist one manual Transaction, its captured context and AuditLogEntry in one D1 atomic batch. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -216,12 +317,18 @@ export const createManualTransaction = async (
       return rejectManualTransaction(db, subject, "not_found");
     }
     const id = uuid();
-    const result = await db.batch(
-      captureStatements(db, { input, subject, context: context.value, id, current })
-    );
-    if (result[0]?.meta.changes !== 1) {
-      return noSession();
-    }
+    const result = await db.batch([
+      ...captureStatements(db, {
+        input,
+        subject,
+        context: context.value,
+        id,
+        current,
+        auditId: uuid(),
+      }),
+      db.prepare(transactionCaptureCompletion),
+    ]);
+    if (!captureCompleted(result, isPAT(subject))) return refusedCaptureWork(db, subject);
     const raw = await db
       .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at
       FROM transactions WHERE user_id = ? AND id = ?`)

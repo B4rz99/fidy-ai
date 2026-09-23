@@ -22,6 +22,7 @@ import {
   NextOperations,
   NotFound,
   OperationResponse,
+  Unavailable,
 } from "~/shell/public-http/contract";
 import {
   freshWebOrVerifiedWhatsAppHosted,
@@ -120,6 +121,7 @@ export const IssuedManualPATResponse = Schema.Struct({
 
 const listPATs = HttpApiEndpoint.get("listPATs", "/pats", {
   success: OperationResponse(ActivePATList),
+  error: Unavailable,
 })
   .annotate(
     OpenApi.Description,

@@ -2,6 +2,7 @@ import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import {
   IssuedPAT,
+  PATLifetimeDays,
   PATRecipientLabel,
   PATRecipientLabelInput,
   PATScopes,
@@ -73,6 +74,9 @@ export const patPairingExpiry = (createdAt: DateTime.Utc): DateTime.Utc =>
 export const StartPATPairingPayload = Schema.Struct({
   recipientLabel: PATRecipientLabelInput,
   scopes: PATScopes,
+  lifetimeDays: PATLifetimeDays.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
+  ),
 }).annotate({ identifier: "StartPATPairingPayload" });
 export type StartPATPairingPayload = typeof StartPATPairingPayload.Type;
 
@@ -107,22 +111,21 @@ export const PATPairingReview = Schema.Struct({
   pairingId: PATPairingId,
   recipientLabel: PATRecipientLabel,
   scopes: PATScopes,
-  lifetimeDays: Schema.Literal(defaultPATLifetimeDays),
-  patExpiresAt: UtcTimestamp,
+  lifetimeDays: PATLifetimeDays,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "PATPairingReview" });
 export type PATPairingReview = typeof PATPairingReview.Type;
 
-/** Approval accepts only the stable reviewed identity and exact server-provided expiration. */
+/** Approval binds the reviewed pairing; its fixed lifetime begins at approval. */
 export const ApprovePATPairingPayload = Schema.Struct({
   pairingId: PATPairingId,
-  patExpiresAt: UtcTimestamp,
 }).annotate({ identifier: "ApprovePATPairingPayload" });
 export type ApprovePATPairingPayload = typeof ApprovePATPairingPayload.Type;
 
 /** Safe browser success: the initiating client, not this browser, receives the bearer. */
 export const ApprovedPATPairing = Schema.Struct({
   pairingId: PATPairingId,
+  patExpiresAt: UtcTimestamp,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "ApprovedPATPairing" });
 export type ApprovedPATPairing = typeof ApprovedPATPairing.Type;

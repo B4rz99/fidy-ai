@@ -18,7 +18,6 @@ const review: PATPairingReview = {
   recipientLabel: PATRecipientLabel.make("Cliente de escritorio"),
   scopes: PATScopes.make(["read", "dashboard"]),
   lifetimeDays: 90,
-  patExpiresAt: DateTime.makeUnsafe("2026-11-23T12:00:00.000Z"),
   claimBy: DateTime.makeUnsafe("2026-08-25T12:10:00.000Z"),
 };
 
@@ -42,13 +41,32 @@ it("submits a normalized public code and renders the immutable review", () => {
   expect(screen.getByText("Lectura")).toBeVisible();
   expect(screen.getByText("Tablero")).toBeVisible();
   expect(screen.getByText("90 días", { selector: "dd" })).toBeVisible();
-  expect(screen.getByText("Acceso válido hasta")).toBeVisible();
-  expect(screen.getByText(/23 de noviembre de 2026/iu)).toBeVisible();
+  expect(screen.getByText("Vigencia desde la autorización")).toBeVisible();
   expect(screen.getByText("Completar la conexión antes de")).toBeVisible();
   expect(screen.getByText(/25 de agosto de 2026/iu)).toBeVisible();
 });
 
-it("approves only the inspected identity and exact expiration, then shows no credential", () => {
+it("reviews and approves a client-selected seven-day pairing starting at approval", () => {
+  const sevenDays: PATPairingReview = {
+    ...review,
+    lifetimeDays: 7,
+  };
+  const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
+  render(
+    <PATPairingView approve={approve} inspect={(command) => command.onInspected(sevenDays)} />
+  );
+  fireEvent.change(screen.getByLabelText("Código"), { target: { value: "BCDF-GHJK" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  expect(screen.getByText("7 días", { selector: "dd" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Autorizar acceso" }));
+  expect(approve).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pairingId: sevenDays.pairingId,
+    })
+  );
+});
+
+it("approves only the inspected identity and fixed lifetime, then shows no credential", () => {
   const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
   render(<PATPairingView approve={approve} inspect={(command) => command.onInspected(review)} />);
   fireEvent.change(screen.getByLabelText("Código"), {
@@ -57,9 +75,7 @@ it("approves only the inspected identity and exact expiration, then shows no cre
   fireEvent.submit(screen.getByRole("button", { name: "Continuar" }));
   fireEvent.click(screen.getByRole("button", { name: "Autorizar acceso" }));
 
-  expect(approve).toHaveBeenCalledWith(
-    expect.objectContaining({ pairingId: review.pairingId, patExpiresAt: review.patExpiresAt })
-  );
+  expect(approve).toHaveBeenCalledWith(expect.objectContaining({ pairingId: review.pairingId }));
   expect(screen.getByText("Acceso autorizado")).toBeVisible();
   expect(screen.getByText(/vuelve al lugar donde obtuviste el código/iu)).toBeVisible();
   expect(

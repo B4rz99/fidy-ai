@@ -1,4 +1,4 @@
-import { listCategoriesPath } from "@fidy/server/categories-path";
+import { operationCatalog } from "@fidy/server/canonical-runtime";
 import {
   emailReplacementCompletionPath,
   emailReplacementPath,
@@ -61,7 +61,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     action: "block",
     description: "Reject methods not owned by the public API ingress",
     enabled: true,
-    expression: `(http.host eq "${apiHostname}" and not http.request.method in {"GET" "POST" "OPTIONS"})`,
+    expression: `(http.host eq "${apiHostname}" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))`,
   },
 ];
 
@@ -92,11 +92,10 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   },
 ];
 
-// The launch zone's Free plan permits one path-based rule, so all owned ingress paths share one
-// source-IP budget instead of pretending that five independent budgets can be deployed.
-const rateLimitPaths = [
+// The Free plan permits one path-based rule. Static paths and parameterized route prefixes derive
+// from the canonical API; unmatched paths never charge legitimate callers' shared source-IP budget.
+const reservedRateLimitPaths = [
   "/health",
-  listCategoriesPath,
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
   "/web/onboarding/email/verify",
@@ -110,12 +109,23 @@ const rateLimitPaths = [
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
   "/user",
-  "/transactions",
+  "/pat-pairings",
+  "/pat-pairings/claim",
 ] as const;
-
-const rateLimitExpression = `(http.request.uri.path in {${rateLimitPaths
-  .map((path) => `"${path}"`)
-  .join(" ")}} or starts_with(http.request.uri.path, "/transactions/"))`;
+const declaredRoutes = operationCatalog.operations.map((operation) => operation.route);
+const exactPaths = Array.from(
+  new Set([...reservedRateLimitPaths, ...declaredRoutes.filter((route) => !route.includes(":"))])
+).sort();
+const paramPrefixes = Array.from(
+  new Set(
+    declaredRoutes
+      .filter((route) => route.includes(":"))
+      .map((route) => route.slice(0, route.indexOf(":")))
+  )
+).sort();
+const rateLimitExpression = `http.request.uri.path in {${exactPaths.map((path) => `"${path}"`).join(" ")}}${paramPrefixes
+  .map((prefix) => ` or starts_with(http.request.uri.path, "${prefix}")`)
+  .join("")}`;
 
 const rateLimitRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   {

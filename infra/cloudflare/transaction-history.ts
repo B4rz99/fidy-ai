@@ -1,4 +1,5 @@
 import { nextTransactionPage } from "@fidy/server/transaction-continuation";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   Counterparty,
   Transaction,
@@ -7,10 +8,18 @@ import {
   TransactionQueryValues,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Option, Schema } from "effect";
+import type { AuthorizedPAT } from "./pat-authorization";
+import {
+  livePATAuthority,
+  recordCanonicalPATWork,
+  recordLivePATUse,
+} from "@fidy/server/tokens-runtime";
+import { prepareOwnedStatement } from "./pat-unit";
 import {
   type TransactionSubject,
   transactionNoStore as noStore,
   transactionNow as now,
+  refusedPATWork,
   transactionAuditExhausted,
   transactionFailure,
   transactionUnavailable as unavailable,
@@ -64,8 +73,10 @@ const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
-type Subject = TransactionSubject;
+type Subject = TransactionSubject | AuthorizedPAT;
+const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
 type Selection = Readonly<{ request: Request; subject: Subject; id: Option.Option<string> }>;
+type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
   const pieces = Schema.decodeUnknownOption(
@@ -78,7 +89,9 @@ const decodeCursor = (cursor: string): Option.Option<readonly [string, string, s
     : Option.none();
 };
 
-const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
+const parseQuery = (
+  selection: Pick<Selection, "id" | "request">
+): Option.Option<typeof Query.Type> => {
   if (
     Option.isSome(selection.id) &&
     Option.isNone(Schema.decodeOption(TransactionId)(selection.id.value))
@@ -99,24 +112,22 @@ const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
   );
 };
 
+type AuthorityCondition = Readonly<{
+  predicate: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
 const selectStatement = (
   db: D1Database,
-  args: Readonly<{ selection: Selection; query: typeof Query.Type; current: number }>
+  args: Readonly<{
+    selection: Pick<Selection, "id">;
+    query: typeof Query.Type;
+    authority: AuthorityCondition;
+  }>
 ): D1PreparedStatement => {
-  const { selection, query, current } = args;
-  const { subject, id } = selection;
-  const conditions = [
-    "user_id = ?",
-    `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
-  ];
-  const values: Array<string | number | Uint8Array> = [
-    subject.userId,
-    subject.id,
-    subject.userId,
-    subject.digest,
-    current,
-    current,
-  ];
+  const { selection, query, authority } = args;
+  const { id } = selection;
+  const conditions = ["user_id = ?", authority.predicate];
+  const values: Array<string | number | Uint8Array> = [...authority.bindings];
   if (Option.isSome(id)) {
     conditions.push("id = ?");
     values.push(id.value);
@@ -165,7 +176,7 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
   });
 };
 
-const presentHistory = (rows: D1Result, selection: Selection): Response => {
+const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "request">): Response => {
   const { id, request } = selection;
   const decoded = rows.results.map(decodeTransactionRow);
   if (decoded.some(Option.isNone)) {
@@ -206,18 +217,18 @@ const presentHistory = (rows: D1Result, selection: Selection): Response => {
 // @effect-diagnostics-next-line asyncFunction:off
 const invalidQueryAudit = async (
   db: D1Database,
-  selection: Selection,
+  selection: BrowserSelection,
   current: number
 ): Promise<Response> => {
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
   const outcome = invalidGet ? "not_found" : "validation_failed";
+  const authority = liveWebSessionAuthority({ subject, current });
   try {
     if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const audit = await db
       .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
-      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(
         uuid(),
         Option.isNone(selection.id)
@@ -225,11 +236,7 @@ const invalidQueryAudit = async (
           : "transactions.getTransaction",
         outcome,
         current,
-        subject.id,
-        subject.userId,
-        subject.digest,
-        current,
-        current
+        ...authority.bindings
       )
       .run();
     if (audit.meta.changes !== 1) return noSession();
@@ -239,7 +246,138 @@ const invalidQueryAudit = async (
   }
 };
 
-/** Browse only the authenticated User's canonical Transactions, with one atomic metadata audit. */
+/** Assemble a WebSession's protected read and its Transaction-owner audit. */
+const browserHistoryStatements = (
+  db: D1Database,
+  input: Readonly<{ selection: BrowserSelection; query: typeof Query.Type; current: number }>
+): Array<D1PreparedStatement> => {
+  const { selection, query, current } = input;
+  const { subject } = selection;
+  const authority = liveWebSessionAuthority({ subject, current });
+  return [
+    selectStatement(db, {
+      selection,
+      query,
+      authority: {
+        predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+        bindings: [subject.userId, ...authority.bindings],
+      },
+    }),
+    db
+      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+        SELECT ?, user_id, id, ?,
+          CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
+            THEN 'not_found' ELSE 'success' END,
+          ? FROM ${authority.table} WHERE ${authority.predicate}`)
+      .bind(
+        uuid(),
+        Option.isNone(selection.id)
+          ? "transactions.listTransactions"
+          : "transactions.getTransaction",
+        Option.getOrNull(selection.id),
+        Option.getOrNull(selection.id),
+        current,
+        ...authority.bindings
+      ),
+  ];
+};
+
+type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;
+
+const patHistoryStatements = (
+  db: D1Database,
+  input: Readonly<{
+    selection: PATSelection;
+    query: Option.Option<typeof Query.Type>;
+    current: number;
+  }>
+): Array<D1PreparedStatement> => {
+  const { selection, query, current } = input;
+  const { subject, id } = selection;
+  const authority = livePATAuthority({ subject, current });
+  return [
+    prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+    ...(Option.isSome(query)
+      ? [
+          selectStatement(db, {
+            selection,
+            query: query.value,
+            authority: {
+              predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+              bindings: [subject.userId, ...authority.bindings],
+            },
+          }),
+        ]
+      : []),
+    prepareOwnedStatement({
+      db,
+      statement: recordCanonicalPATWork({
+        subject,
+        input: {
+          id: uuid(),
+          operation: Option.isNone(id)
+            ? "transactions.listTransactions"
+            : "transactions.getTransaction",
+          outcome: Option.isSome(query) ? "accepted" : "rejected",
+          afterSourceAttestation: false,
+          current,
+        },
+      }),
+    }),
+  ];
+};
+
+const presentPATHistory = (
+  input: Readonly<{
+    db: D1Database;
+    results: ReadonlyArray<D1Result>;
+    selection: PATSelection;
+    query: Option.Option<typeof Query.Type>;
+  }>
+): Promise<Response> => {
+  const { db, results, selection, query } = input;
+  if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
+    return refusedPATWork({ db, userId: selection.subject.userId });
+  }
+  if (Option.isNone(query)) {
+    return Promise.resolve(Option.isSome(selection.id) ? notFound() : invalid());
+  }
+  const rows = results[1];
+  return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
+};
+
+const readAuthorizedHistory = (
+  db: D1Database,
+  input: Readonly<{
+    selection: Selection;
+    query: Option.Option<typeof Query.Type>;
+    current: number;
+  }>
+): Promise<Response> => {
+  const { selection, query, current } = input;
+  const { subject } = selection;
+  if (isPAT(subject)) {
+    const patSelection = { ...selection, subject };
+    return db
+      .batch(patHistoryStatements(db, { selection: patSelection, query, current }))
+      .then((results) => presentPATHistory({ db, results, selection: patSelection, query }));
+  }
+  if (Option.isNone(query)) return Promise.resolve(invalid());
+  return db
+    .batch(
+      browserHistoryStatements(db, {
+        selection: { ...selection, subject },
+        query: query.value,
+        current,
+      })
+    )
+    .then(([rows, audit]) => {
+      if (audit?.meta.changes !== 1) return noSession();
+      return rows === undefined ? unavailable() : presentHistory(rows, selection);
+    });
+};
+
+/** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
 export const browseTransactions = async (
   db: D1Database,
@@ -248,36 +386,12 @@ export const browseTransactions = async (
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
-  if (Option.isNone(query)) return invalidQueryAudit(db, selection, current);
+  if (Option.isNone(query) && !isPAT(subject)) {
+    return invalidQueryAudit(db, { ...selection, subject }, current);
+  }
   try {
     if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
-    const [rows, audit] = await db.batch([
-      selectStatement(db, { selection, query: query.value, current }),
-      db
-        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, id, ?,
-          CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
-            THEN 'not_found' ELSE 'success' END,
-          ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
-        .bind(
-          uuid(),
-          Option.isNone(selection.id)
-            ? "transactions.listTransactions"
-            : "transactions.getTransaction",
-          Option.getOrNull(selection.id),
-          Option.getOrNull(selection.id),
-          current,
-          subject.id,
-          subject.userId,
-          subject.digest,
-          current,
-          current
-        ),
-    ]);
-    if (audit?.meta.changes !== 1) {
-      return noSession();
-    }
-    return rows === undefined ? unavailable() : presentHistory(rows, selection);
+    return readAuthorizedHistory(db, { selection, query, current });
   } catch (error) {
     return failedAudit(error);
   }

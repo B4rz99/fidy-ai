@@ -1,11 +1,8 @@
-import { Data, Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { Category } from "~/core/categories/model";
+import { Data, Effect } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { ListCategoriesResponse } from "./operations";
-
-const maximumCategoryCount = 100;
-const categoryQueryLimit = maximumCategoryCount + 1;
+import { categoryResponseFromRows, categoryRowsQuery } from "./query";
 
 /** Safe reason returned when authoritative Category data cannot be loaded. */
 export class CategoryQueryFailure extends Data.TaggedError("CategoryQueryFailure")<{
@@ -15,20 +12,16 @@ export class CategoryQueryFailure extends Data.TaggedError("CategoryQueryFailure
 const queryFailure = (): CategoryQueryFailure =>
   new CategoryQueryFailure({ reason: "unavailable" });
 
-const loadCategoryRows: Effect.Effect<
-  ReadonlyArray<Category>,
+const loadCategories: Effect.Effect<
+  typeof ListCategoriesResponse.Type,
   CategoryQueryFailure,
   SqlClient.SqlClient
-> = Effect.flatMap(SqlClient.SqlClient, (sql) =>
-  SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: Category,
-    execute: () =>
-      sql`SELECT id, label FROM categories ORDER BY display_order LIMIT ${categoryQueryLimit}`,
-  })(undefined)
-).pipe(
+> = Effect.flatMap(SqlClient.SqlClient, (sql) => {
+  const query = categoryRowsQuery();
+  return sql.unsafe<Record<string, unknown>>(query.sql, query.params);
+}).pipe(
   Effect.mapError(queryFailure),
-  Effect.filterOrFail((categories) => categories.length <= maximumCategoryCount, queryFailure)
+  Effect.flatMap((rows) => Effect.fromOption(categoryResponseFromRows(rows), queryFailure))
 );
 
 export const categoryUnavailable = (): Unavailable =>
@@ -45,7 +38,4 @@ export const listCategoriesResponse: Effect.Effect<
   typeof ListCategoriesResponse.Type,
   Unavailable,
   SqlClient.SqlClient
-> = loadCategoryRows.pipe(
-  Effect.map((categories) => ({ data: categories, next: [] })),
-  Effect.mapError(categoryUnavailable)
-);
+> = loadCategories.pipe(Effect.mapError(categoryUnavailable));

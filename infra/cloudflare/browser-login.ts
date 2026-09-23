@@ -13,7 +13,18 @@ import {
 } from "@fidy/server/identity-runtime";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { BackupRecoveryCode } from "@fidy/server/client";
-import { Clock, Context, DateTime, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Encoding,
+  Exit,
+  Function,
+  Layer,
+  Option,
+  Schema,
+} from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
@@ -368,23 +379,40 @@ export const sessionCookie = (request: Request): Option.Option<string> => {
   return /^[A-Za-z0-9_-]{43}$/u.test(value) ? Option.some(value) : Option.none();
 };
 
-/** Resolve the exact still-fresh browser session for an account-security action; never use an object id as authority. */
+/** Resolve a live WebSession; account-security actions additionally require a fresh decision. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const freshBrowserSession = async (
+export const browserSession = async (
   request: Request,
   db: D1Database,
-  current: number
+  input: Readonly<{ current: number; fresh: boolean }>
 ): Promise<Option.Option<typeof Session.Type>> => {
   const token = sessionCookie(request);
   if (Option.isNone(token)) return Option.none();
   const row = await db
     .prepare(`SELECT id, user_id FROM web_sessions
-    WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+    WHERE token_digest = ? AND revoked_at_ms IS NULL AND (? = 0 OR fresh_until_ms > ?)
       AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
-    .bind(await sha256(token.value), current, current, current)
+    .bind(
+      await sha256(token.value),
+      input.fresh ? 1 : 0,
+      input.current,
+      input.current,
+      input.current
+    )
     .first();
   return Schema.decodeUnknownOption(Session)(row);
 };
+
+/** Resolve the exact still-fresh browser session for an account-security action. */
+export const freshBrowserSession: {
+  (request: Request, db: D1Database, current: number): Promise<Option.Option<typeof Session.Type>>;
+  (
+    db: D1Database,
+    current: number
+  ): (request: Request) => Promise<Option.Option<typeof Session.Type>>;
+} = Function.dual(3, (request: Request, db: D1Database, current: number) =>
+  browserSession(request, db, { current, fresh: true })
+);
 
 /** Return the canonical User projection only for a live, unrevoked WebSession. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off

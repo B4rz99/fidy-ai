@@ -175,10 +175,14 @@
           },
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
+          },
+          "patExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
           }
         },
         "required": [
           "pairingId",
+          "patExpiresAt",
           "claimBy"
         ],
         "type": "object"
@@ -188,14 +192,10 @@
         "properties": {
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
-          },
-          "patExpiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
           }
         },
         "required": [
-          "pairingId",
-          "patExpiresAt"
+          "pairingId"
         ],
         "type": "object"
       },
@@ -2927,7 +2927,8 @@
         },
         "required": [
           "recipientLabel",
-          "scopes"
+          "scopes",
+          "reviewExpiresAt"
         ],
         "type": "object"
       },
@@ -3966,16 +3967,10 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lifetimeDays": {
-            "enum": [
-              90
-            ],
-            "type": "number"
+            "$ref": "#/components/schemas/PATLifetimeDays"
           },
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
-          },
-          "patExpiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -3989,7 +3984,6 @@
           "recipientLabel",
           "scopes",
           "lifetimeDays",
-          "patExpiresAt",
           "claimBy"
         ],
         "type": "object"
@@ -13229,6 +13223,16 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [

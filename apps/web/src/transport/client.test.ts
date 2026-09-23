@@ -584,6 +584,7 @@ describe("canonical browser transport", () => {
             recipientLabel: PATRecipientLabel.make("Automatización casa"),
             scopes: ["read", "dashboard"],
             lifetimeDays: 90,
+            reviewExpiresAt: DateTime.makeUnsafe("2026-04-01T00:00:00Z"),
           },
         },
       });

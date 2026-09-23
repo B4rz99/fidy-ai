@@ -29,6 +29,6 @@
     "rolldown": "1.2.9",
     "typescript": "7.0.2",
     "vitest": "5.0.1",
-    "wrangler": "4.132.0"
+    "wrangler": "4.133.0"
   }
 }

@@ -4,6 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./canonical-runtime": {
+      "types": "./src/shell/canonical-runtime.ts",
+      "import": "./src/shell/canonical-runtime.ts",
+      "default": "./src/shell/canonical-runtime.ts"
+    },
+    "./tokens-runtime": {
+      "types": "./src/shell/tokens/runtime.ts",
+      "import": "./src/shell/tokens/runtime.ts",
+      "default": "./src/shell/tokens/runtime.ts"
+    },
     "./identity-runtime": {
       "types": "./src/shell/identity/browser-runtime.ts",
       "import": "./src/shell/identity/browser-runtime.ts",
@@ -23,6 +33,11 @@
       "types": "./src/shell/transactions/cloudflare-routes.ts",
       "import": "./src/shell/transactions/cloudflare-routes.ts",
       "default": "./src/shell/transactions/cloudflare-routes.ts"
+    },
+    "./transaction-capture": {
+      "types": "./src/shell/transactions/capture.ts",
+      "import": "./src/shell/transactions/capture.ts",
+      "default": "./src/shell/transactions/capture.ts"
     },
     "./transactions-runtime": {
       "types": "./src/core/transactions/model.ts",
@@ -53,6 +68,11 @@
       "types": "./src/shell/email-authentication/delivery.ts",
       "import": "./src/shell/email-authentication/delivery.ts",
       "default": "./src/shell/email-authentication/delivery.ts"
+    },
+    "./consent-pat": {
+      "types": "./src/shell/consent/pat-runtime.ts",
+      "import": "./src/shell/consent/pat-runtime.ts",
+      "default": "./src/shell/consent/pat-runtime.ts"
     },
     "./consent-ingress": {
       "types": "./src/shell/consent/ingress.ts",

@@ -61,6 +61,7 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   CORE: { fetch: () => Promise.reject(new Error("unexpected Core delegation")) },
   LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+  PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
   RELEASE_GIT_SHA: gitRevision,
   ...overrides,
 });
@@ -166,14 +167,21 @@ describe("Production topology contract", () => {
     });
   });
 
+  it("permits declared canonical methods through production ingress for Worker-level route enforcement", () => {
+    expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
+      action: "block",
+      expression:
+        '(http.host eq "api.fidyapp.com" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
+    });
+  });
+
   it("uses one launch-zone-compatible IP budget for every published or reserved HTTP path", () => {
     const rateLimits = edgeSecurityPolicy.rulesets.rateLimits.rules;
 
     expect(rateLimits).toHaveLength(1);
+    expect(rateLimits[0]?.expression).toContain('"/providers/kapso/callback"');
     expect(rateLimits[0]).toMatchObject({
       action: "block",
-      expression:
-        '(http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback" "/web/onboarding/email/verify" "/web/pairings" "/web/pairings/redeem" "/web/session/logout" "/web/email/authentication/start" "/web/email/authentication/complete" "/email/replacement" "/web/email/replacement/verify" "/recovery/backup-code/rotate" "/internal/support-recovery" "/user" "/transactions"} or starts_with(http.request.uri.path, "/transactions/"))',
       ratelimit: {
         characteristics: ["cf.colo.id", "ip.src"],
         mitigationTimeout: 10,
@@ -195,13 +203,12 @@ describe("Production topology contract", () => {
       "wompi",
     ]);
     expect(providerPolicies.every(({ proof }) => proof.includes("replay"))).toBe(true);
+    const expression = edgeSecurityPolicy.rulesets.rateLimits.rules[0]?.expression ?? "";
     for (const callback of Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks)) {
-      expect(
-        edgeSecurityPolicy.rulesets.rateLimits.rules.some(({ expression }) =>
-          (expression ?? "").includes(callback.path)
-        )
-      ).toBe(true);
+      expect(expression).toContain(`"${callback.path}"`);
     }
+    expect(expression).toContain('starts_with(http.request.uri.path, "/budgets/")');
+    expect(expression).not.toContain("http.host");
   });
 
   it("pins local ports for the browser-to-ingress and ingress-to-Core path", () => {

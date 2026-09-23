@@ -1,14 +1,25 @@
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
+import { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
 
 const digestBytes = 32;
-const Command = Schema.Struct({
-  sessionId: Schema.String.check(Schema.isUUID()),
+const Credentials = {
   userId: Schema.String.check(Schema.isUUID()),
   digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   input: Schema.toCodecJson(CreateTransactionInput),
-});
+} as const;
+const Command = Schema.Union([
+  Schema.TaggedStruct("WebSession", {
+    ...Credentials,
+    sessionId: Schema.String.check(Schema.isUUID()),
+  }),
+  Schema.TaggedStruct("PAT", {
+    ...Credentials,
+    patId: Schema.String.check(Schema.isUUID()),
+    requiredScope: Schema.NullOr(CanonicalCapability),
+  }),
+]);
 
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
@@ -33,15 +44,20 @@ export class UserTransactionCoordinator {
         ) {
           return unavailableTransaction();
         }
-        return await createManualTransaction(
-          this.env.DB,
-          {
-            id: command.value.sessionId,
-            userId: command.value.userId,
-            digest: new Uint8Array(command.value.digest),
-          },
-          command.value.input
-        );
+        const subject =
+          command.value._tag === "PAT"
+            ? {
+                patId: command.value.patId,
+                userId: command.value.userId,
+                digest: new Uint8Array(command.value.digest),
+                requiredScope: Option.fromNullishOr(command.value.requiredScope),
+              }
+            : {
+                id: command.value.sessionId,
+                userId: command.value.userId,
+                digest: new Uint8Array(command.value.digest),
+              };
+        return await createManualTransaction(this.env.DB, subject, command.value.input);
       } catch {
         return unavailableTransaction();
       }

@@ -9,6 +9,7 @@ import type { CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
 import { listCategoriesResponse } from "~/shell/categories/list-categories";
 import { getCurrentUser } from "~/shell/identity/current-user";
+import { listPATsResponse } from "~/shell/tokens/list-pats";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
 
 /**
@@ -41,7 +42,7 @@ export const canonicalOperationImplementations = {
   "memory.recall": unavailableOperation,
   "subscription.getUpgradeUrl": unavailableOperation,
   "subscription.listSubscriptionOffers": unavailableOperation,
-  "pats.listPATs": unavailableOperation,
+  "pats.listPATs": (_input, caller) => listPATsResponse(caller.resolved.subjectUserId),
   "operations.executeAtomicBatch": unavailableOperation,
 } as const satisfies CanonicalOperationImplementations;
 

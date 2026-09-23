@@ -80,10 +80,12 @@ it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
 
 it("normalizes one manual PAT recipient label before enforcing the grant boundary", () => {
   const decodeGrant = Schema.decodeUnknownResult(ManualPATGrantInput);
+  const reviewExpiresAt = "2026-09-15T12:00:00.000Z";
   const accepted = decodeGrant({
     recipientLabel: "  Automatización casa  ",
     scopes: ["read"],
     lifetimeDays: 90,
+    reviewExpiresAt,
   });
 
   const decoded = Result.getOrThrow(accepted);
@@ -91,18 +93,25 @@ it("normalizes one manual PAT recipient label before enforcing the grant boundar
     recipientLabel: PATRecipientLabel.make("Automatización casa"),
     scopes: ["read"],
     lifetimeDays: 90,
+    reviewExpiresAt: DateTime.makeUnsafe(reviewExpiresAt),
   });
   expect(Schema.encodeSync(ManualPATGrantInput)(decoded)).toEqual({
     recipientLabel: "Automatización casa",
     scopes: ["read"],
     lifetimeDays: 90,
+    reviewExpiresAt,
   });
   expect(
     Result.isFailure(decodeGrant({ recipientLabel: "   ", scopes: ["read"], lifetimeDays: 90 }))
   ).toBe(true);
   expect(
     Result.isSuccess(
-      decodeGrant({ recipientLabel: "🧭".repeat(80), scopes: ["read"], lifetimeDays: 7 })
+      decodeGrant({
+        recipientLabel: "🧭".repeat(80),
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt,
+      })
     )
   ).toBe(true);
   expect(

@@ -5,18 +5,22 @@ import {
   ownsTransactionPath as transactionPath,
 } from "@fidy/server/transaction-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Effect, Option } from "effect";
+import { Effect, Encoding, Option } from "effect";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./telemetry";
 import { browserOrigins } from "./topology";
+import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pat-routes";
+import { canonicalMethods, canonicalRoute } from "./canonical-routes";
 
+const minimumAdmissionKeyLength = 32;
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
   readonly CORE: Pick<Fetcher, "fetch">;
   readonly LOCAL_CANONICAL_READ_BEARER: string;
+  readonly PAT_ADMISSION_KEY: string;
 };
 
 type PublicWorker = Readonly<{
@@ -101,7 +105,7 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
     request.headers.get("access-control-request-headers")
   );
   const path = new URL(request.url).pathname;
-  const methods = transactionPath(path) ? transactionMethods(path) : [allowedMethod(path)];
+  const methods = allowedMethods(path);
   if (
     !Option.exists(requestedMethod, (method) => methods.includes(method)) ||
     !isAllowedPreflightHeaders(requestedHeaders)
@@ -136,8 +140,9 @@ const categoryAuthorizationFailure = (
     return Option.none();
   }
   if (
-    environment.LOCAL_CANONICAL_READ_BEARER.length > 0 &&
-    request.headers.get("authorization") === `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`
+    request.headers.get("authorization")?.startsWith("Bearer ") === true ||
+    (environment.LOCAL_CANONICAL_READ_BEARER.length > 0 &&
+      request.headers.get("authorization") === `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`)
   ) {
     return Option.none();
   }
@@ -192,8 +197,17 @@ const preflightPaths = new Set<string>([
 ]);
 const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
 const ownedPath = (path: string): boolean =>
-  ownedPaths.has(path) || enrollmentPath(path) || transactionPath(path);
-const allowedMethod = (path: string): "GET" | "POST" => (postPaths.has(path) ? "POST" : "GET");
+  ownedPaths.has(path) ||
+  enrollmentPath(path) ||
+  transactionPath(path) ||
+  patRoute(path) ||
+  canonicalRoute(path);
+const allowedMethods = (path: string): ReadonlyArray<string> => {
+  if (transactionPath(path)) return transactionMethods(path);
+  if (patRoute(path)) return patMethods(path);
+  if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
+  return canonicalMethods(path);
+};
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
     ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
@@ -206,6 +220,7 @@ const browserHeaders = (request: Request, path: string): Headers => {
     path === "/web/session/logout" ||
     path === rotateRecoveryPath ||
     replacementPaths.some((owned) => owned === path) ||
+    patBrowserRoute(path) ||
     enrollmentPath(path)
   ) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
@@ -223,8 +238,22 @@ const forwardsSession = (request: Request, path: string): boolean =>
   (path === listCategoriesPath && request.headers.has("cookie"));
 
 const forwardedHeaders = (request: Request, path: string): Headers => {
+  if (patDirectRoute(path)) {
+    return new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+  }
+  if (patBrowserRoute(path)) return browserHeaders(request, path);
   if (path === callbackPath) return callbackHeaders(request);
   if (path === supportRecoveryPath) return supportHeaders(request);
+  if (
+    transactionPath(path) &&
+    !request.headers.has("cookie") &&
+    request.headers.has("authorization")
+  ) {
+    return new Headers({
+      authorization: request.headers.get("authorization") ?? "",
+      "content-type": request.headers.get("content-type") ?? "",
+    });
+  }
   if (path === verificationPath || isBrowserMutation(path) || enrollmentPath(path)) {
     const headers = browserHeaders(request, path);
     if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
@@ -237,21 +266,60 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
       })
     : request.headers;
 };
-const coreRequest = (request: Request, signal: AbortSignal): Request => {
-  const path = new URL(request.url).pathname;
-  return new Request(
-    `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
-    {
-      headers: forwardedHeaders(request, path),
-      method: request.method,
-      body: request.method === "POST" ? request.body : undefined,
-      signal,
+const pairingSource = (
+  request: Request,
+  environment: PublicEnvironment
+): Effect.Effect<string, void> =>
+  Effect.gen(function* () {
+    const visitor =
+      request.headers.get("cf-connecting-ip") ??
+      (environment.BROWSER_ORIGIN === browserOrigins.local ? "local-development" : "");
+    if (visitor.length === 0 || environment.PAT_ADMISSION_KEY.length < minimumAdmissionKeyLength) {
+      throw new Error("PAT admission unavailable");
     }
-  );
-};
+    const key = yield* Effect.tryPromise({
+      try: () =>
+        crypto.subtle.importKey(
+          "raw",
+          new TextEncoder().encode(environment.PAT_ADMISSION_KEY),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["sign"]
+        ),
+      catch: () => undefined,
+    });
+    const signature = yield* Effect.tryPromise({
+      try: () => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor)),
+      catch: () => undefined,
+    });
+    return Encoding.encodeHex(new Uint8Array(signature));
+  });
+const coreRequest = (
+  request: Request,
+  environment: PublicEnvironment
+): Effect.Effect<Request, void> =>
+  Effect.gen(function* () {
+    const path = new URL(request.url).pathname;
+    const headers = forwardedHeaders(request, path);
+    if (path === "/pat-pairings") {
+      headers.set("x-pat-source", yield* pairingSource(request, environment));
+    }
+    return new Request(
+      `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
+      {
+        headers,
+        method: request.method,
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      }
+    );
+  });
 
 const hasPreflight = (path: string): boolean =>
-  preflightPaths.has(path) || enrollmentPath(path) || transactionPath(path);
+  preflightPaths.has(path) ||
+  enrollmentPath(path) ||
+  transactionPath(path) ||
+  patRoute(path) ||
+  canonicalRoute(path);
 const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
@@ -261,13 +329,12 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
   path === supportRecoveryPath && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
-  transactionPath(path)
-    ? transactionMethods(path).includes(request.method)
-    : request.method === allowedMethod(path);
+  allowedMethods(path).includes(request.method);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   sessionPaths.has(path) ||
   enrollmentPath(path) ||
-  transactionPath(path) ||
+  (transactionPath(path) && request.headers.has("cookie")) ||
+  patBrowserRoute(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
 const gateOwnedRequest = (
@@ -295,9 +362,7 @@ const gateOwnedRequest = (
         { status: "method_not_allowed" },
         {
           headers: {
-            allow: transactionPath(path)
-              ? transactionMethods(path).join(", ")
-              : allowedMethod(path),
+            allow: allowedMethods(path).join(", "),
           },
           status: 405,
         }
@@ -324,9 +389,12 @@ const routeOwnedRequest = (
   if (Option.isSome(rejection)) {
     return Promise.resolve(rejection.value);
   }
-  return Effect.tryPromise({
-    try: (signal) => environment.CORE.fetch(coreRequest(request, signal)),
-    catch: () => undefined,
+  return Effect.gen(function* () {
+    const forwarded = yield* coreRequest(request, environment);
+    return yield* Effect.tryPromise({
+      try: (signal) => environment.CORE.fetch(forwarded, { signal }),
+      catch: () => undefined,
+    });
   }).pipe(
     Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),
     Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),

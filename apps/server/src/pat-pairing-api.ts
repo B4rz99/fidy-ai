@@ -70,7 +70,7 @@ export const PATPairingDirectGroup = HttpApiGroup.make("patPairing")
     HttpApiEndpoint.post("start", "/pat-pairings", {
       payload: StartPATPairingPayload,
       success: StartedPATPairing,
-      error: [PATPairingRateLimitedApi, PATPairingUnavailableApi],
+      error: [PATPairingInvalidApi, PATPairingRateLimitedApi, PATPairingUnavailableApi],
     }).annotate(
       OpenApi.Description,
       "Start one ten-minute PAT pairing and disclose its private claim proof once."

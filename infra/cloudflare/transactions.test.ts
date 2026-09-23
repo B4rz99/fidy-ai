@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
   Transaction,
@@ -120,6 +120,7 @@ const setup = async (platform = false): Promise<D1Database> => {
     "0005_verified_onboarding",
     "0006_browser_login",
     "0009_transactions",
+    "0010_pat_lifecycle",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(db, name)),
     Promise.resolve()
@@ -185,6 +186,7 @@ const sendPublicRequest = (
   publicWorker.fetch(request, {
     BROWSER_ORIGIN: "https://app.fidyapp.com",
     LOCAL_CANONICAL_READ_BEARER: "",
+    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
     CORE: {
       fetch: (internal) =>
@@ -214,6 +216,56 @@ const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
 });
+
+it("rolls back public Transaction capture when its audit silently refuses a write, then permits retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise({ try: () => setup(), catch: () => undefined });
+      const post = (): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(input()),
+          })
+        );
+      yield* Effect.tryPromise({
+        try: () =>
+          db
+            .prepare(`CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON transaction_audit
+    WHEN NEW.operation = 'transactions.createTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+            .run(),
+        catch: () => undefined,
+      });
+      expect((yield* Effect.tryPromise({ try: post, catch: () => undefined })).status).not.toBe(
+        201
+      );
+      const count = (
+        table: "transactions" | "source_attestations"
+      ): Effect.Effect<Option.Option<{ total: number }>, void> =>
+        Effect.tryPromise({
+          try: () =>
+            db
+              .prepare(`SELECT count(*) AS total FROM ${table} WHERE user_id = ?`)
+              .bind(users[0])
+              .first<{ total: number }>(),
+          catch: () => undefined,
+        }).pipe(Effect.map(Option.fromNullishOr));
+      expect(Option.getOrUndefined(yield* count("transactions"))?.total).toBe(0);
+      expect(Option.getOrUndefined(yield* count("source_attestations"))?.total).toBe(0);
+      yield* Effect.tryPromise({
+        try: () => db.prepare("DROP TRIGGER refuse_capture_audit").run(),
+        catch: () => undefined,
+      });
+      expect((yield* Effect.tryPromise({ try: post, catch: () => undefined })).status).toBe(201);
+      expect(Option.getOrUndefined(yield* count("transactions"))?.total).toBe(1);
+    })
+  ));
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("coordinates concurrent public mutations through a real per-User Durable Object binding", async () => {
@@ -681,6 +733,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        _tag: "WebSession",
         sessionId: session.id,
         userId: session.userId,
         digest: Array.from(session.digest),

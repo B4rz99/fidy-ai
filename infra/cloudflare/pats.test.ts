@@ -1,7 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "./core-worker";
@@ -337,6 +337,10 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
 it("bounds per-User issuance even when every PAT is revoked immediately", async () => {
   const { db, send, sessions } = await setup();
   const grant = { recipientLabel: "Cycling client", scopes: ["read"], lifetimeDays: 7 };
+  const manualGrant = {
+    ...grant,
+    reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+  };
   await Promise.all(
     Array.from({ length: 20 }, async (_, index) => {
       const response = await send({
@@ -345,7 +349,7 @@ it("bounds per-User issuance even when every PAT is revoked immediately", async 
         session: sessions[0],
         payload: {
           requestId: `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
-          grant,
+          grant: manualGrant,
         },
       });
       expect(response.status).toBe(200);
@@ -358,7 +362,7 @@ it("bounds per-User issuance even when every PAT is revoked immediately", async 
     path: "/pats",
     method: "POST",
     session: sessions[0],
-    payload: { requestId: "00000000-0000-4000-8000-000000000020", grant },
+    payload: { requestId: "00000000-0000-4000-8000-000000000020", grant: manualGrant },
   });
   expect(denied.status).toBe(429);
   expect((await db.prepare("SELECT count(*) AS total FROM pats").first())?.total).toBe(20);
@@ -425,7 +429,7 @@ it("bounds per-User issuance even when every PAT is revoked immediately", async 
         path: "/pats",
         method: "POST",
         session: sessions[1],
-        payload: { requestId: "00000000-0000-4000-8000-000000000020", grant },
+        payload: { requestId: "00000000-0000-4000-8000-000000000020", grant: manualGrant },
       })
     ).status
   ).toBe(200);
@@ -490,7 +494,12 @@ it("isolates management by User and immediately refuses revoked and under-scoped
   const { db, send, sessions } = await setup();
   const payload = {
     requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    grant: { recipientLabel: "My reader", scopes: ["read"], lifetimeDays: 7 },
+    grant: {
+      recipientLabel: "My reader",
+      scopes: ["read"],
+      lifetimeDays: 7,
+      reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+    },
   };
   const stale = await send({
     path: "/pats",
@@ -551,7 +560,12 @@ it("isolates management by User and immediately refuses revoked and under-scoped
     session: sessions[0],
     payload: {
       requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      grant: { recipientLabel: "Writer", scopes: ["write"], lifetimeDays: 30 },
+      grant: {
+        recipientLabel: "Writer",
+        scopes: ["write"],
+        lifetimeDays: 30,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 30 * 86_400_000)),
+      },
     },
   });
   expect(writer.status).toBe(200);
@@ -570,6 +584,30 @@ it("isolates management by User and immediately refuses revoked and under-scoped
   expect(await revokedWriter.json()).toMatchObject({ error: { code: "unauthenticated" } });
 });
 
+it("mints manual PATs for the complete selected lifetime from issuance", async () => {
+  const { send, sessions } = await setup();
+  const current = clock();
+  const grant = {
+    recipientLabel: "Reviewed agent",
+    scopes: ["read"],
+    lifetimeDays: 7,
+    reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(current + 7 * 86_400_000)),
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(current + 120_000);
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: { requestId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", grant },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(7 * 86_400_000);
+});
+
 it("rejects invalid grants, expired bearers and stale browser authority without partial effects", async () => {
   const { db, send, sessions } = await setup();
   const invalid = await send({
@@ -579,13 +617,29 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
   });
   expect(invalid.status).toBe(400);
   expect((await db.prepare("SELECT count(*) AS total FROM pat_pairings").first())?.total).toBe(0);
+  const unreviewed = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      grant: { recipientLabel: "No review", scopes: ["read"], lifetimeDays: 7 },
+    },
+  });
+  expect(unreviewed.status).toBe(400);
+  expect((await db.prepare("SELECT count(*) AS total FROM pats").first())?.total).toBe(0);
   const response = await send({
     path: "/pats",
     method: "POST",
     session: sessions[0],
     payload: {
       requestId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      grant: { recipientLabel: "Reader", scopes: ["write"], lifetimeDays: 7 },
+      grant: {
+        recipientLabel: "Reader",
+        scopes: ["write"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
     },
   });
   expect(response.status).toBe(200);

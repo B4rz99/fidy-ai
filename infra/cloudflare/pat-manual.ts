@@ -1,16 +1,17 @@
 import {
   CreateManualPATPayload,
+  IssuedManualPATResponse,
   ManualPATIssuanceConsumed,
   ManualPATIssuanceRateLimited,
   ManualPATReviewExpired,
-  PAT,
+  TokenBearer,
   ValidationFailed,
   buildPATDisclosure,
   issuanceConsumedMessage,
   issuanceLimitedMessage,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Option, Redacted, Schema } from "effect";
 import {
   type SessionRow,
   canonical,
@@ -144,14 +145,12 @@ const issuedResponse = (issue: Issuance): Response => {
     revoked_at_ms: null,
   });
   if (Option.isNone(pat)) return unavailable();
-  const encoded = Schema.encodeSync(Schema.toCodecJson(PAT))(pat.value);
-  if (typeof encoded !== "object" || encoded === null || Array.isArray(encoded)) {
-    return unavailable();
-  }
-  return canonical({
-    pat: { ...encoded, idleExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(expires)) },
-    bearer,
-  });
+  return canonical(
+    Schema.encodeSync(Schema.toCodecJson(IssuedManualPATResponse))({
+      pat: { ...pat.value, idleExpiresAt: DateTime.makeUnsafe(expires) },
+      bearer: Redacted.make(Schema.decodeSync(TokenBearer)(bearer)),
+    })
+  );
 };
 
 const expiryFor = (
@@ -159,10 +158,9 @@ const expiryFor = (
   current: number
 ): Option.Option<number> => {
   const maximum = current + grant.lifetimeDays * dayMilliseconds;
-  const expires =
-    grant.reviewExpiresAt === undefined ? maximum : DateTime.toEpochMillis(grant.reviewExpiresAt);
-  return expires > current && expires <= maximum && expires >= maximum - pairingMilliseconds
-    ? Option.some(expires)
+  const reviewed = DateTime.toEpochMillis(grant.reviewExpiresAt);
+  return reviewed > current && reviewed <= maximum && reviewed >= maximum - pairingMilliseconds
+    ? Option.some(maximum)
     : Option.none();
 };
 const failedIssuance = async (

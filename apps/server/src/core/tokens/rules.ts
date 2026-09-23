@@ -31,9 +31,10 @@ export const patScopeCopy: Record<
 };
 
 const hoursPerDay = 24;
+type GrantDetails = Pick<ManualPATGrantInput, "recipientLabel" | "scopes" | "lifetimeDays">;
 
 const disclosureFor = (
-  { recipientLabel, scopes, lifetimeDays }: ManualPATGrantInput,
+  { recipientLabel, scopes, lifetimeDays }: GrantDetails,
   expiresAt: DateTime.Utc,
   delivery: string
 ): string => `Nombre: “${recipientLabel}”.
@@ -56,7 +57,7 @@ export const buildPATDisclosure = ({
 export const buildPairedPATDisclosure = ({
   grant,
   expiresAt,
-}: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
+}: Readonly<{ grant: GrantDetails; expiresAt: DateTime.Utc }>): string =>
   disclosureFor(
     grant,
     expiresAt,

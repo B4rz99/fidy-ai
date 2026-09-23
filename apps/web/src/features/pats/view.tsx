@@ -267,11 +267,14 @@ const GrantReview = ({
         </dd>
         <dt className="text-muted-foreground">Duración</dt>
         <dd className="font-medium">{grant.lifetimeDays} días</dd>
-        <dt className="text-muted-foreground">Vencimiento</dt>
+        <dt className="text-muted-foreground">Vencimiento estimado</dt>
         <dd className="font-medium">
           <time dateTime={DateTime.formatIso(grant.reviewExpiresAt)}>
             {patExpirationFormatter.format(DateTime.toDate(grant.reviewExpiresAt))}
           </time>
+          <span className="block text-sm text-muted-foreground">
+            El vencimiento exacto se calculará al crear el token, {grant.lifetimeDays} días después.
+          </span>
         </dd>
       </dl>
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

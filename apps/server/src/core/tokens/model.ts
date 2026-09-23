@@ -91,7 +91,7 @@ export const ManualPATGrantInput = Schema.Struct({
   lifetimeDays: PATLifetimeDays.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
   ),
-  reviewExpiresAt: Schema.optionalKey(UtcTimestamp),
+  reviewExpiresAt: UtcTimestamp,
 }).annotate({ identifier: "ManualPATGrantInput" });
 export type ManualPATGrantInput = typeof ManualPATGrantInput.Type;
 

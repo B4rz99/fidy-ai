@@ -27,6 +27,7 @@ export { PATsGroup } from "~/shell/tokens/operations";
 export { PATPairingDirectGroup } from "~/pat-pairing-api";
 export { ValidationFailed } from "~/shell/public-http/contract";
 export {
+  IssuedManualPATResponse,
   ManualPATIssuanceConsumed,
   ManualPATIssuanceRateLimited,
   issuanceLimitedMessage,

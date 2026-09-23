@@ -126,6 +126,7 @@ const setup = async (platform = false): Promise<D1Database> => {
     "0012_pat_work_budget",
     "0013_pat_atomic_assertion",
     "0014_canonical_category_budget",
+    "0015_transaction_capture_assertion",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(db, name)),
     Promise.resolve()
@@ -220,6 +221,54 @@ const sendPublicRequest = (
 const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
+});
+
+it("rolls back public Transaction capture when its audit silently refuses a write, then permits retry", async () => {
+  const db = await setup();
+  const post = (): Promise<Response> =>
+    sendPublicRequest(
+      db,
+      new Request("https://api.fidyapp.com/transactions", {
+        method: "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: `__Host-fidy_session=${bearer(0)}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input()),
+      })
+    );
+  await db
+    .prepare(`CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON transaction_audit
+    WHEN NEW.operation = 'transactions.createTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+    .run();
+  expect((await post()).status).not.toBe(201);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+        .bind(users[0])
+        .first()
+    )?.total
+  ).toBe(0);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM source_attestations WHERE user_id = ?")
+        .bind(users[0])
+        .first()
+    )?.total
+  ).toBe(0);
+  await db.prepare("DROP TRIGGER refuse_capture_audit").run();
+  expect((await post()).status).toBe(201);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+        .bind(users[0])
+        .first()
+    )?.total
+  ).toBe(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

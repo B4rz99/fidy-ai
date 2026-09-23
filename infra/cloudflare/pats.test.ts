@@ -1,7 +1,10 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
-import { DateTime, Schema } from "effect";
+import * as D1Client from "@effect/sql-d1/D1Client";
+import { listCategoriesResponse } from "@fidy/server/categories";
+import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "./core-worker";
@@ -88,6 +91,7 @@ const setup = async (): Promise<{
     "0012_pat_work_budget",
     "0013_pat_atomic_assertion",
     "0014_canonical_category_budget",
+    "0015_transaction_capture_assertion",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -1463,6 +1467,34 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
         .first()
     )?.revoked_at_ms
   ).toBeNull();
+});
+
+it("shares one Category projection and row codec between HTTP and the hosted-agent query", async () => {
+  const { db, send, sessions } = await setup();
+  const http = await send({ path: "/categories", method: "GET", session: sessions[0] });
+  expect(http.status).toBe(200);
+  const fromAgent = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const clients = yield* Layer.build(D1Client.layer({ db }));
+        return yield* listCategoriesResponse.pipe(
+          Effect.withTracerEnabled(false),
+          Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
+        );
+      })
+    )
+  );
+  expect(await http.json()).toEqual(fromAgent);
+});
+
+it("fails closed with declared unavailable for an authenticated WebSession whose canonical adapter is absent", async () => {
+  const { send, sessions } = await setup();
+  const authenticated = await send({ path: "/budgets", method: "GET", session: sessions[0] });
+  expect(authenticated.status).toBe(503);
+  expect(await authenticated.json()).toMatchObject({ error: { code: "unavailable" } });
+  expect(
+    (await send({ path: "/budgets", method: "GET", session: "__Host-fidy_session=invalid" })).status
+  ).toBe(401);
 });
 
 it("does not commit PAT activity or disclose Category rows when its audit is silently refused", async () => {

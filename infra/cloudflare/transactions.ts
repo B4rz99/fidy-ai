@@ -5,6 +5,8 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { livePATAuthority } from "@fidy/server/tokens-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { sessionCookie, sha256 } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { decodeTransactionRow } from "./transaction-history";
@@ -153,12 +155,14 @@ const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => 
         SELECT ?,user_id,id,'transactions.createTransaction','accepted',?
         FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
         AND revoked_at_ms IS NULL AND expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
+        AND changes() = 1`)
         .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
     : db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
         SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)`)
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
+        AND changes() = 1`)
         .bind(uuid(), subject.id, current, subject.userId, id);
 };
 
@@ -225,12 +229,35 @@ const hasUnknownCategory = async (
   return category === null;
 };
 
-const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> =>
-  String(error).includes("transaction_resource_limit")
-    ? rejectManualTransaction(db, subject, "resource_limit")
-    : Promise.resolve(
-        String(error).includes("transaction_audit_limit") ? limited() : unavailable()
-      );
+// @effect-diagnostics-next-line asyncFunction:off
+const classifyCaptureAuthority = async (db: D1Database, subject: Subject): Promise<Response> => {
+  try {
+    const authority = isPAT(subject)
+      ? livePATAuthority(subject, now())
+      : liveWebSessionAuthority(subject, now());
+    const live = await db
+      .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
+      .bind(...authority.bindings)
+      .first();
+    return live === null ? noSession() : unavailable();
+  } catch {
+    return unavailable();
+  }
+};
+
+const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> => {
+  if (String(error).includes("transaction_resource_limit")) {
+    return rejectManualTransaction(db, subject, "resource_limit");
+  }
+  return String(error).includes("transaction_audit_limit")
+    ? Promise.resolve(limited())
+    : classifyCaptureAuthority(db, subject);
+};
+
+const captureCompleted = (results: ReadonlyArray<D1Result>): boolean =>
+  results[0]?.meta.changes === 1 &&
+  results[1]?.meta.changes === 1 &&
+  results[2]?.meta.changes === 1;
 
 /** Persist one manual Transaction, its captured context and AuditLogEntry in one D1 atomic batch. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -256,10 +283,11 @@ export const createManualTransaction = async (
       return rejectManualTransaction(db, subject, "not_found");
     }
     const id = uuid();
-    const result = await db.batch(
-      captureStatements(db, { input, subject, context: context.value, id, current })
-    );
-    if (result[0]?.meta.changes !== 1) {
+    const result = await db.batch([
+      ...captureStatements(db, { input, subject, context: context.value, id, current }),
+      db.prepare(transactionCaptureCompletion),
+    ]);
+    if (!captureCompleted(result)) {
       return noSession();
     }
     const raw = await db

@@ -325,6 +325,12 @@ const scopeMissingResponse = (): Response =>
     HTTP_FORBIDDEN
   );
 
+const unavailableCanonicalAdapter = (): Response =>
+  jsonResponse(
+    '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
+    HTTP_SERVICE_UNAVAILABLE
+  );
+
 const admittedPATResponse = (
   request: Request,
   environment: CoreEnvironment,
@@ -358,12 +364,7 @@ const admittedPATResponse = (
   if (operation.id === "categories.listCategories" && pat !== undefined) {
     return categoriesResponse(environment, pat);
   }
-  return Effect.succeed(
-    jsonResponse(
-      '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
-      HTTP_SERVICE_UNAVAILABLE
-    )
-  );
+  return Effect.succeed(unavailableCanonicalAdapter());
 };
 
 const authorizedCanonicalResponse = (
@@ -371,19 +372,20 @@ const authorizedCanonicalResponse = (
   environment: CoreEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
-  if (transactionPath(new URL(request.url).pathname) && !request.headers.has("authorization")) {
-    return transactionsResponse(request, environment, operation);
-  }
-  if (operation.id === "categories.listCategories" && request.headers.has("cookie")) {
+  if (!request.headers.has("authorization")) {
+    if (transactionPath(new URL(request.url).pathname)) {
+      return transactionsResponse(request, environment, operation);
+    }
     return Effect.tryPromise({
       try: () => transactionSession(request, environment.DB),
       catch: () => undefined,
     }).pipe(
-      Effect.flatMap((session) =>
-        Option.isSome(session)
+      Effect.flatMap((session) => {
+        if (Option.isNone(session)) return Effect.succeed(unauthenticatedTransaction());
+        return operation.id === "categories.listCategories"
           ? categoriesResponse(environment, session.value)
-          : Effect.succeed(unauthenticatedTransaction())
-      ),
+          : Effect.succeed(unavailableCanonicalAdapter());
+      }),
       Effect.orElseSucceed(unavailable)
     );
   }

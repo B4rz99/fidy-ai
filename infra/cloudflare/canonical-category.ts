@@ -1,8 +1,8 @@
 import {
   ListCategoriesResponse,
   categoryResponseFromRows,
+  categoryRowsQuery,
   categoryUnavailable,
-  protectedCategoryRows,
   recordBrowserCategoryWork,
 } from "@fidy/server/categories";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
@@ -47,12 +47,12 @@ const categoryStatements = (
   if ("patId" in subject) {
     return [
       prepareOwnedStatement(db, recordLivePATUse(subject, current)),
-      prepareOwnedStatement(db, protectedCategoryRows(livePATAuthority(subject, current))),
+      prepareOwnedStatement(db, categoryRowsQuery(livePATAuthority(subject, current))),
       prepareOwnedStatement(db, recordCategoryPATUse(subject, newId(), current)),
     ];
   }
   return [
-    prepareOwnedStatement(db, protectedCategoryRows(liveWebSessionAuthority(subject, current))),
+    prepareOwnedStatement(db, categoryRowsQuery(liveWebSessionAuthority(subject, current))),
     prepareOwnedStatement(db, recordBrowserCategoryWork(subject, newId(), current)),
   ];
 };

@@ -34,6 +34,11 @@
       "import": "./src/shell/transactions/cloudflare-routes.ts",
       "default": "./src/shell/transactions/cloudflare-routes.ts"
     },
+    "./transaction-capture": {
+      "types": "./src/shell/transactions/capture.ts",
+      "import": "./src/shell/transactions/capture.ts",
+      "default": "./src/shell/transactions/capture.ts"
+    },
     "./transactions-runtime": {
       "types": "./src/core/transactions/model.ts",
       "import": "./src/core/transactions/model.ts",

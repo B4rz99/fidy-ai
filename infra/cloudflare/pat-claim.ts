@@ -6,6 +6,7 @@ import {
   claimPairingGrant,
   decidePATPairingClaim,
   insertClaimedPAT,
+  recordClaimedPAT,
   recordPendingPoll,
   recordWrongPairingProof,
   slowPairingPoll,
@@ -121,10 +122,10 @@ const reserveClaim = async (db: D1Database, claim: Claim): Promise<boolean> => {
         userId: pairing.user_id,
       })
     ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?, 'pats.claim', 'accepted', ? WHERE changes() = 1`)
-      .bind(newId(), pairing.user_id, patId, current),
+    prepareOwnedStatement(
+      db,
+      recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current })
+    ),
   ]);
   return results.every((item) => item.meta.changes === 1);
 };

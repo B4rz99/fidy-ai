@@ -8,7 +8,11 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import {
+  livePATAuthority,
+  recordCanonicalPATWork,
+  recordLivePATUse,
+} from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "./pat-unit";
 import {
   type TransactionSubject,
@@ -67,8 +71,10 @@ const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
-type Subject = TransactionSubject;
+type Subject = TransactionSubject | AuthorizedPAT;
+const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
 type Selection = Readonly<{ request: Request; subject: Subject; id: Option.Option<string> }>;
+type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
   const pieces = Schema.decodeUnknownOption(
@@ -209,7 +215,7 @@ const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "reque
 // @effect-diagnostics-next-line asyncFunction:off
 const invalidQueryAudit = async (
   db: D1Database,
-  selection: Selection,
+  selection: BrowserSelection,
   current: number
 ): Promise<Response> => {
   const { subject } = selection;
@@ -243,64 +249,48 @@ const invalidQueryAudit = async (
   }
 };
 
-/** Browse only the authenticated User's canonical Transactions, with one atomic metadata audit. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const browseTransactions = async (
+/** Assemble a WebSession's protected read and its Transaction-owner audit. */
+const browserHistoryStatements = (
   db: D1Database,
-  selection: Selection
-): Promise<Response> => {
-  const query = parseQuery(selection);
-  const current = now();
+  input: Readonly<{ selection: BrowserSelection; query: typeof Query.Type; current: number }>
+): Array<D1PreparedStatement> => {
+  const { selection, query, current } = input;
   const { subject } = selection;
-  if (Option.isNone(query)) return invalidQueryAudit(db, selection, current);
-  try {
-    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
-    const [rows, audit] = await db.batch([
-      selectStatement(db, {
-        selection,
-        query: query.value,
-        authority: {
-          predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+  return [
+    selectStatement(db, {
+      selection,
+      query,
+      authority: {
+        predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
           AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id))`,
-          bindings: [subject.userId, subject.id, subject.userId, subject.digest, current, current],
-        },
-      }),
-      db
-        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+        bindings: [subject.userId, subject.id, subject.userId, subject.digest, current, current],
+      },
+    }),
+    db
+      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
         SELECT ?, user_id, id, ?,
           CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
             THEN 'not_found' ELSE 'success' END,
           ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
         AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
-        .bind(
-          uuid(),
-          Option.isNone(selection.id)
-            ? "transactions.listTransactions"
-            : "transactions.getTransaction",
-          Option.getOrNull(selection.id),
-          Option.getOrNull(selection.id),
-          current,
-          subject.id,
-          subject.userId,
-          subject.digest,
-          current,
-          current
-        ),
-    ]);
-    if (audit?.meta.changes !== 1) {
-      return noSession();
-    }
-    return rows === undefined ? unavailable() : presentHistory(rows, selection);
-  } catch (error) {
-    return failedAudit(error);
-  }
+      .bind(
+        uuid(),
+        Option.isNone(selection.id)
+          ? "transactions.listTransactions"
+          : "transactions.getTransaction",
+        Option.getOrNull(selection.id),
+        Option.getOrNull(selection.id),
+        current,
+        subject.id,
+        subject.userId,
+        subject.digest,
+        current,
+        current
+      ),
+  ];
 };
 
-type PATSelection = Readonly<{
-  request: Request;
-  subject: AuthorizedPAT;
-  id: Option.Option<string>;
-}>;
+type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;
 
 const patHistoryStatements = (
   db: D1Database,
@@ -327,21 +317,18 @@ const patHistoryStatements = (
           }),
         ]
       : []),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT ?,user_id,id,?,?,? FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
-      .bind(
-        uuid(),
-        Option.isNone(id) ? "transactions.listTransactions" : "transactions.getTransaction",
-        Option.isSome(query) ? "accepted" : "rejected",
+    prepareOwnedStatement(
+      db,
+      recordCanonicalPATWork(subject, {
+        id: uuid(),
+        operation: Option.isNone(id)
+          ? "transactions.listTransactions"
+          : "transactions.getTransaction",
+        outcome: Option.isSome(query) ? "accepted" : "rejected",
+        afterSourceAttestation: false,
         current,
-        subject.patId,
-        subject.userId,
-        subject.digest,
-        current
-      ),
+      })
+    ),
   ];
 };
 
@@ -358,20 +345,51 @@ const presentPATHistory = (
   return rows === undefined ? unavailable() : presentHistory(rows, selection);
 };
 
-/** Read the same canonical Transaction projection through a live User-owned PAT grant. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const browsePATTransactions = async (
+// @effect-diagnostics-next-line asyncFunction:off
+const readAuthorizedHistory = async (
   db: D1Database,
-  selection: PATSelection
+  input: Readonly<{
+    selection: Selection;
+    query: Option.Option<typeof Query.Type>;
+    current: number;
+  }>
+): Promise<Response> => {
+  const { selection, query, current } = input;
+  const { subject } = selection;
+  if (isPAT(subject)) {
+    const patSelection = { ...selection, subject };
+    const results = await db.batch(
+      patHistoryStatements(db, { selection: patSelection, query, current })
+    );
+    return presentPATHistory(results, patSelection, query);
+  }
+  if (Option.isNone(query)) return invalid();
+  const [rows, audit] = await db.batch(
+    browserHistoryStatements(db, {
+      selection: { ...selection, subject },
+      query: query.value,
+      current,
+    })
+  );
+  if (audit?.meta.changes !== 1) return noSession();
+  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+};
+
+/** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const browseTransactions = async (
+  db: D1Database,
+  selection: Selection
 ): Promise<Response> => {
   const query = parseQuery(selection);
   const current = now();
+  const { subject } = selection;
+  if (Option.isNone(query) && !isPAT(subject)) {
+    return invalidQueryAudit(db, { ...selection, subject }, current);
+  }
   try {
-    if (await transactionAuditExhausted(db, selection.subject.userId, current)) {
-      return rateLimited();
-    }
-    const results = await db.batch(patHistoryStatements(db, { selection, query, current }));
-    return presentPATHistory(results, selection, query);
+    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
+    return readAuthorizedHistory(db, { selection, query, current });
   } catch (error) {
     return failedAudit(error);
   }

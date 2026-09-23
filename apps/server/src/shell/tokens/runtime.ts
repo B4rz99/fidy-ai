@@ -34,7 +34,6 @@ export {
   insertClaimedPAT,
   livePATAuthority,
   recordLivePATUse,
-  recordCategoryPATUse,
   revokeOnePAT,
   revokeEveryPAT,
   revokeEveryPairing,
@@ -54,6 +53,14 @@ export {
   slowPairingPoll,
   recordPendingPoll,
 } from "~/shell/tokens/pat-write";
+export {
+  recordSessionPATTransition,
+  recordClaimedPAT,
+  recordPATList,
+  recordOnePATRevocation,
+  recordAllPATRevocations,
+  recordCanonicalPATWork,
+} from "~/shell/tokens/pat-audit";
 export {
   patAtomicAssertion,
   patExpiryCompletion,

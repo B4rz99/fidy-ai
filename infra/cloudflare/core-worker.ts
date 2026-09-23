@@ -10,7 +10,7 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
-import { browsePATTransactions, browseTransactions } from "./transaction-history";
+import { browseTransactions } from "./transaction-history";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
   rejectManualTransaction,
@@ -195,31 +195,6 @@ const dispatchCanonicalCapture = async (
   );
 };
 
-const transactionsResponse = (
-  request: Request,
-  environment: CoreEnvironment,
-  operation: CatalogOperation
-): Effect.Effect<Response> =>
-  Effect.tryPromise({
-    // @effect-diagnostics-next-line asyncFunction:off
-    try: async () => {
-      const subject = await transactionSession(request, environment.DB);
-      if (Option.isNone(subject)) return unauthenticatedTransaction();
-      if (operation.id !== "transactions.createTransaction") {
-        return browseTransactions(environment.DB, {
-          request,
-          subject: subject.value,
-          id:
-            operation.id === "transactions.listTransactions"
-              ? Option.none()
-              : Option.some(new URL(request.url).pathname.split("/").at(-1) ?? ""),
-        });
-      }
-      return dispatchCanonicalCapture(request, environment, subject.value);
-    },
-    catch: () => undefined,
-  }).pipe(Effect.orElseSucceed(unavailable));
-
 const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
   [
@@ -331,28 +306,32 @@ const unavailableCanonicalAdapter = (): Response =>
     HTTP_SERVICE_UNAVAILABLE
   );
 
-const admittedPATResponse = (
-  request: Request,
-  environment: CoreEnvironment,
-  input: Readonly<{ operation: CatalogOperation; pat: AuthorizedPAT | undefined }>
+/** Once admitted, every credential executes through the same canonical operation dispatch. */
+const executeCanonicalWork = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionSubject | AuthorizedPAT;
+  }>
 ): Effect.Effect<Response> => {
-  const { operation, pat } = input;
-  if (pat !== undefined && operation.id === "transactions.createTransaction") {
+  const { request, environment, operation, subject } = input;
+  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  if (operation.id === "transactions.createTransaction") {
     return Effect.tryPromise({
-      try: () => dispatchCanonicalCapture(request, environment, pat),
+      try: () => dispatchCanonicalCapture(request, environment, subject),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
   if (
-    pat !== undefined &&
-    (operation.id === "transactions.listTransactions" ||
-      operation.id === "transactions.getTransaction")
+    operation.id === "transactions.listTransactions" ||
+    operation.id === "transactions.getTransaction"
   ) {
     return Effect.tryPromise({
       try: () =>
-        browsePATTransactions(environment.DB, {
+        browseTransactions(environment.DB, {
           request,
-          subject: pat,
+          subject,
           id:
             operation.id === "transactions.getTransaction"
               ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
@@ -360,9 +339,6 @@ const admittedPATResponse = (
         }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
-  }
-  if (operation.id === "categories.listCategories" && pat !== undefined) {
-    return categoriesResponse(environment, pat);
   }
   return Effect.succeed(unavailableCanonicalAdapter());
 };
@@ -373,18 +349,13 @@ const authorizedCanonicalResponse = (
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
   if (!request.headers.has("authorization")) {
-    if (transactionPath(new URL(request.url).pathname)) {
-      return transactionsResponse(request, environment, operation);
-    }
     return Effect.tryPromise({
       try: () => transactionSession(request, environment.DB),
       catch: () => undefined,
     }).pipe(
       Effect.flatMap((session) => {
         if (Option.isNone(session)) return Effect.succeed(unauthenticatedTransaction());
-        return operation.id === "categories.listCategories"
-          ? categoriesResponse(environment, session.value)
-          : Effect.succeed(unavailableCanonicalAdapter());
+        return executeCanonicalWork({ request, environment, operation, subject: session.value });
       }),
       Effect.orElseSucceed(unavailable)
     );
@@ -412,7 +383,7 @@ const authorizedCanonicalResponse = (
     Effect.flatMap((result) =>
       result instanceof Response
         ? Effect.succeed(result)
-        : admittedPATResponse(request, environment, { operation, pat: result })
+        : executeCanonicalWork({ request, environment, operation, subject: result })
     )
   );
 };

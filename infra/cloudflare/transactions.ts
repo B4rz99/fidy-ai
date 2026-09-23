@@ -4,13 +4,14 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { livePATAuthority } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { sessionCookie, sha256 } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { decodeTransactionRow } from "./transaction-history";
 import type { AuthorizedPAT } from "./pat-authorization";
+import { prepareOwnedStatement } from "./pat-unit";
 import {
   type TransactionSubject,
   transactionNoStore as noStore,
@@ -63,13 +64,16 @@ export const rejectManualTransaction = async (
   try {
     const audit = await (
       isPAT(subject)
-        ? db
-            .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-          SELECT ?,user_id,id,'transactions.createTransaction','rejected',?
-          FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-          AND revoked_at_ms IS NULL AND expires_at_ms > ?
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
-            .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
+        ? prepareOwnedStatement(
+            db,
+            recordCanonicalPATWork(subject, {
+              id: uuid(),
+              current,
+              operation: "transactions.createTransaction",
+              outcome: "rejected",
+              afterSourceAttestation: false,
+            })
+          )
         : db
             .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
           SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
@@ -150,14 +154,16 @@ export const transactionInput = async (
 const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
   const { subject, id, current } = capture;
   return isPAT(subject)
-    ? db
-        .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT ?,user_id,id,'transactions.createTransaction','accepted',?
-        FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
-        AND changes() = 1`)
-        .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
+    ? prepareOwnedStatement(
+        db,
+        recordCanonicalPATWork(subject, {
+          id: uuid(),
+          current,
+          operation: "transactions.createTransaction",
+          outcome: "accepted",
+          afterSourceAttestation: true,
+        })
+      )
     : db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
         SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?

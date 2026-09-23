@@ -11,6 +11,7 @@ import {
   expireFixedPATs,
   pairingExpiryCompletion,
   patExpiryCompletion,
+  recordSessionPATTransition,
   selectPATPairingPublicCodeSymbols,
   startPairingGrant,
   sweepPairingAdmission,
@@ -255,10 +256,15 @@ const commitApproval = async (db: D1Database, approval: Approval): Promise<boole
         current,
       })
     ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,'pats.approvePATPairing','accepted',? WHERE changes() = 1`)
-      .bind(newId(), session.user_id, session.id, current),
+    prepareOwnedStatement(
+      db,
+      recordSessionPATTransition(session, {
+        id: newId(),
+        current,
+        operation: "pats.approvePATPairing",
+        patId: Option.none(),
+      })
+    ),
   ]);
   return committed.every((item) => item.meta.changes === 1);
 };

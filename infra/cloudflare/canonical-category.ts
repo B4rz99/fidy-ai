@@ -8,7 +8,7 @@ import {
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   livePATAuthority,
-  recordCategoryPATUse,
+  recordCanonicalPATWork,
   recordLivePATUse,
 } from "@fidy/server/tokens-runtime";
 import { Option, Schema } from "effect";
@@ -48,7 +48,16 @@ const categoryStatements = (
     return [
       prepareOwnedStatement(db, recordLivePATUse(subject, current)),
       prepareOwnedStatement(db, categoryRowsQuery(livePATAuthority(subject, current))),
-      prepareOwnedStatement(db, recordCategoryPATUse(subject, newId(), current)),
+      prepareOwnedStatement(
+        db,
+        recordCanonicalPATWork(subject, {
+          id: newId(),
+          current,
+          operation: "categories.listCategories",
+          outcome: "accepted",
+          afterSourceAttestation: false,
+        })
+      ),
     ];
   }
   return [

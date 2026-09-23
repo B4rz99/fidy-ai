@@ -113,21 +113,6 @@ export const livePATAuthority = (
   bindings: [subject.patId, subject.userId, subject.digest, current],
 });
 
-/** Account for an authorized Category query in the same D1 unit as its protected read. */
-export const recordCategoryPATUse = (
-  subject: Readonly<{ patId: string; userId: string; digest: Uint8Array }>,
-  id: string,
-  current: number
-): OwnedStatement => {
-  const authority = livePATAuthority(subject, current);
-  return {
-    sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,user_id,id,'categories.listCategories','accepted',? FROM pats
-      WHERE ${authority.predicate}`,
-    params: [id, current, ...authority.bindings],
-  };
-};
-
 /** Recheck bearer digest, lifetime, revocation and withdrawal alongside protected canonical work. */
 export const recordLivePATUse = (
   subject: Readonly<{ patId: string; userId: string; digest: Uint8Array }>,

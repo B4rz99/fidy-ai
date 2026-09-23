@@ -11,6 +11,7 @@ import {
   issuanceConsumedMessage,
   issuanceLimitedMessage,
   issueManualPAT,
+  recordSessionPATTransition,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Option, Redacted, Schema } from "effect";
@@ -131,10 +132,15 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
         current,
       })
     ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,?,'pats.createManualPAT','accepted',? WHERE changes() = 1`)
-      .bind(newId(), session.user_id, session.id, patId, current),
+    prepareOwnedStatement(
+      db,
+      recordSessionPATTransition(session, {
+        id: newId(),
+        current,
+        patId: Option.some(patId),
+        operation: "pats.createManualPAT",
+      })
+    ),
   ]);
   return committed.every((item) => item.meta.changes === 1);
 };

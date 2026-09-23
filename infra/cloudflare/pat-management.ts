@@ -4,6 +4,9 @@ import {
   ActivePATList,
   listPATsResponse,
   patRevokeAllCompletion,
+  recordAllPATRevocations,
+  recordOnePATRevocation,
+  recordPATList,
   revokeEveryPAT,
   revokeEveryPairing,
   revokeOnePAT,
@@ -50,21 +53,10 @@ export const listPATs = async (request: Request, db: D1Database): Promise<Respon
   );
   if (Option.isNone(listed)) return unavailable();
   const current = currentMillis();
-  const recorded = await db
-    .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM web_sessions
-    WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
-    .bind(
-      newId(),
-      session.value.user_id,
-      session.value.id,
-      current,
-      session.value.id,
-      session.value.user_id,
-      current,
-      current
-    )
-    .run();
+  const recorded = await prepareOwnedStatement(
+    db,
+    recordPATList(session.value, { id: newId(), current })
+  ).run();
   return recorded.meta.changes === 1
     ? canonical(Schema.encodeSync(Schema.toCodecJson(ActivePATList))(listed.value.data))
     : unauthorized();
@@ -87,18 +79,10 @@ export const revokePAT = async (
         revokeOnePATConsent(session.value, { id: newId(), shortId, current })
       ),
       prepareOwnedStatement(db, revokeOnePAT(session.value, { shortId, current })),
-      db
-        .prepare(`INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM pats
-      WHERE user_id = ? AND short_id = ? AND changes() = 1`)
-        .bind(
-          newId(),
-          session.value.user_id,
-          session.value.id,
-          current,
-          session.value.user_id,
-          shortId
-        ),
+      prepareOwnedStatement(
+        db,
+        recordOnePATRevocation(session.value, { id: newId(), shortId, current })
+      ),
     ]);
     return canonical({ shortId });
   } catch {
@@ -127,16 +111,7 @@ export const revokeAllPATs = async (request: Request, db: D1Database): Promise<R
     prepareOwnedStatement(db, revokeAllPairingConsents(session.value, current)),
     prepareOwnedStatement(db, revokeEveryPairing(session.value, current)),
     db.prepare(patRevokeAllCompletion).bind(session.value.user_id, current, session.value.user_id),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${sessionExists}`)
-      .bind(
-        newId(),
-        session.value.user_id,
-        session.value.id,
-        current,
-        ...sessionParams(session.value, current)
-      ),
+    prepareOwnedStatement(db, recordAllPATRevocations(session.value, { id: newId(), current })),
   ]);
   if (committed[5]?.meta.changes !== 1) return unauthorized();
   return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });

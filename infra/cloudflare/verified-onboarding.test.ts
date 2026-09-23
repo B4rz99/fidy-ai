@@ -700,7 +700,9 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
     approve(created.backupRecoveryCode),
   ]);
   expect(competing.filter((result) => result.status === 200)).toHaveLength(1);
-  expect(competing.map((result) => result.status).sort()).toEqual([200, 400]);
+  expect(competing.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+    200, 400,
+  ]);
   expect(
     await db
       .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")

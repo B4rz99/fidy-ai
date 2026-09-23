@@ -27,6 +27,7 @@ import {
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
 import { EmailAddress } from "@fidy/server/client";
+import { approveBrowserPairing } from "./browser-login";
 import {
   Context,
   Crypto,
@@ -952,6 +953,24 @@ const handleInbound = (
       digest,
       receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
     };
+    const approval =
+      /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
+        input.event.content.text.trim()
+      );
+    if (approval !== null) {
+      const code = approval[1];
+      if (code === undefined) return answer(HTTP_CONFLICT);
+      return yield* attempt(() =>
+        approveBrowserPairing(environment.DB, {
+          portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+          bsuid: input.event.caller.businessScopedUserId,
+          messageId: input.event.messageEvidence.providerMessageId,
+          publicCode: code,
+          occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
+          receivedAtMs: input.receivedAtMs,
+        })
+      );
+    }
     return yield* routeConsentInbound(environment, input);
   });
 

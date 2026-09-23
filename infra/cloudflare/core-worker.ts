@@ -10,6 +10,12 @@ import { Context, Effect, Exit, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
+  currentUser,
+  logoutBrowser,
+  redeemBrowserPairing,
+  startBrowserPairing,
+} from "./browser-login";
+import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
@@ -109,7 +115,30 @@ const ownedCorePath = (path: string): boolean =>
     listCategoriesPath,
     "/providers/kapso/callback",
     "/web/onboarding/email/verify",
+    "/web/pairings",
+    "/web/pairings/redeem",
+    "/web/session/logout",
+    "/user",
   ].includes(path);
+
+const browserResponse = (request: Request, db: D1Database): Effect.Effect<Response> => {
+  const path = new URL(request.url).pathname;
+  const routes: Readonly<
+    Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
+  > = {
+    "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
+    "/web/pairings/redeem": { method: "POST", handle: () => redeemBrowserPairing(request, db) },
+    "/web/session/logout": { method: "POST", handle: () => logoutBrowser(request, db) },
+    "/user": { method: "GET", handle: () => currentUser(request, db) },
+  };
+  const route = routes[path];
+  if (route === undefined || request.method !== route.method) {
+    return Effect.succeed(methodNotAllowed());
+  }
+  return Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
+    Effect.orElseSucceed(unavailable)
+  );
+};
 
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
@@ -119,6 +148,11 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
+  }
+  if (
+    ["/web/pairings", "/web/pairings/redeem", "/web/session/logout", "/user"].includes(url.pathname)
+  ) {
+    return browserResponse(request, environment.DB);
   }
   if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
 

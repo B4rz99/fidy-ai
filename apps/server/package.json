@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./identity-runtime": {
+      "types": "./src/shell/identity/browser-runtime.ts",
+      "import": "./src/shell/identity/browser-runtime.ts",
+      "default": "./src/shell/identity/browser-runtime.ts"
+    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",

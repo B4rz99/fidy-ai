@@ -166,7 +166,7 @@ describe("Production topology contract", () => {
     expect(rateLimits[0]).toMatchObject({
       action: "block",
       expression:
-        'http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback" "/web/onboarding/email/verify"}',
+        'http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback" "/web/onboarding/email/verify" "/web/pairings" "/web/pairings/redeem" "/web/session/logout" "/user"}',
       ratelimit: {
         characteristics: ["cf.colo.id", "ip.src"],
         mitigationTimeout: 10,

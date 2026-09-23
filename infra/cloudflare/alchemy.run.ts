@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
+import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
@@ -20,6 +21,7 @@ const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
 const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
 const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
+const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
@@ -49,6 +51,17 @@ const resolveKapsoBindings = (
 
 const resolveResendKey = (development: boolean): typeof resendApiKey =>
   development ? resendApiKey.pipe(Config.withDefault(Redacted.make(""))) : resendApiKey;
+const admissionKeyBytes = 32;
+const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
+  development
+    ? patAdmissionKey.pipe(
+        Config.withDefault(
+          Redacted.make(
+            Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(admissionKeyBytes)))
+          )
+        )
+      )
+    : patAdmissionKey;
 
 const resolveAccessConfig = (
   development: boolean
@@ -232,6 +245,7 @@ export default Alchemy.Stack(
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         [productionTopology.ingress.coreBinding]: core,
         LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
+        PAT_ADMISSION_KEY: yield* resolvePatAdmissionKey(development),
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: production ? productionTopology.ingress.workersDev : true,

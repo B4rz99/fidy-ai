@@ -22,6 +22,8 @@ export {
 } from "~/core/tokens/pairing";
 export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rules";
 export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
+export { PATsGroup } from "~/shell/tokens/operations";
+export { PATPairingDirectGroup } from "~/pat-pairing-api";
 export {
   ManualPATIssuanceConsumed,
   ManualPATReviewExpired,

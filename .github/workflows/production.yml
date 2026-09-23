@@ -24,6 +24,7 @@ jobs:
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

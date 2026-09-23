@@ -1,3 +1,10 @@
+-- Ten-minute source admission retains only a keyed digest of the edge-observed visitor IP.
+CREATE TABLE pat_pairing_admission (
+  source_digest BLOB PRIMARY KEY NOT NULL CHECK (length(source_digest) = 32),
+  window_start_ms INTEGER NOT NULL,
+  started_count INTEGER NOT NULL CHECK (started_count BETWEEN 1 AND 20)
+) STRICT;
+CREATE INDEX pat_pairing_admission_expiry ON pat_pairing_admission(window_start_ms);
 -- A short-lived private proof joins a public request only after a fresh WebSession reviews it.
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,

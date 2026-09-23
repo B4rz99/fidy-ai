@@ -61,6 +61,7 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   CORE: { fetch: () => Promise.reject(new Error("unexpected Core delegation")) },
   LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+  PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
   RELEASE_GIT_SHA: gitRevision,
   ...overrides,
 });

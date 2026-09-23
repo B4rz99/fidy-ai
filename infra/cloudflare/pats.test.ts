@@ -34,7 +34,9 @@ const dig = (text: string): Promise<Uint8Array> =>
 // @effect-diagnostics-next-line globalDate:off
 const clock = (): number => Date.now();
 type Send = Readonly<{ path: string; method: "GET" | "POST" | "DELETE" }> &
-  Partial<Readonly<{ payload: object; session: string; bearer: string; origin: string }>>;
+  Partial<
+    Readonly<{ payload: object; session: string; bearer: string; origin: string; source: string }>
+  >;
 const setup = async (): Promise<{
   db: D1Database;
   send: (input: Send) => Promise<Response>;
@@ -124,9 +126,10 @@ const setup = async (): Promise<{
     payload,
     session,
     bearer,
+    source = "198.51.100.10",
     origin = "https://app.fidyapp.com",
   }: Send): Promise<Response> => {
-    const headers = new Headers({ origin });
+    const headers = new Headers({ origin, "cf-connecting-ip": source });
     if (payload !== undefined) headers.set("content-type", "application/json");
     if (session !== undefined) headers.set("cookie", session);
     if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
@@ -138,6 +141,7 @@ const setup = async (): Promise<{
     return publicWorker.fetch(request, {
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       LOCAL_CANONICAL_READ_BEARER: "",
+      PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
       RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
       CORE: {
         fetch: (incoming) =>
@@ -237,6 +241,21 @@ it("releases one scoped bearer to the private-code holder after web approval, ne
         .first()
     )?.bearer_digest
   ).not.toBe(issued.bearer);
+});
+
+it("refuses a source's PAT pairing burst without denying an unrelated client", async () => {
+  const { send } = await setup();
+  const attempt = (source: string): Promise<Response> =>
+    send({
+      path: "/pat-pairings",
+      method: "POST",
+      source,
+      payload: { recipientLabel: "Desktop agent", scopes: ["read"] },
+    });
+  const admitted = await Promise.all(Array.from({ length: 20 }, () => attempt("198.51.100.10")));
+  expect(admitted.map((result) => result.status)).toEqual(Array.from({ length: 20 }, () => 200));
+  expect((await attempt("198.51.100.10")).status).toBe(429);
+  expect((await attempt("203.0.113.20")).status).toBe(200);
 });
 
 it("serializes concurrent private-code claims so only one bearer is ever issued", async () => {

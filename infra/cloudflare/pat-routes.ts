@@ -1,42 +1,72 @@
+import { PATPairingDirectGroup, PATsGroup } from "@fidy/server/tokens-runtime";
+import { HttpApi } from "effect/unstable/httpapi";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
 
-const directPaths = new Set(["/pat-pairings", "/pat-pairings/claim"]);
-const browserPostPaths = new Set(["/pats/pairings/inspect", "/pats/pairings/approve"]);
-const collection = "/pats";
-const revocation = /^\/pats\/[a-z0-9]{8}$/u;
-/** Routes retained from the canonical PAT HttpApi declaration; unknown paths fail closed. */
-export const patRoute = (path: string): boolean =>
-  directPaths.has(path) ||
-  browserPostPaths.has(path) ||
-  path === collection ||
-  revocation.test(path);
-export const patDirectRoute = (path: string): boolean => directPaths.has(path);
-export const patBrowserRoute = (path: string): boolean =>
-  browserPostPaths.has(path) || path === collection || revocation.test(path);
-export const patMethods = (path: string): ReadonlyArray<string> => {
-  if (path === collection) return ["GET", "POST", "DELETE"];
-  if (revocation.test(path)) return ["DELETE"];
-  return ["POST"];
+type PATHandler = (request: Request, db: D1Database, path: string) => Promise<Response>;
+type OperationName =
+  | keyof typeof PATPairingDirectGroup.endpoints
+  | keyof typeof PATsGroup.endpoints;
+const handlers = {
+  start: startPATPairing,
+  claim: claimPATPairing,
+  inspectPATPairing,
+  approvePATPairing,
+  listPATs,
+  createManualPAT,
+  revokeAllPATs,
+  revokePAT: (request, db, path): Promise<Response> =>
+    revokePAT(request, db, path.split("/").at(-1) ?? ""),
+} satisfies Record<OperationName, PATHandler>;
+const handlersByName: ReadonlyMap<string, PATHandler> = new Map(Object.entries(handlers));
+
+const declared = HttpApi.make("patWorker").add(PATPairingDirectGroup).add(PATsGroup);
+type Route = Readonly<{
+  group: string;
+  name: string;
+  method: string;
+  template: string;
+}>;
+const routes: Array<Route> = [];
+HttpApi.reflect(declared, {
+  onGroup: () => {},
+  onEndpoint: ({ endpoint, group }) => {
+    if (!handlersByName.has(endpoint.identifier)) throw new Error("Unimplemented PAT operation");
+    routes.push({
+      group: group.identifier,
+      name: endpoint.identifier,
+      method: endpoint.method,
+      template: endpoint.path,
+    });
+  },
+});
+const matches = (template: string, path: string): boolean => {
+  const segments = template.split("/");
+  const supplied = path.split("/");
+  return (
+    segments.length === supplied.length &&
+    segments.every((segment, index) =>
+      segment.startsWith(":") ? supplied[index] !== "" : segment === supplied[index]
+    )
+  );
 };
-const handlers = new Map<string, (request: Request, db: D1Database) => Promise<Response>>([
-  ["POST /pat-pairings", startPATPairing],
-  ["POST /pat-pairings/claim", claimPATPairing],
-  ["POST /pats/pairings/inspect", inspectPATPairing],
-  ["POST /pats/pairings/approve", approvePATPairing],
-  ["GET /pats", listPATs],
-  ["POST /pats", createManualPAT],
-  ["DELETE /pats", revokeAllPATs],
-]);
-/** Only Core executes PAT handlers, after ingress has forwarded credential-only headers. */
+const forPath = (path: string): ReadonlyArray<Route> =>
+  routes.filter((route) => matches(route.template, path));
+/** PAT paths derive from the declared direct bootstrap and canonical operation groups. */
+export const patRoute = (path: string): boolean => forPath(path).length > 0;
+export const patDirectRoute = (path: string): boolean =>
+  forPath(path).some((route) => route.group === PATPairingDirectGroup.identifier);
+export const patBrowserRoute = (path: string): boolean =>
+  forPath(path).some((route) => route.group === PATsGroup.identifier);
+export const patMethods = (path: string): ReadonlyArray<string> =>
+  Array.from(new Set(forPath(path).map((route) => route.method)));
+/** Execute only a declared PAT operation, never a guessed path or method. */
 export const handlePATRequest = (request: Request, db: D1Database): Promise<Response> => {
   const path = new URL(request.url).pathname;
-  if (revocation.test(path) && request.method === "DELETE") {
-    return revokePAT(request, db, path.slice(collection.length + 1));
-  }
-  const handler = handlers.get(`${request.method} ${path}`);
+  const route = forPath(path).find((candidate) => candidate.method === request.method);
+  const handler = route === undefined ? undefined : handlersByName.get(route.name);
   return handler === undefined
     ? Promise.resolve(Response.json({ status: "method_not_allowed" }, { status: 405 }))
-    : handler(request, db);
+    : handler(request, db, path);
 };

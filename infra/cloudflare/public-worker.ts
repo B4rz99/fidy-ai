@@ -5,7 +5,7 @@ import {
   ownsTransactionPath as transactionPath,
 } from "@fidy/server/transaction-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Effect, Option } from "effect";
+import { Effect, Encoding, Option } from "effect";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -13,10 +13,12 @@ import {
 } from "./telemetry";
 import { browserOrigins } from "./topology";
 
+const minimumAdmissionKeyLength = 32;
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
   readonly CORE: Pick<Fetcher, "fetch">;
   readonly LOCAL_CANONICAL_READ_BEARER: string;
+  readonly PAT_ADMISSION_KEY: string;
 };
 
 type PublicWorker = Readonly<{
@@ -237,17 +239,39 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
       })
     : request.headers;
 };
-const coreRequest = (request: Request, signal: AbortSignal): Request => {
-  const path = new URL(request.url).pathname;
-  return new Request(
-    `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
-    {
-      headers: forwardedHeaders(request, path),
-      method: request.method,
-      body: request.method === "POST" ? request.body : undefined,
-      signal,
-    }
+const pairingSource = async (request: Request, environment: PublicEnvironment): Promise<string> => {
+  const visitor =
+    request.headers.get("cf-connecting-ip") ??
+    (environment.BROWSER_ORIGIN === browserOrigins.local ? "local-development" : "");
+  if (visitor.length === 0 || environment.PAT_ADMISSION_KEY.length < minimumAdmissionKeyLength) {
+    throw new Error("PAT admission unavailable");
+  }
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(environment.PAT_ADMISSION_KEY),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
   );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor));
+  return Encoding.encodeHex(new Uint8Array(signature));
+};
+const coreRequest = async (
+  request: Request,
+  environment: PublicEnvironment,
+  signal: AbortSignal
+): Promise<Request> => {
+  const path = new URL(request.url).pathname;
+  const headers = forwardedHeaders(request, path);
+  if (path === "/pat-pairings") {
+    headers.set("x-pat-source", await pairingSource(request, environment));
+  }
+  return new Request(`https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`, {
+    headers,
+    method: request.method,
+    body: request.method === "POST" ? request.body : undefined,
+    signal,
+  });
 };
 
 const hasPreflight = (path: string): boolean =>
@@ -325,7 +349,7 @@ const routeOwnedRequest = (
     return Promise.resolve(rejection.value);
   }
   return Effect.tryPromise({
-    try: (signal) => environment.CORE.fetch(coreRequest(request, signal)),
+    try: async (signal) => environment.CORE.fetch(await coreRequest(request, environment, signal)),
     catch: () => undefined,
   }).pipe(
     Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),

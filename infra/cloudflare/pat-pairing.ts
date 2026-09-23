@@ -6,7 +6,7 @@ import {
   buildPairedPATDisclosure,
   selectPATPairingPublicCodeSymbols,
 } from "@fidy/server/tokens-runtime";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Encoding, Option, Result, Schema } from "effect";
 import {
   canonical,
   currentMillis,
@@ -33,6 +33,8 @@ const symbolCount = 8;
 const sampleBytes = 16;
 // One source IP cannot exhaust this pool under the edge's 60-per-10-second budget.
 const maxPairingsPerWindow = 4000;
+const maxPairingsPerSource = 20;
+const sourceDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const maximumReviewAttempts = 10;
 const reviewRetrySeconds = 60;
 const rateLimited = (): Response =>
@@ -81,34 +83,88 @@ export const PairingRow = Schema.Struct({
 });
 export type PairingRow = typeof PairingRow.Type;
 
+type StartedPairing = Readonly<{
+  source: Uint8Array;
+  payload: typeof StartPATPairingPayload.Type;
+  current: number;
+  code: string;
+  privateCode: string;
+  pairingId: string;
+  expires: number;
+}>;
+const reservePairing = async (db: D1Database, start: StartedPairing): Promise<boolean> => {
+  const { source, payload, current, code, privateCode, pairingId, expires } = start;
+  const committed = await db.batch([
+    db
+      .prepare(`DELETE FROM pat_pairing_admission WHERE window_start_ms <= ?`)
+      .bind(current - pairingMilliseconds * 2),
+    db
+      .prepare(`INSERT INTO pat_pairing_admission (source_digest,window_start_ms,started_count)
+        SELECT ?,?,1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?
+        ON CONFLICT(source_digest) DO UPDATE SET
+          window_start_ms = CASE WHEN window_start_ms <= ? THEN excluded.window_start_ms ELSE window_start_ms END,
+          started_count = CASE WHEN window_start_ms <= ? THEN 1 ELSE started_count + 1 END
+        WHERE (window_start_ms <= ? OR started_count < ?)
+          AND (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`)
+      .bind(
+        source,
+        current,
+        current - pairingMilliseconds,
+        maxPairingsPerWindow,
+        current - pairingMilliseconds,
+        current - pairingMilliseconds,
+        current - pairingMilliseconds,
+        maxPairingsPerSource,
+        current - pairingMilliseconds,
+        maxPairingsPerWindow
+      ),
+    db
+      .prepare(`INSERT INTO pat_pairings
+        (id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,expires_at_ms)
+        SELECT ?,?,?,?,?,?,?,? WHERE changes() = 1
+        AND (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`)
+      .bind(
+        pairingId,
+        code,
+        await digest(privateCode),
+        payload.recipientLabel,
+        JSON.stringify(payload.scopes),
+        payload.lifetimeDays,
+        current,
+        expires,
+        current - pairingMilliseconds,
+        maxPairingsPerWindow
+      ),
+  ]);
+  return committed[2]?.meta.changes === 1;
+};
 /** Bound anonymous creation before allocating a new pairing or storing its digest. */
 export const startPATPairing = async (request: Request, db: D1Database): Promise<Response> => {
   const payload = await decodeBody(request, StartPATPairingPayload);
   if (Option.isNone(payload)) return invalid();
+  const source = Schema.decodeUnknownOption(sourceDigest)(request.headers.get("x-pat-source"));
+  if (Option.isNone(source)) return unavailable();
+  const bytes = Encoding.decodeHex(source.value);
+  if (Result.isFailure(bytes)) return unavailable();
   const current = currentMillis();
   const code = publicCode();
   const privateCode = newProof();
   const pairingId = newId();
   const expires = current + pairingMilliseconds;
   try {
-    const inserted = await db
-      .prepare(`INSERT INTO pat_pairings
-      (id,public_code,proof_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,expires_at_ms)
-      SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?`)
-      .bind(
-        pairingId,
-        code,
-        await digest(privateCode),
-        payload.value.recipientLabel,
-        JSON.stringify(payload.value.scopes),
-        payload.value.lifetimeDays,
+    if (
+      !(await reservePairing(db, {
+        source: bytes.success,
+        payload: payload.value,
         current,
+        code,
+        privateCode,
+        pairingId,
         expires,
-        current - pairingMilliseconds,
-        maxPairingsPerWindow
-      )
-      .run();
-    if (inserted.meta.changes !== 1) return rateLimited();
+      }))
+    ) {
+      return rateLimited();
+    }
     return response({
       pairingId,
       privateDeviceCode: privateCode,

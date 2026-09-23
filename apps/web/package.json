@@ -29,7 +29,7 @@
     "@fontsource-variable/geist": "5.3.0",
     "@hugeicons/core-free-icons": "4.3.3",
     "@hugeicons/react": "1.1.10",
-    "@tanstack/react-router": "1.170.36",
+    "@tanstack/react-router": "1.170.37",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "effect": "4.0.0-rc.115",
@@ -57,6 +57,6 @@
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "5.0.1",
-    "wrangler": "4.132.0"
+    "wrangler": "4.133.0"
   }
 }

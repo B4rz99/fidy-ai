@@ -57,8 +57,9 @@ const digest = (value: string): Promise<Uint8Array> =>
 const equalDigest = (left: ReadonlyArray<number>, right: Uint8Array): boolean => {
   if (left.length !== digestLength || right.length !== digestLength) return false;
   let difference = 0;
-  for (let index = 0; index < digestLength; index++)
-    {difference |= (left[index] ?? 0) ^ (right[index] ?? 0);}
+  for (let index = 0; index < digestLength; index++) {
+    difference |= (left[index] ?? 0) ^ (right[index] ?? 0);
+  }
   return difference === 0;
 };
 // @effect-diagnostics-next-line asyncFunction:off
@@ -276,8 +277,9 @@ export const completeBrowserPairingEmail = async (
         publicCode,
         current,
       }))
-    )
-      {return invalid();}
+    ) {
+      return invalid();
+    }
     return Response.json(
       { status: "pairing_approved" },
       { headers: { "cache-control": "no-store" } }

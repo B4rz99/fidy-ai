@@ -62,8 +62,9 @@ export const verifySupportAccess = async (
   issuer: string,
   audience: string
 ): Promise<Option.Option<{ issuer: string; subject: string }>> => {
-  if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion))
-    {return Option.none();}
+  if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
+    return Option.none();
+  }
   try {
     let jwks = keys.get(issuer);
     if (jwks === undefined) {

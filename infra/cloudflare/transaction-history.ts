@@ -333,7 +333,7 @@ const patHistoryStatements = (
   ];
 };
 
-const presentPATHistory = async (
+const presentPATHistory = (
   input: Readonly<{
     db: D1Database;
     results: ReadonlyArray<D1Result>;
@@ -345,9 +345,11 @@ const presentPATHistory = async (
   if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
     return refusedPATWork(db, selection.subject.userId);
   }
-  if (Option.isNone(query)) return Option.isSome(selection.id) ? notFound() : invalid();
+  if (Option.isNone(query)) {
+    return Promise.resolve(Option.isSome(selection.id) ? notFound() : invalid());
+  }
   const rows = results[1];
-  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+  return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
 };
 
 // @effect-diagnostics-next-line asyncFunction:off

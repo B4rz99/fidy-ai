@@ -266,43 +266,53 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
       })
     : request.headers;
 };
-const pairingSource = async (request: Request, environment: PublicEnvironment): Promise<string> => {
-  const visitor =
-    request.headers.get("cf-connecting-ip") ??
-    (environment.BROWSER_ORIGIN === browserOrigins.local ? "local-development" : "");
-  if (visitor.length === 0 || environment.PAT_ADMISSION_KEY.length < minimumAdmissionKeyLength) {
-    throw new Error("PAT admission unavailable");
-  }
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(environment.PAT_ADMISSION_KEY),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor));
-  return Encoding.encodeHex(new Uint8Array(signature));
-};
-const coreRequest = async (
+const pairingSource = (
   request: Request,
-  environment: PublicEnvironment,
-  signal: AbortSignal
-): Promise<Request> => {
-  const path = new URL(request.url).pathname;
-  const headers = forwardedHeaders(request, path);
-  if (path === "/pat-pairings") {
-    headers.set("x-pat-source", await pairingSource(request, environment));
-  }
-  return new Request(
-    `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
-    {
-      headers,
-      method: request.method,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-      signal,
+  environment: PublicEnvironment
+): Effect.Effect<string, void> =>
+  Effect.gen(function* () {
+    const visitor =
+      request.headers.get("cf-connecting-ip") ??
+      (environment.BROWSER_ORIGIN === browserOrigins.local ? "local-development" : "");
+    if (visitor.length === 0 || environment.PAT_ADMISSION_KEY.length < minimumAdmissionKeyLength) {
+      throw new Error("PAT admission unavailable");
     }
-  );
-};
+    const key = yield* Effect.tryPromise({
+      try: () =>
+        crypto.subtle.importKey(
+          "raw",
+          new TextEncoder().encode(environment.PAT_ADMISSION_KEY),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["sign"]
+        ),
+      catch: () => undefined,
+    });
+    const signature = yield* Effect.tryPromise({
+      try: () => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor)),
+      catch: () => undefined,
+    });
+    return Encoding.encodeHex(new Uint8Array(signature));
+  });
+const coreRequest = (
+  request: Request,
+  environment: PublicEnvironment
+): Effect.Effect<Request, void> =>
+  Effect.gen(function* () {
+    const path = new URL(request.url).pathname;
+    const headers = forwardedHeaders(request, path);
+    if (path === "/pat-pairings") {
+      headers.set("x-pat-source", yield* pairingSource(request, environment));
+    }
+    return new Request(
+      `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
+      {
+        headers,
+        method: request.method,
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      }
+    );
+  });
 
 const hasPreflight = (path: string): boolean =>
   preflightPaths.has(path) ||
@@ -379,9 +389,12 @@ const routeOwnedRequest = (
   if (Option.isSome(rejection)) {
     return Promise.resolve(rejection.value);
   }
-  return Effect.tryPromise({
-    try: async (signal) => environment.CORE.fetch(await coreRequest(request, environment, signal)),
-    catch: () => undefined,
+  return Effect.gen(function* () {
+    const forwarded = yield* coreRequest(request, environment);
+    return yield* Effect.tryPromise({
+      try: (signal) => environment.CORE.fetch(forwarded, { signal }),
+      catch: () => undefined,
+    });
   }).pipe(
     Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),
     Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),

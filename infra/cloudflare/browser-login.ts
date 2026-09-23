@@ -13,7 +13,18 @@ import {
 } from "@fidy/server/identity-runtime";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { BackupRecoveryCode } from "@fidy/server/client";
-import { Clock, Context, DateTime, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Encoding,
+  Exit,
+  Function,
+  Layer,
+  Option,
+  Schema,
+} from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
@@ -393,12 +404,15 @@ export const browserSession = async (
 };
 
 /** Resolve the exact still-fresh browser session for an account-security action. */
-export const freshBrowserSession = (
-  request: Request,
-  db: D1Database,
-  current: number
-): Promise<Option.Option<typeof Session.Type>> =>
-  browserSession(request, db, { current, fresh: true });
+export const freshBrowserSession: {
+  (request: Request, db: D1Database, current: number): Promise<Option.Option<typeof Session.Type>>;
+  (
+    db: D1Database,
+    current: number
+  ): (request: Request) => Promise<Option.Option<typeof Session.Type>>;
+} = Function.dual(3, (request: Request, db: D1Database, current: number) =>
+  browserSession(request, db, { current, fresh: true })
+);
 
 /** Return the canonical User projection only for a live, unrevoked WebSession. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off

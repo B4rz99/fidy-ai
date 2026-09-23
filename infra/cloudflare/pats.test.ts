@@ -1222,12 +1222,13 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
   let withdrawOnCapture = false;
   const grantId = "e0000000-0000-4000-8000-000000000041";
   const writerGrantId = "e0000000-0000-4000-8000-000000000043";
+  let revocationSequence = 0;
   const revoke = (db: D1Database): Promise<D1Result> =>
     db
       .prepare(`INSERT INTO consent_user_revocations
       (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
       .bind(
-        crypto.randomUUID(),
+        `e0000000-0000-4000-8000-${String(++revocationSequence).padStart(12, "0")}`,
         userB,
         writerGrantId,
         "40000000-0000-4000-8000-000000000002",
@@ -1898,12 +1899,17 @@ it("shares the Category work budget between WebSessions, PATs and Transaction wo
     await issuedResponse.json()
   ).data;
   await db.batch(
-    Array.from({ length: 255 }, () =>
+    Array.from({ length: 255 }, (_, index) =>
       db
         .prepare(`INSERT INTO transaction_audit
     (id,user_id,session_id,operation,outcome,occurred_at_ms)
     VALUES (?, ?, ?, 'transactions.listTransactions', 'success', ?)`)
-        .bind(crypto.randomUUID(), userA, "40000000-0000-4000-8000-000000000001", clock())
+        .bind(
+          `e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+          userA,
+          "40000000-0000-4000-8000-000000000001",
+          clock()
+        )
     )
   );
   expect((await send({ path: "/categories", method: "GET", session: sessions[0] })).status).toBe(

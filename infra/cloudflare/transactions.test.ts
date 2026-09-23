@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
   Transaction,
@@ -217,53 +217,55 @@ const Listed = Schema.Struct({
   next: Schema.Array(Schema.Unknown),
 });
 
-it("rolls back public Transaction capture when its audit silently refuses a write, then permits retry", async () => {
-  const db = await setup();
-  const post = (): Promise<Response> =>
-    sendPublicRequest(
-      db,
-      new Request("https://api.fidyapp.com/transactions", {
-        method: "POST",
-        headers: {
-          origin: "https://app.fidyapp.com",
-          cookie: `__Host-fidy_session=${bearer(0)}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(input()),
-      })
-    );
-  await db
-    .prepare(`CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON transaction_audit
+it("rolls back public Transaction capture when its audit silently refuses a write, then permits retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise({ try: () => setup(), catch: () => undefined });
+      const post = (): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(input()),
+          })
+        );
+      yield* Effect.tryPromise({
+        try: () =>
+          db
+            .prepare(`CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON transaction_audit
     WHEN NEW.operation = 'transactions.createTransaction' BEGIN SELECT RAISE(IGNORE); END`)
-    .run();
-  expect((await post()).status).not.toBe(201);
-  expect(
-    (
-      await db
-        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
-        .bind(users[0])
-        .first()
-    )?.total
-  ).toBe(0);
-  expect(
-    (
-      await db
-        .prepare("SELECT count(*) AS total FROM source_attestations WHERE user_id = ?")
-        .bind(users[0])
-        .first()
-    )?.total
-  ).toBe(0);
-  await db.prepare("DROP TRIGGER refuse_capture_audit").run();
-  expect((await post()).status).toBe(201);
-  expect(
-    (
-      await db
-        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
-        .bind(users[0])
-        .first()
-    )?.total
-  ).toBe(1);
-});
+            .run(),
+        catch: () => undefined,
+      });
+      expect((yield* Effect.tryPromise({ try: post, catch: () => undefined })).status).not.toBe(
+        201
+      );
+      const count = (
+        table: "transactions" | "source_attestations"
+      ): Effect.Effect<Option.Option<{ total: number }>, void> =>
+        Effect.tryPromise({
+          try: () =>
+            db
+              .prepare(`SELECT count(*) AS total FROM ${table} WHERE user_id = ?`)
+              .bind(users[0])
+              .first<{ total: number }>(),
+          catch: () => undefined,
+        }).pipe(Effect.map(Option.fromNullishOr));
+      expect(Option.getOrUndefined(yield* count("transactions"))?.total).toBe(0);
+      expect(Option.getOrUndefined(yield* count("source_attestations"))?.total).toBe(0);
+      yield* Effect.tryPromise({
+        try: () => db.prepare("DROP TRIGGER refuse_capture_audit").run(),
+        catch: () => undefined,
+      });
+      expect((yield* Effect.tryPromise({ try: post, catch: () => undefined })).status).toBe(201);
+      expect(Option.getOrUndefined(yield* count("transactions"))?.total).toBe(1);
+    })
+  ));
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("coordinates concurrent public mutations through a real per-User Durable Object binding", async () => {

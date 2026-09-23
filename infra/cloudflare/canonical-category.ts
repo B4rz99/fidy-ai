@@ -11,7 +11,7 @@ import {
   recordCanonicalPATWork,
   recordLivePATUse,
 } from "@fidy/server/tokens-runtime";
-import { Option, Schema } from "effect";
+import { Effect, Function, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
 import { currentMillis, newId } from "./pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
@@ -66,56 +66,60 @@ const categoryStatements = (
   ];
 };
 
-const refusedCategoryWork = async (
+const refusedCategoryWork = (
   db: D1Database,
   subject: TransactionSubject | AuthorizedPAT
-): Promise<Response> => {
-  if (
-    "patId" in subject &&
-    (await db
-      .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
-      .bind(subject.userId)
-      .first()) !== null
-  ) {
-    return userActionRequired();
-  }
-  return unauthenticated();
-};
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    if ("patId" in subject) {
+      const withdrawn = yield* Effect.tryPromise({
+        try: () =>
+          db
+            .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
+            .bind(subject.userId)
+            .first(),
+        catch: () => undefined,
+      });
+      if (withdrawn !== null) return userActionRequired();
+    }
+    return unauthenticated();
+  });
 
 const auditIndexFromEnd = -2;
 const categoryWorkAccepted = (results: ReadonlyArray<D1Result>, pat: boolean): boolean =>
   results.at(auditIndexFromEnd)?.meta.changes === 1 && (!pat || results[0]?.meta.changes === 1);
 
-const presentCategoryWork = async (
+const presentCategoryWork = (
   db: D1Database,
   subject: TransactionSubject | AuthorizedPAT,
   results: ReadonlyArray<D1Result>
-): Promise<Response> => {
-  const pat = "patId" in subject;
-  if (!categoryWorkAccepted(results, pat)) {
-    return refusedCategoryWork(db, subject);
-  }
-  const rows = results[pat ? 1 : 0]?.results;
-  const response = categoryResponseFromRows(rows);
-  return Option.isSome(response)
-    ? new Response(
-        JSON.stringify(
-          Schema.encodeSync(Schema.toCodecJson(ListCategoriesResponse))(response.value)
-        ),
-        { status: 200, headers }
-      )
-    : unavailable();
-};
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const pat = "patId" in subject;
+    if (!categoryWorkAccepted(results, pat)) {
+      return yield* refusedCategoryWork(db, subject);
+    }
+    const rows = results[pat ? 1 : 0]?.results;
+    const response = categoryResponseFromRows(rows);
+    if (Option.isNone(response)) return unavailable();
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse))(
+      response.value
+    );
+    return new Response(body, { status: 200, headers });
+  });
 
 /** Query, live authority and shared User budget commit in one D1 unit for either credential. */
-export const executeProtectedCategories = async (
-  db: D1Database,
-  subject: TransactionSubject | AuthorizedPAT
-): Promise<Response> => {
-  try {
-    const results = await commitPATUnit(db, categoryStatements(db, subject, currentMillis()));
-    return presentCategoryWork(db, subject, results);
-  } catch {
-    return unavailable();
-  }
-};
+export const executeProtectedCategories: {
+  (db: D1Database, subject: TransactionSubject | AuthorizedPAT): Promise<Response>;
+  (subject: TransactionSubject | AuthorizedPAT): (db: D1Database) => Promise<Response>;
+} = Function.dual(
+  2,
+  (db: D1Database, subject: TransactionSubject | AuthorizedPAT): Promise<Response> =>
+    Effect.gen(function* () {
+      const results = yield* Effect.tryPromise({
+        try: () => commitPATUnit(db, categoryStatements(db, subject, currentMillis())),
+        catch: () => undefined,
+      });
+      return yield* presentCategoryWork(db, subject, results);
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.runPromise)
+);

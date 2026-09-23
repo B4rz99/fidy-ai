@@ -1,29 +1,24 @@
-import type { Crypto, Effect, Option } from "effect";
-import type { ProviderQualifiedMessages } from "~/core/consent/model";
-import type { AccessTier } from "~/core/access-tier/contract";
+import type { Crypto, Effect } from "effect";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/hosted-inference/operations";
+import type { EmailReplacementMutation } from "~/shell/email-authentication/mutation";
 import type { OperationId } from "~/shell/api";
 import type { Telemetry } from "~/shell/observability/operations";
-import type { CanonicalCaller, ChildOperationAudit } from "./authz";
+import type { ChildOperationAudit } from "./authz";
+import type { CanonicalImplementationCaller } from "./canonical-implementation-caller";
 import type { CanonicalEndpoint, CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
 
-/** Caller facts supplied to every canonical implementation once the executor has resolved one. */
-export type CanonicalImplementationCaller = Readonly<{
-  resolved: CanonicalCaller;
-  accessTier: AccessTier;
-  /** Exact provider evidence exposed lazily only after the hosted confirmation permit is consumed. */
-  confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
-}>;
+export type { CanonicalImplementationCaller } from "./canonical-implementation-caller";
 
 /** What canonical execution itself requires, before any child-operation auditing. */
 export type CanonicalExecutionRequirements =
   | SqlClient.SqlClient
   | Telemetry
   | Crypto.Crypto
-  | HostedInference;
+  | HostedInference
+  | EmailReplacementMutation;
 
 /** Everything a canonical implementation may still require once the executor has resolved a caller. */
 export type CanonicalImplementationRequirements =

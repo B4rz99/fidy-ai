@@ -67,6 +67,12 @@ export {
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+export { CompleteEmailReplacementPayload } from "./web-auth-api";
+export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
+export {
+  emailReplacementPath,
+  emailReplacementCompletionPath,
+} from "~/shell/email-authentication/path";
 export { PaymentRequestId } from "~/core/subscription/model";
 export { PriceId } from "~/core/subscription/reference";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
@@ -93,4 +99,6 @@ export {
   BrowserPairingEmailAuthenticationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
+  emailReplacementFreshBody,
+  emailReplacementInvalidBody,
 } from "./web-auth-api";

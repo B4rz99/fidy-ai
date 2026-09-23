@@ -1,4 +1,5 @@
 import { listCategoriesPath } from "@fidy/server/categories-path";
+import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
@@ -156,6 +157,10 @@ const enrollmentPath = (path: string): boolean =>
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
+const replacementPaths = [
+  emailReplacementOperations.request.path,
+  emailReplacementOperations.complete.path,
+] as const;
 const supportRecoveryPath = "/internal/support-recovery";
 const emailAuthenticationPaths = [
   "/web/email/authentication/start",
@@ -165,6 +170,7 @@ const postPaths = new Set<string>([
   callbackPath,
   verificationPath,
   rotateRecoveryPath,
+  ...replacementPaths,
   supportRecoveryPath,
   ...emailAuthenticationPaths,
   ...pairingPaths,
@@ -173,6 +179,7 @@ const postPaths = new Set<string>([
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
+  ...replacementPaths,
   ...emailAuthenticationPaths,
   ...pairingPaths,
 ]);
@@ -195,7 +202,12 @@ const callbackHeaders = (request: Request): Headers =>
   ]);
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
-  if (path === "/web/session/logout" || path === rotateRecoveryPath || enrollmentPath(path)) {
+  if (
+    path === "/web/session/logout" ||
+    path === rotateRecoveryPath ||
+    replacementPaths.some((owned) => owned === path) ||
+    enrollmentPath(path)
+  ) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
   return headers;

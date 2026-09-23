@@ -237,13 +237,13 @@
       },
       "Arrays_3": {
         "items": {
-          "$ref": "#/components/schemas/Objects_22"
+          "$ref": "#/components/schemas/Objects_23"
         },
         "type": "array"
       },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_22"
+          "$ref": "#/components/schemas/Objects_23"
         },
         "type": "array"
       },
@@ -880,6 +880,21 @@
         "minLength": 1,
         "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
+      },
+      "CompletedEmailReplacement": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "replaced"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
       },
       "ConsentRequiredEncoded": {
         "additionalProperties": false,
@@ -2415,6 +2430,73 @@
           }
         ]
       },
+      "EmailReplacementFreshPairingRequiredApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "fresh_pairing_required"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "Vincula el navegador de nuevo antes de cambiar tu correo."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "EmailReplacementInvalidApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_13"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "EmailReplacementOriginRejectedApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_13"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "EmailReplacementPayloadTooLargeApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_13"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
       "EmailReplacementPending": {
         "additionalProperties": false,
         "properties": {
@@ -2429,6 +2511,22 @@
           "status"
         ],
         "type": "object"
+      },
+      "EmailReplacementUnsupportedMediaTypeApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_13"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "EmailVerificationCode": {
+        "pattern": "^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){5}$",
+        "type": "string"
       },
       "FieldIssue": {
         "additionalProperties": false,
@@ -3306,6 +3404,28 @@
       "Objects_13": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "enum": [
+              "verification_invalid"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "enum": [
+              "El código no es válido. Revisa el correo o solicita uno nuevo."
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "Objects_14": {
+        "additionalProperties": false,
+        "properties": {
           "data": {
             "$ref": "#/components/schemas/Transaction"
           },
@@ -3319,7 +3439,7 @@
         ],
         "type": "object"
       },
-      "Objects_14": {
+      "Objects_15": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -3334,7 +3454,7 @@
         ],
         "type": "object"
       },
-      "Objects_15": {
+      "Objects_16": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3350,7 +3470,7 @@
         ],
         "type": "object"
       },
-      "Objects_16": {
+      "Objects_17": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3366,7 +3486,7 @@
         ],
         "type": "object"
       },
-      "Objects_17": {
+      "Objects_18": {
         "additionalProperties": false,
         "properties": {
           "categoryId": {
@@ -3401,7 +3521,7 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "presentation": {
-            "$ref": "#/components/schemas/Objects_14"
+            "$ref": "#/components/schemas/Objects_15"
           }
         },
         "required": [
@@ -3415,27 +3535,11 @@
         ],
         "type": "object"
       },
-      "Objects_18": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Transaction"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
       "Objects_19": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/TransactionId"
+            "$ref": "#/components/schemas/Transaction"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3467,7 +3571,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/EmailForwardingAddress"
+            "$ref": "#/components/schemas/TransactionId"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3483,7 +3587,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/StatementSubmission"
+            "$ref": "#/components/schemas/EmailForwardingAddress"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3496,6 +3600,22 @@
         "type": "object"
       },
       "Objects_22": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatementSubmission"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_23": {
         "additionalProperties": false,
         "properties": {
           "message": {
@@ -3511,7 +3631,7 @@
         ],
         "type": "object"
       },
-      "Objects_23": {
+      "Objects_24": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3527,7 +3647,7 @@
         ],
         "type": "object"
       },
-      "Objects_24": {
+      "Objects_25": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3545,22 +3665,6 @@
               "deliveryAttempt"
             ],
             "type": "object"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_25": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3592,7 +3696,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3624,7 +3728,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/MemoryId"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3656,7 +3760,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
+            "$ref": "#/components/schemas/MemoryId"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3671,6 +3775,22 @@
       "Objects_31": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_32": {
+        "additionalProperties": false,
+        "properties": {
           "publicCode": {
             "type": "string"
           }
@@ -3680,7 +3800,7 @@
         ],
         "type": "object"
       },
-      "Objects_32": {
+      "Objects_33": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3696,7 +3816,7 @@
         ],
         "type": "object"
       },
-      "Objects_33": {
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3712,7 +3832,7 @@
         ],
         "type": "object"
       },
-      "Objects_34": {
+      "Objects_35": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4392,10 +4512,10 @@
         "additionalProperties": false,
         "properties": {
           "firstTransaction": {
-            "$ref": "#/components/schemas/Objects_17"
+            "$ref": "#/components/schemas/Objects_18"
           },
           "secondTransaction": {
-            "$ref": "#/components/schemas/Objects_17"
+            "$ref": "#/components/schemas/Objects_18"
           }
         },
         "required": [
@@ -7431,7 +7551,7 @@
           "presentation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Objects_14"
+                "$ref": "#/components/schemas/Objects_15"
               },
               {
                 "anyOf": [
@@ -8265,7 +8385,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_34"
+                    "$ref": "#/components/schemas/Objects_35"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -8301,7 +8421,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_34"
+                    "$ref": "#/components/schemas/Objects_35"
                   }
                 },
                 "required": [
@@ -8333,7 +8453,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_34"
+                    "$ref": "#/components/schemas/Objects_35"
                   }
                 },
                 "required": [
@@ -8515,7 +8635,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_31"
+                    "$ref": "#/components/schemas/Objects_32"
                   }
                 },
                 "required": [
@@ -8816,7 +8936,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_13"
+                "$ref": "#/components/schemas/Objects_14"
               }
             },
             "required": [
@@ -8839,7 +8959,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_15"
+                "$ref": "#/components/schemas/Objects_16"
               }
             },
             "required": [
@@ -8862,7 +8982,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_16"
+                "$ref": "#/components/schemas/Objects_17"
               }
             },
             "required": [
@@ -8885,7 +9005,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_18"
+                "$ref": "#/components/schemas/Objects_19"
               }
             },
             "required": [
@@ -8908,7 +9028,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_19"
+                "$ref": "#/components/schemas/Objects_20"
               }
             },
             "required": [
@@ -8931,7 +9051,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_20"
+                "$ref": "#/components/schemas/Objects_21"
               }
             },
             "required": [
@@ -8954,7 +9074,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_21"
+                "$ref": "#/components/schemas/Objects_22"
               }
             },
             "required": [
@@ -8977,7 +9097,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_23"
+                "$ref": "#/components/schemas/Objects_24"
               }
             },
             "required": [
@@ -9000,7 +9120,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_24"
+                "$ref": "#/components/schemas/Objects_25"
               }
             },
             "required": [
@@ -9023,7 +9143,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_25"
+                "$ref": "#/components/schemas/Objects_26"
               }
             },
             "required": [
@@ -9046,7 +9166,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_26"
+                "$ref": "#/components/schemas/Objects_27"
               }
             },
             "required": [
@@ -9069,7 +9189,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_27"
+                "$ref": "#/components/schemas/Objects_28"
               }
             },
             "required": [
@@ -9092,7 +9212,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_28"
+                "$ref": "#/components/schemas/Objects_29"
               }
             },
             "required": [
@@ -9115,7 +9235,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_29"
+                "$ref": "#/components/schemas/Objects_30"
               }
             },
             "required": [
@@ -9138,7 +9258,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_30"
+                "$ref": "#/components/schemas/Objects_31"
               }
             },
             "required": [
@@ -9161,7 +9281,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_32"
+                "$ref": "#/components/schemas/Objects_33"
               }
             },
             "required": [
@@ -9184,7 +9304,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_33"
+                "$ref": "#/components/schemas/Objects_34"
               }
             },
             "required": [
@@ -11383,9 +11503,9 @@
           "emailAuthentication"
         ],
         "x-fidy-access": {
-          "type": "fresh-web-or-verified-whatsapp-hosted"
+          "type": "fresh-web-session-only"
         },
-        "x-fidy-agent-confirmation": "required",
+        "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
@@ -11491,7 +11611,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_20"
+                  "$ref": "#/components/schemas/Objects_21"
                 }
               }
             },
@@ -11705,7 +11825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_23"
+                  "$ref": "#/components/schemas/Objects_24"
                 }
               }
             },
@@ -11805,7 +11925,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_21"
+                  "$ref": "#/components/schemas/Objects_22"
                 }
               }
             },
@@ -12026,7 +12146,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_24"
+                  "$ref": "#/components/schemas/Objects_25"
                 }
               }
             },
@@ -12125,7 +12245,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_26"
+                  "$ref": "#/components/schemas/Objects_27"
                 }
               }
             },
@@ -12224,7 +12344,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_25"
+                  "$ref": "#/components/schemas/Objects_26"
                 }
               }
             },
@@ -12511,7 +12631,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_27"
+                  "$ref": "#/components/schemas/Objects_28"
                 }
               }
             },
@@ -12610,7 +12730,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_29"
+                  "$ref": "#/components/schemas/Objects_30"
                 }
               }
             },
@@ -12717,7 +12837,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_28"
+                  "$ref": "#/components/schemas/Objects_29"
                 }
               }
             },
@@ -13148,7 +13268,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_30"
+                  "$ref": "#/components/schemas/Objects_31"
                 }
               }
             },
@@ -13372,7 +13492,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_33"
+                  "$ref": "#/components/schemas/Objects_34"
                 }
               }
             },
@@ -13464,7 +13584,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_31"
+                "$ref": "#/components/schemas/Objects_32"
               }
             }
           },
@@ -13475,7 +13595,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_32"
+                  "$ref": "#/components/schemas/Objects_33"
                 }
               }
             },
@@ -14018,7 +14138,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_13"
+                  "$ref": "#/components/schemas/Objects_14"
                 }
               }
             },
@@ -14127,7 +14247,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_19"
+                  "$ref": "#/components/schemas/Objects_20"
                 }
               }
             },
@@ -14354,7 +14474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_18"
+                  "$ref": "#/components/schemas/Objects_19"
                 }
               }
             },
@@ -14569,7 +14689,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_15"
+                  "$ref": "#/components/schemas/Objects_16"
                 }
               }
             },
@@ -14669,7 +14789,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_16"
+                  "$ref": "#/components/schemas/Objects_17"
                 }
               }
             },
@@ -14936,6 +15056,151 @@
             "evaluation": "operation"
           },
           "type": "pat-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/web/email/replacement/verify": {
+      "post": {
+        "description": "Verify the candidate mailbox and replace the one VerifiedEmailCredential under a fresh WebSession.",
+        "operationId": "emailAuthentication.completeEmailReplacement",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "combinedCode": {
+                    "$ref": "#/components/schemas/EmailVerificationCode"
+                  }
+                },
+                "required": [
+                  "combinedCode"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CompletedEmailReplacement"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EmailReplacementInvalidApiEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "EmailReplacementInvalidApi | ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EmailReplacementFreshPairingRequiredApiEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "EmailReplacementFreshPairingRequiredApi | Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EmailReplacementOriginRejectedApiEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "EmailReplacementOriginRejectedApi | ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailReplacementPayloadTooLargeApiEncoded"
+                }
+              }
+            },
+            "description": "EmailReplacementPayloadTooLargeApi"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailReplacementUnsupportedMediaTypeApiEncoded"
+                }
+              }
+            },
+            "description": "EmailReplacementUnsupportedMediaTypeApi"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "emailAuthentication"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-session-only"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",

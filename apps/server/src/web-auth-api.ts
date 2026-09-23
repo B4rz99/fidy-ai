@@ -182,7 +182,7 @@ const emailReplacementFreshError = {
 
 /** Body accepted by the first-party browser replacement-completion endpoint. */
 export const CompleteEmailReplacementPayload = Schema.Struct({
-  combinedCode: Schema.Unknown,
+  combinedCode: EmailVerificationCode,
 });
 /** Decoded browser replacement-completion body. */
 export type CompleteEmailReplacementPayload = typeof CompleteEmailReplacementPayload.Type;
@@ -236,24 +236,6 @@ export class EmailReplacementFreshPairingRequiredApi extends Schema.Error<EmailR
 export const emailReplacementInvalidBody = { error: emailReplacementInvalidError } as const;
 /** Shared bounded stale-authority payload used by raw browser handlers. */
 export const emailReplacementFreshBody = { error: emailReplacementFreshError } as const;
-
-/** First-party browser contract for completing verified-email replacement. */
-export const EmailReplacementWebAuthGroup = HttpApiGroup.make("emailReplacement").add(
-  HttpApiEndpoint.post("complete", "/web/email/replacement/verify", {
-    payload: CompleteEmailReplacementPayload,
-    success: CompletedEmailReplacement,
-    error: [
-      EmailReplacementInvalidApi,
-      EmailReplacementFreshPairingRequiredApi,
-      EmailReplacementOriginRejectedApi,
-      EmailReplacementPayloadTooLargeApi,
-      EmailReplacementUnsupportedMediaTypeApi,
-    ],
-  }).annotate(
-    OpenApi.Description,
-    "Consume one mailbox proof under the same User's currently fresh browser session."
-  )
-);
 
 const browserPairingEmailAuthenticationInvalidError = {
   code: "authentication_invalid",
@@ -359,7 +341,6 @@ export const BrowserPairingEmailAuthenticationWebAuthGroup = HttpApiGroup.make(
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
   .add(EmailOnboardingWebAuthGroup)
-  .add(EmailReplacementWebAuthGroup)
   .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}
 

@@ -5,6 +5,7 @@ import {
   listCategoriesResponse,
 } from "@fidy/server/categories";
 import { HostedInference } from "@fidy/server/hosted-inference";
+import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
@@ -31,6 +32,14 @@ import {
 } from "./browser-pairing-email-delivery";
 import { handleSupportRecovery } from "./support-recovery";
 import { handleCardEnrollment } from "./card-enrollment";
+import { completeEmailReplacement, requestEmailReplacement } from "./email-replacement";
+import {
+  type EmailReplacementEnvironment,
+  dispatchEmailReplacement,
+  isEmailReplacementWork,
+  receiveEmailReplacement,
+  reconcileEmailReplacement,
+} from "./email-replacement-delivery";
 import {
   currentUser,
   logoutBrowser,
@@ -56,6 +65,7 @@ import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./work
 export { UserTransactionCoordinator } from "./transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding-email";
 export { BrowserPairingEmailWorkflowV1 } from "./browser-pairing-email-delivery";
+export { EmailReplacementWorkflowV1 } from "./email-replacement-delivery";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -81,7 +91,8 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_PRIVATE_KEY?: string;
     readonly WOMPI_INTEGRITY_SECRET?: string;
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
-  Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">>;
+  Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
+  Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">>;
 
 type CoreWorker = Readonly<{
   fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
@@ -214,6 +225,8 @@ const ownedCorePath = (path: string): boolean =>
     "/recovery/backup-code/rotate",
     "/web/email/authentication/start",
     "/web/email/authentication/complete",
+    emailReplacementOperations.request.path,
+    emailReplacementOperations.complete.path,
     "/internal/support-recovery",
     "/user",
   ].includes(path) ||
@@ -243,6 +256,14 @@ const browserResponse = (
       method: "POST",
       handle: () => completeBrowserPairingEmail(request, db),
     },
+    [emailReplacementOperations.request.path]: {
+      method: emailReplacementOperations.request.method,
+      handle: () => requestEmailReplacement(request, db),
+    },
+    [emailReplacementOperations.complete.path]: {
+      method: emailReplacementOperations.complete.method,
+      handle: () => completeEmailReplacement(request, db),
+    },
     "/internal/support-recovery": {
       method: "POST",
       handle: () => handleSupportRecovery(request, db, environment),
@@ -253,9 +274,13 @@ const browserResponse = (
   if (route === undefined || request.method !== route.method) {
     return Effect.succeed(methodNotAllowed());
   }
-  return Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
+  const work = Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
     Effect.orElseSucceed(unavailable)
   );
+  return path === emailReplacementOperations.request.path ||
+    path === emailReplacementOperations.complete.path
+    ? work.pipe(Effect.withSpan("emailReplacement.browser"))
+    : work;
 };
 
 const readCoreResponse = (
@@ -321,6 +346,8 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
       "/recovery/backup-code/rotate",
       "/web/email/authentication/start",
       "/web/email/authentication/complete",
+      emailReplacementOperations.request.path,
+      emailReplacementOperations.complete.path,
       "/internal/support-recovery",
       "/user",
     ].includes(url.pathname)
@@ -331,6 +358,15 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
 };
 
 const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => isEmailReplacementWork(message.body))) {
+    if (environment.EMAIL_REPLACEMENT_WORKFLOW === undefined) {
+      return Promise.reject(new Error("Email replacement unavailable"));
+    }
+    return receiveEmailReplacement({
+      DB: environment.DB,
+      EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
+    })(batch).pipe(Effect.withSpan("emailReplacement.receive"), Effect.runPromise);
+  }
   if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
     if (environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined) {
       return Promise.reject(new Error("Browser pairing email unavailable"));
@@ -390,6 +426,15 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
         });
       }
       yield* reconcileBrowserPairingEmail(environment.DB);
+      if (environment.EMAIL_REPLACEMENT_QUEUE !== undefined) {
+        yield* dispatchEmailReplacement({
+          DB: environment.DB,
+          EMAIL_REPLACEMENT_QUEUE: environment.EMAIL_REPLACEMENT_QUEUE,
+        }).pipe(Effect.withSpan("emailReplacement.dispatch"));
+      }
+      yield* reconcileEmailReplacement(environment.DB).pipe(
+        Effect.withSpan("emailReplacement.reconcile")
+      );
       yield* sweepExpiredConsent(environment.DB)();
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),

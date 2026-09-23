@@ -368,6 +368,24 @@ export const sessionCookie = (request: Request): Option.Option<string> => {
   return /^[A-Za-z0-9_-]{43}$/u.test(value) ? Option.some(value) : Option.none();
 };
 
+/** Resolve the exact still-fresh browser session for an account-security action; never use an object id as authority. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const freshBrowserSession = async (
+  request: Request,
+  db: D1Database,
+  current: number
+): Promise<Option.Option<typeof Session.Type>> => {
+  const token = sessionCookie(request);
+  if (Option.isNone(token)) return Option.none();
+  const row = await db
+    .prepare(`SELECT id, user_id FROM web_sessions
+    WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+      AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+    .bind(await sha256(token.value), current, current, current)
+    .first();
+  return Schema.decodeUnknownOption(Session)(row);
+};
+
 /** Return the canonical User projection only for a live, unrevoked WebSession. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
 export const currentUser = async (request: Request, db: D1Database): Promise<Response> => {

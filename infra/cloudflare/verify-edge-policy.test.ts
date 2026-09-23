@@ -4,7 +4,7 @@ import { edgePolicyDigest, edgePolicyIsReviewed } from "./verify-edge-policy";
 describe("mandatory edge policy verification", () => {
   it("pins the complete desired policy reviewed for promotion", () => {
     expect(edgePolicyDigest).toBe(
-      "b3cf7662520c4a5cd67d8ad1cac6e40eca2b5b0dcd3751e9ff069e2fd9e5bb05"
+      "d82e916a3fdd1c6cbc93fd3762a1ede4c0624255dff34a0ba68b09bb07f682d8"
     );
     expect(edgePolicyIsReviewed).toBe(true);
   });

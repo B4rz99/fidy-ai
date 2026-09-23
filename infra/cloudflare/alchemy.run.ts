@@ -152,6 +152,10 @@ export default Alchemy.Stack(
     const browserPairingEmailWorkflow = Cloudflare.Workflow("BrowserPairingEmailWorkflowV1", {
       className: "BrowserPairingEmailWorkflowV1",
     });
+    const emailReplacementQueue = yield* Cloudflare.Queues.Queue("EmailReplacementQueue");
+    const emailReplacementWorkflow = Cloudflare.Workflow("EmailReplacementWorkflowV1", {
+      className: "EmailReplacementWorkflowV1",
+    });
     const core = yield* Cloudflare.Worker("Core", {
       main: "./core-worker.ts",
       compatibility: { date: "2026-09-08" },
@@ -175,6 +179,8 @@ export default Alchemy.Stack(
         ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
         BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
+        EMAIL_REPLACEMENT_QUEUE: emailReplacementQueue,
+        EMAIL_REPLACEMENT_WORKFLOW: emailReplacementWorkflow,
         RESEND_API_KEY: yield* resolveResendKey(development),
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         WOMPI_ENVIRONMENT: yield* development
@@ -204,6 +210,11 @@ export default Alchemy.Stack(
     });
     yield* Cloudflare.Queues.Consumer("BrowserPairingEmailConsumer", {
       queueId: browserPairingEmailQueue.queueId,
+      scriptName: core.workerName,
+      settings: { batchSize: 10, maxRetries: 3 },
+    });
+    yield* Cloudflare.Queues.Consumer("EmailReplacementConsumer", {
+      queueId: emailReplacementQueue.queueId,
       scriptName: core.workerName,
       settings: { batchSize: 10, maxRetries: 3 },
     });

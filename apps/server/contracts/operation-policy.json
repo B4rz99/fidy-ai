@@ -237,12 +237,23 @@
       }
     },
     {
+      "id": "emailAuthentication.completeEmailReplacement",
+      "policy": {
+        "access": {
+          "type": "fresh-web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "emailAuthentication.requestEmailReplacement",
       "policy": {
         "access": {
-          "type": "fresh-web-or-verified-whatsapp-hosted"
+          "type": "fresh-web-session-only"
         },
-        "agentConfirmation": "required",
+        "agentConfirmation": "not-required",
         "kind": "mutation",
         "requiredTier": "free"
       }

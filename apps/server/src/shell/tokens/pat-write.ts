@@ -143,6 +143,25 @@ export const recordLivePATUse = (
   };
 };
 
+/** Advance PAT activity only after the matching successful capture audit committed in this D1 unit. */
+export const recordCapturedPATUse = (
+  subject: Readonly<{
+    patId: string;
+    userId: string;
+    digest: Uint8Array;
+    requiredScope: Option.Option<CanonicalCapability>;
+  }>,
+  input: Readonly<{ auditId: string; current: number }>
+): OwnedStatement => {
+  const authority = livePATAuthority(subject, input.current);
+  return {
+    sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
+      AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
+      AND pat_id = pats.id AND operation = 'transactions.createTransaction' AND outcome = 'accepted')`,
+    params: [input.current, ...authority.bindings, input.auditId],
+  };
+};
+
 /** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */
 export const revokeOnePAT = (
   session: FreshSessionSubject,

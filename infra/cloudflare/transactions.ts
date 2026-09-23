@@ -4,7 +4,11 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { livePATAuthority, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import {
+  livePATAuthority,
+  recordCanonicalPATWork,
+  recordCapturedPATUse,
+} from "@fidy/server/tokens-runtime";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { sessionCookie, sha256 } from "./browser-login";
@@ -109,6 +113,7 @@ type Capture = Readonly<{
   context: typeof UserContext.Type;
   id: string;
   current: number;
+  auditId: string;
 }>;
 
 /** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
@@ -152,12 +157,12 @@ export const transactionInput = async (
 };
 
 const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
-  const { subject, id, current } = capture;
+  const { subject, id, current, auditId } = capture;
   return isPAT(subject)
     ? prepareOwnedStatement(
         db,
         recordCanonicalPATWork(subject, {
-          id: uuid(),
+          id: auditId,
           current,
           operation: "transactions.createTransaction",
           outcome: "accepted",
@@ -219,6 +224,14 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         id
       ),
     captureAudit(db, capture),
+    ...(isPAT(subject)
+      ? [
+          prepareOwnedStatement(
+            db,
+            recordCapturedPATUse(subject, { auditId: capture.auditId, current })
+          ),
+        ]
+      : []),
   ];
 };
 
@@ -260,10 +273,13 @@ const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promis
     : classifyCaptureAuthority(db, subject);
 };
 
-const captureCompleted = (results: ReadonlyArray<D1Result>): boolean =>
-  results[0]?.meta.changes === 1 &&
-  results[1]?.meta.changes === 1 &&
-  results[2]?.meta.changes === 1;
+const browserCaptureWrites = 3;
+const patCaptureWrites = 4;
+const captureCompleted = (results: ReadonlyArray<D1Result>, pat: boolean): boolean => {
+  const expectedWrites = pat ? patCaptureWrites : browserCaptureWrites;
+  const writes = results.slice(0, expectedWrites);
+  return writes.length === expectedWrites && writes.every((result) => result.meta.changes === 1);
+};
 
 /** Persist one manual Transaction, its captured context and AuditLogEntry in one D1 atomic batch. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -290,10 +306,17 @@ export const createManualTransaction = async (
     }
     const id = uuid();
     const result = await db.batch([
-      ...captureStatements(db, { input, subject, context: context.value, id, current }),
+      ...captureStatements(db, {
+        input,
+        subject,
+        context: context.value,
+        id,
+        current,
+        auditId: uuid(),
+      }),
       db.prepare(transactionCaptureCompletion),
     ]);
-    if (!captureCompleted(result)) {
+    if (!captureCompleted(result, isPAT(subject))) {
       return noSession();
     }
     const raw = await db

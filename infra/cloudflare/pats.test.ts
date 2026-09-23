@@ -1217,6 +1217,129 @@ it("bounds canonical work across a stable User and multiple PATs", async () => {
   ).toBe(count);
 });
 
+it("records successful PAT Transaction capture as use activity without extending its expiry", async () => {
+  const { db, send, sessions } = await setup();
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "70000000-0000-4000-8000-000000000042",
+      grant: {
+        recipientLabel: "Capture agent",
+        scopes: ["write"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  const Activity = Schema.Struct({
+    last_used_at_ms: Schema.NullOr(Schema.Finite),
+    expires_at_ms: Schema.Finite,
+  });
+  const before = Schema.decodeUnknownSync(Activity)(
+    await db
+      .prepare("SELECT last_used_at_ms,expires_at_ms FROM pats WHERE short_id = ?")
+      .bind(issued.pat.shortId)
+      .first()
+  );
+  expect(before.last_used_at_ms).toBeNull();
+  const captured = await send({
+    path: "/transactions",
+    method: "POST",
+    bearer: issued.bearer,
+    payload: {
+      money: { amount: "23.50", currency: "COP" },
+      direction: "outflow",
+      occurredAt: "2026-09-01T12:00:00.000Z",
+    },
+  });
+  expect(captured.status).toBe(201);
+  const after = Schema.decodeUnknownSync(Activity)(
+    await db
+      .prepare("SELECT last_used_at_ms,expires_at_ms FROM pats WHERE short_id = ?")
+      .bind(issued.pat.shortId)
+      .first()
+  );
+  expect(after.last_used_at_ms).not.toBeNull();
+  expect(after.expires_at_ms).toBe(before.expires_at_ms);
+  const listed = await send({ path: "/pats", method: "GET", session: sessions[0] });
+  expect(listed.status).toBe(200);
+  const Listed = Schema.Struct({
+    data: Schema.Struct({
+      pats: Schema.Array(
+        Schema.Struct({
+          shortId: Schema.String,
+          lastUsedAt: Schema.NullOr(Schema.String),
+        })
+      ),
+    }),
+  });
+  const pats = Schema.decodeUnknownSync(Listed)(await listed.json()).data.pats;
+  expect(pats.find((pat) => pat.shortId === issued.pat.shortId)?.lastUsedAt).not.toBeNull();
+});
+
+it("rolls back PAT Transaction capture and activity when its audit is silently refused", async () => {
+  const { db, send, sessions } = await setup();
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "70000000-0000-4000-8000-000000000043",
+      grant: {
+        recipientLabel: "Atomic capture agent",
+        scopes: ["write"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  const capture = {
+    money: { amount: "23.50", currency: "COP" },
+    direction: "outflow",
+    occurredAt: "2026-09-01T12:00:00.000Z",
+  };
+  await db
+    .prepare(`CREATE TRIGGER refuse_pat_capture_audit BEFORE INSERT ON pat_audit
+    WHEN NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'accepted'
+    BEGIN SELECT RAISE(IGNORE); END`)
+    .run();
+  expect(
+    (await send({ path: "/transactions", method: "POST", bearer: issued.bearer, payload: capture }))
+      .status
+  ).not.toBe(201);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+        .bind(userA)
+        .first<{ total: number }>()
+    )?.total
+  ).toBe(0);
+  expect(
+    (
+      await db
+        .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
+        .bind(issued.pat.shortId)
+        .first()
+    )?.last_used_at_ms
+  ).toBeNull();
+  await db.prepare("DROP TRIGGER refuse_pat_capture_audit").run();
+  expect(
+    (await send({ path: "/transactions", method: "POST", bearer: issued.bearer, payload: capture }))
+      .status
+  ).toBe(201);
+});
+
 it("rechecks PAT scope after admission at the protected D1 read and audit", async () => {
   const { db, send, sessions } = await setup();
   const response = await send({

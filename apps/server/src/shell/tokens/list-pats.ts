@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Function, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { ActivePATMetadata, PATRecipientLabel, PATScopes, TokenShortId } from "~/core/tokens/model";
 import type { UserId } from "~/core/identity/reference";
@@ -25,11 +25,13 @@ const queryUnavailable = (): Unavailable =>
   });
 
 /** One bounded PAT metadata query, optionally rechecking its web caller at protected D1 work. */
-export const patMetadataQuery = (
-  userId: string,
-  current: number,
-  session: Option.Option<FreshSessionSubject>
-): OwnedStatement => ({
+export const patMetadataQuery = Function.dual<
+  (
+    current: number,
+    session: Option.Option<FreshSessionSubject>
+  ) => (userId: string) => OwnedStatement,
+  (userId: string, current: number, session: Option.Option<FreshSessionSubject>) => OwnedStatement
+>(3, (userId, current, session) => ({
   sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
     FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
@@ -45,7 +47,7 @@ export const patMetadataQuery = (
     current,
     ...(Option.isSome(session) ? [session.value.id, session.value.user_id, current, current] : []),
   ],
-});
+}));
 
 const decodeMetadata = (
   row: typeof PATMetadataRow.Type

@@ -1,3 +1,4 @@
+import { Function } from "effect";
 import { decidePATRevocation } from "~/core/consent/pat-revocation";
 import {
   type FreshSessionSubject,
@@ -11,11 +12,12 @@ const randomConsentId = `lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) |
   || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-'
   || hex(randomblob(6)))`;
 
+type RevokeOneInput = Readonly<{ id: string; shortId: string; current: number }>;
 /** Append a User-origin revocation only for the live grant owned by this fresh WebSession. */
-export const revokeOnePATConsent = (
-  session: FreshSessionSubject,
-  input: Readonly<{ id: string; shortId: string; current: number }>
-): OwnedStatement => {
+export const revokeOnePATConsent = Function.dual<
+  (input: RevokeOneInput) => (session: FreshSessionSubject) => OwnedStatement,
+  (session: FreshSessionSubject, input: RevokeOneInput) => OwnedStatement
+>(2, (session, input) => {
   const disclosure = decidePATRevocation("user-revoke-one");
   return {
     sql: `INSERT INTO pat_revocation_consents
@@ -38,13 +40,13 @@ export const revokeOnePATConsent = (
       ...freshSessionParams(session, input.current),
     ],
   };
-};
+});
 
 /** Append one origin-qualified revocation per active PAT grant under the same User. */
-export const revokeAllPATConsents = (
-  session: FreshSessionSubject,
-  current: number
-): OwnedStatement => {
+export const revokeAllPATConsents = Function.dual<
+  (current: number) => (session: FreshSessionSubject) => OwnedStatement,
+  (session: FreshSessionSubject, current: number) => OwnedStatement
+>(2, (session, current) => {
   const disclosure = decidePATRevocation("user-revoke-all");
   return {
     sql: `INSERT INTO pat_revocation_consents
@@ -65,13 +67,13 @@ export const revokeAllPATConsents = (
       ...freshSessionParams(session, current),
     ],
   };
-};
+});
 
 /** Include approved but unclaimed PATPairing grants in a User's revoke-all decision. */
-export const revokeAllPairingConsents = (
-  session: FreshSessionSubject,
-  current: number
-): OwnedStatement => {
+export const revokeAllPairingConsents = Function.dual<
+  (current: number) => (session: FreshSessionSubject) => OwnedStatement,
+  (session: FreshSessionSubject, current: number) => OwnedStatement
+>(2, (session, current) => {
   const disclosure = decidePATRevocation("user-revoke-unclaimed");
   return {
     sql: `INSERT INTO pat_revocation_consents
@@ -90,10 +92,13 @@ export const revokeAllPairingConsents = (
       ...freshSessionParams(session, current),
     ],
   };
-};
+});
 
 /** Scheduled expiry appends policy-origin evidence for approved unclaimed pairings. */
-export const expirePairingConsents = (current: number, limit: number): OwnedStatement => {
+export const expirePairingConsents = Function.dual<
+  (limit: number) => (current: number) => OwnedStatement,
+  (current: number, limit: number) => OwnedStatement
+>(2, (current, limit) => {
   const disclosure = decidePATRevocation("approved-unclaimed-expiry");
   return {
     sql: `INSERT INTO pat_revocation_consents
@@ -112,10 +117,13 @@ export const expirePairingConsents = (current: number, limit: number): OwnedStat
       limit,
     ],
   };
-};
+});
 
 /** Scheduled expiry appends policy-origin evidence for every selected fixed-lifetime PAT. */
-export const expirePATConsents = (current: number, limit: number): OwnedStatement => {
+export const expirePATConsents = Function.dual<
+  (limit: number) => (current: number) => OwnedStatement,
+  (current: number, limit: number) => OwnedStatement
+>(2, (current, limit) => {
   const disclosure = decidePATRevocation("fixed-lifetime-expiry");
   return {
     sql: `INSERT INTO pat_revocation_consents
@@ -135,24 +143,36 @@ export const expirePATConsents = (current: number, limit: number): OwnedStatemen
       limit,
     ],
   };
-};
+});
 
+type ManualGrantInput = Readonly<{
+  id: string;
+  requestId: string;
+  disclosure: string;
+  current: number;
+}>;
 /** The User's reviewed manual grant, chained to its guarded PAT issuance in the same D1 unit. */
-export const grantManualPATConsent = (
-  session: FreshSessionSubject,
-  input: Readonly<{ id: string; requestId: string; disclosure: string; current: number }>
-): OwnedStatement => ({
+export const grantManualPATConsent = Function.dual<
+  (input: ManualGrantInput) => (session: FreshSessionSubject) => OwnedStatement,
+  (session: FreshSessionSubject, input: ManualGrantInput) => OwnedStatement
+>(2, (session, input) => ({
   sql: `INSERT INTO pat_grant_consents (id,user_id,session_id,request_id,disclosure_revision,disclosure_text,accepted_at_ms)
     SELECT ?,?,?,?,'pat-grant-2026-09',?,? WHERE changes() = 1`,
   params: [input.id, session.user_id, session.id, input.requestId, input.disclosure, input.current],
-});
+}));
 
+type PairedGrantInput = Readonly<{
+  id: string;
+  pairingId: string;
+  disclosure: string;
+  current: number;
+}>;
 /** The User's reviewed pairing approval, chained to the guarded pairing transition. */
-export const grantPairedPATConsent = (
-  session: FreshSessionSubject,
-  input: Readonly<{ id: string; pairingId: string; disclosure: string; current: number }>
-): OwnedStatement => ({
+export const grantPairedPATConsent = Function.dual<
+  (input: PairedGrantInput) => (session: FreshSessionSubject) => OwnedStatement,
+  (session: FreshSessionSubject, input: PairedGrantInput) => OwnedStatement
+>(2, (session, input) => ({
   sql: `INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)
     SELECT ?,?,?,?,'pat-pairing-grant-2026-09',?,? WHERE changes() = 1`,
   params: [input.id, session.user_id, session.id, input.pairingId, input.disclosure, input.current],
-});
+}));

@@ -104,7 +104,7 @@ const revokedPATResponse = (
         .prepare(
           `SELECT revoked_at_ms FROM pats WHERE user_id = ? AND short_id = ? AND ${sessionExists}`
         )
-        .bind(session.user_id, shortId, ...freshSessionParams(session, current))
+        .bind(session.user_id, shortId, ...freshSessionParams({ session, time: current }))
         .first()
     );
     const record = Schema.decodeUnknownOption(

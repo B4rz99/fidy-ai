@@ -47,6 +47,19 @@ const awaitPromise = <A>(
   });
 const runTest = <A, E>(work: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(work);
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
+type ManualGrant = Readonly<{
+  recipientLabel: string;
+  scopes: ReadonlyArray<string>;
+  lifetimeDays: number;
+  reviewExpiresAt: string;
+}>;
+const manualGrant = (overrides: Partial<ManualGrant> = {}): ManualGrant => ({
+  recipientLabel: "Agent",
+  scopes: ["read"],
+  lifetimeDays: 7,
+  reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+  ...overrides,
+});
 type Send = Readonly<{
   path: string;
   method: "GET" | "POST" | "DELETE";
@@ -265,6 +278,26 @@ const setup = (
       };
     })
   );
+const issueManualPAT = ({
+  send,
+  session,
+  requestId,
+  grant,
+}: Readonly<{
+  send: (input: Send) => Promise<Response>;
+  session: string;
+  requestId: string;
+  grant: ManualGrant;
+}>): Effect.Effect<typeof Issued.Type, TestPromiseFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const response = yield* awaitPromise(
+      send({ path: "/pats", method: "POST", session, payload: { requestId, grant } })
+    );
+    expect(response.status).toBe(200);
+    return (yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Issued }))(
+      yield* awaitPromise(response.json())
+    )).data;
+  });
 afterEach(() =>
   runTest(
     Effect.gen(function* () {
@@ -833,29 +866,13 @@ it("rolls back revoke-one and retries exactly one append-only Consent revocation
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const grant = {
-        recipientLabel: "Agent",
-        scopes: ["read"],
-        lifetimeDays: 7,
-        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-      };
-      const created = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
-            grant,
-          },
-        })
-      );
-      expect(created.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(created.json()))).data;
+      const grant = manualGrant();
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        grant,
+      });
       yield* awaitPromise(
         db
           .prepare(`CREATE TRIGGER test_revoke_failure BEFORE INSERT ON pat_revocation_consents
@@ -1411,28 +1428,12 @@ it("does not append revocation Consent when the PAT transition silently fails", 
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "70000000-0000-4000-8000-000000000051",
-            grant: {
-              recipientLabel: "Agent",
-              scopes: ["read"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(issued.status).toBe(200);
-      const token = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(issued.json()))).data;
+      const token = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000051",
+        grant: manualGrant(),
+      });
       yield* awaitPromise(
         db
           .prepare(`CREATE TRIGGER refuse_pat_revocation BEFORE UPDATE OF revoked_at_ms ON pats
@@ -2319,38 +2320,16 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const issue = (
         scope: "read" | "write" | "dashboard",
         index: number
-      ): Promise<typeof Issued.Type> =>
-        runTest(
-          Effect.gen(function* () {
-            const response = yield* awaitPromise(
-              send({
-                path: "/pats",
-                method: "POST",
-                session: sessions[0],
-                payload: {
-                  requestId: `70000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
-                  grant: {
-                    recipientLabel: `Agent ${index}`,
-                    scopes: [scope],
-                    lifetimeDays: 7,
-                    reviewExpiresAt: DateTime.formatIso(
-                      DateTime.makeUnsafe(clock() + 7 * 86_400_000)
-                    ),
-                  },
-                },
-              })
-            );
-            expect(response.status).toBe(200);
-            return (yield* Schema.decodeUnknownEffect(
-              Schema.Struct({
-                data: Issued,
-              })
-            )(yield* awaitPromise(response.json()))).data;
-          })
-        );
-      const reader = yield* awaitPromise(issue("read", 1));
-      const writer = yield* awaitPromise(issue("write", 2));
-      const dashboard = yield* awaitPromise(issue("dashboard", 3));
+      ): Effect.Effect<typeof Issued.Type, TestPromiseFailure | Schema.SchemaError> =>
+        issueManualPAT({
+          send,
+          session: sessions[0],
+          requestId: `70000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+          grant: manualGrant({ recipientLabel: `Agent ${index}`, scopes: [scope] }),
+        });
+      const reader = yield* issue("read", 1);
+      const writer = yield* issue("write", 2);
+      const dashboard = yield* issue("dashboard", 3);
       const capture = {
         money: {
           amount: "2300.50",
@@ -2607,7 +2586,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             .first()
         ))?.total
       ).toBe(0);
-      const stillLive = yield* awaitPromise(issue("read", 4));
+      const stillLive = yield* issue("read", 4);
       const grantId = "e0000000-0000-4000-8000-000000000001";
       yield* awaitPromise(
         db
@@ -2677,12 +2656,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
           session: sessions[0],
           payload: {
             requestId: "70000000-0000-4000-8000-000000000005",
-            grant: {
-              recipientLabel: "Too late",
-              scopes: ["read"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
+            grant: manualGrant({ recipientLabel: "Too late" }),
           },
         })
       );
@@ -2930,28 +2904,12 @@ it("does not commit PAT activity or disclose Category rows when its audit is sil
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const issuedResponse = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "f0000000-0000-4000-8000-000000000002",
-            grant: {
-              recipientLabel: "Audited reader",
-              scopes: ["read"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(issuedResponse.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(issuedResponse.json()))).data;
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "f0000000-0000-4000-8000-000000000002",
+        grant: manualGrant({ recipientLabel: "Audited reader" }),
+      });
       yield* awaitPromise(
         db
           .prepare(`CREATE TRIGGER ignore_category_audit BEFORE INSERT ON pat_audit

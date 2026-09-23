@@ -1,5 +1,5 @@
 import { type CatalogOperation, operationCatalog } from "@fidy/server/canonical-runtime";
-import { Function, Option } from "effect";
+import { Option } from "effect";
 import { matchesRoute } from "./route-match";
 
 const routes = operationCatalog.operations;
@@ -16,11 +16,10 @@ export const canonicalMethods = (path: string): ReadonlyArray<string> =>
     )
   );
 /** Select a declared operation only when verb and path template match; otherwise None. */
-export const canonicalOperation: {
-  (method: string, path: string): Option.Option<CatalogOperation>;
-  (path: string): (method: string) => Option.Option<CatalogOperation>;
-} = Function.dual(2, (method: string, path: string) =>
+export const canonicalOperation = ({
+  method,
+  path,
+}: Readonly<{ method: string; path: string }>): Option.Option<CatalogOperation> =>
   Option.fromUndefinedOr(
     routes.find((operation) => operation.method === method && matchesRoute(operation.route, path))
-  )
-);
+  );

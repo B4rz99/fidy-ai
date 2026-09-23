@@ -223,7 +223,7 @@ const invalidQueryAudit = async (
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
   const outcome = invalidGet ? "not_found" : "validation_failed";
-  const authority = liveWebSessionAuthority(subject, current);
+  const authority = liveWebSessionAuthority({ subject, current });
   try {
     if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const audit = await db
@@ -253,7 +253,7 @@ const browserHistoryStatements = (
 ): Array<D1PreparedStatement> => {
   const { selection, query, current } = input;
   const { subject } = selection;
-  const authority = liveWebSessionAuthority(subject, current);
+  const authority = liveWebSessionAuthority({ subject, current });
   return [
     selectStatement(db, {
       selection,
@@ -337,7 +337,7 @@ const presentPATHistory = (
 ): Promise<Response> => {
   const { db, results, selection, query } = input;
   if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
-    return refusedPATWork(db, selection.subject.userId);
+    return refusedPATWork({ db, userId: selection.subject.userId });
   }
   if (Option.isNone(query)) {
     return Promise.resolve(Option.isSome(selection.id) ? notFound() : invalid());

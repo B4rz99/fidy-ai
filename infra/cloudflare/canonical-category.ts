@@ -69,7 +69,7 @@ const categoryStatements = (
   return [
     prepareOwnedStatement({
       db,
-      statement: categoryRowsQuery(liveWebSessionAuthority(subject, current)),
+      statement: categoryRowsQuery(liveWebSessionAuthority({ subject, current })),
     }),
     prepareOwnedStatement({
       db,

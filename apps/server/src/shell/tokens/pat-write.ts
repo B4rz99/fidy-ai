@@ -48,7 +48,7 @@ export const issueManualPAT = ({
     input.current,
     input.expires,
     input.requestId,
-    ...freshSessionParams(session, input.current),
+    ...freshSessionParams({ session, time: input.current }),
     session.user_id,
     session.user_id,
     input.current,
@@ -74,7 +74,7 @@ export const approvePairingGrant = ({
     input.expires,
     input.pairingId,
     input.current,
-    ...freshSessionParams(session, input.current),
+    ...freshSessionParams({ session, time: input.current }),
     session.user_id,
   ],
 });
@@ -171,7 +171,7 @@ export const revokeOnePAT = ({
     session.user_id,
     input.shortId,
     input.current,
-    ...freshSessionParams(session, input.current),
+    ...freshSessionParams({ session, time: input.current }),
     session.id,
     input.current,
   ],
@@ -185,7 +185,13 @@ export const revokeEveryPAT = ({
   sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND revoked_at_ms IS NULL
     AND expires_at_ms > ? AND ${freshSessionExists}
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id AND r.session_id = ?)`,
-  params: [current, session.user_id, current, ...freshSessionParams(session, current), session.id],
+  params: [
+    current,
+    session.user_id,
+    current,
+    ...freshSessionParams({ session, time: current }),
+    session.id,
+  ],
 });
 
 /** Close every approved unclaimed pairing covered by this User's revocation evidence. */
@@ -196,7 +202,7 @@ export const revokeEveryPairing = ({
   sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
     AND state = 'approved_awaiting_claim' AND ${freshSessionExists}
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
-  params: [session.user_id, ...freshSessionParams(session, current), session.id],
+  params: [session.user_id, ...freshSessionParams({ session, time: current }), session.id],
 });
 
 /** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */

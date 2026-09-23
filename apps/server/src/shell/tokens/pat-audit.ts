@@ -100,7 +100,7 @@ export const recordAllPATRevocations = ({
     session.user_id,
     session.id,
     input.current,
-    ...freshSessionParams(session, input.current),
+    ...freshSessionParams({ session, time: input.current }),
   ],
 });
 

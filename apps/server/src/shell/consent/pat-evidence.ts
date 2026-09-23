@@ -36,7 +36,7 @@ export const revokeOnePATConsent = ({
       session.user_id,
       input.shortId,
       input.current,
-      ...freshSessionParams(session, input.current),
+      ...freshSessionParams({ session, time: input.current }),
     ],
   };
 };
@@ -63,7 +63,7 @@ export const revokeAllPATConsents = ({
       current,
       session.user_id,
       current,
-      ...freshSessionParams(session, current),
+      ...freshSessionParams({ session, time: current }),
     ],
   };
 };
@@ -88,7 +88,7 @@ export const revokeAllPairingConsents = ({
       disclosure.text,
       current,
       session.user_id,
-      ...freshSessionParams(session, current),
+      ...freshSessionParams({ session, time: current }),
     ],
   };
 };

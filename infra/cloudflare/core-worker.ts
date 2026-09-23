@@ -419,7 +419,7 @@ const canonicalOrHealthResponse = (
   environment: CoreEnvironment,
   path: string
 ): Effect.Effect<Response> => {
-  const operation = canonicalOperation(request.method, path);
+  const operation = canonicalOperation({ method: request.method, path });
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
   }
@@ -442,7 +442,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
   }
-  const patListing = canonicalOperation(request.method, url.pathname);
+  const patListing = canonicalOperation({ method: request.method, path: url.pathname });
   if (Option.isSome(patListing) && patListing.value.id === "pats.listPATs") {
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }

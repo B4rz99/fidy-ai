@@ -1,4 +1,4 @@
-import { Clock, Effect, Function } from "effect";
+import { Clock, Effect } from "effect";
 
 /** Shared, request-scoped identity and safe response vocabulary for the two D1 Transaction adapters. */
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
@@ -65,10 +65,10 @@ export const transactionFailure = (
 /** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
 const HTTP_UNAUTHENTICATED = 401;
 const HTTP_ACTION_REQUIRED = 403;
-export const refusedPATWork: {
-  (db: D1Database, userId: string): Promise<Response>;
-  (userId: string): (db: D1Database) => Promise<Response>;
-} = Function.dual(2, (db: D1Database, userId: string): Promise<Response> =>
+export const refusedPATWork = ({
+  db,
+  userId,
+}: Readonly<{ db: D1Database; userId: string }>): Promise<Response> =>
   Effect.tryPromise({
     try: () =>
       db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first(),
@@ -88,5 +88,4 @@ export const refusedPATWork: {
           )
     ),
     Effect.runPromise
-  )
-);
+  );

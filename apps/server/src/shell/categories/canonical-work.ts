@@ -9,7 +9,7 @@ export const recordBrowserCategoryWork = ({
   id,
   current,
 }: Readonly<{ subject: BrowserCategorySubject; id: string; current: number }>): OwnedStatement => {
-  const authority = liveWebSessionAuthority(subject, current);
+  const authority = liveWebSessionAuthority({ subject, current });
   return {
     sql: `INSERT INTO category_audit (id,user_id,session_id,operation,occurred_at_ms)
       SELECT ?,user_id,id,'categories.listCategories',? FROM web_sessions WHERE ${authority.predicate}`,

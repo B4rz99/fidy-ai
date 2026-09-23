@@ -57,7 +57,7 @@ const limited = (): Response =>
 type Subject = TransactionSubject | AuthorizedPAT;
 const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
 const refusedCaptureWork = (db: D1Database, subject: Subject): Promise<Response> =>
-  isPAT(subject) ? refusedPATWork(db, subject.userId) : Promise.resolve(noSession());
+  isPAT(subject) ? refusedPATWork({ db, userId: subject.userId }) : Promise.resolve(noSession());
 type Refusal = "not_found" | "validation_failed" | "resource_limit";
 
 /** Record a rejected authenticated canonical mutation without retaining its body or granting expired sessions access. */
@@ -264,7 +264,7 @@ const classifyCaptureAuthority = (db: D1Database, subject: Subject): Promise<Res
   try {
     const authority = isPAT(subject)
       ? livePATAuthority({ subject, current: now() })
-      : liveWebSessionAuthority(subject, now());
+      : liveWebSessionAuthority({ subject, current: now() });
     return db
       .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(...authority.bindings)

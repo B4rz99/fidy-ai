@@ -346,8 +346,7 @@ const presentPATHistory = (
   return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const readAuthorizedHistory = async (
+const readAuthorizedHistory = (
   db: D1Database,
   input: Readonly<{
     selection: Selection;
@@ -359,21 +358,23 @@ const readAuthorizedHistory = async (
   const { subject } = selection;
   if (isPAT(subject)) {
     const patSelection = { ...selection, subject };
-    const results = await db.batch(
-      patHistoryStatements(db, { selection: patSelection, query, current })
-    );
-    return presentPATHistory({ db, results, selection: patSelection, query });
+    return db
+      .batch(patHistoryStatements(db, { selection: patSelection, query, current }))
+      .then((results) => presentPATHistory({ db, results, selection: patSelection, query }));
   }
-  if (Option.isNone(query)) return invalid();
-  const [rows, audit] = await db.batch(
-    browserHistoryStatements(db, {
-      selection: { ...selection, subject },
-      query: query.value,
-      current,
-    })
-  );
-  if (audit?.meta.changes !== 1) return noSession();
-  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+  if (Option.isNone(query)) return Promise.resolve(invalid());
+  return db
+    .batch(
+      browserHistoryStatements(db, {
+        selection: { ...selection, subject },
+        query: query.value,
+        current,
+      })
+    )
+    .then(([rows, audit]) => {
+      if (audit?.meta.changes !== 1) return noSession();
+      return rows === undefined ? unavailable() : presentHistory(rows, selection);
+    });
 };
 
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */

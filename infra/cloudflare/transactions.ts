@@ -260,20 +260,19 @@ const hasUnknownCategory = async (
   return category === null;
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const classifyCaptureAuthority = async (db: D1Database, subject: Subject): Promise<Response> => {
+const classifyCaptureAuthority = (db: D1Database, subject: Subject): Promise<Response> => {
   try {
     const authority = isPAT(subject)
       ? livePATAuthority({ subject, current: now() })
       : liveWebSessionAuthority(subject, now());
-    const live = await db
+    return db
       .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(...authority.bindings)
-      .first();
-    if (live !== null) return unavailable();
-    return refusedCaptureWork(db, subject);
+      .first()
+      .then((live) => (live !== null ? unavailable() : refusedCaptureWork(db, subject)))
+      .catch(unavailable);
   } catch {
-    return unavailable();
+    return Promise.resolve(unavailable());
   }
 };
 

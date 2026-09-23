@@ -10,7 +10,7 @@ import {
   patPairingUnavailableBody,
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
-import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
 import { freshSessionExists } from "@fidy/server/identity-runtime";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { browserSession } from "./browser-login";
@@ -60,8 +60,24 @@ export type PATRow = typeof PATRow.Type;
 
 /** Server-observed time, never a caller-supplied deadline. */
 export const currentMillis = (): number => Effect.runSync(Clock.currentTimeMillis);
-// @effect-diagnostics-next-line cryptoRandomUUID:off
-export const newId = (): string => crypto.randomUUID();
+const workerCrypto = Crypto.make({
+  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
+  digest: (algorithm, data) =>
+    Effect.tryPromise({
+      try: () =>
+        crypto.subtle
+          .digest(algorithm, Uint8Array.from(data))
+          .then((bytes) => new Uint8Array(bytes)),
+      catch: (cause) =>
+        PlatformError.systemError({
+          _tag: "Unknown",
+          module: "WorkerCrypto",
+          method: "digest",
+          cause,
+        }),
+    }),
+});
+export const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 export const iso = (milliseconds: number): string =>
   DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
 /** Fast SHA-256 is safe here only because inputs are 256-bit randomly generated bearers. */

@@ -3,10 +3,18 @@ import {
   Transaction,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { sessionCookie, sha256 } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { decodeTransactionRow } from "./transaction-history";
+import {
+  type TransactionSubject,
+  transactionNoStore as noStore,
+  transactionNow as now,
+  transactionFailure,
+  transactionUnavailable as unavailable,
+  transactionId as uuid,
+} from "./transaction-boundary";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
 const Output = Schema.toCodecJson(Transaction);
@@ -20,26 +28,53 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 4096,
   deadlineMilliseconds: 2000,
 });
-const noStore = { "cache-control": "no-store" };
+const HTTP_UNAUTHENTICATED = 401;
+const HTTP_INVALID = 400;
+const HTTP_NOT_FOUND = 404;
+const HTTP_RATE_LIMITED = 429;
 const noSession = (): Response =>
-  Response.json(
-    {
-      error: { code: "unauthenticated", message: "Present a valid credential and retry." },
-      next: [],
-    },
-    { status: 401, headers: noStore }
+  transactionFailure(
+    "unauthenticated",
+    HTTP_UNAUTHENTICATED,
+    "Present a valid credential and retry."
   );
-const unavailable = (): Response =>
-  Response.json({ status: "unavailable" }, { status: 503, headers: noStore });
 const invalid = (): Response =>
-  Response.json(
-    { error: { code: "validation_failed", message: "Invalid Transaction input." }, next: [] },
-    { status: 400, headers: noStore }
-  );
-const now = (): number => Effect.runSync(Clock.currentTimeMillis);
-// @effect-diagnostics-next-line cryptoRandomUUID:off
-const uuid = (): string => crypto.randomUUID();
-type Subject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
+  transactionFailure("validation_failed", HTTP_INVALID, "Invalid Transaction input.");
+const missing = (): Response =>
+  transactionFailure("not_found", HTTP_NOT_FOUND, "Transaction unavailable.");
+const limited = (): Response =>
+  transactionFailure("rate_limited", HTTP_RATE_LIMITED, "Manual Transaction budget exhausted.");
+type Subject = TransactionSubject;
+type Refusal = "not_found" | "validation_failed" | "resource_limit";
+
+/** Record a rejected authenticated canonical mutation without retaining its body or granting expired sessions access. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const rejectManualTransaction = async (
+  db: D1Database,
+  subject: Subject,
+  outcome: Refusal
+): Promise<Response> => {
+  const current = now();
+  try {
+    const audit = await db
+      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
+      AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      .bind(uuid(), outcome, current, subject.id, subject.userId, subject.digest, current, current)
+      .run();
+    if (audit.meta.changes !== 1) return noSession();
+    switch (outcome) {
+      case "not_found":
+        return missing();
+      case "validation_failed":
+        return invalid();
+      case "resource_limit":
+        return limited();
+    }
+  } catch (error) {
+    return String(error).includes("transaction_audit_limit") ? limited() : unavailable();
+  }
+};
 type Capture = Readonly<{
   input: typeof Input.Type;
   subject: Subject;
@@ -137,6 +172,26 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   ];
 };
 
+// @effect-diagnostics-next-line asyncFunction:off
+const hasUnknownCategory = async (
+  db: D1Database,
+  categoryId: Option.Option<string>
+): Promise<boolean> => {
+  if (Option.isNone(categoryId)) return false;
+  const category = await db
+    .prepare("SELECT id FROM categories WHERE id = ?")
+    .bind(categoryId.value)
+    .first();
+  return category === null;
+};
+
+const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> =>
+  String(error).includes("transaction_resource_limit")
+    ? rejectManualTransaction(db, subject, "resource_limit")
+    : Promise.resolve(
+        String(error).includes("transaction_audit_limit") ? limited() : unavailable()
+      );
+
 /** Persist one manual Transaction, its captured context and AuditLogEntry in one D1 atomic batch. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
 export const createManualTransaction = async (
@@ -146,7 +201,7 @@ export const createManualTransaction = async (
 ): Promise<Response> => {
   const current = now();
   if (DateTime.toEpochMillis(input.occurredAt) > current) {
-    return invalid();
+    return rejectManualTransaction(db, subject, "validation_failed");
   }
   try {
     const contextRaw = await db
@@ -156,6 +211,9 @@ export const createManualTransaction = async (
     const context = Schema.decodeUnknownOption(UserContext)(contextRaw);
     if (Option.isNone(context)) {
       return unavailable();
+    }
+    if (await hasUnknownCategory(db, input.categoryId)) {
+      return rejectManualTransaction(db, subject, "not_found");
     }
     const id = uuid();
     const result = await db.batch(
@@ -178,21 +236,8 @@ export const createManualTransaction = async (
       { status: 201, headers: noStore }
     );
   } catch (error) {
-    if (String(error).includes("transaction_resource_limit")) {
-      return Response.json(
-        {
-          error: { code: "resource_limit", message: "Manual Transaction budget exhausted." },
-          next: [],
-        },
-        { status: 429, headers: noStore }
-      );
-    }
-    return unavailable();
+    return failedCapture(db, subject, error);
   }
 };
 
-export {
-  invalid as invalidTransaction,
-  noSession as unauthenticatedTransaction,
-  unavailable as unavailableTransaction,
-};
+export { noSession as unauthenticatedTransaction, unavailable as unavailableTransaction };

@@ -1,3 +1,4 @@
+import { nextTransactionPage } from "@fidy/server/transaction-continuation";
 import {
   Counterparty,
   Transaction,
@@ -5,7 +6,16 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
 } from "@fidy/server/transactions-runtime";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
+import {
+  type TransactionSubject,
+  transactionNoStore as noStore,
+  transactionNow as now,
+  transactionAuditExhausted,
+  transactionFailure,
+  transactionUnavailable as unavailable,
+  transactionId as uuid,
+} from "./transaction-boundary";
 
 const Output = Schema.toCodecJson(Transaction);
 const Row = Schema.Struct({
@@ -26,29 +36,47 @@ const Query = TransactionQueryValues.mapFields((fields) => ({
   counterparty: Schema.OptionFromOptionalKey(Counterparty),
   direction: Schema.OptionFromOptionalKey(fields.direction),
   currency: Schema.OptionFromOptionalKey(fields.currency),
+  cursor: Schema.OptionFromOptionalKey(fields.cursor),
 }));
-const filters = new Set(["from", "to", "categoryId", "counterparty", "direction", "currency"]);
-const maxFilters = 6;
-const noStore = { "cache-control": "no-store" };
-const failure = (code: string, status: number): Response =>
-  Response.json(
-    { error: { code, message: "Transaction unavailable." }, next: [] },
-    { status, headers: noStore }
-  );
+const filters = new Set([
+  "from",
+  "to",
+  "categoryId",
+  "counterparty",
+  "direction",
+  "currency",
+  "cursor",
+]);
+const maxFilters = 7;
+const pageSize = 100;
+const boundarySize = pageSize + 1;
+const failure = (
+  code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
+  status: number
+): Response => transactionFailure(code, status, "Transaction unavailable.");
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;
+const HTTP_RATE_LIMITED = 429;
 const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
 const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
+const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
-const unavailable = (): Response =>
-  Response.json({ status: "unavailable" }, { status: 503, headers: noStore });
-// @effect-diagnostics-next-line cryptoRandomUUID:off
-const uuid = (): string => crypto.randomUUID();
-const now = (): number => Effect.runSync(Clock.currentTimeMillis);
-
-type Subject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
+const failedAudit = (error: unknown): Response =>
+  String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
+type Subject = TransactionSubject;
 type Selection = Readonly<{ request: Request; subject: Subject; id: Option.Option<string> }>;
+
+const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
+  const pieces = Schema.decodeUnknownOption(
+    Schema.Tuple([Schema.String, Schema.String, TransactionId])
+  )(cursor.split("|"));
+  if (Option.isNone(pieces)) return Option.none();
+  const [occurred, created] = pieces.value;
+  return Option.isSome(DateTime.make(occurred)) && Option.isSome(DateTime.make(created))
+    ? Option.some(pieces.value)
+    : Option.none();
+};
 
 const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
   if (
@@ -58,10 +86,17 @@ const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
     return Option.none();
   }
   const params = new URL(selection.request.url).searchParams;
-  if (params.size > maxFilters || [...params.keys()].some((key) => !filters.has(key))) {
+  if (
+    (Option.isSome(selection.id) && params.size > 0) ||
+    params.size > maxFilters ||
+    [...params.keys()].some((key) => !filters.has(key))
+  ) {
     return Option.none();
   }
-  return Schema.decodeOption(Query)(Object.fromEntries(params));
+  return Option.filter(
+    Schema.decodeOption(Query)(Object.fromEntries(params)),
+    (query) => Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value))
+  );
 };
 
 const selectStatement = (
@@ -100,9 +135,14 @@ const selectStatement = (
       values.push(value.value);
     }
   }
+  if (Option.isSome(query.cursor)) {
+    const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));
+    conditions.push("(occurred_at, created_at, id) < (?, ?, ?)");
+    values.push(occurred, created, recordId);
+  }
   return db
     .prepare(
-      `SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 100`
+      `SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
     )
     .bind(...values);
 };
@@ -125,7 +165,8 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
   });
 };
 
-const presentHistory = (rows: D1Result, id: Option.Option<string>): Response => {
+const presentHistory = (rows: D1Result, selection: Selection): Response => {
+  const { id, request } = selection;
   const decoded = rows.results.map(decodeTransactionRow);
   if (decoded.some(Option.isNone)) {
     return unavailable();
@@ -145,8 +186,19 @@ const presentHistory = (rows: D1Result, id: Option.Option<string>): Response => 
     });
     return Response.json({ data, next: [] }, { headers: noStore });
   }
+  const visible = transactions.slice(0, pageSize);
+  const last = visible.at(-1);
+  const next =
+    transactions.length > pageSize && last !== undefined
+      ? nextTransactionPage(
+          `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
+          Object.fromEntries(
+            [...new URL(request.url).searchParams].filter(([name]) => name !== "cursor")
+          )
+        )
+      : [];
   return Response.json(
-    { data: transactions.map((transaction) => Schema.encodeSync(Output)(transaction)), next: [] },
+    { data: visible.map((transaction) => Schema.encodeSync(Output)(transaction)), next },
     { headers: noStore }
   );
 };
@@ -158,16 +210,20 @@ const invalidQueryAudit = async (
   current: number
 ): Promise<Response> => {
   const { subject } = selection;
+  const invalidGet = Option.isSome(selection.id);
+  const outcome = invalidGet ? "not_found" : "validation_failed";
   try {
+    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const audit = await db
       .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, 'validation_failed', ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
+      SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
       AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
       .bind(
         uuid(),
         Option.isNone(selection.id)
           ? "transactions.listTransactions"
           : "transactions.getTransaction",
+        outcome,
         current,
         subject.id,
         subject.userId,
@@ -176,9 +232,10 @@ const invalidQueryAudit = async (
         current
       )
       .run();
-    return audit.meta.changes === 1 ? invalid() : noSession();
-  } catch {
-    return unavailable();
+    if (audit.meta.changes !== 1) return noSession();
+    return invalidGet ? notFound() : invalid();
+  } catch (error) {
+    return failedAudit(error);
   }
 };
 
@@ -193,6 +250,7 @@ export const browseTransactions = async (
   const { subject } = selection;
   if (Option.isNone(query)) return invalidQueryAudit(db, selection, current);
   try {
+    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const [rows, audit] = await db.batch([
       selectStatement(db, { selection, query: query.value, current }),
       db
@@ -219,8 +277,8 @@ export const browseTransactions = async (
     if (audit?.meta.changes !== 1) {
       return noSession();
     }
-    return rows === undefined ? unavailable() : presentHistory(rows, selection.id);
-  } catch {
-    return unavailable();
+    return rows === undefined ? unavailable() : presentHistory(rows, selection);
+  } catch (error) {
+    return failedAudit(error);
   }
 };

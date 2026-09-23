@@ -42,9 +42,18 @@ CREATE TABLE transaction_audit (
   user_id TEXT NOT NULL REFERENCES users(id),
   session_id TEXT NOT NULL REFERENCES web_sessions(id),
   operation TEXT NOT NULL CHECK (operation IN ('transactions.createTransaction', 'transactions.listTransactions', 'transactions.getTransaction')),
-  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'not_found', 'validation_failed')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'not_found', 'validation_failed', 'resource_limit')),
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
+-- Admission is stable-User scoped and atomic with the audit/creation batch. A refused call
+-- cannot grow storage or leave a partially inserted Transaction behind.
+CREATE INDEX transaction_audit_by_user_day ON transaction_audit(user_id, occurred_at_ms);
+CREATE TRIGGER transaction_audit_daily_budget BEFORE INSERT ON transaction_audit
+WHEN (SELECT COUNT(*) FROM transaction_audit
+      WHERE user_id = NEW.user_id
+        AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
+        AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
+BEGIN SELECT RAISE(ABORT, 'transaction_audit_limit'); END;
 CREATE TRIGGER transaction_audit_no_update BEFORE UPDATE ON transaction_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 CREATE TRIGGER transaction_audit_no_delete BEFORE DELETE ON transaction_audit

@@ -104,11 +104,12 @@ const rateLimitPaths = [
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
   "/user",
+  "/transactions",
 ] as const;
 
-const rateLimitExpression = `http.request.uri.path in {${rateLimitPaths
+const rateLimitExpression = `(http.request.uri.path in {${rateLimitPaths
   .map((path) => `"${path}"`)
-  .join(" ")}}`;
+  .join(" ")}} or starts_with(http.request.uri.path, "/transactions/"))`;
 
 const rateLimitRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   {

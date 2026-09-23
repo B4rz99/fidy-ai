@@ -4346,6 +4346,48 @@
         },
         "type": "object"
       },
+      "ResourceLimitedEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "ResourceLimited"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "enum": [
+                  "rate_limited"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
       "RestoredTransactionPair": {
         "additionalProperties": false,
         "properties": {
@@ -6249,6 +6291,10 @@
                       },
                       "currency": {
                         "$ref": "#/components/schemas/CurrencyPartial_1"
+                      },
+                      "cursor": {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|[0-9a-f-]{36}$",
+                        "type": "string"
                       },
                       "direction": {
                         "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
@@ -13842,6 +13888,15 @@
             "schema": {
               "$ref": "#/components/schemas/Currency"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\|[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13910,6 +13965,16 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [
@@ -14008,6 +14073,16 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [
@@ -14217,6 +14292,16 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [

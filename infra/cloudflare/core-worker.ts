@@ -8,11 +8,15 @@ import { HostedInference } from "@fidy/server/hosted-inference";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
+import {
+  ownsTransactionPath as transactionPath,
+  transactionRoute,
+} from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transaction-history";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
-  invalidTransaction,
+  rejectManualTransaction,
   transactionInput,
   transactionSession,
   unauthenticatedTransaction,
@@ -146,9 +150,6 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
-const transactionPath = (path: string): boolean =>
-  path === "/transactions" || /^\/transactions\/[0-9a-f-]{36}$/iu.test(path);
-
 const transactionsResponse = (
   request: Request,
   environment: CoreEnvironment
@@ -159,19 +160,25 @@ const transactionsResponse = (
       const subject = await transactionSession(request, environment.DB);
       if (Option.isNone(subject)) return unauthenticatedTransaction();
       const path = new URL(request.url).pathname;
-      if (request.method === "GET") {
+      const operation = transactionRoute(path, request.method);
+      if (Option.isNone(operation)) return methodNotAllowed();
+      if (operation.value.id !== "transactions.createTransaction") {
         return browseTransactions(environment.DB, {
           request,
           subject: subject.value,
           id:
-            path === "/transactions"
+            operation.value.id === "transactions.listTransactions"
               ? Option.none()
-              : Option.some(path.slice("/transactions/".length)),
+              : Option.some(path.slice(operation.value.route.indexOf(":id"))),
         });
       }
-      if (request.method !== "POST" || path !== "/transactions") return methodNotAllowed();
       const input = await transactionInput(request);
-      if (Option.isNone(input)) return invalidTransaction();
+      if (Option.isNone(input)) {
+        return rejectManualTransaction(environment.DB, subject.value, "validation_failed");
+      }
+      // The existing worker.core.fetch and worker.public.fetch Work spans bound latency and
+      // status for this D1/DO workflow. Do not add per-Transaction spans: they would count
+      // failures twice and risk exporting opaque record ids or captured Money.
       const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
       const encoded = await Effect.runPromise(
         Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)

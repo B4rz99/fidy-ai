@@ -1,4 +1,8 @@
 import { listCategoriesPath } from "@fidy/server/categories-path";
+import {
+  transactionMethods,
+  ownsTransactionPath as transactionPath,
+} from "@fidy/server/transaction-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Effect, Option } from "effect";
 import {
@@ -95,13 +99,10 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
   const requestedHeaders = Option.fromNullishOr(
     request.headers.get("access-control-request-headers")
   );
-  const method = allowedMethod(new URL(request.url).pathname);
+  const path = new URL(request.url).pathname;
+  const methods = transactionPath(path) ? transactionMethods(path) : [allowedMethod(path)];
   if (
-    !(
-      Option.contains(requestedMethod, method) ||
-      (new URL(request.url).pathname === "/transactions" &&
-        Option.contains(requestedMethod, "POST"))
-    ) ||
+    !Option.exists(requestedMethod, (method) => methods.includes(method)) ||
     !isAllowedPreflightHeaders(requestedHeaders)
   ) {
     return forbiddenOrigin();
@@ -112,8 +113,7 @@ const preflightResponse = (request: Request, browserOrigin: string): Response =>
       onNone: () => "",
       onSome: (value) => value.toLowerCase(),
     }),
-    "access-control-allow-methods":
-      new URL(request.url).pathname === "/transactions" ? "GET, POST" : method,
+    "access-control-allow-methods": methods.join(", "),
     "access-control-max-age": "600",
   });
   return applyApiPolicy(
@@ -155,8 +155,6 @@ const enrollmentPath = (path: string): boolean =>
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);
-const transactionPath = (path: string): boolean =>
-  path === "/transactions" || /^\/transactions\/[0-9a-f-]{36}$/iu.test(path);
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
 const supportRecoveryPath = "/internal/support-recovery";
 const emailAuthenticationPaths = [
@@ -251,7 +249,9 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
   path === supportRecoveryPath && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
-  request.method === allowedMethod(path) || (path === "/transactions" && request.method === "POST");
+  transactionPath(path)
+    ? transactionMethods(path).includes(request.method)
+    : request.method === allowedMethod(path);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   sessionPaths.has(path) ||
   enrollmentPath(path) ||
@@ -281,7 +281,14 @@ const gateOwnedRequest = (
     return policy(
       Response.json(
         { status: "method_not_allowed" },
-        { headers: { allow: allowedMethod(path) }, status: 405 }
+        {
+          headers: {
+            allow: transactionPath(path)
+              ? transactionMethods(path).join(", ")
+              : allowedMethod(path),
+          },
+          status: 405,
+        }
       )
     );
   }

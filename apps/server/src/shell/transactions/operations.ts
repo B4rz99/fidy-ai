@@ -14,6 +14,7 @@ import {
 import {
   NotFound,
   OperationResponse,
+  ResourceLimited,
   ValidationFailed,
   createdStatus,
 } from "~/shell/public-http/contract";
@@ -52,7 +53,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.post("createTransaction", "/transactions", {
       payload: CreateTransactionInput,
       success: CreateTransactionResponse.pipe(HttpApiSchema.status(createdStatus)),
-      error: [NotFound, ValidationFailed],
+      error: [NotFound, ValidationFailed, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
@@ -64,7 +65,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.get("listTransactions", "/transactions", {
       query: TransactionQueryParameters,
       success: OperationResponse(Schema.Array(Transaction)),
-      error: ValidationFailed,
+      error: [ValidationFailed, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
@@ -76,7 +77,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
       params: Schema.Struct({ id: TransactionId }),
       success: OperationResponse(TransactionPresentation),
-      error: NotFound,
+      error: [NotFound, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,

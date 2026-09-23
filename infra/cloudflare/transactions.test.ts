@@ -53,18 +53,53 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
       )
   );
 // @effect-diagnostics-next-line asyncFunction:off
-const setup = async (): Promise<D1Database> => {
+const platformModule = async (platform: boolean): Promise<string> => {
+  const built = platform
+    ? await Bun.build({
+        entrypoints: [new URL("./transaction-platform-fixture.ts", import.meta.url).pathname],
+        target: "browser",
+      })
+    : undefined;
+  if (built !== undefined && !built.success) throw new Error("Fixture bundle failed");
+  const fixtureModule =
+    built === undefined
+      ? "export default {fetch() {return new Response('ok')}}"
+      : await built.outputs[0]?.text();
+  if (fixtureModule === undefined) throw new Error("Fixture module missing");
+  return fixtureModule;
+};
+// @effect-diagnostics-next-line asyncFunction:off
+const setup = async (platform = false): Promise<D1Database> => {
+  const fixtureModule = await platformModule(platform);
   const mf = new Miniflare({
     workers: [
       {
         config: {
           compatibilityDate: "2026-09-08",
           env: { DB: { id: `transactions-${++sequence}`, type: "d1" } },
+          ...(platform
+            ? {
+                exports: {
+                  UserTransactionCoordinator: {
+                    type: "durable-object" as const,
+                    storage: "sqlite" as const,
+                  },
+                },
+                env: {
+                  DB: { id: `transactions-${sequence}`, type: "d1" as const },
+                  USER_TRANSACTION_COORDINATOR: {
+                    type: "durable-object" as const,
+                    worker: `transactions-${sequence}`,
+                    exportName: "UserTransactionCoordinator",
+                  },
+                },
+              }
+            : {}),
           manifest: {
             mainModule: "index.mjs",
             modules: {
               "index.mjs": {
-                contents: "export default {fetch() {return new Response('ok')}}",
+                contents: fixtureModule,
                 type: "esm",
               },
             },
@@ -142,7 +177,11 @@ const Created = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
-const sendPublicRequest = (db: D1Database, request: Request): Promise<Response> =>
+const sendPublicRequest = (
+  db: D1Database,
+  request: Request,
+  coordinator?: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
+): Promise<Response> =>
   publicWorker.fetch(request, {
     BROWSER_ORIGIN: "https://app.fidyapp.com",
     LOCAL_CANONICAL_READ_BEARER: "",
@@ -155,7 +194,7 @@ const sendPublicRequest = (db: D1Database, request: Request): Promise<Response> 
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           HOSTED_AI_MODEL: approvedWorkersAiModel,
-          USER_TRANSACTION_COORDINATOR: {
+          USER_TRANSACTION_COORDINATOR: coordinator ?? {
             getByName: (name) => ({
               fetch: (command) =>
                 new UserTransactionCoordinator({ id: { name } }, { DB: db }).fetch(
@@ -174,6 +213,104 @@ const sendPublicRequest = (db: D1Database, request: Request): Promise<Response> 
 const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("coordinates concurrent public mutations through a real per-User Durable Object binding", async () => {
+  const db = await setup(true);
+  const instance = instances.at(-1);
+  if (instance === undefined) throw new Error("Missing Miniflare runtime");
+  const namespace = await instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR");
+  const coordinator = {
+    getByName: (name: string): Readonly<{ fetch: (command: Request) => Promise<Response> }> => ({
+      fetch: (command: Request): Promise<Response> =>
+        command.text().then((body) =>
+          namespace
+            .getByName(name)
+            .fetch(command.url, {
+              method: command.method,
+              headers: Object.fromEntries(command.headers),
+              body,
+            })
+            .then((result) =>
+              result.text().then(
+                (text) =>
+                  new Response(text, {
+                    status: result.status,
+                    headers: Object.fromEntries(result.headers),
+                  })
+              )
+            )
+        ),
+    }),
+  };
+  const post = (index: number): Promise<Response> =>
+    sendPublicRequest(
+      db,
+      new Request("https://api.fidyapp.com/transactions", {
+        method: "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: `__Host-fidy_session=${bearer(index)}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input()),
+      }),
+      coordinator
+    );
+  const results = await Promise.all([post(0), post(0), post(1)]);
+  expect(results.map(({ status }) => status)).toEqual([201, 201, 201]);
+  const transactions = results.map((response) => response.json());
+  const [first, second, other] = await Promise.all(transactions);
+  const created = [first, second, other].map(
+    (value) => Schema.decodeUnknownSync(Created)(value).data
+  );
+  expect(new Set(created.map(({ id }) => id)).size).toBe(3);
+  const browse = (index: number, path = "/transactions"): Promise<Response> =>
+    sendPublicRequest(
+      db,
+      new Request(`https://api.fidyapp.com${path}`, {
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: `__Host-fidy_session=${bearer(index)}`,
+          authorization: `Bearer ${bearer(index)}`,
+          "x-provider-id": users[1 - index] ?? "untrusted",
+        },
+      }),
+      coordinator
+    );
+  const owner = Schema.decodeUnknownSync(Listed)(await (await browse(0)).json()).data;
+  const neighbor = Schema.decodeUnknownSync(Listed)(await (await browse(1)).json()).data;
+  expect(new Set(owner.map(({ id }) => id))).toEqual(
+    new Set(created.slice(0, 2).map(({ id }) => id))
+  );
+  expect(neighbor).toEqual([created[2]]);
+  const protectedTransaction = created[0];
+  if (protectedTransaction === undefined) throw new Error("Missing owner capture");
+  expect((await browse(1, `/transactions/${protectedTransaction.id}`)).status).toBe(404);
+  const attemptedDeletion = sendPublicRequest(
+    db,
+    new Request(`https://api.fidyapp.com/transactions/${protectedTransaction.id}`, {
+      method: "DELETE",
+      headers: {
+        origin: "https://app.fidyapp.com",
+        cookie: `__Host-fidy_session=${bearer(1)}`,
+        authorization: `Bearer ${bearer(1)}`,
+        "x-provider-id": users[0] ?? "",
+      },
+    }),
+    coordinator
+  );
+  const [createdAgain, deleted] = await Promise.all([post(0), attemptedDeletion]);
+  expect(createdAgain.status).toBe(201);
+  expect(deleted.status).not.toBe(200);
+  const preserved = Schema.decodeUnknownSync(Listed)(await (await browse(0)).json()).data;
+  expect(preserved).toContainEqual(protectedTransaction);
+  const evidence = await db
+    .prepare("SELECT COUNT(*) AS count FROM source_attestations WHERE transaction_id = ?")
+    .bind(protectedTransaction.id)
+    .first<{ count: number }>();
+  expect(evidence?.count).toBe(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -214,6 +351,61 @@ it("enforces the stable-User daily write budget atomically and preserves append-
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("bounds authenticated audit growth atomically per stable User at the public boundary", async () => {
+  const db = await setup();
+  // @effect-diagnostics-next-line globalDate:off
+  const current = Date.now();
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 256)
+    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+    SELECT 'budget-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+    .bind(users[0], sessions[0], current)
+    .run();
+  const call = (index: number, path = "/transactions", body?: object): Promise<Response> =>
+    sendPublicRequest(
+      db,
+      new Request(`https://api.fidyapp.com${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          cookie: `__Host-fidy_session=${bearer(index)}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    );
+  expect((await call(0)).status).toBe(429);
+  // The expensive history batch must not run once this User is admitted no further reads.
+  const cheapDb: D1Database = {
+    prepare: (sql) => db.prepare(sql),
+    batch: () => Promise.reject(new Error("History batch must not run")),
+    exec: (sql) => db.exec(sql),
+    withSession: (constraint) => db.withSession(constraint),
+    dump: () => db.dump(),
+  };
+  const cheapRefusal = await sendPublicRequest(
+    cheapDb,
+    new Request("https://api.fidyapp.com/transactions", {
+      headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${bearer(0)}` },
+    })
+  );
+  expect(cheapRefusal.status).toBe(429);
+  expect((await call(0, "/transactions?unknown=1")).status).toBe(429);
+  expect((await call(0, "/transactions", input())).status).toBe(429);
+  expect((await call(1)).status).toBe(200);
+  const audit = await db
+    .prepare("SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ count: number }>();
+  const transactions = await db
+    .prepare("SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ count: number }>();
+  expect(audit?.count).toBe(256);
+  expect(transactions?.count).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("rejects forged browser origins and malformed Money before any public mutation", async () => {
   const db = await setup();
   const post = (origin: string, data: object): Request =>
@@ -240,7 +432,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>()
     )
   );
-  expect(counts.map((result) => result?.count)).toEqual([0, 0, 0]);
+  expect(counts.map((result) => result?.count)).toEqual([0, 0, 1]);
   const created = await sendPublicRequest(db, post("https://app.fidyapp.com", input()));
   expect(created.status).toBe(201);
   const transaction = Schema.decodeUnknownSync(Created)(await created.json()).data;
@@ -259,6 +451,30 @@ it("rejects forged browser origins and malformed Money before any public mutatio
   ]);
   expect(Schema.decodeUnknownSync(Listed)(await (await browse(1)).json()).data).toEqual([]);
   expect((await browse(1, `/transactions/${transaction.id}`)).status).toBe(404);
+  const tokenOnly = await sendPublicRequest(
+    db,
+    new Request(`https://api.fidyapp.com/transactions/${transaction.id}`, {
+      headers: {
+        origin: "https://app.fidyapp.com",
+        authorization: `Bearer ${bearer(0)}`,
+        "x-provider-id": users[0] ?? "",
+      },
+    })
+  );
+  expect(tokenOnly.status).toBe(401);
+  const foreignWithBearer = await sendPublicRequest(
+    db,
+    new Request(`https://api.fidyapp.com/transactions/${transaction.id}`, {
+      headers: {
+        origin: "https://app.fidyapp.com",
+        cookie: `__Host-fidy_session=${bearer(1)}`,
+        authorization: `Bearer ${bearer(0)}`,
+        "x-provider-id": users[0] ?? "",
+      },
+    })
+  );
+  expect(foreignWithBearer.status).toBe(404);
+  expect((await browse(1, "/transactions/not-an-id")).status).toBe(404);
   expect((await browse(0, "/transactions?unknown=1")).status).toBe(400);
   const outcomes = await db
     .prepare(
@@ -266,7 +482,11 @@ it("rejects forged browser origins and malformed Money before any public mutatio
     )
     .bind(users[1])
     .all<{ outcome: string }>();
-  expect(outcomes.results.map(({ outcome }) => outcome)).toEqual(["not_found"]);
+  expect(outcomes.results.map(({ outcome }) => outcome)).toEqual([
+    "not_found",
+    "not_found",
+    "not_found",
+  ]);
   const invalidAudit = await db
     .prepare(
       "SELECT outcome FROM transaction_audit WHERE user_id = ? AND outcome = 'validation_failed'"
@@ -274,6 +494,60 @@ it("rejects forged browser origins and malformed Money before any public mutatio
     .bind(users[0])
     .first<{ outcome: string }>();
   expect(invalidAudit?.outcome).toBe("validation_failed");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("continues the canonical history beyond its first bounded page without losing tied movements", async () => {
+  const db = await setup();
+  // @effect-diagnostics-next-line globalDate:off
+  const createdAt = new Date().toISOString();
+  const previous = "2025-01-09T12:00:00.000Z";
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, ?,
+      CASE WHEN n = 101 THEN ? ELSE ? END FROM seq`)
+    .bind(users[0], category, previous, previous, createdAt)
+    .run();
+  await db
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    VALUES (?, ?, '1', 'COP', 'inflow', ?, '2024-01-09T12:00:00.000Z', ?)`)
+    .bind("00000000-0000-4000-8000-000000000999", users[0], category, previous)
+    .run();
+  const subject = Option.getOrThrow(await transactionSession(request(0), db));
+  const first = await browseTransactions(db, {
+    request: request(0, "/transactions?direction=outflow"),
+    subject,
+    id: Option.none(),
+  });
+  const Page = Schema.Struct({
+    data: Schema.Array(Schema.toCodecJson(Transaction)),
+    next: Schema.Array(
+      Schema.Struct({
+        tool: Schema.String,
+        hint: Schema.String,
+        args: Schema.Struct({
+          query: Schema.Struct({ cursor: Schema.String, direction: Schema.String }),
+        }),
+      })
+    ),
+  });
+  const page = Schema.decodeUnknownSync(Page)(await first.json());
+  expect(page.data).toHaveLength(100);
+  expect(page.next).toHaveLength(1);
+  expect(page.next[0]?.tool).toBe("transactions.listTransactions");
+  const cursor = page.next[0]?.args.query.cursor;
+  if (cursor === undefined) throw new Error("Missing continuation");
+  expect(page.next[0]?.args.query.direction).toBe("outflow");
+  const second = await browseTransactions(db, {
+    request: request(0, `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`),
+    subject,
+    id: Option.none(),
+  });
+  const remainder = Schema.decodeUnknownSync(Page)(await second.json());
+  expect(remainder.data).toHaveLength(1);
+  expect(remainder.next).toEqual([]);
+  expect(new Set([...page.data, ...remainder.data].map(({ id }) => id)).size).toBe(101);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -450,5 +724,5 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
       db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>()
     )
   );
-  expect(counts.map((result) => result?.count)).toEqual([0, 0, 0]);
+  expect(counts.map((result) => result?.count)).toEqual([0, 0, 1]);
 });

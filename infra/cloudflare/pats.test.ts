@@ -2057,28 +2057,12 @@ it("records successful PAT Transaction capture as use activity without extending
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const issuedResponse = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "70000000-0000-4000-8000-000000000042",
-            grant: {
-              recipientLabel: "Capture agent",
-              scopes: ["write"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(issuedResponse.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(issuedResponse.json()))).data;
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000042",
+        grant: manualGrant({ recipientLabel: "Capture agent", scopes: ["write"] }),
+      });
       const Activity = Schema.Struct({
         last_used_at_ms: Schema.NullOr(Schema.Finite),
         expires_at_ms: Schema.Finite,
@@ -2145,28 +2129,12 @@ it("rolls back PAT Transaction capture and activity when its audit is silently r
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const issuedResponse = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "70000000-0000-4000-8000-000000000043",
-            grant: {
-              recipientLabel: "Atomic capture agent",
-              scopes: ["write"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(issuedResponse.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(issuedResponse.json()))).data;
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000043",
+        grant: manualGrant({ recipientLabel: "Atomic capture agent", scopes: ["write"] }),
+      });
       const capture = {
         money: {
           amount: "23.50",
@@ -2958,28 +2926,12 @@ it("shares the Category work budget between WebSessions, PATs and Transaction wo
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
-      const issuedResponse = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "f0000000-0000-4000-8000-000000000001",
-            grant: {
-              recipientLabel: "Category reader",
-              scopes: ["read"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(issuedResponse.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(issuedResponse.json()))).data;
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "f0000000-0000-4000-8000-000000000001",
+        grant: manualGrant({ recipientLabel: "Category reader" }),
+      });
       yield* awaitPromise(
         db.batch(
           Array.from(

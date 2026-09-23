@@ -1,0 +1,69 @@
+infra/cloudflare/edge-security.ts
+  s_4c02df4101548b::t_e1b78348e6f6e9 99-100,102
+  s_4c02df4101548b::t_c1f4cbe22e50c6 101
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_4c02df4101548b::t_a1a6dac6928960 11,27
+apps/server/src/shell/identity/operations.ts
+  s_4c02df4101548b::t_7f4e10f098ce31 4,14
+infra/cloudflare/verified-onboarding.test.ts
+  s_4c02df4101548b::t_4ac7098c6835cb 6,176,264,308-309,316
+  s_4c02df4101548b::t_a62d02255f3717 310,317
+  s_4c02df4101548b::t_e9c44f3d9b0882 361,369,379-391,401-414,416
+  s_4c02df4101548b::t_480a04ab6dc3bc 366,373
+  s_4c02df4101548b::t_66902951c43e84 351,353-359
+  s_4c02df4101548b::t_3ed1d875275cc0 352
+  s_4c02df4101548b::t_72715cf329cadf 415
+  s_4c02df4101548b::t_dd2db89c624804 360,362-365,367,375-378,392-400,417-418
+  s_4c02df4101548b::t_638ba38aae7f59 7
+  s_4c02df4101548b::t_f0b47a0126e210 368
+  s_4c02df4101548b::t_233469feae40e5 370-372
+  s_4c02df4101548b::t_10ff377f42b9b1 374
+infra/cloudflare/browser-login.ts
+  s_4c02df4101548b::t_2133d76560412b 8,12-14,361-372,380-381,383
+  s_4c02df4101548b::t_7617573d7b31b5 6,213,216,219,232-236,260-264,286-291
+  s_4c02df4101548b::t_9d64624cb83611 9
+  s_4c02df4101548b::t_6b324cc31bab37 25-26,179-180
+  s_4c02df4101548b::t_62c8f96a3f5c36 5
+  s_4c02df4101548b::t_ae58684d5d04b6 117-118,318,320
+  s_4c02df4101548b::t_571429e98ee969 41
+  s_4c02df4101548b::t_7ec829e0824409 360
+  s_4c02df4101548b::t_35fa769c829321 226-231,254-259,279-285
+  s_4c02df4101548b::t_cb4b29fbdcbaff 222-225,237,240-242,244-253,265-278,292-301,303-313,325
+  s_4c02df4101548b::t_5e8ffe0c8634b3 373
+  s_4c02df4101548b::t_82f9b159a0a585 238-239,243
+  s_4c02df4101548b::t_e45723a5f161af 200-212,215,218,221
+  s_4c02df4101548b::t_c21025fef62a58 302
+  s_4c02df4101548b::t_13d21266bb2a10 382
+apps/server/contracts/openapi.json
+  s_4c02df4101548b::t_5264a5591873e8 14735-14744
+infra/cloudflare/migrations/0006_browser_login.sql
+  s_4c02df4101548b::t_57fc156c3c01e6 13
+apps/server/src/shell/identity/browser-runtime.ts
+  s_4c02df4101548b::t_69d88702719d39 3
+  s_4c02df4101548b::t_2d0e678f23aa8b 7-8
+  s_4c02df4101548b::t_68fa0f6c359dbd 2
+infra/cloudflare/workers.test.ts
+  s_4c02df4101548b::t_b5b685b7f9e621 169
+apps/server/src/shell/identity/current-user.ts
+  s_4c02df4101548b::t_e70c7c941099fb 47,50
+  s_4c02df4101548b::t_1cc7e8e293c65e 25,49
+  s_4c02df4101548b::t_c7fccd523c8edd 37
+  s_4c02df4101548b::t_aac3117f559bd2 1-24,26-36,38-46,48,51
+  s_4c02df4101548b::t_e615f9b64459b8 52-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1da805033db1d54ae594111833c5ed4a61f2dadd",
+  "prompts": {},
+  "sessions": {
+    "s_4c02df4101548b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cc0b-8b21-723f-922a-37f4dabe583b",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

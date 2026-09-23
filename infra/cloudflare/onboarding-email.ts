@@ -1,4 +1,5 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import type { EmailDeliveryPortService } from "@fidy/server/onboarding-email-delivery";
 import {
   type EmailSendFailed,
   makeOnboardingEmailDelivery,
@@ -195,8 +196,9 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-const sendThroughResend = (
+export const sendThroughResend = (
   input: Readonly<{
+    purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];
     environment: Pick<OnboardingEmailEnvironment, "RESEND_API_KEY">;
     to: EmailAddress;
     combinedCode: EmailVerificationCode;
@@ -213,7 +215,7 @@ const sendThroughResend = (
           apiKey: Redacted.make(input.environment.RESEND_API_KEY),
           httpClient: Context.get(clients, HttpClient.HttpClient),
         }).send({
-          purpose: "verified-onboarding",
+          purpose: input.purpose,
           to: input.to,
           combinedCode: input.combinedCode,
           idempotencyKey: input.id,
@@ -222,7 +224,7 @@ const sendThroughResend = (
     )
   );
 
-const deliveryState = (
+export const deliveryState = (
   outcome: Exit.Exit<void, EmailSendFailed>
 ): "awaiting_proof" | "rejected" | "ambiguous" => {
   if (Exit.isSuccess(outcome)) return "awaiting_proof";
@@ -269,6 +271,7 @@ export const deliverOnboardingEmail =
     if (claim.meta.changes !== 1) return;
     // The step retains no proof or provider body; state is D1-owned.
     const outcome = await sendThroughResend({
+      purpose: "verified-onboarding",
       environment,
       to: pending.value.email_address,
       combinedCode,

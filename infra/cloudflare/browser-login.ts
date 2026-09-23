@@ -12,6 +12,7 @@ import {
   webSessionIdleRenewalCandidate,
 } from "@fidy/server/identity-runtime";
 import * as D1Client from "@effect/sql-d1/D1Client";
+import { BackupRecoveryCode } from "@fidy/server/client";
 import { Clock, Context, DateTime, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
@@ -84,6 +85,17 @@ const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   responseHeaders.set("cache-control", "no-store");
   return Response.json(body, { status, headers: responseHeaders });
 };
+
+const recoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const recoverySymbolCount = 25;
+const sampleRecoveryCode = (): string =>
+  Array.from(
+    crypto.getRandomValues(new Uint8Array(recoverySymbolCount)),
+    (byte) => recoveryAlphabet[byte % recoveryAlphabet.length]
+  )
+    .join("")
+    .match(/.{5}/gu)
+    ?.join("-") ?? "";
 
 const samplePublicCode = (): string => {
   let symbols = "";
@@ -405,6 +417,68 @@ export const currentUser = async (request: Request, db: D1Database): Promise<Res
   } catch {
     return unavailable();
   }
+};
+
+/** Require a still-fresh browser session before rotating its User's emergency proof. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const rotateBackupRecoveryCode = async (
+  request: Request,
+  db: D1Database
+): Promise<Response> => {
+  const token = sessionCookie(request);
+  if (Option.isNone(token)) return noSession();
+  try {
+    const usedAt = now();
+    const session = await db
+      .prepare(`SELECT id, user_id FROM web_sessions
+      WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+      .bind(await sha256(token.value), usedAt, usedAt, usedAt)
+      .first();
+    if (session === null) return noSession();
+    const decoded = Schema.decodeUnknownOption(Session)(session);
+    if (Option.isNone(decoded)) return unavailable();
+    return rotateFreshSessionProof(db, decoded.value, usedAt);
+  } catch {
+    return unavailable();
+  }
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const rotateFreshSessionProof = async (
+  db: D1Database,
+  session: typeof Session.Type,
+  usedAt: number
+): Promise<Response> => {
+  const code = Schema.decodeOption(BackupRecoveryCode)(sampleRecoveryCode());
+  if (Option.isNone(code)) return unavailable();
+  const rotated = await db.batch([
+    db
+      .prepare(`UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
+        consumed_at_ms = NULL, revision = revision + 1
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM web_sessions
+        WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
+      .bind(
+        await sha256(code.value),
+        usedAt,
+        session.user_id,
+        session.id,
+        session.user_id,
+        usedAt,
+        usedAt,
+        usedAt
+      ),
+    db
+      .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
+        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`)
+      .bind(uuid(), session.user_id, session.id, usedAt),
+  ]);
+  if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) return noSession();
+  return json({
+    data: { status: "rotated", backupRecoveryCode: code.value, rotatedAt: instant(usedAt) },
+    next: [],
+  });
 };
 
 /** Revoke the exact cookie's session without disclosing whether it existed. */

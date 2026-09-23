@@ -9,6 +9,7 @@ export { BrowserLoginPairingId } from "~/core/browser-login/reference";
 export {
   BrowserLoginPublicCodeSymbols,
   decideBrowserLoginRedemption,
+  decidePendingBrowserLoginProof,
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
   formatPublicCode,

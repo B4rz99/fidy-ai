@@ -60,3 +60,12 @@ CREATE TABLE canonical_user_reads (
 ) STRICT;
 CREATE TRIGGER canonical_user_reads_no_update BEFORE UPDATE ON canonical_user_reads
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
+CREATE TABLE canonical_security_mutations (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  session_id TEXT NOT NULL REFERENCES web_sessions(id),
+  operation TEXT NOT NULL CHECK (operation = 'recovery.rotateBackupRecoveryCode'),
+  occurred_at_ms INTEGER NOT NULL
+) STRICT;
+CREATE TRIGGER canonical_security_mutations_no_update BEFORE UPDATE ON canonical_security_mutations
+BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;

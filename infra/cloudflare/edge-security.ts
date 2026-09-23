@@ -99,6 +99,10 @@ const rateLimitPaths = [
   "/web/pairings",
   "/web/pairings/redeem",
   "/web/session/logout",
+  "/web/email/authentication/start",
+  "/web/email/authentication/complete",
+  "/recovery/backup-code/rotate",
+  "/internal/support-recovery",
   "/user",
 ] as const;
 

@@ -133,19 +133,35 @@ const callbackPath = "/providers/kapso/callback";
 const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
-const ownedPath = (path: string): boolean =>
-  path === "/health" ||
-  path === listCategoriesPath ||
-  path === callbackPath ||
-  path === verificationPath ||
-  path === userPath ||
-  pairingPaths.some((pairingPath) => path === pairingPath);
-const allowedMethod = (path: string): "GET" | "POST" =>
-  path === callbackPath ||
-  path === verificationPath ||
-  pairingPaths.some((pairingPath) => path === pairingPath)
-    ? "POST"
-    : "GET";
+const rotateRecoveryPath = "/recovery/backup-code/rotate";
+const supportRecoveryPath = "/internal/support-recovery";
+const emailAuthenticationPaths = [
+  "/web/email/authentication/start",
+  "/web/email/authentication/complete",
+] as const;
+const postPaths = new Set<string>([
+  callbackPath,
+  verificationPath,
+  rotateRecoveryPath,
+  supportRecoveryPath,
+  ...emailAuthenticationPaths,
+  ...pairingPaths,
+]);
+const browserMutationPaths = new Set<string>([
+  rotateRecoveryPath,
+  ...emailAuthenticationPaths,
+  ...pairingPaths,
+]);
+const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
+const preflightPaths = new Set<string>([
+  listCategoriesPath,
+  verificationPath,
+  userPath,
+  ...browserMutationPaths,
+]);
+const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+const ownedPath = (path: string): boolean => ownedPaths.has(path);
+const allowedMethod = (path: string): "GET" | "POST" => (postPaths.has(path) ? "POST" : "GET");
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
     ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
@@ -154,13 +170,19 @@ const callbackHeaders = (request: Request): Headers =>
   ]);
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
-  if (path === "/web/session/logout") {
+  if (path === "/web/session/logout" || path === rotateRecoveryPath) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
   return headers;
 };
+const supportHeaders = (request: Request): Headers =>
+  new Headers({
+    "content-type": request.headers.get("content-type") ?? "",
+    "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
+  });
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === callbackPath) return callbackHeaders(request);
+  if (path === supportRecoveryPath) return supportHeaders(request);
   if (path === verificationPath || isBrowserMutation(path)) return browserHeaders(request, path);
   return path === userPath
     ? new Headers({ cookie: request.headers.get("cookie") ?? "" })
@@ -176,16 +198,14 @@ const coreRequest = (request: Request, signal: AbortSignal): Request => {
   });
 };
 
-const hasPreflight = (path: string): boolean =>
-  path === listCategoriesPath ||
-  path === verificationPath ||
-  path === userPath ||
-  pairingPaths.some((pairingPath) => pairingPath === path);
-const isBrowserMutation = (path: string): boolean =>
-  pairingPaths.some((pairingPath) => pairingPath === path);
+const hasPreflight = (path: string): boolean => preflightPaths.has(path);
+const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
+
+const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
+  path === supportRecoveryPath && Option.isSome(origin);
 
 const routeOwnedRequest = (
   request: Request,
@@ -196,6 +216,11 @@ const routeOwnedRequest = (
   if (!ownedPath(url.pathname)) {
     return Promise.resolve(
       applyApiPolicy(Response.json({}, { status: 404 }), environment.BROWSER_ORIGIN, origin)
+    );
+  }
+  if (disallowedSupportOrigin(url.pathname, origin)) {
+    return Promise.resolve(
+      applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, Option.none())
     );
   }
   if (isPreflight(request, url.pathname, origin)) {
@@ -213,10 +238,7 @@ const routeOwnedRequest = (
       )
     );
   }
-  if (
-    (isBrowserMutation(url.pathname) || url.pathname === userPath) &&
-    !Option.contains(origin, environment.BROWSER_ORIGIN)
-  ) {
+  if (sessionPaths.has(url.pathname) && !Option.contains(origin, environment.BROWSER_ORIGIN)) {
     return Promise.resolve(applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, origin));
   }
   const authorizationFailure = categoryAuthorizationFailure(request, environment);

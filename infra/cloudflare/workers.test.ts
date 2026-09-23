@@ -39,6 +39,8 @@ const coreEnvironment = {
   HOSTED_AI_MODEL: approvedWorkersAiModel,
   KAPSO_API_KEY: "",
   KAPSO_WEBHOOK_SECRET: "",
+  CLOUDFLARE_ACCESS_ISSUER: "",
+  CLOUDFLARE_ACCESS_AUDIENCE: "",
   WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
   RELEASE_GIT_SHA: gitRevision,
 };
@@ -166,7 +168,7 @@ describe("Production topology contract", () => {
     expect(rateLimits[0]).toMatchObject({
       action: "block",
       expression:
-        'http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback" "/web/onboarding/email/verify" "/web/pairings" "/web/pairings/redeem" "/web/session/logout" "/user"}',
+        'http.request.uri.path in {"/health" "/categories" "/providers/kapso/callback" "/providers/wompi/callback" "/web/onboarding/email/verify" "/web/pairings" "/web/pairings/redeem" "/web/session/logout" "/web/email/authentication/start" "/web/email/authentication/complete" "/recovery/backup-code/rotate" "/internal/support-recovery" "/user"}',
       ratelimit: {
         characteristics: ["cf.colo.id", "ip.src"],
         mitigationTimeout: 10,
@@ -237,6 +239,8 @@ describe("Cloudflare Worker topology", () => {
           HOSTED_AI_MODEL: "unsupported private model",
           KAPSO_API_KEY: "",
           KAPSO_WEBHOOK_SECRET: "",
+          CLOUDFLARE_ACCESS_ISSUER: "",
+          CLOUDFLARE_ACCESS_AUDIENCE: "",
           WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
           RELEASE_GIT_SHA: "wrong",
         })

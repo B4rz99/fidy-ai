@@ -9,10 +9,20 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
+import { completeBrowserPairingEmail, startBrowserPairingEmail } from "./browser-pairing-email";
+import {
+  type BrowserPairingEmailEnvironment,
+  dispatchBrowserPairingEmail,
+  isBrowserPairingEmailWork,
+  receiveBrowserPairingEmail,
+  reconcileBrowserPairingEmail,
+} from "./browser-pairing-email-delivery";
+import { handleSupportRecovery } from "./support-recovery";
 import {
   currentUser,
   logoutBrowser,
   redeemBrowserPairing,
+  rotateBackupRecoveryCode,
   startBrowserPairing,
 } from "./browser-login";
 import {
@@ -31,6 +41,7 @@ import {
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./workers-ai";
 
 export { OnboardingEmailWorkflowV1 } from "./onboarding-email";
+export { BrowserPairingEmailWorkflowV1 } from "./browser-pairing-email-delivery";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -45,7 +56,10 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  } & Partial<Omit<OnboardingEmailEnvironment, "DB">>;
+    readonly CLOUDFLARE_ACCESS_ISSUER: string;
+    readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
+  } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
+  Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">>;
 
 type CoreWorker = Readonly<{
   fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
@@ -118,10 +132,18 @@ const ownedCorePath = (path: string): boolean =>
     "/web/pairings",
     "/web/pairings/redeem",
     "/web/session/logout",
+    "/recovery/backup-code/rotate",
+    "/web/email/authentication/start",
+    "/web/email/authentication/complete",
+    "/internal/support-recovery",
     "/user",
   ].includes(path);
 
-const browserResponse = (request: Request, db: D1Database): Effect.Effect<Response> => {
+const browserResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> => {
+  const db = environment.DB;
   const path = new URL(request.url).pathname;
   const routes: Readonly<
     Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
@@ -129,6 +151,22 @@ const browserResponse = (request: Request, db: D1Database): Effect.Effect<Respon
     "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
     "/web/pairings/redeem": { method: "POST", handle: () => redeemBrowserPairing(request, db) },
     "/web/session/logout": { method: "POST", handle: () => logoutBrowser(request, db) },
+    "/recovery/backup-code/rotate": {
+      method: "POST",
+      handle: () => rotateBackupRecoveryCode(request, db),
+    },
+    "/web/email/authentication/start": {
+      method: "POST",
+      handle: () => startBrowserPairingEmail(request, db),
+    },
+    "/web/email/authentication/complete": {
+      method: "POST",
+      handle: () => completeBrowserPairingEmail(request, db),
+    },
+    "/internal/support-recovery": {
+      method: "POST",
+      handle: () => handleSupportRecovery(request, db, environment),
+    },
     "/user": { method: "GET", handle: () => currentUser(request, db) },
   };
   const route = routes[path];
@@ -150,9 +188,18 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
     return verificationEffect(request, environment.DB);
   }
   if (
-    ["/web/pairings", "/web/pairings/redeem", "/web/session/logout", "/user"].includes(url.pathname)
+    [
+      "/web/pairings",
+      "/web/pairings/redeem",
+      "/web/session/logout",
+      "/recovery/backup-code/rotate",
+      "/web/email/authentication/start",
+      "/web/email/authentication/complete",
+      "/internal/support-recovery",
+      "/user",
+    ].includes(url.pathname)
   ) {
-    return browserResponse(request, environment.DB);
+    return browserResponse(request, environment);
   }
   if (request.method !== "GET") return Effect.succeed(methodNotAllowed());
 
@@ -171,6 +218,29 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
       HTTP_OK
     )
   );
+};
+
+const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
+    if (environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined) {
+      return Promise.reject(new Error("Browser pairing email unavailable"));
+    }
+    return receiveBrowserPairingEmail({
+      DB: environment.DB,
+      BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
+    })(batch).pipe(Effect.runPromise);
+  }
+  if (
+    environment.ONBOARDING_EMAIL_QUEUE === undefined ||
+    environment.ONBOARDING_EMAIL_WORKFLOW === undefined ||
+    environment.RESEND_API_KEY === undefined
+  ) {
+    return Promise.reject(new Error("Onboarding email unavailable"));
+  }
+  return receiveOnboardingEmail({
+    DB: environment.DB,
+    ONBOARDING_EMAIL_WORKFLOW: environment.ONBOARDING_EMAIL_WORKFLOW,
+  })(batch).pipe(Effect.runPromise);
 };
 
 /** Builds the private Core target with one telemetry service for each request Work span. */
@@ -203,22 +273,17 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
           : Effect.void
       );
       yield* reconcileOnboardingEmail(environment.DB);
+      if (environment.BROWSER_PAIRING_EMAIL_QUEUE !== undefined) {
+        yield* dispatchBrowserPairingEmail({
+          DB: environment.DB,
+          BROWSER_PAIRING_EMAIL_QUEUE: environment.BROWSER_PAIRING_EMAIL_QUEUE,
+        });
+      }
+      yield* reconcileBrowserPairingEmail(environment.DB);
       yield* sweepExpiredConsent(environment.DB)();
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
-  queue: (batch, environment) => {
-    if (
-      environment.ONBOARDING_EMAIL_QUEUE === undefined ||
-      environment.ONBOARDING_EMAIL_WORKFLOW === undefined ||
-      environment.RESEND_API_KEY === undefined
-    ) {
-      return Promise.reject(new Error("Onboarding email unavailable"));
-    }
-    return receiveOnboardingEmail({
-      DB: environment.DB,
-      ONBOARDING_EMAIL_WORKFLOW: environment.ONBOARDING_EMAIL_WORKFLOW,
-    })(batch).pipe(Effect.runPromise);
-  },
+  queue: receiveEmailQueue,
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

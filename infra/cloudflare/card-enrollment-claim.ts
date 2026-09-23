@@ -7,6 +7,7 @@ const Claim = Schema.Struct({
   enrollmentId: CardEnrollmentId,
   paymentRequestId: PaymentRequestId,
   billingEmail: BillingEmail,
+  paymentSourceMode: Schema.Literals(["create", "reuse"]),
 });
 
 /**
@@ -26,16 +27,17 @@ export const claimPreparedCardEnrollment = async (
   const claim = Schema.decodeSync(Claim)(input);
   const result = await db
     .prepare(`UPDATE card_enrollments SET status = 'creating',
-      payment_request_id = ?, billing_email = ?, accepted_at_ms = ?
+      payment_request_id = ?, accepted_at_ms = ?
     WHERE id = ? AND user_id = ? AND status = 'prepared' AND expires_at_ms > ?
-      AND payment_source_mode = 'create'`)
+      AND payment_source_mode = ? AND billing_email = ?`)
     .bind(
       claim.paymentRequestId,
-      claim.billingEmail,
       nowMs,
       claim.enrollmentId,
       claim.userId,
-      nowMs
+      nowMs,
+      claim.paymentSourceMode,
+      claim.billingEmail
     )
     .run();
   return result.meta.changes === 1;

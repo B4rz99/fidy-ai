@@ -1,17 +1,16 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
-import { Miniflare } from "miniflare";
+import type { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import { BillingEmail, CardEnrollmentId, PaymentRequestId } from "@fidy/server/client";
 import { UserId } from "@fidy/server/identity-runtime";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
+import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 
 const userA = UserId.make("10000000-0000-4000-8000-000000000001");
 const userB = UserId.make("10000000-0000-4000-8000-000000000002");
 const enrollmentId = CardEnrollmentId.make("20000000-0000-4000-8000-000000000001");
 const paymentRequestId = PaymentRequestId.make("30000000-0000-4000-8000-000000000001");
 const billingEmail = BillingEmail.make("a@example.test");
-const priceId = "40000000-0000-4000-8000-000000000001";
+const priceId = "22700000-0000-4000-8000-000000000001";
 const nowMs = 1_000_000;
 let nextDatabase = 0;
 const instances: Array<Miniflare> = [];
@@ -24,51 +23,11 @@ afterEach(async () => {
 // @effect-diagnostics-next-line asyncFunction:off
 const setup = async (): Promise<D1Database> => {
   const name = `card-enrollment-${++nextDatabase}`;
-  const mf = new Miniflare({
-    workers: [
-      {
-        config: {
-          compatibilityDate: "2026-09-08",
-          env: { DB: { id: name, type: "d1" } },
-          manifest: {
-            mainModule: "index.mjs",
-            modules: {
-              "index.mjs": {
-                contents: "export default {fetch() {return new Response('ok')}}",
-                type: "esm",
-              },
-            },
-          },
-          name,
-          type: "worker",
-        },
-      },
-    ],
-  });
-  instances.push(mf);
-  await mf.ready;
-  const db = await mf.getD1Database("DB");
-  await db.exec("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL) STRICT;");
-  const migration = await readFile(
-    new URL("./migrations/0009_card_enrollment.sql", import.meta.url),
-    "utf8"
-  );
-  await migration
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=CREATE |$)/u)
-    .reduce<Promise<void>>(
-      (previous, statement) =>
-        previous.then(() => db.prepare(statement).run()).then(() => undefined),
-      Promise.resolve()
-    );
+  const { db, instance } = await makeCardEnrollmentD1(name, [
+    "CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL) STRICT",
+  ]);
+  instances.push(instance);
   await db.prepare("INSERT INTO users (id) VALUES (?), (?)").bind(userA, userB).run();
-  await db
-    .prepare(`INSERT INTO subscription_prices
-    (id, amount, currency, billing_period, service_market, tax_treatment, terms_json)
-    VALUES (?, '9900', 'COP', 'weekly', 'CO', 'not-taxable', '{}')`)
-    .bind(priceId)
-    .run();
   await db
     .prepare(`INSERT INTO card_enrollments
     (id, user_id, price_id, billing_email, status, payment_source_mode,
@@ -82,7 +41,12 @@ const setup = async (): Promise<D1Database> => {
 // @effect-diagnostics-next-line asyncFunction:off
 it("only the owning User can claim a prepared CardEnrollment, once", async () => {
   const db = await setup();
-  const request = { enrollmentId, paymentRequestId, billingEmail };
+  const request = {
+    enrollmentId,
+    paymentRequestId,
+    billingEmail,
+    paymentSourceMode: "create" as const,
+  };
   expect(await claimPreparedCardEnrollment(db, { ...request, userId: userB }, nowMs)).toBe(false);
   const unclaimed = await db
     .prepare("SELECT status, payment_request_id FROM card_enrollments WHERE id = ?")
@@ -114,6 +78,7 @@ it("an expired preparation cannot authorize a provider source", async () => {
         enrollmentId,
         paymentRequestId,
         billingEmail,
+        paymentSourceMode: "create",
       },
       nowMs + 900_000
     )
@@ -140,11 +105,16 @@ it("rejects a pending BillingAttempt whose snapshot differs from the selected Pr
         enrollmentId,
         paymentRequestId,
         billingEmail,
+        paymentSourceMode: "create",
       },
       nowMs
     )
   ).toBe(true);
   const sourceId = "50000000-0000-4000-8000-000000000001";
+  await db
+    .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
+    .bind(enrollmentId)
+    .run();
   await db
     .prepare(`INSERT INTO card_payment_sources
     (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)

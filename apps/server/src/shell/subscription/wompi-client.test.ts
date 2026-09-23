@@ -324,10 +324,9 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"ERROR"}}', { status
 layer(clientLayer(new Response('{"data":{"id":3891,"status":"PENDING"}}', { status: 201 })), {
   excludeTestServices: true,
 })("Wompi pending source adapter", (it) => {
-  it.effect("fences an unresolved source as ambiguous", () =>
+  it.effect("retains the private identity of a pending source for authenticated verification", () =>
     Effect.gen(function* () {
-      const failure = yield* Effect.flip(createPaymentSource);
-      expect(failure).toEqual(new WompiSourceCreationFailed({ certainty: "ambiguous" }));
+      expect(yield* createPaymentSource).toEqual({ _tag: "Verifying", sourceId: 3891 });
     })
   );
 });

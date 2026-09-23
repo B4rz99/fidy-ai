@@ -16,6 +16,10 @@ const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
+const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
+const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
+const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
+const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
@@ -118,6 +122,7 @@ export default Alchemy.Stack(
     providers: Cloudflare.providers(),
     state,
   },
+  // eslint-disable-next-line complexity -- Provisioning collects independent Worker bindings and resources.
   Effect.gen(function* () {
     const development = yield* Alchemy.ALCHEMY_DEV;
     const stage = yield* Alchemy.Stack.useSync((stack) => stack.stage);
@@ -169,6 +174,19 @@ export default Alchemy.Stack(
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
         BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
         RESEND_API_KEY: yield* resolveResendKey(development),
+        BROWSER_ORIGIN: resolveBrowserOrigin(production),
+        WOMPI_ENVIRONMENT: yield* development
+          ? wompiEnvironment.pipe(Config.withDefault("sandbox"))
+          : wompiEnvironment,
+        WOMPI_PUBLIC_KEY: yield* development
+          ? wompiPublicKey.pipe(Config.withDefault(""))
+          : wompiPublicKey,
+        WOMPI_PRIVATE_KEY: yield* development
+          ? wompiPrivateKey.pipe(Config.withDefault(Redacted.make("")))
+          : wompiPrivateKey,
+        WOMPI_INTEGRITY_SECRET: yield* development
+          ? wompiIntegritySecret.pipe(Config.withDefault(Redacted.make("")))
+          : wompiIntegritySecret,
         CLOUDFLARE_ACCESS_ISSUER: accessConfig.issuer,
         CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,

@@ -1,0 +1,29 @@
+infra/cloudflare/verified-onboarding.test.ts
+  s_dd21fd8c536cf5::t_8998925d23189f 324,391-393
+  s_dd21fd8c536cf5::t_fe0b8044989f5a 352-390,394-402
+  s_dd21fd8c536cf5::t_708cb65bf2a0d7 403-449
+infra/cloudflare/migrations/0006_browser_login.sql
+  s_dd21fd8c536cf5::t_ebf6e66e6f8836 43-45
+apps/server/src/shell/identity/browser-runtime.ts
+  s_dd21fd8c536cf5::t_8cc700acf06a37 3-4,6
+  s_dd21fd8c536cf5::t_4dc3ea020b4e1a 5
+infra/cloudflare/browser-login.ts
+  s_dd21fd8c536cf5::t_620703349b7ecd 367
+  s_dd21fd8c536cf5::t_a8ed4a7ea6e772 6,12,316,324-326,328-336,340,344-346,366,369-372,397-404
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d9a5830cce9cb003550806c15d26526f784def2f",
+  "prompts": {},
+  "sessions": {
+    "s_dd21fd8c536cf5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cc49-1bed-723f-922a-37fffaa19faa",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

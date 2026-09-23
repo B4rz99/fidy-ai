@@ -1,0 +1,23 @@
+infra/cloudflare/verified-onboarding.test.ts
+  s_e3fd5727aca99a::t_891d67a365a4b4 190-196
+  s_e3fd5727aca99a::t_ce9f246235844c 113,181-182,211
+infra/cloudflare/verified-onboarding.ts
+  s_e3fd5727aca99a::t_803d5b5b8a5205 7-8,28-31,73-74
+  s_e3fd5727aca99a::t_5a5423f14e49c8 122,124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6a04fb065b202097b6c88038f2a35e0b7aa83e8b",
+  "prompts": {},
+  "sessions": {
+    "s_e3fd5727aca99a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0cb3a-bced-70b8-bb4c-aae4994ab589",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

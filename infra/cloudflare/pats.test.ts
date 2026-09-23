@@ -84,6 +84,7 @@ const setup = async (): Promise<{
     "0009_pats",
     "0009_transactions",
     "0010_pat_revocation_consents",
+    "0011_explicit_consent_revocations",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -1000,6 +1001,73 @@ it("gates every declared canonical path by live PAT and exact operation scope be
     (
       await db
         .prepare("SELECT count(*) AS total FROM pat_audit WHERE operation = 'budgets.listBudgets'")
+        .first()
+    )?.total
+  ).toBe(0);
+
+  const stillLive = await issue("read", 4);
+  const grantId = "e0000000-0000-4000-8000-000000000001";
+  await db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+    .bind(grantId, userA, clock(), clock())
+    .run();
+  await db
+    .prepare(`INSERT INTO consent_user_revocations
+    (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+    .bind(
+      "e0000000-0000-4000-8000-000000000002",
+      userA,
+      grantId,
+      "40000000-0000-4000-8000-000000000001",
+      clock()
+    )
+    .run();
+  const withdrawn = await send({ path: "/categories", method: "GET", bearer: stillLive.bearer });
+  expect(withdrawn.status).toBe(403);
+  expect(JSON.stringify(await withdrawn.json())).toContain("user_action_required");
+  expect(
+    (await send({ path: "/transactions", method: "GET", bearer: stillLive.bearer })).status
+  ).toBe(403);
+  expect((await send({ path: "/categories", method: "GET", bearer: "fin_invalid" })).status).toBe(
+    401
+  );
+  const rejectedIssuance = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "70000000-0000-4000-8000-000000000005",
+      grant: {
+        recipientLabel: "Too late",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(rejectedIssuance.status).toBe(403);
+  expect(JSON.stringify(await rejectedIssuance.json())).toContain("user_action_required");
+  const pairingStart = await send({
+    path: "/pat-pairings",
+    method: "POST",
+    payload: { recipientLabel: "Post-consent client", scopes: ["read"], lifetimeDays: 7 },
+  });
+  expect(pairingStart.status).toBe(200);
+  const pending = Schema.decodeUnknownSync(Started)(await pairingStart.json());
+  const deniedApproval = await send({
+    path: "/pats/pairings/approve",
+    method: "POST",
+    session: sessions[0],
+    payload: { pairingId: pending.pairingId },
+  });
+  expect(deniedApproval.status).not.toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_grant_consents WHERE pairing_id = ?")
+        .bind(pending.pairingId)
         .first()
     )?.total
   ).toBe(0);

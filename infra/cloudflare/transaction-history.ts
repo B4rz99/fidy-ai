@@ -310,7 +310,8 @@ const patHistoryStatements = (
   return [
     db
       .prepare(`UPDATE pats SET last_used_at_ms = ? WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+        AND revoked_at_ms IS NULL AND expires_at_ms > ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
       .bind(current, subject.patId, subject.userId, subject.digest, current),
     ...(Option.isSome(query)
       ? [
@@ -319,7 +320,8 @@ const patHistoryStatements = (
             query: query.value,
             authority: {
               predicate: `EXISTS (SELECT 1 FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-                  AND revoked_at_ms IS NULL AND expires_at_ms > ?)`,
+                  AND revoked_at_ms IS NULL AND expires_at_ms > ?
+                  AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id))`,
               bindings: [subject.userId, subject.patId, subject.userId, subject.digest, current],
             },
           }),
@@ -328,7 +330,8 @@ const patHistoryStatements = (
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
         SELECT ?,user_id,id,?,?,? FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+        AND revoked_at_ms IS NULL AND expires_at_ms > ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
       .bind(
         uuid(),
         Option.isNone(id) ? "transactions.listTransactions" : "transactions.getTransaction",

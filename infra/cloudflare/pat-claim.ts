@@ -93,8 +93,9 @@ const reserveClaim = async (db: D1Database, claim: Claim): Promise<boolean> => {
   const results = await db.batch([
     db
       .prepare(`UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
-        AND user_id = ? AND expires_at_ms > ? AND
-        (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
+        AND user_id = ? AND expires_at_ms > ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pat_pairings.user_id)
+        AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
         AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`)
       .bind(
         pairing.id,

@@ -64,7 +64,8 @@ export const rejectManualTransaction = async (
             .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
           SELECT ?,user_id,id,'transactions.createTransaction','rejected',?
           FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-          AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+          AND revoked_at_ms IS NULL AND expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
             .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
         : db
             .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
@@ -148,7 +149,8 @@ const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => 
         .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
         SELECT ?,user_id,id,'transactions.createTransaction','accepted',?
         FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
-        AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+        AND revoked_at_ms IS NULL AND expires_at_ms > ?
+        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`)
         .bind(uuid(), current, subject.patId, subject.userId, subject.digest, current)
     : db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
@@ -170,7 +172,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
     ? {
         table: "pats",
         predicate:
-          "id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?",
+          "id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)",
         bindings: [subject.patId, subject.userId, subject.digest, current],
       }
     : {

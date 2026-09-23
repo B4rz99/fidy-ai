@@ -8,5 +8,5 @@ export {
 } from "./list-categories";
 export { CategoriesGroup, ListCategoriesResponse } from "./operations";
 export { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
-export { ScopeMissing } from "~/shell/public-http/contract";
+export { ScopeMissing, UserActionRequired } from "~/shell/public-http/contract";
 export { listCategoriesPath } from "./path";

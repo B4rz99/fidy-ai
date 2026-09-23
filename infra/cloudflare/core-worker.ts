@@ -1,6 +1,7 @@
 import * as D1Client from "@effect/sql-d1/D1Client";
 import {
   ScopeMissing,
+  UserActionRequired,
   categoryUnavailable,
   listCategoriesPath,
   listCategoriesResponse,
@@ -298,6 +299,22 @@ const browserResponse = (
     : work;
 };
 
+const consentRevokedResponse = (): Response =>
+  jsonResponse(
+    JSON.stringify(
+      Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
+        UserActionRequired.make({
+          error: {
+            code: "user_action_required",
+            message: "Return to Fidy to review your withdrawn Consent.",
+          },
+          next: [],
+        })
+      )
+    ),
+    HTTP_FORBIDDEN
+  );
+
 const scopeMissingResponse = (): Response =>
   jsonResponse(
     JSON.stringify(
@@ -403,7 +420,9 @@ const authorizedCanonicalResponse = (
     );
   }
   return Effect.tryPromise({
-    try: async (): Promise<AuthorizedPAT | "accepted" | "unauthenticated" | "scope_missing"> =>
+    try: async (): Promise<
+      AuthorizedPAT | "accepted" | "unauthenticated" | "scope_missing" | "user_action_required"
+    > =>
       operation.id === "categories.listCategories"
         ? authorizeCategoryPAT(request, environment.DB)
         : authorizeCanonicalPAT(request, environment.DB, operation),
@@ -418,6 +437,7 @@ const authorizedCanonicalResponse = (
       onSuccess: (authorized) => {
         if (typeof authorized === "object") return authorized;
         if (authorized === "accepted") return undefined;
+        if (authorized === "user_action_required") return consentRevokedResponse();
         if (authorized === "scope_missing") return scopeMissingResponse();
         return jsonResponse(
           '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',

@@ -5,6 +5,7 @@ import {
   ManualPATIssuanceRateLimited,
   ManualPATReviewExpired,
   TokenBearer,
+  UserActionRequired,
   ValidationFailed,
   buildPATDisclosure,
   issuanceConsumedMessage,
@@ -38,6 +39,21 @@ import {
   serviceUnavailable as unavailable,
   webSession,
 } from "./pat-shared";
+
+const httpForbidden = 403;
+const consentActionRequired = (): Response =>
+  response(
+    Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
+      UserActionRequired.make({
+        error: {
+          code: "user_action_required",
+          message: "Return to Fidy to review your withdrawn Consent.",
+        },
+        next: [],
+      })
+    ),
+    httpForbidden
+  );
 
 const invalidReview = (): Response =>
   response(
@@ -97,6 +113,7 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
     db
       .prepare(`INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
       created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${sessionExists}
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
       AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`)
       .bind(
@@ -112,6 +129,7 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
         expires,
         requestId,
         ...sessionParams(session, current),
+        session.user_id,
         session.user_id,
         current,
         maxActivePATs,
@@ -173,6 +191,11 @@ const failedIssuance = async (
     .bind(requestId, userId)
     .first();
   if (prior !== null) return consumed();
+  const revokedConsent = await db
+    .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
+    .bind(userId)
+    .first();
+  if (revokedConsent !== null) return consentActionRequired();
   const issued = await db
     .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
     .bind(userId, currentMillis() - issuanceWindowMilliseconds)

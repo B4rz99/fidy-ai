@@ -277,14 +277,16 @@ const commitApproval = async (db: D1Database, approval: Approval): Promise<boole
   const committed = await db.batch([
     db
       .prepare(`UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
-      WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${sessionExists}`)
+      WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${sessionExists}
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`)
       .bind(
         session.user_id,
         current,
         expires,
         pairing.id,
         current,
-        ...sessionParams(session, current)
+        ...sessionParams(session, current),
+        session.user_id
       ),
     db
       .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)

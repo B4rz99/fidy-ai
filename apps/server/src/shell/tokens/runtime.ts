@@ -27,7 +27,7 @@ export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing
 export { PATsGroup } from "~/shell/tokens/operations";
 export { listPATsResponse } from "~/shell/tokens/list-pats";
 export { PATPairingDirectGroup } from "~/pat-pairing-api";
-export { ValidationFailed } from "~/shell/public-http/contract";
+export { UserActionRequired, ValidationFailed } from "~/shell/public-http/contract";
 export {
   IssuedManualPATResponse,
   ManualPATIssuanceConsumed,

@@ -138,6 +138,8 @@ const matchingRecoveryCandidate = async (
     .prepare(`SELECT p.id FROM browser_login_pairings AS p
     JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
     WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
+      AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
+        WHERE e.pairing_id = p.id AND e.user_id <> b.user_id)
       AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.id)`)
     .bind(codeDigest, publicCode, now)
     .first();
@@ -150,7 +152,9 @@ const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready',
   WHERE public_code = ? AND state = 'pending_approval' AND expires_at_ms > ?
     AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = browser_login_pairings.id)
     AND EXISTS (SELECT 1 FROM backup_recovery_credentials AS b
-      WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL)`;
+      WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL
+        AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
+          WHERE e.pairing_id = browser_login_pairings.id AND e.user_id <> b.user_id))`;
 const recoveryCredentialConsume = `UPDATE backup_recovery_credentials SET code_digest = ?,
   consumed_at_ms = ? WHERE code_digest = ? AND consumed_at_ms IS NULL
   AND EXISTS (SELECT 1 FROM browser_login_pairings AS p
@@ -213,6 +217,16 @@ const configuredAccess = (config: {
 const admissionResponse = (admission: "limited" | "unavailable"): Response =>
   admission === "limited" ? response(httpTooManyRequests, { status: "limited" }) : unavailable();
 
+// @effect-diagnostics-next-line asyncFunction:off
+const decideSupportCase = async (db: D1Database, input: CaseDecision): Promise<Response> => {
+  try {
+    if (await approveCase(db, input)) return response(httpOk, { status: "approved" });
+  } catch {
+    // A competing approval can invalidate a conditional D1 batch after its preflight read.
+  }
+  return (await matchingRecoveryCandidate(db, input)) ? unavailable() : notApproved();
+};
+
 /** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
  * and case events commit in one D1 batch. No public reference can resolve a User alone. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -245,13 +259,12 @@ export const handleSupportRecovery = async (
     ) {
       return notApproved();
     }
-    const paired = await approveCase(db, {
+    return decideSupportCase(db, {
       operator: operator.value,
       codeDigest,
       publicCode: payload.value.pairingCode,
       now,
     });
-    return paired ? response(httpOk, { status: "approved" }) : unavailable();
   } catch {
     return unavailable();
   }

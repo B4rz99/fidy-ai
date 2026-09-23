@@ -1,4 +1,3 @@
-/* eslint-disable complexity, max-params, max-lines-per-function -- Worker orchestration keeps claim and provider failure branches in one boundary. */
 import {
   BillingAttempt,
   BillingAttemptId,

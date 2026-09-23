@@ -1,4 +1,3 @@
-/* eslint-disable max-params, effect-guards/no-nullable-type -- Test request builder models HTTP's optional body and headers. */
 import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { CardEnrollment } from "@fidy/server/client";
@@ -250,22 +249,22 @@ it("reserves preparation before calling Wompi and bounds failed preparations", a
   // Other failed reservations consume the same rate-limit window, regardless of provider outcome.
   // @effect-diagnostics-next-line globalDate:off
   const now = Date.now();
-  for (let index = 2; index <= 12; index++) {
-    // eslint-disable-next-line no-await-in-loop -- each simulated failed reservation commits before the next.
-    await db
-      .prepare(`INSERT INTO card_enrollments
+  await db.batch(
+    Array.from({ length: 11 }, (_, offset) =>
+      db
+        .prepare(`INSERT INTO card_enrollments
       (id, user_id, price_id, billing_email, status, payment_source_mode,
        contracts_json, disclosure_json, prepared_at_ms, expires_at_ms)
       VALUES (?, ?, ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`)
-      .bind(
-        `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-        userA,
-        priceId,
-        now,
-        now + 900_000
-      )
-      .run();
-  }
+        .bind(
+          `20000000-0000-4000-8000-${String(offset + 2).padStart(12, "0")}`,
+          userA,
+          priceId,
+          now,
+          now + 900_000
+        )
+    )
+  );
   expect((await prepare()).status).toBe(503);
   expect(provider).toHaveBeenCalledTimes(1);
   expect((await db.prepare("SELECT id FROM card_enrollments").all()).results).toHaveLength(12);

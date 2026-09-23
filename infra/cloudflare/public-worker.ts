@@ -190,7 +190,6 @@ const supportHeaders = (request: Request): Headers =>
     "content-type": request.headers.get("content-type") ?? "",
     "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
   });
-// eslint-disable-next-line complexity -- Explicit internet-facing header allowlist.
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === callbackPath) return callbackHeaders(request);
   if (path === supportRecoveryPath) return supportHeaders(request);
@@ -222,7 +221,6 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
   path === supportRecoveryPath && Option.isSome(origin);
 
-// eslint-disable-next-line complexity -- Preserve mutually exclusive ingress checks.
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,

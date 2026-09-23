@@ -556,13 +556,14 @@ const renderPaymentEnrollment = (input: {
     if (!isAwaitingPaymentStatus(current.value)) {
       return <PaymentSubmissionStatus submission={current.value} />;
     }
+    const prepared = current.prepared;
     return (
       <div className="flex flex-col gap-5">
-        {Option.isSome(current.prepared) && (
+        {Option.isSome(prepared) && (
           <PreparedEnrollmentForm
             busy
-            enrollment={current.prepared.value}
-            submit={(email, card) => submit(current.prepared.value, email, card)}
+            enrollment={prepared.value}
+            submit={(email, card) => submit(prepared.value, email, card)}
           />
         )}
         <PaymentSubmissionStatus submission={current.value} />

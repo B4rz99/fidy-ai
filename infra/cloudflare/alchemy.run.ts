@@ -122,7 +122,6 @@ export default Alchemy.Stack(
     providers: Cloudflare.providers(),
     state,
   },
-  // eslint-disable-next-line complexity -- Provisioning collects independent Worker bindings and resources.
   Effect.gen(function* () {
     const development = yield* Alchemy.ALCHEMY_DEV;
     const stage = yield* Alchemy.Stack.useSync((stack) => stack.stage);

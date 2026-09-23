@@ -57,7 +57,7 @@ it("only the owning User can claim a prepared CardEnrollment, once", async () =>
     claimPreparedCardEnrollment(db, { ...request, userId: userA }, nowMs),
     claimPreparedCardEnrollment(db, { ...request, userId: userA }, nowMs),
   ]);
-  expect(outcomes.sort()).toEqual([false, true]);
+  expect(outcomes.sort((left, right) => Number(left) - Number(right))).toEqual([false, true]);
   expect(await claimPreparedCardEnrollment(db, { ...request, userId: userA }, nowMs)).toBe(false);
   expect(
     await db

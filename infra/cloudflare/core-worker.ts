@@ -59,15 +59,10 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
     readonly CLOUDFLARE_ACCESS_ISSUER: string;
     readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
-    // eslint-disable-next-line effect-guards/no-nullable-type -- Absent in existing Core test fixtures; enrollment validates configuration before use.
     readonly BROWSER_ORIGIN?: string;
-    // eslint-disable-next-line effect-guards/no-nullable-type -- Enrollment validates configuration before use.
     readonly WOMPI_ENVIRONMENT?: string;
-    // eslint-disable-next-line effect-guards/no-nullable-type -- Enrollment validates configuration before use.
     readonly WOMPI_PUBLIC_KEY?: string;
-    // eslint-disable-next-line effect-guards/no-nullable-type -- Enrollment validates configuration before use.
     readonly WOMPI_PRIVATE_KEY?: string;
-    // eslint-disable-next-line effect-guards/no-nullable-type -- Enrollment validates configuration before use.
     readonly WOMPI_INTEGRITY_SECRET?: string;
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">>;
@@ -195,7 +190,6 @@ const browserResponse = (
   );
 };
 
-// eslint-disable-next-line complexity -- Core ingress routes retain explicit ownership checks.
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {

@@ -185,6 +185,7 @@ const sendPublicRequest = (
   publicWorker.fetch(request, {
     BROWSER_ORIGIN: "https://app.fidyapp.com",
     LOCAL_CANONICAL_READ_BEARER: "",
+    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
     CORE: {
       fetch: (internal) =>

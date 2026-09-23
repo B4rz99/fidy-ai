@@ -3,6 +3,7 @@ import { HttpApi } from "effect/unstable/httpapi";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
+import { matchesRoute } from "./route-match";
 
 type PATHandler = (request: Request, db: D1Database, path: string) => Promise<Response>;
 type OperationName =
@@ -41,18 +42,8 @@ HttpApi.reflect(declared, {
     });
   },
 });
-const matches = (template: string, path: string): boolean => {
-  const segments = template.split("/");
-  const supplied = path.split("/");
-  return (
-    segments.length === supplied.length &&
-    segments.every((segment, index) =>
-      segment.startsWith(":") ? supplied[index] !== "" : segment === supplied[index]
-    )
-  );
-};
 const forPath = (path: string): ReadonlyArray<Route> =>
-  routes.filter((route) => matches(route.template, path));
+  routes.filter((route) => matchesRoute(route.template, path));
 /** PAT paths derive from the declared direct bootstrap and canonical operation groups. */
 export const patRoute = (path: string): boolean => forPath(path).length > 0;
 export const patDirectRoute = (path: string): boolean =>

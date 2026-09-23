@@ -7,6 +7,7 @@ import {
   selectPATPairingPublicCodeSymbols,
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Encoding, Option, Result, Schema } from "effect";
+import { expiredPATRevocationEvidence, expiredPairingRevocationEvidence } from "./pat-consent";
 import {
   type SessionRow,
   canonical,
@@ -90,6 +91,18 @@ export type PairingRow = typeof PairingRow.Type;
 export const sweepExpiredPATPairings = async (db: D1Database): Promise<void> => {
   const current = currentMillis();
   await db.batch([
+    expiredPairingRevocationEvidence(db, current, scheduledSweepLimit),
+    db
+      .prepare(`UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE state = 'approved_awaiting_claim'
+      AND expires_at_ms <= ? AND EXISTS (SELECT 1 FROM pat_revocation_consents r
+      WHERE r.pairing_id = pat_pairings.id AND r.policy_reason = 'pat-approved-unclaimed-expiry')`)
+      .bind(current),
+    expiredPATRevocationEvidence(db, current, scheduledSweepLimit),
+    db
+      .prepare(`UPDATE pats SET revoked_at_ms = ? WHERE revoked_at_ms IS NULL AND expires_at_ms <= ?
+      AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
+      AND r.policy_reason = 'pat-fixed-lifetime-expiry')`)
+      .bind(current, current),
     db
       .prepare(`DELETE FROM pat_pairings WHERE id IN (
       SELECT id FROM pat_pairings WHERE state = 'pending_approval' AND user_id IS NULL

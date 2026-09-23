@@ -79,7 +79,9 @@ const setup = async (): Promise<{
     "0006_browser_login",
     "0007_browser_pairing_email",
     "0008_support_recovery",
+    "0009_email_replacement",
     "0009_pats",
+    "0010_pat_revocation_consents",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -128,6 +130,11 @@ const setup = async (): Promise<{
   const sessions = [await createSession(userA, 1), await createSession(userB, 2)] as const;
   const coreEnvironment = {
     DB: db,
+    USER_TRANSACTION_COORDINATOR: {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: async (): Promise<Response> => new Response(null, { status: 503 }),
+      }),
+    },
     AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
     CONTRACT_DIGEST: "a".repeat(64),
     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -332,6 +339,111 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       .bind(approved.pairingId)
       .first()
   ).not.toBeNull();
+  expect(
+    (
+      await db
+        .prepare("SELECT state FROM pat_pairings WHERE id = ?")
+        .bind(approved.pairingId)
+        .first()
+    )?.state
+  ).toBe("revoked_unclaimed");
+  expect(
+    await db
+      .prepare("SELECT policy_reason,session_id FROM pat_revocation_consents WHERE pairing_id = ?")
+      .bind(approved.pairingId)
+      .first()
+  ).toMatchObject({
+    policy_reason: "pat-approved-unclaimed-expiry",
+    session_id: null,
+  });
+  await scheduled();
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+        .bind(approved.pairingId)
+        .first()
+    )?.total
+  ).toBe(1);
+});
+
+it("atomically revokes claimable approvals with User-origin Consent evidence and blocks late claims", async () => {
+  const { db, send, sessions } = await setup();
+  const started = Schema.decodeUnknownSync(Started)(
+    await (
+      await send({
+        path: "/pat-pairings",
+        method: "POST",
+        payload: { recipientLabel: "Agent", scopes: ["read"] },
+      })
+    ).json()
+  );
+  const review = Schema.decodeUnknownSync(Review)(
+    await (
+      await send({
+        path: "/pats/pairings/inspect",
+        method: "POST",
+        session: sessions[0],
+        payload: { publicCode: started.publicCode },
+      })
+    ).json()
+  ).data;
+  expect(
+    (
+      await send({
+        path: "/pats/pairings/approve",
+        method: "POST",
+        session: sessions[0],
+        payload: { pairingId: review.pairingId },
+      })
+    ).status
+  ).toBe(200);
+  expect((await send({ path: "/pats", method: "DELETE", session: sessions[1] })).status).toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT state FROM pat_pairings WHERE id = ?")
+        .bind(started.pairingId)
+        .first()
+    )?.state
+  ).toBe("approved_awaiting_claim");
+  await db
+    .prepare(`CREATE TRIGGER test_revoke_all_failure BEFORE INSERT ON pat_revocation_consents
+    BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
+    .run();
+  expect((await send({ path: "/pats", method: "DELETE", session: sessions[0] })).status).toBe(503);
+  expect(
+    (
+      await db
+        .prepare("SELECT state FROM pat_pairings WHERE id = ?")
+        .bind(started.pairingId)
+        .first()
+    )?.state
+  ).toBe("approved_awaiting_claim");
+  await db.prepare("DROP TRIGGER test_revoke_all_failure").run();
+  expect((await send({ path: "/pats", method: "DELETE", session: sessions[0] })).status).toBe(200);
+  expect((await send({ path: "/pats", method: "DELETE", session: sessions[0] })).status).toBe(200);
+  expect(
+    await db
+      .prepare("SELECT session_id,policy_reason FROM pat_revocation_consents WHERE pairing_id = ?")
+      .bind(started.pairingId)
+      .first()
+  ).toMatchObject({
+    session_id: "40000000-0000-4000-8000-000000000001",
+    policy_reason: null,
+  });
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first())?.total
+  ).toBe(1);
+  expect(
+    (
+      await send({
+        path: "/pat-pairings/claim",
+        method: "POST",
+        payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+      })
+    ).status
+  ).toBe(400);
 });
 
 it("bounds per-User issuance even when every PAT is revoked immediately", async () => {
@@ -366,6 +478,9 @@ it("bounds per-User issuance even when every PAT is revoked immediately", async 
   });
   expect(denied.status).toBe(429);
   expect((await db.prepare("SELECT count(*) AS total FROM pats").first())?.total).toBe(20);
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first())?.total
+  ).toBe(20);
   expect(
     (await db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first())?.total
   ).toBe(20);
@@ -433,6 +548,109 @@ it("bounds per-User issuance even when every PAT is revoked immediately", async 
       })
     ).status
   ).toBe(200);
+});
+
+it("rolls back revoke-one and retries exactly one append-only Consent revocation after storage recovers", async () => {
+  const { db, send, sessions } = await setup();
+  const grant = {
+    recipientLabel: "Agent",
+    scopes: ["read"],
+    lifetimeDays: 7,
+    reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+  };
+  const created = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: { requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff", grant },
+  });
+  expect(created.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await created.json()
+  ).data;
+  await db
+    .prepare(`CREATE TRIGGER test_revoke_failure BEFORE INSERT ON pat_revocation_consents
+    BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
+    .run();
+  const path = `/pats/${issued.pat.shortId}`;
+  expect((await send({ path, method: "DELETE", session: sessions[0] })).status).toBe(503);
+  expect(
+    (
+      await db
+        .prepare("SELECT revoked_at_ms FROM pats WHERE short_id = ?")
+        .bind(issued.pat.shortId)
+        .first()
+    )?.revoked_at_ms
+  ).toBeNull();
+  expect((await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status).toBe(
+    200
+  );
+  await db.prepare("DROP TRIGGER test_revoke_failure").run();
+  expect((await send({ path, method: "DELETE", session: sessions[0] })).status).toBe(200);
+  expect((await send({ path, method: "DELETE", session: sessions[0] })).status).toBe(200);
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first())?.total
+  ).toBe(1);
+  expect((await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status).toBe(
+    401
+  );
+});
+
+it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence", async () => {
+  const { db, send, scheduled, sessions } = await setup();
+  const original = clock();
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeed",
+      grant: {
+        recipientLabel: "Agent",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(original + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.parse(issued.pat.expiresAt) + 1);
+  expect((await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status).toBe(
+    401
+  );
+  await db
+    .prepare(`CREATE TRIGGER test_expiry_failure BEFORE INSERT ON pat_revocation_consents
+    BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
+    .run();
+  await expect(scheduled()).rejects.toThrow();
+  expect(
+    (
+      await db
+        .prepare("SELECT revoked_at_ms FROM pats WHERE short_id = ?")
+        .bind(issued.pat.shortId)
+        .first()
+    )?.revoked_at_ms
+  ).toBeNull();
+  await db.prepare("DROP TRIGGER test_expiry_failure").run();
+  await scheduled();
+  await scheduled();
+  expect(
+    await db
+      .prepare(`SELECT r.policy_reason,r.session_id FROM pat_revocation_consents r
+    JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
+      .bind(issued.pat.shortId)
+      .first()
+  ).toMatchObject({
+    policy_reason: "pat-fixed-lifetime-expiry",
+    session_id: null,
+  });
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first())?.total
+  ).toBe(1);
 });
 
 it("serializes concurrent private-code claims so only one bearer is ever issued", async () => {
@@ -526,6 +744,11 @@ it("isolates management by User and immediately refuses revoked and under-scoped
   expect(replay.status).toBe(409);
   expect(await replay.json()).toMatchObject({ error: { code: "user_action_required" }, next: [] });
   expect((await send({ path: "/pats", method: "GET", session: sessions[1] })).status).toBe(200);
+  const ownedList = await send({ path: "/pats", method: "GET", session: sessions[0] });
+  expect(ownedList.status).toBe(200);
+  const safeMetadata = await ownedList.text();
+  expect(safeMetadata).toContain(issued.pat.shortId);
+  expect(safeMetadata).not.toContain(issued.bearer);
   const foreign = await send({
     path: `/pats/${issued.pat.shortId}`,
     method: "DELETE",
@@ -551,9 +774,23 @@ it("isolates management by User and immediately refuses revoked and under-scoped
     401
   );
   expect(
+    await db
+      .prepare(`SELECT r.session_id,r.policy_reason FROM pat_revocation_consents r
+    JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
+      .bind(issued.pat.shortId)
+      .first()
+  ).toMatchObject({ session_id: "40000000-0000-4000-8000-000000000001", policy_reason: null });
+  expect(
     (await send({ path: `/pats/${issued.pat.shortId}`, method: "DELETE", session: sessions[0] }))
       .status
   ).toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pat_id IS NOT NULL")
+        .first()
+    )?.total
+  ).toBe(1);
   const writer = await send({
     path: "/pats",
     method: "POST",
@@ -606,6 +843,84 @@ it("mints manual PATs for the complete selected lifetime from issuance", async (
     await issuedResponse.json()
   ).data;
   expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(7 * 86_400_000);
+});
+
+it("gates every declared canonical path by live PAT and exact operation scope before any unavailable adapter", async () => {
+  const { db, send, sessions } = await setup();
+  const issue = async (
+    scope: "read" | "write" | "dashboard",
+    index: number
+  ): Promise<typeof Issued.Type> => {
+    const response = await send({
+      path: "/pats",
+      method: "POST",
+      session: sessions[0],
+      payload: {
+        requestId: `70000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+        grant: {
+          recipientLabel: `Agent ${index}`,
+          scopes: [scope],
+          lifetimeDays: 7,
+          reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+        },
+      },
+    });
+    expect(response.status).toBe(200);
+    return Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(await response.json()).data;
+  };
+  const reader = await issue("read", 1);
+  const writer = await issue("write", 2);
+  const dashboard = await issue("dashboard", 3);
+  expect((await send({ path: "/budgets", method: "GET", bearer: reader.bearer })).status).toBe(503);
+  expect(
+    (await send({ path: "/budgets", method: "POST", bearer: reader.bearer, payload: {} })).status
+  ).toBe(403);
+  expect(
+    (await send({ path: "/budgets", method: "POST", bearer: writer.bearer, payload: {} })).status
+  ).toBe(503);
+  expect(
+    (await send({ path: "/dashboard/edits", method: "POST", bearer: reader.bearer, payload: {} }))
+      .status
+  ).toBe(403);
+  expect(
+    (
+      await send({
+        path: "/dashboard/edits",
+        method: "POST",
+        bearer: dashboard.bearer,
+        payload: {},
+      })
+    ).status
+  ).toBe(503);
+  expect(
+    (await send({ path: "/transactions/foreign-id", method: "GET", bearer: writer.bearer })).status
+  ).toBe(403);
+  expect(
+    (await send({ path: "/transactions/foreign-id", method: "GET", bearer: reader.bearer })).status
+  ).toBe(503);
+  expect((await send({ path: "/budgets", method: "GET", bearer: "fin_invalid" })).status).toBe(401);
+  expect(
+    (
+      await send({
+        path: "/budgets",
+        method: "GET",
+        bearer: reader.bearer,
+        origin: "https://evil.example",
+      })
+    ).status
+  ).toBe(403);
+  expect(
+    (await send({ path: `/pats/${reader.pat.shortId}`, method: "DELETE", session: sessions[0] }))
+      .status
+  ).toBe(200);
+  expect((await send({ path: "/budgets", method: "GET", bearer: reader.bearer })).status).toBe(401);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_audit WHERE operation = 'budgets.listBudgets'")
+        .first()
+    )?.total
+  ).toBe(0);
 });
 
 it("rejects invalid grants, expired bearers and stale browser authority without partial effects", async () => {

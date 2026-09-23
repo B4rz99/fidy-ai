@@ -1,5 +1,6 @@
 import * as D1Client from "@effect/sql-d1/D1Client";
 import {
+  ScopeMissing,
   categoryUnavailable,
   listCategoriesPath,
   listCategoriesResponse,
@@ -40,6 +41,11 @@ import {
   receiveEmailReplacement,
   reconcileEmailReplacement,
 } from "./email-replacement-delivery";
+import { handlePATRequest, patRoute } from "./pat-routes";
+import { canonicalOperation, canonicalRoute } from "./canonical-routes";
+import type { CatalogOperation } from "@fidy/server/canonical-runtime";
+import { sweepExpiredPATPairings } from "./pat-pairing";
+import { authorizeCanonicalPAT, authorizeCategoryPAT } from "./pat-authorization";
 import {
   currentUser,
   logoutBrowser,
@@ -107,6 +113,8 @@ const jsonHeaders = {
 
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 
@@ -230,7 +238,9 @@ const ownedCorePath = (path: string): boolean =>
     "/internal/support-recovery",
     "/user",
   ].includes(path) ||
-  transactionPath(path);
+  transactionPath(path) ||
+  patRoute(path) ||
+  canonicalRoute(path);
 
 const browserResponse = (
   request: Request,
@@ -283,21 +293,28 @@ const browserResponse = (
     : work;
 };
 
-const readCoreResponse = (
+const scopeMissingResponse = (): Response =>
+  jsonResponse(
+    JSON.stringify(
+      Schema.encodeSync(Schema.toCodecJson(ScopeMissing))(
+        ScopeMissing.make({
+          error: {
+            code: "scope_missing",
+            message: "This PAT lacks the required operation scope.",
+          },
+          next: [],
+        })
+      )
+    ),
+    HTTP_FORBIDDEN
+  );
+
+const authorizedCanonicalResponse = (
   request: Request,
-  environment: CoreEnvironment
+  environment: CoreEnvironment,
+  operation: CatalogOperation
 ): Effect.Effect<Response> => {
-  if (request.method !== "GET") {
-    return Effect.succeed(methodNotAllowed());
-  }
-  const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
-  if (Exit.isFailure(configuration)) {
-    return Effect.succeed(unavailable());
-  }
-  if (new URL(request.url).pathname === listCategoriesPath) {
-    if (!request.headers.has("cookie")) {
-      return categoriesResponse(environment);
-    }
+  if (operation.id === "categories.listCategories" && request.headers.has("cookie")) {
     return Effect.tryPromise({
       try: () => transactionSession(request, environment.DB),
       catch: () => undefined,
@@ -310,16 +327,65 @@ const readCoreResponse = (
       Effect.orElseSucceed(unavailable)
     );
   }
-  return Effect.succeed(
-    jsonResponse(
-      JSON.stringify({
-        contractDigest: configuration.value.CONTRACT_DIGEST,
-        gitRevision: configuration.value.RELEASE_GIT_SHA,
-        status: "available",
-      }),
-      HTTP_OK
-    )
+  return Effect.tryPromise({
+    try: () =>
+      operation.id === "categories.listCategories"
+        ? authorizeCategoryPAT(request, environment.DB)
+        : authorizeCanonicalPAT(request, environment.DB, operation),
+    catch: () => undefined,
+  }).pipe(
+    Effect.match({
+      onFailure: () =>
+        jsonResponse(
+          JSON.stringify({ error: categoryUnavailable().error, next: [] }),
+          HTTP_SERVICE_UNAVAILABLE
+        ),
+      onSuccess: (authorized) => {
+        if (authorized === "accepted") return undefined;
+        if (authorized === "scope_missing") return scopeMissingResponse();
+        return jsonResponse(
+          '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
+          HTTP_UNAUTHORIZED
+        );
+      },
+    }),
+    Effect.flatMap((result) => {
+      if (result !== undefined) return Effect.succeed(result);
+      if (operation.id === "categories.listCategories") return categoriesResponse(environment);
+      return Effect.succeed(
+        jsonResponse(
+          '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
+          HTTP_SERVICE_UNAVAILABLE
+        )
+      );
+    })
   );
+};
+
+const healthResponse = (environment: CoreEnvironment): Response => {
+  const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);
+  if (Exit.isFailure(configuration)) return unavailable();
+  return jsonResponse(
+    JSON.stringify({
+      contractDigest: configuration.value.CONTRACT_DIGEST,
+      gitRevision: configuration.value.RELEASE_GIT_SHA,
+      status: "available",
+    }),
+    HTTP_OK
+  );
+};
+
+const canonicalOrHealthResponse = (
+  request: Request,
+  environment: CoreEnvironment,
+  path: string
+): Effect.Effect<Response> => {
+  const operation = canonicalOperation(request.method, path);
+  if (Option.isSome(operation)) {
+    return authorizedCanonicalResponse(request, environment, operation.value);
+  }
+  if (canonicalRoute(path) || request.method !== "GET") return Effect.succeed(methodNotAllowed());
+  return Effect.succeed(healthResponse(environment));
 };
 
 const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
@@ -327,7 +393,11 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
-  if (transactionPath(url.pathname)) return transactionsResponse(request, environment);
+  if (transactionPath(url.pathname)) {
+    return request.headers.has("authorization")
+      ? canonicalOrHealthResponse(request, environment, url.pathname)
+      : transactionsResponse(request, environment);
+  }
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
@@ -337,6 +407,12 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   }
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
+  }
+  if (patRoute(url.pathname)) {
+    return Effect.tryPromise({
+      try: () => handlePATRequest(request, environment.DB),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
   }
   if (
     [
@@ -354,7 +430,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   ) {
     return browserResponse(request, environment);
   }
-  return readCoreResponse(request, environment);
+  return canonicalOrHealthResponse(request, environment, url.pathname);
 };
 
 const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
@@ -436,6 +512,10 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
         Effect.withSpan("emailReplacement.reconcile")
       );
       yield* sweepExpiredConsent(environment.DB)();
+      yield* Effect.tryPromise({
+        try: () => sweepExpiredPATPairings(environment.DB),
+        catch: () => undefined,
+      });
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
   queue: receiveEmailQueue,

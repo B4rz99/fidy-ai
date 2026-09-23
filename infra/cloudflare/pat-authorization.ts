@@ -1,8 +1,8 @@
 import {
-  CategoriesGroup,
+  type CatalogOperation,
   decideOperationAccess,
-  getOperationPolicy,
-} from "@fidy/server/categories";
+  operationCatalog,
+} from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
 import {
   PATRow,
@@ -38,25 +38,40 @@ const authenticate = async (
   return equalsDigest(pat.value.bearer_digest, await digest(bearer)) ? pat : Option.none();
 };
 type CategoryAuthorization = "accepted" | "unauthenticated" | "scope_missing";
-const categoryOperation = CategoriesGroup.endpoints.listCategories;
-const categoryOperationId = `${CategoriesGroup.identifier}.${categoryOperation.identifier}`;
-const categoryScopeDecision = (scopes: ReturnType<typeof scopesFrom>): CategoryAuthorization => {
+const categoryOperationId = "categories.listCategories";
+const categoryOperation = operationCatalog.byId.get(categoryOperationId);
+const scopeDecision = (
+  scopes: ReturnType<typeof scopesFrom>,
+  operation: CatalogOperation
+): CategoryAuthorization => {
   if (Option.isNone(scopes)) return "unauthenticated";
-  const access = decideOperationAccess(getOperationPolicy(categoryOperation).access, {
+  const access = decideOperationAccess(operation.policy.access, {
     _tag: "PAT",
     capabilities: scopes.value,
   });
   if (access._tag === "Allowed") return "accepted";
   return access.reason === "pat_scope_missing" ? "scope_missing" : "unauthenticated";
 };
-/** Verify bearer bytes and declared operation policy, revocation and expiry at D1. */
+/** Every declared operation uses the same bearer, subject, expiry and policy decision. */
+export const authorizeCanonicalPAT = async (
+  request: Request,
+  db: D1Database,
+  operation: CatalogOperation
+): Promise<CategoryAuthorization> => {
+  const pat = await authenticate(request, db);
+  return Option.isNone(pat)
+    ? "unauthenticated"
+    : scopeDecision(scopesFrom(pat.value.scopes_json), operation);
+};
+/** Verify bearer bytes and declared category policy; record activity only for live execution. */
 export const authorizeCategoryPAT = async (
   request: Request,
   db: D1Database
 ): Promise<CategoryAuthorization> => {
+  if (categoryOperation === undefined) return "unauthenticated";
   const pat = await authenticate(request, db);
   if (Option.isNone(pat)) return "unauthenticated";
-  const decision = categoryScopeDecision(scopesFrom(pat.value.scopes_json));
+  const decision = scopeDecision(scopesFrom(pat.value.scopes_json), categoryOperation);
   if (decision !== "accepted") return decision;
   const current = currentMillis();
   const result = await db.batch([

@@ -353,6 +353,7 @@ it("rejects a cross-Origin public submission before Core delegation", async () =
     BROWSER_ORIGIN: browserOrigins.local,
     CORE: { fetch: core },
     LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   };
   const rejected = await ingress.fetch(

@@ -60,13 +60,24 @@ export type EnrollmentGateway = Readonly<{
     billingAttemptId: PendingPayment["billingAttempt"]["id"]
   ) => Promise<PaymentSubmission>;
   status: (enrollmentId: PreparedEnrollment["enrollmentId"]) => Promise<Enrollment>;
+  resume: (enrollmentId: PreparedEnrollment["enrollmentId"]) => Promise<
+    Option.Option<
+      Readonly<{
+        submission: PaymentSubmission;
+        billingEmail: string;
+      }>
+    >
+  >;
 }>;
 
 type PaymentRequestStore = Map<string, ReturnType<typeof PaymentRequestId.make>>;
 const paymentRequestStoragePrefix = "fidy.payment-request.";
+const billingEmailStoragePrefix = "fidy.billing-email.";
 type EnrollmentIdentity = Readonly<{ enrollmentId: PreparedEnrollment["enrollmentId"] }>;
 const paymentRequestStorageKey = (enrollment: EnrollmentIdentity): string =>
   `${paymentRequestStoragePrefix}${enrollment.enrollmentId}`;
+const billingEmailStorageKey = (enrollment: EnrollmentIdentity): string =>
+  `${billingEmailStoragePrefix}${enrollment.enrollmentId}`;
 
 const paymentRequestFor = (
   paymentRequests: PaymentRequestStore,
@@ -96,6 +107,7 @@ const completed = (
     if (paymentSubmissionIsTerminal(submission)) {
       paymentRequests.delete(enrollment.enrollmentId);
       globalThis.sessionStorage.removeItem(paymentRequestStorageKey(enrollment));
+      globalThis.sessionStorage.removeItem(billingEmailStorageKey(enrollment));
     }
     return submission;
   });
@@ -106,6 +118,7 @@ const makeSubmit =
     paymentRequests: PaymentRequestStore
   ): EnrollmentGateway["submit"] =>
   (enrollment, billingEmail, card) => {
+    globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
     const common = {
       enrollmentId: enrollment.enrollmentId,
       paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
@@ -189,6 +202,22 @@ export const makeEnrollmentGateway = (
   const paymentRequests: PaymentRequestStore = new Map();
   return {
     continue: makeContinue(clientService, paymentRequests),
+    resume: (enrollmentId) => {
+      const enrollment = { enrollmentId };
+      const paymentRequest = Schema.decodeUnknownOption(PaymentRequestId)(
+        globalThis.sessionStorage.getItem(paymentRequestStorageKey(enrollment))
+      );
+      const email = Schema.decodeUnknownOption(BillingEmail)(
+        globalThis.sessionStorage.getItem(billingEmailStorageKey(enrollment))
+      );
+      if (Option.isNone(paymentRequest) || Option.isNone(email)) {
+        return Promise.resolve(Option.none());
+      }
+      paymentRequests.set(enrollmentId, paymentRequest.value);
+      return makeContinue(clientService, paymentRequests)(enrollmentId, email.value).then(
+        (submission) => Option.some({ submission, billingEmail: email.value })
+      );
+    },
     observeBillingAttempt: (enrollmentId, billingAttemptId) =>
       completed(
         paymentRequests,

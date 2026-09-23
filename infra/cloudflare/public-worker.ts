@@ -133,6 +133,14 @@ const callbackPath = "/providers/kapso/callback";
 const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
+const enrollmentPreparePath = "/web/subscription/card-enrollments/prepare";
+const enrollmentSubmitPath = "/web/subscription/card-enrollments/submit";
+const enrollmentStatusPath =
+  /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
+const enrollmentPath = (path: string): boolean =>
+  path === enrollmentPreparePath ||
+  path === enrollmentSubmitPath ||
+  enrollmentStatusPath.test(path);
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
 const supportRecoveryPath = "/internal/support-recovery";
 const emailAuthenticationPaths = [
@@ -146,6 +154,8 @@ const postPaths = new Set<string>([
   supportRecoveryPath,
   ...emailAuthenticationPaths,
   ...pairingPaths,
+  enrollmentPreparePath,
+  enrollmentSubmitPath,
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
@@ -160,7 +170,7 @@ const preflightPaths = new Set<string>([
   ...browserMutationPaths,
 ]);
 const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
-const ownedPath = (path: string): boolean => ownedPaths.has(path);
+const ownedPath = (path: string): boolean => ownedPaths.has(path) || enrollmentPath(path);
 const allowedMethod = (path: string): "GET" | "POST" => (postPaths.has(path) ? "POST" : "GET");
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
@@ -170,7 +180,7 @@ const callbackHeaders = (request: Request): Headers =>
   ]);
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
-  if (path === "/web/session/logout" || path === rotateRecoveryPath) {
+  if (path === "/web/session/logout" || path === rotateRecoveryPath || enrollmentPath(path)) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
   return headers;
@@ -183,7 +193,11 @@ const supportHeaders = (request: Request): Headers =>
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === callbackPath) return callbackHeaders(request);
   if (path === supportRecoveryPath) return supportHeaders(request);
-  if (path === verificationPath || isBrowserMutation(path)) return browserHeaders(request, path);
+  if (path === verificationPath || isBrowserMutation(path) || enrollmentPath(path)) {
+    const headers = browserHeaders(request, path);
+    if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
+    return headers;
+  }
   return path === userPath
     ? new Headers({ cookie: request.headers.get("cookie") ?? "" })
     : request.headers;
@@ -198,7 +212,7 @@ const coreRequest = (request: Request, signal: AbortSignal): Request => {
   });
 };
 
-const hasPreflight = (path: string): boolean => preflightPaths.has(path);
+const hasPreflight = (path: string): boolean => preflightPaths.has(path) || enrollmentPath(path);
 const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
@@ -238,7 +252,10 @@ const routeOwnedRequest = (
       )
     );
   }
-  if (sessionPaths.has(url.pathname) && !Option.contains(origin, environment.BROWSER_ORIGIN)) {
+  if (
+    (sessionPaths.has(url.pathname) || enrollmentPath(url.pathname)) &&
+    !Option.contains(origin, environment.BROWSER_ORIGIN)
+  ) {
     return Promise.resolve(applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, origin));
   }
   const authorizationFailure = categoryAuthorizationFailure(request, environment);

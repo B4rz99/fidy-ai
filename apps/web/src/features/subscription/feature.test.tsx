@@ -104,6 +104,7 @@ const enrollmentGateway = {
       enrollmentId: preparedEnrollment.enrollmentId,
     }),
   prepare: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
+  resume: (): Promise<Option.Option<never>> => Promise.resolve(Option.none()),
   submit: (): Promise<
     Readonly<{
       status: "source-verifying";
@@ -745,6 +746,7 @@ it("derives enrollment operations from the browser enrollment client", async () 
   };
   const gateway = makeEnrollmentGateway(service);
   const reuseEnrollment = { ...preparedEnrollment, paymentSourceMode: "reuse" as const };
+  expect(Option.isNone(await gateway.resume(reuseEnrollment.enrollmentId))).toBe(true);
 
   await expect(gateway.prepare(offers[1].id)).rejects.toBe(transportFailure);
   await expect(gateway.status(preparedEnrollment.enrollmentId)).rejects.toBe(transportFailure);
@@ -754,6 +756,9 @@ it("derives enrollment operations from the browser enrollment client", async () 
   );
   expect(retainedRequestId).not.toBeNull();
   const refreshedGateway = makeEnrollmentGateway(service);
+  await expect(refreshedGateway.resume(reuseEnrollment.enrollmentId)).rejects.toBe(
+    transportFailure
+  );
   await expect(refreshedGateway.submit(reuseEnrollment, "payer@example.com")).rejects.toBe(
     transportFailure
   );
@@ -777,6 +782,34 @@ it("derives enrollment operations from the browser enrollment client", async () 
       cardholderName: "Ana López",
     })
   ).rejects.toBeDefined();
+});
+
+it("resumes a verifying enrollment after choosing its offer without tokenizing the card again", async () => {
+  const verifying = {
+    status: "verifying" as const,
+    enrollmentId: preparedEnrollment.enrollmentId,
+    priceId: preparedEnrollment.price.id,
+  };
+  const resume = vi.fn(() =>
+    Promise.resolve(
+      Option.some({
+        submission: { status: "source-verifying" as const, enrollmentId: verifying.enrollmentId },
+        billingEmail: "payer@example.com",
+      })
+    )
+  );
+  const gateway = {
+    ...enrollmentGateway,
+    prepare: (): Promise<typeof verifying> => Promise.resolve(verifying),
+    resume,
+  };
+  render(
+    <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+  await vi.waitFor(() => expect(resume).toHaveBeenCalledWith(verifying.enrollmentId));
+  expect(screen.queryByLabelText("Número de tarjeta")).not.toBeInTheDocument();
+  expect(screen.getByText(/verificando tu fuente de pago/iu)).toBeVisible();
 });
 
 it("reuses a saved payment source without asking for card fields", async () => {

@@ -432,7 +432,7 @@ type PaymentFlowState =
       _tag: "PaymentSubmission";
       value: PaymentSubmission;
       billingEmail: string;
-      prepared: PreparedEnrollment;
+      prepared: Option.Option<PreparedEnrollment>;
     }>;
 
 type PaymentSubmissionFlowState = Extract<PaymentFlowState, { _tag: "PaymentSubmission" }>;
@@ -446,13 +446,30 @@ const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enroll
 const submissionFlow = (
   value: PaymentSubmission,
   billingEmail: string,
-  prepared: PreparedEnrollment
+  prepared: Option.Option<PreparedEnrollment>
 ): PaymentSubmissionFlowState => ({
   _tag: "PaymentSubmission",
   value,
   billingEmail,
   prepared,
 });
+
+// @effect-diagnostics-next-line asyncFunction:off
+const preparePaymentFlow = async (
+  gateway: EnrollmentGateway,
+  priceId: PriceId
+): Promise<PaymentFlowState> => {
+  const prepared = await gateway.prepare(priceId);
+  if (prepared.status !== "verifying" && prepared.status !== "creating") {
+    return enrollmentFlow(prepared);
+  }
+  const resumed = await gateway.resume(prepared.enrollmentId);
+  return Option.match(resumed, {
+    onNone: () => enrollmentFlow(prepared),
+    onSome: ({ submission, billingEmail }) =>
+      submissionFlow(submission, billingEmail, Option.none()),
+  });
+};
 
 const pageIsHidden = (): boolean => globalThis.document.visibilityState === "hidden";
 
@@ -539,13 +556,16 @@ const renderPaymentEnrollment = (input: {
     if (!isAwaitingPaymentStatus(current.value)) {
       return <PaymentSubmissionStatus submission={current.value} />;
     }
+    const prepared = current.prepared;
     return (
       <div className="flex flex-col gap-5">
-        <PreparedEnrollmentForm
-          busy
-          enrollment={current.prepared}
-          submit={(email, card) => submit(current.prepared, email, card)}
-        />
+        {Option.isSome(prepared) && (
+          <PreparedEnrollmentForm
+            busy
+            enrollment={prepared.value}
+            submit={(email, card) => submit(prepared.value, email, card)}
+          />
+        )}
         <PaymentSubmissionStatus submission={current.value} />
       </div>
     );
@@ -821,7 +841,7 @@ const ReadyOffersContent = ({
         select={(id) => {
           setSelectedId(Option.some(id));
           reset();
-          start((availableGateway) => availableGateway.prepare(id).then(enrollmentFlow));
+          start((availableGateway) => preparePaymentFlow(availableGateway, id));
         }}
       />
       {Option.match(selectedOffer, {
@@ -832,7 +852,7 @@ const ReadyOffersContent = ({
             enrollment={enrollment}
             failed={failed}
             prepare={() =>
-              start((availableGateway) => availableGateway.prepare(offer.id).then(enrollmentFlow))
+              start((availableGateway) => preparePaymentFlow(availableGateway, offer.id))
             }
             refresh={(id) =>
               start((availableGateway) => availableGateway.status(id).then(enrollmentFlow))
@@ -841,7 +861,7 @@ const ReadyOffersContent = ({
               start((availableGateway) =>
                 availableGateway
                   .submit(prepared, email, card)
-                  .then((submission) => submissionFlow(submission, email, prepared))
+                  .then((submission) => submissionFlow(submission, email, Option.some(prepared)))
               )
             }
           />

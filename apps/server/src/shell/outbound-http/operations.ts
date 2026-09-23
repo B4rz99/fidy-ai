@@ -54,6 +54,25 @@ export const makeResendOutboundHttp = (
     crypto: Option.none(),
   });
 
+/** Restricts one Worker-owned Wompi credential set to the published bounded provider transport. */
+export const makeWompiOutboundHttp = (
+  input: Readonly<{
+    environment: "sandbox" | "production";
+    publicKey: string;
+    privateKey: Redacted.Redacted<string>;
+    integritySecret: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+    crypto: Crypto.Crypto;
+  }>
+): OutboundHttpService =>
+  makeOutboundHttp({
+    kapsoApiKey: Option.none(),
+    resendEmailDeliveryApiKey: Option.none(),
+    wompi: Option.some(input),
+    httpClient: input.httpClient,
+    crypto: Option.some(input.crypto),
+  });
+
 /** Authority to reach an external provider through the published Outbound HTTP policy. */
 export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpService>()(
   "@fidy/server/shell/outbound-http/operations/OutboundHttp"

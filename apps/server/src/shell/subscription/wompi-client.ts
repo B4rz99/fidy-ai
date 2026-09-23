@@ -94,6 +94,7 @@ export type WompiVerifiedSource = Readonly<{
 
 export type WompiSourceResult =
   | Readonly<{ _tag: "Available"; sourceId: WompiSourceId }>
+  | Readonly<{ _tag: "Verifying"; sourceId: WompiSourceId }>
   | Readonly<{ _tag: "Refused" }>;
 
 export type WompiEnrollmentClientService = Readonly<{
@@ -183,7 +184,10 @@ const parseSourceResult = (
     case "ERROR":
       return Effect.succeed<WompiSourceResult>({ _tag: "Refused" });
     case "PENDING":
-      return Effect.fail(new WompiSourceCreationFailed({ certainty: "ambiguous" }));
+      return Effect.succeed<WompiSourceResult>({
+        _tag: "Verifying",
+        sourceId: decoded.success.data.id,
+      });
   }
 };
 
@@ -270,7 +274,9 @@ const makeVerifyPaymentSource =
         Result.match(decodeSourceLookup(body), {
           onFailure: () => Effect.fail("provider-schema" as const),
           onSuccess: ({ data }) =>
-            Effect.succeed({ sourceId: data.id, billingEmail: data.customer_email }),
+            data.id === sourceId
+              ? Effect.succeed({ sourceId, billingEmail: data.customer_email })
+              : Effect.fail("provider-source-mismatch" as const),
         })
       ),
       Effect.mapError(() => new WompiSourceLookupFailed()),
@@ -329,6 +335,20 @@ const makeCreatePaymentSource =
         Effect.flatMap(parseSourceResult),
         Effect.withSpan("Wompi.createPaymentSource", { attributes: { provider: "wompi" } })
       );
+
+/** Worker-owned enrollment client: acceptance and source creation use the closed outbound policy. */
+export const makeWompiEnrollmentClient = (
+  input: Readonly<{
+    outboundHttp: OutboundHttpService;
+    crypto: Crypto.Crypto;
+    publicKey: string;
+  }>
+): WompiEnrollmentClientService => ({
+  publicKey: input.publicKey,
+  contracts: makeContracts(input),
+  createPaymentSource: makeCreatePaymentSource(input.outboundHttp),
+  verifyPaymentSource: makeVerifyPaymentSource(input.outboundHttp),
+});
 
 export class WompiEnrollmentClient extends Context.Service<
   WompiEnrollmentClient,

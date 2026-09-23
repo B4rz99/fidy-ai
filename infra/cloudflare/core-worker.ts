@@ -18,6 +18,7 @@ import {
   reconcileBrowserPairingEmail,
 } from "./browser-pairing-email-delivery";
 import { handleSupportRecovery } from "./support-recovery";
+import { handleCardEnrollment } from "./card-enrollment";
 import {
   currentUser,
   logoutBrowser,
@@ -58,6 +59,11 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
     readonly CLOUDFLARE_ACCESS_ISSUER: string;
     readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
+    readonly BROWSER_ORIGIN?: string;
+    readonly WOMPI_ENVIRONMENT?: string;
+    readonly WOMPI_PUBLIC_KEY?: string;
+    readonly WOMPI_PRIVATE_KEY?: string;
+    readonly WOMPI_INTEGRITY_SECRET?: string;
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">>;
 
@@ -123,7 +129,13 @@ const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Res
       )
     : Effect.succeed(methodNotAllowed());
 
+const enrollmentCorePath = (path: string): boolean =>
+  path === "/web/subscription/card-enrollments/prepare" ||
+  path === "/web/subscription/card-enrollments/submit" ||
+  /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
+
 const ownedCorePath = (path: string): boolean =>
+  enrollmentCorePath(path) ||
   [
     "/health",
     listCategoriesPath,
@@ -184,6 +196,12 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
+  if (enrollmentCorePath(url.pathname)) {
+    return Effect.tryPromise({
+      try: () => handleCardEnrollment(request, environment),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
+  }
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
   }

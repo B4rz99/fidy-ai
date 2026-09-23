@@ -9,6 +9,11 @@
       "import": "./src/shell/identity/browser-runtime.ts",
       "default": "./src/shell/identity/browser-runtime.ts"
     },
+    "./subscription-runtime": {
+      "types": "./src/shell/subscription/runtime.ts",
+      "import": "./src/shell/subscription/runtime.ts",
+      "default": "./src/shell/subscription/runtime.ts"
+    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",

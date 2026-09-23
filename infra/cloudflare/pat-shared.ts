@@ -10,8 +10,12 @@ import {
   patPairingUnavailableBody,
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
-import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
-import { freshSessionExists, freshSessionParams } from "@fidy/server/identity-runtime";
+import { Clock, DateTime, Effect, Encoding, Function, Option, Schema } from "effect";
+import {
+  type FreshSessionSubject,
+  freshSessionExists,
+  freshSessionParams,
+} from "@fidy/server/identity-runtime";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { browserSession } from "./browser-login";
 
@@ -21,6 +25,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 });
 export { pairingMilliseconds };
 export const dayMilliseconds = 86_400_000;
+const successStatus = 200;
 export const digestBytes = 32;
 export { maxActivePATs, issuanceWindowMilliseconds, maxIssuancesPerUserWindow };
 export const shortLength = patShortIdLength;
@@ -69,14 +74,17 @@ export const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 /** Length-checked constant-work comparison for stored and candidate digests. */
-export const equalsDigest = (stored: ReadonlyArray<number>, candidate: Uint8Array): boolean => {
+export const equalsDigest = Function.dual<
+  (candidate: Uint8Array) => (stored: ReadonlyArray<number>) => boolean,
+  (stored: ReadonlyArray<number>, candidate: Uint8Array) => boolean
+>(2, (stored, candidate) => {
   if (stored.length !== digestBytes || candidate.length !== digestBytes) return false;
   let difference = 0;
   for (let index = 0; index < digestBytes; index++) {
     difference |= (stored[index] ?? 0) ^ (candidate[index] ?? 0);
   }
   return difference === 0;
-};
+});
 /** Opaque private proof; no raw value is ever stored. */
 export const newProof = (): string =>
   Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
@@ -96,22 +104,28 @@ export const newBearer = (shortId: string): string => `fin_${shortId}_${newProof
 export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
 /** Decode JSON bodies before any proof lookup or mutation; malformed bodies are never retained. */
-export const decodeBody = async <Decoded, Encoded>(
-  request: Request,
-  schema: Schema.Codec<Decoded, Encoded>
-): Promise<Option.Option<Decoded>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Option.none();
-  }
-  try {
-    const bytes = await Effect.runPromise(readBoundedRequestBody(request, policy));
-    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    return Schema.decodeUnknownOption(schema)(value);
-  } catch {
-    return Option.none();
-  }
-};
-export const scopesFrom = (text: string): Option.Option<typeof PATScopes.Type> => {
+export const decodeBody = Function.dual<
+  <Decoded, Encoded>(
+    schema: Schema.Codec<Decoded, Encoded>
+  ) => (request: Request) => Promise<Option.Option<Decoded>>,
+  <Decoded, Encoded>(
+    request: Request,
+    schema: Schema.Codec<Decoded, Encoded>
+  ) => Promise<Option.Option<Decoded>>
+>(2, <Decoded, Encoded>(request: Request, schema: Schema.Codec<Decoded, Encoded>) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+        return Option.none<Decoded>();
+      }
+      const bytes = yield* readBoundedRequestBody(request, policy);
+      const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
+      return Schema.decodeUnknownOption(schema)(value);
+    }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()))
+  )
+);
+export const scopesFrom = (text: string): Option.Option<PATScopes> => {
   try {
     return Schema.decodeUnknownOption(PATScopes)(JSON.parse(text));
   } catch {
@@ -119,7 +133,7 @@ export const scopesFrom = (text: string): Option.Option<typeof PATScopes.Type> =
   }
 };
 /** Rebuild decoded persisted fields as a canonical PAT, never spread a D1 row to clients. */
-export const patFrom = (row: PATRow): Option.Option<typeof PAT.Type> => {
+export const patFrom = (row: PATRow): Option.Option<PAT> => {
   const scopes = scopesFrom(row.scopes_json);
   if (Option.isNone(scopes)) return Option.none();
   return Schema.decodeUnknownOption(Schema.toType(PAT))({
@@ -136,18 +150,23 @@ export const patFrom = (row: PATRow): Option.Option<typeof PAT.Type> => {
   });
 };
 /** Browser freshness is required for authority changes, but not safe listing. */
-export const webSession = (
-  request: Request,
-  db: D1Database,
-  fresh: boolean
-): Promise<Option.Option<SessionRow>> =>
-  browserSession(request, db, { current: currentMillis(), fresh });
+export const webSession = Function.dual<
+  (db: D1Database, fresh: boolean) => (request: Request) => Promise<Option.Option<SessionRow>>,
+  (request: Request, db: D1Database, fresh: boolean) => Promise<Option.Option<SessionRow>>
+>(3, (request: Request, db: D1Database, fresh: boolean): Promise<Option.Option<SessionRow>> =>
+  browserSession(request, db, { current: currentMillis(), fresh })
+);
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
 export const sessionExists = freshSessionExists;
-export const sessionParams = freshSessionParams;
-export const response = (body: unknown, status = 200): Response =>
-  Response.json(body, { status, headers: { "cache-control": "no-store" } });
-export const canonical = (data: unknown): Response => response({ data, next: [] });
+export const sessionParams = Function.dual<
+  (time: number) => (session: FreshSessionSubject) => ReturnType<typeof freshSessionParams>,
+  typeof freshSessionParams
+>(2, freshSessionParams);
+export const response = Function.dual<
+  (status: number) => (body: unknown) => Response,
+  (body: unknown, status: number) => Response
+>(2, (body, status) => Response.json(body, { status, headers: { "cache-control": "no-store" } }));
+export const canonical = (data: unknown): Response => response({ data, next: [] }, successStatus);
 export const unauthorized = (): Response =>
   response(
     {

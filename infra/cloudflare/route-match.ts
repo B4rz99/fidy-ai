@@ -1,5 +1,10 @@
+import { Function } from "effect";
+
 /** Match one HttpApi route template; a parameter accepts exactly one nonempty path segment. */
-export const matchesRoute = (template: string, path: string): boolean => {
+export const matchesRoute = Function.dual<
+  (path: string) => (template: string) => boolean,
+  (template: string, path: string) => boolean
+>(2, (template, path) => {
   const segments = template.split("/");
   const supplied = path.split("/");
   return (
@@ -8,4 +13,4 @@ export const matchesRoute = (template: string, path: string): boolean => {
       segment.startsWith(":") ? supplied[index] !== "" : segment === supplied[index]
     )
   );
-};
+});

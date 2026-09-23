@@ -1,4 +1,5 @@
 import { PATPairingDirectGroup, PATsGroup } from "@fidy/server/tokens-runtime";
+import { Function } from "effect";
 import { HttpApi } from "effect/unstable/httpapi";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
@@ -53,11 +54,14 @@ export const patBrowserRoute = (path: string): boolean =>
 export const patMethods = (path: string): ReadonlyArray<string> =>
   Array.from(new Set(forPath(path).map((route) => route.method)));
 /** Execute only a declared PAT operation, never a guessed path or method. */
-export const handlePATRequest = (request: Request, db: D1Database): Promise<Response> => {
+export const handlePATRequest = Function.dual<
+  (db: D1Database) => (request: Request) => Promise<Response>,
+  (request: Request, db: D1Database) => Promise<Response>
+>(2, (request, db) => {
   const path = new URL(request.url).pathname;
   const route = forPath(path).find((candidate) => candidate.method === request.method);
   const handler = route === undefined ? undefined : handlersByName.get(route.name);
   return handler === undefined
     ? Promise.resolve(Response.json({ status: "method_not_allowed" }, { status: 405 }))
     : handler(request, db, path);
-};
+});

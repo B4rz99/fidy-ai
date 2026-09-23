@@ -14,7 +14,7 @@ import {
   recordSessionPATTransition,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
-import { DateTime, Option, Redacted, Schema } from "effect";
+import { type Cause, DateTime, Effect, Function, Option, Redacted, Result, Schema } from "effect";
 import { grantManualPATConsent } from "@fidy/server/consent-pat";
 import {
   type SessionRow,
@@ -97,7 +97,7 @@ const consumed = (): Response =>
     httpConflict
   );
 type Issuance = Readonly<{
-  input: typeof CreateManualPATPayload.Type;
+  input: CreateManualPATPayload;
   session: SessionRow;
   current: number;
   expires: number;
@@ -106,44 +106,51 @@ type Issuance = Readonly<{
   bearer: string;
 }>;
 /** Insert a grant, its exact disclosure and metadata-only audit as one D1 unit. */
-const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean> => {
-  const { input, session, current, expires, patId, shortId, bearer } = issue;
-  const { grant, requestId } = input;
-  const disclosure = buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) });
-  const committed = await commitPATUnit(db, [
-    prepareOwnedStatement(
-      db,
-      issueManualPAT(session, {
-        grant,
-        requestId,
-        patId,
-        shortId,
-        bearerDigest: await digest(bearer),
-        current,
-        expires,
-      })
-    ),
-    prepareOwnedStatement(
-      db,
-      grantManualPATConsent(session, {
-        id: newId(),
-        requestId,
-        disclosure,
-        current,
-      })
-    ),
-    prepareOwnedStatement(
-      db,
-      recordSessionPATTransition(session, {
-        id: newId(),
-        current,
-        patId: Option.some(patId),
-        operation: "pats.createManualPAT",
-      })
-    ),
-  ]);
-  return committed.every((item) => item.meta.changes === 1);
-};
+const commitIssuance = (
+  db: D1Database,
+  issue: Issuance
+): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const { input, session, current, expires, patId, shortId, bearer } = issue;
+    const { grant, requestId } = input;
+    const disclosure = buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) });
+    const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
+    const committed = yield* Effect.tryPromise(() =>
+      commitPATUnit(db, [
+        prepareOwnedStatement(
+          db,
+          issueManualPAT(session, {
+            grant,
+            requestId,
+            patId,
+            shortId,
+            bearerDigest,
+            current,
+            expires,
+          })
+        ),
+        prepareOwnedStatement(
+          db,
+          grantManualPATConsent(session, {
+            id: newId(),
+            requestId,
+            disclosure,
+            current,
+          })
+        ),
+        prepareOwnedStatement(
+          db,
+          recordSessionPATTransition(session, {
+            id: newId(),
+            current,
+            patId: Option.some(patId),
+            operation: "pats.createManualPAT",
+          })
+        ),
+      ])
+    );
+    return committed.every((item) => item.meta.changes === 1);
+  });
 const issuedResponse = (issue: Issuance): Response => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
   const pat = patFrom({
@@ -177,55 +184,66 @@ const expiryFor = (
     ? Option.some(maximum)
     : Option.none();
 };
-const failedIssuance = async (
+const failedIssuance = (
   db: D1Database,
   requestId: string,
   userId: string
-): Promise<Response> => {
-  const prior = await db
-    .prepare("SELECT 1 FROM pats WHERE request_id = ? AND user_id = ?")
-    .bind(requestId, userId)
-    .first();
-  if (prior !== null) return consumed();
-  const revokedConsent = await db
-    .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
-    .bind(userId)
-    .first();
-  if (revokedConsent !== null) return consentActionRequired();
-  const issued = await db
-    .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
-    .bind(userId, currentMillis() - issuanceWindowMilliseconds)
-    .first<{ total: number }>();
-  return issued !== null && issued.total >= maxIssuancesPerUserWindow
-    ? issuanceLimit()
-    : unavailable();
-};
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const prior = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT 1 FROM pats WHERE request_id = ? AND user_id = ?")
+        .bind(requestId, userId)
+        .first()
+    );
+    if (prior !== null) return consumed();
+    const revokedConsent = yield* Effect.tryPromise(() =>
+      db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first()
+    );
+    if (revokedConsent !== null) return consentActionRequired();
+    const issued = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
+        .bind(userId, currentMillis() - issuanceWindowMilliseconds)
+        .first<{ total: number }>()
+    );
+    return issued !== null && issued.total >= maxIssuancesPerUserWindow
+      ? issuanceLimit()
+      : unavailable();
+  });
 
 /** Issue one manually reviewed User-owned bearer; failed or repeated ids never reveal it again. */
-export const createManualPAT = async (request: Request, db: D1Database): Promise<Response> => {
-  const session = await webSession(request, db, true);
-  if (Option.isNone(session)) return unauthorized();
-  const input = await decodeBody(request, Schema.toCodecJson(CreateManualPATPayload));
-  if (Option.isNone(input)) return invalidReview();
-  const current = currentMillis();
-  const expiry = expiryFor(input.value.grant, current);
-  if (Option.isNone(expiry)) return expiredReview();
-  const shortId = newShortId();
-  const issue = {
-    input: input.value,
-    session: session.value,
-    current,
-    expires: expiry.value,
-    shortId,
-    patId: newId(),
-    bearer: newBearer(shortId),
-  };
-  try {
-    if (!(await commitIssuance(db, issue))) {
-      return failedIssuance(db, input.value.requestId, session.value.user_id);
-    }
-    return issuedResponse(issue);
-  } catch {
-    return failedIssuance(db, input.value.requestId, session.value.user_id);
-  }
-};
+export const createManualPAT = Function.dual<
+  (db: D1Database) => (request: Request) => Promise<Response>,
+  (request: Request, db: D1Database) => Promise<Response>
+>(2, (request, db) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      if (Option.isNone(session)) return unauthorized();
+      const input = yield* Effect.tryPromise(() =>
+        decodeBody(request, Schema.toCodecJson(CreateManualPATPayload))
+      );
+      if (Option.isNone(input)) return invalidReview();
+      const current = currentMillis();
+      const expiry = expiryFor(input.value.grant, current);
+      if (Option.isNone(expiry)) return expiredReview();
+      const shortId = newShortId();
+      const issue = {
+        input: input.value,
+        session: session.value,
+        current,
+        expires: expiry.value,
+        shortId,
+        patId: newId(),
+        bearer: newBearer(shortId),
+      };
+      const committed = yield* commitIssuance(db, issue).pipe(Effect.result);
+      if (Result.isSuccess(committed) && committed.success) {
+        const issued = yield* Effect.try(() => issuedResponse(issue)).pipe(Effect.result);
+        if (Result.isSuccess(issued)) return issued.success;
+      }
+      return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
+    })
+  )
+);

@@ -23,7 +23,7 @@ const Review = Schema.Struct({
   data: Schema.Struct({
     pairingId: Schema.String,
     scopes: Schema.Array(Schema.String),
-    lifetimeDays: Schema.Number,
+    lifetimeDays: Schema.Finite,
   }),
 });
 const Issued = Schema.Struct({
@@ -208,7 +208,6 @@ const setup = async (
   };
   return { db, send, sessions, scheduled };
 };
-// @effect-diagnostics-next-line asyncFunction:off
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(instances.splice(0).map((mf) => mf.dispose()));
@@ -726,7 +725,9 @@ it("serializes concurrent private-code claims so only one bearer is ever issued"
     send({ path: "/pat-pairings/claim", method: "POST", payload: proof }),
     send({ path: "/pat-pairings/claim", method: "POST", payload: proof }),
   ]);
-  expect(results.map((result) => result.status).sort()).toEqual([200, 400]);
+  expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
+    200, 400,
+  ]);
   expect(
     (
       await db
@@ -1789,7 +1790,7 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
     )?.last_used_at_ms
   ).toBeNull();
   vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date(clock() + 601_000));
+  vi.setSystemTime(clock() + 601_000);
   expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).toBe(200);
   expect(
     (await send({ path: `/pats/${issued.pat.shortId}`, method: "DELETE", session: sessions[0] }))

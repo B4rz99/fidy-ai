@@ -191,7 +191,6 @@ const dispatchCanonicalCapture = async (
     new Request("https://coordinator.internal/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
       body: JSON.stringify(authority),
     })
   );

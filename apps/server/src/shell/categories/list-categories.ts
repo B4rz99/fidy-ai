@@ -1,4 +1,4 @@
-import { Data, Effect, Option } from "effect";
+import { Data, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { ListCategoriesResponse } from "./operations";
@@ -21,12 +21,7 @@ const loadCategories: Effect.Effect<
   return sql.unsafe<Record<string, unknown>>(query.sql, query.params);
 }).pipe(
   Effect.mapError(queryFailure),
-  Effect.flatMap((rows) =>
-    Option.match(categoryResponseFromRows(rows), {
-      onNone: () => Effect.fail(queryFailure()),
-      onSome: Effect.succeed,
-    })
-  )
+  Effect.flatMap((rows) => Effect.fromOption(categoryResponseFromRows(rows), queryFailure))
 );
 
 export const categoryUnavailable = (): Unavailable =>

@@ -51,10 +51,8 @@ const decodeMetadata = (
   row: typeof PATMetadataRow.Type
 ): Effect.Effect<ActivePATMetadata, Schema.SchemaError> =>
   Effect.gen(function* () {
-    const scopes = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PATScopes))(
-      row.scopes_json
-    );
-    return yield* Schema.decodeUnknownEffect(Schema.toType(ActivePATMetadata))({
+    const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
+    return yield* Schema.decodeEffect(Schema.toType(ActivePATMetadata))({
       shortId: row.short_id,
       recipientLabel: row.recipient_label,
       scopes,
@@ -76,7 +74,7 @@ export const patMetadataResponseFromRows = (
 > =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(PATMetadataRow))(raw);
-    if (rows.length > activeLimit) return yield* Effect.fail(queryUnavailable());
+    if (rows.length > activeLimit) return yield* queryUnavailable();
     const pats = yield* Effect.forEach(rows, decodeMetadata);
     return { data: { pats }, next: [] as const };
   }).pipe(Effect.mapError(queryUnavailable));

@@ -24,12 +24,8 @@ export {
 } from "~/core/tokens/pairing";
 export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rules";
 export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
-export { PATsGroup } from "~/shell/tokens/operations";
-export {
-  listPATsResponse,
-  patMetadataQuery,
-  patMetadataResponseFromRows,
-} from "~/shell/tokens/list-pats";
+export { PATsGroup } from "./operations";
+export { listPATsResponse, patMetadataQuery, patMetadataResponseFromRows } from "./list-pats";
 export type { OwnedStatement } from "~/shell/_shared/owned-statement";
 export {
   issueManualPAT,
@@ -57,7 +53,7 @@ export {
   recordWrongPairingProof,
   slowPairingPoll,
   recordPendingPoll,
-} from "~/shell/tokens/pat-write";
+} from "./pat-write";
 export {
   recordSessionPATTransition,
   recordClaimedPAT,
@@ -65,13 +61,13 @@ export {
   recordOnePATRevocation,
   recordAllPATRevocations,
   recordCanonicalPATWork,
-} from "~/shell/tokens/pat-audit";
+} from "./pat-audit";
 export {
   patAtomicAssertion,
   patExpiryCompletion,
   pairingExpiryCompletion,
   patRevokeAllCompletion,
-} from "~/shell/tokens/pat-atomic-unit";
+} from "./pat-atomic-unit";
 export { PATPairingDirectGroup } from "~/pat-pairing-api";
 export { UserActionRequired, ValidationFailed } from "~/shell/public-http/contract";
 export {
@@ -82,4 +78,4 @@ export {
   ManualPATReviewExpired,
   issuanceConsumedMessage,
   reviewExpiredMessage,
-} from "~/shell/tokens/operations";
+} from "./operations";

@@ -179,9 +179,9 @@ describe("Production topology contract", () => {
     const rateLimits = edgeSecurityPolicy.rulesets.rateLimits.rules;
 
     expect(rateLimits).toHaveLength(1);
+    expect(rateLimits[0]?.expression).toContain('"/providers/kapso/callback"');
     expect(rateLimits[0]).toMatchObject({
       action: "block",
-      expression: expect.stringContaining('"/providers/kapso/callback"'),
       ratelimit: {
         characteristics: ["cf.colo.id", "ip.src"],
         mitigationTimeout: 10,

@@ -10,6 +10,7 @@ CREATE TABLE browser_login_pairings (
   expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms = created_at_ms + 600000),
   wrong_attempts INTEGER NOT NULL DEFAULT 0 CHECK (wrong_attempts BETWEEN 0 AND 5),
   last_poll_at_ms INTEGER,
+  minimum_poll_interval_seconds INTEGER NOT NULL DEFAULT 5 CHECK (minimum_poll_interval_seconds BETWEEN 5 AND 60),
   CHECK ((state = 'pending_approval' AND user_id IS NULL) OR state <> 'pending_approval'),
   CHECK ((state = 'ready' OR state = 'consumed') = (user_id IS NOT NULL))
 ) STRICT;

@@ -2,10 +2,16 @@ import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
   User,
+  UserId,
+  decideBrowserLoginRedemption,
   formatPublicCode,
+  getCurrentUser,
+  maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
 } from "@fidy/server/identity-runtime";
-import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import * as D1Client from "@effect/sql-d1/D1Client";
+import { Clock, Context, DateTime, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
 const PairingProof = Schema.Struct({
@@ -16,16 +22,9 @@ const Pairing = Schema.Struct({
   verifier_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   expires_at_ms: Schema.Finite,
   wrong_attempts: Schema.Int,
+  last_poll_at_ms: Schema.NullOr(Schema.Finite),
+  minimum_poll_interval_seconds: Schema.Int,
   state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
-});
-const UserRow = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
-  service_market: Schema.String,
-  locale: Schema.String,
-  time_zone: Schema.String,
-  created_at_ms: Schema.Finite,
-  started_at_ms: Schema.Finite,
-  ends_at_ms: Schema.Finite,
 });
 const Session = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
@@ -34,12 +33,12 @@ const Session = Schema.Struct({
 const digestBytes = 32;
 const codeSymbols = 8;
 const sampleBytes = 16;
-const minuteMs = 60_000;
 const pairingMs = 600_000;
 const sessionMs = 604_800_000;
 const HTTP_OK = 200;
 const HTTP_PENDING = 202;
 const HTTP_RATE_LIMITED = 429;
+const maximumPollSeconds = 60;
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
   deadlineMilliseconds: 2_000,
@@ -107,24 +106,6 @@ export const startBrowserPairing = async (db: D1Database): Promise<Response> => 
     (SELECT pairing_id FROM web_sessions) ORDER BY expires_at_ms LIMIT 32)`)
     .bind(started)
     .run();
-  const capacity = await db
-    .prepare(`SELECT count(*) AS total FROM browser_login_pairings
-    WHERE created_at_ms > ?`)
-    .bind(started - minuteMs)
-    .first<{ total: number }>();
-  if (capacity === null || capacity.total >= 100) {
-    return json(
-      {
-        error: {
-          code: "rate_limited",
-          message:
-            "El inicio de sesión no está disponible temporalmente. Intenta de nuevo más tarde.",
-        },
-      },
-      HTTP_RATE_LIMITED,
-      { "retry-after": "60" }
-    );
-  }
   const publicCode = samplePublicCode();
   const privateVerifier = Encoding.encodeBase64Url(
     crypto.getRandomValues(new Uint8Array(digestBytes))
@@ -133,15 +114,8 @@ export const startBrowserPairing = async (db: D1Database): Promise<Response> => 
   const result = await db
     .prepare(`INSERT INTO browser_login_pairings
     (id, public_code, verifier_digest, created_at_ms, expires_at_ms)
-    SELECT ?, ?, ?, ?, ? WHERE (SELECT count(*) FROM browser_login_pairings WHERE created_at_ms > ?) < 100`)
-    .bind(
-      pairingId,
-      publicCode,
-      await sha256(privateVerifier),
-      started,
-      started + pairingMs,
-      started - minuteMs
-    )
+    VALUES (?, ?, ?, ?, ?)`)
+    .bind(pairingId, publicCode, await sha256(privateVerifier), started, started + pairingMs)
     .run();
   if (result.meta.changes !== 1) return unavailable();
   return json({
@@ -202,7 +176,8 @@ export const redeemBrowserPairing = async (request: Request, db: D1Database): Pr
     const proof = Schema.decodeUnknownOption(PairingProof)(candidate);
     if (Option.isNone(proof)) return invalid();
     const raw = await db
-      .prepare(`SELECT verifier_digest, expires_at_ms, wrong_attempts, state
+      .prepare(`SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
+        last_poll_at_ms, minimum_poll_interval_seconds
       FROM browser_login_pairings WHERE id = ?`)
       .bind(proof.value.pairingId)
       .first();
@@ -222,43 +197,132 @@ const redeemValidProof = async (
   pairing: typeof Pairing.Type
 ): Promise<Response> => {
   const current = now();
-  if (
-    pairing.expires_at_ms <= current ||
-    (pairing.state !== "pending_approval" && pairing.state !== "ready")
-  ) {
-    return invalid();
+  const decision = decideBrowserLoginRedemption({
+    lifecycle: pairing.state,
+    verifierMatches: sameDigest(pairing.verifier_digest, await sha256(proof.privateVerifier)),
+    wrongVerifierAttempts: pairing.wrong_attempts,
+    minimumPollIntervalSeconds: pairing.minimum_poll_interval_seconds,
+    lastAcceptedPollAt: Option.map(
+      Option.fromNullishOr(pairing.last_poll_at_ms),
+      DateTime.makeUnsafe
+    ),
+    expiresAt: DateTime.makeUnsafe(pairing.expires_at_ms),
+    attemptedAt: DateTime.makeUnsafe(current),
+  });
+  if (decision._tag === "WrongVerifier") {
+    return recordWrongVerifier({ db, pairingId: proof.pairingId, pairing, decision });
   }
-  if (!sameDigest(pairing.verifier_digest, await sha256(proof.privateVerifier))) {
-    await db
-      .prepare(`UPDATE browser_login_pairings SET wrong_attempts = wrong_attempts + 1,
-      state = CASE WHEN wrong_attempts >= 4 THEN 'invalidated' ELSE state END
-      WHERE id = ? AND state IN ('pending_approval', 'ready') AND wrong_attempts < 5`)
-      .bind(proof.pairingId)
-      .run();
-    return invalid();
+  if (decision._tag === "SlowDown") {
+    return delayPoll({ db, pairingId: proof.pairingId, state: pairing.state, decision });
   }
-  if (pairing.state === "pending_approval") {
-    return json(
-      {
-        status: "pending_approval",
-        expiresAt: instant(pairing.expires_at_ms),
-        pollingIntervalSeconds: 5,
-      },
-      HTTP_PENDING
-    );
+  if (decision._tag === "Pending") {
+    return recordPoll({ db, pairingId: proof.pairingId, pairing, current, decision });
   }
+  if (decision._tag !== "Consume") return invalid();
+  return createWebSession(db, proof.pairingId, current);
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const recordWrongVerifier = async ({
+  db,
+  pairingId,
+  pairing,
+  decision,
+}: {
+  db: D1Database;
+  pairingId: string;
+  pairing: typeof Pairing.Type;
+  decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "WrongVerifier" }>;
+}): Promise<Response> => {
+  await db
+    .prepare(`UPDATE browser_login_pairings SET wrong_attempts = ?, state = ?,
+      user_id = CASE WHEN ? = 'invalidated' THEN NULL ELSE user_id END
+    WHERE id = ? AND state = ? AND wrong_attempts = ?`)
+    .bind(
+      decision.wrongVerifierAttempts,
+      decision.lifecycle,
+      decision.lifecycle,
+      pairingId,
+      pairing.state,
+      pairing.wrong_attempts
+    )
+    .run();
+  return invalid();
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const delayPoll = async ({
+  db,
+  pairingId,
+  state,
+  decision,
+}: {
+  db: D1Database;
+  pairingId: string;
+  state: string;
+  decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "SlowDown" }>;
+}): Promise<Response> => {
+  await db
+    .prepare(
+      `UPDATE browser_login_pairings SET minimum_poll_interval_seconds = ? WHERE id = ? AND state = ?`
+    )
+    .bind(Math.min(decision.minimumPollIntervalSeconds, maximumPollSeconds), pairingId, state)
+    .run();
+  return json(
+    { error: { code: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds } },
+    HTTP_RATE_LIMITED,
+    { "retry-after": String(decision.retryAfterSeconds) }
+  );
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const recordPoll = async ({
+  db,
+  pairingId,
+  pairing,
+  current,
+  decision,
+}: {
+  db: D1Database;
+  pairingId: string;
+  pairing: typeof Pairing.Type;
+  current: number;
+  decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "Pending" }>;
+}): Promise<Response> => {
+  const accepted = await db
+    .prepare(`UPDATE browser_login_pairings SET last_poll_at_ms = ?
+    WHERE id = ? AND state = 'pending_approval' AND last_poll_at_ms IS ? AND expires_at_ms > ?`)
+    .bind(current, pairingId, pairing.last_poll_at_ms, current)
+    .run();
+  if (accepted.meta.changes !== 1) return invalid();
+  return json(
+    {
+      status: "pending_approval",
+      expiresAt: instant(pairing.expires_at_ms),
+      pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
+    },
+    HTTP_PENDING
+  );
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const createWebSession = async (
+  db: D1Database,
+  pairingId: string,
+  current: number
+): Promise<Response> => {
   const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
   const committed = await db.batch([
     db
       .prepare(
-        `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < 5`
+        `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
       )
-      .bind(proof.pairingId, current),
+      .bind(pairingId, current, maximumWrongVerifierAttempts),
     db
       .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, expires_at_ms)
       SELECT ?, p.id, p.user_id, ?, ?, ? FROM browser_login_pairings AS p
       WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`)
-      .bind(uuid(), await sha256(token), current, current + sessionMs, proof.pairingId),
+      .bind(uuid(), await sha256(token), current, current + sessionMs, pairingId),
   ]);
   if (committed[1]?.meta.changes !== 1) return invalid();
   return json({ status: "authenticated" }, HTTP_OK, {
@@ -293,34 +357,30 @@ export const currentUser = async (request: Request, db: D1Database): Promise<Res
     if (rawSession === null) return noSession();
     const session = Schema.decodeUnknownOption(Session)(rawSession);
     if (Option.isNone(session)) return unavailable();
-    const raw = await db
-      .prepare(`SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
-      t.started_at_ms, t.ends_at_ms FROM users AS u JOIN trial_periods AS t ON t.user_id = u.id
-      WHERE u.id = ? AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = u.id)`)
-      .bind(session.value.user_id)
-      .first();
-    if (raw === null) return unavailable();
-    const row = Schema.decodeUnknownOption(UserRow)(raw);
-    if (Option.isNone(row)) return unavailable();
-    const data = {
-      id: row.value.id,
-      serviceMarket: row.value.service_market,
-      locale: row.value.locale,
-      timeZone: row.value.time_zone,
-      createdAt: instant(row.value.created_at_ms),
-      trialPeriod: {
-        startedAt: instant(row.value.started_at_ms),
-        endsAt: instant(row.value.ends_at_ms),
-      },
-    };
-    if (Option.isNone(Schema.decodeOption(Schema.toCodecJson(User))(data))) return unavailable();
+    const subject = Schema.decodeOption(UserId)(session.value.user_id);
+    if (Option.isNone(subject)) return unavailable();
+    const loaded = await Effect.runPromiseExit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const clients = yield* Layer.build(D1Client.layer({ db }));
+          return yield* getCurrentUser(subject.value).pipe(
+            Effect.withTracerEnabled(false),
+            Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
+          );
+        })
+      )
+    );
+    if (Exit.isFailure(loaded)) return unavailable();
     await db
       .prepare(
         `INSERT INTO canonical_user_reads (id, user_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?)`
       )
       .bind(uuid(), session.value.user_id, session.value.id, now())
       .run();
-    return json({ data, next: [] });
+    return json({
+      data: Schema.encodeSync(Schema.toCodecJson(User))(loaded.value.data),
+      next: loaded.value.next,
+    });
   } catch {
     return unavailable();
   }

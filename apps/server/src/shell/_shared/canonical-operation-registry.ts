@@ -8,6 +8,7 @@ import type {
 import type { CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
 import { listCategoriesResponse } from "~/shell/categories/list-categories";
+import { getCurrentUser } from "~/shell/identity/current-user";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
 
 /**
@@ -23,7 +24,7 @@ const unavailableOperation = <Id extends OperationId>(
 /** Every canonical operation is present; operations without a Cloudflare adapter fail closed. */
 export const canonicalOperationImplementations = {
   ...canonicalMutationImplementations,
-  "identity.getCurrentUser": unavailableOperation,
+  "identity.getCurrentUser": (_input, caller) => getCurrentUser(caller.resolved.subjectUserId),
   "categories.listCategories": () => listCategoriesResponse,
   "categories.listKeywordRules": unavailableOperation,
   "budgets.listBudgets": unavailableOperation,

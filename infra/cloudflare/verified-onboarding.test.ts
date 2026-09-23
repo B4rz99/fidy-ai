@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 // @effect-diagnostics-next-line nodeBuiltinImport:off
 import { createHmac } from "node:crypto";
 import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { startBrowserPairing } from "./browser-login";
 import coreWorker from "./core-worker";
 import publicWorker from "./public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -172,6 +173,7 @@ const setup = async (
 
 // @effect-diagnostics-next-line asyncFunction:off
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(mfInstances.splice(0).map((mf) => mf.dispose()));
 });
 
@@ -259,6 +261,7 @@ it("reads the created User through an independently approved browser WebSession"
       privateVerifier: pairing.privateVerifier,
     });
   expect((await poll()).status).toBe(202);
+  expect((await poll()).status).toBe(429);
   expect(
     (
       await request("/web/pairings/redeem", {
@@ -302,11 +305,16 @@ it("reads the created User through an independently approved browser WebSession"
       )
     ).status
   ).toBe(400);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  // @effect-diagnostics-next-line globalDate:off
+  vi.setSystemTime(Date.now() + 11_000);
   expect((await poll()).status).toBe(202);
   expect(
     (await signed(createHmac("sha256", "onboarding-test-secret").update(body).digest("hex"), body))
       .status
   ).toBe(200);
+  // @effect-diagnostics-next-line globalDate:off
+  vi.setSystemTime(Date.now() + 11_000);
   const completed = await poll();
   expect(completed.status).toBe(200);
   const cookie = completed.headers.get("set-cookie");
@@ -338,6 +346,74 @@ it("reads the created User through an independently approved browser WebSession"
     (await sendRequest(new Request("https://api.fidyapp.com/web/pairings", { method: "POST" })))
       .status
   ).toBe(403);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("does not impose a shared login lockout after concurrent pairing starts", async () => {
+  const { db } = await setup();
+  const starts = await Promise.all(Array.from({ length: 101 }, () => startBrowserPairing(db)));
+  expect(starts.every((response) => response.status === 200)).toBe(true);
+  expect((await startBrowserPairing(db)).status).toBe(200);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("invalidates a browser pairing after five incorrect private verifiers", async () => {
+  const { db, send, sendRequest } = await setup();
+  const request = (proof: unknown): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/web/pairings/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
+        body: JSON.stringify(proof),
+      })
+    );
+  const started = await sendRequest(
+    new Request("https://api.fidyapp.com/web/pairings", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
+      body: "{}",
+    })
+  );
+  expect(started.status).toBe(200);
+  const pairing: { pairingId: string; privateVerifier: string } = await started.json();
+  const rejectFive = (target: typeof pairing): Promise<void> =>
+    Array.from({ length: 5 }).reduce<Promise<void>>(
+      (previous) =>
+        previous.then(() =>
+          request({ pairingId: target.pairingId, privateVerifier: "A".repeat(43) }).then(
+            (result) => {
+              expect(result.status).toBe(400);
+            }
+          )
+        ),
+      Promise.resolve()
+    );
+  await rejectFive(pairing);
+  expect((await request(pairing)).status).toBe(400);
+  expect(
+    (
+      await db
+        .prepare("SELECT state FROM browser_login_pairings WHERE id = ?")
+        .bind(pairing.pairingId)
+        .first<{ state: string }>()
+    )?.state
+  ).toBe("invalidated");
+  expect((await send(code)).status).toBe(200);
+  const ready: typeof pairing = await (await startBrowserPairing(db)).json();
+  await db
+    .prepare(
+      "UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT id FROM users) WHERE id = ?"
+    )
+    .bind(ready.pairingId)
+    .run();
+  await rejectFive(ready);
+  expect((await request(ready)).status).toBe(400);
+  expect(
+    await db
+      .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")
+      .bind(ready.pairingId)
+      .first<{ state: string; user_id: unknown }>()
+  ).toMatchObject({ state: "invalidated", user_id: null });
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

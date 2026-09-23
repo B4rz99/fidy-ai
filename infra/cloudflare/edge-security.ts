@@ -96,6 +96,10 @@ const rateLimitPaths = [
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
   "/web/onboarding/email/verify",
+  "/web/pairings",
+  "/web/pairings/redeem",
+  "/web/session/logout",
+  "/user",
 ] as const;
 
 const rateLimitExpression = `http.request.uri.path in {${rateLimitPaths

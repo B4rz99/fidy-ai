@@ -1,4 +1,8 @@
 import { listCategoriesPath } from "@fidy/server/categories-path";
+import {
+  emailReplacementCompletionPath,
+  emailReplacementPath,
+} from "@fidy/server/email-replacement-path";
 import type * as Cloudflare from "alchemy/Cloudflare";
 import { browserOrigins, productionTopology } from "./topology";
 
@@ -101,6 +105,8 @@ const rateLimitPaths = [
   "/web/session/logout",
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
+  emailReplacementPath,
+  emailReplacementCompletionPath,
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
   "/user",

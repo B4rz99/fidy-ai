@@ -7,8 +7,8 @@ import {
   EmailAddress,
   type EmailAddress as EmailAddressType,
   EmailReplacementFreshPairingRequiredApi,
+  EmailVerificationCode,
   type FidyClient,
-  type WebAuthClient,
 } from "@/transport/client";
 
 /** Renderable states for the transient verified-email replacement interaction. */
@@ -55,16 +55,21 @@ const makeRequest = (apiClient: FidyClient): Atom.AtomResultFn<RequestCommand, v
     { concurrent: false }
   );
 
-const makeComplete = (
-  webAuthClient: WebAuthClient
-): Atom.AtomResultFn<CompleteCommand, void, never> =>
-  webAuthClient.runtime.fn<CompleteCommand>()(
+const makeComplete = (apiClient: FidyClient): Atom.AtomResultFn<CompleteCommand, void, never> =>
+  apiClient.runtime.fn<CompleteCommand>()(
     ({ candidateEmail, combinedCode, onStateChange }) =>
       Effect.gen(function* () {
+        const decoded = Schema.decodeOption(EmailVerificationCode)(combinedCode);
+        if (decoded._tag === "None") {
+          yield* Effect.sync(() => onStateChange({ _tag: "Invalid", candidateEmail }));
+          return;
+        }
         yield* Effect.sync(() => onStateChange({ _tag: "Completing", candidateEmail }));
-        const client = yield* webAuthClient;
+        const client = yield* apiClient;
         const result = yield* Effect.result(
-          client.emailReplacement.complete({ payload: { combinedCode } })
+          client.emailAuthentication.completeEmailReplacement({
+            payload: { combinedCode: decoded.value },
+          })
         );
         yield* Effect.sync(() => {
           if (Result.isSuccess(result)) onStateChange({ _tag: "Replaced" });
@@ -88,7 +93,7 @@ export const useEmailReplacement = (): EmailReplacementController => {
   const router = useRouter();
   const [state, setState] = useState<EmailReplacementViewState>({ _tag: "Editing" });
   const [requestAtom] = useState(() => makeRequest(router.options.context.apiClient));
-  const [completeAtom] = useState(() => makeComplete(router.options.context.webAuthClient));
+  const [completeAtom] = useState(() => makeComplete(router.options.context.apiClient));
   const request = useAtomSet(requestAtom);
   const complete = useAtomSet(completeAtom);
   return {

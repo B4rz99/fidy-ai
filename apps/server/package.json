@@ -39,6 +39,16 @@
       "import": "./src/shell/email-authentication/onboarding.ts",
       "default": "./src/shell/email-authentication/onboarding.ts"
     },
+    "./email-replacement-path": {
+      "types": "./src/shell/email-authentication/path.ts",
+      "import": "./src/shell/email-authentication/path.ts",
+      "default": "./src/shell/email-authentication/path.ts"
+    },
+    "./email-replacement": {
+      "types": "./src/shell/email-authentication/runtime.ts",
+      "import": "./src/shell/email-authentication/runtime.ts",
+      "default": "./src/shell/email-authentication/runtime.ts"
+    },
     "./onboarding-email-delivery": {
       "types": "./src/shell/email-authentication/delivery.ts",
       "import": "./src/shell/email-authentication/delivery.ts",

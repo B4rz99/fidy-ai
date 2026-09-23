@@ -25,6 +25,7 @@ const safeSource = [
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/[^/]+\/operations\.ts$/u,
   /^src\/shell\/categories\/path\.ts$/u,
+  /^src\/shell\/email-authentication\/(?:contract|path)\.ts$/u,
   /^src\/shell\/ingestion\/input\.ts$/u,
   /^src\/shell\/memory\/errors\.ts$/u,
   /^src\/shell\/_shared\/(?:authz|canonical-telemetry|operation-catalog|operation-policy|partial-input)\.ts$/u,

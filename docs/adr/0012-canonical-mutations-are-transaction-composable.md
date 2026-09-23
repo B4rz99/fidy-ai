@@ -1,6 +1,6 @@
 # Canonical mutations are transaction-composable by definition
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0027 (standalone account-security mutations)
 - **Date:** 2026-08-08
 
 ## Context

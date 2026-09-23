@@ -1,0 +1,13 @@
+{
+  "baseDigest": "d53b1a4490fbd22ea9f0a732a0ae93794c10bef1a2bf54976201c598d7a36d77",
+  "candidateDigest": "64509f0fe8d02f79f48ef50cb56563ff17daa87b939f19a68b5937df039ce5b3",
+  "findings": [
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "emailAuthentication.requestEmailReplacement",
+      "detail": "{\"base\":{\"access\":{\"type\":\"fresh-web-or-verified-whatsapp-hosted\"},\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredTier\":\"free\"},\"candidate\":{\"access\":{\"type\":\"fresh-web-session-only\"},\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredTier\":\"free\"}}"
+    }
+  ],
+  "rolloutIssue": "https://github.com/B4rz99/fidy-ai/issues/686"
+}

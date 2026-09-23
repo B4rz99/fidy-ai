@@ -255,6 +255,7 @@ export default {
           "^src/shell/_shared/canonical-input\\.ts$",
           "^src/shell/_shared/canonical-success\\.ts$",
           "^src/shell/(public-http|schema-codecs|tokens|subscription|web-auth)/contract\\.ts$",
+          "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],
       },
     },

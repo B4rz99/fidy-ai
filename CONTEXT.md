@@ -186,9 +186,14 @@ _Avoid_: Read operation, read-only endpoint.
 
 **Canonical mutation**:
 A canonical operation that requests a domain transition, records durable work, or causes an external
-effect. Every canonical mutation is transaction-composable and uses one reusable implementation for
-individual and atomic-batch execution.
+effect. Batchable canonical mutations use one transaction-composable implementation for individual
+and atomic-batch execution. One-time account-security mutations may instead be standalone.
 _Avoid_: Write operation, command, batch-eligible operation.
+
+**Standalone canonical mutation**:
+A one-time account-security mutation whose mailbox challenge, proof consumption, or single-use secret
+rotation must complete in its own atomic unit, outside an atomic batch.
+_Avoid_: Non-composable write, unsafe mutation.
 
 **SuggestedOperation**:
 A canonical operation attached to a response because it may be worthwhile for the calling agent to

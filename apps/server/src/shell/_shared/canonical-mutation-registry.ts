@@ -1,5 +1,9 @@
 import { Effect } from "effect";
 import type { OperationId } from "~/shell/api";
+import {
+  completeEmailReplacement,
+  requestEmailReplacement,
+} from "~/shell/email-authentication/mutation";
 import type { OperationCatalog } from "./operation-catalog";
 import type {
   CanonicalFailure,
@@ -26,6 +30,7 @@ type MutationId =
   | "dashboard.getDashboardView"
   | "dashboard.applyDashboardEdit"
   | "emailAuthentication.requestEmailReplacement"
+  | "emailAuthentication.completeEmailReplacement"
   | "transactions.createTransaction"
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions"
@@ -71,7 +76,8 @@ export const canonicalMutationImplementations = {
   "dashboard.getDashboard": unavailableMutation,
   "dashboard.getDashboardView": unavailableMutation,
   "dashboard.applyDashboardEdit": unavailableMutation,
-  "emailAuthentication.requestEmailReplacement": unavailableMutation,
+  "emailAuthentication.requestEmailReplacement": requestEmailReplacement,
+  "emailAuthentication.completeEmailReplacement": completeEmailReplacement,
   "transactions.createTransaction": unavailableMutation,
   "transactions.linkTransactions": unavailableMutation,
   "transactions.unlinkTransactions": unavailableMutation,

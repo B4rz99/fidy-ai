@@ -10,6 +10,7 @@ import {
   dispatchBrowserPairingEmail,
 } from "./browser-pairing-email-delivery";
 import { Effect } from "effect";
+import { deliverEmailReplacement, dispatchEmailReplacement } from "./email-replacement-delivery";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker from "./core-worker";
 import publicWorker from "./public-worker";
@@ -78,6 +79,7 @@ const setup = async (
     "0006_browser_login",
     "0007_browser_pairing_email",
     "0008_support_recovery",
+    "0009_email_replacement",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(name)),
     Promise.resolve()
@@ -406,6 +408,52 @@ const seedWebSession = async (db: D1Database, token: string): Promise<number> =>
   return started;
 };
 
+type SendWorkerRequest = (request: Request) => Promise<Response>;
+
+const replacementRequest =
+  (sendRequest: SendWorkerRequest, token: string) =>
+  (
+    path: string,
+    body: object,
+    options: { cookie: string; origin: string } = {
+      cookie: token,
+      origin: "https://app.fidyapp.com",
+    }
+  ): Promise<Response> =>
+    sendRequest(
+      new Request(`https://api.fidyapp.com${path}`, {
+        method: "POST",
+        headers: {
+          origin: options.origin,
+          cookie: `__Host-fidy_session=${options.cookie}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      })
+    );
+
+// @effect-diagnostics-next-line asyncFunction:off
+const deliverPendingReplacement = async (db: D1Database): Promise<string> => {
+  let workId = "";
+  await Effect.runPromise(
+    dispatchEmailReplacement({
+      DB: db,
+      EMAIL_REPLACEMENT_QUEUE: {
+        send: (work) => {
+          workId = work.id;
+          return Promise.resolve();
+        },
+      },
+    })
+  );
+  let proof = "";
+  await deliverEmailReplacement(db, (_to, received) => {
+    proof = received;
+    return Promise.resolve("succeeded");
+  })(workId);
+  return proof;
+};
+
 // @effect-diagnostics-next-line asyncFunction:off
 it("renews an active WebSession until its hard deadline and never revives an expired one", async () => {
   const { db, send, sendRequest } = await setup();
@@ -517,7 +565,8 @@ it("admits email approval only for a browser-held verifier and an existing verif
         .first<{ count: number }>()
     )?.count
   ).toBe(0);
-  expect((await begin(pairing.privateVerifier, "unknown@example.test")).status).toBe(202);
+  const unknownInitiation = await begin(pairing.privateVerifier, "unknown@example.test");
+  expect(unknownInitiation.status).toBe(202);
   expect(
     (
       await db
@@ -525,7 +574,10 @@ it("admits email approval only for a browser-held verifier and an existing verif
         .first<{ count: number }>()
     )?.count
   ).toBe(0);
-  expect((await begin(pairing.privateVerifier, "person@example.test")).status).toBe(202);
+  const knownInitiation = await begin(pairing.privateVerifier, "person@example.test");
+  expect(knownInitiation.status).toBe(unknownInitiation.status);
+  expect(knownInitiation.headers.get("cache-control")).toBe("no-store");
+  expect(await knownInitiation.text()).toBe(await unknownInitiation.text());
   expect(
     (
       await db
@@ -582,6 +634,235 @@ it("admits email approval only for a browser-held verifier and an existing verif
   );
   expect(redeemed.status).toBe(200);
   expect(redeemed.headers.get("set-cookie")).toContain("__Host-fidy_session=");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("replaces one credential only after fresh-session candidate proof and rejects replay", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "E".repeat(43);
+  await seedWebSession(db, token);
+  const request = replacementRequest(sendRequest, token);
+  expect(
+    (
+      await request(
+        "/email/replacement",
+        { candidateEmail: "new@example.test" },
+        { cookie: token, origin: "https://attacker.test" }
+      )
+    ).status
+  ).toBe(403);
+  expect(
+    (await request("/email/replacement", { candidateEmail: "  NEW@example.test " })).status
+  ).toBe(200);
+  const proof = await deliverPendingReplacement(db);
+  expect(
+    (
+      await request(
+        "/web/email/replacement/verify",
+        { combinedCode: proof },
+        { cookie: "F".repeat(43), origin: "https://app.fidyapp.com" }
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await request("/web/email/replacement/verify", {
+        combinedCode: proof.slice(0, -1) + (proof.endsWith("2") ? "3" : "2"),
+      })
+    ).status
+  ).toBe(400);
+  const redemptions = await Promise.all([
+    request("/web/email/replacement/verify", { combinedCode: proof }),
+    request("/web/email/replacement/verify", { combinedCode: proof }),
+  ]);
+  expect(
+    redemptions.map((response) => response.status).sort((left, right) => left - right)
+  ).toEqual([200, 400]);
+  expect(
+    await Promise.all(
+      redemptions.filter((response) => response.status === 200).map((response) => response.json())
+    )
+  ).toEqual([{ data: { status: "replaced" }, next: [] }]);
+  expect((await request("/web/email/replacement/verify", { combinedCode: proof })).status).toBe(
+    400
+  );
+  expect(
+    await db.prepare("SELECT email_address FROM verified_email_credentials").first()
+  ).toMatchObject({ email_address: "new@example.test" });
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>())?.count
+  ).toBe(1);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM email_replacement_audit")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(5);
+  expect(
+    await db
+      .prepare("SELECT operation, outcome FROM email_replacement_audit WHERE outcome = 'replaced'")
+      .first()
+  ).toMatchObject({
+    operation: "completeEmailReplacement",
+    outcome: "replaced",
+  });
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("keeps the old credential when freshness expires or a candidate is already owned", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "G".repeat(43);
+  const started = await seedWebSession(db, token);
+  const request = replacementRequest(sendRequest, token);
+  await db
+    .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+    .bind("10000000-0000-4000-8000-000000000004", started)
+    .run();
+  await db
+    .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
+    .bind("10000000-0000-4000-8000-000000000004", "owned@example.test", started)
+    .run();
+  expect(
+    (await request("/email/replacement", { candidateEmail: "OWNED@example.test" })).status
+  ).toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM email_replacements")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect(
+    (await request("/email/replacement", { candidateEmail: "free@example.test" })).status
+  ).toBe(200);
+  const proof = await deliverPendingReplacement(db);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 600_000);
+  expect((await request("/web/email/replacement/verify", { combinedCode: proof })).status).toBe(
+    401
+  );
+  expect(
+    await db
+      .prepare(
+        "SELECT email_address FROM verified_email_credentials WHERE email_address = 'person@example.test'"
+      )
+      .first()
+  ).not.toBeNull();
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM email_replacement_audit WHERE outcome = 'replaced'")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("preserves global mailbox ownership when another User claims the candidate after delivery", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "H".repeat(43);
+  const started = await seedWebSession(db, token);
+  const request = replacementRequest(sendRequest, token);
+  expect(
+    (await request("/email/replacement", { candidateEmail: "claimed@example.test" })).status
+  ).toBe(200);
+  const proof = await deliverPendingReplacement(db);
+  await db
+    .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+    .bind("10000000-0000-4000-8000-000000000004", started)
+    .run();
+  await db
+    .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
+    .bind("10000000-0000-4000-8000-000000000004", "claimed@example.test", started)
+    .run();
+  expect((await request("/web/email/replacement/verify", { combinedCode: proof })).status).toBe(
+    400
+  );
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT email_address FROM verified_email_credentials WHERE user_id = (SELECT id FROM users WHERE id <> ?)"
+        )
+        .bind("10000000-0000-4000-8000-000000000004")
+        .first()
+    )?.email_address
+  ).toBe("person@example.test");
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM email_replacement_audit WHERE outcome = 'replaced'")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("bounds replacement delivery across rejected proofs for the same User", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "J".repeat(43);
+  await seedWebSession(db, token);
+  const request = replacementRequest(sendRequest, token);
+  const start = (): Promise<Response> =>
+    request("/email/replacement", { candidateEmail: "other@example.test" });
+  // @effect-diagnostics-next-line asyncFunction:off
+  const rejectGeneration = async (): Promise<void> => {
+    expect((await start()).status).toBe(200);
+    const proof = await deliverPendingReplacement(db);
+    const wrong = `${proof.slice(0, -1)}${proof.endsWith("A") ? "B" : "A"}`;
+    await Array.from({ length: 5 }).reduce<Promise<void>>(
+      (previous) =>
+        previous.then(() =>
+          request("/web/email/replacement/verify", { combinedCode: wrong }).then((result) => {
+            expect(result.status).toBe(400);
+          })
+        ),
+      Promise.resolve()
+    );
+  };
+  await rejectGeneration();
+  await rejectGeneration();
+  await rejectGeneration();
+  expect((await Promise.all([start(), start()])).map((response) => response.status)).toEqual([
+    200, 200,
+  ]);
+  expect((await start()).status).toBe(200);
+  const auditRows = await db.prepare("SELECT * FROM email_replacement_audit").all();
+  expect(JSON.stringify(auditRows.results)).not.toContain("other@example.test");
+  expect(JSON.stringify(auditRows.results)).not.toContain("__Host-fidy_session");
+  expect(auditRows.results.filter((entry) => entry.outcome === "rejected")).toHaveLength(15);
+  expect(
+    (
+      await db
+        .prepare("SELECT requests FROM email_replacement_limits")
+        .first<{ requests: number }>()
+    )?.requests
+  ).toBe(5);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM email_replacement_outbox")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(4);
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS count FROM email_replacement_audit WHERE operation = 'requestEmailReplacement'"
+        )
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(6);
+  expect(
+    (await db.prepare("SELECT email_address FROM verified_email_credentials").first())
+      ?.email_address
+  ).toBe("person@example.test");
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

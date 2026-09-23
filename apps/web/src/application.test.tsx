@@ -93,7 +93,7 @@ const successfulReplacementRequest: StubResponse = {
 };
 const successfulReplacementCompletion: StubResponse = {
   status: 200,
-  body: { status: "replaced" },
+  body: { data: { status: "replaced" }, next: [] },
 };
 
 const emailReplacementClients = (
@@ -449,6 +449,22 @@ describe("verified-email replacement completion failures", () => {
     fireEvent.submit(form);
     await waitFor(() => expect(requests).toHaveLength(0));
     expect(screen.getByLabelText("Nuevo correo")).toBeVisible();
+  });
+});
+
+describe("verified-email replacement malformed proof", () => {
+  afterEach(resetApplicationTest);
+
+  it("rejects malformed proof locally without sending it to the API", async () => {
+    const requests: Array<string> = [];
+    const clients = emailReplacementClients(requests);
+    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
+    await beginRenderedEmailReplacement("new.mailbox@example.com");
+    const input = await screen.findByLabelText("Código de verificación");
+    fireEvent.change(input, { target: { value: "not-a-code" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+    expect(await screen.findByText("El código no es válido")).toBeVisible();
+    expect(requests).toEqual(["/email/replacement"]);
   });
 });
 

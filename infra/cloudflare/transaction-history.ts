@@ -7,6 +7,7 @@ import {
   TransactionQueryValues,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Option, Schema } from "effect";
+import type { AuthorizedPAT } from "./pat-authorization";
 import {
   type TransactionSubject,
   transactionNoStore as noStore,
@@ -78,7 +79,9 @@ const decodeCursor = (cursor: string): Option.Option<readonly [string, string, s
     : Option.none();
 };
 
-const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
+const parseQuery = (
+  selection: Pick<Selection, "id" | "request">
+): Option.Option<typeof Query.Type> => {
   if (
     Option.isSome(selection.id) &&
     Option.isNone(Schema.decodeOption(TransactionId)(selection.id.value))
@@ -99,24 +102,22 @@ const parseQuery = (selection: Selection): Option.Option<typeof Query.Type> => {
   );
 };
 
+type AuthorityCondition = Readonly<{
+  predicate: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
 const selectStatement = (
   db: D1Database,
-  args: Readonly<{ selection: Selection; query: typeof Query.Type; current: number }>
+  args: Readonly<{
+    selection: Pick<Selection, "id">;
+    query: typeof Query.Type;
+    authority: AuthorityCondition;
+  }>
 ): D1PreparedStatement => {
-  const { selection, query, current } = args;
-  const { subject, id } = selection;
-  const conditions = [
-    "user_id = ?",
-    `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
-  ];
-  const values: Array<string | number | Uint8Array> = [
-    subject.userId,
-    subject.id,
-    subject.userId,
-    subject.digest,
-    current,
-    current,
-  ];
+  const { selection, query, authority } = args;
+  const { id } = selection;
+  const conditions = ["user_id = ?", authority.predicate];
+  const values: Array<string | number | Uint8Array> = [...authority.bindings];
   if (Option.isSome(id)) {
     conditions.push("id = ?");
     values.push(id.value);
@@ -165,7 +166,7 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
   });
 };
 
-const presentHistory = (rows: D1Result, selection: Selection): Response => {
+const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "request">): Response => {
   const { id, request } = selection;
   const decoded = rows.results.map(decodeTransactionRow);
   if (decoded.some(Option.isNone)) {
@@ -252,7 +253,14 @@ export const browseTransactions = async (
   try {
     if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const [rows, audit] = await db.batch([
-      selectStatement(db, { selection, query: query.value, current }),
+      selectStatement(db, {
+        selection,
+        query: query.value,
+        authority: {
+          predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
+          bindings: [subject.userId, subject.id, subject.userId, subject.digest, current, current],
+        },
+      }),
       db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
         SELECT ?, user_id, id, ?,
@@ -278,6 +286,85 @@ export const browseTransactions = async (
       return noSession();
     }
     return rows === undefined ? unavailable() : presentHistory(rows, selection);
+  } catch (error) {
+    return failedAudit(error);
+  }
+};
+
+type PATSelection = Readonly<{
+  request: Request;
+  subject: AuthorizedPAT;
+  id: Option.Option<string>;
+}>;
+
+const patHistoryStatements = (
+  db: D1Database,
+  input: Readonly<{
+    selection: PATSelection;
+    query: Option.Option<typeof Query.Type>;
+    current: number;
+  }>
+): Array<D1PreparedStatement> => {
+  const { selection, query, current } = input;
+  const { subject, id } = selection;
+  return [
+    db
+      .prepare(`UPDATE pats SET last_used_at_ms = ? WHERE id = ? AND user_id = ? AND bearer_digest = ?
+        AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+      .bind(current, subject.patId, subject.userId, subject.digest, current),
+    ...(Option.isSome(query)
+      ? [
+          selectStatement(db, {
+            selection,
+            query: query.value,
+            authority: {
+              predicate: `EXISTS (SELECT 1 FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
+                  AND revoked_at_ms IS NULL AND expires_at_ms > ?)`,
+              bindings: [subject.userId, subject.patId, subject.userId, subject.digest, current],
+            },
+          }),
+        ]
+      : []),
+    db
+      .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+        SELECT ?,user_id,id,?,?,? FROM pats WHERE id = ? AND user_id = ? AND bearer_digest = ?
+        AND revoked_at_ms IS NULL AND expires_at_ms > ?`)
+      .bind(
+        uuid(),
+        Option.isNone(id) ? "transactions.listTransactions" : "transactions.getTransaction",
+        Option.isSome(query) ? "accepted" : "rejected",
+        current,
+        subject.patId,
+        subject.userId,
+        subject.digest,
+        current
+      ),
+  ];
+};
+
+const presentPATHistory = (
+  results: ReadonlyArray<D1Result>,
+  selection: PATSelection,
+  query: Option.Option<typeof Query.Type>
+): Response => {
+  if (results[0]?.meta.changes !== 1 || results.at(-1)?.meta.changes !== 1) {
+    return noSession();
+  }
+  if (Option.isNone(query)) return Option.isSome(selection.id) ? notFound() : invalid();
+  const rows = results[1];
+  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+};
+
+/** Read the same canonical Transaction projection through a live User-owned PAT grant. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const browsePATTransactions = async (
+  db: D1Database,
+  selection: PATSelection
+): Promise<Response> => {
+  const query = parseQuery(selection);
+  try {
+    const results = await db.batch(patHistoryStatements(db, { selection, query, current: now() }));
+    return presentPATHistory(results, selection, query);
   } catch (error) {
     return failedAudit(error);
   }

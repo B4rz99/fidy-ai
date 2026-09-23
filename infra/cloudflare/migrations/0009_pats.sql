@@ -78,6 +78,8 @@ CREATE TABLE pat_audit (
 ) STRICT;
 CREATE TRIGGER pat_audit_no_update BEFORE UPDATE ON pat_audit
 BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
+CREATE TRIGGER pat_audit_no_delete BEFORE DELETE ON pat_audit
+BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
 CREATE TABLE pat_review_attempts (
   id TEXT PRIMARY KEY NOT NULL,
   session_id TEXT NOT NULL REFERENCES web_sessions(id),

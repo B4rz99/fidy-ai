@@ -682,6 +682,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        _tag: "WebSession",
         sessionId: session.id,
         userId: session.userId,
         digest: Array.from(session.digest),

@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "./core-worker";
 import publicWorker from "./public-worker";
+import { UserTransactionCoordinator } from "./transaction-coordinator";
 
 const instances: Array<Miniflare> = [];
 const userA = "10000000-0000-4000-8000-000000000001";
@@ -81,6 +82,7 @@ const setup = async (): Promise<{
     "0008_support_recovery",
     "0009_email_replacement",
     "0009_pats",
+    "0009_transactions",
     "0010_pat_revocation_consents",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
@@ -128,12 +130,18 @@ const setup = async (): Promise<{
     return `__Host-fidy_session=${token}`;
   };
   const sessions = [await createSession(userA, 1), await createSession(userB, 2)] as const;
+  const coordinators = new Map<string, UserTransactionCoordinator>();
   const coreEnvironment = {
     DB: db,
     USER_TRANSACTION_COORDINATOR: {
-      getByName: (): Pick<Fetcher, "fetch"> => ({
-        fetch: async (): Promise<Response> => new Response(null, { status: 503 }),
-      }),
+      getByName: (name: string): Pick<Fetcher, "fetch"> => {
+        let coordinator = coordinators.get(name);
+        if (coordinator === undefined) {
+          coordinator = new UserTransactionCoordinator({ id: { name } }, { DB: db });
+          coordinators.set(name, coordinator);
+        }
+        return { fetch: (input) => coordinator.fetch(new Request(input)) };
+      },
     },
     AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
     CONTRACT_DIGEST: "a".repeat(64),
@@ -871,6 +879,69 @@ it("gates every declared canonical path by live PAT and exact operation scope be
   const reader = await issue("read", 1);
   const writer = await issue("write", 2);
   const dashboard = await issue("dashboard", 3);
+  const capture = {
+    money: { amount: "2300.50", currency: "COP" },
+    direction: "outflow",
+    categoryId: "10000000-0000-4000-8000-000000000001",
+    occurredAt: "2026-09-01T12:00:00.000Z",
+  };
+  expect(
+    (await send({ path: "/transactions", method: "POST", bearer: reader.bearer, payload: capture }))
+      .status
+  ).toBe(403);
+  const created = await send({
+    path: "/transactions",
+    method: "POST",
+    bearer: writer.bearer,
+    payload: capture,
+  });
+  expect(created.status).toBe(201);
+  expect(
+    (await send({ path: "/transactions", method: "POST", bearer: writer.bearer, payload: {} }))
+      .status
+  ).toBe(400);
+  expect(
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS total FROM pat_audit WHERE operation = 'transactions.createTransaction' AND outcome = 'accepted'"
+        )
+        .first()
+    )?.total
+  ).toBe(1);
+  const transactionId = "90000000-0000-4000-8000-000000000001";
+  await db
+    .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
+    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+    .bind(transactionId, userA, "1000.00", "10000000-0000-4000-8000-000000000001")
+    .run();
+  expect((await send({ path: "/transactions", method: "GET", bearer: writer.bearer })).status).toBe(
+    403
+  );
+  const history = await send({ path: "/transactions", method: "GET", bearer: reader.bearer });
+  expect(history.status).toBe(200);
+  expect(JSON.stringify(await history.json())).toContain(transactionId);
+  expect(
+    (await send({ path: `/transactions/${transactionId}`, method: "GET", bearer: reader.bearer }))
+      .status
+  ).toBe(200);
+  const foreignTransactionId = "90000000-0000-4000-8000-000000000002";
+  await db
+    .prepare(`INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
+    VALUES (?,?,?,'COP','outflow',?,'2026-09-01T12:00:00.000Z','2026-09-01T12:00:00.000Z')`)
+    .bind(foreignTransactionId, userB, "2000.00", "10000000-0000-4000-8000-000000000001")
+    .run();
+  const isolated = await send({ path: "/transactions", method: "GET", bearer: reader.bearer });
+  expect(JSON.stringify(await isolated.json())).not.toContain(foreignTransactionId);
+  expect(
+    (
+      await send({
+        path: `/transactions/${foreignTransactionId}`,
+        method: "GET",
+        bearer: reader.bearer,
+      })
+    ).status
+  ).toBe(404);
   expect((await send({ path: "/budgets", method: "GET", bearer: reader.bearer })).status).toBe(503);
   expect(
     (await send({ path: "/budgets", method: "POST", bearer: reader.bearer, payload: {} })).status
@@ -897,7 +968,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
   ).toBe(403);
   expect(
     (await send({ path: "/transactions/foreign-id", method: "GET", bearer: reader.bearer })).status
-  ).toBe(503);
+  ).toBe(404);
   expect((await send({ path: "/budgets", method: "GET", bearer: "fin_invalid" })).status).toBe(401);
   expect(
     (
@@ -914,6 +985,17 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       .status
   ).toBe(200);
   expect((await send({ path: "/budgets", method: "GET", bearer: reader.bearer })).status).toBe(401);
+  expect((await send({ path: "/transactions", method: "GET", bearer: reader.bearer })).status).toBe(
+    401
+  );
+  expect(
+    (await send({ path: `/pats/${writer.pat.shortId}`, method: "DELETE", session: sessions[0] }))
+      .status
+  ).toBe(200);
+  expect(
+    (await send({ path: "/transactions", method: "POST", bearer: writer.bearer, payload: capture }))
+      .status
+  ).toBe(401);
   expect(
     (
       await db

@@ -14,7 +14,7 @@ import {
   ownsTransactionPath as transactionPath,
   transactionRoute,
 } from "@fidy/server/transaction-routes";
-import { browseTransactions } from "./transaction-history";
+import { browsePATTransactions, browseTransactions } from "./transaction-history";
 import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
@@ -45,7 +45,11 @@ import { handlePATRequest, patRoute } from "./pat-routes";
 import { canonicalOperation, canonicalRoute } from "./canonical-routes";
 import type { CatalogOperation } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pat-pairing";
-import { authorizeCanonicalPAT, authorizeCategoryPAT } from "./pat-authorization";
+import {
+  type AuthorizedPAT,
+  authorizeCanonicalPAT,
+  authorizeCategoryPAT,
+} from "./pat-authorization";
 import {
   currentUser,
   logoutBrowser,
@@ -204,6 +208,7 @@ const transactionsResponse = (
       );
       // @effect-diagnostics-next-line preferSchemaOverJson:off
       const body = JSON.stringify({
+        _tag: "WebSession",
         sessionId: subject.value.id,
         userId: subject.value.userId,
         digest: Array.from(subject.value.digest),
@@ -309,6 +314,76 @@ const scopeMissingResponse = (): Response =>
     HTTP_FORBIDDEN
   );
 
+// @effect-diagnostics-next-line asyncFunction:off
+const dispatchPATCapture = async (
+  request: Request,
+  environment: CoreEnvironment,
+  pat: AuthorizedPAT
+): Promise<Response> => {
+  const input = await transactionInput(request);
+  if (Option.isNone(input)) {
+    return rejectManualTransaction(environment.DB, pat, "validation_failed");
+  }
+  const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(pat.userId);
+  const encoded = await Effect.runPromise(
+    Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
+  );
+  // @effect-diagnostics-next-line preferSchemaOverJson:off
+  const body = JSON.stringify({
+    _tag: "PAT",
+    patId: pat.patId,
+    userId: pat.userId,
+    digest: Array.from(pat.digest),
+    input: encoded,
+  });
+  return stub.fetch(
+    new Request("https://coordinator.internal/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    })
+  );
+};
+
+const admittedPATResponse = (
+  request: Request,
+  environment: CoreEnvironment,
+  input: Readonly<{ operation: CatalogOperation; pat: AuthorizedPAT | undefined }>
+): Effect.Effect<Response> => {
+  const { operation, pat } = input;
+  if (pat !== undefined && operation.id === "transactions.createTransaction") {
+    return Effect.tryPromise({
+      try: () => dispatchPATCapture(request, environment, pat),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
+  if (
+    pat !== undefined &&
+    (operation.id === "transactions.listTransactions" ||
+      operation.id === "transactions.getTransaction")
+  ) {
+    return Effect.tryPromise({
+      try: () =>
+        browsePATTransactions(environment.DB, {
+          request,
+          subject: pat,
+          id:
+            operation.id === "transactions.getTransaction"
+              ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+              : Option.none(),
+        }),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
+  if (operation.id === "categories.listCategories") return categoriesResponse(environment);
+  return Effect.succeed(
+    jsonResponse(
+      '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
+      HTTP_SERVICE_UNAVAILABLE
+    )
+  );
+};
+
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreEnvironment,
@@ -328,7 +403,7 @@ const authorizedCanonicalResponse = (
     );
   }
   return Effect.tryPromise({
-    try: () =>
+    try: async (): Promise<AuthorizedPAT | "accepted" | "unauthenticated" | "scope_missing"> =>
       operation.id === "categories.listCategories"
         ? authorizeCategoryPAT(request, environment.DB)
         : authorizeCanonicalPAT(request, environment.DB, operation),
@@ -341,6 +416,7 @@ const authorizedCanonicalResponse = (
           HTTP_SERVICE_UNAVAILABLE
         ),
       onSuccess: (authorized) => {
+        if (typeof authorized === "object") return authorized;
         if (authorized === "accepted") return undefined;
         if (authorized === "scope_missing") return scopeMissingResponse();
         return jsonResponse(
@@ -349,16 +425,11 @@ const authorizedCanonicalResponse = (
         );
       },
     }),
-    Effect.flatMap((result) => {
-      if (result !== undefined) return Effect.succeed(result);
-      if (operation.id === "categories.listCategories") return categoriesResponse(environment);
-      return Effect.succeed(
-        jsonResponse(
-          '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
-          HTTP_SERVICE_UNAVAILABLE
-        )
-      );
-    })
+    Effect.flatMap((result) =>
+      result instanceof Response
+        ? Effect.succeed(result)
+        : admittedPATResponse(request, environment, { operation, pat: result })
+    )
   );
 };
 

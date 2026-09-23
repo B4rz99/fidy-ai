@@ -38,6 +38,7 @@ const authenticate = async (
   return equalsDigest(pat.value.bearer_digest, await digest(bearer)) ? pat : Option.none();
 };
 type CategoryAuthorization = "accepted" | "unauthenticated" | "scope_missing";
+export type AuthorizedPAT = Readonly<{ patId: string; userId: string; digest: Uint8Array }>;
 const categoryOperationId = "categories.listCategories";
 const categoryOperation = operationCatalog.byId.get(categoryOperationId);
 const scopeDecision = (
@@ -57,11 +58,17 @@ export const authorizeCanonicalPAT = async (
   request: Request,
   db: D1Database,
   operation: CatalogOperation
-): Promise<CategoryAuthorization> => {
+): Promise<AuthorizedPAT | Exclude<CategoryAuthorization, "accepted">> => {
   const pat = await authenticate(request, db);
-  return Option.isNone(pat)
-    ? "unauthenticated"
-    : scopeDecision(scopesFrom(pat.value.scopes_json), operation);
+  if (Option.isNone(pat)) return "unauthenticated";
+  const decision = scopeDecision(scopesFrom(pat.value.scopes_json), operation);
+  return decision === "accepted"
+    ? {
+        patId: pat.value.id,
+        userId: pat.value.user_id,
+        digest: new Uint8Array(pat.value.bearer_digest),
+      }
+    : decision;
 };
 /** Verify bearer bytes and declared category policy; record activity only for live execution. */
 export const authorizeCategoryPAT = async (

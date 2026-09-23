@@ -4,7 +4,7 @@ import { Category } from "~/core/categories/model";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { ListCategoriesResponse } from "./operations";
 
-const maximumCategoryCount = 100;
+export const maximumCategoryCount = 100;
 const categoryQueryLimit = maximumCategoryCount + 1;
 
 /** Safe reason returned when authoritative Category data cannot be loaded. */

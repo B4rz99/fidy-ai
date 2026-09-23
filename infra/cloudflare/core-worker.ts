@@ -1,10 +1,8 @@
-import * as D1Client from "@effect/sql-d1/D1Client";
 import {
   ScopeMissing,
   UserActionRequired,
   categoryUnavailable,
   listCategoriesPath,
-  listCategoriesResponse,
 } from "@fidy/server/categories";
 import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
@@ -13,7 +11,6 @@ import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browsePATTransactions, browseTransactions } from "./transaction-history";
-import { SqlClient } from "effect/unstable/sql";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
 import {
   rejectManualTransaction,
@@ -21,6 +18,7 @@ import {
   transactionSession,
   unauthenticatedTransaction,
 } from "./transactions";
+import type { TransactionSubject } from "./transaction-boundary";
 import { completeBrowserPairingEmail, startBrowserPairingEmail } from "./browser-pairing-email";
 import {
   type BrowserPairingEmailEnvironment,
@@ -43,11 +41,8 @@ import { handlePATRequest, patRoute } from "./pat-routes";
 import { canonicalOperation, canonicalRoute } from "./canonical-routes";
 import type { CatalogOperation } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pat-pairing";
-import {
-  type AuthorizedPAT,
-  authorizeCanonicalPAT,
-  authorizeCategoryPAT,
-} from "./pat-authorization";
+import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pat-authorization";
+import { executeProtectedCategories } from "./canonical-category";
 import {
   currentUser,
   logoutBrowser,
@@ -132,27 +127,14 @@ const methodNotAllowed = (): Response =>
     status: HTTP_METHOD_NOT_ALLOWED,
   });
 
-const categoriesResponse = (environment: CoreEnvironment): Effect.Effect<Response> =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const clients = yield* Layer.build(D1Client.layer({ db: environment.DB }));
-      return yield* listCategoriesResponse.pipe(
-        // Effect SQL span attributes contain query text, which must not enter exported telemetry.
-        Effect.withTracerEnabled(false),
-        Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient)),
-        Effect.mapError(categoryUnavailable),
-        Effect.withSpan("categories.listCategories"),
-        Effect.match({
-          onFailure: (failure) =>
-            jsonResponse(
-              JSON.stringify({ error: failure.error, next: failure.next }),
-              HTTP_SERVICE_UNAVAILABLE
-            ),
-          onSuccess: (response) => jsonResponse(JSON.stringify(response), HTTP_OK),
-        })
-      );
-    })
-  ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
+const categoriesResponse = (
+  environment: CoreEnvironment,
+  subject: TransactionSubject | AuthorizedPAT
+): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    try: () => executeProtectedCategories(environment.DB, subject),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("categories.listCategories"));
 
 const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> =>
   request.method === "POST"
@@ -170,6 +152,48 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/prepare" ||
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
+
+// @effect-diagnostics-next-line asyncFunction:off
+const dispatchCanonicalCapture = async (
+  request: Request,
+  environment: CoreEnvironment,
+  subject: TransactionSubject | AuthorizedPAT
+): Promise<Response> => {
+  const input = await transactionInput(request);
+  if (Option.isNone(input)) {
+    return rejectManualTransaction(environment.DB, subject, "validation_failed");
+  }
+  // The worker.core.fetch and worker.public.fetch Work spans bound latency and status.
+  // Do not create per-Transaction spans that could expose opaque ids or Money.
+  const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
+  const encoded = await Effect.runPromise(
+    Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
+  );
+  const authority =
+    "patId" in subject
+      ? {
+          _tag: "PAT",
+          patId: subject.patId,
+          userId: subject.userId,
+          digest: Array.from(subject.digest),
+          input: encoded,
+        }
+      : {
+          _tag: "WebSession",
+          sessionId: subject.id,
+          userId: subject.userId,
+          digest: Array.from(subject.digest),
+          input: encoded,
+        };
+  return stub.fetch(
+    new Request("https://coordinator.internal/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      body: JSON.stringify(authority),
+    })
+  );
+};
 
 const transactionsResponse = (
   request: Request,
@@ -191,32 +215,7 @@ const transactionsResponse = (
               : Option.some(new URL(request.url).pathname.split("/").at(-1) ?? ""),
         });
       }
-      const input = await transactionInput(request);
-      if (Option.isNone(input)) {
-        return rejectManualTransaction(environment.DB, subject.value, "validation_failed");
-      }
-      // The existing worker.core.fetch and worker.public.fetch Work spans bound latency and
-      // status for this D1/DO workflow. Do not add per-Transaction spans: they would count
-      // failures twice and risk exporting opaque record ids or captured Money.
-      const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
-      const encoded = await Effect.runPromise(
-        Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      const body = JSON.stringify({
-        _tag: "WebSession",
-        sessionId: subject.value.id,
-        userId: subject.value.userId,
-        digest: Array.from(subject.value.digest),
-        input: encoded,
-      });
-      return stub.fetch(
-        new Request("https://coordinator.internal/create", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        })
-      );
+      return dispatchCanonicalCapture(request, environment, subject.value);
     },
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable));
@@ -326,37 +325,6 @@ const scopeMissingResponse = (): Response =>
     HTTP_FORBIDDEN
   );
 
-// @effect-diagnostics-next-line asyncFunction:off
-const dispatchPATCapture = async (
-  request: Request,
-  environment: CoreEnvironment,
-  pat: AuthorizedPAT
-): Promise<Response> => {
-  const input = await transactionInput(request);
-  if (Option.isNone(input)) {
-    return rejectManualTransaction(environment.DB, pat, "validation_failed");
-  }
-  const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(pat.userId);
-  const encoded = await Effect.runPromise(
-    Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(input.value)
-  );
-  // @effect-diagnostics-next-line preferSchemaOverJson:off
-  const body = JSON.stringify({
-    _tag: "PAT",
-    patId: pat.patId,
-    userId: pat.userId,
-    digest: Array.from(pat.digest),
-    input: encoded,
-  });
-  return stub.fetch(
-    new Request("https://coordinator.internal/create", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-    })
-  );
-};
-
 const admittedPATResponse = (
   request: Request,
   environment: CoreEnvironment,
@@ -365,7 +333,7 @@ const admittedPATResponse = (
   const { operation, pat } = input;
   if (pat !== undefined && operation.id === "transactions.createTransaction") {
     return Effect.tryPromise({
-      try: () => dispatchPATCapture(request, environment, pat),
+      try: () => dispatchCanonicalCapture(request, environment, pat),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
@@ -387,7 +355,9 @@ const admittedPATResponse = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  if (operation.id === "categories.listCategories") return categoriesResponse(environment);
+  if (operation.id === "categories.listCategories" && pat !== undefined) {
+    return categoriesResponse(environment, pat);
+  }
   return Effect.succeed(
     jsonResponse(
       '{"error":{"code":"unavailable","message":"Canonical operation is temporarily unavailable."},"next":[]}',
@@ -411,19 +381,14 @@ const authorizedCanonicalResponse = (
     }).pipe(
       Effect.flatMap((session) =>
         Option.isSome(session)
-          ? categoriesResponse(environment)
+          ? categoriesResponse(environment, session.value)
           : Effect.succeed(unauthenticatedTransaction())
       ),
       Effect.orElseSucceed(unavailable)
     );
   }
   return Effect.tryPromise({
-    try: async (): Promise<
-      AuthorizedPAT | "accepted" | "unauthenticated" | "scope_missing" | "user_action_required"
-    > =>
-      operation.id === "categories.listCategories"
-        ? authorizeCategoryPAT(request, environment.DB)
-        : authorizeCanonicalPAT(request, environment.DB, operation),
+    try: () => authorizeCanonicalPAT(request, environment.DB, operation),
     catch: () => undefined,
   }).pipe(
     Effect.match({
@@ -434,7 +399,6 @@ const authorizedCanonicalResponse = (
         ),
       onSuccess: (authorized) => {
         if (typeof authorized === "object") return authorized;
-        if (authorized === "accepted") return undefined;
         if (authorized === "user_action_required") return consentRevokedResponse();
         if (authorized === "scope_missing") return scopeMissingResponse();
         return jsonResponse(

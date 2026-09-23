@@ -1,17 +1,10 @@
-import {
-  type CatalogOperation,
-  decideOperationAccess,
-  operationCatalog,
-} from "@fidy/server/canonical-runtime";
+import { type CatalogOperation, decideOperationAccess } from "@fidy/server/canonical-runtime";
 import { Option, Schema } from "effect";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "./pat-unit";
 import {
   PATRow,
   currentMillis,
   digest,
   equalsDigest,
-  newId,
   scopesFrom,
   shortLength,
   validBearer,
@@ -50,8 +43,6 @@ const consentRevoked = async (db: D1Database, userId: string): Promise<boolean> 
     .bind(userId)
     .first()) !== null;
 export type AuthorizedPAT = Readonly<{ patId: string; userId: string; digest: Uint8Array }>;
-const categoryOperationId = "categories.listCategories";
-const categoryOperation = operationCatalog.byId.get(categoryOperationId);
 const scopeDecision = (
   scopes: ReturnType<typeof scopesFrom>,
   operation: CatalogOperation
@@ -81,42 +72,4 @@ export const authorizeCanonicalPAT = async (
         digest: new Uint8Array(pat.value.bearer_digest),
       }
     : decision;
-};
-const recordCategoryUsage = async (
-  db: D1Database,
-  pat: typeof StoredPAT.Type
-): Promise<boolean> => {
-  const current = currentMillis();
-  const result = await db.batch([
-    prepareOwnedStatement(
-      db,
-      recordLivePATUse(
-        {
-          patId: pat.id,
-          userId: pat.user_id,
-          digest: new Uint8Array(pat.bearer_digest),
-        },
-        current
-      )
-    ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?, ?, 'accepted', ? WHERE changes() = 1`)
-      .bind(newId(), pat.user_id, pat.id, categoryOperationId, current),
-  ]);
-  return result[0]?.meta.changes === 1 && result[1]?.meta.changes === 1;
-};
-
-/** Verify bearer bytes and declared category policy; record activity only for live execution. */
-export const authorizeCategoryPAT = async (
-  request: Request,
-  db: D1Database
-): Promise<CategoryAuthorization> => {
-  if (categoryOperation === undefined) return "unauthenticated";
-  const pat = await authenticate(request, db);
-  if (Option.isNone(pat)) return "unauthenticated";
-  if (await consentRevoked(db, pat.value.user_id)) return "user_action_required";
-  const decision = scopeDecision(scopesFrom(pat.value.scopes_json), categoryOperation);
-  if (decision !== "accepted") return decision;
-  return (await recordCategoryUsage(db, pat.value)) ? "accepted" : "unauthenticated";
 };

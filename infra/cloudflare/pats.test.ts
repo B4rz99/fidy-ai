@@ -87,6 +87,7 @@ const setup = async (): Promise<{
     "0011_explicit_consent_revocations",
     "0012_pat_work_budget",
     "0013_pat_atomic_assertion",
+    "0014_canonical_category_budget",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -1462,6 +1463,96 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
         .first()
     )?.revoked_at_ms
   ).toBeNull();
+});
+
+it("does not commit PAT activity or disclose Category rows when its audit is silently refused", async () => {
+  const { db, send, sessions } = await setup();
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "f0000000-0000-4000-8000-000000000002",
+      grant: {
+        recipientLabel: "Audited reader",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  await db
+    .prepare(`CREATE TRIGGER ignore_category_audit BEFORE INSERT ON pat_audit
+    WHEN NEW.operation = 'categories.listCategories' BEGIN SELECT RAISE(IGNORE); END`)
+    .run();
+  expect(
+    (await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status
+  ).not.toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
+        .bind(issued.pat.shortId)
+        .first()
+    )?.last_used_at_ms
+  ).toBeNull();
+  await db.prepare("DROP TRIGGER ignore_category_audit").run();
+  expect((await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status).toBe(
+    200
+  );
+  expect(
+    (
+      await db
+        .prepare(`SELECT count(*) AS total FROM pat_audit WHERE operation = 'categories.listCategories'
+    AND pat_id = (SELECT id FROM pats WHERE short_id = ?)`)
+        .bind(issued.pat.shortId)
+        .first()
+    )?.total
+  ).toBe(1);
+});
+
+it("shares the Category work budget between WebSessions, PATs and Transaction work", async () => {
+  const { db, send, sessions } = await setup();
+  const issuedResponse = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: {
+      requestId: "f0000000-0000-4000-8000-000000000001",
+      grant: {
+        recipientLabel: "Category reader",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+      },
+    },
+  });
+  expect(issuedResponse.status).toBe(200);
+  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
+    await issuedResponse.json()
+  ).data;
+  await db.batch(
+    Array.from({ length: 255 }, () =>
+      db
+        .prepare(`INSERT INTO transaction_audit
+    (id,user_id,session_id,operation,outcome,occurred_at_ms)
+    VALUES (?, ?, ?, 'transactions.listTransactions', 'success', ?)`)
+        .bind(crypto.randomUUID(), userA, "40000000-0000-4000-8000-000000000001", clock())
+    )
+  );
+  expect((await send({ path: "/categories", method: "GET", session: sessions[0] })).status).toBe(
+    200
+  );
+  expect((await send({ path: "/categories", method: "GET", bearer: issued.bearer })).status).toBe(
+    503
+  );
+  expect((await send({ path: "/categories", method: "GET", session: sessions[0] })).status).toBe(
+    503
+  );
 });
 
 it("rechecks revoke/use races at protected canonical work, not only bearer admission", async () => {

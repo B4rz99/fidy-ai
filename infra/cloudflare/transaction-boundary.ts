@@ -7,7 +7,7 @@ export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMill
 export const transactionId = (): string => crypto.randomUUID();
 export const transactionNoStore = { "cache-control": "no-store" };
 const utcDayMilliseconds = 86_400_000;
-// Matches the 256-entry stable-User triggers in 0012_pat_work_budget.sql. These remain the
+// Matches the 256-entry stable-User triggers in 0014_canonical_category_budget.sql. These remain the
 // atomic authority if concurrent browser and PAT requests pass this cheap preflight together.
 const lastAdmissibleAuditOffset = 255;
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -23,8 +23,14 @@ export const transactionAuditExhausted = async (
       UNION ALL
       SELECT occurred_at_ms FROM pat_audit WHERE user_id = ? AND pat_id IS NOT NULL AND operation NOT LIKE 'pats.%'
       AND occurred_at_ms >= ? AND occurred_at_ms < ?
+      UNION ALL
+      SELECT occurred_at_ms FROM category_audit WHERE user_id = ?
+      AND occurred_at_ms >= ? AND occurred_at_ms < ?
     ) LIMIT 1 OFFSET ?`)
     .bind(
+      userId,
+      start,
+      start + utcDayMilliseconds,
       userId,
       start,
       start + utcDayMilliseconds,

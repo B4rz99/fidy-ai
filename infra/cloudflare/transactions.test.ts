@@ -124,6 +124,8 @@ const setup = async (platform = false): Promise<D1Database> => {
     "0010_pat_revocation_consents",
     "0011_explicit_consent_revocations",
     "0012_pat_work_budget",
+    "0013_pat_atomic_assertion",
+    "0014_canonical_category_budget",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => applyMigration(db, name)),
     Promise.resolve()

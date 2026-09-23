@@ -34,6 +34,7 @@ export {
   insertClaimedPAT,
   livePATAuthority,
   recordLivePATUse,
+  recordCategoryPATUse,
   revokeOnePAT,
   revokeEveryPAT,
   revokeEveryPairing,

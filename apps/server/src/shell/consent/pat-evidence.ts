@@ -3,7 +3,7 @@ import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
-} from "~/shell/identity/session-guard";
+} from "~/shell/identity/browser-runtime";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
 // One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.

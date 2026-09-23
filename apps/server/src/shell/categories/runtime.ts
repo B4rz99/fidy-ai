@@ -7,6 +7,11 @@ export {
   listCategoriesResponse,
 } from "./list-categories";
 export { CategoriesGroup, ListCategoriesResponse } from "./operations";
+export {
+  protectedCategoryRows,
+  categoryResponseFromRows,
+  recordBrowserCategoryWork,
+} from "./canonical-work";
 export { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
 export { ScopeMissing, UserActionRequired } from "~/shell/public-http/contract";
 export { listCategoriesPath } from "./path";

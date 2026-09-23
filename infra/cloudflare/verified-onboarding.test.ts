@@ -321,6 +321,7 @@ it("reads the created User through an independently approved browser WebSession"
   expect(cookie).toContain("__Host-fidy_session=");
   expect(cookie).toContain("HttpOnly");
   expect(cookie).toContain("Secure");
+  expect(cookie).toContain("Max-Age=2592000");
   expect((await poll()).status).toBe(400);
   expect((await request("/user", undefined, "__Host-fidy_session=" + "A".repeat(43))).status).toBe(
     401
@@ -346,6 +347,92 @@ it("reads the created User through an independently approved browser WebSession"
     (await sendRequest(new Request("https://api.fidyapp.com/web/pairings", { method: "POST" })))
       .status
   ).toBe(403);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+const seedWebSession = async (db: D1Database, token: string): Promise<number> => {
+  const pairing: { pairingId: string } = await (await startBrowserPairing(db)).json();
+  // @effect-diagnostics-next-line globalDate:off
+  const started = Date.now();
+  await db
+    .prepare(`UPDATE browser_login_pairings SET state = 'ready',
+      user_id = (SELECT id FROM users) WHERE id = ?`)
+    .bind(pairing.pairingId)
+    .run();
+  await db
+    .prepare("UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ?")
+    .bind(pairing.pairingId)
+    .run();
+  await db
+    .prepare(`INSERT INTO web_sessions
+      (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms,
+       idle_expires_at_ms, hard_expires_at_ms)
+       VALUES (?, ?, (SELECT id FROM users), ?, ?, ?, ?, ?) `)
+    .bind(
+      "10000000-0000-4000-8000-000000000099",
+      pairing.pairingId,
+      await digest(token),
+      started,
+      started + 600_000,
+      started + 2_592_000_000,
+      started + 7_776_000_000
+    )
+    .run();
+  return started;
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("renews an active WebSession until its hard deadline and never revives an expired one", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "B".repeat(43);
+  const started = await seedWebSession(db, token);
+  const use = (): Promise<Response> =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/user", {
+        headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+      })
+    );
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 29 * 86_400_000);
+  const renewed = await use();
+  expect(renewed.status).toBe(200);
+  expect(renewed.headers.get("set-cookie")).toContain("Max-Age=2592000");
+  vi.setSystemTime(started + 45 * 86_400_000);
+  expect((await use()).status).toBe(200);
+  vi.setSystemTime(started + 90 * 86_400_000);
+  expect((await use()).status).toBe(401);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("refuses an idle-expired WebSession without writing a canonical User read", async () => {
+  const { db, send, sendRequest } = await setup();
+  expect((await send(code)).status).toBe(200);
+  const token = "C".repeat(43);
+  const started = await seedWebSession(db, token);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(started + 29 * 86_400_000);
+  const crossSite = await sendRequest(
+    new Request("https://api.fidyapp.com/user", {
+      headers: { cookie: `__Host-fidy_session=${token}` },
+    })
+  );
+  expect(crossSite.status).toBe(403);
+  expect(crossSite.headers.get("set-cookie")).toBeNull();
+  vi.setSystemTime(started + 31 * 86_400_000);
+  const result = await sendRequest(
+    new Request("https://api.fidyapp.com/user", {
+      headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+    })
+  );
+  expect(result.status).toBe(401);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM canonical_user_reads")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

@@ -213,7 +213,10 @@ const routeOwnedRequest = (
       )
     );
   }
-  if (isBrowserMutation(url.pathname) && !Option.contains(origin, environment.BROWSER_ORIGIN)) {
+  if (
+    (isBrowserMutation(url.pathname) || url.pathname === userPath) &&
+    !Option.contains(origin, environment.BROWSER_ORIGIN)
+  ) {
     return Promise.resolve(applyApiPolicy(forbiddenOrigin(), environment.BROWSER_ORIGIN, origin));
   }
   const authorizationFailure = categoryAuthorizationFailure(request, environment);

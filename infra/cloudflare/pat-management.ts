@@ -10,7 +10,8 @@ import {
   revokeEveryPairing,
   revokeOnePAT,
 } from "@fidy/server/tokens-runtime";
-import { type Cause, Effect, Function, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
+import { freshSessionParams } from "@fidy/server/identity-runtime";
 import {
   revokeAllPATConsents,
   revokeAllPairingConsents,
@@ -25,7 +26,6 @@ import {
   notFound,
   response,
   sessionExists,
-  sessionParams,
   shortIdIsValid,
   unauthorized,
   serviceUnavailable as unavailable,
@@ -36,21 +36,30 @@ import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 export { createManualPAT } from "./pat-manual";
 
 /** List only currently active, subject-owned, safe PAT metadata. */
-export const listPATs = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const listPATs = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, false));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: false }));
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       return yield* Effect.gen(function* () {
         const [rows, recorded] = yield* Effect.tryPromise({
           try: () =>
             db.batch([
-              prepareOwnedStatement(db, patMetadataQuery(session.value.user_id, current, session)),
-              prepareOwnedStatement(db, recordPATList(session.value, { id: newId(), current })),
+              prepareOwnedStatement({
+                db,
+                statement: patMetadataQuery({ userId: session.value.user_id, current, session }),
+              }),
+              prepareOwnedStatement({
+                db,
+                statement: recordPATList({
+                  session: session.value,
+                  input: { id: newId(), current },
+                }),
+              }),
             ]),
           catch: (error) =>
             String(error).includes("transaction_audit_limit")
@@ -69,20 +78,19 @@ export const listPATs = Function.dual<
         Effect.catch((error) =>
           Effect.succeed(
             error === "rate_limited"
-              ? response(
-                  {
+              ? response({
+                  body: {
                     error: { code: "rate_limited", message: "PAT metadata budget exhausted." },
                     next: [],
                   },
-                  httpRateLimited
-                )
+                  status: httpRateLimited,
+                })
               : unavailable()
           )
         )
       );
     })
-  )
-);
+  );
 
 const revokedPATResponse = (
   db: D1Database,
@@ -96,7 +104,7 @@ const revokedPATResponse = (
         .prepare(
           `SELECT revoked_at_ms FROM pats WHERE user_id = ? AND short_id = ? AND ${sessionExists}`
         )
-        .bind(session.user_id, shortId, ...sessionParams(session, current))
+        .bind(session.user_id, shortId, ...freshSessionParams(session, current))
         .first()
     );
     const record = Schema.decodeUnknownOption(
@@ -107,63 +115,92 @@ const revokedPATResponse = (
   });
 
 /** Idempotently revoke one owned PAT; foreign and unknown ids are indistinguishable. */
-export const revokePAT = Function.dual<
-  (db: D1Database, shortId: string) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database, shortId: string) => Promise<Response>
->(3, (request, db, shortId) =>
+export const revokePAT = ({
+  request,
+  db,
+  shortId,
+}: Readonly<{ request: Request; db: D1Database; shortId: string }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
       if (Option.isNone(session)) return unauthorized();
       if (!shortIdIsValid(shortId)) return notFound();
       const current = currentMillis();
       return yield* Effect.tryPromise(() =>
-        commitPATUnit(db, [
-          prepareOwnedStatement(
-            db,
-            revokeOnePATConsent(session.value, { id: newId(), shortId, current })
-          ),
-          prepareOwnedStatement(db, revokeOnePAT(session.value, { shortId, current })),
-          prepareOwnedStatement(
-            db,
-            recordOnePATRevocation(session.value, { id: newId(), shortId, current })
-          ),
-        ])
+        commitPATUnit({
+          db,
+          statements: [
+            prepareOwnedStatement({
+              db,
+              statement: revokeOnePATConsent({
+                session: session.value,
+                input: { id: newId(), shortId, current },
+              }),
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: revokeOnePAT({ session: session.value, input: { shortId, current } }),
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: recordOnePATRevocation({
+                session: session.value,
+                input: { id: newId(), shortId, current },
+              }),
+            }),
+          ],
+        })
       ).pipe(
         Effect.map(() => canonical({ shortId })),
         Effect.catch(() => revokedPATResponse(db, session.value, { shortId, current }))
       );
     })
-  )
-);
+  );
 
 /** Revoke all active grants and close every unclaimed approval under one WebSession check. */
-export const revokeAllPATs = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const revokeAllPATs = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       const committed = yield* Effect.tryPromise(() =>
-        commitPATUnit(db, [
-          prepareOwnedStatement(db, revokeAllPATConsents(session.value, current)),
-          prepareOwnedStatement(db, revokeEveryPAT(session.value, current)),
-          prepareOwnedStatement(db, revokeAllPairingConsents(session.value, current)),
-          prepareOwnedStatement(db, revokeEveryPairing(session.value, current)),
-          db
-            .prepare(patRevokeAllCompletion)
-            .bind(session.value.user_id, current, session.value.user_id),
-          prepareOwnedStatement(
-            db,
-            recordAllPATRevocations(session.value, { id: newId(), current })
-          ),
-        ])
+        commitPATUnit({
+          db,
+          statements: [
+            prepareOwnedStatement({
+              db,
+              statement: revokeAllPATConsents({ session: session.value, current }),
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: revokeEveryPAT({ session: session.value, current }),
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: revokeAllPairingConsents({ session: session.value, current }),
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: revokeEveryPairing({ session: session.value, current }),
+            }),
+            db
+              .prepare(patRevokeAllCompletion)
+              .bind(session.value.user_id, current, session.value.user_id),
+            prepareOwnedStatement({
+              db,
+              statement: recordAllPATRevocations({
+                session: session.value,
+                input: { id: newId(), current },
+              }),
+            }),
+          ],
+        })
       );
       if (committed[5]?.meta.changes !== 1) return unauthorized();
       return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });
     })
-  )
-);
+  );

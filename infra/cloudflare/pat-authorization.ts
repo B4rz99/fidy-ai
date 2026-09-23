@@ -4,7 +4,7 @@ import {
   patScopeCapability,
 } from "@fidy/server/canonical-runtime";
 import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
-import { type Cause, Effect, Function, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import {
   PATRow,
   currentMillis,
@@ -39,7 +39,7 @@ const authenticate = (
       return Option.none();
     }
     const candidate = yield* Effect.tryPromise(() => digest(bearer));
-    return equalsDigest(pat.value.bearer_digest, candidate) ? pat : Option.none();
+    return equalsDigest({ stored: pat.value.bearer_digest, candidate }) ? pat : Option.none();
   });
 type CategoryAuthorization =
   | "accepted"
@@ -72,17 +72,13 @@ const scopeDecision = (
   return access.reason === "pat_scope_missing" ? "scope_missing" : "unauthenticated";
 };
 /** Every declared operation uses the same bearer, subject, expiry and policy decision. */
-export const authorizeCanonicalPAT = Function.dual<
-  (
-    db: D1Database,
-    operation: CatalogOperation
-  ) => (request: Request) => Promise<AuthorizedPAT | Exclude<CategoryAuthorization, "accepted">>,
-  (
-    request: Request,
-    db: D1Database,
-    operation: CatalogOperation
-  ) => Promise<AuthorizedPAT | Exclude<CategoryAuthorization, "accepted">>
->(3, (request, db, operation) =>
+export const authorizeCanonicalPAT = ({
+  request,
+  db,
+  operation,
+}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Promise<
+  AuthorizedPAT | Exclude<CategoryAuthorization, "accepted">
+> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const pat = yield* authenticate(request, db);
@@ -98,5 +94,4 @@ export const authorizeCanonicalPAT = Function.dual<
           }
         : decision;
     })
-  )
-);
+  );

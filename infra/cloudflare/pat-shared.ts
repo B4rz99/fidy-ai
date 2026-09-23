@@ -10,12 +10,8 @@ import {
   patPairingUnavailableBody,
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
-import { Clock, DateTime, Effect, Encoding, Function, Option, Schema } from "effect";
-import {
-  type FreshSessionSubject,
-  freshSessionExists,
-  freshSessionParams,
-} from "@fidy/server/identity-runtime";
+import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { freshSessionExists } from "@fidy/server/identity-runtime";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 import { browserSession } from "./browser-login";
 
@@ -74,17 +70,17 @@ export const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 /** Length-checked constant-work comparison for stored and candidate digests. */
-export const equalsDigest = Function.dual<
-  (candidate: Uint8Array) => (stored: ReadonlyArray<number>) => boolean,
-  (stored: ReadonlyArray<number>, candidate: Uint8Array) => boolean
->(2, (stored, candidate) => {
+export const equalsDigest = ({
+  stored,
+  candidate,
+}: Readonly<{ stored: ReadonlyArray<number>; candidate: Uint8Array }>): boolean => {
   if (stored.length !== digestBytes || candidate.length !== digestBytes) return false;
   let difference = 0;
   for (let index = 0; index < digestBytes; index++) {
     difference |= (stored[index] ?? 0) ^ (candidate[index] ?? 0);
   }
   return difference === 0;
-});
+};
 /** Opaque private proof; no raw value is ever stored. */
 export const newProof = (): string =>
   Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
@@ -104,15 +100,13 @@ export const newBearer = (shortId: string): string => `fin_${shortId}_${newProof
 export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
 /** Decode JSON bodies before any proof lookup or mutation; malformed bodies are never retained. */
-export const decodeBody = Function.dual<
-  <Decoded, Encoded>(
-    schema: Schema.Codec<Decoded, Encoded>
-  ) => (request: Request) => Promise<Option.Option<Decoded>>,
-  <Decoded, Encoded>(
-    request: Request,
-    schema: Schema.Codec<Decoded, Encoded>
-  ) => Promise<Option.Option<Decoded>>
->(2, <Decoded, Encoded>(request: Request, schema: Schema.Codec<Decoded, Encoded>) =>
+export const decodeBody = <Decoded, Encoded>({
+  request,
+  schema,
+}: Readonly<{
+  request: Request;
+  schema: Schema.Codec<Decoded, Encoded>;
+}>): Promise<Option.Option<Decoded>> =>
   Effect.runPromise(
     Effect.gen(function* () {
       if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
@@ -123,8 +117,7 @@ export const decodeBody = Function.dual<
       const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
       return Schema.decodeUnknownOption(schema)(value);
     }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()))
-  )
-);
+  );
 export const scopesFrom = (text: string): Option.Option<PATScopes> => {
   try {
     return Schema.decodeUnknownOption(PATScopes)(JSON.parse(text));
@@ -150,65 +143,65 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
   });
 };
 /** Browser freshness is required for authority changes, but not safe listing. */
-export const webSession = Function.dual<
-  (db: D1Database, fresh: boolean) => (request: Request) => Promise<Option.Option<SessionRow>>,
-  (request: Request, db: D1Database, fresh: boolean) => Promise<Option.Option<SessionRow>>
->(3, (request: Request, db: D1Database, fresh: boolean): Promise<Option.Option<SessionRow>> =>
-  browserSession(request, db, { current: currentMillis(), fresh })
-);
+export const webSession = ({
+  request,
+  db,
+  fresh,
+}: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Promise<
+  Option.Option<SessionRow>
+> => browserSession(request, db, { current: currentMillis(), fresh });
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
 export const sessionExists = freshSessionExists;
-export const sessionParams = Function.dual<
-  (time: number) => (session: FreshSessionSubject) => ReturnType<typeof freshSessionParams>,
-  typeof freshSessionParams
->(2, freshSessionParams);
-export const response = Function.dual<
-  (status: number) => (body: unknown) => Response,
-  (body: unknown, status: number) => Response
->(2, (body, status) => Response.json(body, { status, headers: { "cache-control": "no-store" } }));
-export const canonical = (data: unknown): Response => response({ data, next: [] }, successStatus);
+export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
+  Response.json(body, { status, headers: { "cache-control": "no-store" } });
+export const canonical = (data: unknown): Response =>
+  response({ body: { data, next: [] }, status: successStatus });
 export const unauthorized = (): Response =>
-  response(
-    {
+  response({
+    body: {
       error: { code: "unauthenticated", message: "Present a valid credential and retry." },
       next: [],
     },
-    httpUnauthorized
-  );
-export const unavailable = (): Response => response(patPairingUnavailableBody, httpUnavailable);
+    status: httpUnauthorized,
+  });
+export const unavailable = (): Response =>
+  response({ body: patPairingUnavailableBody, status: httpUnavailable });
 export const serviceUnavailable = (): Response =>
-  response(
-    {
+  response({
+    body: {
       error: {
         code: "unavailable",
         message: "PAT service is temporarily unavailable. Try again later.",
       },
       next: [],
     },
-    httpUnavailable
-  );
+    status: httpUnavailable,
+  });
 export const invalid = (): Response =>
-  response(
-    {
+  response({
+    body: {
       error: {
         code: "pairing_invalid",
         message: "This PAT pairing is no longer valid. Start a new request.",
       },
     },
-    httpBadRequest
-  );
+    status: httpBadRequest,
+  });
 export const rejected = (): Response =>
-  response(
-    {
+  response({
+    body: {
       error: {
         code: "validation_failed",
         message: "This PAT pairing is invalid or no longer available. Start a new request.",
       },
       next: [],
     },
-    httpBadRequest
-  );
+    status: httpBadRequest,
+  });
 export const notFound = (): Response =>
-  response({ error: { code: "not_found", message: "PAT not found." }, next: [] }, httpNotFound);
+  response({
+    body: { error: { code: "not_found", message: "PAT not found." }, next: [] },
+    status: httpNotFound,
+  });
 /** Checks one safe short identifier before it is ever used in a subject-scoped query. */
 export const shortIdIsValid = (value: string): boolean => Schema.is(TokenShortId)(value);

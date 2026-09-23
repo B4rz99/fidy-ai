@@ -71,16 +71,19 @@ export const rejectManualTransaction = async (
   try {
     const audit = await (
       isPAT(subject)
-        ? prepareOwnedStatement(
+        ? prepareOwnedStatement({
             db,
-            recordCanonicalPATWork(subject, {
-              id: uuid(),
-              current,
-              operation: "transactions.createTransaction",
-              outcome: "rejected",
-              afterSourceAttestation: false,
-            })
-          )
+            statement: recordCanonicalPATWork({
+              subject,
+              input: {
+                id: uuid(),
+                current,
+                operation: "transactions.createTransaction",
+                outcome: "rejected",
+                afterSourceAttestation: false,
+              },
+            }),
+          })
         : db
             .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
           SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
@@ -162,16 +165,19 @@ export const transactionInput = async (
 const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
   const { subject, id, current, auditId } = capture;
   return isPAT(subject)
-    ? prepareOwnedStatement(
+    ? prepareOwnedStatement({
         db,
-        recordCanonicalPATWork(subject, {
-          id: auditId,
-          current,
-          operation: "transactions.createTransaction",
-          outcome: "accepted",
-          afterSourceAttestation: true,
-        })
-      )
+        statement: recordCanonicalPATWork({
+          subject,
+          input: {
+            id: auditId,
+            current,
+            operation: "transactions.createTransaction",
+            outcome: "accepted",
+            afterSourceAttestation: true,
+          },
+        }),
+      })
     : db
         .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
         SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
@@ -191,7 +197,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   );
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
   const authority = isPAT(subject)
-    ? livePATAuthority(subject, current)
+    ? livePATAuthority({ subject, current })
     : {
         table: "web_sessions",
         predicate:
@@ -229,10 +235,13 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
     captureAudit(db, capture),
     ...(isPAT(subject)
       ? [
-          prepareOwnedStatement(
+          prepareOwnedStatement({
             db,
-            recordCapturedPATUse(subject, { auditId: capture.auditId, current })
-          ),
+            statement: recordCapturedPATUse({
+              subject,
+              input: { auditId: capture.auditId, current },
+            }),
+          }),
         ]
       : []),
   ];
@@ -255,7 +264,7 @@ const hasUnknownCategory = async (
 const classifyCaptureAuthority = async (db: D1Database, subject: Subject): Promise<Response> => {
   try {
     const authority = isPAT(subject)
-      ? livePATAuthority(subject, now())
+      ? livePATAuthority({ subject, current: now() })
       : liveWebSessionAuthority(subject, now());
     const live = await db
       .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)

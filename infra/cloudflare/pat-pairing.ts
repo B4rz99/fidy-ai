@@ -18,7 +18,7 @@ import {
   sweepPairingReviews,
   sweepUnapprovedPairings,
 } from "@fidy/server/tokens-runtime";
-import { type Cause, DateTime, Effect, Encoding, Function, Option, Result, Schema } from "effect";
+import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
 import {
   expirePATConsents,
   expirePairingConsents,
@@ -53,8 +53,8 @@ const sourceDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const reviewRetrySeconds = 60;
 const successStatus = 200;
 const rateLimited = (): Response =>
-  response(
-    {
+  response({
+    body: {
       error: {
         code: "rate_limited",
         message: "This PAT pairing is invalid or no longer available. Start a new request.",
@@ -62,8 +62,8 @@ const rateLimited = (): Response =>
       },
       next: [],
     },
-    httpRateLimited
-  );
+    status: httpRateLimited,
+  });
 const publicCode = (): string => {
   let symbols = "";
   while (symbols.length < symbolCount) {
@@ -106,15 +106,30 @@ export const sweepExpiredPATPairings = (db: D1Database): Promise<void> =>
       const current = currentMillis();
       yield* Effect.tryPromise(() =>
         db.batch([
-          prepareOwnedStatement(db, expirePairingConsents(current, scheduledSweepLimit)),
-          prepareOwnedStatement(db, expireApprovedPairings(current)),
+          prepareOwnedStatement({
+            db,
+            statement: expirePairingConsents({ current, limit: scheduledSweepLimit }),
+          }),
+          prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
           db.prepare(pairingExpiryCompletion).bind(current),
-          prepareOwnedStatement(db, expirePATConsents(current, scheduledSweepLimit)),
-          prepareOwnedStatement(db, expireFixedPATs(current)),
+          prepareOwnedStatement({
+            db,
+            statement: expirePATConsents({ current, limit: scheduledSweepLimit }),
+          }),
+          prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
           db.prepare(patExpiryCompletion).bind(current),
-          prepareOwnedStatement(db, sweepUnapprovedPairings(current, scheduledSweepLimit)),
-          prepareOwnedStatement(db, sweepPairingAdmission(current, scheduledSweepLimit)),
-          prepareOwnedStatement(db, sweepPairingReviews(current, scheduledSweepLimit)),
+          prepareOwnedStatement({
+            db,
+            statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: sweepPairingReviews({ current, limit: scheduledSweepLimit }),
+          }),
         ])
       );
     })
@@ -137,11 +152,17 @@ const reservePairing = (
     const proofDigest = yield* Effect.tryPromise(() => digest(privateCode));
     const committed = yield* Effect.tryPromise(() =>
       db.batch([
-        prepareOwnedStatement(db, sweepPairingAdmission(current, scheduledSweepLimit)),
-        prepareOwnedStatement(db, admitPairingSource(source, current)),
-        prepareOwnedStatement(
+        prepareOwnedStatement({
           db,
-          startPairingGrant({
+          statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
+        }),
+        prepareOwnedStatement({
+          db,
+          statement: admitPairingSource({ sourceDigest: source, current }),
+        }),
+        prepareOwnedStatement({
+          db,
+          statement: startPairingGrant({
             id: pairingId,
             publicCode: code,
             proofDigest,
@@ -150,20 +171,22 @@ const reservePairing = (
             lifetimeDays: payload.lifetimeDays,
             current,
             expires,
-          })
-        ),
+          }),
+        }),
       ])
     );
     return committed[2]?.meta.changes === 1;
   });
 /** Bound anonymous creation before allocating a new pairing or storing its digest. */
-export const startPATPairing = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const startPATPairing = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const payload = yield* Effect.tryPromise(() => decodeBody(request, StartPATPairingPayload));
+      const payload = yield* Effect.tryPromise(() =>
+        decodeBody({ request, schema: StartPATPairingPayload })
+      );
       if (Option.isNone(payload)) return invalid();
       const source = Schema.decodeUnknownOption(sourceDigest)(request.headers.get("x-pat-source"));
       if (Option.isNone(source)) return unavailable();
@@ -185,23 +208,22 @@ export const startPATPairing = Function.dual<
       }).pipe(
         Effect.map((reserved) =>
           reserved
-            ? response(
-                {
+            ? response({
+                body: {
                   pairingId,
                   privateDeviceCode: privateCode,
                   publicCode: code,
                   expiresAt: iso(expires),
                   pollingIntervalSeconds: 5,
                 },
-                successStatus
-              )
+                status: successStatus,
+              })
             : rateLimited()
         ),
         Effect.orElseSucceed(() => unavailable())
       );
     })
-  )
-);
+  );
 
 const admitReview = (
   db: D1Database,
@@ -210,30 +232,30 @@ const admitReview = (
 ): Effect.Effect<boolean, Cause.UnknownError> =>
   Effect.gen(function* () {
     const result = yield* Effect.tryPromise(() =>
-      prepareOwnedStatement(
+      prepareOwnedStatement({
         db,
-        admitPairingReview({
+        statement: admitPairingReview({
           id: newId(),
           sessionId,
           current,
-        })
-      ).run()
+        }),
+      }).run()
     );
     return result.meta.changes === 1;
   });
 /** Inspect a public code only for a fresh browser User, with bounded guessing. */
-export const inspectPATPairing = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const inspectPATPairing = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
       const input = yield* Effect.tryPromise(() =>
-        decodeBody(request, Schema.Struct({ publicCode: Schema.String }))
+        decodeBody({ request, schema: Schema.Struct({ publicCode: Schema.String }) })
       );
       const code = Option.flatMap(input, (value) =>
         Schema.decodeOption(PATPairingPublicCodeInput)(value.publicCode)
@@ -261,8 +283,7 @@ export const inspectPATPairing = Function.dual<
         ? canonical(yield* Schema.encodeEffect(Schema.toCodecJson(PATPairingReview))(review.value))
         : unavailable();
     })
-  )
-);
+  );
 
 type Approval = Readonly<{
   session: SessionRow;
@@ -278,48 +299,60 @@ const commitApproval = (
   Effect.gen(function* () {
     const { session, pairing, current, expires, disclosure } = approval;
     const committed = yield* Effect.tryPromise(() =>
-      commitPATUnit(db, [
-        prepareOwnedStatement(
-          db,
-          approvePairingGrant(session, {
-            pairingId: pairing.id,
-            current,
-            expires,
-          })
-        ),
-        prepareOwnedStatement(
-          db,
-          grantPairedPATConsent(session, {
-            id: newId(),
-            pairingId: pairing.id,
-            disclosure,
-            current,
-          })
-        ),
-        prepareOwnedStatement(
-          db,
-          recordSessionPATTransition(session, {
-            id: newId(),
-            current,
-            operation: "pats.approvePATPairing",
-            patId: Option.none(),
-          })
-        ),
-      ])
+      commitPATUnit({
+        db,
+        statements: [
+          prepareOwnedStatement({
+            db,
+            statement: approvePairingGrant({
+              session,
+              input: {
+                pairingId: pairing.id,
+                current,
+                expires,
+              },
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: grantPairedPATConsent({
+              session,
+              input: {
+                id: newId(),
+                pairingId: pairing.id,
+                disclosure,
+                current,
+              },
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: recordSessionPATTransition({
+              session,
+              input: {
+                id: newId(),
+                current,
+                operation: "pats.approvePATPairing",
+                patId: Option.none(),
+              },
+            }),
+          }),
+        ],
+      })
     );
     return committed.every((item) => item.meta.changes === 1);
   });
 /** Approve one reviewed immutable grant and append its exact User-bound disclosure atomically. */
-export const approvePATPairing = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const approvePATPairing = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
       if (Option.isNone(session)) return unauthorized();
       const payload = yield* Effect.tryPromise(() =>
-        decodeBody(request, Schema.toCodecJson(ApprovePATPairingPayload))
+        decodeBody({ request, schema: Schema.toCodecJson(ApprovePATPairingPayload) })
       );
       if (Option.isNone(payload)) return rejected();
       const current = currentMillis();
@@ -364,5 +397,4 @@ export const approvePATPairing = Function.dual<
         claimBy: iso(pairing.value.expires_at_ms),
       });
     })
-  )
-);
+  );

@@ -11,7 +11,7 @@ import {
   recordCanonicalPATWork,
   recordLivePATUse,
 } from "@fidy/server/tokens-runtime";
-import { Effect, Function, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
 import { currentMillis, newId } from "./pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
@@ -46,23 +46,35 @@ const categoryStatements = (
 ): Array<D1PreparedStatement> => {
   if ("patId" in subject) {
     return [
-      prepareOwnedStatement(db, recordLivePATUse(subject, current)),
-      prepareOwnedStatement(db, categoryRowsQuery(livePATAuthority(subject, current))),
-      prepareOwnedStatement(
+      prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+      prepareOwnedStatement({
         db,
-        recordCanonicalPATWork(subject, {
-          id: newId(),
-          current,
-          operation: "categories.listCategories",
-          outcome: "accepted",
-          afterSourceAttestation: false,
-        })
-      ),
+        statement: categoryRowsQuery(livePATAuthority({ subject, current })),
+      }),
+      prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          subject,
+          input: {
+            id: newId(),
+            current,
+            operation: "categories.listCategories",
+            outcome: "accepted",
+            afterSourceAttestation: false,
+          },
+        }),
+      }),
     ];
   }
   return [
-    prepareOwnedStatement(db, categoryRowsQuery(liveWebSessionAuthority(subject, current))),
-    prepareOwnedStatement(db, recordBrowserCategoryWork(subject, newId(), current)),
+    prepareOwnedStatement({
+      db,
+      statement: categoryRowsQuery(liveWebSessionAuthority(subject, current)),
+    }),
+    prepareOwnedStatement({
+      db,
+      statement: recordBrowserCategoryWork({ subject, id: newId(), current }),
+    }),
   ];
 };
 
@@ -109,17 +121,15 @@ const presentCategoryWork = (
   });
 
 /** Query, live authority and shared User budget commit in one D1 unit for either credential. */
-export const executeProtectedCategories: {
-  (db: D1Database, subject: TransactionSubject | AuthorizedPAT): Promise<Response>;
-  (subject: TransactionSubject | AuthorizedPAT): (db: D1Database) => Promise<Response>;
-} = Function.dual(
-  2,
-  (db: D1Database, subject: TransactionSubject | AuthorizedPAT): Promise<Response> =>
-    Effect.gen(function* () {
-      const results = yield* Effect.tryPromise({
-        try: () => commitPATUnit(db, categoryStatements(db, subject, currentMillis())),
-        catch: () => undefined,
-      });
-      return yield* presentCategoryWork(db, subject, results);
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.runPromise)
-);
+export const executeProtectedCategories = ({
+  db,
+  subject,
+}: Readonly<{ db: D1Database; subject: TransactionSubject | AuthorizedPAT }>): Promise<Response> =>
+  Effect.gen(function* () {
+    const results = yield* Effect.tryPromise({
+      try: () =>
+        commitPATUnit({ db, statements: categoryStatements(db, subject, currentMillis()) }),
+      catch: () => undefined,
+    });
+    return yield* presentCategoryWork(db, subject, results);
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.runPromise);

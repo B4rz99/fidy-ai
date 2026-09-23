@@ -1,4 +1,5 @@
 import { nextTransactionPage } from "@fidy/server/transaction-continuation";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   Counterparty,
   Transaction,
@@ -222,13 +223,12 @@ const invalidQueryAudit = async (
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
   const outcome = invalidGet ? "not_found" : "validation_failed";
+  const authority = liveWebSessionAuthority(subject, current);
   try {
     if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
     const audit = await db
       .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ?
-      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(
         uuid(),
         Option.isNone(selection.id)
@@ -236,11 +236,7 @@ const invalidQueryAudit = async (
           : "transactions.getTransaction",
         outcome,
         current,
-        subject.id,
-        subject.userId,
-        subject.digest,
-        current,
-        current
+        ...authority.bindings
       )
       .run();
     if (audit.meta.changes !== 1) return noSession();
@@ -257,14 +253,14 @@ const browserHistoryStatements = (
 ): Array<D1PreparedStatement> => {
   const { selection, query, current } = input;
   const { subject } = selection;
+  const authority = liveWebSessionAuthority(subject, current);
   return [
     selectStatement(db, {
       selection,
       query,
       authority: {
-        predicate: `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id))`,
-        bindings: [subject.userId, subject.id, subject.userId, subject.digest, current, current],
+        predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+        bindings: [subject.userId, ...authority.bindings],
       },
     }),
     db
@@ -272,8 +268,7 @@ const browserHistoryStatements = (
         SELECT ?, user_id, id, ?,
           CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
             THEN 'not_found' ELSE 'success' END,
-          ? FROM web_sessions WHERE id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+          ? FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(
         uuid(),
         Option.isNone(selection.id)
@@ -282,11 +277,7 @@ const browserHistoryStatements = (
         Option.getOrNull(selection.id),
         Option.getOrNull(selection.id),
         current,
-        subject.id,
-        subject.userId,
-        subject.digest,
-        current,
-        current
+        ...authority.bindings
       ),
   ];
 };
@@ -303,9 +294,9 @@ const patHistoryStatements = (
 ): Array<D1PreparedStatement> => {
   const { selection, query, current } = input;
   const { subject, id } = selection;
-  const authority = livePATAuthority(subject, current);
+  const authority = livePATAuthority({ subject, current });
   return [
-    prepareOwnedStatement(db, recordLivePATUse(subject, current)),
+    prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
     ...(Option.isSome(query)
       ? [
           selectStatement(db, {
@@ -318,18 +309,21 @@ const patHistoryStatements = (
           }),
         ]
       : []),
-    prepareOwnedStatement(
+    prepareOwnedStatement({
       db,
-      recordCanonicalPATWork(subject, {
-        id: uuid(),
-        operation: Option.isNone(id)
-          ? "transactions.listTransactions"
-          : "transactions.getTransaction",
-        outcome: Option.isSome(query) ? "accepted" : "rejected",
-        afterSourceAttestation: false,
-        current,
-      })
-    ),
+      statement: recordCanonicalPATWork({
+        subject,
+        input: {
+          id: uuid(),
+          operation: Option.isNone(id)
+            ? "transactions.listTransactions"
+            : "transactions.getTransaction",
+          outcome: Option.isSome(query) ? "accepted" : "rejected",
+          afterSourceAttestation: false,
+          current,
+        },
+      }),
+    }),
   ];
 };
 

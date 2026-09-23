@@ -11,7 +11,7 @@ import {
   recordWrongPairingProof,
   slowPairingPoll,
 } from "@fidy/server/tokens-runtime";
-import { type Cause, DateTime, Effect, Function, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
   currentMillis,
@@ -39,7 +39,9 @@ const decodeProof = (
   request: Request
 ): Effect.Effect<Option.Option<typeof Proof.Type>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const input = yield* Effect.tryPromise(() => decodeBody(request, ClaimPATPairingPayload));
+    const input = yield* Effect.tryPromise(() =>
+      decodeBody({ request, schema: ClaimPATPairingPayload })
+    );
     return Option.flatMap(input, (value) => Schema.decodeUnknownOption(Proof)(value));
   });
 
@@ -50,15 +52,15 @@ const recordWrongProof = (
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
-      prepareOwnedStatement(
+      prepareOwnedStatement({
         db,
-        recordWrongPairingProof({
+        statement: recordWrongPairingProof({
           attempts,
           pairingId: pairing.id,
           state: pairing.state,
           previous: pairing.wrong_attempts,
-        })
-      ).run()
+        }),
+      }).run()
     );
     return invalid();
   });
@@ -69,16 +71,19 @@ const slowPoll = (
   Effect.gen(function* () {
     const { pairing, seconds, retryAfter } = input;
     yield* Effect.tryPromise(() =>
-      prepareOwnedStatement(
+      prepareOwnedStatement({
         db,
-        slowPairingPoll({
+        statement: slowPairingPoll({
           seconds: Math.min(maximumPollSeconds, seconds),
           pairingId: pairing.id,
           state: pairing.state,
-        })
-      ).run()
+        }),
+      }).run()
     );
-    return response({ error: { code: "rate_limited", retryAfterSeconds: retryAfter } }, slowStatus);
+    return response({
+      body: { error: { code: "rate_limited", retryAfterSeconds: retryAfter } },
+      status: slowStatus,
+    });
   });
 const pending = (
   db: D1Database,
@@ -87,24 +92,24 @@ const pending = (
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
     const result = yield* Effect.tryPromise(() =>
-      prepareOwnedStatement(
+      prepareOwnedStatement({
         db,
-        recordPendingPoll({
+        statement: recordPendingPoll({
           current,
           pairingId: pairing.id,
           lastPoll: Option.fromNullishOr(pairing.last_poll_at_ms),
-        })
-      ).run()
+        }),
+      }).run()
     );
     return result.meta.changes === 1
-      ? response(
-          {
+      ? response({
+          body: {
             status: "pending_approval",
             expiresAt: iso(pairing.expires_at_ms),
             pollingIntervalSeconds: pairing.minimum_poll_seconds,
           },
-          pendingStatus
-        )
+          status: pendingStatus,
+        })
       : invalid();
   });
 type Claim = Readonly<{
@@ -120,29 +125,36 @@ const reserveClaim = (db: D1Database, claim: Claim): Effect.Effect<boolean, Caus
     const { pairing, current, shortId, bearer, patId, expires } = claim;
     const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
     const results = yield* Effect.tryPromise(() =>
-      commitPATUnit(db, [
-        prepareOwnedStatement(
-          db,
-          claimPairingGrant({ pairingId: pairing.id, userId: pairing.user_id, current })
-        ),
-        prepareOwnedStatement(
-          db,
-          insertClaimedPAT({
-            patId,
-            shortId,
-            bearerDigest,
-            approvedAt: pairing.approved_at_ms,
-            current,
-            expires,
-            pairingId: pairing.id,
-            userId: pairing.user_id,
-          })
-        ),
-        prepareOwnedStatement(
-          db,
-          recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current })
-        ),
-      ])
+      commitPATUnit({
+        db,
+        statements: [
+          prepareOwnedStatement({
+            db,
+            statement: claimPairingGrant({
+              pairingId: pairing.id,
+              userId: pairing.user_id,
+              current,
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: insertClaimedPAT({
+              patId,
+              shortId,
+              bearerDigest,
+              approvedAt: pairing.approved_at_ms,
+              current,
+              expires,
+              pairingId: pairing.id,
+              userId: pairing.user_id,
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current }),
+          }),
+        ],
+      })
     );
     return results.every((item) => item.meta.changes === 1);
   });
@@ -194,18 +206,18 @@ const mint = (
         revoked_at_ms: null,
       });
       return Option.isSome(pat)
-        ? response(
-            { pat: yield* Schema.encodeEffect(Schema.toCodecJson(PAT))(pat.value), bearer },
-            successStatus
-          )
+        ? response({
+            body: { pat: yield* Schema.encodeEffect(Schema.toCodecJson(PAT))(pat.value), bearer },
+            status: successStatus,
+          })
         : unavailable();
     }).pipe(Effect.orElseSucceed(() => invalid()));
   });
 /** Only the original private-code holder may poll or claim; all terminal states refuse replay. */
-export const claimPATPairing = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const claimPATPairing = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const proof = yield* decodeProof(request);
@@ -219,7 +231,7 @@ export const claimPATPairing = Function.dual<
       const proofDigest = yield* Effect.tryPromise(() => digest(proof.value.privateDeviceCode));
       const decision = yield* decidePATPairingClaim({
         lifecycle: pairing.value.state,
-        proofMatches: equalsDigest(pairing.value.proof_digest, proofDigest),
+        proofMatches: equalsDigest({ stored: pairing.value.proof_digest, candidate: proofDigest }),
         wrongProofAttempts: pairing.value.wrong_attempts,
         minimumPollIntervalSeconds: pairing.value.minimum_poll_seconds,
         lastAcceptedPollAt: Option.map(
@@ -243,5 +255,4 @@ export const claimPATPairing = Function.dual<
       if (decision._tag !== "Claim") return invalid();
       return yield* mint(db, pairing.value, current);
     })
-  )
-);
+  );

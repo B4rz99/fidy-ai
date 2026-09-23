@@ -1,12 +1,13 @@
 import { PATPairingDirectGroup, PATsGroup } from "@fidy/server/tokens-runtime";
-import { Function } from "effect";
 import { HttpApi } from "effect/unstable/httpapi";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
 import { matchesRoute } from "./route-match";
 
-type PATHandler = (request: Request, db: D1Database, path: string) => Promise<Response>;
+type PATHandler = (
+  input: Readonly<{ request: Request; db: D1Database; path: string }>
+) => Promise<Response>;
 type OperationName =
   | keyof typeof PATPairingDirectGroup.endpoints
   | keyof typeof PATsGroup.endpoints;
@@ -18,8 +19,8 @@ const handlers = {
   listPATs,
   createManualPAT,
   revokeAllPATs,
-  revokePAT: (request, db, path): Promise<Response> =>
-    revokePAT(request, db, path.split("/").at(-1) ?? ""),
+  revokePAT: ({ request, db, path }): Promise<Response> =>
+    revokePAT({ request, db, shortId: path.split("/").at(-1) ?? "" }),
 } satisfies Record<OperationName, PATHandler>;
 const handlersByName: ReadonlyMap<string, PATHandler> = new Map(Object.entries(handlers));
 
@@ -54,14 +55,14 @@ export const patBrowserRoute = (path: string): boolean =>
 export const patMethods = (path: string): ReadonlyArray<string> =>
   Array.from(new Set(forPath(path).map((route) => route.method)));
 /** Execute only a declared PAT operation, never a guessed path or method. */
-export const handlePATRequest = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) => {
+export const handlePATRequest = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> => {
   const path = new URL(request.url).pathname;
   const route = forPath(path).find((candidate) => candidate.method === request.method);
   const handler = route === undefined ? undefined : handlersByName.get(route.name);
   return handler === undefined
     ? Promise.resolve(Response.json({ status: "method_not_allowed" }, { status: 405 }))
-    : handler(request, db, path);
-});
+    : handler({ request, db, path });
+};

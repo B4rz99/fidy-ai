@@ -133,7 +133,7 @@ const categoriesResponse = (
   subject: TransactionSubject | AuthorizedPAT
 ): Effect.Effect<Response> =>
   Effect.tryPromise({
-    try: () => executeProtectedCategories(environment.DB, subject),
+    try: () => executeProtectedCategories({ db: environment.DB, subject }),
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("categories.listCategories"));
 
@@ -327,7 +327,7 @@ const executeCanonicalWork = (
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
   if (operation.id === "pats.listPATs") {
     return Effect.tryPromise({
-      try: () => listPATs(request, environment.DB),
+      try: () => listPATs({ request, db: environment.DB }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
@@ -375,7 +375,7 @@ const authorizedCanonicalResponse = (
     );
   }
   return Effect.tryPromise({
-    try: () => authorizeCanonicalPAT(request, environment.DB, operation),
+    try: () => authorizeCanonicalPAT({ request, db: environment.DB, operation }),
     catch: () => undefined,
   }).pipe(
     Effect.match({
@@ -448,7 +448,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   }
   if (patRoute(url.pathname)) {
     return Effect.tryPromise({
-      try: () => handlePATRequest(request, environment.DB),
+      try: () => handlePATRequest({ request, db: environment.DB }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }

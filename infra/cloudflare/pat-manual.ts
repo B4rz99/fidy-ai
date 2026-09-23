@@ -14,7 +14,7 @@ import {
   recordSessionPATTransition,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
-import { type Cause, DateTime, Effect, Function, Option, Redacted, Result, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { grantManualPATConsent } from "@fidy/server/consent-pat";
 import {
   type SessionRow,
@@ -43,8 +43,8 @@ import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 
 const httpForbidden = 403;
 const consentActionRequired = (): Response =>
-  response(
-    Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
+  response({
+    body: Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
       UserActionRequired.make({
         error: {
           code: "user_action_required",
@@ -53,49 +53,49 @@ const consentActionRequired = (): Response =>
         next: [],
       })
     ),
-    httpForbidden
-  );
+    status: httpForbidden,
+  });
 
 const invalidReview = (): Response =>
-  response(
-    Schema.encodeSync(Schema.toCodecJson(ValidationFailed))(
+  response({
+    body: Schema.encodeSync(Schema.toCodecJson(ValidationFailed))(
       ValidationFailed.make({
         error: { code: "validation_failed", message: "Review the PAT grant again.", fields: [] },
         next: [],
       })
     ),
-    httpBadRequest
-  );
+    status: httpBadRequest,
+  });
 const expiredReview = (): Response =>
-  response(
-    Schema.encodeSync(Schema.toCodecJson(ManualPATReviewExpired))(
+  response({
+    body: Schema.encodeSync(Schema.toCodecJson(ManualPATReviewExpired))(
       ManualPATReviewExpired.make({
         error: { code: "user_action_required", message: reviewExpiredMessage },
         next: [],
       })
     ),
-    httpReviewExpired
-  );
+    status: httpReviewExpired,
+  });
 const issuanceLimit = (): Response =>
-  response(
-    Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
+  response({
+    body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
       ManualPATIssuanceRateLimited.make({
         error: { code: "rate_limited", message: issuanceLimitedMessage, retryAfterSeconds: 600 },
         next: [],
       })
     ),
-    httpTooManyRequests
-  );
+    status: httpTooManyRequests,
+  });
 const consumed = (): Response =>
-  response(
-    Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceConsumed))(
+  response({
+    body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceConsumed))(
       ManualPATIssuanceConsumed.make({
         error: { code: "user_action_required", message: issuanceConsumedMessage },
         next: [],
       })
     ),
-    httpConflict
-  );
+    status: httpConflict,
+  });
 type Issuance = Readonly<{
   input: CreateManualPATPayload;
   session: SessionRow;
@@ -116,38 +116,50 @@ const commitIssuance = (
     const disclosure = buildPATDisclosure({ grant, expiresAt: DateTime.makeUnsafe(expires) });
     const bearerDigest = yield* Effect.tryPromise(() => digest(bearer));
     const committed = yield* Effect.tryPromise(() =>
-      commitPATUnit(db, [
-        prepareOwnedStatement(
-          db,
-          issueManualPAT(session, {
-            grant,
-            requestId,
-            patId,
-            shortId,
-            bearerDigest,
-            current,
-            expires,
-          })
-        ),
-        prepareOwnedStatement(
-          db,
-          grantManualPATConsent(session, {
-            id: newId(),
-            requestId,
-            disclosure,
-            current,
-          })
-        ),
-        prepareOwnedStatement(
-          db,
-          recordSessionPATTransition(session, {
-            id: newId(),
-            current,
-            patId: Option.some(patId),
-            operation: "pats.createManualPAT",
-          })
-        ),
-      ])
+      commitPATUnit({
+        db,
+        statements: [
+          prepareOwnedStatement({
+            db,
+            statement: issueManualPAT({
+              session,
+              input: {
+                grant,
+                requestId,
+                patId,
+                shortId,
+                bearerDigest,
+                current,
+                expires,
+              },
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: grantManualPATConsent({
+              session,
+              input: {
+                id: newId(),
+                requestId,
+                disclosure,
+                current,
+              },
+            }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: recordSessionPATTransition({
+              session,
+              input: {
+                id: newId(),
+                current,
+                patId: Option.some(patId),
+                operation: "pats.createManualPAT",
+              },
+            }),
+          }),
+        ],
+      })
     );
     return committed.every((item) => item.meta.changes === 1);
   });
@@ -213,16 +225,16 @@ const failedIssuance = (
   });
 
 /** Issue one manually reviewed User-owned bearer; failed or repeated ids never reveal it again. */
-export const createManualPAT = Function.dual<
-  (db: D1Database) => (request: Request) => Promise<Response>,
-  (request: Request, db: D1Database) => Promise<Response>
->(2, (request, db) =>
+export const createManualPAT = ({
+  request,
+  db,
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession(request, db, true));
+      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
       if (Option.isNone(session)) return unauthorized();
       const input = yield* Effect.tryPromise(() =>
-        decodeBody(request, Schema.toCodecJson(CreateManualPATPayload))
+        decodeBody({ request, schema: Schema.toCodecJson(CreateManualPATPayload) })
       );
       if (Option.isNone(input)) return invalidReview();
       const current = currentMillis();
@@ -245,5 +257,4 @@ export const createManualPAT = Function.dual<
       }
       return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
     })
-  )
-);
+  );

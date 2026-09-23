@@ -1,4 +1,4 @@
-import { Function, Option } from "effect";
+import { Option } from "effect";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import {
   type FreshSessionSubject,
@@ -27,10 +27,10 @@ type ManualPATInput = Readonly<{
   expires: number;
 }>;
 /** Guard one reviewed User-owned manual PAT against stale authority and both issuance budgets. */
-export const issueManualPAT = Function.dual<
-  (input: ManualPATInput) => (session: FreshSessionSubject) => OwnedStatement,
-  (session: FreshSessionSubject, input: ManualPATInput) => OwnedStatement
->(2, (session, input) => ({
+export const issueManualPAT = ({
+  session,
+  input,
+}: Readonly<{ session: FreshSessionSubject; input: ManualPATInput }>): OwnedStatement => ({
   sql: `INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
     created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${freshSessionExists}
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)
@@ -57,14 +57,14 @@ export const issueManualPAT = Function.dual<
     input.current - issuanceWindowMilliseconds,
     maxIssuancesPerUserWindow,
   ],
-}));
+});
 
 type ApprovalInput = Readonly<{ pairingId: string; current: number; expires: number }>;
 /** Bind an approved PATPairing to its reviewed User before the initiating client claims it. */
-export const approvePairingGrant = Function.dual<
-  (input: ApprovalInput) => (session: FreshSessionSubject) => OwnedStatement,
-  (session: FreshSessionSubject, input: ApprovalInput) => OwnedStatement
->(2, (session, input) => ({
+export const approvePairingGrant = ({
+  session,
+  input,
+}: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement => ({
   sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
     WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
@@ -77,7 +77,7 @@ export const approvePairingGrant = Function.dual<
     ...freshSessionParams(session, input.current),
     session.user_id,
   ],
-}));
+});
 
 /** Consume a single User-bound PATPairing approval under current Consent and issuance limits. */
 export const claimPairingGrant = (
@@ -113,10 +113,10 @@ type PATAuthority = Readonly<{
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
 /** Guard protected D1 work with the same live bearer and Consent decision as PAT use. */
-export const livePATAuthority = Function.dual<
-  (current: number) => (subject: PATSubject) => PATAuthority,
-  (subject: PATSubject, current: number) => PATAuthority
->(2, (subject, current) => ({
+export const livePATAuthority = ({
+  subject,
+  current,
+}: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => ({
   table: "pats",
   predicate: `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
@@ -128,41 +128,41 @@ export const livePATAuthority = Function.dual<
     current,
     ...Option.toArray(subject.requiredScope),
   ],
-}));
+});
 
 /** Recheck bearer, Consent, scope, and lifetime alongside protected canonical work. */
-export const recordLivePATUse = Function.dual<
-  (current: number) => (subject: PATSubject) => OwnedStatement,
-  (subject: PATSubject, current: number) => OwnedStatement
->(2, (subject, current) => {
-  const authority = livePATAuthority(subject, current);
+export const recordLivePATUse = ({
+  subject,
+  current,
+}: Readonly<{ subject: PATSubject; current: number }>): OwnedStatement => {
+  const authority = livePATAuthority({ subject, current });
   return {
     sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate}`,
     params: [current, ...authority.bindings],
   };
-});
+};
 
 type CapturedUseInput = Readonly<{ auditId: string; current: number }>;
 /** Advance PAT activity only after the matching successful capture audit committed in this D1 unit. */
-export const recordCapturedPATUse = Function.dual<
-  (input: CapturedUseInput) => (subject: PATSubject) => OwnedStatement,
-  (subject: PATSubject, input: CapturedUseInput) => OwnedStatement
->(2, (subject, input) => {
-  const authority = livePATAuthority(subject, input.current);
+export const recordCapturedPATUse = ({
+  subject,
+  input,
+}: Readonly<{ subject: PATSubject; input: CapturedUseInput }>): OwnedStatement => {
+  const authority = livePATAuthority({ subject, current: input.current });
   return {
     sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
       AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
       AND pat_id = pats.id AND operation = 'transactions.createTransaction' AND outcome = 'accepted')`,
     params: [input.current, ...authority.bindings, input.auditId],
   };
-});
+};
 
 type RevokeOneInput = Readonly<{ shortId: string; current: number }>;
 /** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */
-export const revokeOnePAT = Function.dual<
-  (input: RevokeOneInput) => (session: FreshSessionSubject) => OwnedStatement,
-  (session: FreshSessionSubject, input: RevokeOneInput) => OwnedStatement
->(2, (session, input) => ({
+export const revokeOnePAT = ({
+  session,
+  input,
+}: Readonly<{ session: FreshSessionSubject; input: RevokeOneInput }>): OwnedStatement => ({
   sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND short_id = ? AND revoked_at_ms IS NULL
     AND expires_at_ms > ? AND ${freshSessionExists} AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
     AND r.session_id = ? AND r.occurred_at_ms = ?)`,
@@ -175,29 +175,29 @@ export const revokeOnePAT = Function.dual<
     session.id,
     input.current,
   ],
-}));
+});
 
 /** Revoke every live PAT under this fresh User decision and its committed Consent evidence. */
-export const revokeEveryPAT = Function.dual<
-  (current: number) => (session: FreshSessionSubject) => OwnedStatement,
-  (session: FreshSessionSubject, current: number) => OwnedStatement
->(2, (session, current) => ({
+export const revokeEveryPAT = ({
+  session,
+  current,
+}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement => ({
   sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND revoked_at_ms IS NULL
     AND expires_at_ms > ? AND ${freshSessionExists}
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id AND r.session_id = ?)`,
   params: [current, session.user_id, current, ...freshSessionParams(session, current), session.id],
-}));
+});
 
 /** Close every approved unclaimed pairing covered by this User's revocation evidence. */
-export const revokeEveryPairing = Function.dual<
-  (current: number) => (session: FreshSessionSubject) => OwnedStatement,
-  (session: FreshSessionSubject, current: number) => OwnedStatement
->(2, (session, current) => ({
+export const revokeEveryPairing = ({
+  session,
+  current,
+}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement => ({
   sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
     AND state = 'approved_awaiting_claim' AND ${freshSessionExists}
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
   params: [session.user_id, ...freshSessionParams(session, current), session.id],
-}));
+});
 
 /** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */
 export const expireApprovedPairings = (current: number): OwnedStatement => ({
@@ -216,41 +216,41 @@ export const expireFixedPATs = (current: number): OwnedStatement => ({
 });
 
 /** Reclaim anonymous metadata without deleting approved User-bound grant evidence. */
-export const sweepUnapprovedPairings = Function.dual<
-  (limit: number) => (current: number) => OwnedStatement,
-  (current: number, limit: number) => OwnedStatement
->(2, (current, limit) => ({
+export const sweepUnapprovedPairings = ({
+  current,
+  limit,
+}: Readonly<{ current: number; limit: number }>): OwnedStatement => ({
   sql: `DELETE FROM pat_pairings WHERE id IN (
     SELECT id FROM pat_pairings WHERE state = 'pending_approval' AND user_id IS NULL
     AND created_at_ms <= ? ORDER BY created_at_ms LIMIT ?)`,
   params: [current - pairingMilliseconds, limit],
-}));
+});
 
-export const sweepPairingAdmission = Function.dual<
-  (limit: number) => (current: number) => OwnedStatement,
-  (current: number, limit: number) => OwnedStatement
->(2, (current, limit) => ({
+export const sweepPairingAdmission = ({
+  current,
+  limit,
+}: Readonly<{ current: number; limit: number }>): OwnedStatement => ({
   sql: `DELETE FROM pat_pairing_admission WHERE source_digest IN (
     SELECT source_digest FROM pat_pairing_admission WHERE window_start_ms <= ?
     ORDER BY window_start_ms LIMIT ?)`,
   params: [current - pairingMilliseconds * 2, limit],
-}));
+});
 
-export const sweepPairingReviews = Function.dual<
-  (limit: number) => (current: number) => OwnedStatement,
-  (current: number, limit: number) => OwnedStatement
->(2, (current, limit) => ({
+export const sweepPairingReviews = ({
+  current,
+  limit,
+}: Readonly<{ current: number; limit: number }>): OwnedStatement => ({
   sql: `DELETE FROM pat_review_attempts WHERE id IN (
     SELECT id FROM pat_review_attempts WHERE occurred_at_ms <= ?
     ORDER BY occurred_at_ms LIMIT ?)`,
   params: [current - pairingMilliseconds * 2, limit],
-}));
+});
 
 /** Reserve bounded anonymous source capacity before persisting a PATPairing proof digest. */
-export const admitPairingSource = Function.dual<
-  (current: number) => (sourceDigest: Uint8Array) => OwnedStatement,
-  (sourceDigest: Uint8Array, current: number) => OwnedStatement
->(2, (sourceDigest, current) => ({
+export const admitPairingSource = ({
+  sourceDigest,
+  current,
+}: Readonly<{ sourceDigest: Uint8Array; current: number }>): OwnedStatement => ({
   sql: `INSERT INTO pat_pairing_admission (source_digest,window_start_ms,started_count)
     SELECT ?,?,1 WHERE (SELECT count(*) FROM pat_pairings WHERE created_at_ms > ?) < ?
     ON CONFLICT(source_digest) DO UPDATE SET
@@ -270,7 +270,7 @@ export const admitPairingSource = Function.dual<
     current - pairingMilliseconds,
     maxPairingsPerWindow,
   ],
-}));
+});
 
 /** Persist only the private-device-code digest when anonymous source admission succeeded. */
 export const startPairingGrant = (

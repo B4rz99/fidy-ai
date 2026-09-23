@@ -18,11 +18,12 @@ CREATE TABLE pat_pairings (
   state TEXT NOT NULL DEFAULT 'pending_approval' CHECK (state IN ('pending_approval','approved_awaiting_claim','claimed','expired_unapproved','revoked_unclaimed')),
   user_id TEXT REFERENCES users(id),
   approved_at_ms INTEGER,
+  pat_expires_at_ms INTEGER,
   wrong_attempts INTEGER NOT NULL DEFAULT 0 CHECK (wrong_attempts BETWEEN 0 AND 32767),
   last_poll_at_ms INTEGER,
   minimum_poll_seconds INTEGER NOT NULL DEFAULT 5 CHECK (minimum_poll_seconds BETWEEN 5 AND 60),
-  CHECK ((state = 'pending_approval' AND user_id IS NULL AND approved_at_ms IS NULL) OR state <> 'pending_approval'),
-  CHECK ((state IN ('approved_awaiting_claim','claimed') AND user_id IS NOT NULL AND approved_at_ms IS NOT NULL) OR state NOT IN ('approved_awaiting_claim','claimed'))
+  CHECK ((state = 'pending_approval' AND user_id IS NULL AND approved_at_ms IS NULL AND pat_expires_at_ms IS NULL) OR state <> 'pending_approval'),
+  CHECK ((state IN ('approved_awaiting_claim','claimed') AND user_id IS NOT NULL AND approved_at_ms IS NOT NULL AND pat_expires_at_ms IS NOT NULL AND pat_expires_at_ms = approved_at_ms + lifetime_days * 86400000) OR state NOT IN ('approved_awaiting_claim','claimed'))
 ) STRICT;
 CREATE INDEX pat_pairings_capacity ON pat_pairings(created_at_ms);
 CREATE TABLE pats (
@@ -34,6 +35,7 @@ CREATE TABLE pats (
   scopes_json TEXT NOT NULL,
   lifetime_days INTEGER NOT NULL CHECK (lifetime_days IN (7,30,90,365)),
   created_at_ms INTEGER NOT NULL,
+  issued_at_ms INTEGER NOT NULL CHECK (issued_at_ms >= created_at_ms),
   expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms > created_at_ms),
   last_used_at_ms INTEGER,
   revoked_at_ms INTEGER,
@@ -49,6 +51,7 @@ WHEN NEW.pairing_id IS NOT NULL AND NOT EXISTS (
 )
 BEGIN SELECT RAISE(ABORT,'pat_pairing_not_claimable'); END;
 CREATE INDEX pats_user_active ON pats(user_id,revoked_at_ms,expires_at_ms);
+CREATE INDEX pats_user_issuance ON pats(user_id,issued_at_ms);
 CREATE TABLE pat_grant_consents (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

@@ -129,7 +129,7 @@ const makeApprovePairingCommand = (
       Effect.gen(function* () {
         const client = yield* apiClient;
         yield* client.pats.approvePATPairing({
-          payload: { pairingId: command.pairingId, patExpiresAt: command.patExpiresAt },
+          payload: { pairingId: command.pairingId },
         });
         yield* Effect.sync(command.onApproved);
       }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),

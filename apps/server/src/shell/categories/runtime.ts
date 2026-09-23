@@ -6,5 +6,7 @@ export {
   categoryUnavailable,
   listCategoriesResponse,
 } from "./list-categories";
-export { ListCategoriesResponse } from "./operations";
+export { CategoriesGroup, ListCategoriesResponse } from "./operations";
+export { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
+export { ScopeMissing } from "~/shell/public-http/contract";
 export { listCategoriesPath } from "./path";

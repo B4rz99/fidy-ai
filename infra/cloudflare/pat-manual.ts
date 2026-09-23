@@ -1,10 +1,13 @@
 import {
   CreateManualPATPayload,
   ManualPATIssuanceConsumed,
+  ManualPATIssuanceRateLimited,
   ManualPATReviewExpired,
   PAT,
+  ValidationFailed,
   buildPATDisclosure,
   issuanceConsumedMessage,
+  issuanceLimitedMessage,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Option, Schema } from "effect";
@@ -18,7 +21,10 @@ import {
   httpBadRequest,
   httpConflict,
   httpReviewExpired,
+  httpTooManyRequests,
+  issuanceWindowMilliseconds,
   maxActivePATs,
+  maxIssuancesPerUserWindow,
   newBearer,
   newId,
   newShortId,
@@ -34,7 +40,12 @@ import {
 
 const invalidReview = (): Response =>
   response(
-    { error: { code: "validation_failed", message: "Review the PAT grant again." }, next: [] },
+    Schema.encodeSync(Schema.toCodecJson(ValidationFailed))(
+      ValidationFailed.make({
+        error: { code: "validation_failed", message: "Review the PAT grant again.", fields: [] },
+        next: [],
+      })
+    ),
     httpBadRequest
   );
 const expiredReview = (): Response =>
@@ -46,6 +57,16 @@ const expiredReview = (): Response =>
       })
     ),
     httpReviewExpired
+  );
+const issuanceLimit = (): Response =>
+  response(
+    Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
+      ManualPATIssuanceRateLimited.make({
+        error: { code: "rate_limited", message: issuanceLimitedMessage, retryAfterSeconds: 600 },
+        next: [],
+      })
+    ),
+    httpTooManyRequests
   );
 const consumed = (): Response =>
   response(
@@ -74,8 +95,9 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
   const committed = await db.batch([
     db
       .prepare(`INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
-      created_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${sessionExists}
-      AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?`)
+      created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${sessionExists}
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`)
       .bind(
         patId,
         session.user_id,
@@ -85,12 +107,16 @@ const commitIssuance = async (db: D1Database, issue: Issuance): Promise<boolean>
         JSON.stringify(grant.scopes),
         grant.lifetimeDays,
         current,
+        current,
         expires,
         requestId,
         ...sessionParams(session, current),
         session.user_id,
         current,
-        maxActivePATs
+        maxActivePATs,
+        session.user_id,
+        current - issuanceWindowMilliseconds,
+        maxIssuancesPerUserWindow
       ),
     db
       .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,request_id,disclosure_revision,disclosure_text,accepted_at_ms)
@@ -148,7 +174,14 @@ const failedIssuance = async (
     .prepare("SELECT 1 FROM pats WHERE request_id = ? AND user_id = ?")
     .bind(requestId, userId)
     .first();
-  return prior === null ? unavailable() : consumed();
+  if (prior !== null) return consumed();
+  const issued = await db
+    .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
+    .bind(userId, currentMillis() - issuanceWindowMilliseconds)
+    .first<{ total: number }>();
+  return issued !== null && issued.total >= maxIssuancesPerUserWindow
+    ? issuanceLimit()
+    : unavailable();
 };
 
 /** Issue one manually reviewed User-owned bearer; failed or repeated ids never reveal it again. */
@@ -172,7 +205,7 @@ export const createManualPAT = async (request: Request, db: D1Database): Promise
   };
   try {
     if (!(await commitIssuance(db, issue))) {
-      return unavailable();
+      return failedIssuance(db, input.value.requestId, session.value.user_id);
     }
     return issuedResponse(issue);
   } catch {

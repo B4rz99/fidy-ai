@@ -4,6 +4,7 @@ import {
   TokenBearer,
   TokenShortId,
   patPairingUnavailableBody,
+  patShortIdLength,
 } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
@@ -16,14 +17,16 @@ export const pairingMilliseconds = 600_000;
 export const dayMilliseconds = 86_400_000;
 export const digestBytes = 32;
 export const maxActivePATs = 100;
-export const shortLength = 8;
-const bearerLength = 56;
+export const issuanceWindowMilliseconds = 600_000;
+export const maxIssuancesPerUserWindow = 20;
+export const shortLength = patShortIdLength;
 const sampleSize = 16;
 export const httpBadRequest = 400;
 export const httpUnauthorized = 401;
 export const httpNotFound = 404;
 export const httpUnavailable = 503;
 export const httpConflict = 409;
+export const httpTooManyRequests = 429;
 export const httpReviewExpired = 422;
 export const httpRateLimited = 429;
 const unbiasedBase36Limit = 252;
@@ -86,8 +89,7 @@ export const newShortId = (): string => {
   return shortId;
 };
 export const newBearer = (shortId: string): string => `fin_${shortId}_${newProof()}`;
-export const validBearer = (value: string): boolean =>
-  value.length === bearerLength && Schema.is(TokenBearer)(value);
+export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
 /** Decode JSON bodies before any proof lookup or mutation; malformed bodies are never retained. */
 export const decodeBody = async <Decoded, Encoded>(

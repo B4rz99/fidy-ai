@@ -8,6 +8,7 @@ import {
 } from "@fidy/server/tokens-runtime";
 import { DateTime, Encoding, Option, Result, Schema } from "effect";
 import {
+  type SessionRow,
   canonical,
   currentMillis,
   dayMilliseconds,
@@ -77,6 +78,7 @@ export const PairingRow = Schema.Struct({
   ]),
   user_id: Schema.NullOr(Schema.String),
   approved_at_ms: Schema.NullOr(Schema.Finite),
+  pat_expires_at_ms: Schema.NullOr(Schema.Finite),
   wrong_attempts: Schema.Int,
   last_poll_at_ms: Schema.NullOr(Schema.Finite),
   minimum_poll_seconds: Schema.Int,
@@ -221,9 +223,6 @@ export const inspectPATPairing = async (request: Request, db: D1Database): Promi
     recipientLabel: pairing.value.recipient_label,
     scopes: scopes.value,
     lifetimeDays: pairing.value.lifetime_days,
-    patExpiresAt: DateTime.makeUnsafe(
-      pairing.value.created_at_ms + pairing.value.lifetime_days * dayMilliseconds
-    ),
     claimBy: DateTime.makeUnsafe(pairing.value.expires_at_ms),
   });
   return Option.isSome(review)
@@ -231,6 +230,38 @@ export const inspectPATPairing = async (request: Request, db: D1Database): Promi
     : unavailable();
 };
 
+type Approval = Readonly<{
+  session: SessionRow;
+  pairing: PairingRow;
+  current: number;
+  expires: number;
+  disclosure: string;
+}>;
+const commitApproval = async (db: D1Database, approval: Approval): Promise<boolean> => {
+  const { session, pairing, current, expires, disclosure } = approval;
+  const committed = await db.batch([
+    db
+      .prepare(`UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
+      WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${sessionExists}`)
+      .bind(
+        session.user_id,
+        current,
+        expires,
+        pairing.id,
+        current,
+        ...sessionParams(session, current)
+      ),
+    db
+      .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)
+      SELECT ?,?,?,?,'pat-pairing-grant-2026-09',?,? WHERE changes() = 1`)
+      .bind(newId(), session.user_id, session.id, pairing.id, disclosure, current),
+    db
+      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+      SELECT ?,?,?,'pats.approvePATPairing','accepted',? WHERE changes() = 1`)
+      .bind(newId(), session.user_id, session.id, current),
+  ]);
+  return committed.every((item) => item.meta.changes === 1);
+};
 /** Approve one reviewed immutable grant and append its exact User-bound disclosure atomically. */
 export const approvePATPairing = async (request: Request, db: D1Database): Promise<Response> => {
   const session = await webSession(request, db, true);
@@ -245,8 +276,7 @@ export const approvePATPairing = async (request: Request, db: D1Database): Promi
     .first();
   const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
   if (Option.isNone(pairing)) return rejected();
-  const expires = pairing.value.created_at_ms + pairing.value.lifetime_days * dayMilliseconds;
-  if (DateTime.toEpochMillis(payload.value.patExpiresAt) !== expires) return rejected();
+  const expires = current + pairing.value.lifetime_days * dayMilliseconds;
   const scopes = scopesFrom(pairing.value.scopes_json);
   if (Option.isNone(scopes)) return unavailable();
   const disclosure = buildPairedPATDisclosure({
@@ -259,35 +289,22 @@ export const approvePATPairing = async (request: Request, db: D1Database): Promi
         pairing.value.lifetime_days
       ),
     },
-    expiresAt: payload.value.patExpiresAt,
+    expiresAt: DateTime.makeUnsafe(expires),
   });
-  const committed = await db.batch([
-    db
-      .prepare(`UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?
-      WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${sessionExists}`)
-      .bind(
-        session.value.user_id,
-        current,
-        pairing.value.id,
-        current,
-        ...sessionParams(session.value, current)
-      ),
-    db
-      .prepare(`INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)
-      SELECT ?,?,?,?,'pat-pairing-grant-2026-09',?,? WHERE changes() = 1`)
-      .bind(
-        newId(),
-        session.value.user_id,
-        session.value.id,
-        pairing.value.id,
-        disclosure,
-        current
-      ),
-    db
-      .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,'pats.approvePATPairing','accepted',? WHERE changes() = 1`)
-      .bind(newId(), session.value.user_id, session.value.id, current),
-  ]);
-  if (committed.some((item) => item.meta.changes !== 1)) return rejected();
-  return canonical({ pairingId: pairing.value.id, claimBy: iso(pairing.value.expires_at_ms) });
+  if (
+    !(await commitApproval(db, {
+      session: session.value,
+      pairing: pairing.value,
+      current,
+      expires,
+      disclosure,
+    }))
+  ) {
+    return rejected();
+  }
+  return canonical({
+    pairingId: pairing.value.id,
+    patExpiresAt: iso(expires),
+    claimBy: iso(pairing.value.expires_at_ms),
+  });
 };

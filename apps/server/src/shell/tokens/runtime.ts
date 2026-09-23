@@ -8,6 +8,7 @@ export {
   PATScopes,
   TokenBearer,
   TokenShortId,
+  patShortIdLength,
 } from "~/core/tokens/model";
 export {
   ApprovePATPairingPayload,
@@ -24,8 +25,11 @@ export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rule
 export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
 export { PATsGroup } from "~/shell/tokens/operations";
 export { PATPairingDirectGroup } from "~/pat-pairing-api";
+export { ValidationFailed } from "~/shell/public-http/contract";
 export {
   ManualPATIssuanceConsumed,
+  ManualPATIssuanceRateLimited,
+  issuanceLimitedMessage,
   ManualPATReviewExpired,
   issuanceConsumedMessage,
   reviewExpiredMessage,

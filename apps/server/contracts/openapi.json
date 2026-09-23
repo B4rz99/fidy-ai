@@ -175,10 +175,14 @@
           },
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
+          },
+          "patExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
           }
         },
         "required": [
           "pairingId",
+          "patExpiresAt",
           "claimBy"
         ],
         "type": "object"
@@ -188,14 +192,10 @@
         "properties": {
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
-          },
-          "patExpiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
           }
         },
         "required": [
-          "pairingId",
-          "patExpiresAt"
+          "pairingId"
         ],
         "type": "object"
       },
@@ -3971,9 +3971,6 @@
           "pairingId": {
             "$ref": "#/components/schemas/PATPairingId"
           },
-          "patExpiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
           },
@@ -3986,7 +3983,6 @@
           "recipientLabel",
           "scopes",
           "lifetimeDays",
-          "patExpiresAt",
           "claimBy"
         ],
         "type": "object"

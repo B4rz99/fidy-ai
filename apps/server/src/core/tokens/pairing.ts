@@ -112,21 +112,20 @@ export const PATPairingReview = Schema.Struct({
   recipientLabel: PATRecipientLabel,
   scopes: PATScopes,
   lifetimeDays: PATLifetimeDays,
-  patExpiresAt: UtcTimestamp,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "PATPairingReview" });
 export type PATPairingReview = typeof PATPairingReview.Type;
 
-/** Approval accepts only the stable reviewed identity and exact server-provided expiration. */
+/** Approval binds the reviewed pairing; its fixed lifetime begins at approval. */
 export const ApprovePATPairingPayload = Schema.Struct({
   pairingId: PATPairingId,
-  patExpiresAt: UtcTimestamp,
 }).annotate({ identifier: "ApprovePATPairingPayload" });
 export type ApprovePATPairingPayload = typeof ApprovePATPairingPayload.Type;
 
 /** Safe browser success: the initiating client, not this browser, receives the bearer. */
 export const ApprovedPATPairing = Schema.Struct({
   pairingId: PATPairingId,
+  patExpiresAt: UtcTimestamp,
   claimBy: UtcTimestamp,
 }).annotate({ identifier: "ApprovedPATPairing" });
 export type ApprovedPATPairing = typeof ApprovedPATPairing.Type;

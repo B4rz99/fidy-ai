@@ -111,7 +111,8 @@ export const CreateManualPATPayload = Schema.Struct({
 export type CreateManualPATPayload = typeof CreateManualPATPayload.Type;
 
 const bearerPrefix = "fin_";
-const patShortIdLength = 8;
+/** Number of public naming characters embedded in every opaque PAT bearer. */
+export const patShortIdLength = 8;
 const patShortIdPattern = `[a-z0-9]{${patShortIdLength}}`;
 const bearerSecretPattern = "[A-Za-z0-9_-]{32,}";
 /** Human-readable notation for the one opaque bearer encoding. */

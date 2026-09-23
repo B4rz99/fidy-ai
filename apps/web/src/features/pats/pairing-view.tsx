@@ -15,7 +15,6 @@ export type InspectPATPairingCommand = Readonly<{
 }>;
 export type ApprovePATPairingCommand = Readonly<{
   pairingId: PATPairingId;
-  patExpiresAt: DateTime.Utc;
   onApproved: () => void;
   onFailed: () => void;
 }>;
@@ -50,10 +49,8 @@ const PairingReviewDetails = ({ review }: Readonly<{ review: PATPairingReview }>
         </Badge>
       ))}
     </dd>
-    <dt className="text-muted-foreground">Duración</dt>
+    <dt className="text-muted-foreground">Vigencia desde la autorización</dt>
     <dd className="font-medium">{review.lifetimeDays} días</dd>
-    <dt className="text-muted-foreground">Acceso válido hasta</dt>
-    <dd className="font-medium">{format(review.patExpiresAt)}</dd>
     <dt className="text-muted-foreground">Completar la conexión antes de</dt>
     <dd className="font-medium">{format(review.claimBy)}</dd>
   </dl>
@@ -119,7 +116,6 @@ const PairingReviewCard = ({
             onClick={() =>
               approve({
                 pairingId: state.review.pairingId,
-                patExpiresAt: state.review.patExpiresAt,
                 onApproved: approved,
                 onFailed: failed,
               })

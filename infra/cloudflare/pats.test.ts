@@ -18,13 +18,16 @@ const Started = Schema.Struct({
 const Review = Schema.Struct({
   data: Schema.Struct({
     pairingId: Schema.String,
-    patExpiresAt: Schema.String,
     scopes: Schema.Array(Schema.String),
     lifetimeDays: Schema.Number,
   }),
 });
 const Issued = Schema.Struct({
-  pat: Schema.Struct({ shortId: Schema.String, expiresAt: Schema.String }),
+  pat: Schema.Struct({
+    shortId: Schema.String,
+    createdAt: Schema.String,
+    expiresAt: Schema.String,
+  }),
   bearer: Schema.String,
 });
 const dig = (text: string): Promise<Uint8Array> =>
@@ -198,7 +201,7 @@ it("releases one scoped bearer to the private-code holder after web approval, ne
   const rejectedOrigin = await send({
     path: "/pats/pairings/approve",
     method: "POST",
-    payload: { pairingId: review.pairingId, patExpiresAt: review.patExpiresAt },
+    payload: { pairingId: review.pairingId },
     session: sessions[0],
     origin: "https://evil.example",
   });
@@ -210,10 +213,12 @@ it("releases one scoped bearer to the private-code holder after web approval, ne
   expect(
     (await db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first())?.total
   ).toBe(0);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(clock() + 240_000);
   const approval = await send({
     path: "/pats/pairings/approve",
     method: "POST",
-    payload: { pairingId: review.pairingId, patExpiresAt: review.patExpiresAt },
+    payload: { pairingId: review.pairingId },
     session: sessions[0],
   });
   expect(approval.status).toBe(200);
@@ -222,6 +227,7 @@ it("releases one scoped bearer to the private-code holder after web approval, ne
   expect(claim.status).toBe(200);
   const issued = Schema.decodeUnknownSync(Issued)(await claim.json());
   expect(issued.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{43}$/u);
+  expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(7 * 86_400_000);
   expect((await send({ path: "/pat-pairings/claim", method: "POST", payload: proof })).status).toBe(
     400
   );
@@ -258,6 +264,103 @@ it("refuses a source's PAT pairing burst without denying an unrelated client", a
   expect((await attempt("203.0.113.20")).status).toBe(200);
 });
 
+it("bounds per-User issuance even when every PAT is revoked immediately", async () => {
+  const { db, send, sessions } = await setup();
+  const grant = { recipientLabel: "Cycling client", scopes: ["read"], lifetimeDays: 7 };
+  await Promise.all(
+    Array.from({ length: 20 }, async (_, index) => {
+      const response = await send({
+        path: "/pats",
+        method: "POST",
+        session: sessions[0],
+        payload: {
+          requestId: `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+          grant,
+        },
+      });
+      expect(response.status).toBe(200);
+      expect((await send({ path: "/pats", method: "DELETE", session: sessions[0] })).status).toBe(
+        200
+      );
+    })
+  );
+  const denied = await send({
+    path: "/pats",
+    method: "POST",
+    session: sessions[0],
+    payload: { requestId: "00000000-0000-4000-8000-000000000020", grant },
+  });
+  expect(denied.status).toBe(429);
+  expect((await db.prepare("SELECT count(*) AS total FROM pats").first())?.total).toBe(20);
+  expect(
+    (await db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first())?.total
+  ).toBe(20);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.createManualPAT'")
+        .first()
+    )?.total
+  ).toBe(20);
+  const started = Schema.decodeUnknownSync(Started)(
+    await (
+      await send({
+        path: "/pat-pairings",
+        method: "POST",
+        payload: grant,
+      })
+    ).json()
+  );
+  const review = Schema.decodeUnknownSync(Review)(
+    await (
+      await send({
+        path: "/pats/pairings/inspect",
+        method: "POST",
+        session: sessions[0],
+        payload: { publicCode: started.publicCode },
+      })
+    ).json()
+  ).data;
+  expect(
+    (
+      await send({
+        path: "/pats/pairings/approve",
+        method: "POST",
+        session: sessions[0],
+        payload: { pairingId: review.pairingId },
+      })
+    ).status
+  ).toBe(200);
+  expect(
+    (
+      await send({
+        path: "/pat-pairings/claim",
+        method: "POST",
+        payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+      })
+    ).status
+  ).toBe(400);
+  expect((await db.prepare("SELECT count(*) AS total FROM pats").first())?.total).toBe(20);
+  expect(
+    (
+      await db
+        .prepare("SELECT state FROM pat_pairings WHERE id = ?")
+        .bind(started.pairingId)
+        .first()
+    )?.state
+  ).toBe("approved_awaiting_claim");
+  expect(
+    (
+      await send({
+        path: "/pats",
+        method: "POST",
+        session: sessions[1],
+        payload: { requestId: "00000000-0000-4000-8000-000000000020", grant },
+      })
+    ).status
+  ).toBe(200);
+});
+
 it("serializes concurrent private-code claims so only one bearer is ever issued", async () => {
   const { db, send, sessions } = await setup();
   const started = Schema.decodeUnknownSync(Started)(
@@ -285,7 +388,7 @@ it("serializes concurrent private-code claims so only one bearer is ever issued"
         path: "/pats/pairings/approve",
         method: "POST",
         session: sessions[0],
-        payload: { pairingId: review.pairingId, patExpiresAt: review.patExpiresAt },
+        payload: { pairingId: review.pairingId },
       })
     ).status
   ).toBe(200);
@@ -385,9 +488,9 @@ it("isolates management by User and immediately refuses revoked and under-scoped
   const writerBearer = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
     await writer.json()
   ).data.bearer;
-  expect((await send({ path: "/categories", method: "GET", bearer: writerBearer })).status).toBe(
-    401
-  );
+  const underScoped = await send({ path: "/categories", method: "GET", bearer: writerBearer });
+  expect(underScoped.status).toBe(403);
+  expect(await underScoped.json()).toMatchObject({ error: { code: "scope_missing" }, next: [] });
 });
 
 it("rejects invalid grants, expired bearers and stale browser authority without partial effects", async () => {
@@ -474,7 +577,7 @@ it("closes an approved unclaimed pairing on User revocation and prevents later c
         path: "/pats/pairings/approve",
         method: "POST",
         session: sessions[0],
-        payload: { pairingId: inspected.pairingId, patExpiresAt: inspected.patExpiresAt },
+        payload: { pairingId: inspected.pairingId },
       })
     ).status
   ).toBe(200);

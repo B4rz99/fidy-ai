@@ -9,13 +9,14 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
   currentMillis,
-  dayMilliseconds,
   decodeBody,
   digest,
   equalsDigest,
   invalid,
   iso,
+  issuanceWindowMilliseconds,
   maxActivePATs,
+  maxIssuancesPerUserWindow,
   newBearer,
   newId,
   newShortId,
@@ -79,46 +80,78 @@ const pending = async (
       )
     : invalid();
 };
+type Claim = Readonly<{
+  pairing: typeof PairingRow.Type;
+  current: number;
+  shortId: string;
+  bearer: string;
+  patId: string;
+  expires: number;
+}>;
+const reserveClaim = async (db: D1Database, claim: Claim): Promise<boolean> => {
+  const { pairing, current, shortId, bearer, patId, expires } = claim;
+  const results = await db.batch([
+    db
+      .prepare(`UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
+        AND user_id = ? AND expires_at_ms > ? AND
+        (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
+        AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`)
+      .bind(
+        pairing.id,
+        pairing.user_id,
+        current,
+        pairing.user_id,
+        current,
+        maxActivePATs,
+        pairing.user_id,
+        current - issuanceWindowMilliseconds,
+        maxIssuancesPerUserWindow
+      ),
+    db
+      .prepare(`INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
+        created_at_ms,issued_at_ms,expires_at_ms,pairing_id)
+        SELECT ?,user_id,?,?,recipient_label,scopes_json,lifetime_days,?,?,?,id
+        FROM pat_pairings WHERE id = ? AND state = 'claimed' AND user_id = ? AND changes() = 1`)
+      .bind(
+        patId,
+        shortId,
+        await digest(bearer),
+        pairing.approved_at_ms,
+        current,
+        expires,
+        pairing.id,
+        pairing.user_id
+      ),
+    db
+      .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+        SELECT ?,?,?, 'pats.claim', 'accepted', ? WHERE changes() = 1`)
+      .bind(newId(), pairing.user_id, patId, current),
+  ]);
+  return results.every((item) => item.meta.changes === 1);
+};
 /** Atomically consume a reviewed private proof and mint one unrecoverable bearer. */
 const mint = async (
   db: D1Database,
   pairing: typeof PairingRow.Type,
   current: number
 ): Promise<Response> => {
-  if (pairing.user_id === null || pairing.approved_at_ms === null) return invalid();
+  if (
+    pairing.user_id === null ||
+    pairing.approved_at_ms === null ||
+    pairing.pat_expires_at_ms === null
+  ) {
+    return invalid();
+  }
   const scopes = scopesFrom(pairing.scopes_json);
   if (Option.isNone(scopes)) return unavailable();
   const shortId = newShortId();
   const bearer = newBearer(shortId);
   const patId = newId();
-  const expires = pairing.created_at_ms + pairing.lifetime_days * dayMilliseconds;
+  const expires = pairing.pat_expires_at_ms;
   try {
-    const results = await db.batch([
-      db
-        .prepare(`UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
-        AND user_id = ? AND expires_at_ms > ? AND
-        (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?`)
-        .bind(pairing.id, pairing.user_id, current, pairing.user_id, current, maxActivePATs),
-      db
-        .prepare(`INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
-        created_at_ms,expires_at_ms,pairing_id)
-        SELECT ?,user_id,?,?,recipient_label,scopes_json,lifetime_days,?,?,id
-        FROM pat_pairings WHERE id = ? AND state = 'claimed' AND user_id = ? AND changes() = 1`)
-        .bind(
-          patId,
-          shortId,
-          await digest(bearer),
-          pairing.approved_at_ms,
-          expires,
-          pairing.id,
-          pairing.user_id
-        ),
-      db
-        .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?, 'pats.claim', 'accepted', ? WHERE changes() = 1`)
-        .bind(newId(), pairing.user_id, patId, current),
-    ]);
-    if (results.some((item) => item.meta.changes !== 1)) return invalid();
+    if (!(await reserveClaim(db, { pairing, current, shortId, bearer, patId, expires }))) {
+      return invalid();
+    }
     const pat = patFrom({
       id: patId,
       user_id: pairing.user_id,

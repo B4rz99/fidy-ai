@@ -1,3 +1,8 @@
+import {
+  CategoriesGroup,
+  decideOperationAccess,
+  getOperationPolicy,
+} from "@fidy/server/categories";
 import { Option, Schema } from "effect";
 import {
   PATRow,
@@ -29,12 +34,27 @@ const authenticate = async (
   if (Option.isNone(pat)) return Option.none();
   return equalsDigest(pat.value.bearer_digest, await digest(bearer)) ? pat : Option.none();
 };
-/** Verify bearer bytes, scope, revocation and absolute expiry at the authoritative D1 boundary. */
-export const authorizeCategoryPAT = async (request: Request, db: D1Database): Promise<boolean> => {
+type CategoryAuthorization = "accepted" | "unauthenticated" | "scope_missing";
+const categoryOperation = CategoriesGroup.endpoints.listCategories;
+const categoryOperationId = `${CategoriesGroup.identifier}.${categoryOperation.identifier}`;
+const categoryScopeDecision = (scopes: ReturnType<typeof scopesFrom>): CategoryAuthorization => {
+  if (Option.isNone(scopes)) return "unauthenticated";
+  const access = decideOperationAccess(getOperationPolicy(categoryOperation).access, {
+    _tag: "PAT",
+    capabilities: scopes.value,
+  });
+  if (access._tag === "Allowed") return "accepted";
+  return access.reason === "pat_scope_missing" ? "scope_missing" : "unauthenticated";
+};
+/** Verify bearer bytes and declared operation policy, revocation and expiry at D1. */
+export const authorizeCategoryPAT = async (
+  request: Request,
+  db: D1Database
+): Promise<CategoryAuthorization> => {
   const pat = await authenticate(request, db);
-  if (Option.isNone(pat)) return false;
-  const scopes = scopesFrom(pat.value.scopes_json);
-  if (Option.isNone(scopes) || !scopes.value.includes("read")) return false;
+  if (Option.isNone(pat)) return "unauthenticated";
+  const decision = categoryScopeDecision(scopesFrom(pat.value.scopes_json));
+  if (decision !== "accepted") return decision;
   const current = currentMillis();
   const result = await db.batch([
     db
@@ -44,8 +64,10 @@ export const authorizeCategoryPAT = async (request: Request, db: D1Database): Pr
       .bind(current, pat.value.id, current),
     db
       .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?, 'categories.listCategories', 'accepted', ? WHERE changes() = 1`)
-      .bind(newId(), pat.value.user_id, pat.value.id, current),
+      SELECT ?,?,?, ?, 'accepted', ? WHERE changes() = 1`)
+      .bind(newId(), pat.value.user_id, pat.value.id, categoryOperationId, current),
   ]);
-  return result[0]?.meta.changes === 1 && result[1]?.meta.changes === 1;
+  return result[0]?.meta.changes === 1 && result[1]?.meta.changes === 1
+    ? "accepted"
+    : "unauthenticated";
 };

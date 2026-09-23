@@ -25,7 +25,11 @@ export {
 export { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rules";
 export { ClaimPATPairingPayload, patPairingUnavailableBody } from "~/pat-pairing-api";
 export { PATsGroup } from "~/shell/tokens/operations";
-export { listPATsResponse } from "~/shell/tokens/list-pats";
+export {
+  listPATsResponse,
+  patMetadataQuery,
+  patMetadataResponseFromRows,
+} from "~/shell/tokens/list-pats";
 export type { OwnedStatement } from "~/shell/_shared/owned-statement";
 export {
   issueManualPAT,

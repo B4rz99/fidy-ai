@@ -13,6 +13,7 @@ import {
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { freshSessionExists, freshSessionParams } from "@fidy/server/identity-runtime";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
+import { browserSession } from "./browser-login";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
@@ -134,33 +135,13 @@ export const patFrom = (row: PATRow): Option.Option<typeof PAT.Type> => {
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
   });
 };
-const cookie = (request: Request): Option.Option<string> => {
-  const values =
-    request.headers
-      .get("cookie")
-      ?.split(";")
-      .map((part) => part.trim())
-      .filter((part) => part.startsWith("__Host-fidy_session=")) ?? [];
-  if (values.length !== 1) return Option.none();
-  const token = values[0]?.slice("__Host-fidy_session=".length) ?? "";
-  return /^[A-Za-z0-9_-]{43}$/u.test(token) ? Option.some(token) : Option.none();
-};
 /** Browser freshness is required for authority changes, but not safe listing. */
-export const webSession = async (
+export const webSession = (
   request: Request,
   db: D1Database,
   fresh: boolean
-): Promise<Option.Option<SessionRow>> => {
-  const token = cookie(request);
-  if (Option.isNone(token)) return Option.none();
-  const current = currentMillis();
-  const row = await db
-    .prepare(`SELECT id,user_id FROM web_sessions WHERE token_digest = ?
-    AND revoked_at_ms IS NULL AND (? = 0 OR fresh_until_ms > ?) AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
-    .bind(await digest(token.value), fresh ? 1 : 0, current, current, current)
-    .first();
-  return Schema.decodeUnknownOption(SessionRow)(row);
-};
+): Promise<Option.Option<SessionRow>> =>
+  browserSession(request, db, { current: currentMillis(), fresh });
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
 export const sessionExists = freshSessionExists;
 export const sessionParams = freshSessionParams;

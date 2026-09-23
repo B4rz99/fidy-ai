@@ -1,8 +1,7 @@
-import * as D1Client from "@effect/sql-d1/D1Client";
-import { UserId } from "@fidy/server/identity-runtime";
 import {
   ActivePATList,
-  listPATsResponse,
+  patMetadataQuery,
+  patMetadataResponseFromRows,
   patRevokeAllCompletion,
   recordAllPATRevocations,
   recordOnePATRevocation,
@@ -11,8 +10,7 @@ import {
   revokeEveryPairing,
   revokeOnePAT,
 } from "@fidy/server/tokens-runtime";
-import { Context, Effect, Layer, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { Effect, Option, Schema } from "effect";
 import {
   revokeAllPATConsents,
   revokeAllPairingConsents,
@@ -21,8 +19,10 @@ import {
 import {
   canonical,
   currentMillis,
+  httpRateLimited,
   newId,
   notFound,
+  response,
   sessionExists,
   sessionParams,
   shortIdIsValid,
@@ -38,28 +38,28 @@ export { createManualPAT } from "./pat-manual";
 export const listPATs = async (request: Request, db: D1Database): Promise<Response> => {
   const session = await webSession(request, db, false);
   if (Option.isNone(session)) return unauthorized();
-  const userId = Schema.decodeUnknownOption(UserId)(session.value.user_id);
-  if (Option.isNone(userId)) return unavailable();
-  const listed = await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const clients = yield* Layer.build(D1Client.layer({ db }));
-        return yield* listPATsResponse(userId.value).pipe(
-          Effect.withTracerEnabled(false),
-          Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
-        );
-      })
-    ).pipe(Effect.option)
-  );
-  if (Option.isNone(listed)) return unavailable();
   const current = currentMillis();
-  const recorded = await prepareOwnedStatement(
-    db,
-    recordPATList(session.value, { id: newId(), current })
-  ).run();
-  return recorded.meta.changes === 1
-    ? canonical(Schema.encodeSync(Schema.toCodecJson(ActivePATList))(listed.value.data))
-    : unauthorized();
+  try {
+    const [rows, recorded] = await db.batch([
+      prepareOwnedStatement(db, patMetadataQuery(session.value.user_id, current, session)),
+      prepareOwnedStatement(db, recordPATList(session.value, { id: newId(), current })),
+    ]);
+    if (recorded?.meta.changes !== 1) return unauthorized();
+    if (rows === undefined) return unavailable();
+    const listed = await Effect.runPromise(
+      patMetadataResponseFromRows(rows.results).pipe(Effect.option)
+    );
+    return Option.isSome(listed)
+      ? canonical(Schema.encodeSync(Schema.toCodecJson(ActivePATList))(listed.value.data))
+      : unavailable();
+  } catch (error) {
+    return String(error).includes("transaction_audit_limit")
+      ? response(
+          { error: { code: "rate_limited", message: "PAT metadata budget exhausted." }, next: [] },
+          httpRateLimited
+        )
+      : unavailable();
+  }
 };
 
 /** Idempotently revoke one owned PAT; foreign and unknown ids are indistinguishable. */

@@ -38,6 +38,7 @@ import {
   reconcileEmailReplacement,
 } from "./email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pat-routes";
+import { listPATs } from "./pat-management";
 import { canonicalOperation, canonicalRoute } from "./canonical-routes";
 import type { CatalogOperation } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pat-pairing";
@@ -317,6 +318,12 @@ const executeCanonicalWork = (
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  if (operation.id === "pats.listPATs") {
+    return Effect.tryPromise({
+      try: () => listPATs(request, environment.DB),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
   if (operation.id === "transactions.createTransaction") {
     return Effect.tryPromise({
       try: () => dispatchCanonicalCapture(request, environment, subject),
@@ -428,6 +435,10 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   }
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
+  }
+  const patListing = canonicalOperation(request.method, url.pathname);
+  if (Option.isSome(patListing) && patListing.value.id === "pats.listPATs") {
+    return authorizedCanonicalResponse(request, environment, patListing.value);
   }
   if (patRoute(url.pathname)) {
     return Effect.tryPromise({

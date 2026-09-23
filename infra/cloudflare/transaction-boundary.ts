@@ -21,7 +21,8 @@ export const transactionAuditExhausted = async (
     .prepare(`SELECT 1 FROM (
       SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
-      SELECT occurred_at_ms FROM pat_audit WHERE user_id = ? AND pat_id IS NOT NULL AND operation NOT LIKE 'pats.%'
+      SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
+      AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
       AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM category_audit WHERE user_id = ?

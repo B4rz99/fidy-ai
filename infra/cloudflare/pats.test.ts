@@ -92,6 +92,7 @@ const setup = async (): Promise<{
     "0013_pat_atomic_assertion",
     "0014_canonical_category_budget",
     "0015_transaction_capture_assertion",
+    "0016_pat_listing_work_budget",
   ];
   await migrationNames.reduce<Promise<void>>(async (previous, name) => {
     await previous;
@@ -1091,6 +1092,60 @@ it("does not commit a PAT when its ConsentRecord is silently refused", async () 
         .first<{ total: number }>()
     )?.total
   ).toBe(0);
+});
+
+it("denies PAT metadata reads after explicit Consent withdrawal at protected work", async () => {
+  const { db, send, sessions } = await setup();
+  expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).toBe(200);
+  await db
+    .prepare(`CREATE TRIGGER refuse_list_audit BEFORE INSERT ON pat_audit
+    WHEN NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END`)
+    .run();
+  expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).not.toBe(200);
+  await db.prepare("DROP TRIGGER refuse_list_audit").run();
+  const grantId = "e0000000-0000-4000-8000-000000000031";
+  await db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+    .bind(grantId, userA, clock(), clock())
+    .run();
+  await db
+    .prepare(`INSERT INTO consent_user_revocations
+    (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+    .bind(
+      "e0000000-0000-4000-8000-000000000032",
+      userA,
+      grantId,
+      "40000000-0000-4000-8000-000000000001",
+      clock()
+    )
+    .run();
+  expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).toBe(401);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.listPATs'")
+        .first()
+    )?.total
+  ).toBe(1);
+  expect((await send({ path: "/pats", method: "GET", session: sessions[1] })).status).toBe(200);
+});
+
+it("includes PAT metadata listing in the shared User/day canonical work budget", async () => {
+  const { db, send, sessions } = await setup();
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
+    INSERT INTO transaction_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+    SELECT lower(hex(randomblob(16))), ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+    .bind(userA, "40000000-0000-4000-8000-000000000001", clock())
+    .run();
+  expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).toBe(200);
+  expect((await send({ path: "/pats", method: "GET", session: sessions[0] })).status).toBe(429);
+  expect((await send({ path: "/pats", method: "GET", session: sessions[1] })).status).toBe(200);
+  expect((await send({ path: "/categories", method: "GET", session: sessions[0] })).status).toBe(
+    503
+  );
 });
 
 it("bounds canonical work across a stable User and multiple PATs", async () => {

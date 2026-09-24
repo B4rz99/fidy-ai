@@ -5,13 +5,15 @@ import {
   deliverBrowserPairingEmail,
   dispatchBrowserPairingEmail,
 } from "../identity/browser-pairing-email-delivery";
-import { type Cause, Clock, Effect, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Schema } from "effect";
 import {
   deliverEmailReplacement,
   dispatchEmailReplacement,
 } from "../identity/email-replacement-delivery";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import coreWorker from "../core-worker";
+import coreWorker, { makeCoreWorker } from "../core-worker";
+import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+import { handleSupportRecovery } from "../identity/support-recovery";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
@@ -46,7 +48,20 @@ const digest = (text: string): Promise<Uint8Array> =>
 
 const setup = (
   email = "person@example.test",
-  bsuid = "CO.Person1"
+  bsuid = "CO.Person1",
+  {
+    worker,
+    database,
+    accessIssuer,
+  }: {
+    worker: typeof coreWorker;
+    database: (db: D1Database) => D1Database;
+    accessIssuer: string;
+  } = {
+    worker: coreWorker,
+    database: (db: D1Database): D1Database => db,
+    accessIssuer: "https://example.cloudflareaccess.com",
+  }
 ): Promise<{
   db: D1Database;
   send: (combinedCode: unknown) => Promise<Response>;
@@ -192,8 +207,8 @@ const setup = (
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CORE: {
             fetch: (request) =>
-              coreWorker.fetch(new Request(request), {
-                DB: db,
+              worker.fetch(new Request(request), {
+                DB: database(db),
                 AI: { run: () => Promise.reject(new Error("unused")) },
                 CONTRACT_DIGEST: "a".repeat(64),
                 RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -208,7 +223,7 @@ const setup = (
                 },
                 KAPSO_API_KEY: "",
                 KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
-                CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
+                CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
                 CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",
                 WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
               }),
@@ -1283,6 +1298,116 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
         )
       );
       expect(redeemed.status).toBe(200);
+    })
+  ));
+
+it("keeps unexpected recovery defects out of operational failures and observes one closed route outcome", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const failures: Array<unknown> = [];
+      const telemetry = makeTelemetryService({
+        ...DisabledTelemetryResource.adapter,
+        captureFailure: (_span, failure) =>
+          Effect.sync(() => {
+            failures.push(failure);
+          }),
+      });
+      let failure: "defect" | "d1" | "none" = "none";
+      const database = (db: D1Database): D1Database =>
+        new Proxy(db, {
+          get(target, property, receiver) {
+            if (property === "prepare" && failure !== "none") {
+              const kind = failure;
+              failure = "none";
+              return () => {
+                throw new Error(
+                  kind === "defect"
+                    ? "programmer defect: secret pairing and SQL text"
+                    : "D1_ERROR: database unavailable"
+                );
+              };
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        });
+      const { db, send, sendRequest } = yield* Effect.tryPromise(() =>
+        setup("person@example.test", "CO.Person1", {
+          worker: makeCoreWorker(telemetry),
+          database,
+          accessIssuer: "https://defect.cloudflareaccess.com",
+        })
+      );
+      const created: { backupRecoveryCode: string } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ backupRecoveryCode: Schema.String })
+      )(yield* Effect.tryPromise(() => send(code).then((result) => result.json())));
+      const pairing: { publicCode: string } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ publicCode: Schema.String })
+      )(yield* Effect.tryPromise(() => startBrowserPairing(db).then((result) => result.json())));
+      const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
+      const jwk = {
+        ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
+        kid: "defect-key",
+        alg: "RS256",
+        use: "sig",
+      };
+      vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+        Promise.resolve(Response.json({ keys: [jwk] }))
+      );
+      const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
+      const assertion = yield* Effect.tryPromise(() =>
+        new SignJWT({})
+          .setProtectedHeader({ alg: "RS256", kid: "defect-key" })
+          .setIssuer("https://defect.cloudflareaccess.com")
+          .setAudience("test-support-audience")
+          .setSubject("test-operator")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 300)
+          .sign(privateKey)
+      );
+      const request = (): Request =>
+        new Request("https://api.fidyapp.com/internal/support-recovery", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "cf-access-jwt-assertion": assertion,
+          },
+          body: encodeJson({
+            pairingCode: pairing.publicCode,
+            backupRecoveryCode: created.backupRecoveryCode,
+          }),
+        });
+      const config = {
+        CLOUDFLARE_ACCESS_ISSUER: "https://defect.cloudflareaccess.com",
+        CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",
+      };
+      failure = "defect";
+      const exit = yield* Effect.exit(
+        handleSupportRecovery({ request: request(), db: database(db), config })
+      );
+      expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+      failure = "defect";
+      const returned = yield* Effect.tryPromise(() => sendRequest(request()));
+      expect(returned.status).toBe(503);
+      expect(yield* Effect.tryPromise(() => returned.json())).toEqual({ status: "unavailable" });
+      expect(failures).toEqual([
+        {
+          _tag: "Defect",
+          component: "api",
+          operation: "http.supportRecovery",
+          error: "unexpected_defect",
+          cause: undefined,
+        },
+      ]);
+      failure = "d1";
+      expect((yield* Effect.tryPromise(() => sendRequest(request()))).status).toBe(503);
+      expect(failures).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS count FROM support_recovery_cases")
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(0);
     })
   ));
 

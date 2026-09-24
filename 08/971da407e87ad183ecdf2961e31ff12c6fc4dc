@@ -1,0 +1,117 @@
+apps/server/src/shell/subscription/runtime.ts
+  s_de6c7d29aa90cd::t_7629c2e7239512 12,20-21
+  s_de6c7d29aa90cd::t_ff5c3c52557627 2-11
+  s_de6c7d29aa90cd::t_02e53c45506767 22
+apps/server/cloudflare/billing/wompi-event.ts
+  s_de6c7d29aa90cd::t_5183747207f321 1-9,11-26,34-42,44-49,51-53,61,87,98,100,138
+  s_de6c7d29aa90cd::t_c7aba235ff66ea 133
+  s_de6c7d29aa90cd::t_3132de1edb01e3 126,128
+  s_de6c7d29aa90cd::t_4cdf2d610da14e 108,110
+  s_de6c7d29aa90cd::t_f3fcf8053dadf6 111
+  s_de6c7d29aa90cd::t_ff5c3c52557627 30-31,64-69,73-78,82-85,88-97,101-106,113-114,127
+  s_de6c7d29aa90cd::t_46a949ef5bd624 10,27-29,32-33,43,50,54-55,57,59-60,62-63,70-72,79-81,86,107,109,130-131,136-137
+  s_de6c7d29aa90cd::t_f91a2db0ba36e1 56,58
+  s_de6c7d29aa90cd::t_95464e9aa97998 99,112,115-125,129,132,134-135
+apps/server/cloudflare/core-worker.ts
+  s_de6c7d29aa90cd::t_6e4cdcf534a944 36-40,43,83,112
+  s_de6c7d29aa90cd::t_ff5c3c52557627 113-118
+  s_de6c7d29aa90cd::t_3a946d84f8a98a 683,696
+  s_de6c7d29aa90cd::t_a9a2d076acc5f3 685,687-690
+  s_de6c7d29aa90cd::t_c0433501ed72a6 42,164-176,592-593
+  s_de6c7d29aa90cd::t_6deafe2bc74362 41,313,594
+  s_de6c7d29aa90cd::t_7b4fd5f487f076 667-682,684,692-694,744,752
+  s_de6c7d29aa90cd::t_bb2fb47fe6b59e 686,691,695
+  s_de6c7d29aa90cd::t_eb3a54244187d3 177
+  s_de6c7d29aa90cd::t_07b66adb4390a2 697
+apps/server/cloudflare/billing/wompi-event.test.ts
+  s_de6c7d29aa90cd::t_0ab3823adffe09 6-7,31
+  s_de6c7d29aa90cd::t_084fc35cb2b733 1-5,8-10,14-26,30,39-40
+  s_de6c7d29aa90cd::t_ff5c3c52557627 11-13,27-29,32-38,41-66
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_3dbe94dd39b7c4 6,8-9,26,30-34,91
+  s_de6c7d29aa90cd::t_5c3fec8592b722 27
+  s_de6c7d29aa90cd::t_cc58ec0416cecd 133-137,156-182,184-243
+  s_de6c7d29aa90cd::t_ff5c3c52557627 39-50,54-56,58-64,69-74,83-84,92-96,99-122,125-132,138-153,246-264
+  s_de6c7d29aa90cd::t_1dcec62e4dcb28 1,3-5,7,10-11,17-25,28,35-38,51-53,57,65-68,75-82,85-90,97-98,123-124,244-245
+  s_de6c7d29aa90cd::t_f23a31c9fb02b5 2,12-16,29,154-155,183
+apps/server/src/shell/subscription/wompi-billing-client.ts
+  s_de6c7d29aa90cd::t_ffe6e5bde489ee 159-168,172
+apps/server/cloudflare/public-worker.ts
+  s_de6c7d29aa90cd::t_3b6ea387108a57 153,177,267
+  s_de6c7d29aa90cd::t_dd231095a7733e 219-225,265-266
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_de6c7d29aa90cd::t_b285257c41c282 242-243,246-251,254-257
+  s_de6c7d29aa90cd::t_ff5c3c52557627 244-245,252-253
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_a882cb574c70c9 18,80,354,360-362,369-372,377-378,385-386,397-398,407-409,417-421,511
+  s_de6c7d29aa90cd::t_cc58ec0416cecd 138-144,147-149,152-155,158-165,167-175,274-281,283-290,294-302,304
+  s_de6c7d29aa90cd::t_4b59598a63a1ad 37-39
+  s_de6c7d29aa90cd::t_29dbac5d78a109 303,305
+  s_de6c7d29aa90cd::t_0ad24d837bb3bb 55,506,509-510,512-516
+  s_de6c7d29aa90cd::t_f7b30d1c1fa901 429-430
+  s_de6c7d29aa90cd::t_cb3a5fcaa7b521 258,265,272-273,334-335
+  s_de6c7d29aa90cd::t_8fdb7c77a7a4ef 1-4,6-7,9-16,19,34-36,40-54,56-57,59,62,68,70-79,81-91,96-99,103-120,125-126,129-130,134-137,179-184,187-188,198,201,203-206,211-212,214-218,226-229,238-239,243-247,309-310,316-317,322-323,352-353,426-427,431-432,435,439,449,462,469-471,477-483,488-505,521,524,542-543
+  s_de6c7d29aa90cd::t_49bd35b9e8b882 428
+  s_de6c7d29aa90cd::t_aaeccdbc70489f 8,259-264
+  s_de6c7d29aa90cd::t_5d7455c7c0567a 197,202
+  s_de6c7d29aa90cd::t_a72d3a751c11f6 17
+  s_de6c7d29aa90cd::t_4fd7b8e5472c40 145-146,150-151,156-157,166,176-178,199-200
+  s_de6c7d29aa90cd::t_66b10a4533122c 282,291-293,306-308,321
+  s_de6c7d29aa90cd::t_4f1a4cf1ec5b47 5,58,60-61,63,69,207-210,213
+  s_de6c7d29aa90cd::t_b28f0aba96467e 394,396,459,461
+  s_de6c7d29aa90cd::t_3feda94ee94782 522-523
+  s_de6c7d29aa90cd::t_ff5c3c52557627 20-33,64-67,92-95,100-102,121-124,127-128,131-133,185-186,189-196,219-225,230-237,240-242,248-257,266-271,311-315,318-320,324-333,336-351,355-359,363-368,373-376,379-381,387-393,395,399-406,410-416,422-425,433-434,436-438,440-448,450-458,460,463-468,472-476,484-487,507-508,517-520,525-541
+  s_de6c7d29aa90cd::t_3b79b7d04f448d 382-384
+apps/server/cloudflare/migrations/0012_billing_collection.sql
+  s_de6c7d29aa90cd::t_487c1de1981647 34-35,40-41
+  s_de6c7d29aa90cd::t_10de71e73edb48 43-46
+  s_de6c7d29aa90cd::t_5575fd0d4ea6fb 1-30,47-81
+  s_de6c7d29aa90cd::t_f46f1c7b29c82c 37-39,42
+  s_de6c7d29aa90cd::t_3f860582c17866 31-33,36
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_de6c7d29aa90cd::t_892af16337b5df 18
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_de6c7d29aa90cd::t_47a0cf8a579dd2 14
+apps/server/cloudflare/card-enrollment/card-enrollment-d1.test-fixture.ts
+  s_de6c7d29aa90cd::t_1963c2e2b28462 37-46
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_de6c7d29aa90cd::t_f438192f4db0f3 589
+  s_de6c7d29aa90cd::t_a38f2fff3a359b 590
+  s_de6c7d29aa90cd::t_34e94a3ff716eb 107-108,482-484,489-490,499-505,509-510,514,517-519
+  s_de6c7d29aa90cd::t_ff5c3c52557627 506-508,512,515-516
+  s_de6c7d29aa90cd::t_3a1c1df4b049a2 511,513
+infra/cloudflare/alchemy.run.ts
+  s_de6c7d29aa90cd::t_3c0468498b2b02 165-168,200-201,233-237
+  s_de6c7d29aa90cd::t_f47aed53fd4317 28,222-224
+  s_6b77634642862a::t_eeefe1b229be14 238
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_ff5c3c52557627 25-26,36-45,51-52,58-65,72-73,77-86,94-97,100-101
+  s_de6c7d29aa90cd::t_cc58ec0416cecd 21-24
+  s_de6c7d29aa90cd::t_157702b7bf0ac1 3-9,14,16-20,27-35,46-50,53-57,66-71,74-76,87-93,98-99,102-109
+  s_de6c7d29aa90cd::t_90351de656649d 10-13
+  s_de6c7d29aa90cd::t_1b4578ef51d998 1-2,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "08971da407e87ad183ecdf2961e31ff12c6fc4dc",
+  "prompts": {},
+  "sessions": {
+    "s_6b77634642862a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-2385-7286-8dfe-eff034a8f95f",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

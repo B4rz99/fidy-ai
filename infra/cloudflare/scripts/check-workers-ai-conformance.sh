@@ -7,7 +7,8 @@ model="${HOSTED_AI_MODEL:?HOSTED_AI_MODEL must select the approval candidate}"
 # The promotion gate combines deterministic malformed-output/recovery evidence with the live model.
 bun run --cwd ../../apps/server test:hosted-inference
 
-config_file="$(mktemp)"
+config_dir="$(mktemp -d)"
+config_file="$config_dir/wrangler.jsonc"
 log_file="$(mktemp)"
 response_file="$(mktemp)"
 worker_pid=""
@@ -27,7 +28,8 @@ cleanup() {
     kill "$worker_pid" 2>/dev/null || true
     wait "$worker_pid" 2>/dev/null || true
   fi
-  rm -f "$config_file" "$log_file" "$response_file"
+  rm -rf "$config_dir"
+  rm -f "$log_file" "$response_file"
 }
 trap cleanup EXIT
 
@@ -46,6 +48,7 @@ for _attempt in $(seq 1 60); do
   fi
   if ! kill -0 "$worker_pid" 2>/dev/null; then
     echo "Workers AI conformance Worker failed to start." >&2
+    cat "$log_file" >&2
     exit 1
   fi
   sleep 1
@@ -53,6 +56,7 @@ done
 
 if [[ "$ready" != true ]]; then
   echo "Workers AI conformance Worker did not become ready." >&2
+  cat "$log_file" >&2
   exit 1
 fi
 

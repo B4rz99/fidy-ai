@@ -1,0 +1,20 @@
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_224e7b9131c0e5 140-147,327-328,438,657,691,813
+  s_de6c7d29aa90cd::t_e05d745af9eb91 131-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6534b0b134069e2da60b308fcfbb9f8213c7de22",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

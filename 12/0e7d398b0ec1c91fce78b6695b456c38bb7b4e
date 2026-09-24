@@ -1,0 +1,42 @@
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_5aa89c06895250 719,721
+  s_de6c7d29aa90cd::t_c3538cce7106e0 720
+  s_de6c7d29aa90cd::t_cb141ebf33616b 521,561
+  s_de6c7d29aa90cd::t_6dd7c20ead80e4 284-304,522-560
+  s_de6c7d29aa90cd::t_a0fe79699b9e28 283,305
+  s_de6c7d29aa90cd::t_b95ac46a19ee1f 716,718,722-723,727-728,747
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_c4a9698e8526f6 43-50
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_6dd7c20ead80e4 20,123-126,556-567
+  s_de6c7d29aa90cd::t_a7fbeffe380d4f 539,593-596,602-603,611,630-631
+  s_de6c7d29aa90cd::t_cc5823c67541a9 21,121-122,127-128,212,257
+  s_de6c7d29aa90cd::t_c3538cce7106e0 69-70,73,543-544,548
+  s_de6c7d29aa90cd::t_95782164d6b858 545-547
+  s_de6c7d29aa90cd::t_ebf0f16ebed6ee 71-72,533-534
+  s_de6c7d29aa90cd::t_745c585f69cdf2 553-555,568-569,583
+apps/server/cloudflare/wompi/wompi-runtime.ts
+  s_de6c7d29aa90cd::t_22bffb6ec1d4d1 2-8,13-30,41-42
+  s_de6c7d29aa90cd::t_aa3c9e02dc1d93 1
+  s_de6c7d29aa90cd::t_6dd7c20ead80e4 9-12,31-40
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_de6c7d29aa90cd::t_9bf01cd012e209 166-167,171-172
+  s_de6c7d29aa90cd::t_ab93fa9f4bc83b 26
+  s_de6c7d29aa90cd::t_6dd7c20ead80e4 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "120e7d398b0ec1c91fce78b6695b456c38bb7b4e",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

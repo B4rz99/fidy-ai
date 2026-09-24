@@ -1,0 +1,47 @@
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_94cc191a2b1c2a 436-516,518-522
+  s_de6c7d29aa90cd::t_5d6423dbe9f2b6 202,209-210
+  s_de6c7d29aa90cd::t_b6332d564dc6aa 435,517,523
+  s_de6c7d29aa90cd::t_9ff7ae6f135656 203-208
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_3c3fe0fe50a25e 14
+  s_de6c7d29aa90cd::t_166c54f1a04889 15-19,25,30,52,85,96-99
+  s_de6c7d29aa90cd::t_9ff7ae6f135656 31-32,55-57,86-87
+infra/cloudflare/verify-edge-policy.ts
+  s_de6c7d29aa90cd::t_9d40a7bcba68e9 5
+infra/cloudflare/verify-edge-policy.test.ts
+  s_de6c7d29aa90cd::t_1dd2d9ee44c94a 7
+apps/server/cloudflare/billing/wompi-event.test.ts
+  s_de6c7d29aa90cd::t_8bf645c0e8fb22 3,31,38
+  s_de6c7d29aa90cd::t_9ff7ae6f135656 26-29
+apps/server/cloudflare/billing/wompi-event.ts
+  s_de6c7d29aa90cd::t_b83e264e519fac 118
+  s_de6c7d29aa90cd::t_9ff7ae6f135656 120-122,139-141
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_6e32cd1deb40a8 395
+  s_de6c7d29aa90cd::t_8665ec7993a5a2 19,436,445,450,452-458
+  s_de6c7d29aa90cd::t_60c86674fdf1cd 94-95,597,599,623-624,627
+  s_de6c7d29aa90cd::t_25912fd9e10194 366-369,373-384,388
+  s_de6c7d29aa90cd::t_94cc191a2b1c2a 370-372
+  s_de6c7d29aa90cd::t_e0fbd837a73a48 413
+  s_de6c7d29aa90cd::t_9ff7ae6f135656 385-387,629-635
+  s_de6c7d29aa90cd::t_09a9d5b1ea0a4e 18
+apps/server/cloudflare/migrations/0012_billing_collection.sql
+  s_de6c7d29aa90cd::t_542d0814b21916 41-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e16019f9848211fb272509ca3eaf98520d66af7f",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

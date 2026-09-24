@@ -1,6 +1,7 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { CardEnrollment } from "@fidy/server/client";
+import { CardEnrollment, PaymentRequestId } from "@fidy/server/client";
+import { UserId } from "@fidy/server/identity-runtime";
 import { Clock, Data, Effect, Schema } from "effect";
 import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
 import { browserOrigins, localCanonicalReadBearer } from "../runtime/topology";
@@ -145,14 +146,15 @@ it("derives the same BillingAttempt and checkout reference for one User action w
   Effect.runPromise(
     Effect.gen(function* () {
       const paymentRequestId = "40000000-0000-4000-8000-000000000001";
+      const requestId = PaymentRequestId.make(paymentRequestId);
       const first = yield* fromTestPromise(() =>
-        billingAttemptIdFor({ userId: userA, requestId: paymentRequestId })
+        billingAttemptIdFor({ userId: UserId.make(userA), requestId })
       );
       const retry = yield* fromTestPromise(() =>
-        billingAttemptIdFor({ userId: userA, requestId: paymentRequestId })
+        billingAttemptIdFor({ userId: UserId.make(userA), requestId })
       );
       const otherUser = yield* fromTestPromise(() =>
-        billingAttemptIdFor({ userId: userB, requestId: paymentRequestId })
+        billingAttemptIdFor({ userId: UserId.make(userB), requestId })
       );
       expect(retry).toBe(first);
       expect(otherUser).not.toBe(first);
@@ -222,14 +224,33 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(concurrent.every((response) => response.status === 200)).toBe(true);
       const first = yield* fromTestPromise(() => send());
       const result = yield* fromTestPromise(() => first.json());
+      const expectedId = yield* fromTestPromise(() =>
+        billingAttemptIdFor({
+          userId: UserId.make(userA),
+          requestId: PaymentRequestId.make(submission.paymentRequestId),
+        })
+      );
       expect(result).toMatchObject({
         status: "payment-pending",
-        billingAttempt: { status: "pending", money: { amount: "9900" } },
+        billingAttempt: { id: expectedId, status: "pending", money: { amount: "9900" } },
       });
+      const stored = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT id, wompi_reference FROM billing_attempts WHERE user_id = ? AND payment_request_id = ?"
+          )
+          .bind(userA, submission.paymentRequestId)
+          .first()
+      );
+      expect(stored).toMatchObject({ id: expectedId, wompi_reference: `fidy-${expectedId}` });
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(Effect.orDie)
       ).not.toMatch(/3891|tok_test_browser_only|prv_test|fidy-/u);
-      expect((yield* fromTestPromise(() => send())).status).toBe(200);
+      const retried = yield* fromTestPromise(() => send());
+      expect(retried.status).toBe(200);
+      expect(yield* fromTestPromise(() => retried.json())).toMatchObject({
+        billingAttempt: { id: expectedId },
+      });
       const next = yield* fromTestPromise(() =>
         handleCardEnrollment({
           request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),

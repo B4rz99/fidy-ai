@@ -6,6 +6,7 @@ import {
   CardEnrollmentId,
   CardPaymentSourceId,
   CardPaymentSubmission,
+  PaymentRequestId,
   PrepareCardEnrollmentPayload,
   Price,
   RecurringDisclosure,
@@ -141,9 +142,9 @@ const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 
-/** One subject-scoped collection identity for a browser payment action, independent of retry order. */
+/** Derive one BillingAttempt ID from the authenticated User and the validated, retry-stable PaymentRequestId for a single payment action. Never use a new PaymentRequestId to retry the same action. */
 export const billingAttemptIdFor = (
-  input: Readonly<{ userId: string; requestId: string }>
+  input: Readonly<{ userId: UserId; requestId: PaymentRequestId }>
 ): Promise<BillingAttemptId> =>
   digest(`billing-attempt-v1:${input.userId}:${input.requestId}`).then((hash) => {
     const bytes = hash.slice(0, uuidByteCount);
@@ -515,7 +516,12 @@ const finish = (
     Effect.gen(function* () {
       const selected = yield* waitFor(() => price(environment.DB, row.price_id));
       if (Option.isNone(selected)) return unavailable();
-      const attemptId = yield* waitFor(() => billingAttemptIdFor({ userId, requestId }));
+      const attemptId = yield* waitFor(() =>
+        billingAttemptIdFor({
+          userId: UserId.make(userId),
+          requestId: PaymentRequestId.make(requestId),
+        })
+      );
       const reference = `fidy-${attemptId}`;
       const statements = [
         ...(wompiSourceId === undefined

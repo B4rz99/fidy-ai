@@ -37,7 +37,11 @@ candidate digest, finding set, and coordinated rollout issue. See
 
 Every stable-User domain API and agent surface derives from the server's canonical operation
 definition. A proof-bearing credential-bootstrap API with no stable User is the narrow exception and
-joins canonical authority only after proof exchange establishes a stable User.
+joins canonical authority only after proof exchange establishes a stable User. Its separately generated
+OpenAPI artifact is freshness-checked and compared against the base when present. It has no canonical
+operation policy, so the policy-break acknowledgement for the stable-User artifact pair does not apply:
+breaking changes to this direct bootstrap contract are rejected until a coordinated add/use/remove
+rollout makes the comparison nonbreaking.
 
 ## 3. Production topology
 

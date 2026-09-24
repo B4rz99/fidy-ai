@@ -80,7 +80,12 @@ export const PATPairingDirectGroup = HttpApiGroup.make("patPairing")
     HttpApiEndpoint.post("claim", "/pat-pairings/claim", {
       payload: ClaimPATPairingPayload,
       success: [PendingPATPairingClaim, ClaimedPATPairing],
-      error: [PATPairingInvalidApi, PATPairingPollingRateLimitedApi, PATPairingUnavailableApi],
+      error: [
+        PATPairingInvalidApi,
+        PATPairingPollingRateLimitedApi,
+        PATPairingRateLimitedApi,
+        PATPairingUnavailableApi,
+      ],
     }).annotate(
       OpenApi.Description,
       "Poll or claim one reviewed PAT pairing with the initiating client's private proof."

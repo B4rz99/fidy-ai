@@ -20,6 +20,7 @@ import {
 } from "./transactions/transactions";
 import {
   type TransactionSubject,
+  rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./http/request-body";
@@ -59,6 +60,7 @@ import {
   type AtomicBatchCall,
   type CatalogOperation,
   atomicBatchOperation,
+  type getAtomicBatchCallSchema,
   getAtomicBatchInputSchema,
   maximumAtomicBatchCalls,
   operationCatalog,
@@ -269,7 +271,7 @@ const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
 });
 
 type AtomicBatchInput = ReturnType<typeof getAtomicBatchInputSchema>["Type"];
-type EncodedBatchCall = Readonly<{ callId: string; operation: string; input: unknown }>;
+type EncodedBatchCall = Schema.Codec.Encoded<ReturnType<typeof getAtomicBatchCallSchema>>;
 
 const batchInput = (request: Request): Promise<Option.Option<AtomicBatchInput>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
@@ -307,15 +309,7 @@ const dispatchCanonicalBatch = (
   Effect.runPromise(
     Effect.gen(function* () {
       const parsed = yield* Effect.tryPromise(() => batchInput(request));
-      if (Option.isNone(parsed)) {
-        return yield* Effect.tryPromise(() =>
-          rejectInvalidTransactionInput({
-            db: environment.DB,
-            subject,
-            operation: "transactions.createTransaction",
-          })
-        );
-      }
+      if (Option.isNone(parsed)) return rejectInvalidBatchInput();
       const encoded = yield* Effect.exit(encodeBatchCalls(parsed.value.calls));
       if (Exit.isFailure(encoded)) return unavailableCanonicalAdapter();
       const calls = encoded.value;

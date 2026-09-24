@@ -1,4 +1,5 @@
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { Transaction } from "@fidy/server/transactions-runtime";
 import {
@@ -6,10 +7,12 @@ import {
   type TransactionMutationOperation,
   type TransactionRefusal,
   boundaryCause,
+  isPATCaller,
   liveTransactionCaller,
+  liveTransactionCredential,
   recordTransactionRefusal,
+  refusedCredentialResponse,
   refusedTransactionResponse,
-  refusedTransactionWork,
   rejectTransactionMutation,
   transactionNoStore,
   transactionUnavailable,
@@ -25,12 +28,15 @@ const Output = Schema.toCodecJson(Transaction);
  * corrected id otherwise. `statements` are the guard-chained writes that must all commit, ending
  * in the mutation's success AuditLogEntry so the unit's final completion statement turns any
  * silently skipped guard into a rollback. `expectedRevision` is present only for corrections and
- * lets an aborted unit report the stale write as the child it belongs to.
+ * lets an aborted unit report the stale write as the child it belongs to. `requiredScope` is the
+ * exact PAT capability the owner prepared the mutation under, so an aborted unit reports and
+ * audits the refusal against the same child authority.
  */
 export type PreparedTransactionMutation = Readonly<{
   operation: TransactionMutationOperation;
   transactionId: string;
   expectedRevision: Option.Option<number>;
+  requiredScope: Option.Option<CanonicalCapability>;
   statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 
@@ -175,6 +181,13 @@ const staleCorrectionIndex = ({
     return Option.none();
   });
 
+/** Restore the exact child authority the owner prepared a mutation under. */
+const childSubject = (
+  subject: TransactionCaller,
+  mutation: PreparedTransactionMutation
+): TransactionCaller =>
+  isPATCaller(subject) ? { ...subject, requiredScope: mutation.requiredScope } : subject;
+
 const rejectRecorded = ({
   db,
   subject,
@@ -195,7 +208,7 @@ const rejectRecorded = ({
   return Effect.tryPromise(() =>
     recordTransactionRefusal({
       db,
-      subject,
+      subject: childSubject(subject, mutation),
       outcome: refusal.outcome,
       operation: mutation.operation,
       current,
@@ -249,7 +262,7 @@ const classifyAbortedUnit = ({
 }>): Effect.Effect<TransactionUnitExecution> =>
   Effect.gen(function* () {
     const live = yield* Effect.tryPromise(() =>
-      liveTransactionCaller({ db, subject, current })
+      liveTransactionCredential({ db, subject, current })
     ).pipe(Effect.orElseSucceed(() => false));
     if (!live) return { _tag: "CredentialRefused" };
     const detail = String(cause);
@@ -346,9 +359,7 @@ const unitResponse = ({
     case "Rejected":
       return Effect.succeed(refusedTransactionResponse(execution.refusal));
     case "CredentialRefused":
-      return Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-        Effect.orElseSucceed(transactionUnavailable)
-      );
+      return refusedCredentialResponse({ db, subject });
     case "Unavailable":
       return Effect.succeed(transactionUnavailable());
   }
@@ -366,11 +377,7 @@ const failedPreparationResponse = ({
   Effect.tryPromise(() => liveTransactionCaller({ db, subject, current })).pipe(
     Effect.orElseSucceed(() => false),
     Effect.flatMap((live) =>
-      live
-        ? Effect.succeed(transactionUnavailable())
-        : Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-            Effect.orElseSucceed(transactionUnavailable)
-          )
+      live ? Effect.succeed(transactionUnavailable()) : refusedCredentialResponse({ db, subject })
     )
   );
 
@@ -401,9 +408,7 @@ export const executeSingleTransactionMutation = ({
         rejectTransactionMutation({ db, subject, operation, refusal: preparation.refusal, current })
       ).pipe(Effect.orElseSucceed(transactionUnavailable));
     case "CredentialRefused":
-      return Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-        Effect.orElseSucceed(transactionUnavailable)
-      );
+      return refusedCredentialResponse({ db, subject });
     case "Unavailable":
       return Effect.succeed(transactionUnavailable());
     case "Failed":

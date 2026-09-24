@@ -14,6 +14,7 @@ import {
   type TransactionSubject,
   boundaryFailure,
   callerAuthority,
+  callerScope,
   isPATCaller,
   transactionNow as now,
   transactionFailure,
@@ -251,6 +252,7 @@ export const prepareCapture = ({
         operation: "transactions.createTransaction",
         transactionId: id,
         expectedRevision: Option.none(),
+        requiredScope: callerScope(subject),
         statements: captureStatements(db, {
           input,
           subject,

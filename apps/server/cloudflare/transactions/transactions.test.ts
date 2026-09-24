@@ -2288,3 +2288,219 @@ it("maps a batch dependency defect to the closed unavailable failure without par
       ).toBe(0);
     })
   ));
+
+it("records a PAT refusal Audit for a refused batch child and attributes a PAT budget abort", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000008";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const writeToken = `fin_${"t".repeat(8)}_${"c".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token: writeToken, scopes: ["write"], current });
+      const refused = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          bearerRequest(0, writeToken, [
+            transactionCall(1, input()),
+            correctionCall(2, seededId, { expectedRevision: 9, changes: { notes: "stale" } }),
+          ])
+        )
+      );
+      expect(refused.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => refused.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      const refusals = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(refusals.results).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "rejected" },
+      ]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+
+      const budgetDb = yield* fromTestPromise(() => setup());
+      const today = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* fromTestPromise(() =>
+        budgetDb
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
+          .bind(users[0], category, today, today)
+          .run()
+      );
+      const budgetToken = `fin_${"u".repeat(8)}_${"d".repeat(43)}`;
+      yield* seedPAT({
+        db: budgetDb,
+        userId: users[0] ?? "",
+        token: budgetToken,
+        scopes: ["write"],
+        current,
+      });
+      const limited = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          budgetDb,
+          bearerRequest(0, budgetToken, [transactionCall(1, input()), transactionCall(2, input())])
+        )
+      );
+      expect(limited.status).toBe(400);
+      const limitedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => limited.json())
+      ).pipe(Effect.orDie);
+      expect(limitedRejection.error.code).toBe("rate_limited");
+      expect(limitedRejection.error.failedCallIndex).toBe(1);
+      expect(limitedRejection.error.operation).toBe("transactions.createTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            budgetDb,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(99);
+      const budgetRefusals = yield* fromTestPromise(() =>
+        budgetDb
+          .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(budgetRefusals.results).toEqual([
+        { operation: "transactions.createTransaction", outcome: "rejected" },
+      ]);
+    })
+  ));
+
+it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent without writes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const token = `fin_${"v".repeat(8)}_${"e".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+          .bind(current, sessions[0])
+          .run()
+      );
+      const revokedSession = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+      );
+      expect(revokedSession.status).toBe(401);
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?")
+          .bind(current, token.slice(4, 12))
+          .run()
+      );
+      const revokedPAT = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
+      );
+      expect(revokedPAT.status).toBe(401);
+
+      const neighborToken = `fin_${"w".repeat(8)}_${"f".repeat(43)}`;
+      yield* seedPAT({
+        db,
+        userId: users[1] ?? "",
+        token: neighborToken,
+        scopes: ["write"],
+        current,
+      });
+      const grantId = "50000000-0000-4000-8000-000000000001";
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO onboarding_consent_records
+            (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+            VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .bind(grantId, users[1], current, current)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
+            VALUES (?,?,?,?,?)`)
+          .bind("50000000-0000-4000-8000-000000000002", users[1], grantId, sessions[1], current)
+          .run()
+      );
+      const withdrawn = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(1, neighborToken, [transactionCall(1, input())]))
+      );
+      expect(withdrawn.status).toBe(403);
+      const withdrawal = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })
+      )(yield* fromTestPromise(() => withdrawn.json())).pipe(Effect.orDie);
+      expect(withdrawal.error.code).toBe("user_action_required");
+      const neighborSession = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(1, [transactionCall(1, input())]))
+      );
+      expect(neighborSession.status).toBe(401);
+
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("refuses a malformed batch body with the canonical validation failure and no child Audit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const malformed = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              calls: [
+                {
+                  callId: "not-a-uuid",
+                  operation: "transactions.createTransaction",
+                  input: { payload: {} },
+                },
+              ],
+            }),
+          })
+        )
+      );
+      expect(malformed.status).toBe(400);
+      const failure = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })
+      )(yield* fromTestPromise(() => malformed.json())).pipe(Effect.orDie);
+      expect(failure.error.code).toBe("validation_failed");
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+    })
+  ));

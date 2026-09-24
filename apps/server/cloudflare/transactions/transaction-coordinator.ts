@@ -1,6 +1,10 @@
 import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
 import { correctTransaction } from "./transaction-corrections";
-import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
+import {
+  AtomicBatchCallId,
+  CanonicalCapability,
+  maximumAtomicBatchCalls,
+} from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
 import { type TransactionBatchCall, executeTransactionBatch } from "./transaction-mutations";
@@ -24,8 +28,10 @@ const Correction = {
     input: Schema.toCodecJson(UpdateTransactionInput),
   }),
 } as const;
+// The command carries each child's encoded canonical input, so it stays `Unknown` here and the
+// owner decodes it against the same catalog schema the individual operation uses.
 const BatchCall = Schema.Struct({
-  callId: Schema.String.check(Schema.isUUID()),
+  callId: AtomicBatchCallId,
   operation: Schema.String,
   input: Schema.Unknown,
 });

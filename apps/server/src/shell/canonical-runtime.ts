@@ -5,10 +5,12 @@ export type { CatalogOperation } from "~/shell/_shared/operation-catalog";
 export { CanonicalCapability, CanonicalOperationId } from "~/core/canonical-operations/contract";
 export { patScopeCapability } from "~/shell/_shared/operation-policy";
 export { grantsRequiredTier } from "~/shell/_shared/suggested-operations";
+export type { ErrorCode } from "~/shell/public-http/contract";
 export {
+  AtomicBatchCallId,
   AtomicBatchRejected,
   atomicBatchOperation,
-  decodeAtomicBatchResult,
+  getAtomicBatchCallSchema,
   getAtomicBatchInputSchema,
   maximumAtomicBatchCalls,
 } from "~/shell/operations/operations";

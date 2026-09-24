@@ -1,7 +1,9 @@
 import {
+  type AtomicBatchCall,
   AtomicBatchRejected,
   CanonicalOperationId,
   type CatalogOperation,
+  type ErrorCode,
   grantsRequiredTier,
   operationCatalog,
   patScopeCapability,
@@ -19,7 +21,7 @@ import {
   liveTransactionCaller,
   liveTransactionCredential,
   recordTransactionRefusal,
-  refusedTransactionWork,
+  refusedCredentialResponse,
   transactionNoStore,
   transactionUnavailable,
 } from "./transaction-boundary";
@@ -43,12 +45,8 @@ const UpdateTransactionCall = Schema.toCodecJson(
   })
 );
 
-/** One canonical child call of an atomic batch, exactly as the public contract encodes it. */
-export type TransactionBatchCall = Readonly<{
-  callId: string;
-  operation: string;
-  input: unknown;
-}>;
+/** One child of the published atomic batch carries its encoded canonical input for the owner. */
+export type TransactionBatchCall = AtomicBatchCall;
 
 type DecodedChild =
   | Readonly<{
@@ -81,6 +79,10 @@ type CatalogDecision =
   | Readonly<{ _tag: "Continue"; operation: CatalogOperation }>
   | Readonly<{ _tag: "Response"; response: Response }>;
 
+// A batch executes a call the caller already confirmed: hosted confirmation is enforced before a
+// batch reaches this D1 seam, exactly as it is for an individual mutation, and no confirmation
+// evidence exists at the D1 boundary either way.
+//
 // No Subscription adapter resolves AccessTier in this slice. Every implemented child is free-tier,
 // and a Pro-only child is not implementable yet, so the stricter `free` default cannot admit work
 // a Pro caller was owed.
@@ -133,13 +135,7 @@ const batchRejection = ({
   index,
   operation,
 }: Readonly<{
-  code:
-    | "validation_failed"
-    | "not_found"
-    | "rate_limited"
-    | "scope_missing"
-    | "paywall_required"
-    | "unavailable";
+  code: ErrorCode;
   message: string;
   index: number;
   operation: string;
@@ -162,6 +158,15 @@ const batchRejection = ({
 
 type ChildAccess = "allowed" | "scope_missing" | "credential_refused";
 
+/** Restore the exact child authority a PAT needs for one canonical child scope. */
+const childSubject = (
+  subject: TransactionCaller,
+  capability: ReturnType<typeof patScopeCapability>
+): TransactionCaller =>
+  isPATCaller(subject) && Option.isSome(capability)
+    ? { ...subject, requiredScope: capability }
+    : subject;
+
 const childAccess = ({
   db,
   subject,
@@ -173,10 +178,7 @@ const childAccess = ({
   current: number;
   capability: ReturnType<typeof patScopeCapability>;
 }>): Promise<ChildAccess> => {
-  const scoped =
-    isPATCaller(subject) && Option.isSome(capability)
-      ? { ...subject, requiredScope: capability }
-      : subject;
+  const scoped = childSubject(subject, capability);
   return liveTransactionCaller({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
     if (!isPATCaller(subject)) return "credential_refused" as const;
@@ -212,7 +214,7 @@ const rejectChild = ({
       })
     );
     if (record === "credential_refused") {
-      return yield* Effect.tryPromise(() => refusedTransactionWork({ db, subject }));
+      return yield* refusedCredentialResponse({ db, subject });
     }
     if (record === "unavailable") return transactionUnavailable();
     if (record === "rate_limited") {
@@ -230,14 +232,6 @@ const rejectChild = ({
       operation,
     });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
-
-const credentialResponse = ({
-  db,
-  subject,
-}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
-  Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-    Effect.orElseSucceed(transactionUnavailable)
-  );
 
 const preparedChild = (
   call: TransactionBatchCall,
@@ -355,7 +349,7 @@ const prepareDecodedChild = ({
 
 const preparationStep = ({
   db,
-  subject,
+  scopedSubject,
   current,
   index,
   call,
@@ -364,7 +358,7 @@ const preparationStep = ({
   preparation,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  scopedSubject: TransactionCaller;
   current: number;
   index: number;
   call: TransactionBatchCall;
@@ -382,11 +376,12 @@ const preparationStep = ({
     return Effect.succeed({ _tag: "Response", response: transactionUnavailable() });
   }
   if (preparation._tag === "Failed") {
-    return failedChildStep({ db, subject, current });
+    return failedChildStep({ db, subject: scopedSubject, current });
   }
+  // The refusal Audit belongs to the same child authority the owner prepared under.
   return rejectChild({
     db,
-    subject,
+    subject: scopedSubject,
     current,
     index,
     operation: decoded.operation,
@@ -429,10 +424,7 @@ const prepareChild = ({
         }),
       };
     }
-    const scopedSubject =
-      isPATCaller(subject) && Option.isSome(capability)
-        ? { ...subject, requiredScope: capability }
-        : subject;
+    const scopedSubject = childSubject(subject, capability);
     const preparation = yield* prepareDecodedChild({
       db,
       subject: scopedSubject,
@@ -441,7 +433,7 @@ const prepareChild = ({
     });
     return yield* preparationStep({
       db,
-      subject,
+      scopedSubject,
       current,
       index,
       call,
@@ -493,7 +485,7 @@ const prepareBatch = ({
       const step = yield* prepareChild({ db, subject, call, index, current });
       if (step._tag === "Response") return { _tag: "Response", response: step.response };
       if (step._tag === "CredentialRefused") {
-        return { _tag: "Response", response: yield* credentialResponse({ db, subject }) };
+        return { _tag: "Response", response: yield* refusedCredentialResponse({ db, subject }) };
       }
       children.push(step);
     }
@@ -533,7 +525,7 @@ const executionResponse = ({
   execution: TransactionUnitExecution;
 }>): Effect.Effect<Response> => {
   if (execution._tag === "Committed") return presentCommitted({ children, execution });
-  if (execution._tag === "CredentialRefused") return credentialResponse({ db, subject });
+  if (execution._tag === "CredentialRefused") return refusedCredentialResponse({ db, subject });
   if (execution._tag === "Unavailable") return Effect.succeed(transactionUnavailable());
   const child = children[execution.callIndex];
   return Effect.succeed(

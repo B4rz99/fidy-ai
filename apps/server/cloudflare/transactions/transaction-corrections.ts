@@ -13,6 +13,7 @@ import {
   type TransactionCaller,
   boundaryFailure,
   callerAuthority,
+  callerScope,
   isPATCaller,
   transactionId,
   transactionNow,
@@ -222,7 +223,7 @@ const liveCorrectionAuthority = ({
     catch: boundaryFailure,
   }).pipe(Effect.map((row) => row !== null));
 
-const ownedCorrection = ({
+const findOwnedCorrection = ({
   db,
   subject,
   id,
@@ -272,6 +273,7 @@ const preparedCorrection = ({
       operation: "transactions.updateTransaction",
       transactionId: id,
       expectedRevision: Option.some(input.expectedRevision),
+      requiredScope: callerScope(subject),
       statements: [
         ...changeStatements({ correction, current, previous, updated }, evidence),
         ...auditStatements({
@@ -305,7 +307,7 @@ export const prepareCorrection = (
     const authority = callerAuthority({ subject, current });
     const live = yield* liveCorrectionAuthority({ db, authority });
     if (!live) return { _tag: "CredentialRefused" } as const;
-    const owned = yield* ownedCorrection({ db, subject, id });
+    const owned = yield* findOwnedCorrection({ db, subject, id });
     if (Option.isNone(owned)) return refusedPreparation("not_found", missingMessage);
     if (owned.value.revision !== input.expectedRevision) {
       return refusedPreparation("validation_failed", staleMessage);

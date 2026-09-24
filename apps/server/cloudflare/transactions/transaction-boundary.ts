@@ -1,4 +1,5 @@
-import { Clock, Data, Effect } from "effect";
+import { Clock, Data, Effect, Option } from "effect";
+import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   livePATAuthority,
@@ -26,6 +27,9 @@ export type TransactionSubject = Readonly<{ id: string; userId: string; digest: 
 export type TransactionCaller = TransactionSubject | AuthorizedPAT;
 export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPAT =>
   "patId" in subject;
+/** The exact PAT capability a caller operates under; a WebSession carries none. */
+export const callerScope = (subject: TransactionCaller): Option.Option<CanonicalCapability> =>
+  isPATCaller(subject) ? subject.requiredScope : Option.none();
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 export const transactionNoStore = { "cache-control": "no-store" };
@@ -195,16 +199,13 @@ const limited = (): Response =>
   });
 
 /** Map one already-recorded Transaction refusal to its canonical individual response. */
-export const refusedTransactionResponse = (refusal: TransactionRefusal): Response => {
-  switch (refusal.outcome) {
-    case "not_found":
-      return missing();
-    case "validation_failed":
-      return invalid();
-    case "resource_limit":
-      return limited();
-  }
+const refusalResponses: Readonly<Record<TransactionRefusal["outcome"], () => Response>> = {
+  not_found: missing,
+  validation_failed: invalid,
+  resource_limit: limited,
 };
+export const refusedTransactionResponse = (refusal: TransactionRefusal): Response =>
+  refusalResponses[refusal.outcome]();
 
 /** Refuse one authenticated canonical Transaction mutation after its refusal Audit committed. */
 export const rejectTransactionMutation = ({
@@ -257,6 +258,17 @@ export const rejectInvalidTransactionInput = ({
     refusal: { outcome: "validation_failed", message: "Invalid Transaction input." },
   });
 
+/**
+ * Refuse an atomic batch whose body failed validation before any child was decoded. No child can
+ * be held responsible for a body that never named one, so no refusal Audit is recorded.
+ */
+export const rejectInvalidBatchInput = (): Response =>
+  transactionFailure({
+    code: "validation_failed",
+    status: 400,
+    message: "Invalid atomic batch input.",
+  });
+
 /** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
 export const refusedPATWork = ({
   db,
@@ -297,6 +309,15 @@ export const refusedTransactionWork = ({
           message: "Present a valid credential and retry.",
         })
       );
+
+/** Classify a credential refusal, closing over any dependency defect as canonical unavailable. */
+export const refusedCredentialResponse = ({
+  db,
+  subject,
+}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
+  Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
+    Effect.orElseSucceed(transactionUnavailable)
+  );
 
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
 export const callerAuthority = ({

@@ -8,7 +8,8 @@ import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
-import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
+import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
+import { correctionInput } from "./transactions/transaction-corrections";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./onboarding/consent-ingress";
@@ -158,6 +159,60 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
+type ForwardWork =
+  | Readonly<{ _tag: "Capture"; input: unknown }>
+  | Readonly<{ _tag: "Correction"; id: string; input: unknown }>;
+const forwardTransaction = ({
+  environment,
+  subject,
+  work,
+}: Readonly<{
+  environment: CoreEnvironment;
+  subject: TransactionSubject | AuthorizedPAT;
+  work: ForwardWork;
+}>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
+    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
+    const capture = work._tag === "Capture";
+    const authority =
+      "patId" in subject
+        ? {
+            _tag: capture ? "PATCapture" : "PATCorrection",
+            patId: subject.patId,
+            userId: subject.userId,
+            digest: Array.from(subject.digest),
+            requiredScope: Option.getOrNull(subject.requiredScope),
+          }
+        : {
+            _tag: capture ? "WebSessionCapture" : "WebSessionCorrection",
+            sessionId: subject.id,
+            userId: subject.userId,
+            digest: Array.from(subject.digest),
+          };
+    const payload = capture
+      ? { input: work.input }
+      : {
+          correction: {
+            id: work.id,
+            input: work.input,
+          },
+        };
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      ...authority,
+      ...payload,
+    });
+    return yield* Effect.tryPromise(() =>
+      stub.fetch(
+        new Request(`https://coordinator.internal/${capture ? "create" : "correct"}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        })
+      )
+    );
+  });
+
 const dispatchCanonicalCapture = (
   request: Request,
   environment: CoreEnvironment,
@@ -172,42 +227,51 @@ const dispatchCanonicalCapture = (
             db: environment.DB,
             subject,
             outcome: "validation_failed",
+            operation: "transactions.createTransaction",
           })
         );
       }
-      // The worker.core.fetch and worker.public.fetch Work spans bound latency and status.
-      // Do not create per-Transaction spans that could expose opaque ids or Money.
-      const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
       const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
         input.value
       );
-      const authority =
-        "patId" in subject
-          ? {
-              _tag: "PAT",
-              patId: subject.patId,
-              userId: subject.userId,
-              digest: Array.from(subject.digest),
-              requiredScope: Option.getOrNull(subject.requiredScope),
-              input: encoded,
-            }
-          : {
-              _tag: "WebSession",
-              sessionId: subject.id,
-              userId: subject.userId,
-              digest: Array.from(subject.digest),
-              input: encoded,
-            };
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(authority);
-      return yield* Effect.tryPromise(() =>
-        stub.fetch(
-          new Request("https://coordinator.internal/create", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body,
+      return yield* forwardTransaction({
+        environment,
+        subject,
+        work: { _tag: "Capture", input: encoded },
+      });
+    })
+  );
+
+const dispatchCanonicalCorrection = (
+  request: Request,
+  environment: CoreEnvironment,
+  subject: TransactionSubject | AuthorizedPAT
+): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = yield* Effect.tryPromise(() => correctionInput(request));
+      if (Option.isNone(input)) {
+        return yield* Effect.tryPromise(() =>
+          rejectManualTransaction({
+            db: environment.DB,
+            subject,
+            outcome: "validation_failed",
+            operation: "transactions.updateTransaction",
           })
-        )
+        );
+      }
+      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(UpdateTransactionInput))(
+        input.value
       );
+      return yield* forwardTransaction({
+        environment,
+        subject,
+        work: {
+          _tag: "Correction",
+          id: new URL(request.url).pathname.split("/").at(-1) ?? "",
+          input: encoded,
+        },
+      });
     })
   );
 
@@ -384,6 +448,12 @@ const executeCanonicalWork = (
   if (operation.id === "transactions.createTransaction") {
     return Effect.tryPromise({
       try: () => dispatchCanonicalCapture(request, environment, subject),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
+  if (operation.id === "transactions.updateTransaction") {
+    return Effect.tryPromise({
+      try: () => dispatchCanonicalCorrection(request, environment, subject),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }

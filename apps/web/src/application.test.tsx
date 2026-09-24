@@ -252,6 +252,7 @@ const transactionCaptureClient = (
           {
             data: {
               id: "24000000-0000-4000-8000-000000000002",
+              revision: 0,
               money: { amount: "25000", currency: "COP" },
               direction: "outflow",
               counterparty: "El Corral",

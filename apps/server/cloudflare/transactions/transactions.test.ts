@@ -65,7 +65,7 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
       sql
         .replace(/^--.*$/gmu, "")
         .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |$)/u)
+        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
         .reduce<Promise<void>>(
           (last, statement) => last.then(() => db.prepare(statement).run()).then(() => undefined),
           Promise.resolve()
@@ -146,6 +146,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0006_browser_login",
           "0009_transactions",
           "0010_pat_lifecycle",
+          "0011_transaction_corrections",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -257,6 +258,216 @@ const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
 });
+
+it("corrects selected facts once, retains decisions and evidence, and rejects stale or foreign corrections", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const methodFor = (path: string, body?: object): string => {
+        if (body === undefined) return "GET";
+        return path === "/transactions" ? "POST" : "PUT";
+      };
+      const send = (index: number, path: string, body?: object): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com${path}`, {
+            method: methodFor(path, body),
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(index)}`,
+              ...(body === undefined ? {} : { "content-type": "application/json" }),
+            },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          })
+        );
+      const createdResponse = yield* fromTestPromise(() =>
+        send(0, "/transactions", input({ counterparty: "Acme" }))
+      );
+      expect(createdResponse.status).toBe(201);
+      const created = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() => createdResponse.json())
+      ).pipe(Effect.orDie)).data;
+      const path = `/transactions/${created.id}`;
+      const correction = {
+        expectedRevision: 0,
+        changes: { categoryId: "10000000-0000-4000-8000-000000000001", counterparty: null },
+      };
+      expect((yield* fromTestPromise(() => send(1, path, correction))).status).toBe(404);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(`https://api.fidyapp.com${path}`, {
+              method: "PUT",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                authorization: `Bearer ${bearer(0)}`,
+                "x-provider-id": users[0] ?? "",
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(correction),
+            })
+          )
+        )).status
+      ).toBe(401);
+      expect(
+        (yield* fromTestPromise(() => send(0, path, { expectedRevision: 0, changes: {} }))).status
+      ).toBe(400);
+      const changed = yield* fromTestPromise(() => send(0, path, correction));
+      expect(changed.status).toBe(200);
+      const result = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() => changed.json())
+      ).pipe(Effect.orDie)).data;
+      expect(result.id).toBe(created.id);
+      expect(result.revision).toBe(1);
+      expect(result.money).toEqual(created.money);
+      expect(Option.isNone(result.counterparty)).toBe(true);
+      expect(result.categoryId).toBe(correction.changes.categoryId);
+      expect((yield* fromTestPromise(() => send(0, path, correction))).status).toBe(400);
+      const fetched = yield* fromTestPromise(() => send(0, path));
+      expect(fetched.status).toBe(200);
+      const stored = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT revision, user_decisions FROM transactions WHERE id = ?")
+          .bind(created.id)
+          .first<{ revision: number; user_decisions: string }>()
+      );
+      expect(stored?.revision).toBe(1);
+      expect(
+        yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean))
+        )(stored?.user_decisions).pipe(Effect.orDie)
+      ).toEqual({
+        money: true,
+        direction: true,
+        occurredAt: true,
+        categoryId: true,
+        counterparty: true,
+      });
+      const evidence = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT before_facts, after_facts FROM transaction_corrections WHERE transaction_id = ?"
+          )
+          .bind(created.id)
+          .first<{ before_facts: string; after_facts: string }>()
+      );
+      expect(evidence?.before_facts).toContain("Acme");
+      expect(evidence?.after_facts).not.toContain("Acme");
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM source_attestations WHERE transaction_id = ?")
+            .bind(created.id)
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(1);
+      yield* fromTestPromise(() =>
+        expect(
+          db.prepare("UPDATE transaction_corrections SET changed_fields = '[]'").run()
+        ).rejects.toThrow()
+      );
+      yield* fromTestPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE transactions SET user_decisions = '{}' WHERE id = ?")
+            .bind(created.id)
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* fromTestPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE transactions SET category_id = ? WHERE id = ?")
+            .bind(category, created.id)
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* fromTestPromise(() =>
+        expect(
+          db
+            .prepare(
+              "UPDATE transactions SET category_id = ?, revision = revision + 1 WHERE id = ?"
+            )
+            .bind(category, created.id)
+            .run()
+        ).rejects.toThrow()
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT revision FROM transactions WHERE id = ?")
+            .bind(created.id)
+            .first<{ revision: number }>()
+        ))?.revision
+      ).toBe(1);
+    })
+  ));
+
+it("serializes competing corrections and rolls back evidence when the correction audit refuses a write", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const send = (path: string, method: string, body?: object): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com${path}`, {
+            method,
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          })
+        );
+      const created = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() =>
+          send("/transactions", "POST", input()).then((response) => response.json())
+        )
+      ).pipe(Effect.orDie)).data;
+      const path = `/transactions/${created.id}`;
+      const first = { expectedRevision: 0, changes: { notes: "first" } };
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_correction_audit BEFORE INSERT ON transaction_audit
+      WHEN NEW.operation = 'transactions.updateTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      expect((yield* fromTestPromise(() => send(path, "PUT", first))).status).not.toBe(200);
+      const empty = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT revision FROM transactions WHERE id = ?")
+          .bind(created.id)
+          .first<{ revision: number }>()
+      );
+      expect(empty?.revision).toBe(0);
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM transaction_corrections")
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(0);
+      yield* fromTestPromise(() => db.prepare("DROP TRIGGER refuse_correction_audit").run());
+      const results = yield* fromTestPromise(() =>
+        Promise.all([
+          send(path, "PUT", first),
+          send(path, "PUT", { expectedRevision: 0, changes: { notes: "second" } }),
+        ])
+      );
+      expect(results.map(({ status }) => status).sort((left, right) => left - right)).toEqual([
+        200, 400,
+      ]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM transaction_corrections")
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(1);
+    })
+  ));
 
 it("rolls back public Transaction capture when its audit silently refuses a write, then permits retry", () =>
   Effect.runPromise(
@@ -934,7 +1145,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            _tag: "WebSession",
+            _tag: "WebSessionCapture",
             sessionId: session.id,
             userId: session.userId,
             digest: Array.from(session.digest),

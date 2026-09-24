@@ -240,6 +240,22 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       );
       expect(stored).toMatchObject({ id: expectedId, wompi_reference: `fidy-${expectedId}` });
       expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT state FROM billing_collection_arms WHERE attempt_id = ?")
+            .bind(expectedId)
+            .first()
+        )
+      ).toMatchObject({ state: "armed" });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT version FROM billing_collection_outbox WHERE attempt_id = ?")
+            .bind(expectedId)
+            .first()
+        )
+      ).toMatchObject({ version: 1 });
+      expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(Effect.orDie)
       ).not.toMatch(/3891|tok_test_browser_only|prv_test|fidy-/u);
       const retried = yield* fromTestPromise(() => send());

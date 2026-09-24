@@ -156,14 +156,20 @@ const makeFindTransaction = (
     Effect.mapError(() => new WompiTransactionLookupFailed())
   );
 
+/** Construct the policy-bearing billing client for a Cloudflare Workflow Activity. */
+export const makeWompiBillingClient = (
+  input: Readonly<{ outboundHttp: OutboundHttpService; environment: WompiEnvironment }>
+): WompiBillingClientService =>
+  WompiBillingClient.of({
+    environment: input.environment,
+    createTransaction: makeCreateTransaction(input.outboundHttp),
+    findTransaction: makeFindTransaction(input.outboundHttp),
+  });
+
 const loadBillingAdapter = Effect.gen(function* () {
   const outboundHttp = yield* OutboundHttp;
   const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
-  return WompiBillingClient.of({
-    environment,
-    createTransaction: makeCreateTransaction(outboundHttp),
-    findTransaction: makeFindTransaction(outboundHttp),
-  });
+  return makeWompiBillingClient({ outboundHttp, environment });
 });
 
 export class WompiBillingClient extends Context.Service<

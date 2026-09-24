@@ -104,6 +104,8 @@ const AttemptRow = Schema.Struct({
   created_at_ms: Schema.Finite,
   status: Schema.Literals(["pending", "succeeded", "failed"]),
   finalized_at_ms: Schema.NullOr(Schema.Finite),
+  ends_at_ms: Schema.NullOr(Schema.Finite),
+  renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
 const preparationWindowMs = 3_600_000;
 const verificationCooldownMs = 3_000;
@@ -477,14 +479,15 @@ const attemptFor = (
   attemptId: string
 ): Promise<Option.Option<BillingAttempt>> =>
   db
-    .prepare("SELECT * FROM billing_attempts WHERE id = ? AND user_id = ?")
+    .prepare(`SELECT a.*, p.ends_at_ms, p.renewal_anchor_ms FROM billing_attempts AS a
+      LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
+      WHERE a.id = ? AND a.user_id = ?`)
     .bind(attemptId, userId)
     .first()
     .then((raw) => {
       const row = decodeRow(AttemptRow, raw);
-      if (Option.isNone(row) || row.value.status !== "pending") return Option.none();
-      return decodeRow(Schema.toCodecJson(BillingAttempt), {
-        status: "pending",
+      if (Option.isNone(row)) return Option.none();
+      const snapshot = {
         id: row.value.id,
         priceId: row.value.price_id,
         money: { amount: row.value.amount, currency: row.value.currency },
@@ -493,6 +496,27 @@ const attemptFor = (
         taxTreatment: row.value.tax_treatment,
         timeZone: row.value.time_zone,
         createdAt: instant(row.value.created_at_ms),
+      };
+      if (row.value.status === "pending") {
+        return decodeRow(Schema.toCodecJson(BillingAttempt), { status: "pending", ...snapshot });
+      }
+      if (row.value.finalized_at_ms === null) return Option.none();
+      if (row.value.status === "failed") {
+        return decodeRow(Schema.toCodecJson(BillingAttempt), {
+          status: "failed",
+          ...snapshot,
+          failedAt: instant(row.value.finalized_at_ms),
+        });
+      }
+      if (row.value.ends_at_ms === null || row.value.renewal_anchor_ms === null) {
+        return Option.none();
+      }
+      return decodeRow(Schema.toCodecJson(BillingAttempt), {
+        status: "succeeded",
+        ...snapshot,
+        finalizedAt: instant(row.value.finalized_at_ms),
+        paidPeriodEndsAt: instant(row.value.ends_at_ms),
+        renewalAnchor: instant(row.value.renewal_anchor_ms),
       });
     });
 
@@ -562,7 +586,8 @@ const finish = (
         ),
       ];
       const committed = yield* waitFor(() => environment.DB.batch(statements));
-      if (committed.at(-1)?.meta.changes !== 1) return unavailable();
+      // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
+      if ((committed.at(-1)?.meta.changes ?? 0) === 0) return unavailable();
       const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
       if (Option.isNone(attempt)) return unavailable();
       const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardPaymentSubmission))({

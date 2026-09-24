@@ -150,6 +150,7 @@ const categoryAuthorizationFailure = (
 };
 
 const callbackPath = "/providers/kapso/callback";
+const wompiBillingEventPath = "/providers/wompi/billing-events";
 const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
@@ -173,6 +174,7 @@ const emailAuthenticationPaths = [
 ] as const;
 const postPaths = new Set<string>([
   callbackPath,
+  wompiBillingEventPath,
   verificationPath,
   rotateRecoveryPath,
   ...replacementPaths,
@@ -214,6 +216,13 @@ const callbackHeaders = (request: Request): Headers =>
     ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
     ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
   ]);
+const wompiEventHeaders = (request: Request): Headers =>
+  new Headers({
+    "content-type": request.headers.get("content-type") ?? "",
+    "x-event-checksum": request.headers.get("x-event-checksum") ?? "",
+  });
+const providerHeaders = (request: Request, path: string): Headers =>
+  path === callbackPath ? callbackHeaders(request) : wompiEventHeaders(request);
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
   if (
@@ -253,7 +262,9 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
   }
   if (patBrowserRoute(path)) return Option.some(browserHeaders(request, path));
-  if (path === callbackPath) return Option.some(callbackHeaders(request));
+  if (path === callbackPath || path === wompiBillingEventPath) {
+    return Option.some(providerHeaders(request, path));
+  }
   if (path === supportRecoveryPath) return Option.some(supportHeaders(request));
   return Option.none();
 };

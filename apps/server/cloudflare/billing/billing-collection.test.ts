@@ -128,6 +128,23 @@ const client = (read: () => WompiTransaction): WompiBillingClientService => ({
   createTransaction: () => Effect.succeed(read()),
   findTransaction: () => Effect.succeed(read()),
 });
+type BillingRuntimeFixture = Readonly<{
+  DB: D1Database;
+  WOMPI_ENVIRONMENT: "sandbox";
+  WOMPI_PUBLIC_KEY: string;
+  WOMPI_PRIVATE_KEY: string;
+  WOMPI_INTEGRITY_SECRET: string;
+  WOMPI_EVENT_SECRET: string;
+}>;
+const billingRuntime = (DB: D1Database): BillingRuntimeFixture => ({
+  DB,
+  WOMPI_ENVIRONMENT: "sandbox",
+  WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+  WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+  WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+  WOMPI_EVENT_SECRET: "test_events_payment_test_secret",
+});
+
 const sendSignedEvent = (
   db: D1Database,
   input: Readonly<{ transactionId: string; status: "APPROVED" | "DECLINED"; timestamp: number }>
@@ -307,15 +324,8 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.promise(fixture);
-      const eventSecret = "test_events_payment_test_secret";
-      const environment = {
-        DB: db,
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-        WOMPI_EVENT_SECRET: eventSecret,
-      };
+      const environment = billingRuntime(db);
+      const eventSecret = environment.WOMPI_EVENT_SECRET;
       const provider = vi.fn((_request: URL, init?: RequestInit): Promise<Response> => {
         if (init?.method === "POST") return Promise.reject(new Error("lost response"));
         return Promise.resolve(
@@ -425,13 +435,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.promise(fixture);
-      const environment = {
-        DB: db,
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-      };
+      const environment = billingRuntime(db);
       const provider = vi.fn((_url: URL, init?: RequestInit): Promise<Response> =>
         init?.method === "POST"
           ? Promise.reject(new Error("lost response"))
@@ -650,13 +654,7 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
         )
       );
       vi.stubGlobal("fetch", provider);
-      const environment = {
-        DB: db,
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-      };
+      const environment = billingRuntime(db);
       const create = vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
         runBillingCollectionWorkflow({
           environment,
@@ -690,13 +688,7 @@ it("accepts same-second signed approval after a verified negative without replay
     Effect.gen(function* () {
       const db = yield* Effect.promise(fixture);
       const timestamp = 1530291411;
-      const environment = {
-        DB: db,
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-      };
+      const environment = billingRuntime(db);
       let observed: "APPROVED" | "DECLINED" = "DECLINED";
       const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
         Promise.resolve(
@@ -818,13 +810,7 @@ it("rejects a signed callback with another User's source even when its reference
         )
       );
       vi.stubGlobal("fetch", provider);
-      const environment = {
-        DB: db,
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-      };
+      const environment = billingRuntime(db);
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
           runBillingCollectionWorkflow({

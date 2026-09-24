@@ -107,6 +107,7 @@ export const recordAllPATRevocations = ({
 type CanonicalPATOperation =
   | "categories.listCategories"
   | "transactions.createTransaction"
+  | "transactions.updateTransaction"
   | "transactions.listTransactions"
   | "transactions.getTransaction";
 

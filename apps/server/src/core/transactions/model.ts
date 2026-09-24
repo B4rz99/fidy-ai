@@ -112,6 +112,8 @@ export const Transaction = Schema.Struct({
   ),
   occurredAt: OccurredAt,
   createdAt: CreatedAt,
+  /** Starts at zero; each accepted correction advances it once. */
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 })
   .check(positiveTransactionMoney)
   .annotate({ identifier: "Transaction" });
@@ -171,7 +173,7 @@ export type RestoredTransactionPair = typeof RestoredTransactionPair.Type;
  */
 export const CreateTransactionInput = Transaction.mapFields(
   Function.flow(
-    Struct.omit(["id", "createdAt"]),
+    Struct.omit(["id", "createdAt", "revision"]),
     Struct.evolve({ categoryId: () => Schema.OptionFromOptionalKey(CategoryId) })
   )
 )
@@ -179,10 +181,24 @@ export const CreateTransactionInput = Transaction.mapFields(
   .annotate({ identifier: "CreateTransactionInput" });
 export type CreateTransactionInput = typeof CreateTransactionInput.Type;
 
-/** A complete replacement of editable facts; omitting Counterparty or notes clears that fact. */
-export const UpdateTransactionInput = Transaction.mapFields(Struct.omit(["id", "createdAt"]))
-  .check(positiveTransactionMoney)
-  .annotate({ identifier: "UpdateTransactionInput" });
+/** Replace only explicitly supplied facts at the revision observed by the caller. Null clears an optional fact. */
+export const UpdateTransactionInput = Schema.Struct({
+  expectedRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  changes: Schema.Struct({
+    money: Schema.optionalKey(Money),
+    direction: Schema.optionalKey(Direction),
+    categoryId: Schema.optionalKey(CategoryId),
+    counterparty: Schema.optionalKey(Schema.NullOr(Counterparty)),
+    notes: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+          Schema.isMaxLength(maximumTransactionNotesLength)
+        )
+      )
+    ),
+    occurredAt: Schema.optionalKey(OccurredAt),
+  }),
+}).annotate({ identifier: "UpdateTransactionInput" });
 export type UpdateTransactionInput = typeof UpdateTransactionInput.Type;
 
 /** Facts an extractor may propose, derived from the canonical model and nested Money. */

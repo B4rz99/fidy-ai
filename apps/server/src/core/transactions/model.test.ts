@@ -30,6 +30,7 @@ const apiTransaction = (overrides: Partial<TransactionInput> = {}): TransactionI
   categoryId: "10000000-0000-4000-8000-000000000001",
   occurredAt: "2026-07-20T12:30:00Z",
   createdAt: "2026-07-21T08:00:00Z",
+  revision: 0,
   ...overrides,
 });
 
@@ -87,7 +88,13 @@ it("rejects the legacy top-level amount and currency shape", () => {
 });
 
 it("allows Category omission only on capture input", () => {
-  const { categoryId: _, createdAt: _createdAt, id: _id, ...capture } = apiTransaction();
+  const {
+    categoryId: _,
+    createdAt: _createdAt,
+    id: _id,
+    revision: _revision,
+    ...capture
+  } = apiTransaction();
 
   expect(Result.isSuccess(decodeCreateInput(capture))).toBe(true);
   expect(Result.isFailure(decodeTransaction(capture))).toBe(true);
@@ -139,11 +146,11 @@ it("accepts both manual and statement-line provenance variants", () => {
 });
 
 it("derives input and evidence fields from their canonical models", () => {
-  const editableFields = Object.keys(Transaction.fields).filter(
-    (field) => field !== "id" && field !== "createdAt"
+  const captureFields = Object.keys(Transaction.fields).filter(
+    (field) => field !== "id" && field !== "createdAt" && field !== "revision"
   );
-  expect(Object.keys(CreateTransactionInput.fields)).toEqual(editableFields);
-  expect(Object.keys(UpdateTransactionInput.fields)).toEqual(editableFields);
+  expect(Object.keys(CreateTransactionInput.fields)).toEqual(captureFields);
+  expect(Object.keys(UpdateTransactionInput.fields)).toEqual(["expectedRevision", "changes"]);
   expect(Object.keys(TransactionExtraction.fields)).toEqual([
     "money",
     "counterparty",

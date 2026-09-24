@@ -74,7 +74,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_8"
+            "$ref": "#/components/schemas/Union_7"
           },
           "op": {
             "enum": [
@@ -138,7 +138,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "requested": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_3"
           },
           "timeZone": {
             "$ref": "#/components/schemas/IanaTimeZone"
@@ -327,7 +327,7 @@
         "additionalProperties": false,
         "properties": {
           "axis": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_5"
           },
           "besideWidget": {
             "$ref": "#/components/schemas/WidgetId"
@@ -490,7 +490,7 @@
         "additionalProperties": false,
         "properties": {
           "cap": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
@@ -529,7 +529,7 @@
                 "type": "string"
               },
               "cap": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "category": {
                 "$ref": "#/components/schemas/Category"
@@ -538,7 +538,7 @@
                 "$ref": "#/components/schemas/Currency"
               },
               "spent": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "status": {
                 "anyOf": [
@@ -546,7 +546,7 @@
                     "additionalProperties": false,
                     "properties": {
                       "remaining": {
-                        "$ref": "#/components/schemas/Money_1"
+                        "$ref": "#/components/schemas/Money_2"
                       },
                       "type": {
                         "enum": [
@@ -580,7 +580,7 @@
                     "additionalProperties": false,
                     "properties": {
                       "overBy": {
-                        "$ref": "#/components/schemas/Money_1"
+                        "$ref": "#/components/schemas/Money_2"
                       },
                       "type": {
                         "enum": [
@@ -744,10 +744,10 @@
                 "$ref": "#/components/schemas/AppliedBudgetMonth"
               },
               "remaining": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "spent": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "type": {
                 "enum": [
@@ -775,7 +775,7 @@
                 "$ref": "#/components/schemas/AppliedBudgetMonth"
               },
               "spent": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "type": {
                 "enum": [
@@ -799,13 +799,13 @@
                 "$ref": "#/components/schemas/Budget"
               },
               "overBy": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "period": {
                 "$ref": "#/components/schemas/AppliedBudgetMonth"
               },
               "spent": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "type": {
                 "enum": [
@@ -954,7 +954,7 @@
         "additionalProperties": false,
         "properties": {
           "cap": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
@@ -1024,7 +1024,12 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+            "enum": [
+              "inflow",
+              "outflow"
+            ],
+            "type": "string"
           },
           "money": {
             "$ref": "#/components/schemas/Money"
@@ -1055,10 +1060,10 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "notes": {
             "maxLength": 500,
@@ -1583,7 +1588,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_4"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_2"
@@ -1595,7 +1600,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_3"
           },
           "title": {
             "maxLength": 80,
@@ -1622,7 +1627,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_4"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_2"
@@ -1637,7 +1642,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_3"
           },
           "title": {
             "maxLength": 80,
@@ -1821,13 +1826,13 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "occurredAt": {
             "$ref": "#/components/schemas/TransactionOccurredAt"
@@ -1914,7 +1919,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_6"
+                "$ref": "#/components/schemas/Union_5"
               },
               "children": {
                 "items": {
@@ -2165,7 +2170,7 @@
                 "$ref": "#/components/schemas/Arrays_4"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -2259,7 +2264,7 @@
                 "$ref": "#/components/schemas/Arrays_4"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -2349,7 +2354,7 @@
                 "$ref": "#/components/schemas/Arrays_4"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -2835,7 +2840,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_6"
+                "$ref": "#/components/schemas/Union_5"
               },
               "children": {
                 "items": {
@@ -3167,6 +3172,21 @@
             "type": "string"
           },
           "currency": {
+            "$ref": "#/components/schemas/CurrencyPartial"
+          }
+        },
+        "type": "object"
+      },
+      "Money_2": {
+        "additionalProperties": false,
+        "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
+        "properties": {
+          "amount": {
+            "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": "string"
+          },
+          "currency": {
             "$ref": "#/components/schemas/Currency"
           }
         },
@@ -3183,10 +3203,10 @@
             "$ref": "#/components/schemas/Currency"
           },
           "inflow": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "outflow": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           }
         },
         "required": [
@@ -3206,7 +3226,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_8"
+            "$ref": "#/components/schemas/Union_7"
           },
           "op": {
             "enum": [
@@ -3504,13 +3524,13 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "notes": {
             "maxLength": 500,
@@ -3523,6 +3543,10 @@
           },
           "presentation": {
             "$ref": "#/components/schemas/Objects_15"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -3532,6 +3556,7 @@
           "categoryId",
           "occurredAt",
           "createdAt",
+          "revision",
           "presentation"
         ],
         "type": "object"
@@ -4145,7 +4170,7 @@
             "$ref": "#/components/schemas/PriceId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "paymentMethods": {
             "$ref": "#/components/schemas/LaunchPaymentMethods"
@@ -4775,7 +4800,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "sourceProvider": {
                 "maxLength": 80,
@@ -5009,10 +5034,10 @@
             "$ref": "#/components/schemas/Arrays_2"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_2"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_3"
           },
           "title": {
             "maxLength": 80,
@@ -5041,13 +5066,13 @@
             "$ref": "#/components/schemas/Arrays_2"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_2"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_3"
           },
           "title": {
             "maxLength": 80,
@@ -5152,7 +5177,7 @@
                 "$ref": "#/components/schemas/Arrays_3"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -5283,7 +5308,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_9"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -5299,7 +5324,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -5354,7 +5379,7 @@
                 "$ref": "#/components/schemas/Arrays_3"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -5364,7 +5389,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_9"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -5380,7 +5405,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -5434,7 +5459,7 @@
                 "$ref": "#/components/schemas/Arrays_3"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money_1"
+                "$ref": "#/components/schemas/Money_2"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -5444,7 +5469,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_9"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -5463,7 +5488,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -5520,7 +5545,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "status": {
                 "enum": [
@@ -5552,7 +5577,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -5594,7 +5619,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -5645,7 +5670,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_8"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -6572,7 +6597,7 @@
                     "type": "object"
                   },
                   "payload": {
-                    "$ref": "#/components/schemas/UpdateTransactionInput"
+                    "$ref": "#/components/schemas/UpdateTransactionInputPartial"
                   }
                 },
                 "type": "object"
@@ -7261,13 +7286,13 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "notes": {
             "maxLength": 500,
@@ -7277,6 +7302,10 @@
           },
           "occurredAt": {
             "$ref": "#/components/schemas/TransactionOccurredAt"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -7285,7 +7314,8 @@
           "direction",
           "categoryId",
           "occurredAt",
-          "createdAt"
+          "createdAt",
+          "revision"
         ],
         "type": "object"
       },
@@ -7306,7 +7336,12 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_2"
+            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+            "enum": [
+              "inflow",
+              "outflow"
+            ],
+            "type": "string"
           },
           "money": {
             "$ref": "#/components/schemas/Money"
@@ -7328,10 +7363,10 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "occurredAt": {
             "$ref": "#/components/schemas/TransactionOccurredAt"
@@ -7525,13 +7560,13 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_6"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "notes": {
             "maxLength": 500,
@@ -7586,6 +7621,10 @@
                 ]
               }
             ]
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -7595,6 +7634,7 @@
           "categoryId",
           "occurredAt",
           "createdAt",
+          "revision",
           "presentation"
         ],
         "type": "object"
@@ -7725,18 +7765,6 @@
         ]
       },
       "Union_10": {
-        "enum": [
-          "malformed-source-row",
-          "missing-required-fact",
-          "ambiguous-direction",
-          "ambiguous-currency",
-          "canonical-validation-failed",
-          "mapping-unavailable",
-          "model-unavailable"
-        ],
-        "type": "string"
-      },
-      "Union_11": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -8204,7 +8232,7 @@
                     "type": "object"
                   },
                   "payload": {
-                    "$ref": "#/components/schemas/UpdateTransactionInput_1"
+                    "$ref": "#/components/schemas/UpdateTransactionInput"
                   }
                 },
                 "required": [
@@ -8685,7 +8713,7 @@
           }
         ]
       },
-      "Union_12": {
+      "Union_11": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -9311,14 +9339,6 @@
         ]
       },
       "Union_2": {
-        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-        "enum": [
-          "inflow",
-          "outflow"
-        ],
-        "type": "string"
-      },
-      "Union_3": {
         "enum": [
           "category",
           "day",
@@ -9326,7 +9346,7 @@
         ],
         "type": "string"
       },
-      "Union_4": {
+      "Union_3": {
         "enum": [
           "this-week",
           "this-month",
@@ -9337,7 +9357,7 @@
         ],
         "type": "string"
       },
-      "Union_5": {
+      "Union_4": {
         "enum": [
           "sum",
           "average",
@@ -9345,14 +9365,14 @@
         ],
         "type": "string"
       },
-      "Union_6": {
+      "Union_5": {
         "enum": [
           "row",
           "column"
         ],
         "type": "string"
       },
-      "Union_7": {
+      "Union_6": {
         "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
         "enum": [
           "inflow",
@@ -9360,7 +9380,7 @@
         ],
         "type": "string"
       },
-      "Union_8": {
+      "Union_7": {
         "anyOf": [
           {
             "enum": [
@@ -9374,10 +9394,22 @@
           }
         ]
       },
-      "Union_9": {
+      "Union_8": {
         "enum": [
           "csv",
           "xlsx"
+        ],
+        "type": "string"
+      },
+      "Union_9": {
+        "enum": [
+          "malformed-source-row",
+          "missing-required-fact",
+          "ambiguous-direction",
+          "ambiguous-currency",
+          "canonical-validation-failed",
+          "mapping-unavailable",
+          "model-unavailable"
         ],
         "type": "string"
       },
@@ -9397,7 +9429,7 @@
         "additionalProperties": false,
         "properties": {
           "cap": {
-            "$ref": "#/components/schemas/Money_1"
+            "$ref": "#/components/schemas/Money_2"
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
@@ -9440,69 +9472,118 @@
       "UpdateTransactionInput": {
         "additionalProperties": false,
         "properties": {
-          "categoryId": {
-            "$ref": "#/components/schemas/CategoryId"
+          "changes": {
+            "additionalProperties": false,
+            "properties": {
+              "categoryId": {
+                "$ref": "#/components/schemas/CategoryId"
+              },
+              "counterparty": {
+                "anyOf": [
+                  {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "direction": {
+                "$ref": "#/components/schemas/Union_6"
+              },
+              "money": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredAt": {
+                "$ref": "#/components/schemas/TransactionOccurredAt"
+              }
+            },
+            "type": "object"
           },
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "direction": {
-            "$ref": "#/components/schemas/Union_2"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money"
-          },
-          "notes": {
-            "maxLength": 500,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
-          }
-        },
-        "type": "object"
-      },
-      "UpdateTransactionInput_1": {
-        "additionalProperties": false,
-        "properties": {
-          "categoryId": {
-            "$ref": "#/components/schemas/CategoryId"
-          },
-          "counterparty": {
-            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "direction": {
-            "$ref": "#/components/schemas/Union_7"
-          },
-          "money": {
-            "$ref": "#/components/schemas/Money_1"
-          },
-          "notes": {
-            "maxLength": 500,
-            "minLength": 1,
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "type": "string"
-          },
-          "occurredAt": {
-            "$ref": "#/components/schemas/TransactionOccurredAt"
+          "expectedRevision": {
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
-          "money",
-          "direction",
-          "categoryId",
-          "occurredAt"
+          "expectedRevision",
+          "changes"
         ],
+        "type": "object"
+      },
+      "UpdateTransactionInputPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "additionalProperties": false,
+            "properties": {
+              "categoryId": {
+                "$ref": "#/components/schemas/CategoryId"
+              },
+              "counterparty": {
+                "anyOf": [
+                  {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "direction": {
+                "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+                "enum": [
+                  "inflow",
+                  "outflow"
+                ],
+                "type": "string"
+              },
+              "money": {
+                "$ref": "#/components/schemas/Money_1"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredAt": {
+                "$ref": "#/components/schemas/TransactionOccurredAt"
+              }
+            },
+            "type": "object"
+          },
+          "expectedRevision": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "UpdateWidget": {
@@ -12934,13 +13015,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_11"
+                      "$ref": "#/components/schemas/Union_10"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_11"
+                        "$ref": "#/components/schemas/Union_10"
                       }
                     ],
                     "type": "array"
@@ -12967,13 +13048,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_12"
+                            "$ref": "#/components/schemas/Union_11"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_12"
+                              "$ref": "#/components/schemas/Union_11"
                             }
                           ],
                           "type": "array"
@@ -14002,7 +14083,7 @@
             "name": "direction",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_7"
+              "$ref": "#/components/schemas/Union_6"
             }
           },
           {
@@ -14451,7 +14532,7 @@
         "x-fidy-required-tier": "free"
       },
       "put": {
-        "description": "Replace the editable facts of one visible Transaction, including Category, Counterparty, and notes. Send the complete corrected movement; omitting Counterparty or notes clears that fact. Existing SourceAttestations remain unchanged.",
+        "description": "Correct only the supplied normalized facts on the same Transaction. Supply its current revision (zero at capture); stale revisions fail. Null clears Counterparty or notes. Explicit User decisions remain authoritative over later provider metadata. Keyword rule edits do not change past Transactions. SourceAttestations remain unchanged.",
         "operationId": "transactions.updateTransaction",
         "parameters": [
           {
@@ -14467,7 +14548,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateTransactionInput_1"
+                "$ref": "#/components/schemas/UpdateTransactionInput"
               }
             }
           },

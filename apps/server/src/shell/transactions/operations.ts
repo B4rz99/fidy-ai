@@ -118,7 +118,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "Replace the editable facts of one visible Transaction, including Category, Counterparty, and notes. Send the complete corrected movement; omitting Counterparty or notes clears that fact. Existing SourceAttestations remain unchanged."
+        "Correct only the supplied normalized facts on the same Transaction. Supply its current revision (zero at capture); stale revisions fail. Null clears Counterparty or notes. Explicit User decisions remain authoritative over later provider metadata. Keyword rule edits do not change past Transactions. SourceAttestations remain unchanged."
       )
       .annotateMerge(destructiveWrite)
   )

@@ -62,7 +62,7 @@ const manualGrant = (overrides: Partial<ManualGrant> = {}): ManualGrant => ({
 });
 type Send = Readonly<{
   path: string;
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "DELETE";
 }> &
   Partial<
     Readonly<{
@@ -124,6 +124,7 @@ const setup = (
         "0009_email_replacement",
         "0009_transactions",
         "0010_pat_lifecycle",
+        "0011_transaction_corrections",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
@@ -132,7 +133,7 @@ const setup = (
         for (const statement of sql
           .replace(/^--.*$/gmu, "")
           .trim()
-          .split(/;\s*\n(?=CREATE |ALTER |$)/u)) {
+          .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)) {
           yield* awaitPromise(db.prepare(statement).run());
         }
       }
@@ -2358,6 +2359,43 @@ it("gates every declared canonical path by live PAT and exact operation scope be
           .bind(transactionId, userA, "1000.00", "10000000-0000-4000-8000-000000000001")
           .run()
       );
+      expect(
+        (yield* awaitPromise(
+          send({
+            path: `/transactions/${transactionId}`,
+            method: "PUT",
+            bearer: reader.bearer,
+            payload: { expectedRevision: 0, changes: { direction: "inflow" } },
+          })
+        )).status
+      ).toBe(403);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare("SELECT revision, direction FROM transactions WHERE id = ?")
+            .bind(transactionId)
+            .first<{ revision: number; direction: string }>()
+        )
+      ).toEqual({ revision: 0, direction: "outflow" });
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM transaction_corrections WHERE transaction_id = ?"
+            )
+            .bind(transactionId)
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(0);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'transactions.updateTransaction'"
+            )
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(0);
       expect(
         (yield* awaitPromise(
           send({

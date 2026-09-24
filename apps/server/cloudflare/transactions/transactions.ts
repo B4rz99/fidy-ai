@@ -77,45 +77,16 @@ export const rejectManualTransaction = ({
   db,
   subject,
   outcome,
+  operation,
 }: {
   db: D1Database;
   subject: Subject;
   outcome: Refusal;
+  operation: "transactions.createTransaction" | "transactions.updateTransaction";
 }): Promise<Response> => {
   const current = now();
   return Promise.resolve()
-    .then(() => {
-      const statement = isPAT(subject)
-        ? prepareOwnedStatement({
-            db,
-            statement: recordCanonicalPATWork({
-              subject,
-              input: {
-                id: uuid(),
-                current,
-                operation: "transactions.createTransaction",
-                outcome: "rejected",
-                afterSourceAttestation: false,
-              },
-            }),
-          })
-        : db
-            .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-          SELECT ?, user_id, id, 'transactions.createTransaction', ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
-          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
-            .bind(
-              uuid(),
-              outcome,
-              current,
-              subject.id,
-              subject.userId,
-              subject.digest,
-              current,
-              current
-            );
-      return statement.run();
-    })
+    .then(() => rejectionStatement({ db, subject, outcome, operation, current }).run())
     .then((audit) => {
       if (audit.meta.changes !== 1) return refusedCaptureWork(db, subject);
       switch (outcome) {
@@ -131,6 +102,50 @@ export const rejectManualTransaction = ({
       String(error).includes("transaction_audit_limit") ? limited() : unavailable()
     );
 };
+
+const rejectionStatement = ({
+  db,
+  subject,
+  outcome,
+  operation,
+  current,
+}: {
+  db: D1Database;
+  subject: Subject;
+  outcome: Refusal;
+  operation: "transactions.createTransaction" | "transactions.updateTransaction";
+  current: number;
+}): D1PreparedStatement =>
+  isPAT(subject)
+    ? prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          subject,
+          input: {
+            id: uuid(),
+            current,
+            operation,
+            outcome: "rejected",
+            afterSourceAttestation: false,
+          },
+        }),
+      })
+    : db
+        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+          SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
+          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+        .bind(
+          uuid(),
+          operation,
+          outcome,
+          current,
+          subject.id,
+          subject.userId,
+          subject.digest,
+          current,
+          current
+        );
 type Capture = Readonly<{
   input: typeof Input.Type;
   subject: Subject;
@@ -207,8 +222,8 @@ const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => 
         .bind(uuid(), subject.id, current, subject.userId, id);
 };
 
-const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
-  const { input, subject, context, id, current } = capture;
+const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {
+  const { input, subject, id, current } = capture;
   const categoryId = Option.getOrElse(input.categoryId, () =>
     Schema.decodeSync(Transaction.fields.categoryId)(
       input.direction === "inflow"
@@ -225,22 +240,36 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
           "id = ? AND user_id = ? AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)",
         bindings: [subject.id, subject.userId, subject.digest, current, current],
       };
+  return db
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, user_decisions)
+      SELECT ?, user_id, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
+    .bind(
+      id,
+      encodeMoneyAmount(input.money.amount),
+      input.money.currency,
+      input.direction,
+      Option.getOrNull(input.counterparty),
+      categoryId,
+      Option.getOrNull(input.notes),
+      DateTime.formatIso(input.occurredAt),
+      createdAt,
+      Schema.encodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))({
+        money: true,
+        direction: true,
+        occurredAt: true,
+        ...(Option.isSome(input.categoryId) ? { categoryId: true } : {}),
+        ...(Option.isSome(input.counterparty) ? { counterparty: true } : {}),
+        ...(Option.isSome(input.notes) ? { notes: true } : {}),
+      }),
+      ...authority.bindings
+    );
+};
+
+const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
+  const { subject, context, id, current } = capture;
+  const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
   return [
-    db
-      .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at)
-      SELECT ?, user_id, ?, ?, ?, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(
-        id,
-        encodeMoneyAmount(input.money.amount),
-        input.money.currency,
-        input.direction,
-        Option.getOrNull(input.counterparty),
-        categoryId,
-        Option.getOrNull(input.notes),
-        DateTime.formatIso(input.occurredAt),
-        createdAt,
-        ...authority.bindings
-      ),
+    captureInsert(db, capture),
     db
       .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision, created_at)
       SELECT ?, user_id, id, 'manual', ?, ?, ?, 'manual-v1', ? FROM transactions WHERE user_id = ? AND id = ?`)
@@ -295,7 +324,12 @@ const classifyCaptureAuthority = (db: D1Database, subject: Subject): Promise<Res
 
 const failedCapture = (db: D1Database, subject: Subject, error: unknown): Promise<Response> => {
   if (String(error).includes("transaction_resource_limit")) {
-    return rejectManualTransaction({ db, subject, outcome: "resource_limit" });
+    return rejectManualTransaction({
+      db,
+      subject,
+      outcome: "resource_limit",
+      operation: "transactions.createTransaction",
+    });
   }
   return String(error).includes("transaction_audit_limit")
     ? Promise.resolve(limited())
@@ -347,7 +381,12 @@ const decideCaptureResponse = <E>({
     );
   }
   return exit.value === "not_found"
-    ? rejectManualTransaction({ db, subject, outcome: "not_found" })
+    ? rejectManualTransaction({
+        db,
+        subject,
+        outcome: "not_found",
+        operation: "transactions.createTransaction",
+      })
     : exit.value;
 };
 
@@ -363,7 +402,12 @@ export const createManualTransaction = ({
 }): Promise<Response> => {
   const current = now();
   if (DateTime.toEpochMillis(input.occurredAt) > current) {
-    return rejectManualTransaction({ db, subject, outcome: "validation_failed" });
+    return rejectManualTransaction({
+      db,
+      subject,
+      outcome: "validation_failed",
+      operation: "transactions.createTransaction",
+    });
   }
   return Effect.runPromiseExit(
     Effect.gen(function* () {
@@ -391,7 +435,7 @@ export const createManualTransaction = ({
       }
       const raw = yield* waitFor(() =>
         db
-          .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at
+          .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
       FROM transactions WHERE user_id = ? AND id = ?`)
           .bind(subject.userId, id)
           .first()

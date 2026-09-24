@@ -37,6 +37,7 @@ const Row = Schema.Struct({
   notes: Schema.NullOr(Schema.String),
   occurred_at: Schema.String,
   created_at: Schema.String,
+  revision: Schema.Int,
 });
 const Query = TransactionQueryValues.mapFields((fields) => ({
   from: Schema.OptionFromOptionalKey(fields.from),
@@ -153,7 +154,7 @@ const selectStatement = (
   }
   return db
     .prepare(
-      `SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
+      `SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
     )
     .bind(...values);
 };
@@ -173,6 +174,7 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
     ...(row.value.notes === null ? {} : { notes: row.value.notes }),
     occurredAt: row.value.occurred_at,
     createdAt: row.value.created_at,
+    revision: row.value.revision,
   });
 };
 

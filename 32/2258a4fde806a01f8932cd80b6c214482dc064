@@ -1,0 +1,33 @@
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_20c7bd04cb455a::t_d863becacc1ce0 1-25
+apps/web/scripts/production-workflow.test.ts
+  s_20c7bd04cb455a::t_a394b2f4099a3b 60-61
+  s_20c7bd04cb455a::t_aea6c0dbad9337 35-40,53-55,68-69
+  s_20c7bd04cb455a::t_00f2fcb034a442 50-51
+  s_20c7bd04cb455a::t_b27d12eed118f7 34,41-43,45,48-49,52,56-59,62-67
+  s_20c7bd04cb455a::t_931047ec962717 44,46-47
+.github/workflows/production.yml
+  s_20c7bd04cb455a::t_211e8e4e6d0c5d 89,91,94-95,99,119,121,124-125,129
+  s_20c7bd04cb455a::t_759d01979901e2 96-97,126-127
+  s_20c7bd04cb455a::t_d20b1ebc420799 87-88,117-118
+  s_20c7bd04cb455a::t_cd62f96097ea1e 90,92-93,120,122-123
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_20c7bd04cb455a::t_e8a360b4a666e8 1-22,26-81
+  s_20c7bd04cb455a::t_aa6198f5f4ac1d 23-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "322258a4fde806a01f8932cd80b6c214482dc064",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

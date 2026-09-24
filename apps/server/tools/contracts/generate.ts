@@ -3,6 +3,7 @@
 import type { SchemaAST } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
+import { PATPairingApi } from "~/pat-pairing-api";
 import { publishOperationAccess } from "~/shell/_shared/operation-policy";
 import {
   type ContractArtifacts,
@@ -90,6 +91,12 @@ type ContractArtifactFile = {
 
 const artifactFiles = (artifacts: ContractArtifacts): ReadonlyArray<ContractArtifactFile> => [
   { name: "openapi.json", contents: artifactText(artifacts.openapi) },
+  {
+    name: "pat-pairing-openapi.json",
+    contents: artifactText(
+      asJsonObject(OpenApi.fromApi(PATPairingApi, { referencePolicy: contractReferencePolicy }))
+    ),
+  },
   { name: "operation-policy.json", contents: artifactText(artifacts.operationPolicy) },
 ];
 

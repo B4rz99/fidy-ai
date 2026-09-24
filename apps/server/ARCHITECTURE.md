@@ -35,7 +35,10 @@ map typed domain failures to the public contract.
 The canonical operation definition is the source for reflected operation ids, access metadata,
 suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptions. The reflected
 registries remain complete even when their execution implementation is unavailable; a registry entry
-must never silently fall back to local state.
+must never silently fall back to local state. The direct proof-bearing PATPairing API has no stable
+User or canonical operation policy; its generated OpenAPI is checked for freshness and breaking
+changes independently of the stable-User contract pair. Breaking direct-client changes require a
+nonbreaking add/use/remove rollout, not a canonical operation-policy acknowledgement.
 
 ## 3. Security and subject boundaries
 

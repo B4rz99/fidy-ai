@@ -1,0 +1,509 @@
+{
+  "components": {
+    "schemas": {
+      "Arrays_": {
+        "items": {
+          "$ref": "#/components/schemas/PATScope"
+        },
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
+      },
+      "ClaimedPATPairing": {
+        "additionalProperties": false,
+        "properties": {
+          "bearer": {
+            "$ref": "#/components/schemas/TokenBearer"
+          },
+          "pat": {
+            "$ref": "#/components/schemas/PAT"
+          }
+        },
+        "required": [
+          "pat",
+          "bearer"
+        ],
+        "type": "object"
+      },
+      "Objects_": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "rate_limited"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "enum": [
+              "PAT pairing is temporarily unavailable. Try again later."
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "PAT": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "PAT"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "id": {
+            "$ref": "#/components/schemas/PATId"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifetimeDays": {
+            "$ref": "#/components/schemas/PATLifetimeDays"
+          },
+          "recipientLabel": {
+            "$ref": "#/components/schemas/PATRecipientLabel"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopes": {
+            "$ref": "#/components/schemas/Arrays_"
+          },
+          "shortId": {
+            "$ref": "#/components/schemas/TokenShortId"
+          }
+        },
+        "required": [
+          "_tag",
+          "shortId",
+          "lastUsedAt",
+          "revokedAt",
+          "createdAt",
+          "id",
+          "recipientLabel",
+          "scopes",
+          "lifetimeDays",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "PATId": {
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
+      },
+      "PATLifetimeDays": {
+        "enum": [
+          7,
+          30,
+          90,
+          365
+        ],
+        "type": "number"
+      },
+      "PATPairingDeviceCode": {
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "type": "string"
+      },
+      "PATPairingId": {
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+        "type": "string"
+      },
+      "PATPairingInvalidApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "pairing_invalid"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This PAT pairing is no longer valid. Start a new request."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PATPairingPollingRateLimitedApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "rate_limited"
+                ],
+                "type": "string"
+              },
+              "retryAfterSeconds": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "code",
+              "retryAfterSeconds"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PATPairingPublicCode": {
+        "pattern": "^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$",
+        "type": "string"
+      },
+      "PATPairingRateLimitedApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PATPairingUnavailableApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Objects_"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "PATRecipientLabel": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+        "type": "string"
+      },
+      "PATRecipientLabelInput": {
+        "description": "PAT recipient label whose surrounding whitespace is removed before enforcing 1 to 80 characters.",
+        "type": "string"
+      },
+      "PATScope": {
+        "enum": [
+          "read",
+          "write",
+          "dashboard"
+        ],
+        "type": "string"
+      },
+      "PendingPATPairingClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "pollingIntervalSeconds": {
+            "minimum": 5,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending_approval"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "expiresAt",
+          "pollingIntervalSeconds"
+        ],
+        "type": "object"
+      },
+      "StartedPATPairing": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "pairingId": {
+            "$ref": "#/components/schemas/PATPairingId"
+          },
+          "pollingIntervalSeconds": {
+            "enum": [
+              5
+            ],
+            "type": "number"
+          },
+          "privateDeviceCode": {
+            "$ref": "#/components/schemas/PATPairingDeviceCode"
+          },
+          "publicCode": {
+            "$ref": "#/components/schemas/PATPairingPublicCode"
+          }
+        },
+        "required": [
+          "pairingId",
+          "privateDeviceCode",
+          "publicCode",
+          "expiresAt",
+          "pollingIntervalSeconds"
+        ],
+        "type": "object"
+      },
+      "StartPATPairingPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "lifetimeDays": {
+            "$ref": "#/components/schemas/PATLifetimeDays"
+          },
+          "recipientLabel": {
+            "$ref": "#/components/schemas/PATRecipientLabelInput"
+          },
+          "scopes": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "recipientLabel",
+          "scopes"
+        ],
+        "type": "object"
+      },
+      "TokenBearer": {
+        "pattern": "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$",
+        "type": "string"
+      },
+      "TokenShortId": {
+        "pattern": "^[a-z0-9]{8}$",
+        "type": "string"
+      },
+      "UtcTimestamp": {
+        "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
+        "type": "string"
+      }
+    },
+    "securitySchemes": {}
+  },
+  "info": {
+    "title": "fidy-ai PATPairing API",
+    "version": "0.0.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/pat-pairings": {
+      "post": {
+        "description": "Start one ten-minute PAT pairing and disclose its private claim proof once.",
+        "operationId": "patPairing.start",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPATPairingPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedPATPairing"
+                }
+              }
+            },
+            "description": "StartedPATPairing"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingInvalidApiEncoded"
+                }
+              }
+            },
+            "description": "PATPairingInvalidApi"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingRateLimitedApiEncoded"
+                }
+              }
+            },
+            "description": "PATPairingRateLimitedApi"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingUnavailableApiEncoded"
+                }
+              }
+            },
+            "description": "PATPairingUnavailableApi"
+          }
+        },
+        "security": [],
+        "tags": [
+          "patPairing"
+        ]
+      }
+    },
+    "/pat-pairings/claim": {
+      "post": {
+        "description": "Poll or claim one reviewed PAT pairing with the initiating client's private proof.",
+        "operationId": "patPairing.claim",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "pairingId": {
+                    "anyOf": [
+                      {},
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "privateDeviceCode": {
+                    "anyOf": [
+                      {},
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimedPATPairing"
+                }
+              }
+            },
+            "description": "ClaimedPATPairing"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingPATPairingClaim"
+                }
+              }
+            },
+            "description": "PendingPATPairingClaim"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingInvalidApiEncoded"
+                }
+              }
+            },
+            "description": "PATPairingInvalidApi"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PATPairingPollingRateLimitedApiEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PATPairingRateLimitedApiEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "PATPairingPollingRateLimitedApi | PATPairingRateLimitedApi"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingUnavailableApiEncoded"
+                }
+              }
+            },
+            "description": "PATPairingUnavailableApi"
+          }
+        },
+        "security": [],
+        "tags": [
+          "patPairing"
+        ]
+      }
+    }
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "patPairing"
+    }
+  ]
+}

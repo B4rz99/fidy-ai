@@ -9,6 +9,7 @@ import {
   type ContractFinding,
   type ProductionWebRelease,
   acknowledgementCovers,
+  asJsonObject,
   canonicalJson,
   compareOperationPolicies,
   contractAcknowledgementFrom,
@@ -343,6 +344,23 @@ const main = async (): Promise<void> => {
   const base = committed ?? (await bootstrapBaseArtifacts(baseRef));
   if (committed === undefined) {
     process.stdout.write(`bootstrapped base contracts from ${baseRef}\n`);
+  }
+
+  // The proof-bearing direct API predates this artifact. Once published, refuse breaking
+  // direct-client changes independently of the stable-User contract digest.
+  const directBase = run([
+    "git",
+    "show",
+    `${baseRef}:apps/server/contracts/pat-pairing-openapi.json`,
+  ]);
+  if (directBase.exitCode === 0) {
+    const directFindings = await findOpenApiBreakingChanges(
+      asJsonObject(JSON.parse(directBase.stdout)),
+      asJsonObject(await readJson(`${contractsDirectory}/pat-pairing-openapi.json`))
+    );
+    if (directFindings.length > 0) {
+      throw new Error(`Breaking PAT pairing contract changes: ${JSON.stringify(directFindings)}`);
+    }
   }
 
   const findings = [

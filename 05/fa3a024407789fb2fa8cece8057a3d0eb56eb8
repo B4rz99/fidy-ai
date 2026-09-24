@@ -1,0 +1,192 @@
+apps/server/cloudflare/documents/document-extraction-worker.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-5,7-175
+  s_7a5d495ebc7dab::t_65dc4867880382 6
+apps/server/cloudflare/categories/canonical-category.ts
+  s_7a5d495ebc7dab::t_d7a1f643d49c1a 15-18
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-14,19-135
+infra/cloudflare/deployment-configuration.ts
+  s_7a5d495ebc7dab::t_61021188763c60 5
+infra/cloudflare/workers.test.ts
+  s_7a5d495ebc7dab::t_67f67aa4363e8c 10,14
+apps/server/cloudflare/http/request-body.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-140
+apps/server/cloudflare/ai/workers-ai-conformance-worker.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-36
+apps/server/cloudflare/transactions/transaction-platform-fixture.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-6
+infra/cloudflare/alchemy.run.ts
+  s_7a5d495ebc7dab::t_b920317d166ba2 16
+apps/server/cloudflare/documents/document-parsing-worker.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-6,8-69
+  s_7a5d495ebc7dab::t_5fd20aac90a2f7 7
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1,3-93
+  s_7a5d495ebc7dab::t_5d69a5a0515ecf 2
+apps/server/cloudflare/card-enrollment/card-enrollment-claim.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-194
+infra/cloudflare/verify-edge-policy.ts
+  s_7a5d495ebc7dab::t_a011028bc79e8b 5
+  s_7a5d495ebc7dab::t_6e4aff005cdef9 10-12
+apps/server/cloudflare/runtime/topology.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-34
+apps/server/cloudflare/onboarding/onboarding-email.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-311
+apps/server/cloudflare/pats/pat-shared.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-14,17-223
+  s_7a5d495ebc7dab::t_a33089c64c69b4 15-16
+apps/server/cloudflare/http/request-body.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-108
+apps/server/cloudflare/documents/document-extraction.wrangler.jsonc
+  s_7a5d495ebc7dab::t_584db14e83547d 2
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1,3-13
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-10,13-61,63-1046
+  s_7a5d495ebc7dab::t_a5e23618d38c34 11-12
+  s_7a5d495ebc7dab::t_1aa9d4287d4230 62
+apps/server/cloudflare/documents/protected-document.wrangler.jsonc
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1,3-9
+  s_7a5d495ebc7dab::t_52fa26c798eec7 2
+apps/server/cloudflare/core-worker.ts
+  s_7a5d495ebc7dab::t_33551fd832d3a5 13-14,20-21,32-35,42-45,47-49,56,62-64,69-70,72-75
+  s_7a5d495ebc7dab::t_6e4aff005cdef9 22-25
+infra/cloudflare/edge-security.ts
+  s_7a5d495ebc7dab::t_dbd101bf3aabaf 7
+apps/server/cloudflare/resource-admission/authority.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-447,449-458
+  s_7a5d495ebc7dab::t_77f10d7ef2b937 448
+apps/server/cloudflare/pats/pats.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-7,11-129,131-3140
+  s_7a5d495ebc7dab::t_7504b8a0a07ffc 8-10
+  s_7a5d495ebc7dab::t_b8fee489824352 130
+apps/server/cloudflare/routing/canonical-routes.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-25
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-78
+apps/server/cloudflare/routing/route-match.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-16
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-29,31-57,59-1076
+  s_7a5d495ebc7dab::t_9433ed40050713 58
+  s_7a5d495ebc7dab::t_2a64205ca42fbd 30
+apps/server/cloudflare/documents/document-parsing-worker.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-45,49-154
+  s_7a5d495ebc7dab::t_6e4aff005cdef9 46-48
+apps/server/cloudflare/identity/browser-pairing-email-delivery.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-4,6-314
+  s_7a5d495ebc7dab::t_c736f0f1078df1 5
+apps/server/cloudflare/identity/email-replacement.ts
+  s_7a5d495ebc7dab::t_91bca45bb08d48 16
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-15,17-435
+apps/server/cloudflare/ai/workers-ai.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-43
+apps/server/cloudflare/transactions/transactions.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-13,16,19-411
+  s_7a5d495ebc7dab::t_7468174acbb09d 14-15,17-18
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_7a5d495ebc7dab::t_62dbffeeddd404 11,17
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-10,12-16,18-397
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-10,13-43,45-160,162-164,166-1649
+  s_7a5d495ebc7dab::t_4a97600b8c2fbd 11-12
+  s_7a5d495ebc7dab::t_bdda3dde6ba415 44,161,165
+apps/server/cloudflare/documents/fixtures/README.md
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-20
+apps/server/cloudflare/documents/protected-document-worker.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-18
+apps/server/cloudflare/http/bounded-request-body.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-66
+apps/server/cloudflare/pats/pat-unit.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-19
+apps/server/cloudflare/resource-admission/resource-admission.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-23,25-32,34-666
+  s_7a5d495ebc7dab::t_031a64886b1195 24
+  s_7a5d495ebc7dab::t_dcbed8717a0066 33
+apps/server/cloudflare/runtime/release-identity.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-3
+docs/research/worker-document-parsing-proof.md
+  s_7a5d495ebc7dab::t_8032e8d410075a 21
+apps/server/cloudflare/identity/browser-login.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-29,31-714
+  s_7a5d495ebc7dab::t_9661921d9345df 30
+apps/server/cloudflare/card-enrollment/card-enrollment-d1.test-fixture.ts
+  s_7a5d495ebc7dab::t_1fb272d0158fc6 38
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-37,39-47
+apps/server/cloudflare/pats/pat-pairing.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-400
+infra/cloudflare/local-emulation.test.ts
+  s_7a5d495ebc7dab::t_0025df7681dfdb 10
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-5,9-545
+  s_7a5d495ebc7dab::t_ea71b7e72ef605 6-8
+apps/server/cloudflare/identity/browser-pairing-email.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-6,8-331
+  s_7a5d495ebc7dab::t_1a1410b78bc776 7
+.oxlintrc.json
+  s_7a5d495ebc7dab::t_f66fdc596bb714 213-215,217-219,239,249
+apps/server/cloudflare/identity/support-recovery.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-4,7-283
+  s_7a5d495ebc7dab::t_a207c176ed1750 5-6
+apps/server/cloudflare/pats/pat-manual.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-260
+apps/server/cloudflare/pats/pat-claim.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-258
+apps/server/cloudflare/pats/pat-management.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-206
+apps/server/cloudflare/identity/email-replacement-delivery.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-4,6-274
+  s_7a5d495ebc7dab::t_2b8cbf032e0769 5
+apps/server/cloudflare/resource-admission/resource-admission-worker.fixture.ts
+  s_7a5d495ebc7dab::t_c3a2fe13a43728 14
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-13,15-63
+apps/server/cloudflare/pats/pat-routes.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-5,7-68
+  s_7a5d495ebc7dab::t_ae688e6c570bf8 6
+apps/server/cloudflare/pats/pat-authorization.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-97
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_7a5d495ebc7dab::t_7bf80b3a78efc9 37-38
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-36,39-857
+apps/server/cloudflare/card-enrollment/card-enrollment-claim.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-43
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-2,4-6,8,13,16-81,83-1549
+  s_7a5d495ebc7dab::t_6e4aff005cdef9 9-12
+  s_7a5d495ebc7dab::t_7fd8dffaf70ab5 82
+  s_7a5d495ebc7dab::t_c09c2c31334887 3,7,14-15
+infra/cloudflare/verify-edge-policy.test.ts
+  s_7a5d495ebc7dab::t_3d7e5cfa8fa00d 7
+apps/server/cloudflare/documents/document-extraction-worker.test.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-231
+apps/server/cloudflare/runtime/telemetry.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-88
+scripts/document-parsing/check.ts
+  s_7a5d495ebc7dab::t_bf21797b88bfa9 34-36
+  s_7a5d495ebc7dab::t_a7ed3a6e5553bc 29
+  s_7a5d495ebc7dab::t_95150f7eab24b6 240,263
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_7a5d495ebc7dab::t_088f425ace5ed3 19
+apps/server/cloudflare/documents/document-parsing.wrangler.jsonc
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1,3-9
+  s_7a5d495ebc7dab::t_73b96e41c53541 2
+apps/server/cloudflare/onboarding/verified-onboarding.ts
+  s_7a5d495ebc7dab::t_e60b89e4236ce3 1-7,10-205
+  s_7a5d495ebc7dab::t_66bee038d1a442 8-9
+apps/server/cloudflare/public-worker.ts
+  s_7a5d495ebc7dab::t_c62f3462602089 13-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "05fa3a024407789fb2fa8cece8057a3d0eb56eb8",
+  "prompts": {},
+  "sessions": {
+    "s_7a5d495ebc7dab": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-cf33-7096-a332-f4becb9a38a3",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

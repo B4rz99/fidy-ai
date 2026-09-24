@@ -1,0 +1,19 @@
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_20c7bd04cb455a::t_056556661916bd 10-11,31-32,51,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7dd573818462fc54a0919f18eba50a565445644a",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

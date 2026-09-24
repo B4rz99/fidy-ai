@@ -6,6 +6,7 @@ const scriptPath = fileURLToPath(new URL("./check-production-runtime-config.sh",
 const workingDirectory = fileURLToPath(new URL("../", import.meta.url));
 const testValue = "runtime-config-test-value";
 const requiredConfiguration = [
+  "PAT_ADMISSION_KEY",
   "KAPSO_API_KEY",
   "KAPSO_WEBHOOK_SECRET",
   "WHATSAPP_BUSINESS_PORTFOLIO_ID",
@@ -56,6 +57,17 @@ describe("Production runtime configuration gate", () => {
       "check=production_runtime_configuration category=required_configuration_missing"
     );
     expect(result.output).not.toContain("KAPSO_API_KEY");
+    expect(result.output).not.toContain(testValue);
+  });
+
+  it("rejects a missing PAT admission key without disclosing its name", () => {
+    const result = runConfigurationGate("PAT_ADMISSION_KEY");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain(
+      "check=production_runtime_configuration category=required_configuration_missing"
+    );
+    expect(result.output).not.toContain("PAT_ADMISSION_KEY");
     expect(result.output).not.toContain(testValue);
   });
 

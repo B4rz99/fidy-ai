@@ -255,6 +255,35 @@ const coordinatorCommand = (
   return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
 };
 
+/** Encode one admitted command and deliver it to the caller's User coordinator. */
+const sendToCoordinator = ({
+  environment,
+  subject,
+  work,
+  path,
+}: Readonly<{
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+  work: CoordinatorWork;
+  path: string;
+}>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
+    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
+      coordinatorCommand(subject, work)
+    );
+    return yield* Effect.tryPromise(() =>
+      stub.fetch(
+        new Request(`https://coordinator.internal/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        })
+      )
+    );
+  });
+
 const forwardTransaction = ({
   environment,
   subject,
@@ -264,22 +293,11 @@ const forwardTransaction = ({
   subject: TransactionCaller;
   work: ForwardWork;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
-  Effect.gen(function* () {
-    // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
-    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-    const capture = work._tag === "Capture";
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
-      coordinatorCommand(subject, work)
-    );
-    return yield* Effect.tryPromise(() =>
-      stub.fetch(
-        new Request(`https://coordinator.internal/${capture ? "create" : "correct"}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        })
-      )
-    );
+  sendToCoordinator({
+    environment,
+    subject,
+    work,
+    path: work._tag === "Capture" ? "create" : "correct",
   });
 
 // One canonical child input is bounded by its own operation policy; a batch carries at most one
@@ -311,19 +329,12 @@ const dispatchCanonicalBatch = (
     Effect.gen(function* () {
       const parsed = yield* Effect.tryPromise(() => batchBody(request));
       if (Option.isNone(parsed)) return rejectInvalidBatchInput();
-      const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
-        coordinatorCommand(subject, { _tag: "Batch", calls: parsed.value.calls })
-      );
-      return yield* Effect.tryPromise(() =>
-        stub.fetch(
-          new Request("https://coordinator.internal/batch", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body,
-          })
-        )
-      );
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: { _tag: "Batch", calls: parsed.value.calls },
+        path: "batch",
+      });
     })
   );
 

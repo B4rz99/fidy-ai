@@ -2533,3 +2533,35 @@ it("attributes a repeated observed revision to the later correction without part
       ]);
     })
   ));
+
+it("refuses a cookie-admitted batch without the browser origin and writes nothing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const refused = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ calls: [transactionCall(1, input())] }),
+          })
+        )
+      );
+      expect(refused.status).toBe(403);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM pat_audit"))
+      ).toBe(0);
+    })
+  ));

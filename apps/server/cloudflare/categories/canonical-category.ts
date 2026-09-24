@@ -14,7 +14,7 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { currentMillis, newId } from "../pats/pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
-import type { TransactionCaller } from "../transactions/transaction-boundary";
+import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
 const unavailable = (): Response => Response.json(categoryUnavailable(), { status: 503, headers });
@@ -43,7 +43,7 @@ const categoryStatements = (
   subject: TransactionCaller,
   current: number
 ): Array<D1PreparedStatement> => {
-  if ("patId" in subject) {
+  if (isPATCaller(subject)) {
     return [
       prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
       prepareOwnedStatement({
@@ -82,7 +82,7 @@ const refusedCategoryWork = (
   subject: TransactionCaller
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
-    if ("patId" in subject) {
+    if (isPATCaller(subject)) {
       const withdrawn = yield* Effect.tryPromise({
         try: () =>
           db
@@ -106,7 +106,7 @@ const presentCategoryWork = (
   results: ReadonlyArray<D1Result>
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
-    const pat = "patId" in subject;
+    const pat = isPATCaller(subject);
     if (!categoryWorkAccepted(results, pat)) {
       return yield* refusedCategoryWork(db, subject);
     }

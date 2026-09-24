@@ -60,7 +60,7 @@ const filters = new Set([
   "cursor",
 ]);
 const maxFilters = 7;
-const maxSearchUrlLength = 512;
+const maxSearchUrlLength = 2048;
 const minimumSearchLength = 2;
 const pageSize = 100;
 const boundarySize = pageSize + 1;
@@ -80,14 +80,13 @@ const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
 type Subject = TransactionSubject | AuthorizedPAT;
 const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
-type Selection = Readonly<{
-  request: Request;
-  subject: Subject;
-  id: Option.Option<string>;
-  // Search is absent only for the pre-existing history adapter callers.
-  // oxlint-disable-next-line effect-guards/no-nullable-type
-  search?: boolean;
-}>;
+type Selection = Readonly<{ request: Request; subject: Subject }> &
+  (
+    | Readonly<{ search: true; id: Option.Option<never> }>
+    // History callers select a single record by id or list when id is absent.
+    // oxlint-disable-next-line effect-guards/no-nullable-type
+    | Readonly<{ search?: never; id: Option.Option<string> }>
+  );
 type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
@@ -187,9 +186,10 @@ const selectStatement = (
     }
   }
   if (Option.isSome(query.q)) {
-    const literal = query.q.value.replace(/[\\%_]/gu, "\\$&");
-    conditions.push("(counterparty LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')");
-    values.push(`%${literal}%`, `%${literal}%`);
+    conditions.push(
+      "(instr(lower(counterparty), lower(?)) > 0 OR instr(lower(notes), lower(?)) > 0)"
+    );
+    values.push(query.q.value, query.q.value);
   }
   if (Option.isSome(query.cursor)) {
     const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));

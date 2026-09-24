@@ -466,15 +466,17 @@ const executeCanonicalWork = (
       try: () =>
         browseTransactions({
           db: environment.DB,
-          selection: {
-            request,
-            subject,
-            search: operation.id === "transactions.searchTransactions",
-            id:
-              operation.id === "transactions.getTransaction"
-                ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-                : Option.none(),
-          },
+          selection:
+            operation.id === "transactions.searchTransactions"
+              ? { request, subject, search: true, id: Option.none() }
+              : {
+                  request,
+                  subject,
+                  id:
+                    operation.id === "transactions.getTransaction"
+                      ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+                      : Option.none(),
+                },
         }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));

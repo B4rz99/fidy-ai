@@ -313,7 +313,12 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
             .data
         ).toEqual([]);
       }
+      const unicodeTerm = encodeURIComponent("é".repeat(80));
+      expect(
+        (yield* fromTestPromise(() => send(0, `/transactions/search?q=${unicodeTerm}`))).status
+      ).toBe(200);
       for (const path of [
+        `/transactions/search?q=${"a".repeat(3000)}`,
         "/transactions/search?q=%25",
         "/transactions/search?q=a",
         `/transactions/search?q=${"x".repeat(100)}`,

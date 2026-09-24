@@ -1,0 +1,60 @@
+docs/decisions/billing-attempt-lifecycle.md
+  s_de6c7d29aa90cd::t_762a08cb2f5121 8-9,14-25
+  s_de6c7d29aa90cd::t_1132c6d1dc005a 1-7,11-13,26-29
+  s_de6c7d29aa90cd::t_c96a7d061f117a 10
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_de6c7d29aa90cd::t_c79cd6fa3437a8 710-720
+apps/server/cloudflare/billing/wompi-event.test.ts
+  s_de6c7d29aa90cd::t_a3e04382f2c00a 29-31,40-44
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_535ccc5e448b21 119-124
+  s_de6c7d29aa90cd::t_a562d91f8c927f 118
+apps/server/cloudflare/billing/wompi-event.ts
+  s_de6c7d29aa90cd::t_81c6c007457924 12
+  s_de6c7d29aa90cd::t_f01e4b08de5bb7 63,65
+  s_de6c7d29aa90cd::t_a3e04382f2c00a 16-18,60-62,64,129-131,150-154
+apps/server/cloudflare/migrations/0012_billing_collection.sql
+  s_de6c7d29aa90cd::t_356ccdca125667 48-76
+  s_de6c7d29aa90cd::t_8ea5d89aec74aa 43
+  s_de6c7d29aa90cd::t_19d06269c77ac7 35
+  s_de6c7d29aa90cd::t_27afe59cdb582e 114-119
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_c01a2cf582aec1 498,518,534
+  s_de6c7d29aa90cd::t_a3e04382f2c00a 625-686,689-700,704-706,709-714,719-794
+  s_de6c7d29aa90cd::t_896674a50a7dad 264-265
+  s_de6c7d29aa90cd::t_479d64e082d8a9 836-841
+  s_de6c7d29aa90cd::t_e8239e97267ca0 137-171,254-263,266-268,275-279
+  s_de6c7d29aa90cd::t_9ad8920a51b904 132-136,172-173
+  s_de6c7d29aa90cd::t_6e40a63c6333d1 499-517,519-533
+  s_de6c7d29aa90cd::t_d820a4f9460c25 131
+  s_de6c7d29aa90cd::t_fe765324b10c36 624,687-688,701-703,707-708,715-718,795
+docs/runbooks/billing-ambiguity.md
+  s_de6c7d29aa90cd::t_262906dbe2b6b0 36,50
+  s_de6c7d29aa90cd::t_762a08cb2f5121 19
+  s_de6c7d29aa90cd::t_2deb31ddedad1b 17,20-28,56
+  s_de6c7d29aa90cd::t_3a9357a7d1918a 40-49,51-53
+  s_de6c7d29aa90cd::t_af29cc8663be01 18
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_de6c7d29aa90cd::t_a3e04382f2c00a 310-312,315-316,318-346,348-359,361
+  s_de6c7d29aa90cd::t_cc1ae3732131b9 304-309,360
+  s_de6c7d29aa90cd::t_3dc67773172962 313-314,317,347
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_f82ac0eaa0e199 445,450,452-457,461
+  s_de6c7d29aa90cd::t_da049762f8f6ef 94,595,597,602,620,634,636
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2c530f95f5ba99f2e245798542a8b37ac4b44bd3",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

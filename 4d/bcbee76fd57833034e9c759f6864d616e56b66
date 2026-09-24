@@ -1,0 +1,21 @@
+docs/research/reconciliation-account-hints.md
+  s_de6c7d29aa90cd::t_c23467afea14b3 7
+docs/research/reconciliation-statement-timing.md
+  s_de6c7d29aa90cd::t_b9b7f5545d9aff 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4dbcbee76fd57833034e9c759f6864d616e56b66",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

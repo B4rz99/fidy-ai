@@ -163,14 +163,7 @@ jobs:
 
       - name: Reject post-deployment Cloudflare drift
         working-directory: infra/cloudflare
-        run: |
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
-          drift=$(NO_COLOR=1 alchemy drift --stage production --no-input 2>&1)
-          printf '%s\n' "$drift"
-          if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
-            echo "The deployed topology drifted before promotion completed." >&2
-            exit 1
-          fi
+        run: bash scripts/check-topology-drift.sh
 
       - name: Record the release
         if: ${{ always() }}

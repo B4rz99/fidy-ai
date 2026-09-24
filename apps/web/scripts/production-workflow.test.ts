@@ -106,15 +106,17 @@ describe("Production release workflow policy", () => {
     const verification = workflow.indexOf("Verify the migrated public topology");
     const postDeploymentDrift = workflow.indexOf("Reject post-deployment Cloudflare drift");
     const postDeploymentDriftCommand = workflow.indexOf(
-      "alchemy drift --stage production --no-input"
+      "bash scripts/check-topology-drift.sh",
+      postDeploymentDrift
     );
     const releaseRecord = workflow.indexOf("Record the release");
 
     expect(deploy).toBeLessThan(verification);
     expect(verification).toBeLessThan(postDeploymentDrift);
-    expect(postDeploymentDrift).toBeLessThan(postDeploymentDriftCommand);
+    expect(postDeploymentDriftCommand).toBeGreaterThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
-    expect(workflow.match(/alchemy drift --stage production --no-input/gu)).toHaveLength(1);
+    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(2);
+    expect(workflow).not.toContain("alchemy drift --stage production --no-input");
     expect(workflow).toContain("https://fidyapp.com/health-check");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
     expect(workflow).toContain("https://api.fidyapp.com/health");

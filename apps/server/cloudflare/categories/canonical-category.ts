@@ -12,10 +12,9 @@ import {
   recordLivePATUse,
 } from "@fidy/server/tokens-runtime";
 import { Effect, Option, Schema } from "effect";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { currentMillis, newId } from "../pats/pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
+import type { TransactionCaller } from "../transactions/transaction-boundary";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
 const unavailable = (): Response => Response.json(categoryUnavailable(), { status: 503, headers });
@@ -41,7 +40,7 @@ const userActionRequired = (): Response =>
 
 const categoryStatements = (
   db: D1Database,
-  subject: TransactionSubject | AuthorizedPAT,
+  subject: TransactionCaller,
   current: number
 ): Array<D1PreparedStatement> => {
   if ("patId" in subject) {
@@ -80,7 +79,7 @@ const categoryStatements = (
 
 const refusedCategoryWork = (
   db: D1Database,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     if ("patId" in subject) {
@@ -103,7 +102,7 @@ const categoryWorkAccepted = (results: ReadonlyArray<D1Result>, pat: boolean): b
 
 const presentCategoryWork = (
   db: D1Database,
-  subject: TransactionSubject | AuthorizedPAT,
+  subject: TransactionCaller,
   results: ReadonlyArray<D1Result>
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
@@ -124,7 +123,7 @@ const presentCategoryWork = (
 export const executeProtectedCategories = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: TransactionSubject | AuthorizedPAT }>): Promise<Response> =>
+}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Promise<Response> =>
   Effect.gen(function* () {
     const results = yield* Effect.tryPromise({
       try: () =>

@@ -18,8 +18,9 @@ unit.
 Refusals decided before admission are request or policy decisions answered on the declared failure
 contract and record nothing: a body that fails the published request envelope (absent, empty, or
 oversized `calls`), a child that names no canonical operation, a child whose operation has no batch
-adapter, a child below the required tier, a child outside the caller's credential scope (which
-matches the individual ingress refusal exactly), and a repeated `callId`. None of these names work
+adapter, a child below the required tier, a child outside the caller's credential scope (the same
+`scope_missing` decision the individual ingress makes, reported through the batch failure
+contract), and a repeated `callId`. None of these names work
 the caller was allowed to do, and auditing them would let garbage requests consume the caller's own
 daily audit budget.
 
@@ -31,7 +32,9 @@ exactly the union of its children's; a batch-level row would duplicate evidence,
 
 When the D1 unit aborts, the batch reports the first child it can prove responsible: a stale
 observed revision, a repeated observed revision of one Transaction (the later child's guard cannot
-be satisfied), or the daily budget trigger. That child's refusal AuditLogEntry is recorded.
+be satisfied), or a budget trigger. The child's refusal AuditLogEntry is recorded whenever that
+entry can commit; an abort on the shared daily audit budget answers the canonical `rate_limited`
+refusal without a row, because the exhausted budget is what refused it.
 
 An abort that maps to no child answers the canonical `unavailable` failure. Because the unit rolled
 back, no child state and no child success AuditLogEntry exists to report; a misattributed refusal

@@ -229,11 +229,11 @@ export const prepareCapture = ({
     }
     const context = yield* captureUserContext(db, subject.userId);
     if (Option.isNone(context)) return { _tag: "Unavailable" } as const;
-    const unknown = yield* Effect.tryPromise({
+    const unrecognizedCategory = yield* Effect.tryPromise({
       try: () => hasUnknownCategory(db, input.categoryId),
       catch: boundaryFailure,
     });
-    if (unknown) {
+    if (unrecognizedCategory) {
       return refusedPreparation(
         "not_found",
         "The Category does not exist; correct categoryId and retry."

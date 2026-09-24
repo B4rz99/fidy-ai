@@ -34,6 +34,10 @@ export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
 );
 export type BatchCalls = typeof BatchCalls.Type;
 const Batch = { calls: BatchCalls } as const;
+/** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
+export const BatchInput = Schema.Struct(Batch);
+export type BatchInput = typeof BatchInput.Type;
+/** Every coordinator command: the live subject authority plus the exact work it admitted. */
 export const TransactionCommand = Schema.Union([
   Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
   Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),

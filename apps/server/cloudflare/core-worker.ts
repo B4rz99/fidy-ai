@@ -22,7 +22,8 @@ import {
   unauthenticatedTransaction,
 } from "./transactions/transactions";
 import {
-  type TransactionSubject,
+  type TransactionCaller,
+  isPATCaller,
   maximumTransactionInputBytes,
   rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
@@ -60,14 +61,18 @@ import {
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
-import { BatchCalls, TransactionCommand } from "./transactions/transaction-coordinator";
+import {
+  type BatchCalls,
+  BatchInput,
+  TransactionCommand,
+} from "./transactions/transaction-coordinator";
 import {
   type CatalogOperation,
   atomicBatchOperation,
   maximumAtomicBatchCalls,
 } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
-import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pats/pat-authorization";
+import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
 import {
   currentUser,
@@ -162,7 +167,7 @@ const methodNotAllowed = (): Response =>
 
 const categoriesResponse = (
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Effect.Effect<Response> =>
   Effect.tryPromise({
     try: () => executeProtectedCategories({ db: environment.DB, subject }),
@@ -212,10 +217,10 @@ type CoordinatorWork = ForwardWork | Readonly<{ _tag: "Batch"; calls: BatchCalls
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
 const coordinatorCommand = (
-  subject: TransactionSubject | AuthorizedPAT,
+  subject: TransactionCaller,
   work: CoordinatorWork
 ): TransactionCommand => {
-  if ("patId" in subject) {
+  if (isPATCaller(subject)) {
     const authority = {
       patId: subject.patId,
       userId: subject.userId,
@@ -256,7 +261,7 @@ const forwardTransaction = ({
   work,
 }: Readonly<{
   environment: CoreEnvironment;
-  subject: TransactionSubject | AuthorizedPAT;
+  subject: TransactionCaller;
   work: ForwardWork;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -285,17 +290,14 @@ const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
-const BatchBody = Schema.Struct({ calls: BatchCalls });
-type BatchBody = typeof BatchBody.Type;
-
-const batchBody = (request: Request): Promise<Option.Option<BatchBody>> => {
+const batchBody = (request: Request): Promise<Option.Option<BatchInput>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return Promise.resolve(Option.none());
   }
   return Effect.runPromise(readBoundedRequestBody(request, batchPolicy))
     .then((bytes) => {
       const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(BatchBody)(parsed);
+      return Schema.decodeUnknownOption(BatchInput)(parsed);
     })
     .catch(() => Option.none());
 };
@@ -303,7 +305,7 @@ const batchBody = (request: Request): Promise<Option.Option<BatchBody>> => {
 const dispatchCanonicalBatch = (
   request: Request,
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -328,7 +330,7 @@ const dispatchCanonicalBatch = (
 const dispatchCanonicalCapture = (
   request: Request,
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -353,7 +355,7 @@ const dispatchCanonicalCapture = (
 const dispatchCanonicalCorrection = (
   request: Request,
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -539,7 +541,7 @@ const executeCanonicalWork = (
     request: Request;
     environment: CoreEnvironment;
     operation: CatalogOperation;
-    subject: TransactionSubject | AuthorizedPAT;
+    subject: TransactionCaller;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;

@@ -21,6 +21,7 @@ export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 /** The two live caller subjects that may execute Transaction work. */
 export type TransactionCaller = TransactionSubject | AuthorizedPAT;
+/** True when the caller is an authorized PAT rather than a WebSession. */
 export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPAT =>
   "patId" in subject;
 /** The exact PAT capability a caller operates under; a WebSession carries none. */

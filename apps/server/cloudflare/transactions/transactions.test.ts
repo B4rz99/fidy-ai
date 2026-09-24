@@ -300,6 +300,17 @@ const auditedOperations = (
     .bind(userId)
     .all<{ operation: string; outcome: string }>()
     .then((rows) => rows.results);
+
+/** The metadata-only PAT audit rows one User recorded, in insertion order. */
+const auditedPATOperations = (
+  db: D1Database,
+  userId: string
+): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
+  db
+    .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
+    .bind(userId)
+    .all<{ operation: string; outcome: string }>()
+    .then((rows) => rows.results);
 const seedDailyTransactions = (db: D1Database, count: number): Promise<unknown> => {
   const today = DateTime.formatIso(DateTime.nowUnsafe());
   return db
@@ -2299,13 +2310,8 @@ it("records a PAT refusal Audit for a refused batch child and attributes a PAT b
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
-      const refusals = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(refusals.results).toEqual([
+      const refusals = yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""));
+      expect(refusals).toEqual([
         { operation: "transactions.updateTransaction", outcome: "rejected" },
       ]);
       expect(
@@ -2351,12 +2357,9 @@ it("records a PAT refusal Audit for a refused batch child and attributes a PAT b
         )
       ).toBe(99);
       const budgetRefusals = yield* fromTestPromise(() =>
-        budgetDb
-          .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
+        auditedPATOperations(budgetDb, users[0] ?? "")
       );
-      expect(budgetRefusals.results).toEqual([
+      expect(budgetRefusals).toEqual([
         { operation: "transactions.createTransaction", outcome: "rejected" },
       ]);
     })

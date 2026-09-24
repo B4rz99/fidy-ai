@@ -17,7 +17,9 @@ import {
 } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
+  type TransactionCaller,
   type TransactionSubject,
+  isPATCaller,
   missingTransactionMessage,
   transactionNoStore as noStore,
   transactionNow as now,
@@ -79,8 +81,7 @@ const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
-type Subject = TransactionSubject | AuthorizedPAT;
-const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
+type Subject = TransactionCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
@@ -431,7 +432,7 @@ const readAuthorizedHistory = (
 ): Promise<Response> => {
   const { selection, query, current } = input;
   const { subject } = selection;
-  if (isPAT(subject)) {
+  if (isPATCaller(subject)) {
     const patSelection = { ...selection, subject };
     return db
       .batch(patHistoryStatements(db, { selection: patSelection, query, current }))
@@ -463,7 +464,7 @@ export const browseTransactions = ({
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
-  if (Option.isNone(query) && !isPAT(subject)) {
+  if (Option.isNone(query) && !isPATCaller(subject)) {
     return invalidQueryAudit(db, { ...selection, subject }, current);
   }
   return transactionAuditExhausted({ db, userId: subject.userId, current })

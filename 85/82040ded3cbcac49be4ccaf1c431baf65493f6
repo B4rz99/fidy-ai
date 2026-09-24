@@ -1,0 +1,37 @@
+infra/cloudflare/scripts/check-topology-drift.sh
+  s_20c7bd04cb455a::t_2718e4971392df 48
+  s_20c7bd04cb455a::t_49222541e6109b 8
+  s_20c7bd04cb455a::t_406210da1e5dcb 1-7,9-47,49-53
+.oxlintrc.json
+  s_20c7bd04cb455a::t_dadae14fcc3d03 212
+.github/workflows/production.yml
+  s_20c7bd04cb455a::t_4ac11f94fdcc84 79
+infra/cloudflare/alchemy-drift.run.ts
+  s_20c7bd04cb455a::t_cefd8a81039ba1 4-5,9-10,12-23,28
+  s_20c7bd04cb455a::t_8ee8ff6d1b32f8 1-3,6-8,11,24-27,29-31
+infra/cloudflare/scripts/check-topology-drift.test.ts
+  s_20c7bd04cb455a::t_28166cf1651c41 4
+  s_20c7bd04cb455a::t_7677732e8d2bb6 13
+  s_20c7bd04cb455a::t_b9cf5d9a444426 16,48
+  s_20c7bd04cb455a::t_a8045f5803ed16 1,3,5-10,19-22,24-29,31-39,41-46,49-63,67-69,71-79,82-96
+  s_20c7bd04cb455a::t_5733062de53b40 70,80-81
+  s_20c7bd04cb455a::t_243865cc5a193f 2,15,23,30,40,47
+  s_20c7bd04cb455a::t_19902f7935c219 64-66
+  s_20c7bd04cb455a::t_484c4d3070440e 11-12,14,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8582040ded3cbcac49be4ccaf1c431baf65493f6",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,65 @@
+apps/server/src/core/transactions/model.ts
+  s_6b77634642862a::t_4fdb319dff88d0 230-231,233-235
+  s_6b77634642862a::t_01b0ade46e35d0 228-229,232
+apps/server/src/shell/transactions/operations.ts
+  s_6b77634642862a::t_4ee6ab17d91ada 12,77-85
+  s_658377608a509f::t_f8dacb7dd177e3 86-88
+apps/server/cloudflare/core-worker.ts
+  s_6b77634642862a::t_e134ffc6e5885e 462,472
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_6b77634642862a::t_97336d9d730e97 150
+  s_6b77634642862a::t_34191939015fa5 955-956,1021,1033-1034,1043,1047-1049,1068-1070
+  s_6b77634642862a::t_51f5f0680427f0 263
+  s_6b77634642862a::t_9a4788a6e43ca4 329
+  s_6b77634642862a::t_2afd7824805c3a 264-328,1022-1032,1035-1042,1044-1046,1051-1067,1071-1072
+  s_6b77634642862a::t_cf3a4bea4fef1c 1050
+apps/server/src/shell/transactions/cloudflare-routes.ts
+  s_6b77634642862a::t_dead38e23e5e9f 19
+apps/server/cloudflare/migrations/0012_transaction_search.sql
+  s_6b77634642862a::t_3441a1eb02fde9 1-56
+apps/server/src/shell/transactions/continuation.ts
+  s_6b77634642862a::t_2afd7824805c3a 14-16
+  s_6b77634642862a::t_d0002c74439215 13,22-23
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_6b77634642862a::t_779437760e145e 9,51,138,189-192,254
+  s_6b77634642862a::t_9e31c28054d8ca 63-64,87-88,104-114,116,123,127-128,139,141,145-146,282,321,363
+  s_6b77634642862a::t_2afd7824805c3a 83-86,89-90,148-151,225-228,255-257
+  s_6b77634642862a::t_e0b0dec2d7e8ea 341
+  s_6b77634642862a::t_23c656bb61b535 115,117-122,124-126,142-144
+  s_6b77634642862a::t_9fc3b2f7991e51 130
+  s_6b77634642862a::t_edc2f0af099507 193
+apps/server/src/shell/tokens/pat-audit.ts
+  s_6b77634642862a::t_4f1f21cd96e502 112
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_6b77634642862a::t_d06318b8a6fe1e 36
+apps/server/contracts/openapi.json
+  s_6b77634642862a::t_c974113f2b2e09 6478,6485-6522,14902-15024
+  s_6b77634642862a::t_ebd323f254ce81 6479-6484,15025-15027
+apps/server/contracts/operation-policy.json
+  s_6b77634642862a::t_c974113f2b2e09 713
+  s_6b77634642862a::t_e53ab72205e65f 699-712
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a690b1bd12dbe1b843519e3b90dead2263be086c",
+  "prompts": {},
+  "sessions": {
+    "s_658377608a509f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-9230-7417-a5dd-6ee6b0e56045",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6b77634642862a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-2385-7286-8dfe-eff034a8f95f",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

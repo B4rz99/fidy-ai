@@ -1,0 +1,9 @@
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "fidy-protected-document-proof",
+  "main": "./protected-document-worker.ts",
+  "compatibility_date": "2026-09-08",
+  "limits": {
+    "cpu_ms": 30000,
+  },
+}

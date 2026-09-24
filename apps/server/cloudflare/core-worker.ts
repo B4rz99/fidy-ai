@@ -10,66 +10,69 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
-import { browseTransactions } from "./transaction-history";
-import { receiveConsentWebhook, sweepExpiredConsent } from "./consent-ingress";
+import { browseTransactions } from "./transactions/transaction-history";
+import { receiveConsentWebhook, sweepExpiredConsent } from "./onboarding/consent-ingress";
 import {
   rejectManualTransaction,
   transactionInput,
   transactionSession,
   unauthenticatedTransaction,
-} from "./transactions";
-import type { TransactionSubject } from "./transaction-boundary";
-import { completeBrowserPairingEmail, startBrowserPairingEmail } from "./browser-pairing-email";
+} from "./transactions/transactions";
+import type { TransactionSubject } from "./transactions/transaction-boundary";
+import {
+  completeBrowserPairingEmail,
+  startBrowserPairingEmail,
+} from "./identity/browser-pairing-email";
 import {
   type BrowserPairingEmailEnvironment,
   dispatchBrowserPairingEmail,
   isBrowserPairingEmailWork,
   receiveBrowserPairingEmail,
   reconcileBrowserPairingEmail,
-} from "./browser-pairing-email-delivery";
-import { handleSupportRecovery } from "./support-recovery";
-import { handleCardEnrollment } from "./card-enrollment";
-import { completeEmailReplacement, requestEmailReplacement } from "./email-replacement";
+} from "./identity/browser-pairing-email-delivery";
+import { handleSupportRecovery } from "./identity/support-recovery";
+import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
+import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
 import {
   type EmailReplacementEnvironment,
   dispatchEmailReplacement,
   isEmailReplacementWork,
   receiveEmailReplacement,
   reconcileEmailReplacement,
-} from "./email-replacement-delivery";
-import { handlePATRequest, patRoute } from "./pat-routes";
-import { listPATs } from "./pat-management";
-import { canonicalOperation, canonicalRoute } from "./canonical-routes";
+} from "./identity/email-replacement-delivery";
+import { handlePATRequest, patRoute } from "./pats/pat-routes";
+import { listPATs } from "./pats/pat-management";
+import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import type { CatalogOperation } from "@fidy/server/canonical-runtime";
-import { sweepExpiredPATPairings } from "./pat-pairing";
-import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pat-authorization";
-import { executeProtectedCategories } from "./canonical-category";
+import { sweepExpiredPATPairings } from "./pats/pat-pairing";
+import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pats/pat-authorization";
+import { executeProtectedCategories } from "./categories/canonical-category";
 import {
   currentUser,
   logoutBrowser,
   redeemBrowserPairing,
   rotateBackupRecoveryCode,
   startBrowserPairing,
-} from "./browser-login";
+} from "./identity/browser-login";
 import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
   reconcileOnboardingEmail,
-} from "./onboarding-email";
-import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
-import { verifyOnboarding } from "./verified-onboarding";
+} from "./onboarding/onboarding-email";
+import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
+import { verifyOnboarding } from "./onboarding/verified-onboarding";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
-} from "./telemetry";
-import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./workers-ai";
+} from "./runtime/telemetry";
+import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./ai/workers-ai";
 
-export { UserTransactionCoordinator } from "./transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding-email";
-export { BrowserPairingEmailWorkflowV1 } from "./browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./email-replacement-delivery";
+export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
+export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
+export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),

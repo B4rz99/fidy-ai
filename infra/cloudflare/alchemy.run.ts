@@ -13,7 +13,7 @@ import {
   browserOrigins,
   productionTopology,
   resolveLocalCanonicalReadBearer,
-} from "../../apps/server/cloudflare/topology";
+} from "../../apps/server/cloudflare/runtime/topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));

@@ -4,7 +4,7 @@ import {
   emailReplacementPath,
 } from "@fidy/server/email-replacement-path";
 import type * as Cloudflare from "alchemy/Cloudflare";
-import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/topology";
+import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 
 const kapsoCallbackPath = "/providers/kapso/callback";
 const wompiCallbackPath = "/providers/wompi/callback";

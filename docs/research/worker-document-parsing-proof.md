@@ -18,7 +18,7 @@ Run:
 bun run check:document-parsing
 bun run --cwd infra/cloudflare check:document-parsing:remote # authenticated evidence
 (cd apps/server && bun --bun vitest run src/shell/ingestion/parser.test.ts --coverage.enabled=false)
-bun --bun vitest run infra/cloudflare/document-parsing-worker.test.ts infra/cloudflare/document-extraction-worker.test.ts
+bun --bun vitest run apps/server/cloudflare/documents/document-parsing-worker.test.ts apps/server/cloudflare/documents/document-extraction-worker.test.ts
 ```
 
 The deterministic build gate runs the first command. It validates every local bundle, startup, statement-runtime, hostile-fixture, and protected-document assertion without requiring repository secrets. The explicitly selected authenticated command additionally starts the Workers AI binding and records the remote PDF/image runtime evidence. Together they perform these checks against the proof configurations:

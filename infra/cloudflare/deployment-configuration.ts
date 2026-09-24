@@ -2,7 +2,7 @@ import { Data, Result } from "effect";
 import {
   contractDigestPattern,
   gitRevisionPattern,
-} from "../../apps/server/cloudflare/release-identity";
+} from "../../apps/server/cloudflare/runtime/release-identity";
 
 const developmentGitRevision = "0000000000000000000000000000000000000000";
 const developmentContractDigest =

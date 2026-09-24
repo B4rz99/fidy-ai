@@ -10,10 +10,10 @@ import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
-} from "./telemetry";
-import { browserOrigins } from "./topology";
-import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pat-routes";
-import { canonicalMethods, canonicalRoute } from "./canonical-routes";
+} from "./runtime/telemetry";
+import { browserOrigins } from "./runtime/topology";
+import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/pat-routes";
+import { canonicalMethods, canonicalRoute } from "./routing/canonical-routes";
 
 const minimumAdmissionKeyLength = 32;
 type PublicEnvironment = WorkerTelemetryEnvironment & {

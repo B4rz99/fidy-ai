@@ -1321,9 +1321,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
               failure = "none";
               return () => {
                 throw new Error(
-                  kind === "defect"
-                    ? "programmer defect: secret pairing and SQL text"
-                    : "D1_ERROR: database unavailable"
+                  kind === "defect" ? "programmer defect: secret pairing and SQL text" : "D1_ERROR"
                 );
               };
             }

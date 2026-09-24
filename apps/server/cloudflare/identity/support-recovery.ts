@@ -245,7 +245,7 @@ class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<
 
 // D1 rejects with a fixed error prefix, while user or programmer exceptions must stay defects.
 const isD1Failure = (error: unknown): boolean =>
-  error instanceof Error && /^D1_(?:EXEC_)?ERROR:/u.test(error.message);
+  error instanceof Error && /^D1_(?:EXEC_)?ERROR(?::|$)/u.test(error.message);
 
 const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFailure> =>
   Effect.tryPromise({

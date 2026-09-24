@@ -1,4 +1,5 @@
 import type { Miniflare } from "miniflare";
+import type { WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -322,6 +323,74 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       expect(
         (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(1);
+    })
+  ));
+
+it("retains ambiguity without a callback and settles a privileged provider-ID recovery hint", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      const environment = {
+        DB: db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      };
+      const provider = vi.fn((_url: URL, init?: RequestInit): Promise<Response> =>
+        init?.method === "POST"
+          ? Promise.reject(new Error("lost response"))
+          : Promise.resolve(
+              Response.json({
+                data: {
+                  id: transactionId,
+                  reference,
+                  status: "APPROVED",
+                  amount_in_cents: 990000,
+                  currency: "COP",
+                  finalized_at: "2026-09-08T12:00:00Z",
+                },
+              })
+            )
+      );
+      vi.stubGlobal("fetch", provider);
+      const activity = (
+        _name: string,
+        _options: WorkflowStepConfig,
+        run: () => Promise<void>
+      ): Promise<void> => run();
+      yield* Effect.promise(() =>
+        runBillingCollectionWorkflow({
+          environment,
+          payload: { version: 1, attemptId },
+          activity,
+        })
+      );
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }) =>
+          runBillingCollectionWorkflow({ environment, payload: options.params, activity }).then(
+            () => ({})
+          )
+        ),
+        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+      };
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(workflow.create).not.toHaveBeenCalled();
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      // An operator supplies only the provider id as a hint; the Workflow GET authorizes settlement.
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.promise(() =>
+        db
+          .prepare(`INSERT INTO billing_event_candidates
+      (transaction_id, received_at_ms) SELECT ?, ? WHERE EXISTS
+      (SELECT 1 FROM billing_attempts WHERE wompi_reference = ? AND status = 'pending')`)
+          .bind(transactionId, now, reference)
+          .run()
+      );
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(workflow.create).toHaveBeenCalledTimes(1);
+      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
     })
   ));
 

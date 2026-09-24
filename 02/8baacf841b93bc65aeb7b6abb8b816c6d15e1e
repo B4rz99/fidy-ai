@@ -1,0 +1,57 @@
+apps/server/src/shell/subscription/runtime.ts
+  s_de6c7d29aa90cd::t_f55085820a3119 40
+apps/server/cloudflare/core-worker.ts
+  s_de6c7d29aa90cd::t_abf3b36c88f712 688,690-691
+  s_de6c7d29aa90cd::t_9a77761d326a49 685-687,689
+  s_de6c7d29aa90cd::t_86d46b3e48d79f 698-701
+  s_de6c7d29aa90cd::t_f790c11e4bc74a 175,680
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_6ad42ccab2e93c 85
+  s_de6c7d29aa90cd::t_213da70793de42 101-102,106-107
+  s_de6c7d29aa90cd::t_6aeffe47dfda5f 103-105,110-111
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_fbf2f75d80c5a2 526,599
+  s_de6c7d29aa90cd::t_9a77761d326a49 39-41,69-71,385-386,501,519-525,527-530,532-566
+  s_de6c7d29aa90cd::t_d36cc62c309b2a 498,500,503,505,531
+  s_de6c7d29aa90cd::t_a0820f7eb16e1c 567-568,570,589,601-602
+  s_de6c7d29aa90cd::t_68ca9d5e416606 43-47,162,203,230-231
+  s_de6c7d29aa90cd::t_8f4a327b4819b3 28,38,42,48-51,378-379,382-383,389,428,482,494,496-497,499,502,504
+  s_de6c7d29aa90cd::t_0fede9f924f0ba 5,68,72-74,248-249,316,440
+  s_de6c7d29aa90cd::t_384b3666d2f3f7 591-592,594,596
+  s_de6c7d29aa90cd::t_fb5cd65a7d3d14 459-461
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_ab5ada72fcdb34 361,374,383-386,430
+  s_de6c7d29aa90cd::t_7669950f553234 270-277,281-301,305-329
+  s_de6c7d29aa90cd::t_9a77761d326a49 248-249
+  s_de6c7d29aa90cd::t_1971c683eb9d6b 424
+  s_de6c7d29aa90cd::t_9c0493821403d7 278,375-376
+  s_de6c7d29aa90cd::t_55722fa86a40c7 19,243-245,250-254,258-260
+  s_de6c7d29aa90cd::t_59216d00e845f7 3
+  s_de6c7d29aa90cd::t_46dac720e40959 332-338,345-346,348-359
+  s_de6c7d29aa90cd::t_213da70793de42 421-423
+  s_de6c7d29aa90cd::t_e69b6eb98904be 279-280,362-373,377-382,387-420,425-429
+  s_de6c7d29aa90cd::t_ab788fd7ad1466 12-14,269
+  s_de6c7d29aa90cd::t_d057f3c0486409 339-344,347
+  s_de6c7d29aa90cd::t_011bddf812f6f3 16-17,330-331
+  s_de6c7d29aa90cd::t_4ed3484d7d13f0 302-304
+  s_de6c7d29aa90cd::t_4bf0f7f9d6af32 246-247,255-257
+  s_de6c7d29aa90cd::t_f69e5ced761b7b 360
+apps/server/cloudflare/migrations/0012_billing_collection.sql
+  s_de6c7d29aa90cd::t_071c2ca58351fb 50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "028baacf841b93bc65aeb7b6abb8b816c6d15e1e",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

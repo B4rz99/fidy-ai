@@ -1,7 +1,6 @@
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
-import { Transaction } from "@fidy/server/transactions-runtime";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
@@ -9,7 +8,7 @@ import {
   childCaller,
   dailyAuditBudget,
   dailyAuditCount,
-  liveTransactionCaller,
+  liveTransactionAuthority,
   liveTransactionCredential,
   recordTransactionRefusal,
   refusedCredentialResponse,
@@ -18,9 +17,7 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "./transaction-boundary";
-import { type StoredTransaction, findTransaction } from "./transaction-history";
-
-const Output = Schema.toCodecJson(Transaction);
+import { type StoredTransaction, TransactionOutput, findTransaction } from "./transaction-history";
 
 /**
  * One owner-prepared Transaction mutation, ready to join a caller-owned D1 unit.
@@ -325,7 +322,7 @@ const unitResponse = ({
       const stored = execution.results[0];
       return stored === undefined
         ? Effect.succeed(transactionUnavailable())
-        : Schema.encodeEffect(Output)(stored).pipe(
+        : Schema.encodeEffect(TransactionOutput)(stored).pipe(
             Effect.map((data) =>
               Response.json({ data, next: [] }, { status, headers: transactionNoStore })
             ),
@@ -350,7 +347,7 @@ const failedPreparationResponse = ({
   subject: TransactionCaller;
   current: number;
 }>): Effect.Effect<Response> =>
-  Effect.tryPromise(() => liveTransactionCaller({ db, subject, current })).pipe(
+  Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })).pipe(
     Effect.orElseSucceed(() => false),
     Effect.flatMap((live) =>
       live ? Effect.succeed(transactionUnavailable()) : refusedCredentialResponse({ db, subject })

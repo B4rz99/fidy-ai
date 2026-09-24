@@ -4,7 +4,8 @@ export const freshSessionExists = `EXISTS (SELECT 1 FROM web_sessions WHERE id =
 
 export type FreshSessionSubject = Readonly<{ id: string; user_id: string }>;
 type WebSessionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
-type WebSessionAuthority = Readonly<{
+/** One live-authority gate over the `web_sessions` table. */
+export type WebSessionAuthority = Readonly<{
   table: "web_sessions";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;

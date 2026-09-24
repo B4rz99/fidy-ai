@@ -17,6 +17,7 @@ import {
 } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
+  type TransactionAuthority,
   type TransactionCaller,
   type TransactionSubject,
   isPATCaller,
@@ -30,7 +31,8 @@ import {
   transactionId as uuid,
 } from "./transaction-boundary";
 
-const Output = Schema.toCodecJson(Transaction);
+/** The canonical stored-Transaction encoding every Transaction adapter returns. */
+export const TransactionOutput = Schema.toCodecJson(Transaction);
 const Row = Schema.Struct({
   id: TransactionId,
   amount: Schema.String,
@@ -166,10 +168,7 @@ const parseQuery = (
   return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
-type AuthorityCondition = Readonly<{
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
+type AuthorityCondition = Pick<TransactionAuthority, "predicate" | "bindings">;
 const selectStatement = (
   db: D1Database,
   args: Readonly<{
@@ -219,12 +218,14 @@ const selectStatement = (
 };
 
 /** Decode untrusted D1 projection into the canonical Transaction shape before it may be returned. */
-export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.Type> => {
+export const decodeTransactionRow = (
+  raw: unknown
+): Option.Option<typeof TransactionOutput.Type> => {
   const row = Schema.decodeUnknownOption(Row)(raw);
   if (Option.isNone(row)) {
     return Option.none();
   }
-  return Schema.decodeOption(Output)({
+  return Schema.decodeOption(TransactionOutput)({
     id: row.value.id,
     money: { amount: row.value.amount, currency: row.value.currency },
     direction: row.value.direction,
@@ -238,7 +239,7 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
 };
 
 /** A stored Transaction decoded into the canonical JSON projection every response carries. */
-export type StoredTransaction = typeof Output.Type;
+export type StoredTransaction = typeof TransactionOutput.Type;
 
 /** Read one owned Transaction projection by id; absence is an answer rather than a defect. */
 export const findTransaction = ({
@@ -291,7 +292,7 @@ const presentHistory = (
         )
       : [];
   return Response.json(
-    { data: visible.map((transaction) => Schema.encodeSync(Output)(transaction)), next },
+    { data: visible.map((transaction) => Schema.encodeSync(TransactionOutput)(transaction)), next },
     { headers: noStore }
   );
 };

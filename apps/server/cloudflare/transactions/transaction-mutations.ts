@@ -23,7 +23,7 @@ import {
   type TransactionRefusal,
   childCaller,
   isPATCaller,
-  liveTransactionCaller,
+  liveTransactionAuthority,
   liveTransactionCredential,
   recordTransactionRefusal,
   refusalFailureCode,
@@ -50,7 +50,7 @@ const CorrectionInput = Schema.toType(UpdateTransactionCanonicalInput);
 /** One raw child as the published batch command carries it; the catalog call schema decodes it. */
 export type TransactionBatchCall = unknown;
 
-type DecodedChild =
+type DecodedCall =
   | Readonly<{
       _tag: "Capture";
       operation: "transactions.createTransaction";
@@ -63,18 +63,18 @@ type DecodedChild =
       input: UpdateTransactionInput;
     }>;
 
-type PreparedChild = Readonly<{
+type PreparedCall = Readonly<{
   _tag: "Prepared";
   call: AtomicBatchCall;
   operation: CatalogOperation;
   mutation: PreparedTransactionMutation;
 }>;
-type ChildStep =
-  | PreparedChild
+type CallStep =
+  | PreparedCall
   | Readonly<{ _tag: "Response"; response: Response }>
   | Readonly<{ _tag: "CredentialRefused" }>;
 type BatchPreparation =
-  | Readonly<{ _tag: "Prepared"; children: ReadonlyArray<PreparedChild> }>
+  | Readonly<{ _tag: "Prepared"; children: ReadonlyArray<PreparedCall> }>
   | Readonly<{ _tag: "Response"; response: Response }>;
 type CatalogDecision =
   | Readonly<{
@@ -108,7 +108,7 @@ const implementedMutations: ReadonlySet<string> = new Set<TransactionMutationOpe
 const isImplementedMutation = (id: string): id is TransactionMutationOperation =>
   implementedMutations.has(id);
 
-const decodeChild = (operation: string, input: unknown): Option.Option<DecodedChild> => {
+const decodeChild = (operation: string, input: unknown): Option.Option<DecodedCall> => {
   if (operation === "transactions.createTransaction") {
     return Option.map(Schema.decodeUnknownOption(CaptureInput)(input), (value) => ({
       _tag: "Capture" as const,
@@ -178,7 +178,7 @@ const childAccess = ({
   capability: ReturnType<typeof patScopeCapability>;
 }>): Promise<ChildAccess> => {
   const scoped = childCaller(subject, capability);
-  return liveTransactionCaller({ db, subject: scoped, current }).then((allowed) => {
+  return liveTransactionAuthority({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
     if (!isPATCaller(subject)) return "credential_refused" as const;
     return liveTransactionCredential({ db, subject, current }).then((live) =>
@@ -232,12 +232,6 @@ const rejectChild = ({
     });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-const preparedChild = (
-  call: AtomicBatchCall,
-  operation: CatalogOperation,
-  mutation: PreparedTransactionMutation
-): PreparedChild => ({ _tag: "Prepared", call, operation, mutation });
-
 /** Decide one named canonical operation against the batch's own executable-child policy. */
 const catalogDecision = (operation: CanonicalOperationId, index: number): CatalogDecision => {
   const catalogOperation = operationCatalog.byId.get(operation);
@@ -289,7 +283,7 @@ const scopeStep = (
   access: ChildAccess,
   operation: CatalogOperation,
   index: number
-): Option.Option<ChildStep> => {
+): Option.Option<CallStep> => {
   if (access === "allowed") return Option.none();
   if (access === "credential_refused") return Option.some({ _tag: "CredentialRefused" });
   return Option.some({
@@ -303,7 +297,7 @@ const scopeStep = (
   });
 };
 
-const failedChildStep = ({
+const failedCallStep = ({
   db,
   subject,
   current,
@@ -311,8 +305,8 @@ const failedChildStep = ({
   db: D1Database;
   subject: TransactionCaller;
   current: number;
-}>): Effect.Effect<ChildStep> =>
-  Effect.tryPromise(() => liveTransactionCaller({ db, subject, current })).pipe(
+}>): Effect.Effect<CallStep> =>
+  Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })).pipe(
     Effect.orElseSucceed(() => false),
     Effect.map((live) =>
       live
@@ -321,7 +315,7 @@ const failedChildStep = ({
     )
   );
 
-const prepareDecodedChild = ({
+const prepareOwnerMutation = ({
   db,
   subject,
   decoded,
@@ -329,7 +323,7 @@ const prepareDecodedChild = ({
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
-  decoded: DecodedChild;
+  decoded: DecodedCall;
   current: number;
 }>): Effect.Effect<TransactionMutationPreparation> =>
   decoded._tag === "Capture"
@@ -352,11 +346,16 @@ const preparationStep = ({
   index: number;
   call: AtomicBatchCall;
   catalogOperation: CatalogOperation;
-  decoded: DecodedChild;
+  decoded: DecodedCall;
   preparation: TransactionMutationPreparation;
-}>): Effect.Effect<ChildStep> => {
+}>): Effect.Effect<CallStep> => {
   if (preparation._tag === "Prepared") {
-    return Effect.succeed(preparedChild(call, catalogOperation, preparation.mutation));
+    return Effect.succeed({
+      _tag: "Prepared",
+      call,
+      operation: catalogOperation,
+      mutation: preparation.mutation,
+    });
   }
   if (preparation._tag === "CredentialRefused") {
     return Effect.succeed({ _tag: "CredentialRefused" });
@@ -365,7 +364,7 @@ const preparationStep = ({
     return Effect.succeed({ _tag: "Response", response: transactionUnavailable() });
   }
   if (preparation._tag === "Failed") {
-    return failedChildStep({ db, subject: scopedSubject, current });
+    return failedCallStep({ db, subject: scopedSubject, current });
   }
   // The refusal Audit belongs to the same child authority the owner prepared under.
   return rejectChild({
@@ -391,7 +390,7 @@ const rejectInvalidChild = ({
   current: number;
   index: number;
   operation: TransactionMutationOperation;
-}>): Effect.Effect<ChildStep> =>
+}>): Effect.Effect<CallStep> =>
   rejectChild({
     db,
     subject,
@@ -414,7 +413,7 @@ const childAccessStep = ({
   current: number;
   catalogOperation: CatalogOperation;
   index: number;
-}>): Effect.Effect<Option.Option<ChildStep>> => {
+}>): Effect.Effect<Option.Option<CallStep>> => {
   const capability = patScopeCapability(catalogOperation.policy.access);
   return Effect.tryPromise(() => childAccess({ db, subject, current, capability })).pipe(
     Effect.orElseSucceed(() => "credential_refused" as const),
@@ -422,7 +421,7 @@ const childAccessStep = ({
   );
 };
 
-const prepareChild = ({
+const prepareCall = ({
   db,
   subject,
   call,
@@ -434,7 +433,7 @@ const prepareChild = ({
   call: TransactionBatchCall;
   index: number;
   current: number;
-}>): Effect.Effect<ChildStep> => {
+}>): Effect.Effect<CallStep> => {
   const operation = rawOperation(call);
   if (Option.isNone(operation)) {
     // Structurally absent children are answered as the request-level validation failure they are.
@@ -466,7 +465,7 @@ const prepareChild = ({
         operation: decision.mutation,
       });
     }
-    return yield* prepareDecodedCall({
+    return yield* prepareOwnerCall({
       db,
       scopedSubject,
       current,
@@ -479,7 +478,7 @@ const prepareChild = ({
 };
 
 /** Decode one catalog-validated child into its owner payload and hand it to the owner adapter. */
-const prepareDecodedCall = ({
+const prepareOwnerCall = ({
   db,
   scopedSubject,
   current,
@@ -495,7 +494,7 @@ const prepareDecodedCall = ({
   catalogOperation: CatalogOperation;
   mutation: TransactionMutationOperation;
   decodedCall: AtomicBatchCall;
-}>): Effect.Effect<ChildStep> =>
+}>): Effect.Effect<CallStep> =>
   Effect.gen(function* () {
     const decoded = decodeChild(mutation, decodedCall.input);
     if (Option.isNone(decoded)) {
@@ -509,7 +508,7 @@ const prepareDecodedCall = ({
         }),
       };
     }
-    const preparation = yield* prepareDecodedChild({
+    const preparation = yield* prepareOwnerMutation({
       db,
       subject: scopedSubject,
       decoded: decoded.value,
@@ -566,9 +565,9 @@ const prepareBatch = ({
   current: number;
 }>): Effect.Effect<BatchPreparation> =>
   Effect.gen(function* () {
-    const children: Array<PreparedChild> = [];
+    const children: Array<PreparedCall> = [];
     for (const [index, call] of calls.entries()) {
-      const step = yield* prepareChild({ db, subject, call, index, current });
+      const step = yield* prepareCall({ db, subject, call, index, current });
       if (step._tag === "Response") return { _tag: "Response", response: step.response };
       if (step._tag === "CredentialRefused") {
         return { _tag: "Response", response: yield* refusedCredentialResponse({ db, subject }) };
@@ -582,7 +581,7 @@ const presentCommitted = ({
   children,
   execution,
 }: Readonly<{
-  children: ReadonlyArray<PreparedChild>;
+  children: ReadonlyArray<PreparedCall>;
   execution: Extract<TransactionUnitExecution, { readonly _tag: "Committed" }>;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -610,7 +609,7 @@ const executionResponse = ({
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
-  children: ReadonlyArray<PreparedChild>;
+  children: ReadonlyArray<PreparedCall>;
   execution: TransactionUnitExecution;
 }>): Effect.Effect<Response> => {
   if (execution._tag === "Committed") return presentCommitted({ children, execution });

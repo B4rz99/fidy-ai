@@ -54,6 +54,7 @@ export {
   recordWrongPairingProof,
   slowPairingPoll,
   recordPendingPoll,
+  type PATAuthority,
 } from "./pat-write";
 export {
   recordSessionPATTransition,

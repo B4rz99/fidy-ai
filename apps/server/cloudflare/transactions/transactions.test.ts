@@ -7,6 +7,7 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { UserTransactionCoordinator } from "./transaction-coordinator";
+import { AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -233,17 +234,8 @@ const BatchResult = Schema.Struct({
   }),
   next: Schema.Array(Schema.Unknown),
 });
-const CallerFailure = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
-const BatchRejection = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.String,
-    message: Schema.String,
-    failedCallIndex: Schema.Int,
-    operation: Schema.String,
-    fields: Schema.Array(Schema.Unknown),
-  }),
-  next: Schema.Array(Schema.Unknown),
-});
+const CallerFailure = Schema.Struct({ error: Schema.Struct({ code: ErrorCode }) });
+const BatchRejection = AtomicBatchRejected;
 const batchCallId = (suffix: number): string =>
   `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
 const transactionCall = (suffix: number, payload: object): object => ({

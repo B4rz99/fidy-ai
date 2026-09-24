@@ -1,7 +1,8 @@
 import { Clock, Data, Effect, Option } from "effect";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
+  type PATAuthority,
   livePATAuthority,
   livePATCredential,
   recordCanonicalPATWork,
@@ -355,27 +356,18 @@ export const refusedCredentialResponse = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
+/** One live-authority gate over a credential table: its table, predicate, and bindings. */
+export type TransactionAuthority = PATAuthority | WebSessionAuthority;
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
 export const callerAuthority = ({
   subject,
   current,
-}: Readonly<{ subject: TransactionCaller; current: number }>): Readonly<{
-  table: string;
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}> =>
+}: Readonly<{ subject: TransactionCaller; current: number }>): TransactionAuthority =>
   isPATCaller(subject)
     ? livePATAuthority({ subject, current })
     : liveWebSessionAuthority({ subject, current });
 
-const authorityExists = (
-  db: D1Database,
-  authority: Readonly<{
-    table: string;
-    predicate: string;
-    bindings: ReadonlyArray<string | number | Uint8Array>;
-  }>
-): Promise<boolean> =>
+const authorityExists = (db: D1Database, authority: TransactionAuthority): Promise<boolean> =>
   db
     .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
     .bind(...authority.bindings)
@@ -400,7 +392,7 @@ export const liveTransactionCredential = ({
   );
 
 /** True while the caller's authority for the exact scope it presented is still live. */
-export const liveTransactionCaller = ({
+export const liveTransactionAuthority = ({
   db,
   subject,
   current,

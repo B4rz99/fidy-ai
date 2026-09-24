@@ -16,6 +16,7 @@ import {
   callerScope,
   invalidTransactionMessage,
   isPATCaller,
+  liveTransactionAuthority,
   maximumTransactionInputBytes,
   missingTransactionMessage,
   transactionId,
@@ -29,10 +30,9 @@ import {
   refusedPreparation,
   staleCorrectionMessage,
 } from "./transaction-unit";
-import { type StoredTransaction, findTransaction } from "./transaction-history";
+import { type StoredTransaction, TransactionOutput, findTransaction } from "./transaction-history";
 
 const Input = Schema.toCodecJson(UpdateTransactionInput);
-const Output = Schema.toCodecJson(Transaction);
 const Decisions = Schema.Record(Schema.String, Schema.Boolean);
 const Fields = Schema.Array(Schema.String);
 const policy = Schema.decodeSync(RequestBodyPolicy)({
@@ -207,22 +207,6 @@ const auditStatements = ({
 const emptyChangeMessage =
   "The correction must change at least one fact and cannot occur in the future.";
 
-const liveCorrectionAuthority = ({
-  db,
-  authority,
-}: Readonly<{
-  db: D1Database;
-  authority: ReturnType<typeof callerAuthority>;
-}>): Effect.Effect<boolean, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
-        .bind(...authority.bindings)
-        .first(),
-    catch: boundaryFailure,
-  }).pipe(Effect.map((row) => row !== null));
-
 const findOwnedCorrection = ({
   db,
   subject,
@@ -245,8 +229,8 @@ const correctionEvidence = (
   Effect.gen(function* () {
     const fields = Object.keys(changes);
     return {
-      before: yield* Schema.encodeEffect(Schema.fromJsonString(Output))(previous),
-      after: yield* Schema.encodeEffect(Schema.fromJsonString(Output))(updated),
+      before: yield* Schema.encodeEffect(Schema.fromJsonString(TransactionOutput))(previous),
+      after: yield* Schema.encodeEffect(Schema.fromJsonString(TransactionOutput))(updated),
       decisions: yield* Schema.encodeEffect(Schema.fromJsonString(Decisions))(
         Object.fromEntries(fields.map((field) => [field, true]))
       ),
@@ -304,8 +288,10 @@ export const prepareCorrection = (
     if (invalidCorrection(input, current)) {
       return refusedPreparation("validation_failed", emptyChangeMessage);
     }
-    const authority = callerAuthority({ subject, current });
-    const live = yield* liveCorrectionAuthority({ db, authority });
+    const live = yield* Effect.tryPromise({
+      try: () => liveTransactionAuthority({ db, subject, current }),
+      catch: boundaryFailure,
+    });
     if (!live) return { _tag: "CredentialRefused" } as const;
     const owned = yield* findOwnedCorrection({ db, subject, id });
     if (Option.isNone(owned)) return refusedPreparation("not_found", missingTransactionMessage);

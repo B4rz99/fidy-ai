@@ -18,9 +18,9 @@ import {
   isPATCaller,
   maximumTransactionInputBytes,
   transactionNow as now,
-  transactionFailure,
   transactionId,
   transactionUnavailable,
+  unauthenticatedTransaction,
 } from "./transaction-boundary";
 import {
   type TransactionMutationPreparation,
@@ -40,13 +40,6 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
 });
-const HTTP_UNAUTHENTICATED = 401;
-const noSession = (): Response =>
-  transactionFailure({
-    code: "unauthenticated",
-    status: HTTP_UNAUTHENTICATED,
-    message: "Present a valid credential and retry.",
-  });
 
 type Capture = Readonly<{
   input: typeof Input.Type;
@@ -264,7 +257,7 @@ export const prepareCapture = ({
         }),
       },
     } as const;
-  }).pipe(Effect.catch((failure) => Effect.succeed(failedPreparation(failure))));
+  }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Record one manual Transaction, its captured context and AuditLogEntry in one D1 atomic unit. */
 export const createManualTransaction = ({
@@ -292,7 +285,4 @@ export const createManualTransaction = ({
   ).catch(() => transactionUnavailable());
 };
 
-export {
-  transactionUnavailable as unavailableTransaction,
-  noSession as unauthenticatedTransaction,
-};
+export { transactionUnavailable as unavailableTransaction, unauthenticatedTransaction };

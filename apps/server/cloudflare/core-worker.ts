@@ -554,19 +554,19 @@ const executeCanonicalWork = (
     return Effect.tryPromise({
       try: () => dispatchCanonicalCapture(request, environment, subject),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.createTransaction"));
   }
   if (operation.id === "transactions.updateTransaction") {
     return Effect.tryPromise({
       try: () => dispatchCanonicalCorrection(request, environment, subject),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"));
   }
   if (operation.id === atomicBatchOperation) {
     return Effect.tryPromise({
       try: () => dispatchCanonicalBatch(request, environment, subject),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation));
   }
   if (
     operation.id === "transactions.listTransactions" ||

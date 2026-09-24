@@ -323,7 +323,7 @@ export const prepareCorrection = (
       updated: updated.value,
       evidence,
     });
-  }).pipe(Effect.catch((failure) => Effect.succeed(failedPreparation(failure))));
+  }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Correct selected owned facts under live caller authority, retaining immutable evidence atomically. */
 export const correctTransaction = (correction: Correction): Promise<Response> => {

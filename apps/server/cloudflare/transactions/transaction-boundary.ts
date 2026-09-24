@@ -17,10 +17,6 @@ export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBou
 /** Wrap one rejected dependency promise so the failure channel stays typed. */
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
-/** Recover the dependency detail a boundary failure carries for budget and authority checks. */
-export const boundaryCause = (failure: unknown): unknown =>
-  failure instanceof TransactionBoundaryFailure ? failure.cause : failure;
-
 /** Shared, request-scoped identity and safe response vocabulary for the D1 Transaction adapters. */
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 /** The two live caller subjects that may execute Transaction work. */
@@ -139,26 +135,26 @@ export const recordTransactionRefusal = ({
     );
 
 const utcDayMilliseconds = 86_400_000;
-// Matches the 256-entry stable-User triggers in 0010_pat_lifecycle.sql. These remain the
-// atomic authority if concurrent browser and PAT requests pass this cheap preflight together.
-const lastAdmissibleAuditOffset = 255;
-export const transactionAuditExhausted = ({
-  db,
-  userId,
-  current,
-}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<boolean> => {
-  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
-  return db
-    .prepare(`SELECT 1 FROM (
-      SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
+/** Matches the 256-entry stable-User triggers in 0010_pat_lifecycle.sql; the triggers stay the authority. */
+export const dailyAuditBudget = 256;
+/** The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, and category audit. */
+const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
       AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
       AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM category_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-    ) LIMIT 1 OFFSET ?`)
+      AND occurred_at_ms >= ? AND occurred_at_ms < ?`;
+/** How many canonical audit rows one User has committed in the UTC day containing `current`. */
+export const dailyAuditCount = ({
+  db,
+  userId,
+  current,
+}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<number> => {
+  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
+  return db
+    .prepare(`SELECT count(*) AS total FROM (${auditDayRows})`)
     .bind(
       userId,
       start,
@@ -168,12 +164,17 @@ export const transactionAuditExhausted = ({
       start + utcDayMilliseconds,
       userId,
       start,
-      start + utcDayMilliseconds,
-      lastAdmissibleAuditOffset
+      start + utcDayMilliseconds
     )
-    .first()
-    .then((row) => row !== null);
+    .first<{ total: number }>()
+    .then((row) => row?.total ?? 0);
 };
+export const transactionAuditExhausted = ({
+  db,
+  userId,
+  current,
+}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<boolean> =>
+  dailyAuditCount({ db, userId, current }).then((count) => count >= dailyAuditBudget);
 export const transactionUnavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: 503, headers: transactionNoStore });
 
@@ -285,7 +286,7 @@ export const rejectInvalidTransactionInput = ({
     subject,
     operation,
     current: transactionNow(),
-    refusal: { outcome: "validation_failed", message: "Invalid Transaction input." },
+    refusal: { outcome: "validation_failed", message: invalidTransactionMessage },
   });
 
 /**
@@ -327,6 +328,14 @@ export const refusedPATWork = ({
     Effect.runPromise
   );
 
+/** The canonical unauthenticated response every Transaction entry point shares. */
+export const unauthenticatedTransaction = (): Response =>
+  transactionFailure({
+    code: "unauthenticated",
+    status: HTTP_UNAUTHENTICATED,
+    message: "Present a valid credential and retry.",
+  });
+
 /** Classify a Transaction credential refusal against the live PAT and Consent decisions. */
 export const refusedTransactionWork = ({
   db,
@@ -334,13 +343,7 @@ export const refusedTransactionWork = ({
 }: Readonly<{ db: D1Database; subject: TransactionCaller }>): Promise<Response> =>
   isPATCaller(subject)
     ? refusedPATWork({ db, userId: subject.userId })
-    : Promise.resolve(
-        transactionFailure({
-          code: "unauthenticated",
-          status: HTTP_UNAUTHENTICATED,
-          message: "Present a valid credential and retry.",
-        })
-      );
+    : Promise.resolve(unauthenticatedTransaction());
 
 /** Classify a credential refusal, closing over any dependency defect as canonical unavailable. */
 export const refusedCredentialResponse = ({
@@ -378,7 +381,7 @@ const authorityExists = (
     .first()
     .then((row) => row !== null);
 
-/** True only while either Transaction caller's live credential still exists. */
+/** True while the caller's credential exists, regardless of scope; classification only. */
 export const liveTransactionCredential = ({
   db,
   subject,
@@ -395,7 +398,7 @@ export const liveTransactionCredential = ({
       : liveWebSessionAuthority({ subject, current })
   );
 
-/** True only while either Transaction caller's authority row is still live. */
+/** True while the caller's authority for the exact scope it presented is still live. */
 export const liveTransactionCaller = ({
   db,
   subject,

@@ -94,6 +94,8 @@ const platformModule = (platform: boolean): Promise<string> =>
 const setup = (platform = false): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      // Every test starts its own deterministic PAT sequence instead of inheriting module order.
+      seededPATSequence = 0;
       const fixtureModule = yield* fromTestPromise(() => platformModule(platform));
       const mf = new Miniflare({
         workers: [
@@ -285,6 +287,19 @@ const countRows = (
     .bind(...bindings)
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
+
+/** The metadata-only Transaction audit rows one User recorded, in occurrence order. */
+const auditedOperations = (
+  db: D1Database,
+  userId: string
+): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
+  db
+    .prepare(
+      "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+    )
+    .bind(userId)
+    .all<{ operation: string; outcome: string }>()
+    .then((rows) => rows.results);
 const seedDailyTransactions = (db: D1Database, count: number): Promise<unknown> => {
   const today = DateTime.formatIso(DateTime.nowUnsafe());
   return db
@@ -1686,15 +1701,8 @@ it("rolls back an earlier child when a later child's revision is stale", () =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
         )
       ).toBe(0);
-      const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
-          )
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(audits.results).toEqual([
+      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
     })
@@ -1754,15 +1762,8 @@ it("aborts the D1 unit and attributes the child when a guarded correction change
         db.prepare("SELECT id FROM transaction_corrections").all<{ id: string }>()
       );
       expect(evidence.results).toEqual([{ id: evidenceId }]);
-      const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
-          )
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(audits.results).toEqual([
+      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
     })
@@ -1931,15 +1932,8 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
           )
         )
       ).toBe(2);
-      const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
-          )
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(audits.results).toEqual([
+      const audits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(audits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
@@ -2218,7 +2212,7 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
       );
       expect(neighborRows.results).toEqual([{ notes: "seed", revision: 0 }]);
 
-      const unknown = yield* fromTestPromise(() =>
+      const unrecognized = yield* fromTestPromise(() =>
         sendPublicRequest(
           db,
           batchRequest(0, [
@@ -2227,13 +2221,13 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           ])
         )
       );
-      expect(unknown.status).toBe(400);
-      const unknownRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => unknown.json())
+      expect(unrecognized.status).toBe(400);
+      const unrecognizedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => unrecognized.json())
       ).pipe(Effect.orDie);
-      expect(unknownRejection.error.code).toBe("not_found");
-      expect(unknownRejection.error.failedCallIndex).toBe(1);
-      expect(unknownRejection.error.operation).toBe("transactions.createTransaction");
+      expect(unrecognizedRejection.error.code).toBe("not_found");
+      expect(unrecognizedRejection.error.failedCallIndex).toBe(1);
+      expect(unrecognizedRejection.error.operation).toBe("transactions.createTransaction");
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -2243,14 +2237,9 @@ it("fails closed on a foreign Transaction or an unknown Category without partial
           )
         )
       ).toBe(0);
-      const refusals = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(refusals.results.map(({ outcome }) => outcome)).toEqual(["not_found", "not_found"]);
-      expect(new Set(refusals.results.map(({ operation }) => operation)).size).toBe(2);
+      const refusals = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(refusals.map(({ outcome }) => outcome)).toEqual(["not_found", "not_found"]);
+      expect(new Set(refusals.map(({ operation }) => operation)).size).toBe(2);
     })
   ));
 
@@ -2482,13 +2471,8 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
       expect(childFailure.error.code).toBe("validation_failed");
       expect(childFailure.error.failedCallIndex).toBe(0);
       expect(childFailure.error.operation).toBe("transactions.createTransaction");
-      const refusals = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(refusals.results).toEqual([
+      const refusals = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(refusals).toEqual([
         { operation: "transactions.createTransaction", outcome: "validation_failed" },
       ]);
       expect(
@@ -2540,13 +2524,8 @@ it("attributes a repeated observed revision to the later correction without part
           .all<{ notes: string; revision: number }>()
       );
       expect(retained.results).toEqual([{ notes: "seed", revision: 0 }]);
-      const refusedAudits = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(refusedAudits.results).toEqual([
+      const refusedAudits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
     })

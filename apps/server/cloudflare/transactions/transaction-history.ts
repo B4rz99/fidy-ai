@@ -18,6 +18,7 @@ import {
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionSubject,
+  missingTransactionMessage,
   transactionNoStore as noStore,
   transactionNow as now,
   refusedPATWork,
@@ -67,7 +68,7 @@ const boundarySize = pageSize + 1;
 const failure = (
   code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
   status: number
-): Response => transactionFailure({ code, status, message: "Transaction unavailable." });
+): Response => transactionFailure({ code, status, message: missingTransactionMessage });
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;

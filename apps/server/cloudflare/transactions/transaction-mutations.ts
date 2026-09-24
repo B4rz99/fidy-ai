@@ -3,16 +3,17 @@ import {
   AtomicBatchRejected,
   CanonicalOperationId,
   type CatalogOperation,
+  CreateTransactionCanonicalInput,
   type ErrorCode,
+  UpdateTransactionCanonicalInput,
   decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
   grantsRequiredTier,
   operationCatalog,
   patScopeCapability,
 } from "@fidy/server/canonical-runtime";
-import {
+import type {
   CreateTransactionInput,
-  TransactionId,
   UpdateTransactionInput,
 } from "@fidy/server/transactions-runtime";
 import { Effect, Option, Schema } from "effect";
@@ -41,15 +42,10 @@ import {
 import { prepareCapture } from "./transactions";
 import { prepareCorrection } from "./transaction-corrections";
 
-// The catalog-derived call schema already validated each child's canonical input; these extract
-// the typed payload the owning adapter prepares, so the batch never restates the wire shape.
-const CaptureInput = Schema.toType(Schema.Struct({ payload: CreateTransactionInput }));
-const CorrectionInput = Schema.toType(
-  Schema.Struct({
-    params: Schema.Struct({ id: TransactionId }),
-    payload: UpdateTransactionInput,
-  })
-);
+// The catalog-derived call schema already validated each child's canonical input; these accept
+// the decoded canonical input so the batch only extracts the typed payload the owner prepares.
+const CaptureInput = Schema.toType(CreateTransactionCanonicalInput);
+const CorrectionInput = Schema.toType(UpdateTransactionCanonicalInput);
 
 /** One raw child as the published batch command carries it; the catalog call schema decodes it. */
 export type TransactionBatchCall = unknown;
@@ -131,7 +127,10 @@ const decodeChild = (operation: string, input: unknown): Option.Option<DecodedCh
   return Option.none();
 };
 
-/** Read the canonical operation one raw child names before the catalog call schema decodes it. */
+/**
+ * Read the canonical operation one raw child names before the catalog call schema decodes it.
+ * The read stays lenient on purpose: only a decodable operation can be attributed to a child.
+ */
 const rawOperation = (call: TransactionBatchCall): Option.Option<CanonicalOperationId> =>
   Option.flatMap(
     Schema.decodeUnknownOption(Schema.Struct({ operation: Schema.String }))(call),
@@ -147,7 +146,7 @@ const batchRejection = ({
   code: ErrorCode;
   message: string;
   index: number;
-  operation: string;
+  operation: CanonicalOperationId | TransactionMutationOperation;
 }>): Response =>
   Response.json(
     Schema.encodeSync(Schema.toCodecJson(AtomicBatchRejected))(
@@ -528,6 +527,7 @@ const prepareDecodedCall = ({
     });
   });
 
+/** Compare raw callIds before schema validation so a repeated identity is a request-shape failure. */
 const duplicateCallIndex = (calls: ReadonlyArray<TransactionBatchCall>): Option.Option<number> => {
   const seen = new Set<string>();
   for (const [index, call] of calls.entries()) {

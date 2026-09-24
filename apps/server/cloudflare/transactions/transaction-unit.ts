@@ -6,8 +6,9 @@ import {
   type TransactionCaller,
   type TransactionMutationOperation,
   type TransactionRefusal,
-  boundaryCause,
   childCaller,
+  dailyAuditBudget,
+  dailyAuditCount,
   liveTransactionCaller,
   liveTransactionCredential,
   recordTransactionRefusal,
@@ -46,7 +47,7 @@ export type TransactionMutationPreparation =
   | Readonly<{ _tag: "Refused"; refusal: TransactionRefusal }>
   | Readonly<{ _tag: "CredentialRefused" }>
   | Readonly<{ _tag: "Unavailable" }>
-  | Readonly<{ _tag: "Failed"; cause: unknown }>;
+  | Readonly<{ _tag: "Failed" }>;
 
 /** Build one owner refusal as the preparation every executor maps to its canonical response. */
 // @effect-diagnostics-next-line missingPipeableSignature:off
@@ -56,10 +57,7 @@ export const refusedPreparation = (
 ): TransactionMutationPreparation => ({ _tag: "Refused", refusal: { outcome, message } });
 
 /** Build the closed preparation failure for a dependency defect the executor classifies. */
-export const failedPreparation = (failure: unknown): TransactionMutationPreparation => ({
-  _tag: "Failed",
-  cause: boundaryCause(failure),
-});
+export const failedPreparation = (): TransactionMutationPreparation => ({ _tag: "Failed" });
 
 /** What one caller-owned D1 unit did with its ordered Transaction mutations. */
 export type TransactionUnitExecution =
@@ -68,11 +66,9 @@ export type TransactionUnitExecution =
   | Readonly<{ _tag: "CredentialRefused" }>
   | Readonly<{ _tag: "Unavailable" }>;
 
-// Both budgets are enforced by the D1 triggers in the 0009/0010/0011 migrations; these values
-// only attribute an aborted unit to the child that met the trigger, never admit or refuse work.
+// The D1 triggers in the 0009/0010/0011 migrations stay the atomic authority; this value only
+// attributes an aborted unit to the child that met the trigger, never admits or refuses work.
 const manualDailyMovementBudget = 100;
-const sharedDailyAuditBudget = 256;
-const millisecondsPerDay = 86_400_000;
 const RevisionRow = Schema.Struct({ revision: Schema.Int });
 const TotalRow = Schema.Struct({ total: Schema.Int });
 /** The one message both the individual caller and a batch child report for an exhausted day. */
@@ -130,35 +126,11 @@ const auditBudgetIndex = ({
   userId: string;
   current: number;
   mutations: ReadonlyArray<PreparedTransactionMutation>;
-}>): Promise<number> => {
-  const start = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
-  return countRows(
-    db
-      .prepare(`SELECT count(*) AS total FROM (
-        SELECT 1 FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
-        UNION ALL
-        SELECT 1 FROM pat_audit WHERE user_id = ?
-        AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
-        AND occurred_at_ms >= ? AND occurred_at_ms < ?
-        UNION ALL
-        SELECT 1 FROM category_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      )`)
-      .bind(
-        userId,
-        start,
-        start + millisecondsPerDay,
-        userId,
-        start,
-        start + millisecondsPerDay,
-        userId,
-        start,
-        start + millisecondsPerDay
-      )
-  ).then((count) => {
-    const remaining = sharedDailyAuditBudget - count;
+}>): Promise<number> =>
+  dailyAuditCount({ db, userId, current }).then((count) => {
+    const remaining = dailyAuditBudget - count;
     return remaining >= 0 && remaining < mutations.length ? remaining : 0;
   });
-};
 
 const staleCorrectionIndex = ({
   db,

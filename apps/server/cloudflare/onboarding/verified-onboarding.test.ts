@@ -1325,7 +1325,8 @@ it("keeps unexpected recovery defects out of operational failures and observes o
                 );
               };
             }
-            return Reflect.get(target, property, receiver);
+            const value: unknown = Reflect.get(target, property, receiver);
+            return value;
           },
         });
       const { db, send, sendRequest } = yield* Effect.tryPromise(() =>

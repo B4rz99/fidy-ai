@@ -1,0 +1,20 @@
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 31,229-235,254,278-280,307,332
+apps/server/cloudflare/http/request-body.ts
+  h_c6d49c804e0ad2 1,109-130
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  h_c6d49c804e0ad2 9,56-57
+apps/server/cloudflare/transactions/transactions.ts
+  h_c6d49c804e0ad2 9,84-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7a27fd09ff28399b68ffe7f8e7d5a237eae88655",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -21,7 +21,6 @@ import {
   Effect,
   Encoding,
   Exit,
-  Function,
   Layer,
   Option,
   PlatformError,
@@ -72,7 +71,10 @@ const unavailable = (): Response => Response.json({ status: "unavailable" }, { s
 const noSession = (): Response =>
   Response.json(
     {
-      error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+      error: {
+        code: "unauthenticated",
+        message: "Present a valid credential and retry.",
+      },
       next: [],
     },
     { status: 401 }
@@ -82,7 +84,9 @@ export const sha256 = (value: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(value))
     .then((digest) => new Uint8Array(digest));
 const sameDigest = (expected: ReadonlyArray<number>, received: Uint8Array): boolean => {
-  if (expected.length !== digestBytes || received.length !== digestBytes) return false;
+  if (expected.length !== digestBytes || received.length !== digestBytes) {
+    return false;
+  }
   let difference = 0;
   for (let index = 0; index < digestBytes; index++) {
     difference |= (expected[index] ?? 0) ^ (received[index] ?? 0);
@@ -146,9 +150,11 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       // Expiry is checked at every use; pruning is bounded and cannot change an active pairing.
       yield* attempt(() =>
         db
-          .prepare(`DELETE FROM browser_login_pairings WHERE id IN (
+          .prepare(
+            `DELETE FROM browser_login_pairings WHERE id IN (
     SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND id NOT IN
-    (SELECT pairing_id FROM web_sessions) ORDER BY expires_at_ms LIMIT 32)`)
+    (SELECT pairing_id FROM web_sessions) ORDER BY expires_at_ms LIMIT 32)`
+          )
           .bind(started)
           .run()
       );
@@ -160,9 +166,11 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       const proofDigest = yield* attempt(() => sha256(privateVerifier));
       const result = yield* attempt(() =>
         db
-          .prepare(`INSERT INTO browser_login_pairings
+          .prepare(
+            `INSERT INTO browser_login_pairings
     (id, public_code, verifier_digest, created_at_ms, expires_at_ms)
-    VALUES (?, ?, ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, ?)`
+          )
           .bind(pairingId, publicCode, proofDigest, started, started + pairingMs)
           .run()
       );
@@ -186,21 +194,26 @@ type ApprovalInput = Readonly<{
   occurredAtMs: number;
   receivedAtMs: number;
 }>;
-export const approveBrowserPairing: {
-  (db: D1Database, input: ApprovalInput): Promise<Response>;
-  (input: ApprovalInput): (db: D1Database) => Promise<Response>;
-} = Function.dual(2, (db: D1Database, input: ApprovalInput): Promise<Response> =>
+export const approveBrowserPairing = ({
+  db,
+  input,
+}: {
+  db: D1Database;
+  input: ApprovalInput;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const result = yield* attempt(() =>
         db
-          .prepare(`INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
+          .prepare(
+            `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
       SELECT ?, ?, p.id, w.user_id FROM browser_login_pairings AS p
       JOIN whatsapp_identities AS w ON w.portfolio_id = ? AND w.bsuid = ?
       JOIN onboarding_consent_records AS c ON c.user_id = w.user_id
       WHERE p.public_code = ? AND p.state = 'pending_approval'
         AND p.expires_at_ms > ? AND p.expires_at_ms > ?
-        AND ? >= (p.created_at_ms / 1000) * 1000`)
+        AND ? >= (p.created_at_ms / 1000) * 1000`
+          )
           .bind(
             input.portfolioId,
             input.messageId,
@@ -215,14 +228,16 @@ export const approveBrowserPairing: {
       );
       return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  )
-);
+  );
 
 /** Redeem only an approved pairing with the browser's independent verifier. */
-export const redeemBrowserPairing: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const redeemBrowserPairing = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
@@ -238,63 +253,72 @@ export const redeemBrowserPairing: {
         if (Option.isNone(proof)) return invalid();
         const raw = yield* attempt(() =>
           db
-            .prepare(`SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
+            .prepare(
+              `SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
         last_poll_at_ms, minimum_poll_interval_seconds
-      FROM browser_login_pairings WHERE id = ?`)
+      FROM browser_login_pairings WHERE id = ?`
+            )
             .bind(proof.value.pairingId)
             .first()
         );
         if (raw === null) return invalid();
         const pairing = Schema.decodeUnknownOption(Pairing)(raw);
         if (Option.isNone(pairing)) return unavailable();
-        return yield* attempt(() => redeemValidProof(db, proof.value, pairing.value));
+        return yield* redeemValidProof(db, proof.value, pairing.value);
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  )
-);
+  );
 
 const redeemValidProof = (
   db: D1Database,
   proof: typeof PairingProof.Type,
   pairing: typeof Pairing.Type
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = yield* Clock.currentTimeMillis;
-      const decision = decideBrowserLoginRedemption({
-        lifecycle: pairing.state,
-        verifierMatches: sameDigest(
-          pairing.verifier_digest,
-          yield* attempt(() => sha256(proof.privateVerifier))
-        ),
-        wrongVerifierAttempts: pairing.wrong_attempts,
-        minimumPollIntervalSeconds: pairing.minimum_poll_interval_seconds,
-        lastAcceptedPollAt: Option.map(
-          Option.fromNullishOr(pairing.last_poll_at_ms),
-          DateTime.makeUnsafe
-        ),
-        expiresAt: DateTime.makeUnsafe(pairing.expires_at_ms),
-        attemptedAt: DateTime.makeUnsafe(current),
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const decision = decideBrowserLoginRedemption({
+      lifecycle: pairing.state,
+      verifierMatches: sameDigest(
+        pairing.verifier_digest,
+        yield* attempt(() => sha256(proof.privateVerifier))
+      ),
+      wrongVerifierAttempts: pairing.wrong_attempts,
+      minimumPollIntervalSeconds: pairing.minimum_poll_interval_seconds,
+      lastAcceptedPollAt: Option.map(
+        Option.fromNullishOr(pairing.last_poll_at_ms),
+        DateTime.makeUnsafe
+      ),
+      expiresAt: DateTime.makeUnsafe(pairing.expires_at_ms),
+      attemptedAt: DateTime.makeUnsafe(current),
+    });
+    if (decision._tag === "WrongVerifier") {
+      return yield* recordWrongVerifier({
+        db,
+        pairingId: proof.pairingId,
+        pairing,
+        decision,
       });
-      if (decision._tag === "WrongVerifier") {
-        return yield* attempt(() =>
-          recordWrongVerifier({ db, pairingId: proof.pairingId, pairing, decision })
-        );
-      }
-      if (decision._tag === "SlowDown") {
-        return yield* attempt(() =>
-          delayPoll({ db, pairingId: proof.pairingId, state: pairing.state, decision })
-        );
-      }
-      if (decision._tag === "Pending") {
-        return yield* attempt(() =>
-          recordPoll({ db, pairingId: proof.pairingId, pairing, current, decision })
-        );
-      }
-      if (decision._tag !== "Consume") return invalid();
-      return yield* attempt(() => createWebSession(db, proof.pairingId, current));
-    })
-  );
+    }
+    if (decision._tag === "SlowDown") {
+      return yield* delayPoll({
+        db,
+        pairingId: proof.pairingId,
+        state: pairing.state,
+        decision,
+      });
+    }
+    if (decision._tag === "Pending") {
+      return yield* recordPoll({
+        db,
+        pairingId: proof.pairingId,
+        pairing,
+        current,
+        decision,
+      });
+    }
+    if (decision._tag !== "Consume") return invalid();
+    return yield* createWebSession(db, proof.pairingId, current);
+  });
 
 const recordWrongVerifier = ({
   db,
@@ -306,27 +330,27 @@ const recordWrongVerifier = ({
   pairingId: string;
   pairing: typeof Pairing.Type;
   decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "WrongVerifier" }>;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* attempt(() =>
-        db
-          .prepare(`UPDATE browser_login_pairings SET wrong_attempts = ?, state = ?,
+}): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    yield* attempt(() =>
+      db
+        .prepare(
+          `UPDATE browser_login_pairings SET wrong_attempts = ?, state = ?,
       user_id = CASE WHEN ? = 'invalidated' THEN NULL ELSE user_id END
-    WHERE id = ? AND state = ? AND wrong_attempts = ?`)
-          .bind(
-            decision.wrongVerifierAttempts,
-            decision.lifecycle,
-            decision.lifecycle,
-            pairingId,
-            pairing.state,
-            pairing.wrong_attempts
-          )
-          .run()
-      );
-      return invalid();
-    })
-  );
+    WHERE id = ? AND state = ? AND wrong_attempts = ?`
+        )
+        .bind(
+          decision.wrongVerifierAttempts,
+          decision.lifecycle,
+          decision.lifecycle,
+          pairingId,
+          pairing.state,
+          pairing.wrong_attempts
+        )
+        .run()
+    );
+    return invalid();
+  });
 
 const delayPoll = ({
   db,
@@ -338,24 +362,27 @@ const delayPoll = ({
   pairingId: string;
   state: string;
   decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "SlowDown" }>;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* attempt(() =>
-        db
-          .prepare(
-            `UPDATE browser_login_pairings SET minimum_poll_interval_seconds = ? WHERE id = ? AND state = ?`
-          )
-          .bind(Math.min(decision.minimumPollIntervalSeconds, maximumPollSeconds), pairingId, state)
-          .run()
-      );
-      return json(
-        { error: { code: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds } },
-        HTTP_RATE_LIMITED,
-        { "retry-after": String(decision.retryAfterSeconds) }
-      );
-    })
-  );
+}): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    yield* attempt(() =>
+      db
+        .prepare(
+          `UPDATE browser_login_pairings SET minimum_poll_interval_seconds = ? WHERE id = ? AND state = ?`
+        )
+        .bind(Math.min(decision.minimumPollIntervalSeconds, maximumPollSeconds), pairingId, state)
+        .run()
+    );
+    return json(
+      {
+        error: {
+          code: "rate_limited",
+          retryAfterSeconds: decision.retryAfterSeconds,
+        },
+      },
+      HTTP_RATE_LIMITED,
+      { "retry-after": String(decision.retryAfterSeconds) }
+    );
+  });
 
 const recordPoll = ({
   db,
@@ -369,63 +396,67 @@ const recordPoll = ({
   pairing: typeof Pairing.Type;
   current: number;
   decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "Pending" }>;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const accepted = yield* attempt(() =>
-        db
-          .prepare(`UPDATE browser_login_pairings SET last_poll_at_ms = ?
-    WHERE id = ? AND state = 'pending_approval' AND last_poll_at_ms IS ? AND expires_at_ms > ?`)
-          .bind(current, pairingId, pairing.last_poll_at_ms, current)
-          .run()
-      );
-      if (accepted.meta.changes !== 1) return invalid();
-      return json(
-        {
-          status: "pending_approval",
-          expiresAt: instant(pairing.expires_at_ms),
-          pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
-        },
-        HTTP_PENDING
-      );
-    })
-  );
+}): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const accepted = yield* attempt(() =>
+      db
+        .prepare(
+          `UPDATE browser_login_pairings SET last_poll_at_ms = ?
+    WHERE id = ? AND state = 'pending_approval' AND last_poll_at_ms IS ? AND expires_at_ms > ?`
+        )
+        .bind(current, pairingId, pairing.last_poll_at_ms, current)
+        .run()
+    );
+    if (accepted.meta.changes !== 1) return invalid();
+    return json(
+      {
+        status: "pending_approval",
+        expiresAt: instant(pairing.expires_at_ms),
+        pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
+      },
+      HTTP_PENDING
+    );
+  });
 
-const createWebSession = (db: D1Database, pairingId: string, current: number): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
-      const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
-      const tokenDigest = yield* attempt(() => sha256(token));
-      const committed = yield* attempt(() =>
-        db.batch([
-          db
-            .prepare(
-              `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
-            )
-            .bind(pairingId, current, maximumWrongVerifierAttempts),
-          db
-            .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
+const createWebSession = (
+  db: D1Database,
+  pairingId: string,
+  current: number
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
+    const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
+    const tokenDigest = yield* attempt(() => sha256(token));
+    const committed = yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(
+            `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
+          )
+          .bind(pairingId, current, maximumWrongVerifierAttempts),
+        db
+          .prepare(
+            `INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
         fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
       SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
-      WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`)
-            .bind(
-              uuid(),
-              tokenDigest,
-              current,
-              DateTime.toEpochMillis(deadlines.freshUntil),
-              DateTime.toEpochMillis(deadlines.idleExpiresAt),
-              DateTime.toEpochMillis(deadlines.hardExpiresAt),
-              pairingId
-            ),
-        ])
-      );
-      if (committed[1]?.meta.changes !== 1) return invalid();
-      return json({ status: "authenticated" }, HTTP_OK, {
-        "set-cookie": sessionSetCookie(token),
-      });
-    })
-  );
+      WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`
+          )
+          .bind(
+            uuid(),
+            tokenDigest,
+            current,
+            DateTime.toEpochMillis(deadlines.freshUntil),
+            DateTime.toEpochMillis(deadlines.idleExpiresAt),
+            DateTime.toEpochMillis(deadlines.hardExpiresAt),
+            pairingId
+          ),
+      ])
+    );
+    if (committed[1]?.meta.changes !== 1) return invalid();
+    return json({ status: "authenticated" }, HTTP_OK, {
+      "set-cookie": sessionSetCookie(token),
+    });
+  });
 
 const sessionSetCookie = (token: string): string =>
   `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
@@ -444,57 +475,54 @@ export const sessionCookie = (request: Request): Option.Option<string> => {
 
 /** Resolve a live WebSession; account-security actions additionally require a fresh decision. */
 type SessionInput = Readonly<{ current: number; fresh: boolean }>;
-export const browserSession: {
-  (
-    request: Request,
-    db: D1Database,
-    input: SessionInput
-  ): Promise<Option.Option<typeof Session.Type>>;
-  (
-    db: D1Database,
-    input: SessionInput
-  ): (request: Request) => Promise<Option.Option<typeof Session.Type>>;
-} = Function.dual(
-  3,
-  (
-    request: Request,
-    db: D1Database,
-    input: SessionInput
-  ): Promise<Option.Option<typeof Session.Type>> =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const token = sessionCookie(request);
-        if (Option.isNone(token)) return Option.none();
-        const tokenDigest = yield* attempt(() => sha256(token.value));
-        const row = yield* attempt(() =>
-          db
-            .prepare(`SELECT id, user_id FROM web_sessions
+export const browserSession = ({
+  request,
+  db,
+  input,
+}: {
+  request: Request;
+  db: D1Database;
+  input: SessionInput;
+}): Promise<Option.Option<typeof Session.Type>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const token = sessionCookie(request);
+      if (Option.isNone(token)) return Option.none();
+      const tokenDigest = yield* attempt(() => sha256(token.value));
+      const row = yield* attempt(() =>
+        db
+          .prepare(
+            `SELECT id, user_id FROM web_sessions
     WHERE token_digest = ? AND revoked_at_ms IS NULL AND (? = 0 OR fresh_until_ms > ?)
-      AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
-            .bind(tokenDigest, input.fresh ? 1 : 0, input.current, input.current, input.current)
-            .first()
-        );
-        return Schema.decodeUnknownOption(Session)(row);
-      })
-    )
-);
+      AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
+          )
+          .bind(tokenDigest, input.fresh ? 1 : 0, input.current, input.current, input.current)
+          .first()
+      );
+      return Schema.decodeUnknownOption(Session)(row);
+    })
+  );
 
 /** Resolve the exact still-fresh browser session for an account-security action. */
-export const freshBrowserSession: {
-  (request: Request, db: D1Database, current: number): Promise<Option.Option<typeof Session.Type>>;
-  (
-    db: D1Database,
-    current: number
-  ): (request: Request) => Promise<Option.Option<typeof Session.Type>>;
-} = Function.dual(3, (request: Request, db: D1Database, current: number) =>
-  browserSession(request, db, { current, fresh: true })
-);
+export const freshBrowserSession = ({
+  request,
+  db,
+  current,
+}: {
+  request: Request;
+  db: D1Database;
+  current: number;
+}): Promise<Option.Option<typeof Session.Type>> =>
+  browserSession({ request, db, input: { current, fresh: true } });
 
 /** Return the canonical User projection only for a live, unrevoked WebSession. */
-export const currentUser: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const currentUser = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const token = sessionCookie(request);
@@ -505,9 +533,11 @@ export const currentUser: {
         const candidate = webSessionIdleRenewalCandidate(DateTime.makeUnsafe(usedAt));
         const rawSession = yield* attempt(() =>
           db
-            .prepare(`UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
+            .prepare(
+              `UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
         max(idle_expires_at_ms, ?)) WHERE token_digest = ? AND revoked_at_ms IS NULL
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`)
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`
+            )
             .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
             .first()
         );
@@ -516,51 +546,65 @@ export const currentUser: {
         if (Option.isNone(session)) return unavailable();
         const subject = Schema.decodeOption(UserId)(session.value.user_id);
         if (Option.isNone(subject)) return unavailable();
-        const loaded = yield* Effect.exit(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const clients = yield* Layer.build(D1Client.layer({ db }));
-              return yield* getCurrentUser(subject.value).pipe(
-                Effect.withTracerEnabled(false),
-                Effect.provideService(
-                  SqlClient.SqlClient,
-                  Context.get(clients, SqlClient.SqlClient)
-                )
-              );
-            })
-          )
-        );
-        if (Exit.isFailure(loaded)) return unavailable();
-        const observedAt = yield* Clock.currentTimeMillis;
-        yield* attempt(() =>
-          db
-            .prepare(
-              `INSERT INTO canonical_user_reads (id, user_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?)`
-            )
-            .bind(uuid(), session.value.user_id, session.value.id, observedAt)
-            .run()
-        );
-        const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
-          Effect.orDie
-        );
-        return json(
-          {
-            data,
-            next: loaded.value.next,
-          },
-          HTTP_OK,
-          { "set-cookie": sessionSetCookie(token.value) }
-        );
+        return yield* projectCurrentUser({
+          db,
+          subject: subject.value,
+          session: session.value,
+          token: token.value,
+        });
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  )
-);
+  );
+
+const projectCurrentUser = ({
+  db,
+  subject,
+  session,
+  token,
+}: {
+  db: D1Database;
+  subject: UserId;
+  session: typeof Session.Type;
+  token: string;
+}): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const loaded = yield* Effect.exit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const clients = yield* Layer.build(D1Client.layer({ db }));
+          return yield* getCurrentUser(subject).pipe(
+            Effect.withTracerEnabled(false),
+            Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
+          );
+        })
+      )
+    );
+    if (Exit.isFailure(loaded)) return unavailable();
+    const observedAt = yield* Clock.currentTimeMillis;
+    yield* attempt(() =>
+      db
+        .prepare(
+          `INSERT INTO canonical_user_reads (id, user_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?)`
+        )
+        .bind(uuid(), session.user_id, session.id, observedAt)
+        .run()
+    );
+    const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
+      Effect.orDie
+    );
+    return json({ data, next: loaded.value.next }, HTTP_OK, {
+      "set-cookie": sessionSetCookie(token),
+    });
+  });
 
 /** Require a still-fresh browser session before rotating its User's emergency proof. */
-export const rotateBackupRecoveryCode: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const rotateBackupRecoveryCode = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const token = sessionCookie(request);
@@ -570,68 +614,80 @@ export const rotateBackupRecoveryCode: {
         const tokenDigest = yield* attempt(() => sha256(token.value));
         const session = yield* attempt(() =>
           db
-            .prepare(`SELECT id, user_id FROM web_sessions
+            .prepare(
+              `SELECT id, user_id FROM web_sessions
       WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`)
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
+            )
             .bind(tokenDigest, usedAt, usedAt, usedAt)
             .first()
         );
         if (session === null) return noSession();
         const decoded = Schema.decodeUnknownOption(Session)(session);
         if (Option.isNone(decoded)) return unavailable();
-        return yield* attempt(() => rotateFreshSessionProof(db, decoded.value, usedAt));
+        return yield* rotateFreshSessionProof(db, decoded.value, usedAt);
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  )
-);
+  );
 
 const rotateFreshSessionProof = (
   db: D1Database,
   session: typeof Session.Type,
   usedAt: number
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const code = Schema.decodeOption(BackupRecoveryCode)(sampleRecoveryCode());
-      if (Option.isNone(code)) return unavailable();
-      const codeDigest = yield* attempt(() => sha256(code.value));
-      const rotated = yield* attempt(() =>
-        db.batch([
-          db
-            .prepare(`UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const code = Schema.decodeOption(BackupRecoveryCode)(sampleRecoveryCode());
+    if (Option.isNone(code)) return unavailable();
+    const codeDigest = yield* attempt(() => sha256(code.value));
+    const rotated = yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(
+            `UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
         consumed_at_ms = NULL, revision = revision + 1
         WHERE user_id = ? AND EXISTS (SELECT 1 FROM web_sessions
         WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
-            .bind(
-              codeDigest,
-              usedAt,
-              session.user_id,
-              session.id,
-              session.user_id,
-              usedAt,
-              usedAt,
-              usedAt
-            ),
-          db
-            .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
-        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`)
-            .bind(uuid(), session.user_id, session.id, usedAt),
-        ])
-      );
-      if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) return noSession();
-      return json({
-        data: { status: "rotated", backupRecoveryCode: code.value, rotatedAt: instant(usedAt) },
-        next: [],
-      });
-    })
-  );
+        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`
+          )
+          .bind(
+            codeDigest,
+            usedAt,
+            session.user_id,
+            session.id,
+            session.user_id,
+            usedAt,
+            usedAt,
+            usedAt
+          ),
+        db
+          .prepare(
+            `INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
+        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`
+          )
+          .bind(uuid(), session.user_id, session.id, usedAt),
+      ])
+    );
+    if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) {
+      return noSession();
+    }
+    return json({
+      data: {
+        status: "rotated",
+        backupRecoveryCode: code.value,
+        rotatedAt: instant(usedAt),
+      },
+      next: [],
+    });
+  });
 
 /** Revoke the exact cookie's session without disclosing whether it existed. */
-export const logoutBrowser: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const logoutBrowser = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const token = sessionCookie(request);
@@ -655,5 +711,4 @@ export const logoutBrowser: {
         },
       });
     })
-  )
-);
+  );

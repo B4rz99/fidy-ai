@@ -7,7 +7,7 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
 } from "@fidy/server/transactions-runtime";
-import { DateTime, Function, Option, Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
 import {
   livePATAuthority,
@@ -376,10 +376,13 @@ const readAuthorizedHistory = (
 };
 
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
-export const browseTransactions: {
-  (db: D1Database, selection: Selection): Promise<Response>;
-  (selection: Selection): (db: D1Database) => Promise<Response>;
-} = Function.dual(2, (db: D1Database, selection: Selection) => {
+export const browseTransactions = ({
+  db,
+  selection,
+}: {
+  db: D1Database;
+  selection: Selection;
+}): Promise<Response> => {
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
@@ -391,4 +394,4 @@ export const browseTransactions: {
       exhausted ? rateLimited() : readAuthorizedHistory(db, { selection, query, current })
     )
     .catch(failedAudit);
-});
+};

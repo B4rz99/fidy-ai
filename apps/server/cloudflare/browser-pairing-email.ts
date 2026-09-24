@@ -3,7 +3,7 @@ import {
   BrowserLoginPairingId,
   decidePendingBrowserLoginProof,
 } from "@fidy/server/identity-runtime";
-import { Clock, Crypto, DateTime, Effect, Function, Option, PlatformError, Schema } from "effect";
+import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
 const Start = Schema.Struct({
@@ -146,12 +146,13 @@ const checkPairing = (
   );
 
 /** Start one bounded email proof only after the browser proves ownership of a pending pairing. */
-export const startBrowserPairingEmail: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const startBrowserPairingEmail = (input: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const { request, db } = input;
       const proof = yield* attempt(() => readProof(request, Start));
       if (Option.isNone(proof)) return invalid();
       {
@@ -203,8 +204,7 @@ export const startBrowserPairingEmail: {
         return pending();
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  )
-);
+  );
 
 const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
   Effect.runPromise(
@@ -267,13 +267,20 @@ const approveEmailPairing = (
   );
 };
 
+const EmailProofRow = Schema.Struct({
+  proof_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
+  wrong_attempts: Schema.Int,
+  work_id: Schema.String.check(Schema.isUUID()),
+});
+
 /** Consume a mailbox proof and bind only its credential's stable User to the same browser challenge. */
-export const completeBrowserPairingEmail: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, db: D1Database): Promise<Response> =>
+export const completeBrowserPairingEmail = (input: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const { request, db } = input;
       const proof = yield* attempt(() => readProof(request, Complete));
       if (Option.isNone(proof)) return invalid();
       {
@@ -292,15 +299,7 @@ export const completeBrowserPairingEmail: {
             .first()
         );
         if (raw === null) return invalid();
-        const row = Schema.decodeUnknownOption(
-          Schema.Struct({
-            proof_digest: Schema.Array(
-              Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
-            ),
-            wrong_attempts: Schema.Int,
-            work_id: Schema.String.check(Schema.isUUID()),
-          })
-        )(raw);
+        const row = Schema.decodeUnknownOption(EmailProofRow)(raw);
         if (Option.isNone(row)) return unavailable();
         if (
           !equalDigest(
@@ -329,5 +328,4 @@ export const completeBrowserPairingEmail: {
         );
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  )
-);
+  );

@@ -539,9 +539,12 @@ const deliverPendingReplacement = (db: D1Database): Promise<string> =>
       });
       let proof = "";
       yield* Effect.tryPromise(() =>
-        deliverEmailReplacement(db, (_to, received) => {
-          proof = received;
-          return Promise.resolve("succeeded");
+        deliverEmailReplacement({
+          db,
+          send: (_to, received) => {
+            proof = received;
+            return Promise.resolve("succeeded");
+          },
         })(workId)
       );
       return proof;
@@ -719,9 +722,12 @@ it("admits email approval only for a browser-held verifier and an existing verif
       });
       let receivedCode = "";
       yield* Effect.tryPromise(() =>
-        deliverBrowserPairingEmail(db, (_email, combinedCode) => {
-          receivedCode = combinedCode;
-          return Promise.resolve("succeeded");
+        deliverBrowserPairingEmail({
+          db,
+          send: (_email, combinedCode) => {
+            receivedCode = combinedCode;
+            return Promise.resolve("succeeded");
+          },
         })(workId)
       );
       const complete = (combinedCode: string, privateVerifier: string): Promise<Response> =>

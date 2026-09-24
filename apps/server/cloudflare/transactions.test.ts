@@ -432,13 +432,15 @@ it("enforces the stable-User daily write budget atomically and preserves append-
           .bind(users[0], category, today, today)
           .run()
       );
-      const session = yield* fromTestPromise(() => transactionSession(request(0), db));
+      const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       if (Option.isNone(session)) throw new Error("Missing fixture session");
       const decoded = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(CreateTransactionInput))(
         input()
       ).pipe(Effect.orDie);
       expect(
-        (yield* fromTestPromise(() => createManualTransaction(db, session.value, decoded))).status
+        (yield* fromTestPromise(() =>
+          createManualTransaction({ db, subject: session.value, input: decoded })
+        )).status
       ).toBe(429);
       const rows = yield* fromTestPromise(() =>
         db
@@ -447,10 +449,16 @@ it("enforces the stable-User daily write budget atomically and preserves append-
           .first<{ count: number }>()
       );
       expect(rows?.count).toBe(100);
-      const neighborSession = yield* fromTestPromise(() => transactionSession(request(1), db));
+      const neighborSession = yield* fromTestPromise(() =>
+        transactionSession({ request: request(1), db })
+      );
       expect(
         (yield* fromTestPromise(() =>
-          createManualTransaction(db, Option.getOrThrow(neighborSession), decoded)
+          createManualTransaction({
+            db,
+            subject: Option.getOrThrow(neighborSession),
+            input: decoded,
+          })
         )).status
       ).toBe(201);
       const evidence = yield* fromTestPromise(() =>
@@ -679,13 +687,16 @@ it("continues the canonical history beyond its first bounded page without losing
           .run()
       );
       const subject = Option.getOrThrow(
-        yield* fromTestPromise(() => transactionSession(request(0), db))
+        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
       );
       const first = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(0, "/transactions?direction=outflow"),
-          subject,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(0, "/transactions?direction=outflow"),
+            subject,
+            id: Option.none(),
+          },
         })
       );
       const Page = Schema.Struct({
@@ -710,13 +721,16 @@ it("continues the canonical history beyond its first bounded page without losing
       if (cursor === undefined) throw new Error("Missing continuation");
       expect(page.next[0]?.args.query.direction).toBe("outflow");
       const second = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(
-            0,
-            `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
-          ),
-          subject,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(
+              0,
+              `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
+            ),
+            subject,
+            id: Option.none(),
+          },
         })
       );
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
@@ -732,13 +746,13 @@ it("commits exact manual Money, immutable capture context, and audit before cano
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession(request(0), db));
+      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       const parsed = yield* fromTestPromise(() =>
         transactionInput(request(0, "/transactions", input({ counterparty: "Acme" })))
       );
       if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
       const response = yield* fromTestPromise(() =>
-        createManualTransaction(db, owner.value, parsed.value)
+        createManualTransaction({ db, subject: owner.value, input: parsed.value })
       );
       expect(response.status).toBe(201);
       const created = yield* Schema.decodeUnknownEffect(Created)(
@@ -748,10 +762,13 @@ it("commits exact manual Money, immutable capture context, and audit before cano
       expect(encodeMoneyAmount(created.data.money.amount)).toBe("9007199254740993.15");
       expect(Option.getOrNull(created.data.counterparty)).toBe("Acme");
       const listed = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(0),
-          subject: owner.value,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(0),
+            subject: owner.value,
+            id: Option.none(),
+          },
         })
       );
       expect(
@@ -796,32 +813,35 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession(request(0), db));
-      const other = yield* fromTestPromise(() => transactionSession(request(1), db));
+      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const other = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
       const parsed = yield* fromTestPromise(() =>
         transactionInput(request(0, "/transactions", input()))
       );
       const tokenOnly = new Request("https://core.internal/transactions", {
         headers: { authorization: `Bearer ${bearer(0)}`, "x-provider-id": users[0] ?? "" },
       });
-      expect(Option.isNone(yield* fromTestPromise(() => transactionSession(tokenOnly, db)))).toBe(
-        true
-      );
+      expect(
+        Option.isNone(yield* fromTestPromise(() => transactionSession({ request: tokenOnly, db })))
+      ).toBe(true);
       if (Option.isNone(owner) || Option.isNone(other) || Option.isNone(parsed)) {
         throw new Error("fixture invalid");
       }
       const ownerLookupResponse = yield* fromTestPromise(() =>
-        createManualTransaction(db, owner.value, parsed.value)
+        createManualTransaction({ db, subject: owner.value, input: parsed.value })
       );
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => ownerLookupResponse.json())
       ).pipe(Effect.orDie);
 
       const foreignLookupResponse = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(1),
-          subject: other.value,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(1),
+            subject: other.value,
+            id: Option.none(),
+          },
         })
       );
       expect(
@@ -831,10 +851,13 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
       ).toEqual([]);
       expect(
         (yield* fromTestPromise(() =>
-          browseTransactions(db, {
-            request: request(1, `/transactions/${created.data.id}`),
-            subject: other.value,
-            id: Option.some(created.data.id),
+          browseTransactions({
+            db,
+            selection: {
+              request: request(1, `/transactions/${created.data.id}`),
+              subject: other.value,
+              id: Option.some(created.data.id),
+            },
           })
         )).status
       ).toBe(404);
@@ -844,23 +867,30 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
           .bind(1, sessions[0])
           .run()
       );
-      expect(Option.isNone(yield* fromTestPromise(() => transactionSession(request(0), db)))).toBe(
-        true
-      );
       expect(
-        (yield* fromTestPromise(() => createManualTransaction(db, owner.value, parsed.value)))
-          .status
+        Option.isNone(yield* fromTestPromise(() => transactionSession({ request: request(0), db })))
+      ).toBe(true);
+      expect(
+        (yield* fromTestPromise(() =>
+          createManualTransaction({ db, subject: owner.value, input: parsed.value })
+        )).status
       ).toBe(401);
       expect(
         (yield* fromTestPromise(() =>
-          browseTransactions(db, { request: request(0), subject: owner.value, id: Option.none() })
+          browseTransactions({
+            db,
+            selection: { request: request(0), subject: owner.value, id: Option.none() },
+          })
         )).status
       ).toBe(401);
       const otherSessionLookupResponse = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(1),
-          subject: other.value,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(1),
+            subject: other.value,
+            id: Option.none(),
+          },
         })
       );
       expect(
@@ -880,8 +910,8 @@ it("serializes concurrent mutations for one User without mixing another User's r
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const first = yield* fromTestPromise(() => transactionSession(request(0), db));
-      const second = yield* fromTestPromise(() => transactionSession(request(1), db));
+      const first = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const second = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
       const parsed = yield* fromTestPromise(() =>
         transactionInput(request(0, "/transactions", input()))
       );
@@ -923,17 +953,23 @@ it("serializes concurrent mutations for one User without mixing another User's r
         (yield* fromTestPromise(() => coordinatorB.fetch(command(first.value)))).status
       ).not.toBe(201);
       const firstList = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(0),
-          subject: first.value,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(0),
+            subject: first.value,
+            id: Option.none(),
+          },
         })
       );
       const secondList = yield* fromTestPromise(() =>
-        browseTransactions(db, {
-          request: request(1),
-          subject: second.value,
-          id: Option.none(),
+        browseTransactions({
+          db,
+          selection: {
+            request: request(1),
+            subject: second.value,
+            id: Option.none(),
+          },
         })
       );
       expect(
@@ -949,11 +985,42 @@ it("serializes concurrent mutations for one User without mixing another User's r
     })
   ));
 
+it("records one rejected audit when an atomic capture hits its resource limit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const parsed = yield* fromTestPromise(() =>
+        transactionInput(request(0, "/transactions", input()))
+      );
+      if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
+      const limitedDb: D1Database = {
+        prepare: (sql) => db.prepare(sql),
+        batch: () => Promise.reject(new Error("transaction_resource_limit")),
+        exec: (sql) => db.exec(sql),
+        withSession: (constraint) => db.withSession(constraint),
+        dump: () => db.dump(),
+      };
+      const response = yield* fromTestPromise(() =>
+        createManualTransaction({ db: limitedDb, subject: owner.value, input: parsed.value })
+      );
+      expect(response.status).toBe(429);
+      const audit = yield* fromTestPromise(() =>
+        db.prepare("SELECT outcome FROM transaction_audit WHERE user_id = ?").bind(users[0]).all()
+      );
+      expect(audit.results).toEqual([{ outcome: "resource_limit" }]);
+      const transactions = yield* fromTestPromise(() =>
+        db.prepare("SELECT COUNT(*) AS count FROM transactions").first<{ count: number }>()
+      );
+      expect(transactions?.count).toBe(0);
+    })
+  ));
+
 it("rejects an unknown Category without retaining partial Transaction, attestation, or audit state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession(request(0), db));
+      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       const parsed = yield* fromTestPromise(() =>
         transactionInput(
           request(0, "/transactions", input({ categoryId: "10000000-0000-4000-8000-000000009999" }))
@@ -963,8 +1030,9 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
         throw new Error("fixture invalid");
       }
       expect(
-        (yield* fromTestPromise(() => createManualTransaction(db, owner.value, parsed.value)))
-          .status
+        (yield* fromTestPromise(() =>
+          createManualTransaction({ db, subject: owner.value, input: parsed.value })
+        )).status
       ).not.toBe(201);
       const counts = yield* fromTestPromise(() =>
         Promise.all(

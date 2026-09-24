@@ -6,18 +6,7 @@ import {
 } from "@fidy/server/onboarding-email-delivery";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
-import {
-  Cause,
-  Clock,
-  Context,
-  Effect,
-  Exit,
-  Function,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-} from "effect";
+import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 const Work = Schema.Struct({
@@ -180,32 +169,23 @@ type DeliveryActivity = (
 ) => Promise<void>;
 
 /** Resolve only versioned identity work; the Activity returns no proof material. */
-export const runOnboardingEmailWorkflow: {
-  (
-    environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
-    payload: unknown,
-    activity: DeliveryActivity
-  ): Promise<void>;
-  (
-    payload: unknown,
-    activity: DeliveryActivity
-  ): (environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">) => Promise<void>;
-} = Function.dual(
-  3,
-  (
-    environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
-    payload: unknown,
-    activity: DeliveryActivity
-  ): Promise<void> => {
-    const decoded = Schema.decodeUnknownOption(Work)(payload);
-    if (Option.isNone(decoded)) return Promise.resolve();
-    return activity(
-      "send-onboarding-verification-v1",
-      { retries: { limit: 0, delay: "1 second" } },
-      () => deliverOnboardingEmail(environment)(decoded.value.id)
-    );
-  }
-);
+export const runOnboardingEmailWorkflow = ({
+  environment,
+  payload,
+  activity,
+}: {
+  environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">;
+  payload: unknown;
+  activity: DeliveryActivity;
+}): Promise<void> => {
+  const decoded = Schema.decodeUnknownOption(Work)(payload);
+  if (Option.isNone(decoded)) return Promise.resolve();
+  return activity(
+    "send-onboarding-verification-v1",
+    { retries: { limit: 0, delay: "1 second" } },
+    () => deliverOnboardingEmail(environment)(decoded.value.id)
+  );
+};
 
 /** Version 1 stores only a work identity; the named Activity never returns proof material. */
 export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
@@ -213,9 +193,11 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return runOnboardingEmailWorkflow(this.env, event.payload, (name, options, activity) =>
-      step.do(name, options, activity)
-    );
+    return runOnboardingEmailWorkflow({
+      environment: this.env,
+      payload: event.payload,
+      activity: (name, options, activity) => step.do(name, options, activity),
+    });
   }
 }
 

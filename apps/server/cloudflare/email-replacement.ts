@@ -11,7 +11,7 @@ import {
   emailReplacementImplementations,
   permitsFreshBrowserReplacement,
 } from "@fidy/server/email-replacement";
-import { Clock, Crypto, Data, Effect, Exit, Function, Option, PlatformError, Schema } from "effect";
+import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
 import { freshBrowserSession } from "./browser-login";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
@@ -91,17 +91,20 @@ const readProof = <A, Encoded>(
 };
 
 /** Start a candidate-mailbox proof for a fresh WebSession, without disclosing collisions. */
-export const requestEmailReplacement: {
-  (request: globalThis.Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: globalThis.Request) => Promise<Response>;
-} = Function.dual(2, (request: globalThis.Request, db: D1Database): Promise<Response> =>
+export const requestEmailReplacement = ({
+  request,
+  db,
+}: {
+  request: globalThis.Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const input = yield* attempt(() => readProof(request, RequestEmailReplacementPayload));
       if (Option.isNone(input)) return invalid();
       {
         const current = yield* Clock.currentTimeMillis;
-        const session = yield* attempt(() => freshBrowserSession(request, db, current));
+        const session = yield* attempt(() => freshBrowserSession({ request, db, current }));
         if (Option.isNone(session)) return fresh();
         if (!permitsFreshBrowserReplacement("request")) return unavailable();
         const result = yield* emailReplacementImplementations
@@ -115,8 +118,7 @@ export const requestEmailReplacement: {
         return json(result, HTTP_OK);
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  )
-);
+  );
 
 const startProof = (
   db: D1Database,
@@ -206,17 +208,20 @@ const recordMalformedInput = (
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    const session = yield* attempt(() => freshBrowserSession(request, db, current));
+    const session = yield* attempt(() => freshBrowserSession({ request, db, current }));
     if (Option.isSome(session)) {
       yield* attempt(() => recordRejected(db, session.value, current));
     }
   });
 
 /** Consume a candidate-mailbox proof only while the initiating User still has fresh browser authority. */
-export const completeEmailReplacement: {
-  (request: globalThis.Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: globalThis.Request) => Promise<Response>;
-} = Function.dual(2, (request: globalThis.Request, db: D1Database): Promise<Response> =>
+export const completeEmailReplacement = ({
+  request,
+  db,
+}: {
+  request: globalThis.Request;
+  db: D1Database;
+}): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const input = yield* attempt(() => readProof(request, CompleteEmailReplacementPayload));
@@ -227,7 +232,7 @@ export const completeEmailReplacement: {
       }
       {
         const current = yield* Clock.currentTimeMillis;
-        const session = yield* attempt(() => freshBrowserSession(request, db, current));
+        const session = yield* attempt(() => freshBrowserSession({ request, db, current }));
         if (Option.isNone(session)) return fresh();
         if (!permitsFreshBrowserReplacement("complete")) return unavailable();
         return yield* emailReplacementImplementations
@@ -241,8 +246,7 @@ export const completeEmailReplacement: {
           );
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  )
-);
+  );
 
 const redeemProof = (
   db: D1Database,

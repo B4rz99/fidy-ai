@@ -1,7 +1,7 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import { Clock, Effect, Exit, Function, Option, Schema } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "./onboarding-email";
 
 const Work = Schema.Struct({
@@ -156,33 +156,29 @@ type Send = (
   code: EmailVerificationCode,
   id: string
 ) => Promise<"succeeded" | "rejected" | "ambiguous">;
-export const deliverEmailReplacement: {
-  (db: D1Database, send: Send): (id: string) => Promise<void>;
-  (send: Send): (db: D1Database) => (id: string) => Promise<void>;
-} = Function.dual(
-  2,
-  (db: D1Database, send: Send) =>
-    (id: string): Promise<void> =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const current = yield* Clock.currentTimeMillis;
-          const pending = yield* attempt(() => findDeliverable(db, id, current));
-          if (
-            Option.isNone(pending) ||
-            pending.value.state !== "awaiting_delivery" ||
-            pending.value.expires_at_ms <= current
-          ) {
-            return;
-          }
-          const publicCode = group(symbols(publicSymbols));
-          const secret = group(symbols(secretSymbols));
-          const code = yield* Schema.decodeEffect(EmailVerificationCode)(
-            `${publicCode}-${secret}`
-          ).pipe(Effect.orDie);
-          const proofDigest = yield* attempt(() => digest(secret));
-          const claimed = yield* attempt(() =>
-            db
-              .prepare(`UPDATE email_replacements SET state = 'sending', public_code = ?,
+export const deliverEmailReplacement =
+  ({ db, send }: { db: D1Database; send: Send }) =>
+  (id: string): Promise<void> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const current = yield* Clock.currentTimeMillis;
+        const pending = yield* attempt(() => findDeliverable(db, id, current));
+        if (
+          Option.isNone(pending) ||
+          pending.value.state !== "awaiting_delivery" ||
+          pending.value.expires_at_ms <= current
+        ) {
+          return;
+        }
+        const publicCode = group(symbols(publicSymbols));
+        const secret = group(symbols(secretSymbols));
+        const code = yield* Schema.decodeEffect(EmailVerificationCode)(
+          `${publicCode}-${secret}`
+        ).pipe(Effect.orDie);
+        const proofDigest = yield* attempt(() => digest(secret));
+        const claimed = yield* attempt(() =>
+          db
+            .prepare(`UPDATE email_replacements SET state = 'sending', public_code = ?,
       proof_digest = ?, proof_expires_at_ms = ? WHERE work_id = ? AND state = 'awaiting_delivery'
         AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
           WHERE v.user_id = email_replacements.user_id AND v.email_address = prior_email
@@ -190,34 +186,33 @@ export const deliverEmailReplacement: {
         AND EXISTS (SELECT 1 FROM web_sessions AS s WHERE s.id = session_id
           AND s.user_id = email_replacements.user_id AND s.revoked_at_ms IS NULL
           AND s.fresh_until_ms > ? AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?)`)
-              .bind(
-                publicCode,
-                proofDigest,
-                Math.min(current + proofLifetimeMilliseconds, pending.value.expires_at_ms),
-                id,
-                current,
-                current,
-                current,
-                current
-              )
-              .run()
-          );
-          if (claimed.meta.changes !== 1) return;
-          const outcome = yield* attempt(() => send(pending.value.candidate_email, code, id));
-          const state = outcome === "succeeded" ? "awaiting_proof" : outcome;
-          yield* attempt(() =>
-            db
-              .prepare(`UPDATE email_replacements SET state = ?,
+            .bind(
+              publicCode,
+              proofDigest,
+              Math.min(current + proofLifetimeMilliseconds, pending.value.expires_at_ms),
+              id,
+              current,
+              current,
+              current,
+              current
+            )
+            .run()
+        );
+        if (claimed.meta.changes !== 1) return;
+        const outcome = yield* attempt(() => send(pending.value.candidate_email, code, id));
+        const state = outcome === "succeeded" ? "awaiting_proof" : outcome;
+        yield* attempt(() =>
+          db
+            .prepare(`UPDATE email_replacements SET state = ?,
       public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
       proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
       proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
       WHERE work_id = ? AND state = 'sending'`)
-              .bind(state, state, state, state, id)
-              .run()
-          );
-        })
-      )
-);
+            .bind(state, state, state, state, id)
+            .run()
+        );
+      })
+    );
 
 /** Versioned Activity sends the only raw mailbox proof through the fixed Resend boundary. */
 export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
@@ -230,18 +225,20 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
     return step.do("send-email-replacement-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
       Effect.tryPromise({
         try: () =>
-          deliverEmailReplacement(this.env.DB, (to, code, id) =>
-            sendThroughResend({
-              purpose: "credential-replacement",
-              environment: this.env,
-              to,
-              combinedCode: code,
-              id,
-            }).then((result) => {
-              const outcome = deliveryState(result);
-              return outcome === "awaiting_proof" ? "succeeded" : outcome;
-            })
-          )(work.value.id),
+          deliverEmailReplacement({
+            db: this.env.DB,
+            send: (to, code, id) =>
+              sendThroughResend({
+                purpose: "credential-replacement",
+                environment: this.env,
+                to,
+                combinedCode: code,
+                id,
+              }).then((result) => {
+                const outcome = deliveryState(result);
+                return outcome === "awaiting_proof" ? "succeeded" : outcome;
+              }),
+          })(work.value.id),
         catch: () => undefined,
       }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
     );

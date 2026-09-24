@@ -144,9 +144,10 @@ const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.
 
 const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Response> =>
   request.method === "POST"
-    ? Effect.tryPromise({ try: () => verifyOnboarding(request, db), catch: () => undefined }).pipe(
-        Effect.orElseSucceed(unavailable)
-      )
+    ? Effect.tryPromise({
+        try: () => verifyOnboarding({ request, db }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable))
     : Effect.succeed(methodNotAllowed());
 
 const enrollmentCorePath = (path: string): boolean =>
@@ -164,7 +165,11 @@ const dispatchCanonicalCapture = (
       const input = yield* Effect.tryPromise(() => transactionInput(request));
       if (Option.isNone(input)) {
         return yield* Effect.tryPromise(() =>
-          rejectManualTransaction(environment.DB, subject, "validation_failed")
+          rejectManualTransaction({
+            db: environment.DB,
+            subject,
+            outcome: "validation_failed",
+          })
         );
       }
       // The worker.core.fetch and worker.public.fetch Work spans bound latency and status.
@@ -235,33 +240,39 @@ const browserResponse = (
     Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
   > = {
     "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
-    "/web/pairings/redeem": { method: "POST", handle: () => redeemBrowserPairing(request, db) },
-    "/web/session/logout": { method: "POST", handle: () => logoutBrowser(request, db) },
+    "/web/pairings/redeem": {
+      method: "POST",
+      handle: () => redeemBrowserPairing({ request, db }),
+    },
+    "/web/session/logout": {
+      method: "POST",
+      handle: () => logoutBrowser({ request, db }),
+    },
     "/recovery/backup-code/rotate": {
       method: "POST",
-      handle: () => rotateBackupRecoveryCode(request, db),
+      handle: () => rotateBackupRecoveryCode({ request, db }),
     },
     "/web/email/authentication/start": {
       method: "POST",
-      handle: () => startBrowserPairingEmail(request, db),
+      handle: () => startBrowserPairingEmail({ request, db }),
     },
     "/web/email/authentication/complete": {
       method: "POST",
-      handle: () => completeBrowserPairingEmail(request, db),
+      handle: () => completeBrowserPairingEmail({ request, db }),
     },
     [emailReplacementOperations.request.path]: {
       method: emailReplacementOperations.request.method,
-      handle: () => requestEmailReplacement(request, db),
+      handle: () => requestEmailReplacement({ request, db }),
     },
     [emailReplacementOperations.complete.path]: {
       method: emailReplacementOperations.complete.method,
-      handle: () => completeEmailReplacement(request, db),
+      handle: () => completeEmailReplacement({ request, db }),
     },
     "/internal/support-recovery": {
       method: "POST",
-      handle: () => handleSupportRecovery(request, db, environment),
+      handle: () => handleSupportRecovery({ request, db, config: environment }),
     },
-    "/user": { method: "GET", handle: () => currentUser(request, db) },
+    "/user": { method: "GET", handle: () => currentUser({ request, db }) },
   };
   const route = routes[path];
   if (route === undefined || request.method !== route.method) {
@@ -343,13 +354,16 @@ const executeCanonicalWork = (
   ) {
     return Effect.tryPromise({
       try: () =>
-        browseTransactions(environment.DB, {
-          request,
-          subject,
-          id:
-            operation.id === "transactions.getTransaction"
-              ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-              : Option.none(),
+        browseTransactions({
+          db: environment.DB,
+          selection: {
+            request,
+            subject,
+            id:
+              operation.id === "transactions.getTransaction"
+                ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+                : Option.none(),
+          },
         }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
@@ -364,7 +378,7 @@ const authorizedCanonicalResponse = (
 ): Effect.Effect<Response> => {
   if (!request.headers.has("authorization")) {
     return Effect.tryPromise({
-      try: () => transactionSession(request, environment.DB),
+      try: () => transactionSession({ request, db: environment.DB }),
       catch: () => undefined,
     }).pipe(
       Effect.flatMap((session) => {
@@ -435,7 +449,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
-      try: () => handleCardEnrollment(request, environment),
+      try: () => handleCardEnrollment({ request, environment }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
   }

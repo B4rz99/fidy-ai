@@ -154,10 +154,10 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       );
       vi.stubGlobal("fetch", provider);
       const prepared = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
-          environment
-        )
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        })
       );
       expect(prepared.status).toBe(200);
       const preparedBody: unknown = yield* fromTestPromise(() => prepared.json());
@@ -183,18 +183,18 @@ it("prepares a Price and creates exactly one provider source and pending Billing
         cardToken: "tok_test_browser_only",
       };
       const send = (): Promise<Response> =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", submission),
-          environment
-        );
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", submission),
+          environment,
+        });
       const changedEmail = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", {
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", {
             ...submission,
             billingEmail: "wrong@example.com",
           }),
-          environment
-        )
+          environment,
+        })
       );
       expect(changedEmail.status).toBe(400);
       expect(changedEmail.headers.get("cache-control")).toBe("no-store");
@@ -212,10 +212,10 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       ).not.toMatch(/3891|tok_test_browser_only|prv_test|fidy-/u);
       expect((yield* fromTestPromise(() => send())).status).toBe(200);
       const next = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
-          environment
-        )
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        })
       );
       const second: unknown = yield* fromTestPromise(() => next.json());
       expect(second).toMatchObject({ status: "prepared", paymentSourceMode: "reuse" });
@@ -225,29 +225,29 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       if (secondEnrollment.status !== "prepared") throw new Error("expected second preparation");
       expect(
         (yield* fromTestPromise(() =>
-          handleCardEnrollment(
-            request("/web/subscription/card-enrollments/submit", "POST", {
+          handleCardEnrollment({
+            request: request("/web/subscription/card-enrollments/submit", "POST", {
               enrollmentId: secondEnrollment.enrollmentId,
               paymentSourceMode: "reuse",
               paymentRequestId: submission.paymentRequestId,
               billingEmail: submission.billingEmail,
               decisions: submission.decisions,
             }),
-            environment
-          )
+            environment,
+          })
         )).status
       ).toBe(400);
       const reuse = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", {
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", {
             enrollmentId: secondEnrollment.enrollmentId,
             paymentSourceMode: "reuse",
             billingEmail: submission.billingEmail,
             decisions: submission.decisions,
             paymentRequestId: "30000000-0000-4000-8000-000000000002",
           }),
-          environment
-        )
+          environment,
+        })
       );
       expect(reuse.status).toBe(200);
       expect(yield* fromTestPromise(() => reuse.json())).toMatchObject({
@@ -272,10 +272,10 @@ it("reserves preparation before calling Wompi and bounds failed preparations", (
       const provider = vi.fn((): Promise<Response> => pending);
       vi.stubGlobal("fetch", provider);
       const prepare = (): Promise<Response> =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
-          environment
-        );
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        });
       const first = prepare();
       yield* fromTestPromise(() => vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1)));
       expect((yield* fromTestPromise(() => prepare())).status).toBe(503);
@@ -322,26 +322,26 @@ it("rejects a foreign Origin or missing session without provider or persistence 
       vi.stubGlobal("fetch", provider);
       expect(
         (yield* fromTestPromise(() =>
-          handleCardEnrollment(
-            withHeader(
+          handleCardEnrollment({
+            request: withHeader(
               request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
               "origin",
               "https://evil.test"
             ),
-            environment
-          )
+            environment,
+          })
         )).status
       ).toBe(403);
       expect(
         (yield* fromTestPromise(() =>
-          handleCardEnrollment(
-            withHeader(
+          handleCardEnrollment({
+            request: withHeader(
               request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
               "cookie",
               "wrong"
             ),
-            environment
-          )
+            environment,
+          })
         )).status
       ).toBe(401);
       expect(provider).not.toHaveBeenCalled();
@@ -362,18 +362,18 @@ it("never repeats a source POST after a provider timeout without a known candida
       );
       vi.stubGlobal("fetch", provider);
       const prepared = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
-          environment
-        )
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        })
       );
       const decoded = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(CardEnrollment))(
         yield* fromTestPromise(() => prepared.json())
       ).pipe(Effect.orDie);
       if (decoded.status !== "prepared") throw new Error("expected prepared enrollment");
       const send = (): Promise<Response> =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", {
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", {
             enrollmentId: decoded.enrollmentId,
             paymentSourceMode: "create",
             cardToken: "tok_test_browser_only",
@@ -385,8 +385,8 @@ it("never repeats a source POST after a provider timeout without a known candida
               authorizedRecurringCharges: true,
             },
           }),
-          environment
-        );
+          environment,
+        });
       const firstSubmission = yield* fromTestPromise(() => send());
       expect(yield* fromTestPromise(() => firstSubmission.json())).toMatchObject({
         status: "source-verifying",
@@ -454,10 +454,10 @@ it("resolves a pending provider source by authenticated lookup without another s
       });
       vi.stubGlobal("fetch", provider);
       const prepared = yield* fromTestPromise(() =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
-          environment
-        )
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        })
       );
       const decoded = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(CardEnrollment))(
         yield* fromTestPromise(() => prepared.json())
@@ -476,10 +476,10 @@ it("resolves a pending provider source by authenticated lookup without another s
         },
       };
       const send = (): Promise<Response> =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", payload),
-          environment
-        );
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", payload),
+          environment,
+        });
       const pendingSubmission = yield* fromTestPromise(() => send());
       expect(yield* fromTestPromise(() => pendingSubmission.json())).toMatchObject({
         status: "source-verifying",
@@ -500,16 +500,16 @@ it("resolves a pending provider source by authenticated lookup without another s
           .run()
       );
       const resume = (): Promise<Response> =>
-        handleCardEnrollment(
-          request("/web/subscription/card-enrollments/submit", "POST", {
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", {
             enrollmentId: decoded.enrollmentId,
             paymentSourceMode: "reuse",
             paymentRequestId: payload.paymentRequestId,
             billingEmail: payload.billingEmail,
             decisions: payload.decisions,
           }),
-          environment
-        );
+          environment,
+        });
       mismatched = true;
       const mismatchedLookup = yield* fromTestPromise(() => resume());
       expect(yield* fromTestPromise(() => mismatchedLookup.json())).toMatchObject({

@@ -4,7 +4,7 @@ import {
   maximumOnboardingProofFailures,
   verifiedOnboardingContext,
 } from "@fidy/server/onboarding-verification";
-import { Clock, Data, Effect, Function, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import { newId } from "./pat-shared";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
@@ -144,62 +144,62 @@ const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, OnboardingBoundaryF
   Effect.tryPromise({ try: run, catch: (cause) => new OnboardingBoundaryFailure({ cause }) });
 
 /** Redeem a mailbox proof once; all stable identity and evidence commits or none do. */
-export const verifyOnboarding: {
-  (request: Request, db: D1Database): Promise<Response>;
-  (db: D1Database): (request: Request) => Promise<Response>;
-} = Function.dual(
-  2,
-  (request: Request, db: D1Database) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const code = yield* waitFor(() => readCode(request));
-        if (Option.isNone(code)) return invalid();
-        const raw = yield* waitFor(() =>
-          db
-            .prepare(`SELECT id, exchange_id, email_address, proof_digest,
+export const verifyOnboarding = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const code = yield* waitFor(() => readCode(request));
+      if (Option.isNone(code)) return invalid();
+      const raw = yield* waitFor(() =>
+        db
+          .prepare(`SELECT id, exchange_id, email_address, proof_digest,
       expires_at_ms, proof_expires_at_ms, state FROM pending_email_enrollments
       WHERE public_code = ?`)
-            .bind(code.value.slice(0, publicCodeLength))
-            .first()
-        );
-        if (raw === null) return invalid();
-        const row = Schema.decodeUnknownOption(ProofRow)(raw);
-        if (Option.isNone(row)) return unavailable();
-        const now = yield* Clock.currentTimeMillis;
-        if (
-          !canRedeemOnboardingProof({
-            state: row.value.state,
-            expiresAtMs: row.value.expires_at_ms,
-            proofExpiresAtMs: row.value.proof_expires_at_ms,
-            nowMs: now,
-          })
-        ) {
-          return invalid();
-        }
-        const candidate = yield* waitFor(() => digest(code.value.slice(proofOffset)));
-        if (!equalDigest(Uint8Array.from(row.value.proof_digest), candidate)) {
-          yield* waitFor(() =>
-            db
-              .prepare(`UPDATE pending_email_enrollments SET
+          .bind(code.value.slice(0, publicCodeLength))
+          .first()
+      );
+      if (raw === null) return invalid();
+      const row = Schema.decodeUnknownOption(ProofRow)(raw);
+      if (Option.isNone(row)) return unavailable();
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        !canRedeemOnboardingProof({
+          state: row.value.state,
+          expiresAtMs: row.value.expires_at_ms,
+          proofExpiresAtMs: row.value.proof_expires_at_ms,
+          nowMs: now,
+        })
+      ) {
+        return invalid();
+      }
+      const candidate = yield* waitFor(() => digest(code.value.slice(proofOffset)));
+      if (!equalDigest(Uint8Array.from(row.value.proof_digest), candidate)) {
+        yield* waitFor(() =>
+          db
+            .prepare(`UPDATE pending_email_enrollments SET
         wrong_proof_attempts = wrong_proof_attempts + 1,
         state = CASE WHEN wrong_proof_attempts + 1 >= ? THEN 'rejected' ELSE state END,
         proof_digest = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE proof_digest END,
         public_code = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE public_code END,
         proof_expires_at_ms = CASE WHEN wrong_proof_attempts + 1 >= ? THEN NULL ELSE proof_expires_at_ms END
         WHERE id = ? AND state = 'awaiting_proof' AND wrong_proof_attempts < ?`)
-              .bind(
-                maximumOnboardingProofFailures,
-                maximumOnboardingProofFailures,
-                maximumOnboardingProofFailures,
-                maximumOnboardingProofFailures,
-                row.value.id,
-                maximumOnboardingProofFailures
-              )
-              .run()
-          );
-          return invalid();
-        }
-        return yield* waitFor(() => createUser(db, row.value, now));
-      })
-    ).catch(() => invalid()) // D1 constraints and final proof trigger reject races and replay.
-);
+            .bind(
+              maximumOnboardingProofFailures,
+              maximumOnboardingProofFailures,
+              maximumOnboardingProofFailures,
+              maximumOnboardingProofFailures,
+              row.value.id,
+              maximumOnboardingProofFailures
+            )
+            .run()
+        );
+        return invalid();
+      }
+      return yield* waitFor(() => createUser(db, row.value, now));
+    })
+  ).catch(() => invalid()); // D1 constraints and final proof trigger reject races and replay.

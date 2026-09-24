@@ -934,13 +934,25 @@ it("runs the versioned Workflow Activity under replay without repeating provider
       };
       const environment = { DB: db, RESEND_API_KEY: "test-provider-key" };
       yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow(environment, { version: 1, id }, activity)
+        runOnboardingEmailWorkflow({
+          environment,
+          payload: { version: 1, id },
+          activity,
+        })
       );
       yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow(environment, { version: 1, id }, activity)
+        runOnboardingEmailWorkflow({
+          environment,
+          payload: { version: 1, id },
+          activity,
+        })
       );
       yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow(environment, { version: 2, id }, activity)
+        runOnboardingEmailWorkflow({
+          environment,
+          payload: { version: 2, id },
+          activity,
+        })
       );
       expect(steps).toEqual(["send-onboarding-verification-v1", "send-onboarding-verification-v1"]);
       expect(provider).toHaveBeenCalledTimes(1);

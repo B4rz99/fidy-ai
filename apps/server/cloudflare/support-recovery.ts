@@ -1,7 +1,7 @@
 import { BackupRecoveryCode } from "@fidy/server/client";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
-import { Clock, Data, Effect, Function, Option, Schema } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import { newId } from "./pat-shared";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
@@ -57,19 +57,15 @@ const currentClaims = (claims: Option.Option<typeof Claims.Type>, now: number): 
   claims.value.exp - now <= maximumAssertionLifetimeSeconds;
 
 /** Origin-side Access JWT validation, including signed issuer, audience and short lived identity. */
-export const verifySupportAccess: {
-  (
-    assertion: Option.Option<string>,
-    issuer: string,
-    audience: string
-  ): Promise<Option.Option<{ issuer: string; subject: string }>>;
-  (
-    issuer: string,
-    audience: string
-  ): (
-    assertion: Option.Option<string>
-  ) => Promise<Option.Option<{ issuer: string; subject: string }>>;
-} = Function.dual(3, (assertion: Option.Option<string>, issuer: string, audience: string) => {
+export const verifySupportAccess = ({
+  assertion,
+  issuer,
+  audience,
+}: {
+  assertion: Option.Option<string>;
+  issuer: string;
+  audience: string;
+}): Promise<Option.Option<{ issuer: string; subject: string }>> => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
     return Promise.resolve(Option.none());
   }
@@ -95,7 +91,7 @@ export const verifySupportAccess: {
       return Option.some({ issuer, subject: claims.value.sub });
     })
     .catch(() => Option.none());
-});
+};
 
 const readPayload = (request: Request): Promise<Option.Option<typeof Payload.Type>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
@@ -248,49 +244,40 @@ const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFail
 
 /** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
  * and case events commit in one D1 batch. No public reference can resolve a User alone. */
-export const handleSupportRecovery: {
-  (
-    request: Request,
-    db: D1Database,
-    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
-  ): Promise<Response>;
-  (
-    db: D1Database,
-    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
-  ): (request: Request) => Promise<Response>;
-} = Function.dual(
-  3,
-  (
-    request: Request,
-    db: D1Database,
-    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
-  ) => {
-    if (!configuredAccess(config)) return Promise.resolve(unavailable());
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const operator = yield* waitFor(() =>
-          verifySupportAccess(
-            Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
-            config.CLOUDFLARE_ACCESS_ISSUER,
-            config.CLOUDFLARE_ACCESS_AUDIENCE
-          )
-        );
-        if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
-        const now = yield* Clock.currentTimeMillis;
-        const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
-        if (admission !== "allowed") return admissionResponse(admission);
-        const payload = yield* waitFor(() => readPayload(request));
-        if (Option.isNone(payload)) return notApproved();
-        const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
-        const decision = {
-          operator: operator.value,
-          codeDigest,
-          publicCode: payload.value.pairingCode,
-          now,
-        };
-        if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
-        return yield* waitFor(() => decideSupportCase(db, decision));
-      })
-    ).catch(() => unavailable());
-  }
-);
+export const handleSupportRecovery = ({
+  request,
+  db,
+  config,
+}: {
+  request: Request;
+  db: D1Database;
+  config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
+}): Promise<Response> => {
+  if (!configuredAccess(config)) return Promise.resolve(unavailable());
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const operator = yield* waitFor(() =>
+        verifySupportAccess({
+          assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
+          issuer: config.CLOUDFLARE_ACCESS_ISSUER,
+          audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
+        })
+      );
+      if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
+      const now = yield* Clock.currentTimeMillis;
+      const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
+      if (admission !== "allowed") return admissionResponse(admission);
+      const payload = yield* waitFor(() => readPayload(request));
+      if (Option.isNone(payload)) return notApproved();
+      const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
+      const decision = {
+        operator: operator.value,
+        codeDigest,
+        publicCode: payload.value.pairingCode,
+        now,
+      };
+      if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
+      return yield* waitFor(() => decideSupportCase(db, decision));
+    })
+  ).catch(() => unavailable());
+};

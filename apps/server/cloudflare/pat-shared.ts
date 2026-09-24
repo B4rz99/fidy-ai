@@ -165,7 +165,7 @@ export const webSession = ({
   fresh,
 }: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Promise<
   Option.Option<SessionRow>
-> => browserSession(request, db, { current: currentMillis(), fresh });
+> => browserSession({ request, db, input: { current: currentMillis(), fresh } });
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
 export const sessionExists = freshSessionExists;
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>

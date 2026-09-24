@@ -26,7 +26,6 @@ import {
   DateTime,
   Effect,
   Exit,
-  Function,
   Layer,
   Option,
   Redacted,
@@ -793,10 +792,13 @@ const submit = (
   );
 
 /** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
-export const handleCardEnrollment: {
-  (request: Request, environment: EnrollmentEnvironment): Promise<Response>;
-  (environment: EnrollmentEnvironment): (request: Request) => Promise<Response>;
-} = Function.dual(2, (request: Request, environment: EnrollmentEnvironment) => {
+export const handleCardEnrollment = ({
+  request,
+  environment,
+}: {
+  request: Request;
+  environment: EnrollmentEnvironment;
+}): Promise<Response> => {
   const config = decodeRow(WompiConfiguration, environment);
   if (
     Option.isNone(config) ||
@@ -852,4 +854,4 @@ export const handleCardEnrollment: {
       return invalid();
     })
   ).catch(() => unavailable());
-});
+};

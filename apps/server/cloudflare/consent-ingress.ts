@@ -961,13 +961,16 @@ const handleInbound = (
       const code = approval[1];
       if (code === undefined) return answer(HTTP_CONFLICT);
       return yield* attempt(() =>
-        approveBrowserPairing(environment.DB, {
-          portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-          bsuid: input.event.caller.businessScopedUserId,
-          messageId: input.event.messageEvidence.providerMessageId,
-          publicCode: code,
-          occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-          receivedAtMs: input.receivedAtMs,
+        approveBrowserPairing({
+          db: environment.DB,
+          input: {
+            portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+            bsuid: input.event.caller.businessScopedUserId,
+            messageId: input.event.messageEvidence.providerMessageId,
+            publicCode: code,
+            occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
+            receivedAtMs: input.receivedAtMs,
+          },
         })
       );
     }

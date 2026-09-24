@@ -63,7 +63,7 @@ export class UserTransactionCoordinator {
                   digest: new Uint8Array(command.value.digest),
                 };
           return yield* Effect.tryPromise({
-            try: () => createManualTransaction(db, subject, command.value.input),
+            try: () => createManualTransaction({ db, subject, input: command.value.input }),
             catch: () => unavailableTransaction(),
           });
         }).pipe(Effect.catch((response) => Effect.succeed(response)))

@@ -1,0 +1,21 @@
+.github/workflows/production.yml
+  s_20c7bd04cb455a::t_35e044eefbfac4 166
+apps/web/scripts/production-workflow.test.ts
+  s_20c7bd04cb455a::t_5f1d85f055b486 109-110,116,118-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "705c2ed470741702918eee339c535449315bad34",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

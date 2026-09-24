@@ -324,6 +324,8 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
         `/transactions/search?q=${"x".repeat(100)}`,
         "/transactions/search?q=valid&q=valid",
         "/transactions/search?q=valid&cursor=bad",
+        "/transactions/search?q=%ZZ",
+        "/transactions/search?q=%FF%FF",
       ]) {
         const rejected = yield* fromTestPromise(() => send(0, path));
         expect(rejected.status).toBe(400);

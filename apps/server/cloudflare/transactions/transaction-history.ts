@@ -107,6 +107,15 @@ const searchValues = (values: Record<string, string>): Option.Option<Record<stri
   return term.length < minimumSearchLength ? Option.none() : Option.some({ ...values, q: term });
 };
 
+const validEncoding = (query: string): boolean => {
+  try {
+    decodeURIComponent(query);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const validParameters = (params: URLSearchParams, search: boolean, hasId: boolean): boolean =>
   !(hasId && params.size > 0) &&
   params.size <= (search ? minimumSearchLength : maxFilters) &&
@@ -125,30 +134,35 @@ const historyOperation = (
     : "transactions.listTransactions";
 };
 
+const queryValues = (
+  params: URLSearchParams,
+  search: boolean
+): Option.Option<Record<string, string>> => {
+  const values = Object.fromEntries(params);
+  return search ? searchValues(values) : Option.some(values);
+};
+
+const validSelectedId = (id: Option.Option<string>): boolean =>
+  Option.isNone(id) || Option.isSome(Schema.decodeOption(TransactionId)(id.value));
+
+const validDecodedQuery = (query: typeof Query.Type, search: boolean): boolean =>
+  (search ? Option.isSome(query.q) : Option.isNone(query.q)) &&
+  (Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value)));
+
 const parseQuery = (
   selection: Pick<Selection, "id" | "request" | "search">
 ): Option.Option<typeof Query.Type> => {
-  if (
-    Option.isSome(selection.id) &&
-    Option.isNone(Schema.decodeOption(TransactionId)(selection.id.value))
-  ) {
-    return Option.none();
-  }
+  if (!validSelectedId(selection.id)) return Option.none();
   const search = selection.search === true;
   if (search && selection.request.url.length > maxSearchUrlLength) return Option.none();
-  const params = new URL(selection.request.url).searchParams;
+  const url = new URL(selection.request.url);
+  if (search && !validEncoding(url.search)) return Option.none();
+  const params = url.searchParams;
   if (!validParameters(params, search, Option.isSome(selection.id))) return Option.none();
-  const values = search
-    ? searchValues(Object.fromEntries(params))
-    : Option.some(Object.fromEntries(params));
+  const values = queryValues(params, search);
   if (Option.isNone(values)) return Option.none();
   const decoded = Schema.decodeOption(Query)(values.value);
-  return Option.filter(
-    decoded,
-    (query) =>
-      (search ? Option.isSome(query.q) : Option.isNone(query.q)) &&
-      (Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value)))
-  );
+  return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
 type AuthorityCondition = Readonly<{

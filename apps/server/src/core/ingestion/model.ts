@@ -27,9 +27,23 @@ import {
   StatementSubmissionId,
 } from "./reference";
 
-const maximumEncodedFileLength = 6_990_508;
+const maximumStatementMebibytes = 5;
+const bytesPerKibibyte = 1024;
+const bytesPerMebibyte = bytesPerKibibyte * bytesPerKibibyte;
+const base64DecodedBytesPerGroup = 3;
+const base64EncodedCharactersPerGroup = 4;
 const maximumFileNameLength = 255;
 const maximumMappingSampleRows = 5;
+
+/**
+ * Largest actual statement byte length accepted by staging or parsing. Staged bytes are exactly the
+ * compressed input a later parse receives, so both ceilings are the same domain bound.
+ */
+export const maximumStatementBytes = maximumStatementMebibytes * bytesPerMebibyte;
+
+/** Base64 image of the same statement bound, for the current byte-bearing canonical input. */
+const maximumEncodedFileLength =
+  Math.ceil(maximumStatementBytes / base64DecodedBytesPerGroup) * base64EncodedCharactersPerGroup;
 
 /** One permanent unpredictable forwarding address owned by the authenticated User. */
 export const EmailForwardingAddress = Schema.Struct({

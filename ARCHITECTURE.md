@@ -36,12 +36,17 @@ candidate digest, finding set, and coordinated rollout issue. See
 [Contract compatibility](docs/contract-compatibility.md).
 
 Every stable-User domain API and agent surface derives from the server's canonical operation
-definition. A proof-bearing credential-bootstrap API with no stable User is the narrow exception and
-joins canonical authority only after proof exchange establishes a stable User. Its separately generated
-OpenAPI artifact is freshness-checked and compared against the base when present. It has no canonical
-operation policy, so the policy-break acknowledgement for the stable-User artifact pair does not apply:
-breaking changes to this direct bootstrap contract are rejected until a coordinated add/use/remove
-rollout makes the comparison nonbreaking.
+definition. Two narrow exceptions are named rather than silent. A proof-bearing credential-bootstrap
+API with no stable User joins canonical authority only after proof exchange establishes a stable
+User. A bounded byte-staging transport may accept one User's hostile statement bytes before a
+canonical submission cites them: it is User-authenticated, creates no domain state, returns no
+readable content and no authority, and any unpublished material expires unless a canonical mutation
+publishes it ([ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The
+proof-bearing bootstrap's separately generated OpenAPI artifact is freshness-checked and compared
+against the base when present. It has no canonical operation policy, so the policy-break
+acknowledgement for the stable-User artifact pair does not apply: breaking changes to this direct
+bootstrap contract are rejected until a coordinated add/use/remove rollout makes the comparison
+nonbreaking.
 
 ## 3. Production topology
 
@@ -96,9 +101,12 @@ policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cac
 headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
 is the first exception: its Cloudflare integration gate exercises public ingress, the private service
 binding, and local D1. Resource-admission integration exercises local D1 directly to prove atomic
-concurrency and restart behavior without inventing a public route. The Workers AI release gate
-exercises the approved model through the real AI binding without a gateway or external-model
-fallback. DO/Queue/Workflow/R2 integration gates remain future work.
+concurrency and restart behavior without inventing a public route. Statement-byte staging exercises
+local D1 and R2 directly to prove actual bytes, digests, User ownership, interruption, replay, and
+bounded expiry; the production binding and its scheduled sweep land with statement submission
+([ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The Workers AI
+release gate exercises the approved model through the real AI binding without a gateway or
+external-model fallback. DO/Queue/Workflow integration gates remain future work.
 
 Application-local test seams belong to the owning application architecture. Portable core, schema,
 security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests

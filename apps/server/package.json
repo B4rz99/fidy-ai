@@ -94,6 +94,11 @@
       "import": "./src/shell/ingestion/parser.ts",
       "default": "./src/shell/ingestion/parser.ts"
     },
+    "./statement-staging": {
+      "types": "./src/core/ingestion/staging.ts",
+      "import": "./src/core/ingestion/staging.ts",
+      "default": "./src/core/ingestion/staging.ts"
+    },
     "./telemetry": {
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",

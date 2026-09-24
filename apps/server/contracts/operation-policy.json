@@ -710,6 +710,21 @@
       }
     },
     {
+      "id": "transactions.searchTransactions",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "transactions.unlinkTransactions",
       "policy": {
         "access": {

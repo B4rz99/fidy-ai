@@ -33,6 +33,7 @@ export const canonicalOperationImplementations = {
   "budgets.getBudgetStatus": unavailableOperation,
   "dashboard.listDashboardCatalog": unavailableOperation,
   "transactions.listTransactions": unavailableOperation,
+  "transactions.searchTransactions": unavailableOperation,
   "transactions.getTransaction": unavailableOperation,
   "transactions.listSourceAttestations": unavailableOperation,
   "ingestion.getEmailForwarding": unavailableOperation,

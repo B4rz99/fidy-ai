@@ -9,6 +9,7 @@ import {
   TransactionPairInput,
   TransactionPresentation,
   TransactionQueryValues,
+  TransactionSearchQuery,
   UpdateTransactionInput,
 } from "~/core/transactions/model";
 import {
@@ -70,6 +71,18 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
       .annotate(
         OpenApi.Description,
         "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.get("searchTransactions", "/transactions/search", {
+      query: TransactionSearchQuery,
+      success: OperationResponse(Schema.Array(Transaction)),
+      error: [ValidationFailed, ResourceLimited],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters; results are bounded and ordered newest first. Follow the returned continuation to browse further matches."
       )
       .annotateMerge(read)
   )

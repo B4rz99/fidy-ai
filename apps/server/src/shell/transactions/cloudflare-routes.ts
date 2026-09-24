@@ -16,6 +16,7 @@ const matches = (template: string, path: string): boolean => {
 const implemented = [
   "transactions.createTransaction",
   "transactions.listTransactions",
+  "transactions.searchTransactions",
   "transactions.getTransaction",
   "transactions.updateTransaction",
 ] as const;

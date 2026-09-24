@@ -1314,6 +1314,22 @@ it("isolates management by User and immediately refuses revoked and under-scoped
         },
         next: [],
       });
+      const auditBeforeSearch = yield* awaitPromise(
+        db.prepare("SELECT count(*) AS total FROM transaction_audit").first<{ total: number }>()
+      );
+      const deniedSearch = yield* awaitPromise(
+        send({ path: "/transactions/search?q=private", method: "GET", bearer: writerBearer })
+      );
+      expect(deniedSearch.status).toBe(403);
+      expect(yield* awaitPromise(deniedSearch.json())).toMatchObject({
+        error: { code: "scope_missing" },
+        next: [],
+      });
+      expect(
+        yield* awaitPromise(
+          db.prepare("SELECT count(*) AS total FROM transaction_audit").first<{ total: number }>()
+        )
+      ).toEqual(auditBeforeSearch);
       yield* awaitPromise(
         db
           .prepare("UPDATE pats SET revoked_at_ms = ? WHERE bearer_digest = ?")

@@ -31,6 +31,42 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
   });
 
+  it("provides complete production runtime config to Alchemy plan and deploy", () => {
+    const planStart = workflow.indexOf("- name: Plan the complete Cloudflare topology");
+    const trunkRecheck = workflow.indexOf("- name: Recheck trunk immediately before deployment");
+    const deployStart = workflow.indexOf("- name: Deploy the exact planned topology with Alchemy");
+    const verification = workflow.indexOf("- name: Verify the migrated public topology");
+    const planStep = workflow.slice(planStart, trunkRecheck);
+    const deployStep = workflow.slice(deployStart, verification);
+    const runtimeConfiguration = [
+      "KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}",
+      "KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}",
+      "WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}",
+      "RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}",
+      "WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}",
+      "WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}",
+      "WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}",
+      "WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}",
+      "CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}",
+      "CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}",
+    ];
+
+    expect(planStart).toBeGreaterThan(0);
+    expect(deployStart).toBeGreaterThan(0);
+    for (const binding of runtimeConfiguration) {
+      expect(planStep).toContain(binding);
+      expect(deployStep).toContain(binding);
+    }
+    expect(planStep).toContain("bash scripts/check-production-runtime-config.sh");
+    expect(deployStep).toContain("bash scripts/check-production-runtime-config.sh");
+    expect(planStep.indexOf("bash scripts/check-production-runtime-config.sh")).toBeLessThan(
+      planStep.indexOf("alchemy plan")
+    );
+    expect(deployStep.indexOf("bash scripts/check-production-runtime-config.sh")).toBeLessThan(
+      deployStep.indexOf("alchemy deploy")
+    );
+  });
+
   it("runs the deterministic Worker boundary suite before deployment", () => {
     expect(workflow).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
   });

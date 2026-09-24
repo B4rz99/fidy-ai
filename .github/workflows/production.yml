@@ -84,7 +84,19 @@ jobs:
 
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
+        env:
+          KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
+          KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+          CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
+          bash scripts/check-production-runtime-config.sh
           alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
           alchemy plan --stage production --no-input
 
@@ -102,7 +114,19 @@ jobs:
 
       - name: Deploy the exact planned topology with Alchemy
         working-directory: infra/cloudflare
+        env:
+          KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
+          KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+          CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
+          bash scripts/check-production-runtime-config.sh
           alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
           alchemy deploy --stage production --yes --no-input
 

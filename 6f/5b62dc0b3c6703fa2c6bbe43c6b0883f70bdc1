@@ -1,0 +1,18 @@
+apps/server/cloudflare/categories/canonical-category.ts
+  h_c6d49c804e0ad2 17,46,85,109
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 229-230,234,238-239,249,258-273,303-308
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 2396-2427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6f5b62dc0b3c6703fa2c6bbe43c6b0883f70bdc1",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

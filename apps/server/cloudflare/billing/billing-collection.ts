@@ -2,6 +2,7 @@ import {
   BillingAttemptId,
   BillingEmail,
   IanaTimeZone,
+  Money,
   type WompiBillingClientService,
   WompiEnvironment,
   WompiSourceId,
@@ -18,13 +19,13 @@ import { recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventId } from "./wompi-event";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import {
-  BigDecimal,
   Clock,
   Context,
   Crypto,
   Data,
   DateTime,
   Effect,
+  Encoding,
   Exit,
   Layer,
   Option,
@@ -34,6 +35,20 @@ import {
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 const Work = Schema.Struct({ version: Schema.Literal(1), attemptId: BillingAttemptId });
+const LookupWork = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("lookup"),
+  transactionId: WompiTransactionId,
+});
+type CollectionQueue = Readonly<{ send: (work: typeof Work.Type) => Promise<unknown> }>;
+type CollectionWorkflow = Readonly<{
+  create: (options: { id: string; params: typeof Work.Type }) => Promise<unknown>;
+  get: (id: string) => Promise<unknown>;
+}>;
+type LookupWorkflowBinding = Readonly<{
+  create: (options: { id: string; params: typeof LookupWork.Type }) => Promise<unknown>;
+  get: (id: string) => Promise<unknown>;
+}>;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
@@ -50,6 +65,13 @@ const Snapshot = Schema.Struct({
   wompi_source_id: WompiSourceId,
 });
 const Candidate = Schema.Struct({ transaction_id: WompiTransactionId });
+const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
+const billingAmount = (
+  captured: typeof Snapshot.Type
+): Effect.Effect<number, BillingCollectionFailure> =>
+  Effect.flatMap(decode(Money, { amount: captured.amount, currency: captured.currency }), (money) =>
+    amountInCentsForBilling(money.amount)
+  );
 const pendingBatchSize = 32;
 const dispatchCooldownMs = 60_000;
 const candidateCooldownMs = 60_000;
@@ -137,7 +159,7 @@ const snapshot = (
 
 const publishBillingEntry = (
   input: Readonly<{
-    environment: Pick<BillingCollectionEnvironment, "DB" | "BILLING_COLLECTION_QUEUE">;
+    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }>;
     entry: { readonly attempt_id: BillingAttemptId; readonly version: 1 };
     now: number;
   }>
@@ -178,7 +200,7 @@ const publishBillingEntry = (
 
 /** Offer bounded, secret-free work identities. D1 intent remains authoritative on Queue failure. */
 export const dispatchBillingCollection = (
-  environment: Pick<BillingCollectionEnvironment, "DB" | "BILLING_COLLECTION_QUEUE">
+  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }>
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -205,8 +227,8 @@ export const dispatchBillingCollection = (
 /** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Pick<BillingCollectionEnvironment, "DB" | "BILLING_COLLECTION_WORKFLOW">;
-    batch: MessageBatch<unknown>;
+    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>;
+    batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
@@ -223,7 +245,8 @@ export const receiveBillingCollection = (
           .bind(work.value.attemptId)
           .first()
       );
-      if (row?.state !== "armed") {
+      const arm = Schema.decodeUnknownOption(ArmState)(row);
+      if (Option.isNone(arm) || arm.value.state !== "armed") {
         message.ack();
         continue;
       }
@@ -290,7 +313,7 @@ const verifiedSnapshot = (
     );
     const match = yield* decode(Schema.Struct({ id: BillingAttemptId }), row);
     const captured = yield* snapshot(input.db, match.id);
-    const amount = yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe(captured.amount));
+    const amount = yield* billingAmount(captured);
     if (
       !matchesSnapshot({
         found: input.found,
@@ -352,21 +375,18 @@ export const reconcileBillingTransaction = (
   });
 
 const reconcileEventCandidate = (
-  input: Readonly<{
-    db: D1Database;
-    client: WompiBillingClientService;
-    transactionId: WompiTransactionId;
-  }>
+  environment: BillingRuntime,
+  transactionId: WompiTransactionId
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
-    yield* reconcileBillingTransaction(input);
+    const client = yield* billingClient(environment);
+    yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
     yield* attempt(() =>
-      input.db
-        .prepare("DELETE FROM billing_event_candidates WHERE transaction_id = ?")
-        .bind(input.transactionId)
+      environment.DB.prepare("DELETE FROM billing_event_candidates WHERE transaction_id = ?")
+        .bind(transactionId)
         .run()
     );
-  });
+  }).pipe(Effect.withSpan("billing.collection.lookup"));
 
 /** A valid signed event persists only a bounded transaction-id hint, then independently verifies provider evidence. */
 export const receiveWompiBillingEvent = (
@@ -405,17 +425,7 @@ export const receiveWompiBillingEvent = (
       )
     );
     if (Exit.isFailure(retained)) return new Response(null, { status: 503 });
-    const client = yield* Effect.exit(billingClient(input.environment));
-    if (Exit.isSuccess(client)) {
-      yield* Effect.exit(
-        reconcileEventCandidate({
-          db: input.environment.DB,
-          client: client.value,
-          transactionId: id,
-        })
-      );
-    }
-    // The persisted hint is sufficient: a sweep retries authenticated GET without trusting the callback state.
+    // The durable hint is looked up by a named Workflow Activity, never from the ingress handler.
     return new Response(null, { status: 200 });
   });
 
@@ -427,7 +437,7 @@ const collect = (
     const captured = yield* snapshot(environment.DB, attemptId);
     if (captured.wompi_environment !== environment.WOMPI_ENVIRONMENT) return yield* failure();
     const client = yield* billingClient(environment);
-    const amount = yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe(captured.amount));
+    const amount = yield* billingAmount(captured);
     // Claim BEFORE outbound I/O: a crash between this write and POST is ambiguous, never retried blindly.
     const now = yield* Clock.currentTimeMillis;
     const claimed = yield* attempt(() =>
@@ -446,7 +456,9 @@ const collect = (
         sourceId: captured.wompi_source_id,
       })
     );
-    if (Exit.isFailure(created)) return; // Retain ambiguity; do not rearm on timeout or malformed response.
+    // Wompi documents charge lookup by provider id, not by reference. Without a response id,
+    // retain ambiguity until a signed callback supplies a lookup hint; NEVER repeat the POST.
+    if (Exit.isFailure(created)) return;
     if (
       !matchesSnapshot({
         found: created.value,
@@ -467,7 +479,7 @@ const collect = (
         .run()
     );
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId: candidate });
-  });
+  }).pipe(Effect.withSpan("billing.collection.collect"));
 
 type CollectionActivity = (
   name: string,
@@ -479,12 +491,18 @@ type CollectionActivity = (
 export const runBillingCollectionWorkflow = (
   input: Readonly<{ environment: BillingRuntime; payload: unknown; activity: CollectionActivity }>
 ): Promise<void> => {
-  const work = Schema.decodeUnknownOption(Work)(input.payload);
+  const work = Schema.decodeUnknownOption(Schema.Union([Work, LookupWork]))(input.payload);
   if (Option.isNone(work)) return Promise.resolve();
-  return input.activity(
-    "collect-wompi-billing-v1",
-    { retries: { limit: 0, delay: "1 second" } },
-    () => Effect.runPromise(collect(input.environment, work.value.attemptId))
+  const options = { retries: { limit: 0, delay: "1 second" } } as const;
+  if ("kind" in work.value) {
+    const transactionId = work.value.transactionId;
+    return input.activity("lookup-wompi-billing-v1", options, () =>
+      Effect.runPromise(reconcileEventCandidate(input.environment, transactionId))
+    );
+  }
+  const attemptId = work.value.attemptId;
+  return input.activity("collect-wompi-billing-v1", options, () =>
+    Effect.runPromise(collect(input.environment, attemptId))
   );
 };
 
@@ -498,9 +516,58 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
   }
 }
 
-/** Recheck known candidates and delay terminal negative settlement until the retry window expires. */
+const offerBillingLookup = (
+  input: Readonly<{
+    db: D1Database;
+    workflow: LookupWorkflowBinding;
+    transactionId: WompiTransactionId;
+    now: number;
+  }>
+): Effect.Effect<boolean, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    const { db, workflow, transactionId, now } = input;
+    const fingerprint = Encoding.encodeHex(
+      new Uint8Array(
+        yield* attempt(() =>
+          crypto.subtle.digest("SHA-256", new TextEncoder().encode(transactionId))
+        )
+      )
+    );
+    const id = `billing-lookup-v1-${fingerprint}-${Math.floor(now / candidateCooldownMs)}`;
+    const created = yield* Effect.exit(
+      attempt(() =>
+        workflow.create({
+          id,
+          params: { version: 1, kind: "lookup", transactionId },
+        })
+      )
+    );
+    if (Exit.isFailure(created)) {
+      const existing = yield* Effect.exit(attempt(() => workflow.get(id)));
+      if (Exit.isFailure(existing)) return false;
+    }
+    const recorded = yield* Effect.exit(
+      attempt(() =>
+        db.batch([
+          db
+            .prepare(
+              "UPDATE billing_transaction_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
+            )
+            .bind(now, transactionId),
+          db
+            .prepare(
+              "UPDATE billing_event_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
+            )
+            .bind(now, transactionId),
+        ])
+      )
+    );
+    return Exit.isSuccess(recorded);
+  });
+
+/** Recheck known candidates by starting a bounded, named Workflow Activity. Failed handoffs retain D1 intent. */
 export const reconcileBillingCandidates = (
-  environment: BillingRuntime
+  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: LookupWorkflowBinding }>
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -519,25 +586,17 @@ export const reconcileBillingCandidates = (
         .all()
     );
     const candidates = yield* decode(Schema.Array(Candidate), rows.results);
-    if (candidates.length === 0) return;
-    const client = yield* billingClient(environment);
+    let failed = false;
     for (const candidate of candidates) {
-      yield* attempt(() =>
-        environment.DB.batch([
-          environment.DB.prepare(
-            "UPDATE billing_transaction_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
-          ).bind(now, candidate.transaction_id),
-          environment.DB.prepare(
-            "UPDATE billing_event_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
-          ).bind(now, candidate.transaction_id),
-        ])
-      );
-      yield* Effect.exit(
-        reconcileEventCandidate({
+      const offered = yield* Effect.exit(
+        offerBillingLookup({
           db: environment.DB,
-          client,
+          workflow: environment.BILLING_COLLECTION_WORKFLOW,
           transactionId: candidate.transaction_id,
+          now,
         })
       );
+      if (Exit.isFailure(offered) || !offered.value) failed = true;
     }
-  });
+    if (failed) return yield* failure();
+  }).pipe(Effect.withSpan("billing.collection.reconcile"));

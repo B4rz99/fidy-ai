@@ -172,7 +172,7 @@ const providerCallbackEffect = (
   return receiveWompiBillingEvent({
     request,
     environment: { ...environment, WOMPI_EVENT_SECRET: environment.WOMPI_EVENT_SECRET },
-  });
+  }).pipe(Effect.withSpan("billing.collection.event"));
 };
 
 const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Response> =>
@@ -682,21 +682,28 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
       BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
     },
     batch,
-  }).pipe(Effect.runPromise);
+  }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
 };
 
 const billingScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
   Effect.gen(function* () {
-    if (environment.BILLING_COLLECTION_QUEUE === undefined) return;
+    if (
+      environment.BILLING_COLLECTION_QUEUE === undefined ||
+      environment.BILLING_COLLECTION_WORKFLOW === undefined
+    ) {
+      return;
+    }
+    const workflow = environment.BILLING_COLLECTION_WORKFLOW;
     const dispatched = yield* Effect.exit(
       dispatchBillingCollection({
         DB: environment.DB,
         BILLING_COLLECTION_QUEUE: environment.BILLING_COLLECTION_QUEUE,
       }).pipe(Effect.withSpan("billing.collection.dispatch"))
     );
-    yield* reconcileBillingCandidates(environment).pipe(
-      Effect.withSpan("billing.collection.reconcile")
-    );
+    yield* reconcileBillingCandidates({
+      DB: environment.DB,
+      BILLING_COLLECTION_WORKFLOW: workflow,
+    });
     if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
   }).pipe(Effect.orDie);
 

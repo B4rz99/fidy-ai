@@ -37,4 +37,4 @@ export {
   cardEnrollmentInvalidBody,
   cardEnrollmentUnavailableBody,
 } from "~/subscription-enrollment-api";
-export { encodeMoneyAmount } from "~/core/_shared/money";
+export { encodeMoneyAmount, Money } from "~/core/_shared/money";

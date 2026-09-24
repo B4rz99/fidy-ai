@@ -47,6 +47,9 @@ BEGIN SELECT RAISE(ABORT, 'billing_evidence_foreign_transaction'); END;
 CREATE TRIGGER billing_evidence_immutable_identity BEFORE UPDATE ON billing_transaction_evidence
 WHEN NEW.transaction_id <> OLD.transaction_id OR NEW.attempt_id <> OLD.attempt_id
 BEGIN SELECT RAISE(ABORT, 'billing_evidence_identity_immutable'); END;
+CREATE TRIGGER billing_evidence_approval_monotonic BEFORE UPDATE ON billing_transaction_evidence
+WHEN OLD.status = 'APPROVED' AND NEW.status <> 'APPROVED'
+BEGIN SELECT RAISE(ABORT, 'billing_evidence_approval_immutable'); END;
 
 -- Success can correct a previous negative, but no later event may revoke a verified approval.
 DROP TRIGGER billing_attempt_terminal_monotonic;

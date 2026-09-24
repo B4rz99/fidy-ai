@@ -82,6 +82,7 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
         Option.getOrNull(periodStartMs),
         attemptId
       ),
+    // User is the stable coordination key: the guarded upsert serializes competing attempts in D1.
     db
       .prepare(`INSERT INTO subscriptions
       (user_id, attempt_id, price_id, paid_period_ends_at_ms, renewal_anchor_ms)
@@ -98,8 +99,16 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
       SELECT id, status, ? FROM billing_attempts WHERE id = ? AND status IN ('succeeded','failed')`)
       .bind(observedAtMs, attemptId),
     db
+      .prepare(`DELETE FROM billing_followup_outbox
+      WHERE attempt_id IN (SELECT id FROM billing_attempts WHERE user_id =
+        (SELECT user_id FROM billing_attempts WHERE id = ?))
+      AND NOT EXISTS (SELECT 1 FROM subscriptions WHERE subscriptions.attempt_id =
+        billing_followup_outbox.attempt_id)`)
+      .bind(attemptId),
+    db
       .prepare(`INSERT OR IGNORE INTO billing_followup_outbox (attempt_id, kind, due_at_ms)
-      SELECT attempt_id, 'renewal_due', ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?`)
+      SELECT p.attempt_id, 'renewal_due', p.ends_at_ms FROM billing_paid_periods AS p
+      JOIN subscriptions AS s ON s.attempt_id = p.attempt_id WHERE p.attempt_id = ?`)
       .bind(attemptId),
   ];
 };

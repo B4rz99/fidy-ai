@@ -227,7 +227,12 @@ const admissionResponse = (admission: "limited" | "unavailable"): Response =>
 const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Response> =>
   Promise.resolve()
     .then(() => approveCase(db, input))
-    .catch(() => false) // A competing approval can invalidate a conditional D1 batch.
+    .catch((error: unknown) => {
+      // A competing approval can invalidate a conditional D1 batch. Other D1 failures
+      // still require a candidate recheck; unrelated exceptions are defects.
+      if (isD1Failure(error)) return false;
+      throw error;
+    })
     .then((approved) =>
       approved
         ? response(httpOk, { status: "approved" })
@@ -236,11 +241,20 @@ const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Respons
           )
     );
 
-class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<{
-  readonly cause: unknown;
-}> {}
+class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<{}> {}
+
+// D1 rejects with a fixed error prefix, while user or programmer exceptions must stay defects.
+const isD1Failure = (error: unknown): boolean =>
+  error instanceof Error && /^D1_(?:EXEC_)?ERROR(?::|$)/u.test(error.message);
+
 const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFailure> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new SupportBoundaryFailure({ cause }) });
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => {
+      if (isD1Failure(cause)) return new SupportBoundaryFailure();
+      throw cause;
+    },
+  });
 
 /** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
  * and case events commit in one D1 batch. No public reference can resolve a User alone. */
@@ -252,32 +266,30 @@ export const handleSupportRecovery = ({
   request: Request;
   db: D1Database;
   config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
-}): Promise<Response> => {
-  if (!configuredAccess(config)) return Promise.resolve(unavailable());
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const operator = yield* waitFor(() =>
-        verifySupportAccess({
-          assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
-          issuer: config.CLOUDFLARE_ACCESS_ISSUER,
-          audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
-        })
-      );
-      if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
-      const now = yield* Clock.currentTimeMillis;
-      const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
-      if (admission !== "allowed") return admissionResponse(admission);
-      const payload = yield* waitFor(() => readPayload(request));
-      if (Option.isNone(payload)) return notApproved();
-      const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
-      const decision = {
-        operator: operator.value,
-        codeDigest,
-        publicCode: payload.value.pairingCode,
-        now,
-      };
-      if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
-      return yield* waitFor(() => decideSupportCase(db, decision));
-    })
-  ).catch(() => unavailable());
+}): Effect.Effect<Response> => {
+  if (!configuredAccess(config)) return Effect.succeed(unavailable());
+  return Effect.gen(function* () {
+    const operator = yield* waitFor(() =>
+      verifySupportAccess({
+        assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
+        issuer: config.CLOUDFLARE_ACCESS_ISSUER,
+        audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
+      })
+    );
+    if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
+    const now = yield* Clock.currentTimeMillis;
+    const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
+    if (admission !== "allowed") return admissionResponse(admission);
+    const payload = yield* waitFor(() => readPayload(request));
+    if (Option.isNone(payload)) return notApproved();
+    const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
+    const decision = {
+      operator: operator.value,
+      codeDigest,
+      publicCode: payload.value.pairingCode,
+      now,
+    };
+    if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
+    return yield* waitFor(() => decideSupportCase(db, decision));
+  }).pipe(Effect.catchTag("SupportBoundaryFailure", () => Effect.succeed(unavailable())));
 };

@@ -7,7 +7,7 @@ import {
 import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { CreateTransactionInput } from "@fidy/server/transactions-runtime";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
@@ -233,12 +233,52 @@ const ownedCorePath = (path: string): boolean =>
   patRoute(path) ||
   canonicalRoute(path);
 
+const supportRecoveryResponse = (
+  request: Request,
+  environment: CoreEnvironment,
+  telemetry: TelemetryService
+): Effect.Effect<Response> => {
+  if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+  return telemetry.rootSpan(
+    {
+      component: "api",
+      operation: "http.supportRecovery",
+      trigger: "api",
+      spanOperation: "http.server",
+      workKind: "http_request",
+      metadata: {
+        _tag: "Http",
+        method: "POST",
+        route: "/internal/support-recovery",
+        status: Option.none(),
+      },
+    },
+    handleSupportRecovery({ request, db: environment.DB, config: environment }).pipe(
+      Effect.catchCauseIf(Cause.hasDies, () =>
+        telemetry
+          .captureFailure({
+            _tag: "Defect",
+            component: "api",
+            operation: "http.supportRecovery",
+            error: "unexpected_defect",
+            cause: undefined,
+          })
+          .pipe(Effect.as(unavailable()))
+      )
+    )
+  );
+};
+
 const browserResponse = (
   request: Request,
-  environment: CoreEnvironment
+  environment: CoreEnvironment,
+  telemetry: TelemetryService
 ): Effect.Effect<Response> => {
   const db = environment.DB;
   const path = new URL(request.url).pathname;
+  if (path === "/internal/support-recovery") {
+    return supportRecoveryResponse(request, environment, telemetry);
+  }
   const routes: Readonly<
     Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
   > = {
@@ -270,10 +310,6 @@ const browserResponse = (
     [emailReplacementOperations.complete.path]: {
       method: emailReplacementOperations.complete.method,
       handle: () => completeEmailReplacement({ request, db }),
-    },
-    "/internal/support-recovery": {
-      method: "POST",
-      handle: () => handleSupportRecovery({ request, db, config: environment }),
     },
     "/user": { method: "GET", handle: () => currentUser({ request, db }) },
   };
@@ -444,7 +480,11 @@ const canonicalOrHealthResponse = (
   return Effect.succeed(healthResponse(environment));
 };
 
-const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> => {
+const fetchEffect = (
+  request: Request,
+  environment: CoreEnvironment,
+  telemetry: TelemetryService
+): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
@@ -485,7 +525,7 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
       "/user",
     ].includes(url.pathname)
   ) {
-    return browserResponse(request, environment);
+    return browserResponse(request, environment, telemetry);
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
@@ -528,7 +568,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
     Effect.scoped(
       Effect.gen(function* () {
         const inference = yield* Layer.build(cloudflareHostedInferenceLive(environment));
-        return yield* fetchEffect(request, environment).pipe(
+        return yield* fetchEffect(request, environment, telemetry).pipe(
           Effect.provideService(HostedInference, Context.get(inference, HostedInference))
         );
       })

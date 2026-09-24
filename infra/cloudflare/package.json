@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export HOSTED_AI_MODEL=$(bun scripts/print-approved-workers-ai-model.ts) && rm -rf .alchemy/dev-auth && ALCHEMY_HOME=.alchemy/dev-auth alchemy profile create local --no-input && ALCHEMY_HOME=.alchemy/dev-auth alchemy profile edit --profile local --add Cloudflare --method stored --set apiToken=local-development-placeholder --set accountId=00000000000000000000000000000000 --no-input && ALCHEMY_HOME=.alchemy/dev-auth ALCHEMY_PROFILE=local alchemy dev",
-    "plan": "alchemy plan --stage production --no-input",
+    "dev": "export HOSTED_AI_MODEL=$(bun scripts/print-approved-workers-ai-model.ts) && export ALCHEMY_HOME=$(pwd)/../../.alchemy/dev-auth && export ALCHEMY_CLI=$(pwd)/../../node_modules/alchemy/bin/alchemy.ts && rm -rf \"$ALCHEMY_HOME\" && (cd ../.. && bun \"$ALCHEMY_CLI\" profile create local --no-input) && (cd ../.. && bun \"$ALCHEMY_CLI\" profile edit --profile local --add Cloudflare --method stored --set apiToken=local-development-placeholder --set accountId=00000000000000000000000000000000 --no-input) && ALCHEMY_PROFILE=local bun \"$ALCHEMY_CLI\" dev",
+    "plan": "bun ../../node_modules/alchemy/bin/alchemy.ts plan --stage production --no-input",
     "check:document-parsing": "bun ../../scripts/document-parsing/check.ts",
     "check:document-parsing:remote": "bun ../../scripts/document-parsing/check.ts --remote",
     "typecheck": "tsc --noEmit",
@@ -13,20 +13,14 @@
     "test:workers-ai-conformance": "bash scripts/check-workers-ai-conformance.sh"
   },
   "dependencies": {
-    "@effect/sql-d1": "4.0.0-rc.115",
     "@fidy/server": "workspace:0.0.0",
-    "effect": "4.0.0-rc.115",
-    "jose": "6.2.12"
+    "effect": "4.0.0-rc.115"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260916.1",
+    "@cloudflare/workers-types": "5.20260917.1",
     "@effect/platform-bun": "4.0.0-rc.115",
-    "@effect/platform-node": "4.0.0-rc.115",
     "@effect/vitest": "4.0.0-rc.115",
     "alchemy": "2.0.0-beta.79",
-    "miniflare": "5.20260911.1-alpha",
-    "mupdf": "1.28.1",
-    "rolldown": "1.2.9",
     "typescript": "7.0.2",
     "vitest": "5.0.1",
     "wrangler": "4.133.0"

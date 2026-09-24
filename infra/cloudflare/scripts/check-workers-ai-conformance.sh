@@ -15,7 +15,7 @@ worker_pid=""
 cat >"$config_file" <<EOF
 {
   "name": "fidy-workers-ai-conformance",
-  "main": "$(pwd)/workers-ai-conformance-worker.ts",
+  "main": "$(pwd)/../../apps/server/cloudflare/workers-ai-conformance-worker.ts",
   "compatibility_date": "2026-09-22",
   "compatibility_flags": ["nodejs_compat"],
   "ai": { "binding": "AI", "remote": true }

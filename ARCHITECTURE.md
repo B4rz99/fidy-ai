@@ -11,11 +11,11 @@ workspace package.
 The workspace contains two application packages and one infrastructure package:
 
 - [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operation
-  declarations, schemas, and provider-neutral shell contracts. It is not a process runtime.
+  declarations, schemas, provider-neutral shell contracts, and Cloudflare runtime adapters. It is not a process runtime.
 - [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and the static
   Cloudflare artifact.
-- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack and the Worker entrypoints that
-  realize Cloudflare topology boundaries. It owns no product domain model.
+- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the single Alchemy deployment stack,
+  Cloudflare resource wiring, and edge policy. It owns no product domain model or Worker runtime implementation.
 
 Cloudflare is the production authority. The intended runtime adapters use Worker entrypoints with D1,
 Durable Objects, Queues, Workflows, R2, Workers AI, and Email Workers as appropriate. Until an adapter
@@ -41,7 +41,9 @@ joins canonical authority only after proof exchange establishes a stable User.
 
 ## 3. Production topology
 
-`infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. Its one stack declares
+`infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. Server Worker entrypoints,
+Cloudflare adapters, D1 migrations, and their tests live in `apps/server/cloudflare/`; the stack wires
+those entrypoints and migrations into the declared binding graph. Its one stack declares
 an assets-only web Worker at `app.fidyapp.com`, the `fidyapp.com` redirect, an ingress Worker at
 `api.fidyapp.com`, and a Core Worker reachable only through the ingress service binding. The ingress
 has no D1 binding. The artifact contains the browser shell, hashed assets, headers, and deployment
@@ -50,7 +52,7 @@ restricted to isolated static pull-request previews and owns no Production route
 
 Public `/health` and canonical Categories requests cross the ingress-to-Core binding. Core returns a
 closed projection of health, Git revision, and contract digest, and is the sole owner of the D1
-binding used to load the stable Category taxonomy. The Cloudflare infrastructure package also owns
+binding used to load the stable Category taxonomy. The server Cloudflare runtime also owns
 the reusable admission primitive that later Core adapters install with Worker-owned policy.
 Admission atomically composes security, spend, and outstanding-work claims with proof or outbox
 statements; it is not commercial allowance accounting. Binding objects, environment values, topology, SQL,

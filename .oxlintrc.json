@@ -209,15 +209,16 @@
     {
       "files": [
         "infra/cloudflare/alchemy.run.ts",
-        "infra/cloudflare/core-worker.ts",
-        "infra/cloudflare/document-extraction-worker.ts",
-        "infra/cloudflare/document-parsing-worker.ts",
-        "infra/cloudflare/protected-document-worker.ts",
-        "infra/cloudflare/public-worker.ts",
-        "infra/cloudflare/resource-admission-worker.fixture.ts",
-        "infra/cloudflare/transaction-platform-fixture.ts",
-        "infra/cloudflare/workers-ai-conformance-worker.ts",
-        "infra/cloudflare/vitest.config.ts"
+        "apps/server/cloudflare/core-worker.ts",
+        "apps/server/cloudflare/document-extraction-worker.ts",
+        "apps/server/cloudflare/document-parsing-worker.ts",
+        "apps/server/cloudflare/protected-document-worker.ts",
+        "apps/server/cloudflare/public-worker.ts",
+        "apps/server/cloudflare/resource-admission-worker.fixture.ts",
+        "apps/server/cloudflare/transaction-platform-fixture.ts",
+        "apps/server/cloudflare/workers-ai-conformance-worker.ts",
+        "infra/cloudflare/vitest.config.ts",
+        "apps/server/cloudflare/vitest.config.ts"
       ],
       "rules": {
         "import/no-default-export": "off"
@@ -235,39 +236,17 @@
     // Card enrollment orchestrates atomic D1 claims and provider ambiguity at one Worker
     // boundary. The test request builder models HTTP's optional body and headers.
     {
-      "files": ["infra/cloudflare/card-enrollment.ts"],
+      "files": ["apps/server/cloudflare/card-enrollment.ts"],
       "rules": {
         "complexity": "off",
         "max-params": "off",
         "max-lines-per-function": "off"
       }
     },
-    {
-      "files": ["infra/cloudflare/card-enrollment.test.ts"],
-      "rules": {
-        "max-params": "off",
-        "effect-guards/no-nullable-type": "off"
-      }
-    },
-    // Existing Core fixture bindings are optional, but the enrollment route rejects
-    // absent configuration; both Workers preserve explicit ingress policy branches.
-    {
-      "files": ["infra/cloudflare/core-worker.ts"],
-      "rules": {
-        "complexity": "off",
-        "effect-guards/no-nullable-type": "off"
-      }
-    },
-    {
-      "files": ["infra/cloudflare/public-worker.ts"],
-      "rules": {
-        "complexity": "off"
-      }
-    },
     // Rolldown publishes its package-root entrypoint without an extension; this fixture imports
     // that public entrypoint to bundle the Worker used by Miniflare's multi-runtime test.
     {
-      "files": ["infra/cloudflare/resource-admission.test.ts"],
+      "files": ["apps/server/cloudflare/resource-admission.test.ts"],
       "rules": {
         "import/extensions": "off"
       }

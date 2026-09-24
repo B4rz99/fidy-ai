@@ -31,7 +31,7 @@
     "contracts:check:compatibility": "bun run --cwd apps/server tools/contracts/check.ts",
     "test:contracts": "bun run --cwd apps/server test:contracts",
     "test:ci-tools": "bun --bun vitest run scripts/check-effect-family.test.ts --environment node",
-    "test": "bun run --cwd apps/server test:core && bun run --cwd apps/server test:email-interpretation && bun run --cwd apps/web test && bun run --cwd infra/cloudflare test",
+    "test": "bun run --cwd apps/server test:core && bun run --cwd apps/server test:email-interpretation && bun run --cwd apps/server test:cloudflare && bun run --cwd apps/web test && bun run --cwd infra/cloudflare test",
     "test:preview-policy": "bun run --cwd apps/web test:preview-policy",
     "test:production-adapters": "bun run --cwd apps/web test -- scripts/production-workflow.test.ts scripts/cloudflare-adapter.test.ts",
     "check:document-parsing": "bun run --cwd infra/cloudflare check:document-parsing",

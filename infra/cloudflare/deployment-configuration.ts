@@ -1,5 +1,8 @@
 import { Data, Result } from "effect";
-import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
+import {
+  contractDigestPattern,
+  gitRevisionPattern,
+} from "../../apps/server/cloudflare/release-identity";
 
 const developmentGitRevision = "0000000000000000000000000000000000000000";
 const developmentContractDigest =

@@ -77,7 +77,8 @@ jobs:
       - name: Reject drift from the deployed Cloudflare topology
         working-directory: infra/cloudflare
         run: |
-          drift=$(NO_COLOR=1 bunx alchemy drift --stage production --no-input 2>&1)
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          drift=$(NO_COLOR=1 alchemy drift --stage production --no-input 2>&1)
           printf '%s\n' "$drift"
           if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
             echo "The deployed topology has drifted from Alchemy state; refusing promotion." >&2
@@ -90,7 +91,9 @@ jobs:
 
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
-        run: bunx alchemy plan --stage production --no-input
+        run: |
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          alchemy plan --stage production --no-input
 
       - name: Recheck trunk immediately before deployment
         env:
@@ -106,7 +109,9 @@ jobs:
 
       - name: Deploy the exact planned topology with Alchemy
         working-directory: infra/cloudflare
-        run: bunx alchemy deploy --stage production --yes --no-input
+        run: |
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          alchemy deploy --stage production --yes --no-input
 
       - name: Verify the migrated public topology
         run: |
@@ -142,7 +147,8 @@ jobs:
       - name: Reject post-deployment Cloudflare drift
         working-directory: infra/cloudflare
         run: |
-          drift=$(NO_COLOR=1 bunx alchemy drift --stage production --no-input 2>&1)
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          drift=$(NO_COLOR=1 alchemy drift --stage production --no-input 2>&1)
           printf '%s\n' "$drift"
           if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
             echo "The deployed topology drifted before promotion completed." >&2

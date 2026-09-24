@@ -1,0 +1,71 @@
+apps/server/src/shell/hosted-inference/workers-ai.test.ts
+  s_20c7bd04cb455a::t_87f184352f3f55 36,44-45,315,546
+  s_20c7bd04cb455a::t_8ced658d48f37b 6,327-328,356-363,372,582,593,598
+  s_20c7bd04cb455a::t_0371a9b5036baf 329-355,364-371,373-381,584-585,591
+  s_20c7bd04cb455a::t_42fca09d86f487 163,382-383,553,578-580
+  s_20c7bd04cb455a::t_e6932ad6f7cc3e 558,560-561,574-577,592
+  s_20c7bd04cb455a::t_be6ae904020cad 254,258-259,481-482
+  s_20c7bd04cb455a::t_466d9ec4344daf 104-133,135-162,167-188,197-199,211,213-227,264,266-267,271-272,416,418-419,487-498,529,531-532,547-548,586-590
+  s_20c7bd04cb455a::t_b83708275f5a5b 134
+  s_20c7bd04cb455a::t_459f985e87d020 165,192,201
+  s_20c7bd04cb455a::t_8a3afeef14c358 164,273,384,581,583,594-597,599
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_20c7bd04cb455a::t_466d9ec4344daf 2-5
+apps/server/cloudflare/ai/workers-ai-conformance-worker.ts
+  s_20c7bd04cb455a::t_466d9ec4344daf 18-21,31-37,39-43
+  s_20c7bd04cb455a::t_dd0aa7c44393a5 1-2,22,24-30,38,44-46
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_20c7bd04cb455a::t_51859941888aad 26-27,30,46-51,53-55,87-93
+  s_20c7bd04cb455a::t_06704b8dd25d34 28-29,52,94-99,105-106
+  s_20c7bd04cb455a::t_4562bb3e5cf257 82-83,85-86,114-117
+  s_20c7bd04cb455a::t_afae90eafc1c4b 100-104,107-113
+  s_20c7bd04cb455a::t_edcc696c99a11d 5,84
+apps/server/src/shell/hosted-inference/model.ts
+  s_20c7bd04cb455a::t_028d5e560f5bc1 3
+apps/server/src/shell/hosted-inference/conformance.ts
+  s_20c7bd04cb455a::t_7f8ad08063bd81 1-2
+  s_20c7bd04cb455a::t_610694ca497bc9 54,73,78-79,81,165-166,192-193,207-208
+  s_20c7bd04cb455a::t_a50c593657cd2a 75-76,80,98-101,104-114,167-168
+  s_20c7bd04cb455a::t_c5bde4d329ddce 91
+  s_20c7bd04cb455a::t_3909f334a7acef 171-181,199-203
+  s_20c7bd04cb455a::t_51859941888aad 94,182-185,194-198,209-211
+  s_20c7bd04cb455a::t_466d9ec4344daf 164,169-170,186-191
+  s_20c7bd04cb455a::t_abaeaa5a1e8298 74,115
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_20c7bd04cb455a::t_5997e451a67c22 63,65,67,69,72-74,76-81
+  s_20c7bd04cb455a::t_8fa0fc6150d083 70
+  s_20c7bd04cb455a::t_35a74f4a56e2c9 75
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_20c7bd04cb455a::t_886306ea6679b4 30-31
+apps/server/cloudflare/ai/workers-ai-conformance-worker.test.ts
+  s_20c7bd04cb455a::t_e5287d0e133453 2
+  s_20c7bd04cb455a::t_466d9ec4344daf 6-16,18-25,27-30
+  s_20c7bd04cb455a::t_c0b68e1dbe7cc4 1,3-5,17
+  s_20c7bd04cb455a::t_9f843846670674 26
+apps/server/src/shell/hosted-inference/workers-ai.ts
+  s_20c7bd04cb455a::t_2548770589b0d6 192
+  s_20c7bd04cb455a::t_be1a665a976c34 29-30,42,412-417,422
+  s_20c7bd04cb455a::t_d63fd8d76ad3b1 571-576,580
+  s_20c7bd04cb455a::t_055412fcced379 32-37,45,50-55,60-64,104,140-145,147-153,162,165-166,172
+  s_20c7bd04cb455a::t_e6932ad6f7cc3e 577-579
+  s_20c7bd04cb455a::t_71cdf201c598bc 203-207,215-217,219,227,234,291-296,301,304-311,408-409,411,472-473,479,500,508,517,526-527,554,587-589,597
+  s_20c7bd04cb455a::t_466d9ec4344daf 155-161,208-214,220-226,492-493,555-557,590-596
+  s_20c7bd04cb455a::t_51859941888aad 40,43-44,65-70,75-79,424-427
+  s_20c7bd04cb455a::t_1403a1535e2c65 488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dbbcf4d251ce907f74a6f31094348b59bd973a9d",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

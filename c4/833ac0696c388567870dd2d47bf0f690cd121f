@@ -1,0 +1,32 @@
+apps/server/cloudflare/billing/billing-settlement.ts
+  s_de6c7d29aa90cd::t_9147ffc18c14af 1-6
+  s_de6c7d29aa90cd::t_155ba8b85a07c4 16-17
+apps/server/cloudflare/billing/billing-collection.ts
+  s_de6c7d29aa90cd::t_b1e2153d27b3ab 46
+  s_de6c7d29aa90cd::t_9147ffc18c14af 53-57,61-65
+  s_de6c7d29aa90cd::t_ee3df88f74aba8 604,607-614
+  s_de6c7d29aa90cd::t_06cd1cc5c747ae 47-48,274,567
+  s_de6c7d29aa90cd::t_bea5f515d9c984 442-445
+apps/server/cloudflare/billing/billing-collection.test.ts
+  s_de6c7d29aa90cd::t_890e6589fee775 381
+  s_de6c7d29aa90cd::t_9147ffc18c14af 190-192,194-196
+  s_de6c7d29aa90cd::t_858359474d99a4 185-188,193,197-200
+  s_de6c7d29aa90cd::t_a911f82a30f47c 189
+  s_de6c7d29aa90cd::t_d99a4ade0c0cfa 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c4833ac0696c388567870dd2d47bf0f690cd121f",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

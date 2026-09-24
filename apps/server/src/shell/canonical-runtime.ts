@@ -10,8 +10,8 @@ export {
   AtomicBatchCallId,
   AtomicBatchRejected,
   atomicBatchOperation,
+  decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
-  getAtomicBatchInputSchema,
   maximumAtomicBatchCalls,
 } from "~/shell/operations/operations";
 export type { AtomicBatchCall } from "~/shell/operations/operations";

@@ -1,5 +1,5 @@
 import { Clock, Data, Effect, Option } from "effect";
-import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
+import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   livePATAuthority,
@@ -40,6 +40,12 @@ export const childCaller = (
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 export const transactionNoStore = { "cache-control": "no-store" };
+/** One canonical Transaction input is bounded by this many bytes, for every adapter that reads one. */
+export const maximumTransactionInputBytes = 4096;
+/** The message `transactions.getTransaction` and corrections share for an absent or foreign id. */
+export const missingTransactionMessage = "Transaction unavailable.";
+/** The message every adapter shares for an input that fails its canonical schema. */
+export const invalidTransactionMessage = "Invalid Transaction input.";
 
 /** The two canonical mutations this adapter executes, individually or as children of one batch. */
 export type TransactionMutationOperation =
@@ -85,22 +91,27 @@ const refusalStatement = ({
           },
         }),
       })
-    : db
-        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-          SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
-          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
-        .bind(
-          transactionId(),
-          operation,
-          outcome,
-          current,
-          subject.id,
-          subject.userId,
-          subject.digest,
-          current,
-          current
-        );
+    : sessionRefusalStatement({ db, subject, outcome, operation, current });
+
+const sessionRefusalStatement = ({
+  db,
+  subject,
+  outcome,
+  operation,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  outcome: TransactionRefusal["outcome"];
+  operation: TransactionMutationOperation;
+  current: number;
+}>): D1PreparedStatement => {
+  const authority = liveWebSessionAuthority({ subject, current });
+  return db
+    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
+    .bind(transactionId(), operation, outcome, current, ...authority.bindings);
+};
 
 /**
  * Record one refused Transaction mutation's metadata-only AuditLogEntry. A refusal whose audit
@@ -190,13 +201,13 @@ const invalid = (): Response =>
   transactionFailure({
     code: "validation_failed",
     status: 400,
-    message: "Invalid Transaction input.",
+    message: invalidTransactionMessage,
   });
 const missing = (): Response =>
   transactionFailure({
     code: "not_found",
     status: 404,
-    message: "Transaction unavailable.",
+    message: missingTransactionMessage,
   });
 const limited = (): Response =>
   transactionFailure({
@@ -205,14 +216,26 @@ const limited = (): Response =>
     message: "Manual Transaction budget exhausted.",
   });
 
-/** Map one already-recorded Transaction refusal to its canonical individual response. */
-const refusalResponses: Readonly<Record<TransactionRefusal["outcome"], () => Response>> = {
-  not_found: missing,
-  validation_failed: invalid,
-  resource_limit: limited,
+/**
+ * The one decision table for a closed refusal outcome: the canonical failure code every batch
+ * child reports and the body the individual caller receives. A new outcome cannot be added
+ * without answering both here.
+ */
+const refusalOutcomes: Readonly<
+  Record<TransactionRefusal["outcome"], Readonly<{ code: ErrorCode; response: () => Response }>>
+> = {
+  not_found: { code: "not_found", response: missing },
+  validation_failed: { code: "validation_failed", response: invalid },
+  resource_limit: { code: "rate_limited", response: limited },
 };
+
+/** Map one already-recorded Transaction refusal to its canonical individual response. */
 export const refusedTransactionResponse = (refusal: TransactionRefusal): Response =>
-  refusalResponses[refusal.outcome]();
+  refusalOutcomes[refusal.outcome].response();
+
+/** The canonical failure code one already-recorded Transaction refusal is reported as. */
+export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>
+  refusalOutcomes[outcome].code;
 
 /** Refuse one authenticated canonical Transaction mutation after its refusal Audit committed. */
 export const rejectTransactionMutation = ({

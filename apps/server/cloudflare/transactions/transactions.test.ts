@@ -2449,7 +2449,7 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
     })
   ));
 
-it("refuses a malformed batch body with the canonical validation failure and no child Audit", () =>
+it("attributes a malformed child to its index and Audit while an unshaped body stays unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -2476,17 +2476,78 @@ it("refuses a malformed batch body with the canonical validation failure and no 
         )
       );
       expect(malformed.status).toBe(400);
-      const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+      const childFailure = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => malformed.json())
       ).pipe(Effect.orDie);
-      expect(failure.error.code).toBe("validation_failed");
+      expect(childFailure.error.code).toBe("validation_failed");
+      expect(childFailure.error.failedCallIndex).toBe(0);
+      expect(childFailure.error.operation).toBe("transactions.createTransaction");
+      const refusals = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(refusals.results).toEqual([
+        { operation: "transactions.createTransaction", outcome: "validation_failed" },
+      ]);
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(0);
+
+      const unshaped = yield* fromTestPromise(() => sendPublicRequest(db, batchRequest(0, [])));
+      expect(unshaped.status).toBe(400);
+      const unshapedFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+        yield* fromTestPromise(() => unshaped.json())
+      ).pipe(Effect.orDie);
+      expect(unshapedFailure.error.code).toBe("validation_failed");
       expect(
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
-      ).toBe(0);
+      ).toBe(1);
+    })
+  ));
+
+it("attributes a repeated observed revision to the later correction without partial state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000009";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      const repeated = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            correctionCall(1, seededId, { expectedRevision: 0, changes: { notes: "first" } }),
+            correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "second" } }),
+          ])
+        )
+      );
+      expect(repeated.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => repeated.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      const retained = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT notes, revision FROM transactions WHERE user_id = ? AND id = ?")
+          .bind(users[0], seededId)
+          .all<{ notes: string; revision: number }>()
+      );
+      expect(retained.results).toEqual([{ notes: "seed", revision: 0 }]);
+      const refusedAudits = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(refusedAudits.results).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+      ]);
     })
   ));

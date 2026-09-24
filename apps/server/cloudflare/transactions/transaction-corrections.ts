@@ -14,7 +14,10 @@ import {
   boundaryFailure,
   callerAuthority,
   callerScope,
+  invalidTransactionMessage,
   isPATCaller,
+  maximumTransactionInputBytes,
+  missingTransactionMessage,
   transactionId,
   transactionNow,
   transactionUnavailable,
@@ -24,6 +27,7 @@ import {
   executeSingleTransactionMutation,
   failedPreparation,
   refusedPreparation,
+  staleCorrectionMessage,
 } from "./transaction-unit";
 import { type StoredTransaction, findTransaction } from "./transaction-history";
 
@@ -32,7 +36,7 @@ const Output = Schema.toCodecJson(Transaction);
 const Decisions = Schema.Record(Schema.String, Schema.Boolean);
 const Fields = Schema.Array(Schema.String);
 const policy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 4096,
+  maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
 });
 type Correction = Readonly<{
@@ -200,10 +204,6 @@ const auditStatements = ({
           .bind(transactionId(), subject.id, current, correctionId, subject.userId),
       ];
 
-const missingMessage = "Transaction unavailable.";
-const staleMessage =
-  "The Transaction changed since it was read. Re-read it and retry the correction.";
-const invalidMessage = "Invalid Transaction input.";
 const emptyChangeMessage =
   "The correction must change at least one fact and cannot occur in the future.";
 
@@ -299,7 +299,7 @@ export const prepareCorrection = (
   Effect.gen(function* () {
     const { db, subject, id, input, current } = correction;
     if (Option.isNone(Schema.decodeOption(TransactionId)(id))) {
-      return refusedPreparation("not_found", missingMessage);
+      return refusedPreparation("not_found", missingTransactionMessage);
     }
     if (invalidCorrection(input, current)) {
       return refusedPreparation("validation_failed", emptyChangeMessage);
@@ -308,12 +308,14 @@ export const prepareCorrection = (
     const live = yield* liveCorrectionAuthority({ db, authority });
     if (!live) return { _tag: "CredentialRefused" } as const;
     const owned = yield* findOwnedCorrection({ db, subject, id });
-    if (Option.isNone(owned)) return refusedPreparation("not_found", missingMessage);
+    if (Option.isNone(owned)) return refusedPreparation("not_found", missingTransactionMessage);
     if (owned.value.revision !== input.expectedRevision) {
-      return refusedPreparation("validation_failed", staleMessage);
+      return refusedPreparation("validation_failed", staleCorrectionMessage);
     }
     const updated = replaceFacts(owned.value, input.changes);
-    if (Option.isNone(updated)) return refusedPreparation("validation_failed", invalidMessage);
+    if (Option.isNone(updated)) {
+      return refusedPreparation("validation_failed", invalidTransactionMessage);
+    }
     const evidence = yield* correctionEvidence(owned.value, updated.value, input.changes);
     return preparedCorrection({
       correction,

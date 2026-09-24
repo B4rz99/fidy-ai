@@ -16,6 +16,7 @@ import {
   callerAuthority,
   callerScope,
   isPATCaller,
+  maximumTransactionInputBytes,
   transactionNow as now,
   transactionFailure,
   transactionId,
@@ -36,7 +37,7 @@ const UserContext = Schema.Struct({
 });
 const Session = Schema.Struct({ id: Schema.String, user_id: Schema.String });
 const policy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 4096,
+  maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
 });
 const HTTP_UNAUTHENTICATED = 401;

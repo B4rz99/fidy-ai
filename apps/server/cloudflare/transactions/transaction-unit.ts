@@ -75,9 +75,14 @@ const sharedDailyAuditBudget = 256;
 const millisecondsPerDay = 86_400_000;
 const RevisionRow = Schema.Struct({ revision: Schema.Int });
 const TotalRow = Schema.Struct({ total: Schema.Int });
+/** The one message both the individual caller and a batch child report for an exhausted day. */
+export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";
+/** The one message both the individual caller and a batch child report for an observed revision. */
+export const staleCorrectionMessage =
+  "The Transaction changed since it was read. Re-read it and retry the correction.";
 const dailyAuditRefusal: TransactionRefusal = {
   outcome: "resource_limit",
-  message: "The caller's daily canonical write budget is exhausted.",
+  message: dailyAuditMessage,
 };
 
 const countRows = (statement: D1PreparedStatement): Promise<number> =>
@@ -165,8 +170,14 @@ const staleCorrectionIndex = ({
   mutations: ReadonlyArray<PreparedTransactionMutation>;
 }>): Effect.Effect<Option.Option<number>> =>
   Effect.gen(function* () {
+    const observed = new Map<string, number>();
     for (const [index, mutation] of mutations.entries()) {
       if (Option.isNone(mutation.expectedRevision)) continue;
+      const key = `${mutation.transactionId}:${mutation.expectedRevision.value}`;
+      // A repeated observed revision of one Transaction can never satisfy its guard: the earlier
+      // child already advanced the revision inside the unit, so this child owns the aborted guard.
+      if (observed.has(key)) return Option.some(index);
+      observed.set(key, index);
       const row = yield* Effect.tryPromise(() =>
         db
           .prepare("SELECT revision FROM transactions WHERE user_id = ? AND id = ?")
@@ -285,7 +296,7 @@ const classifyAbortedUnit = ({
     if (Option.isSome(stale)) {
       return yield* refused(stale.value, {
         outcome: "validation_failed",
-        message: "The Transaction changed since it was read. Re-read it and retry the correction.",
+        message: staleCorrectionMessage,
       });
     }
     return { _tag: "Unavailable" };

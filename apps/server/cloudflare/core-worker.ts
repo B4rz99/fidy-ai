@@ -7,8 +7,11 @@ import {
 import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Cause, Context, Data, Effect, Exit, Layer, Option, Schema } from "effect";
-import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
+import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import type {
+  CreateTransactionInput,
+  UpdateTransactionInput,
+} from "@fidy/server/transactions-runtime";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
@@ -20,6 +23,7 @@ import {
 } from "./transactions/transactions";
 import {
   type TransactionSubject,
+  maximumTransactionInputBytes,
   rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
 } from "./transactions/transaction-boundary";
@@ -56,14 +60,11 @@ import {
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
+import { BatchCalls, TransactionCommand } from "./transactions/transaction-coordinator";
 import {
-  type AtomicBatchCall,
   type CatalogOperation,
   atomicBatchOperation,
-  type getAtomicBatchCallSchema,
-  getAtomicBatchInputSchema,
   maximumAtomicBatchCalls,
-  operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pats/pat-authorization";
@@ -201,28 +202,53 @@ const enrollmentCorePath = (path: string): boolean =>
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
 type ForwardWork =
-  | Readonly<{ _tag: "Capture"; input: unknown }>
-  | Readonly<{ _tag: "Correction"; id: string; input: unknown }>;
+  | Readonly<{ _tag: "Capture"; input: CreateTransactionInput }>
+  | Readonly<{ _tag: "Correction"; id: string; input: UpdateTransactionInput }>;
 
-/** Bind one admitted caller to the coordinator command variant for this Transaction work. */
-const coordinatorAuthority = (
+type CoordinatorWork = ForwardWork | Readonly<{ _tag: "Batch"; calls: BatchCalls }>;
+
+/**
+ * Bind one admitted caller to the exact coordinator command variant for this Transaction work. The
+ * coordinator's own published schema types every field here, so the Worker cannot drift from it.
+ */
+const coordinatorCommand = (
   subject: TransactionSubject | AuthorizedPAT,
-  suffix: "Capture" | "Correction" | "Batch"
-): Readonly<Record<string, unknown>> =>
-  "patId" in subject
-    ? {
-        _tag: `PAT${suffix}`,
-        patId: subject.patId,
-        userId: subject.userId,
-        digest: Array.from(subject.digest),
-        requiredScope: Option.getOrNull(subject.requiredScope),
-      }
-    : {
-        _tag: `WebSession${suffix}`,
-        sessionId: subject.id,
-        userId: subject.userId,
-        digest: Array.from(subject.digest),
+  work: CoordinatorWork
+): TransactionCommand => {
+  if ("patId" in subject) {
+    const authority = {
+      patId: subject.patId,
+      userId: subject.userId,
+      digest: Array.from(subject.digest),
+      requiredScope: Option.getOrNull(subject.requiredScope),
+    };
+    if (work._tag === "Capture") return { _tag: "PATCapture", ...authority, input: work.input };
+    if (work._tag === "Correction") {
+      return {
+        _tag: "PATCorrection",
+        ...authority,
+        correction: { id: work.id, input: work.input },
       };
+    }
+    return { _tag: "PATBatch", ...authority, calls: work.calls };
+  }
+  const authority = {
+    sessionId: subject.id,
+    userId: subject.userId,
+    digest: Array.from(subject.digest),
+  };
+  if (work._tag === "Capture") {
+    return { _tag: "WebSessionCapture", ...authority, input: work.input };
+  }
+  if (work._tag === "Correction") {
+    return {
+      _tag: "WebSessionCorrection",
+      ...authority,
+      correction: { id: work.id, input: work.input },
+    };
+  }
+  return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
+};
 
 const forwardTransaction = ({
   environment,
@@ -237,19 +263,9 @@ const forwardTransaction = ({
     // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
     const capture = work._tag === "Capture";
-    const authority = coordinatorAuthority(subject, capture ? "Capture" : "Correction");
-    const payload = capture
-      ? { input: work.input }
-      : {
-          correction: {
-            id: work.id,
-            input: work.input,
-          },
-        };
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-      ...authority,
-      ...payload,
-    });
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
+      coordinatorCommand(subject, work)
+    );
     return yield* Effect.tryPromise(() =>
       stub.fetch(
         new Request(`https://coordinator.internal/${capture ? "create" : "correct"}`, {
@@ -261,45 +277,28 @@ const forwardTransaction = ({
     );
   });
 
-// One canonical child input is bounded by its own operation policy (4096 bytes today); a batch
-// may therefore carry at most that much per declared child.
-const maximumChildInputBytes = 4096;
-const maximumBatchBytes = maximumAtomicBatchCalls * maximumChildInputBytes;
+// One canonical child input is bounded by its own operation policy; a batch carries at most one
+// such input per declared child, and each child is decoded and attributed by the batch adapter.
+const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
 const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumBatchBytes,
   deadlineMilliseconds: 2000,
 });
 
-type AtomicBatchInput = ReturnType<typeof getAtomicBatchInputSchema>["Type"];
-type EncodedBatchCall = Schema.Codec.Encoded<ReturnType<typeof getAtomicBatchCallSchema>>;
+const BatchBody = Schema.Struct({ calls: BatchCalls });
+type BatchBody = typeof BatchBody.Type;
 
-const batchInput = (request: Request): Promise<Option.Option<AtomicBatchInput>> => {
+const batchBody = (request: Request): Promise<Option.Option<BatchBody>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return Promise.resolve(Option.none());
   }
   return Effect.runPromise(readBoundedRequestBody(request, batchPolicy))
     .then((bytes) => {
       const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(getAtomicBatchInputSchema())(parsed);
+      return Schema.decodeUnknownOption(BatchBody)(parsed);
     })
     .catch(() => Option.none());
 };
-
-/** A decoded batch child whose operation vanished from the assembled catalog between checks. */
-class UnknownBatchOperation extends Data.TaggedError("UnknownBatchOperation") {}
-
-/** Re-encode each decoded child input into the canonical JSON the coordinator decodes again. */
-const encodeBatchCalls = (
-  calls: ReadonlyArray<AtomicBatchCall>
-): Effect.Effect<Array<EncodedBatchCall>, Schema.SchemaError | UnknownBatchOperation> =>
-  Effect.forEach(calls, (call) =>
-    Effect.gen(function* () {
-      const operation = operationCatalog.byId.get(call.operation);
-      if (operation === undefined) return yield* new UnknownBatchOperation();
-      const input = yield* Schema.encodeEffect(operation.input)(call.input);
-      return { callId: call.callId, operation: call.operation, input };
-    })
-  );
 
 const dispatchCanonicalBatch = (
   request: Request,
@@ -308,16 +307,12 @@ const dispatchCanonicalBatch = (
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const parsed = yield* Effect.tryPromise(() => batchInput(request));
+      const parsed = yield* Effect.tryPromise(() => batchBody(request));
       if (Option.isNone(parsed)) return rejectInvalidBatchInput();
-      const encoded = yield* Effect.exit(encodeBatchCalls(parsed.value.calls));
-      if (Exit.isFailure(encoded)) return unavailableCanonicalAdapter();
-      const calls = encoded.value;
       const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-        ...coordinatorAuthority(subject, "Batch"),
-        calls,
-      });
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
+        coordinatorCommand(subject, { _tag: "Batch", calls: parsed.value.calls })
+      );
       return yield* Effect.tryPromise(() =>
         stub.fetch(
           new Request("https://coordinator.internal/batch", {
@@ -347,13 +342,10 @@ const dispatchCanonicalCapture = (
           })
         );
       }
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
-        input.value
-      );
       return yield* forwardTransaction({
         environment,
         subject,
-        work: { _tag: "Capture", input: encoded },
+        work: { _tag: "Capture", input: input.value },
       });
     })
   );
@@ -375,16 +367,13 @@ const dispatchCanonicalCorrection = (
           })
         );
       }
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(UpdateTransactionInput))(
-        input.value
-      );
       return yield* forwardTransaction({
         environment,
         subject,
         work: {
           _tag: "Correction",
           id: new URL(request.url).pathname.split("/").at(-1) ?? "",
-          input: encoded,
+          input: input.value,
         },
       });
     })

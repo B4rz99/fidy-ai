@@ -4,6 +4,8 @@ import {
   CanonicalOperationId,
   type CatalogOperation,
   type ErrorCode,
+  decodeAtomicBatchResult,
+  getAtomicBatchCallSchema,
   grantsRequiredTier,
   operationCatalog,
   patScopeCapability,
@@ -17,12 +19,15 @@ import { Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
+  type TransactionRefusal,
   childCaller,
   isPATCaller,
   liveTransactionCaller,
   liveTransactionCredential,
   recordTransactionRefusal,
+  refusalFailureCode,
   refusedCredentialResponse,
+  rejectInvalidBatchInput,
   transactionNoStore,
   transactionUnavailable,
 } from "./transaction-boundary";
@@ -30,24 +35,24 @@ import {
   type PreparedTransactionMutation,
   type TransactionMutationPreparation,
   type TransactionUnitExecution,
+  dailyAuditMessage,
   executeTransactionUnit,
 } from "./transaction-unit";
 import { prepareCapture } from "./transactions";
 import { prepareCorrection } from "./transaction-corrections";
 
-/** The canonical input each implemented Transaction mutation is submitted with inside a batch. */
-const CreateTransactionCall = Schema.toCodecJson(
-  Schema.Struct({ payload: CreateTransactionInput })
-);
-const UpdateTransactionCall = Schema.toCodecJson(
+// The catalog-derived call schema already validated each child's canonical input; these extract
+// the typed payload the owning adapter prepares, so the batch never restates the wire shape.
+const CaptureInput = Schema.toType(Schema.Struct({ payload: CreateTransactionInput }));
+const CorrectionInput = Schema.toType(
   Schema.Struct({
     params: Schema.Struct({ id: TransactionId }),
     payload: UpdateTransactionInput,
   })
 );
 
-/** One child of the published atomic batch carries its encoded canonical input for the owner. */
-export type TransactionBatchCall = AtomicBatchCall;
+/** One raw child as the published batch command carries it; the catalog call schema decodes it. */
+export type TransactionBatchCall = unknown;
 
 type DecodedChild =
   | Readonly<{
@@ -62,10 +67,9 @@ type DecodedChild =
       input: UpdateTransactionInput;
     }>;
 
-type RefusedPreparation = Extract<TransactionMutationPreparation, { readonly _tag: "Refused" }>;
 type PreparedChild = Readonly<{
   _tag: "Prepared";
-  call: TransactionBatchCall;
+  call: AtomicBatchCall;
   operation: CatalogOperation;
   mutation: PreparedTransactionMutation;
 }>;
@@ -77,7 +81,11 @@ type BatchPreparation =
   | Readonly<{ _tag: "Prepared"; children: ReadonlyArray<PreparedChild> }>
   | Readonly<{ _tag: "Response"; response: Response }>;
 type CatalogDecision =
-  | Readonly<{ _tag: "Continue"; operation: CatalogOperation }>
+  | Readonly<{
+      _tag: "Continue";
+      operation: CatalogOperation;
+      mutation: TransactionMutationOperation;
+    }>
   | Readonly<{ _tag: "Response"; response: Response }>;
 
 // A batch executes a call the caller already confirmed: hosted confirmation is enforced before a
@@ -88,7 +96,6 @@ type CatalogDecision =
 // and a Pro-only child is not implementable yet, so the stricter `free` default cannot admit work
 // a Pro caller was owed.
 const transactionAccessTier = "free";
-const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";
 const executableChildMessage = "Each batch child must name an executable canonical mutation.";
 const unsupportedChildMessage =
   "This canonical mutation has no Transaction batch adapter yet. Nothing was written; remove it or call it on its own.";
@@ -102,17 +109,19 @@ const implementedMutations: ReadonlySet<string> = new Set<TransactionMutationOpe
   "transactions.createTransaction",
   "transactions.updateTransaction",
 ]);
+const isImplementedMutation = (id: string): id is TransactionMutationOperation =>
+  implementedMutations.has(id);
 
 const decodeChild = (operation: string, input: unknown): Option.Option<DecodedChild> => {
   if (operation === "transactions.createTransaction") {
-    return Option.map(Schema.decodeUnknownOption(CreateTransactionCall)(input), (value) => ({
+    return Option.map(Schema.decodeUnknownOption(CaptureInput)(input), (value) => ({
       _tag: "Capture" as const,
       operation: "transactions.createTransaction" as const,
       input: value.payload,
     }));
   }
   if (operation === "transactions.updateTransaction") {
-    return Option.map(Schema.decodeUnknownOption(UpdateTransactionCall)(input), (value) => ({
+    return Option.map(Schema.decodeUnknownOption(CorrectionInput)(input), (value) => ({
       _tag: "Correction" as const,
       operation: "transactions.updateTransaction" as const,
       id: value.params.id,
@@ -122,13 +131,12 @@ const decodeChild = (operation: string, input: unknown): Option.Option<DecodedCh
   return Option.none();
 };
 
-const batchRejectionCode = (
-  outcome: RefusedPreparation["refusal"]["outcome"]
-): "not_found" | "validation_failed" | "rate_limited" => {
-  if (outcome === "not_found") return "not_found";
-  if (outcome === "resource_limit") return "rate_limited";
-  return "validation_failed";
-};
+/** Read the canonical operation one raw child names before the catalog call schema decodes it. */
+const rawOperation = (call: TransactionBatchCall): Option.Option<CanonicalOperationId> =>
+  Option.flatMap(
+    Schema.decodeUnknownOption(Schema.Struct({ operation: Schema.String }))(call),
+    (raw) => Schema.decodeOption(CanonicalOperationId)(raw.operation)
+  );
 
 const batchRejection = ({
   code,
@@ -193,14 +201,14 @@ const rejectChild = ({
   current: number;
   index: number;
   operation: TransactionMutationOperation;
-  refusal: RefusedPreparation;
+  refusal: TransactionRefusal;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const record = yield* Effect.tryPromise(() =>
       recordTransactionRefusal({
         db,
         subject,
-        outcome: refusal.refusal.outcome,
+        outcome: refusal.outcome,
         operation,
         current,
       })
@@ -218,60 +226,50 @@ const rejectChild = ({
       });
     }
     return batchRejection({
-      code: batchRejectionCode(refusal.refusal.outcome),
-      message: refusal.refusal.message,
+      code: refusalFailureCode(refusal.outcome),
+      message: refusal.message,
       index,
       operation,
     });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 const preparedChild = (
-  call: TransactionBatchCall,
+  call: AtomicBatchCall,
   operation: CatalogOperation,
   mutation: PreparedTransactionMutation
 ): PreparedChild => ({ _tag: "Prepared", call, operation, mutation });
 
-const catalogDecision = (call: TransactionBatchCall, index: number): CatalogDecision => {
-  const operation = operationCatalog.byId.get(call.operation);
-  if (operation === undefined) {
-    const candidate = Schema.decodeOption(CanonicalOperationId)(call.operation);
-    return Option.isSome(candidate)
-      ? {
-          _tag: "Response",
-          response: batchRejection({
-            code: "validation_failed",
-            message: executableChildMessage,
-            index,
-            operation: candidate.value,
-          }),
-        }
-      : { _tag: "Response", response: transactionUnavailable() };
+/** Decide one named canonical operation against the batch's own executable-child policy. */
+const catalogDecision = (operation: CanonicalOperationId, index: number): CatalogDecision => {
+  const catalogOperation = operationCatalog.byId.get(operation);
+  if (catalogOperation === undefined) {
+    return { _tag: "Response", response: transactionUnavailable() };
   }
-  if (operation.policy.kind !== "mutation") {
+  if (catalogOperation.policy.kind !== "mutation") {
     return {
       _tag: "Response",
       response: batchRejection({
         code: "validation_failed",
         message: executableChildMessage,
         index,
-        operation: operation.id,
+        operation: catalogOperation.id,
       }),
     };
   }
-  if (!implementedMutations.has(operation.id)) {
+  if (!isImplementedMutation(catalogOperation.id)) {
     return {
       _tag: "Response",
       response: batchRejection({
         code: "unavailable",
         message: unsupportedChildMessage,
         index,
-        operation: operation.id,
+        operation: catalogOperation.id,
       }),
     };
   }
   if (
     !grantsRequiredTier({
-      requiredTier: operation.policy.requiredTier,
+      requiredTier: catalogOperation.policy.requiredTier,
       callerTier: transactionAccessTier,
     })
   ) {
@@ -281,11 +279,11 @@ const catalogDecision = (call: TransactionBatchCall, index: number): CatalogDeci
         code: "paywall_required",
         message: paywallMessage,
         index,
-        operation: operation.id,
+        operation: catalogOperation.id,
       }),
     };
   }
-  return { _tag: "Continue", operation };
+  return { _tag: "Continue", operation: catalogOperation, mutation: catalogOperation.id };
 };
 
 const scopeStep = (
@@ -353,7 +351,7 @@ const preparationStep = ({
   scopedSubject: TransactionCaller;
   current: number;
   index: number;
-  call: TransactionBatchCall;
+  call: AtomicBatchCall;
   catalogOperation: CatalogOperation;
   decoded: DecodedChild;
   preparation: TransactionMutationPreparation;
@@ -377,8 +375,52 @@ const preparationStep = ({
     current,
     index,
     operation: decoded.operation,
-    refusal: preparation,
+    refusal: preparation.refusal,
   }).pipe(Effect.map((response) => ({ _tag: "Response" as const, response })));
+};
+
+/** Refuse and audit one executable child whose callId or canonical input failed its schema. */
+const rejectInvalidChild = ({
+  db,
+  subject,
+  current,
+  index,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  index: number;
+  operation: TransactionMutationOperation;
+}>): Effect.Effect<ChildStep> =>
+  rejectChild({
+    db,
+    subject,
+    current,
+    index,
+    operation,
+    refusal: { outcome: "validation_failed", message: invalidChildMessage },
+  }).pipe(Effect.map((response) => ({ _tag: "Response" as const, response })));
+
+/** Recheck one child's live authority and report the refusal reason when it is not allowed. */
+const childAccessStep = ({
+  db,
+  subject,
+  current,
+  catalogOperation,
+  index,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  catalogOperation: CatalogOperation;
+  index: number;
+}>): Effect.Effect<Option.Option<ChildStep>> => {
+  const capability = patScopeCapability(catalogOperation.policy.access);
+  return Effect.tryPromise(() => childAccess({ db, subject, current, capability })).pipe(
+    Effect.orElseSucceed(() => "credential_refused" as const),
+    Effect.map((access) => scopeStep(access, catalogOperation, index))
+  );
 };
 
 const prepareChild = ({
@@ -394,17 +436,69 @@ const prepareChild = ({
   index: number;
   current: number;
 }>): Effect.Effect<ChildStep> => {
-  const decision = catalogDecision(call, index);
+  const operation = rawOperation(call);
+  if (Option.isNone(operation)) {
+    // Structurally absent children are answered as the request-level validation failure they are.
+    return Effect.succeed({ _tag: "Response", response: rejectInvalidBatchInput() });
+  }
+  const decision = catalogDecision(operation.value, index);
   if (decision._tag === "Response") return Effect.succeed(decision);
   const catalogOperation = decision.operation;
   return Effect.gen(function* () {
-    const capability = patScopeCapability(catalogOperation.policy.access);
-    const access = yield* Effect.tryPromise(() =>
-      childAccess({ db, subject, current, capability })
-    ).pipe(Effect.orElseSucceed(() => "credential_refused" as const));
-    const accessStep = scopeStep(access, catalogOperation, index);
+    const accessStep = yield* childAccessStep({
+      db,
+      subject,
+      current,
+      catalogOperation,
+      index,
+    });
     if (Option.isSome(accessStep)) return accessStep.value;
-    const decoded = decodeChild(call.operation, call.input);
+    const capability = patScopeCapability(catalogOperation.policy.access);
+    const scopedSubject = childCaller(subject, capability);
+    const decodedCall = Schema.decodeUnknownOption(getAtomicBatchCallSchema())(call);
+    if (Option.isNone(decodedCall)) {
+      // The child names an executable mutation, so its own callId or input failed the published
+      // schema: refuse and audit that child instead of failing the whole request unattributed.
+      return yield* rejectInvalidChild({
+        db,
+        subject: scopedSubject,
+        current,
+        index,
+        operation: decision.mutation,
+      });
+    }
+    return yield* prepareDecodedCall({
+      db,
+      scopedSubject,
+      current,
+      index,
+      catalogOperation,
+      mutation: decision.mutation,
+      decodedCall: decodedCall.value,
+    });
+  });
+};
+
+/** Decode one catalog-validated child into its owner payload and hand it to the owner adapter. */
+const prepareDecodedCall = ({
+  db,
+  scopedSubject,
+  current,
+  index,
+  catalogOperation,
+  mutation,
+  decodedCall,
+}: Readonly<{
+  db: D1Database;
+  scopedSubject: TransactionCaller;
+  current: number;
+  index: number;
+  catalogOperation: CatalogOperation;
+  mutation: TransactionMutationOperation;
+  decodedCall: AtomicBatchCall;
+}>): Effect.Effect<ChildStep> =>
+  Effect.gen(function* () {
+    const decoded = decodeChild(mutation, decodedCall.input);
     if (Option.isNone(decoded)) {
       return {
         _tag: "Response",
@@ -416,7 +510,6 @@ const prepareChild = ({
         }),
       };
     }
-    const scopedSubject = childCaller(subject, capability);
     const preparation = yield* prepareDecodedChild({
       db,
       subject: scopedSubject,
@@ -428,19 +521,20 @@ const prepareChild = ({
       scopedSubject,
       current,
       index,
-      call,
+      call: decodedCall,
       catalogOperation,
       decoded: decoded.value,
       preparation,
     });
   });
-};
 
 const duplicateCallIndex = (calls: ReadonlyArray<TransactionBatchCall>): Option.Option<number> => {
   const seen = new Set<string>();
   for (const [index, call] of calls.entries()) {
-    if (seen.has(call.callId)) return Option.some(index);
-    seen.add(call.callId);
+    const callId = Schema.decodeUnknownOption(Schema.Struct({ callId: Schema.String }))(call);
+    if (Option.isNone(callId)) continue;
+    if (seen.has(callId.value.callId)) return Option.some(index);
+    seen.add(callId.value.callId);
   }
   return Option.none();
 };
@@ -449,15 +543,15 @@ const duplicateRejection = (
   calls: ReadonlyArray<TransactionBatchCall>,
   index: number
 ): Response => {
-  const offending = calls[index];
-  return offending === undefined
-    ? transactionUnavailable()
-    : batchRejection({
+  const operation = rawOperation(calls[index]);
+  return Option.isSome(operation)
+    ? batchRejection({
         code: "validation_failed",
         message: repeatedCallIdMessage,
         index,
-        operation: offending.operation,
-      });
+        operation: operation.value,
+      })
+    : rejectInvalidBatchInput();
 };
 
 const prepareBatch = ({
@@ -496,11 +590,14 @@ const presentCommitted = ({
     for (const [index, child] of children.entries()) {
       const stored = execution.results[index];
       if (stored === undefined) return transactionUnavailable();
-      const output = yield* Schema.encodeEffect(child.operation.success)({
-        data: stored,
-        next: [],
+      // Revalidate each result against the published correlated union before it is encoded.
+      const result = yield* decodeAtomicBatchResult({
+        callId: child.call.callId,
+        operation: child.operation.id,
+        output: { data: stored, next: [] },
       });
-      results.push({ callId: child.call.callId, operation: child.operation.id, output });
+      const output = yield* Schema.encodeEffect(child.operation.success)(result.output);
+      results.push({ callId: result.callId, operation: result.operation, output });
     }
     return Response.json({ data: { results }, next: [] }, { headers: transactionNoStore });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
@@ -524,7 +621,7 @@ const executionResponse = ({
     child === undefined
       ? transactionUnavailable()
       : batchRejection({
-          code: batchRejectionCode(execution.refusal.outcome),
+          code: refusalFailureCode(execution.refusal.outcome),
           message: execution.refusal.message,
           index: execution.callIndex,
           operation: child.operation.id,

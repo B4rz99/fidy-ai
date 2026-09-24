@@ -1,13 +1,9 @@
 import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
 import { correctTransaction } from "./transaction-corrections";
-import {
-  AtomicBatchCallId,
-  CanonicalCapability,
-  maximumAtomicBatchCalls,
-} from "@fidy/server/canonical-runtime";
+import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
-import { type TransactionBatchCall, executeTransactionBatch } from "./transaction-mutations";
+import { executeTransactionBatch } from "./transaction-mutations";
 import { type TransactionCaller, transactionNow } from "./transaction-boundary";
 
 const digestBytes = 32;
@@ -28,17 +24,17 @@ const Correction = {
     input: Schema.toCodecJson(UpdateTransactionInput),
   }),
 } as const;
-// The command carries each child's encoded canonical input, so it stays `Unknown` here and the
-// owner decodes it against the same catalog schema the individual operation uses.
-const BatchCall = Schema.Struct({
-  callId: AtomicBatchCallId,
-  operation: Schema.String,
-  input: Schema.Unknown,
-});
-const Batch = {
-  calls: Schema.NonEmptyArray(BatchCall).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
-} as const;
-const Command = Schema.Union([
+/**
+ * The bounded raw child list a batch command carries. Each entry stays `Unknown` here because the
+ * Transaction batch adapter decodes it against the published catalog call union, where a malformed
+ * child can still be attributed and audited as the child it named.
+ */
+export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
+  Schema.isMaxLength(maximumAtomicBatchCalls)
+);
+export type BatchCalls = typeof BatchCalls.Type;
+const Batch = { calls: BatchCalls } as const;
+export const TransactionCommand = Schema.Union([
   Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
   Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),
   Schema.TaggedStruct("WebSessionBatch", { ...WebSession, ...Batch }),
@@ -46,10 +42,10 @@ const Command = Schema.Union([
   Schema.TaggedStruct("PATCorrection", { ...PAT, ...Correction }),
   Schema.TaggedStruct("PATBatch", { ...PAT, ...Batch }),
 ]);
-type Command = typeof Command.Type;
+export type TransactionCommand = typeof TransactionCommand.Type;
 
 /** Rebuild the exact live subject the admitted command was issued for. */
-const commandSubject = (command: Command): TransactionCaller =>
+const commandSubject = (command: TransactionCommand): TransactionCaller =>
   command._tag === "PATCapture" || command._tag === "PATCorrection" || command._tag === "PATBatch"
     ? {
         patId: command.patId,
@@ -67,7 +63,7 @@ const commandSubject = (command: Command): TransactionCaller =>
 const executeCommand = ({
   db,
   command,
-}: Readonly<{ db: D1Database; command: Command }>): Effect.Effect<Response, Response> =>
+}: Readonly<{ db: D1Database; command: TransactionCommand }>): Effect.Effect<Response, Response> =>
   Effect.gen(function* () {
     const subject = commandSubject(command);
     switch (command._tag) {
@@ -81,13 +77,17 @@ const executeCommand = ({
         });
       }
       case "WebSessionBatch":
-      case "PATBatch": {
-        const calls: ReadonlyArray<TransactionBatchCall> = command.calls;
+      case "PATBatch":
         return yield* Effect.tryPromise({
-          try: () => executeTransactionBatch({ db, subject, calls, current: transactionNow() }),
+          try: () =>
+            executeTransactionBatch({
+              db,
+              subject,
+              calls: command.calls,
+              current: transactionNow(),
+            }),
           catch: () => unavailableTransaction(),
         });
-      }
       case "WebSessionCapture":
       case "PATCapture":
         return yield* Effect.tryPromise({
@@ -117,7 +117,7 @@ export class UserTransactionCoordinator {
             try: () => request.json(),
             catch: () => unavailableTransaction(),
           });
-          const command = Schema.decodeUnknownOption(Command)(candidate);
+          const command = Schema.decodeUnknownOption(TransactionCommand)(candidate);
           if (
             Option.isNone(command) ||
             command.value.digest.length !== digestBytes ||

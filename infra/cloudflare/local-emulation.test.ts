@@ -7,7 +7,7 @@ import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { ChildProcess } from "effect/unstable/process";
 import { expect } from "vitest";
-import { localCanonicalReadBearer } from "../../apps/server/cloudflare/topology";
+import { localCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/topology";
 
 const infrastructureRoot = new URL(".", import.meta.url).pathname;
 const ingressOrigin = "http://127.0.0.1:8787";

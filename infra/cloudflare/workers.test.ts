@@ -7,11 +7,11 @@ import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-wo
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import publicWorker, { makePublicWorker } from "../../apps/server/cloudflare/public-worker";
-import { makeWorkerTelemetry } from "../../apps/server/cloudflare/telemetry";
+import { makeWorkerTelemetry } from "../../apps/server/cloudflare/runtime/telemetry";
 import {
   localCanonicalReadBearer,
   productionTopology,
-} from "../../apps/server/cloudflare/topology";
+} from "../../apps/server/cloudflare/runtime/topology";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";

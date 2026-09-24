@@ -2,12 +2,14 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "7ddb7d0d9cdc36baa36a5479e12f7accb78de12a3e2ab4bfc3e39de50abd5430";
+const expectedEdgePolicyDigest = "b8b4e20056ab2e07dd51bb8101664090499324ada082a7438c063f2b682c6deb";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
-  await Bun.file(new URL("../../apps/server/cloudflare/topology.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/runtime/topology.ts", import.meta.url)
+  ).text(),
   await Bun.file(new URL("../../apps/web/cloudflare/production/_headers", import.meta.url)).text(),
 ];
 

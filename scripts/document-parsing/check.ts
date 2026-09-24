@@ -26,13 +26,14 @@ const representativeXlsxColumns = Number("12");
 const serverPort = 8793;
 const inspectorPort = 9293;
 const infrastructureRoot = new URL("../../apps/server/cloudflare/", import.meta.url).pathname;
+const documentWorkersRoot = `${infrastructureRoot}documents`;
 const workspaceRoot = new URL("../..", import.meta.url).pathname;
 const temporaryDirectory = `${workspaceRoot}/.document-parsing-proof`;
 const bundlePath = `${temporaryDirectory}/document-parsing-worker.js`;
 const profilePath = `${temporaryDirectory}/startup.cpuprofile`;
-const extractionConfigPath = `${infrastructureRoot}/document-extraction.wrangler.jsonc`;
-const protectedConfigPath = `${infrastructureRoot}/protected-document.wrangler.jsonc`;
-const configPath = `${infrastructureRoot}/document-parsing.wrangler.jsonc`;
+const extractionConfigPath = `${documentWorkersRoot}/document-extraction.wrangler.jsonc`;
+const protectedConfigPath = `${documentWorkersRoot}/protected-document.wrangler.jsonc`;
+const configPath = `${documentWorkersRoot}/document-parsing.wrangler.jsonc`;
 const wranglerPath = `${workspaceRoot}/node_modules/.bin/wrangler`;
 
 const StartupProfile = Schema.Struct({ endTime: Schema.Finite, startTime: Schema.Finite });
@@ -236,7 +237,7 @@ try {
       label: "oversized-image-dimensions",
     },
     {
-      body: await readFile(`${infrastructureRoot}/fixtures/protected-document.pdf`),
+      body: await readFile(`${documentWorkersRoot}/fixtures/protected-document.pdf`),
       headers: { "x-document-password": "proof-password" },
       label: "protected-pdf-password",
     },
@@ -259,7 +260,7 @@ try {
   const activeWorkbookFixtures = ["SimpleMacro.xlsm", "link-external-workbook-a.xlsx"];
   for (const fixture of activeWorkbookFixtures) {
     const activeResponse = await fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: await readFile(`${infrastructureRoot}/fixtures/${fixture}`),
+      body: await readFile(`${documentWorkersRoot}/fixtures/${fixture}`),
       method: "POST",
     });
     const activeResult = Schema.decodeUnknownSync(ParseResult)(await activeResponse.json());

@@ -19,6 +19,12 @@
   ],
   "deferredUpdates": [
     {
+      "name": "jsdom",
+      "manifest": "apps/web/package.json",
+      "reason": "jsdom 30.1.0 breaks the Vitest 5.0.1 jsdom worker environment: its Window addEventListener rejects Vitest's Window proxy as an invalid EventTarget, so all browser unit tests fail before execution. Keep 30.0.1 until the Vitest/jsdom integration supports this release; rerun web and preview-policy tests before updating.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
       "name": "typescript",
       "manifest": "tools/depcruise/package.json",
       "reason": "With TypeScript 7.0.2, dependency-cruiser silently cruises zero modules and the repo's tripwire exits because no architecture rules ran. Revisit after TypeScript 7.1 ships the replacement compiler API and dependency-cruiser adopts it.",

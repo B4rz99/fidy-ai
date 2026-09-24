@@ -1,0 +1,21 @@
+apps/server/cloudflare/identity/support-recovery.ts
+  s_80d919865c178f::t_06ceba18ca3519 248
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_80d919865c178f::t_b2082f97ed8f94 1324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "51f2948d9c9ddf7baa660445a24de86b3b2b1004",
+  "prompts": {},
+  "sessions": {
+    "s_80d919865c178f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d4c6-0ceb-77e7-9746-36b3526012c0",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

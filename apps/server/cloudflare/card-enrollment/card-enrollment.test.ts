@@ -224,12 +224,8 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(concurrent.every((response) => response.status === 200)).toBe(true);
       const first = yield* fromTestPromise(() => send());
       const result = yield* fromTestPromise(() => first.json());
-      const expectedId = yield* fromTestPromise(() =>
-        billingAttemptIdFor({
-          userId: UserId.make(userA),
-          requestId: PaymentRequestId.make(submission.paymentRequestId),
-        })
-      );
+      // Worked SHA-256/UUID-v4 vector for this User and PaymentRequestId, independent of the helper.
+      const expectedId = "c130318e-2d38-470c-90b0-4f77028b0364";
       expect(result).toMatchObject({
         status: "payment-pending",
         billingAttempt: { id: expectedId, status: "pending", money: { amount: "9900" } },

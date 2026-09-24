@@ -1,0 +1,25 @@
+infra/cloudflare/package.json
+  s_20c7bd04cb455a::t_f164bcf764a617 26
+apps/web/package.json
+  s_20c7bd04cb455a::t_ca3e0fc63e44cb 60
+apps/server/package.json
+  s_20c7bd04cb455a::t_f7e6d549f0c9b7 153
+bun.lock
+  s_20c7bd04cb455a::t_59468fc8dc03e0 47,90,107,1870-1875,2180-2191,2362-2391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "49b46a7a0028098cd80d975e211bfe8b0f0d1ba8",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

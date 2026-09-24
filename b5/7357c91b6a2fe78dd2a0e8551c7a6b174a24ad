@@ -1,0 +1,19 @@
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_80d919865c178f::t_acf72e4bf1620e 1328-1329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b57357c91b6a2fe78dd2a0e8551c7a6b174a24ad",
+  "prompts": {},
+  "sessions": {
+    "s_80d919865c178f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d4c6-0ceb-77e7-9746-36b3526012c0",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

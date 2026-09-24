@@ -1,0 +1,37 @@
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_de6c7d29aa90cd::t_30e8e8c1246cf3 1-926
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_de6c7d29aa90cd::t_ac5c303d950f1e 1-693
+apps/server/src/core/ingestion/staging.test.ts
+  s_de6c7d29aa90cd::t_050534c844683d 1-52
+apps/server/src/shell/ingestion/parser.ts
+  s_de6c7d29aa90cd::t_78a5404aacc2a7 11,22,390
+apps/server/src/core/ingestion/model.ts
+  s_de6c7d29aa90cd::t_6ec5eda4bb7019 30-34,38-47
+apps/server/src/shell/operations/operations.test.ts
+  s_6b77634642862a::t_67553ab4e8975a 36-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dfacfbcbbedc366c87f6d22c50539d85ff4ce300",
+  "prompts": {},
+  "sessions": {
+    "s_6b77634642862a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-2385-7286-8dfe-eff034a8f95f",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

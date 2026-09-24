@@ -1,0 +1,34 @@
+apps/server/src/pat-pairing-api.test.ts
+  s_d232ea17b8bce4::t_82de0ce7a024b7 37
+  s_d232ea17b8bce4::t_8d766d7387a5f0 47-50
+  s_d232ea17b8bce4::t_ba01745883d974 1-12,15-24,26-35,43-46,60-61
+  s_d232ea17b8bce4::t_4c2ddbe2c96ab1 36,38-42,51-59
+  s_d232ea17b8bce4::t_d8833769ba3f52 13-14,25
+apps/server/tools/contracts/generate.ts
+  s_d232ea17b8bce4::t_786faef2999873 6,94-95,99
+  s_d232ea17b8bce4::t_4c2ddbe2c96ab1 96-98
+apps/server/tools/contracts/check.ts
+  s_d232ea17b8bce4::t_929cd9e2a733cf 12,349-350,356-363
+  s_d232ea17b8bce4::t_d5b04b6b256b35 351-355
+  s_d232ea17b8bce4::t_5cb2b724852550 364-365
+apps/server/contracts/pat-pairing-openapi.json
+  s_d232ea17b8bce4::t_4b113073238362 1-509
+apps/server/src/pat-pairing-api.ts
+  s_d232ea17b8bce4::t_9c27c73eaa4e64 83-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "87f889f36ed1e7a110120343f00756a5787ff13a",
+  "prompts": {},
+  "sessions": {
+    "s_d232ea17b8bce4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d4c5-abe0-7250-bf7d-cdce2dfa9047",
+        "model": "gpt-6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

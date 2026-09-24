@@ -17,26 +17,13 @@ import {
   cardEnrollmentInvalidBody,
   cardEnrollmentUnavailableBody,
   makeWompiEnrollmentClient,
-  makeWompiOutboundHttp,
 } from "@fidy/server/subscription-runtime";
-import {
-  Clock,
-  Context,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-} from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserId } from "@fidy/server/identity-runtime";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { browserOrigins } from "../runtime/topology";
+import { wompiOutboundHttp, workerCrypto } from "../wompi/wompi-runtime";
 
 const Origin = Schema.Literals([browserOrigins.production, browserOrigins.local]);
 const WompiConfiguration = Schema.Struct({
@@ -164,18 +151,6 @@ const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A>
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
 
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, bytes) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, new Uint8Array(bytes))
-          .then((value) => new Uint8Array(value)),
-      catch: () => undefined,
-    }).pipe(Effect.orDie),
-});
-
 type EnrollmentEnvironment = { readonly DB: D1Database } & Partial<{
   readonly BROWSER_ORIGIN: string;
   readonly WOMPI_ENVIRONMENT: string;
@@ -188,27 +163,13 @@ type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & { readon
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
 ): Promise<WompiEnrollmentClientService> =>
-  Effect.runPromise(
-    Effect.scoped(
-      Layer.build(FetchHttpClient.layer).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
-      )
-    )
-  ).then((clients) => {
-    const outboundHttp = makeWompiOutboundHttp({
-      environment: environment.WOMPI_ENVIRONMENT,
-      publicKey: environment.WOMPI_PUBLIC_KEY,
-      privateKey: Redacted.make(environment.WOMPI_PRIVATE_KEY),
-      integritySecret: Redacted.make(environment.WOMPI_INTEGRITY_SECRET),
-      httpClient: Context.get(clients, HttpClient.HttpClient),
-      crypto: workerCrypto,
-    });
-    return makeWompiEnrollmentClient({
+  Effect.runPromise(wompiOutboundHttp(environment)).then((outboundHttp) =>
+    makeWompiEnrollmentClient({
       outboundHttp,
       crypto: workerCrypto,
       publicKey: environment.WOMPI_PUBLIC_KEY,
-    });
-  });
+    })
+  );
 
 const authority = (
   request: Request,

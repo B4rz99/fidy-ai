@@ -11,28 +11,14 @@ import {
   WompiTransactionReference,
   amountInCentsForBilling,
   makeWompiBillingClient,
-  makeWompiOutboundHttp,
   paidPeriodFor,
 } from "@fidy/server/subscription-runtime";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventHint } from "./wompi-event";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
-import {
-  Clock,
-  Context,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Encoding,
-  Exit,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-} from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { Clock, Data, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
+import { wompiOutboundHttp } from "../wompi/wompi-runtime";
 
 const CollectionMessage = Schema.Struct({
   version: Schema.Literal(1),
@@ -80,7 +66,11 @@ const Snapshot = Schema.Struct({
   billing_email: BillingEmail,
   wompi_source_id: WompiSourceId,
 });
-const Candidate = Schema.Struct({ transaction_id: WompiTransactionId });
+const Candidate = Schema.Struct({
+  transaction_id: WompiTransactionId,
+  signed_at: Schema.OptionFromNullOr(Schema.Finite),
+  signed_status: Schema.OptionFromNullOr(Schema.String),
+});
 const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
 const billingAmount = (
   captured: typeof Snapshot.Type
@@ -125,38 +115,17 @@ type BillingRuntime = Pick<
   "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
 >;
 
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, bytes) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, new Uint8Array(bytes))
-          .then((value) => new Uint8Array(value)),
-      catch: () => undefined,
-    }).pipe(Effect.orDie),
-});
-
 const billingClient = (
   environment: BillingRuntime
 ): Effect.Effect<WompiBillingClientService, BillingCollectionFailure> =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const configured = yield* decode(WompiEnvironment, environment.WOMPI_ENVIRONMENT);
-      const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
-      );
-      const outboundHttp = makeWompiOutboundHttp({
-        environment: configured,
-        publicKey: environment.WOMPI_PUBLIC_KEY,
-        privateKey: Redacted.make(environment.WOMPI_PRIVATE_KEY),
-        integritySecret: Redacted.make(environment.WOMPI_INTEGRITY_SECRET),
-        httpClient: Context.get(clients, HttpClient.HttpClient),
-        crypto: workerCrypto,
-      });
-      return makeWompiBillingClient({ outboundHttp, environment: configured });
-    })
-  );
+  Effect.gen(function* () {
+    const configured = yield* decode(WompiEnvironment, environment.WOMPI_ENVIRONMENT);
+    const outboundHttp = yield* wompiOutboundHttp({
+      ...environment,
+      WOMPI_ENVIRONMENT: configured,
+    });
+    return makeWompiBillingClient({ outboundHttp, environment: configured });
+  });
 
 const snapshot = (
   db: D1Database,
@@ -240,7 +209,7 @@ export const dispatchBillingCollection = (
       if (!published) failed = true;
     }
     if (failed) return yield* failure();
-  });
+  }).pipe(Effect.withSpan("billing.collection.dispatch"));
 
 /** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
@@ -285,7 +254,7 @@ export const receiveBillingCollection = (
       }
       message.ack();
     }
-  });
+  }).pipe(Effect.withSpan("billing.collection.receive"));
 
 const matchesSnapshot = (
   input: Readonly<{
@@ -561,19 +530,43 @@ const offerBillingLookup = (
     db: D1Database;
     workflow: LookupWorkflowBinding;
     transactionId: WompiTransactionId;
+    signedAt: Option.Option<number>;
+    signedStatus: Option.Option<string>;
     now: number;
   }>
 ): Effect.Effect<boolean, BillingCollectionFailure> =>
   Effect.gen(function* () {
-    const { db, workflow, transactionId, now } = input;
+    const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
     const fingerprint = Encoding.encodeHex(
       new Uint8Array(
         yield* attempt(() =>
-          crypto.subtle.digest("SHA-256", new TextEncoder().encode(transactionId))
+          crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(
+              `${transactionId}:${Option.getOrElse(signedAt, () => 0)}:${Option.getOrElse(signedStatus, () => "")}`
+            )
+          )
         )
       )
     );
     const id = `billing-lookup-v1-${fingerprint}-${Math.floor(now / candidateCooldownMs)}`;
+    // Reserve the bounded lookup in D1 before the Activity can make outbound I/O.
+    // A failed or ambiguous handoff consumes its reservation; support can renew a confirmed hint.
+    const recorded = yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(
+            "UPDATE billing_transaction_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
+          )
+          .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
+        db
+          .prepare(
+            "UPDATE billing_event_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND resolved_at_ms IS NULL AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
+          )
+          .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
+      ])
+    );
+    if (recorded.every((result) => result.meta.changes === 0)) return true;
     const created = yield* Effect.exit(
       attempt(() =>
         workflow.create({
@@ -587,23 +580,7 @@ const offerBillingLookup = (
       const existing = yield* Effect.exit(attempt(() => workflow.get(id)));
       if (Exit.isFailure(existing)) return false;
     }
-    const recorded = yield* Effect.exit(
-      attempt(() =>
-        db.batch([
-          db
-            .prepare(
-              "UPDATE billing_transaction_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ?"
-            )
-            .bind(now, transactionId, maximumCandidateLookupAttempts),
-          db
-            .prepare(
-              "UPDATE billing_event_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ?"
-            )
-            .bind(now, transactionId, maximumCandidateLookupAttempts),
-        ])
-      )
-    );
-    return Exit.isSuccess(recorded);
+    return true;
   });
 
 /** Recheck known candidates by starting a bounded, named Workflow Activity. Failed handoffs retain D1 intent. */
@@ -613,15 +590,17 @@ export const reconcileBillingCandidates = (
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT transaction_id FROM (
-      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority
+      environment.DB.prepare(`SELECT transaction_id, MAX(signed_at) AS signed_at,
+      MAX(signed_status) AS signed_status FROM (
+      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
+        NULL AS signed_at, NULL AS signed_status
         FROM billing_transaction_candidates AS c
         JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
           AND c.lookup_attempts < ?
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
-      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority
-        FROM billing_event_candidates AS c
+      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority,
+        c.signed_at, c.signed_status FROM billing_event_candidates AS c
         LEFT JOIN billing_transaction_evidence AS e ON e.transaction_id = c.transaction_id
         LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
         WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?
@@ -629,7 +608,7 @@ export const reconcileBillingCandidates = (
         AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
         AND (a.id IS NULL OR a.status = 'pending' OR (a.status = 'failed'
           AND c.received_at_ms >= a.finalized_at_ms))
-    ) ORDER BY priority LIMIT ?`)
+    ) GROUP BY transaction_id ORDER BY MIN(priority) LIMIT ?`)
         .bind(
           maximumCandidateLookupAttempts,
           now - candidateCooldownMs,
@@ -648,6 +627,8 @@ export const reconcileBillingCandidates = (
           db: environment.DB,
           workflow: environment.BILLING_COLLECTION_WORKFLOW,
           transactionId: candidate.transaction_id,
+          signedAt: candidate.signed_at,
+          signedStatus: candidate.signed_status,
           now,
         })
       );

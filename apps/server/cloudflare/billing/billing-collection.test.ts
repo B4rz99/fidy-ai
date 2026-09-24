@@ -280,6 +280,29 @@ it("holds verified negative until the retry opportunity and admits a later verif
     })
   ));
 
+it("restarts the negative retry opportunity after a verified pending observation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      let observed = transaction("DECLINED");
+      const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
+        reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
+      yield* verify();
+      yield* Effect.promise(() =>
+        db
+          .prepare(`UPDATE billing_transaction_evidence
+      SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
+          .run()
+      );
+      observed = transaction("PENDING");
+      yield* verify();
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      observed = transaction("DECLINED");
+      yield* verify();
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+    })
+  ));
+
 it("does not repeat an ambiguous Workflow POST and settles a later signed callback after provider GET", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -495,6 +518,47 @@ it("rejects forged callback evidence across Public and Core ingress without writ
     })
   ));
 
+it("durably claims each lookup before Workflow handoff, even if the handoff is ambiguous", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      yield* reconcileBillingTransaction({
+        db,
+        client: client(() => transaction("PENDING")),
+        transactionId,
+      });
+      const create = vi.fn((_options: { id: string; params: unknown }): Promise<unknown> =>
+        Promise.reject(new Error("handoff unavailable"))
+      );
+      const workflow = {
+        create,
+        get: (_id: string): Promise<unknown> => Promise.reject(new Error("status unavailable")),
+      };
+      for (let index = 0; index < 8; index++) {
+        yield* Effect.exit(
+          reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow })
+        );
+        yield* Effect.promise(() =>
+          db
+            .prepare(`UPDATE billing_transaction_candidates
+        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+            .run()
+        );
+      }
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(8);
+      expect(
+        (yield* Effect.promise(() =>
+          db
+            .prepare(`SELECT lookup_attempts FROM billing_transaction_candidates
+      WHERE transaction_id = ?`)
+            .bind(transactionId)
+            .first<{ lookup_attempts: number }>()
+        ))?.lookup_attempts
+      ).toBe(8);
+    })
+  ));
+
 it("bounds pending provider-ID lookups and resumes only from a confirmed lookup hint", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -649,14 +713,19 @@ it("accepts same-second signed approval after a verified negative without replay
         )
       );
       vi.stubGlobal("fetch", provider);
+      const started = new Set<string>();
       const workflow = {
-        create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
-          runBillingCollectionWorkflow({
+        create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> => {
+          if (started.has(options.id)) {
+            return Promise.reject(new Error("Workflow ID already exists"));
+          }
+          started.add(options.id);
+          return runBillingCollectionWorkflow({
             environment,
             payload: options.params,
             activity: (_name, _options, run) => run(),
-          }).then(() => ({}))
-        ),
+          }).then(() => ({}));
+        }),
         get: (_id: string): Promise<unknown> => Promise.resolve({}),
       };
       expect(
@@ -675,6 +744,7 @@ it("accepts same-second signed approval after a verified negative without replay
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
       expect(provider).toHaveBeenCalledTimes(2);
+      expect(started.size).toBe(2);
       expect(
         (yield* Effect.promise(() =>
           sendSignedEvent(db, { transactionId, status: "DECLINED", timestamp })

@@ -199,6 +199,15 @@ it("holds verified negative until the retry opportunity and admits a later verif
       expect(create).toHaveBeenCalledTimes(1);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(1);
+      // A transient lookup failure does not consume the later signed approval hint.
+      yield* Effect.promise(() =>
+        db
+          .prepare(`UPDATE billing_event_candidates
+        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+          .run()
+      );
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(2);
       observed = transaction("APPROVED");
       yield* verify();
       expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
@@ -420,6 +429,95 @@ it("rejects forged callback evidence across Public and Core ingress without writ
         )).results
       ).toHaveLength(0);
       expect(provider).not.toHaveBeenCalled();
+    })
+  ));
+
+it("bounds unrelated signed callback lookups and ignores identical event replay", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      const secret = "test_events_payment_test_secret";
+      const unrelatedId = "other-merchant-transaction";
+      const timestamp = 1530291411;
+      const status = "APPROVED";
+      const amount = 990000;
+      const digest = new Uint8Array(
+        yield* Effect.promise(() =>
+          crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(`${unrelatedId}${status}${amount}${timestamp}${secret}`)
+          )
+        )
+      );
+      const checksum = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const event = {
+        event: "transaction.updated",
+        environment: "test",
+        timestamp,
+        data: { transaction: { id: unrelatedId, status, amount_in_cents: amount } },
+        signature: {
+          properties: ["transaction.id", "transaction.status", "transaction.amount_in_cents"],
+          checksum,
+        },
+      };
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(event);
+      const send = (): Promise<Response> =>
+        publicBillingCallback(
+          db,
+          new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-event-checksum": checksum },
+            body,
+          })
+        );
+      expect((yield* Effect.promise(send)).status).toBe(200);
+      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              id: unrelatedId,
+              reference: "fidy-40000000-0000-4000-8000-000000000099",
+              status,
+              amount_in_cents: amount,
+              currency: "COP",
+              finalized_at: "2026-09-08T12:00:00Z",
+            },
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const environment = {
+        DB: db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      };
+      const create = vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
+        runBillingCollectionWorkflow({
+          environment,
+          payload: options.params,
+          activity: (_name, _options, run) => run(),
+        }).then(
+          () => ({}),
+          () => ({})
+        )
+      );
+      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      for (let index = 0; index < 8; index++) {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        yield* Effect.promise(() =>
+          db
+            .prepare(`UPDATE billing_event_candidates
+        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+            .run()
+        );
+      }
+      expect((yield* Effect.promise(send)).status).toBe(200);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(8);
+      expect(provider).toHaveBeenCalledTimes(8);
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
     })
   ));
 

@@ -15,8 +15,8 @@ import {
   paidPeriodFor,
 } from "@fidy/server/subscription-runtime";
 import { WorkflowEntrypoint } from "cloudflare:workers";
-import { recordVerifiedBillingEvidence } from "./billing-settlement";
-import { verifiedWompiEventId } from "./wompi-event";
+import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
+import { verifiedWompiEventHint } from "./wompi-event";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import {
   Clock,
@@ -91,6 +91,8 @@ const billingAmount = (
 const pendingBatchSize = 32;
 const dispatchCooldownMs = 60_000;
 const candidateCooldownMs = 60_000;
+const maximumEventLookupAttempts = 8;
+const eventCandidateLifetimeMs = 86_400_000;
 
 class BillingCollectionFailure extends Data.TaggedError("BillingCollectionFailure")<{
   readonly cause: Option.Option<unknown>;
@@ -361,31 +363,36 @@ export const reconcileBillingTransaction = (
       .pipe(Effect.mapError((cause) => failure(Option.some(cause))));
     const captured = yield* verifiedSnapshot({ ...input, found });
     const now = yield* Clock.currentTimeMillis;
-    const finalizedAt = Option.map(found.finalizedAt, DateTime.toEpochMillis);
-    const period =
-      Option.isSome(found.finalizedAt) && found.status === "APPROVED"
-        ? Option.some(
-            yield* paidPeriodFor(
-              captured.billing_period,
-              captured.time_zone,
-              found.finalizedAt.value
-            )
-          )
-        : Option.none();
-    const paidPeriod = Option.map(period, (value) => ({
-      startsAtMs: DateTime.toEpochMillis(value.startsAt),
-      endsAtMs: DateTime.toEpochMillis(value.endsAt),
-      renewalAnchorMs: DateTime.toEpochMillis(value.renewalAnchor),
-    }));
+    let settlement: VerifiedOutcome;
+    if (found.status === "APPROVED") {
+      if (Option.isNone(found.finalizedAt)) return yield* failure();
+      const period = yield* paidPeriodFor(
+        captured.billing_period,
+        captured.time_zone,
+        found.finalizedAt.value
+      );
+      settlement = {
+        status: "APPROVED",
+        finalizedAtMs: DateTime.toEpochMillis(found.finalizedAt.value),
+        paidPeriod: {
+          startsAtMs: DateTime.toEpochMillis(period.startsAt),
+          endsAtMs: DateTime.toEpochMillis(period.endsAt),
+          renewalAnchorMs: DateTime.toEpochMillis(period.renewalAnchor),
+        },
+      };
+    } else {
+      settlement = {
+        status: found.status,
+        finalizedAtMs: Option.map(found.finalizedAt, DateTime.toEpochMillis),
+      };
+    }
     yield* attempt(() =>
       recordVerifiedBillingEvidence({
         db: input.db,
         attemptId: captured.id,
         transactionId: input.transactionId,
-        status: found.status,
         observedAtMs: now,
-        finalizedAtMs: finalizedAt,
-        paidPeriod,
+        outcome: settlement,
       })
     );
   });
@@ -403,7 +410,7 @@ const reconcileEventCandidate = (
       SET resolved_at_ms = ? WHERE transaction_id = ? AND resolved_at_ms IS NULL
       AND EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
         JOIN billing_attempts AS a ON a.id = e.attempt_id
-        WHERE e.transaction_id = ? AND e.status = 'APPROVED' AND a.status = 'succeeded')`)
+        WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
         .bind(now, transactionId, transactionId)
         .run()
     );
@@ -426,7 +433,7 @@ export const receiveWompiBillingEvent = (
       return new Response(null, { status: 503 });
     }
     const verified = yield* Effect.exit(
-      verifiedWompiEventId({
+      verifiedWompiEventHint({
         request: input.request,
         secret: input.environment.WOMPI_EVENT_SECRET,
         environment: configured.value,
@@ -435,15 +442,20 @@ export const receiveWompiBillingEvent = (
     if (Exit.isFailure(verified) || Option.isNone(verified.value)) {
       return new Response(null, { status: 400 });
     }
-    const id = verified.value.value;
+    const { transactionId, signedAt } = verified.value.value;
     const now = yield* Clock.currentTimeMillis;
     const retained = yield* Effect.exit(
       attempt(() =>
         input.environment.DB.prepare(`INSERT INTO billing_event_candidates
-      (transaction_id, received_at_ms) VALUES (?, ?)
+      (transaction_id, received_at_ms, signed_at) VALUES (?, ?, ?)
       ON CONFLICT(transaction_id) DO UPDATE SET received_at_ms = excluded.received_at_ms,
-        last_checked_at_ms = NULL WHERE resolved_at_ms IS NULL`)
-          .bind(id, now)
+        signed_at = excluded.signed_at, lookup_attempts = 0,
+        last_checked_at_ms = NULL, resolved_at_ms = NULL
+      WHERE excluded.signed_at > billing_event_candidates.signed_at
+        AND NOT EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
+          JOIN billing_attempts AS a ON a.id = e.attempt_id
+          WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded')`)
+          .bind(transactionId, now, signedAt)
           .run()
       )
     );
@@ -582,9 +594,9 @@ const offerBillingLookup = (
             .bind(now, transactionId),
           db
             .prepare(
-              "UPDATE billing_event_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
+              "UPDATE billing_event_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ?"
             )
-            .bind(now, transactionId),
+            .bind(now, transactionId, maximumEventLookupAttempts),
         ])
       )
     );
@@ -608,12 +620,19 @@ export const reconcileBillingCandidates = (
         FROM billing_event_candidates AS c
         LEFT JOIN billing_transaction_evidence AS e ON e.transaction_id = c.transaction_id
         LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
-        WHERE c.resolved_at_ms IS NULL
+        WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?
+        AND c.received_at_ms >= ?
         AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
         AND (a.id IS NULL OR a.status = 'pending' OR (a.status = 'failed'
-          AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < c.received_at_ms)))
+          AND c.received_at_ms >= a.finalized_at_ms))
     ) ORDER BY priority LIMIT ?`)
-        .bind(now - candidateCooldownMs, now - candidateCooldownMs, pendingBatchSize)
+        .bind(
+          now - candidateCooldownMs,
+          maximumEventLookupAttempts,
+          now - eventCandidateLifetimeMs,
+          now - candidateCooldownMs,
+          pendingBatchSize
+        )
         .all()
     );
     const candidates = yield* decode(Schema.Array(Candidate), rows.results);

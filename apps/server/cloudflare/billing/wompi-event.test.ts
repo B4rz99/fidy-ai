@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { Effect, Option } from "effect";
-import { verifiedWompiEventId } from "./wompi-event";
+import { verifiedWompiEventHint } from "./wompi-event";
 
 const secret = "prod_events_OcHnIzeBl5socpwByQ4hA52Em3USQ93Z";
 // SHA-256 of the ordered Wompi example values, timestamp and separate events secret.
@@ -23,16 +23,19 @@ const request = (body: unknown, header = checksum): Request =>
     headers: { "content-type": "application/json", "x-event-checksum": header },
     body: JSON.stringify(body),
   });
-const verify = (body: unknown, header = checksum): Promise<Option.Option<string>> =>
+const verify = (
+  body: unknown,
+  header = checksum
+): Promise<Option.Option<Readonly<{ transactionId: string; signedAt: number }>>> =>
   Effect.runPromise(
-    verifiedWompiEventId({ request: request(body, header), secret, environment: "production" })
+    verifiedWompiEventHint({ request: request(body, header), secret, environment: "production" })
   );
 
 it("authenticates an independently calculated ordered-property Wompi event vector", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       expect(yield* Effect.promise(() => verify(event))).toEqual(
-        Option.some(event.data.transaction.id)
+        Option.some({ transactionId: event.data.transaction.id, signedAt: event.timestamp })
       );
     })
   ));

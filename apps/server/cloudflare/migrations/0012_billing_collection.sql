@@ -38,6 +38,8 @@ CREATE TABLE billing_transaction_candidates (
 CREATE TABLE billing_event_candidates (
   transaction_id TEXT PRIMARY KEY NOT NULL CHECK (length(transaction_id) BETWEEN 1 AND 128),
   received_at_ms INTEGER NOT NULL,
+  signed_at INTEGER NOT NULL DEFAULT 0,
+  lookup_attempts INTEGER NOT NULL DEFAULT 0 CHECK (lookup_attempts >= 0),
   last_checked_at_ms INTEGER,
   resolved_at_ms INTEGER
 ) STRICT;

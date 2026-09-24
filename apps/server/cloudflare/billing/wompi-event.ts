@@ -115,9 +115,11 @@ const readEvent = (
   });
 
 /** Verify Wompi's ordered event properties with the separate events secret before using the id as a lookup hint. */
-export const verifiedWompiEventId = (
+export const verifiedWompiEventHint = (
   input: Readonly<{ request: Request; secret: string; environment: "sandbox" | "production" }>
-): Effect.Effect<Option.Option<WompiTransactionId>> =>
+): Effect.Effect<
+  Option.Option<Readonly<{ transactionId: WompiTransactionId; signedAt: number }>>
+> =>
   Effect.gen(function* () {
     if (input.secret.length === 0) return Option.none();
     const parsed = yield* readEvent(input.request);
@@ -134,5 +136,7 @@ export const verifiedWompiEventId = (
       secret: input.secret,
       values: values.value,
     });
-    return trusted ? Option.some(event.data.transaction.id) : Option.none();
+    return trusted
+      ? Option.some({ transactionId: event.data.transaction.id, signedAt: event.timestamp })
+      : Option.none();
   });

@@ -11,20 +11,25 @@ type PaidPeriod = Readonly<{
   endsAtMs: number;
   renewalAnchorMs: number;
 }>;
+export type VerifiedOutcome =
+  | Readonly<{ status: "APPROVED"; finalizedAtMs: number; paidPeriod: PaidPeriod }>
+  | Readonly<{
+      status: Exclude<WompiBillingStatus, "APPROVED">;
+      finalizedAtMs: Option.Option<number>;
+    }>;
 type Settlement = Readonly<{
   db: D1Database;
   attemptId: BillingAttemptId;
   transactionId: WompiTransactionId;
-  status: WompiBillingStatus;
   observedAtMs: number;
-  finalizedAtMs: Option.Option<number>;
-  paidPeriod: Option.Option<PaidPeriod>;
+  outcome: VerifiedOutcome;
 }>;
 const retryOpportunityMs = Duration.toMillis(wompiRetryOpportunity);
 
 const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatement> => {
-  const { db, attemptId, transactionId, status, observedAtMs, finalizedAtMs } = input;
-  const negative = status === "DECLINED" || status === "VOIDED" || status === "ERROR";
+  const { db, attemptId, transactionId, observedAtMs, outcome } = input;
+  const negative =
+    outcome.status === "DECLINED" || outcome.status === "VOIDED" || outcome.status === "ERROR";
   return [
     db
       .prepare(`INSERT OR IGNORE INTO billing_transaction_candidates (transaction_id, attempt_id)
@@ -44,10 +49,12 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
       .bind(
         transactionId,
         attemptId,
-        status,
+        outcome.status,
         observedAtMs,
         negative ? observedAtMs : null,
-        Option.getOrNull(finalizedAtMs)
+        outcome.status === "APPROVED"
+          ? outcome.finalizedAtMs
+          : Option.getOrNull(outcome.finalizedAtMs)
       ),
     db
       .prepare(`UPDATE billing_attempts SET status = 'succeeded', finalized_at_ms =
@@ -75,7 +82,9 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
 };
 
 const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement> => {
-  const { db, attemptId, observedAtMs, paidPeriod } = input;
+  const { db, attemptId, observedAtMs, outcome } = input;
+  const period =
+    outcome.status === "APPROVED" ? Option.some(outcome.paidPeriod) : Option.none<PaidPeriod>();
   return [
     db
       .prepare(`INSERT OR IGNORE INTO billing_paid_periods
@@ -84,10 +93,10 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
       (SELECT 1 FROM billing_attempts WHERE id = ? AND status = 'succeeded')`)
       .bind(
         attemptId,
-        Option.map(paidPeriod, (period) => period.startsAtMs).pipe(Option.getOrNull),
-        Option.map(paidPeriod, (period) => period.endsAtMs).pipe(Option.getOrNull),
-        Option.map(paidPeriod, (period) => period.renewalAnchorMs).pipe(Option.getOrNull),
-        Option.map(paidPeriod, (period) => period.startsAtMs).pipe(Option.getOrNull),
+        Option.map(period, (value) => value.startsAtMs).pipe(Option.getOrNull),
+        Option.map(period, (value) => value.endsAtMs).pipe(Option.getOrNull),
+        Option.map(period, (value) => value.renewalAnchorMs).pipe(Option.getOrNull),
+        Option.map(period, (value) => value.startsAtMs).pipe(Option.getOrNull),
         attemptId
       ),
     // User is the stable coordination key: the guarded upsert serializes competing attempts in D1.

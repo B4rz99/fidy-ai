@@ -1,0 +1,148 @@
+infra/cloudflare/deployment-configuration.ts
+  s_a4c11a77629bee::t_e79391f28214a1 2-5
+infra/cloudflare/verify-edge-policy.ts
+  s_a4c11a77629bee::t_dfbd1a78347438 5
+  s_a4c11a77629bee::t_46dc3700624eb6 9-10
+infra/cloudflare/tsconfig.json
+  s_a4c11a77629bee::t_9d9e9b8437f0f8 17-18
+apps/server/cloudflare/card-enrollment-claim.ts
+  s_a4c11a77629bee::t_c3398fed1ac8d2 21-25
+  s_a4c11a77629bee::t_03073bccc9c301 27-42
+apps/server/cloudflare/support-recovery.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-296
+apps/server/cloudflare/card-enrollment.test.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 4-52,63-127,144-365,367-545
+  s_a4c11a77629bee::t_0e07ba5ae955da 62,130-135,142,366
+  s_a4c11a77629bee::t_1d8e154ff87eed 129
+apps/server/cloudflare/onboarding-email.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-329
+scripts/document-parsing/check.ts
+  s_a4c11a77629bee::t_2f1dbdf804870b 28
+apps/server/cloudflare/resource-admission-worker.fixture.ts
+  s_a4c11a77629bee::t_cbd8954c7ba81d 34-61
+apps/server/cloudflare/document-parsing-worker.test.ts
+  s_a4c11a77629bee::t_7497da82120820 129-151
+  s_a4c11a77629bee::t_5f717c47f1b94c 3-63,71,84,100,127
+.github/workflows/production.yml
+  s_a4c11a77629bee::t_f28cf5c20186d3 80-81,94-96,112-114,150-151
+apps/server/cloudflare/card-enrollment-d1.test-fixture.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-47
+apps/server/cloudflare/email-replacement-delivery.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-277
+apps/server/cloudflare/browser-pairing-email-delivery.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-323
+apps/server/cloudflare/resource-admission.test.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-666
+apps/server/cloudflare/card-enrollment-claim.test.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 2-194
+apps/server/cloudflare/verified-onboarding.test.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 8-1540
+apps/server/cloudflare/browser-login.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-659
+apps/server/cloudflare/transaction-coordinator.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-78
+infra/cloudflare/local-emulation.test.ts
+  s_a4c11a77629bee::t_58c720290ffed6 10
+  s_a4c11a77629bee::t_e1db7cb43a2153 64-70
+apps/server/cloudflare/public-worker.ts
+  s_a4c11a77629bee::t_a8bf4567707fc8 42,251-259,265-267
+  s_a4c11a77629bee::t_6f29761a88c80b 240,242-250,268-269,378
+  s_a4c11a77629bee::t_b485e8cd005eba 241
+  s_a4c11a77629bee::t_413bf95a41b4af 24,43,52,73,129,150,210,228-229,260-264,270,277,390,412
+apps/server/cloudflare/document-extraction-worker.test.ts
+  s_a4c11a77629bee::t_feb759c3ed4378 25-26
+  s_a4c11a77629bee::t_b485e8cd005eba 45-125
+apps/server/cloudflare/transaction-history.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 10,40,157,209,217-394
+  s_a4c11a77629bee::t_6d2f8ae16b0ab4 65
+docs/research/alchemy-monorepo-ownership.md
+  s_a4c11a77629bee::t_e8327e79557b11 3
+  s_a4c11a77629bee::t_e79391f28214a1 8,24,26,28
+  s_a4c11a77629bee::t_f09d2bdb0084c3 1-2,4-7,9-23,25,27,29-42
+apps/server/package.json
+  s_a4c11a77629bee::t_12a4912af1035d 133,137,142-144,149-150,152-153
+  s_a4c11a77629bee::t_f08e512ac5e003 124
+.oxlintrc.json
+  s_a4c11a77629bee::t_4c15e119d36d31 212-219,249
+  s_a4c11a77629bee::t_dd71393a640210 220-221
+  s_a4c11a77629bee::t_f125561759cff0 239
+apps/server/cloudflare/topology.ts
+  s_a4c11a77629bee::t_8d1c0fbf8160c3 1
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_a4c11a77629bee::t_576126da944707 18
+apps/server/cloudflare/email-replacement.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-431
+apps/server/cloudflare/transactions.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 6,35,40,76-372
+  s_a4c11a77629bee::t_434653ecb8326f 46-50
+  s_a4c11a77629bee::t_db8c566b490f8a 52-68
+infra/cloudflare/verify-edge-policy.test.ts
+  s_a4c11a77629bee::t_7b79ab11e3f011 7
+infra/cloudflare/workers.test.ts
+  s_a4c11a77629bee::t_b913ac143f7ccb 43-47
+  s_a4c11a77629bee::t_d0e78ba292cb13 256
+  s_a4c11a77629bee::t_80390f126f8b25 6,9-10
+  s_a4c11a77629bee::t_e79391f28214a1 11-14
+apps/server/cloudflare/transaction-boundary.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 2-7
+  s_a4c11a77629bee::t_6da2f38316051b 13-90
+apps/server/cloudflare/resource-admission.ts
+  s_a4c11a77629bee::t_8211c1b4b45bf7 448
+ARCHITECTURE.md
+  s_a4c11a77629bee::t_ffb0a03df42a78 55
+  s_a4c11a77629bee::t_3d0f97bfacc5f0 14,17-18,44-46
+apps/server/cloudflare/transactions.test.ts
+  s_a4c11a77629bee::t_7c6e72376e6877 235-239
+  s_a4c11a77629bee::t_5f717c47f1b94c 3-212,221,246-247,253,262-263,266-277,285,288,305,308-309,311-978
+infra/cloudflare/vitest.config.ts
+  s_a4c11a77629bee::t_e79391f28214a1 7-10
+apps/server/cloudflare/vitest.config.ts
+  s_a4c11a77629bee::t_509abbc3395355 1-13
+apps/server/cloudflare/consent-ingress.test.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 2-1637
+apps/server/cloudflare/verified-onboarding.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-205
+infra/cloudflare/alchemy.run.ts
+  s_a4c11a77629bee::t_e79391f28214a1 12-16
+  s_a4c11a77629bee::t_585860b543177d 160,177,240
+infra/cloudflare/package.json
+  s_a4c11a77629bee::t_510f6186b07012 17
+  s_a4c11a77629bee::t_dc0ebc1efe4cc0 7
+  s_a4c11a77629bee::t_61199d3b258f20 8
+apps/server/tsconfig.json
+  s_a4c11a77629bee::t_de64d0f1941b98 10-11,20
+infra/cloudflare/edge-security.ts
+  s_a4c11a77629bee::t_dc9f8b69aeecad 7
+package.json
+  s_a4c11a77629bee::t_a18a8e6af97d46 34
+apps/server/cloudflare/card-enrollment.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1,21-855
+apps/server/cloudflare/core-worker.ts
+  s_a4c11a77629bee::t_69eb11b3a87f2f 204,272,293,309,315,401,414,445-448
+  s_a4c11a77629bee::t_bc4d254d041f2e 92-96
+apps/server/ARCHITECTURE.md
+  s_a4c11a77629bee::t_a742efc3656504 23-25
+  s_a4c11a77629bee::t_5c018e6951bbf6 15-16,22
+apps/server/cloudflare/pats.test.ts
+  s_a4c11a77629bee::t_6d915f660f3ee5 227-231
+apps/server/cloudflare/browser-pairing-email.ts
+  s_a4c11a77629bee::t_5f717c47f1b94c 1-333
+bun.lock
+  s_a4c11a77629bee::t_a6b59f47ab9fde 27,31,36-38,43-44,47,250,252,254,256,258,1698,1744,1864-1865,1944,2260-2269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "44c82d40dd40fa8f79aa0349ef6fe0acb796485a",
+  "prompts": {},
+  "sessions": {
+    "s_a4c11a77629bee": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d122-0e51-7309-8713-189213b52fbf",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

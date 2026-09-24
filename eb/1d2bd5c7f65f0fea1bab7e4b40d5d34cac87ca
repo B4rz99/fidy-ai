@@ -1,0 +1,20 @@
+apps/web/scripts/production-workflow.test.ts
+  s_20c7bd04cb455a::t_fd49ea093141ec 41,45,78-80
+  s_20c7bd04cb455a::t_18952487161a07 71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "eb1d2bd5c7f65f0fea1bab7e4b40d5d34cac87ca",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

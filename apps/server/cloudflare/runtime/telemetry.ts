@@ -28,8 +28,19 @@ export const makeWorkerTelemetry = (
   });
 
 /** Cloudflare-native structured logging for the production Worker entrypoints. */
-export const cloudflareWorkerTelemetry = makeWorkerTelemetry((record) => {
-  Effect.runSync(Effect.log(record));
+export const cloudflareWorkerTelemetry = makeTelemetryService({
+  ...DisabledTelemetryResource.adapter,
+  exportWork: (record) => {
+    Effect.runSync(Effect.log(record));
+  },
+  captureFailure: (_span, failure) =>
+    failure.operation === "http.supportRecovery" && failure.error === "unexpected_defect"
+      ? Effect.log({
+          component: "api",
+          operation: "http.supportRecovery",
+          error: "unexpected_defect",
+        })
+      : Effect.void,
 });
 
 const firstClientFailureStatus = 400;

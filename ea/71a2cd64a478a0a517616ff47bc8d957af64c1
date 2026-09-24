@@ -1,0 +1,24 @@
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_20c7bd04cb455a::t_ba9f56001602f4 9,63-70
+  s_20c7bd04cb455a::t_b8c977ce0c29e9 71-73
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_20c7bd04cb455a::t_ca61a57c33bb0c 5
+apps/web/scripts/production-workflow.test.ts
+  s_20c7bd04cb455a::t_e3028849387da3 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ea71a2cd64a478a0a517616ff47bc8d957af64c1",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

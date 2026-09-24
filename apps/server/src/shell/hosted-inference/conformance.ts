@@ -1,4 +1,5 @@
-import { Brand, DateTime, Effect, Option, Predicate, Schema } from "effect";
+import { BigDecimal, Brand, DateTime, Effect, Option, Predicate, Schema } from "effect";
+import { CreateTransactionInput } from "~/core/transactions/model";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -50,7 +51,7 @@ const forbidTextEvidence = (
     ? Effect.void
     : Effect.fail(conformanceFailure());
 
-const verifyCanonicalTools = (
+const verifyCanonicalQuery = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>
   Effect.gen(function* () {
@@ -69,7 +70,15 @@ const verifyCanonicalTools = (
     ) {
       return yield* conformanceFailure();
     }
+  });
 
+const MutationArguments = Schema.Struct({ payload: Schema.toType(CreateTransactionInput) });
+type MutationArguments = typeof MutationArguments.Type;
+
+const verifyCanonicalMutation = (
+  inference: HostedInferenceService
+): Effect.Effect<MutationArguments, HostedInferenceError> =>
+  Effect.gen(function* () {
     const mutation = yield* inference.prepareText({
       context: context(
         "Registra con la herramienta un gasto de 42.000 COP en mercado ocurrido el 22 de septiembre de 2026 a las 07:00 en Bogotá."
@@ -79,13 +88,30 @@ const verifyCanonicalTools = (
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
     const mutationResult = yield* mutation.execute;
+    const mutationCall = mutationResult.toolCalls[0];
     if (
       mutationResult.toolCalls.length !== 1 ||
-      mutationResult.toolCalls[0]?.operation !== "transactions.createTransaction"
+      mutationCall?.operation !== "transactions.createTransaction"
     ) {
       return yield* conformanceFailure();
     }
+    if (!Schema.is(MutationArguments)(mutationCall.params)) {
+      return yield* conformanceFailure();
+    }
+    return mutationCall.params;
   });
+
+const verifyMutationMoney = (args: MutationArguments): Effect.Effect<void, HostedInferenceError> =>
+  args.payload.money.currency === "COP" &&
+  args.payload.direction === "outflow" &&
+  BigDecimal.equals(args.payload.money.amount, BigDecimal.make(42_000n, 0))
+    ? Effect.void
+    : Effect.fail(conformanceFailure());
+
+const verifyMutationTime = (args: MutationArguments): Effect.Effect<void, HostedInferenceError> =>
+  DateTime.formatIso(args.payload.occurredAt) === "2026-09-22T12:00:00.000Z"
+    ? Effect.void
+    : Effect.fail(conformanceFailure());
 
 const verifyInvalidOutputRecovery = (
   inference: HostedInferenceService
@@ -135,10 +161,54 @@ const verifyStructuredColombianSpanish = (
  * adapter conformance for malformed output and arguments, recovery, bounds, interruption, and
  * hidden-retry prohibition; this live phase then verifies approved-model behavior.
  */
+export type HostedConformanceCheck =
+  | "canonical_query"
+  | "canonical_mutation"
+  | "canonical_mutation_money"
+  | "canonical_mutation_time"
+  | "invalid_output_recovery"
+  | "structured_es_co";
+
+/** Only a closed check and failure category may leave the live conformance boundary. */
+export type HostedConformanceFailure = Readonly<{
+  check: HostedConformanceCheck;
+  category: HostedInferenceError["reason"]["_tag"];
+}>;
+
+/** Live checks with privacy-safe, check-level failure evidence for the release gate. */
+export const verifyHostedInferenceConformanceChecks = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedConformanceFailure> => {
+  const check = <A>(
+    name: HostedConformanceCheck,
+    work: Effect.Effect<A, HostedInferenceError>
+  ): Effect.Effect<A, HostedConformanceFailure> =>
+    work.pipe(
+      Effect.mapError((error): HostedConformanceFailure => ({
+        check: name,
+        category: error.reason._tag,
+      }))
+    );
+  return check("canonical_query", verifyCanonicalQuery(inference)).pipe(
+    Effect.andThen(check("canonical_mutation", verifyCanonicalMutation(inference))),
+    Effect.flatMap((args) =>
+      check("canonical_mutation_money", verifyMutationMoney(args)).pipe(
+        Effect.andThen(check("canonical_mutation_time", verifyMutationTime(args)))
+      )
+    ),
+    Effect.andThen(check("invalid_output_recovery", verifyInvalidOutputRecovery(inference))),
+    Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference)))
+  );
+};
+
 export const verifyHostedInferenceConformance = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>
-  verifyCanonicalTools(inference).pipe(
+  verifyCanonicalQuery(inference).pipe(
+    Effect.andThen(verifyCanonicalMutation(inference)),
+    Effect.flatMap((args) =>
+      verifyMutationMoney(args).pipe(Effect.andThen(verifyMutationTime(args)))
+    ),
     Effect.andThen(verifyInvalidOutputRecovery(inference)),
     Effect.andThen(verifyStructuredColombianSpanish(inference))
   );

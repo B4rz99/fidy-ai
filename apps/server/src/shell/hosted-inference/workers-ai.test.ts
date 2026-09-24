@@ -3,6 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { ToolCallId } from "~/core/transcript/model";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
@@ -32,8 +33,7 @@ const initialContext = (text = "Gasté 42.500 pesos en el mercado"): HostedIniti
   hostedInitialTextContext(text);
 
 type ProviderResponseFixture = Readonly<{
-  output: ReadonlyArray<unknown>;
-  status: "completed" | "queued";
+  choices: ReadonlyArray<unknown>;
   usage: unknown;
 }>;
 
@@ -41,24 +41,10 @@ const response = (body: unknown, status = 200): Response => Response.json(body, 
 
 const completed = (overrides: Partial<ProviderResponseFixture> = {}): Response =>
   response({
-    status: "completed",
-    output: [
-      {
-        id: "message-1",
-        type: "message",
-        role: "assistant",
-        status: "completed",
-        content: [{ type: "output_text", text: "Listo" }],
-      },
-    ],
-    usage: { input_tokens: 12, output_tokens: 2, total_tokens: 14 },
+    choices: [{ message: { role: "assistant", content: "Listo" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
     ...overrides,
   });
-
-const requestTextContent = (request: WorkersAiRequest): ReadonlyArray<string> =>
-  request.input.flatMap((item) =>
-    "role" in item && typeof item.content === "string" ? [item.content] : []
-  );
 
 const captureRun = (
   reply: (request: WorkersAiRequest, signal: AbortSignal) => Promise<Response>
@@ -115,38 +101,104 @@ it.effect("fails closed when the configured Workers AI model is absent or unsupp
   })
 );
 
-it.effect("sends canonical tool schemas through the direct binding with bounded generation", () =>
+it.effect(
+  "selects a canonical operation from Gemma chat completions without granting extra tools",
+  () =>
+    Effect.gen(function* () {
+      const binding = captureRun(() =>
+        Promise.resolve(
+          response({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call-1",
+                      type: "function",
+                      function: {
+                        name: "transactions__listTransactions",
+                        arguments: '{"query":{}}',
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+          })
+        )
+      );
+
+      const inference = yield* makeConfiguredInference(binding.run);
+      const prepared = yield* inference.prepareText({
+        context: initialContext(),
+        availableOperations: [CanonicalOperationId.make("transactions.listTransactions")],
+        toolChoice: "auto",
+        maximumToolCalls: HostedToolCallMaximum.make(1),
+      });
+
+      const result = yield* prepared.execute;
+      expect(result.toolCalls.map(({ operation }) => operation)).toEqual([
+        "transactions.listTransactions",
+      ]);
+      expect(binding.calls).toHaveLength(1);
+      const call = binding.calls[0];
+      expect(call?.model).toBe(approvedWorkersAiModel);
+      expect(call?.options.returnRawResponse).toBe(true);
+      expect(call?.request).toMatchObject({
+        max_tokens: 16_000,
+        chat_template_kwargs: { enable_thinking: false },
+        tool_choice: "auto",
+      });
+      expect(call?.request).not.toHaveProperty("gateway");
+      expect(call?.request).not.toHaveProperty("store");
+      expect(call?.request).toMatchObject({
+        tools: [{ type: "function", function: { name: "transactions__listTransactions" } }],
+      });
+      expect(call?.request).toHaveProperty("messages");
+    })
+);
+
+it.effect("rejects a truncated tool call before it can be executed", () =>
   Effect.gen(function* () {
-    const binding = captureRun(() => Promise.resolve(completed()));
+    const binding = captureRun(() =>
+      Promise.resolve(
+        completed({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call-1",
+                    type: "function",
+                    function: { name: "transactions__listTransactions", arguments: '{"query":{}}' },
+                  },
+                ],
+              },
+              finish_reason: "length",
+            },
+          ],
+        })
+      )
+    );
     const inference = yield* makeConfiguredInference(binding.run);
     const prepared = yield* inference.prepareText({
       context: initialContext(),
-      availableOperations: [CanonicalOperationId.make("transactions.createTransaction")],
+      availableOperations: [CanonicalOperationId.make("transactions.listTransactions")],
       toolChoice: "auto",
       maximumToolCalls: HostedToolCallMaximum.make(1),
     });
 
-    yield* prepared.execute;
-
-    expect(binding.calls).toHaveLength(1);
-    const call = binding.calls[0];
-    expect(call?.model).toBe(approvedWorkersAiModel);
-    expect(call?.options.returnRawResponse).toBe(true);
-    expect(call?.request).toMatchObject({
-      max_output_tokens: 16_000,
-      parallel_tool_calls: false,
-      truncation: "disabled",
-    });
-    expect(call?.request).not.toHaveProperty("gateway");
-    expect(call?.request).not.toHaveProperty("store");
-    expect(call?.request.tools.map(({ name }) => name)).toContain(
-      "transactions__createTransaction"
+    assertHostedFailure(
+      yield* Effect.exit(prepared.execute),
+      hostedFailure({ _tag: "InvalidOutput", description: "Hosted provider response was invalid" })
     );
-    const textContent = call === undefined ? [] : requestTextContent(call.request);
-    expect(textContent.some((content) => content.includes("es-CO"))).toBe(true);
-    expect(
-      textContent.some((content) => content.includes("Gasté 42.500 pesos en el mercado"))
-    ).toBe(true);
+    expect(binding.calls).toHaveLength(1);
   })
 );
 
@@ -156,12 +208,23 @@ it.effect("rejects malformed canonical tool arguments without exposing provider 
     const binding = captureRun(() =>
       Promise.resolve(
         completed({
-          output: [
+          choices: [
             {
-              type: "function_call",
-              call_id: "call-1",
-              name: "transactions__createTransaction",
-              arguments: JSON.stringify({ privateValue }),
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call-1",
+                    type: "function",
+                    function: {
+                      name: "transactions__createTransaction",
+                      arguments: JSON.stringify({ privateValue }),
+                    },
+                  },
+                ],
+              },
+              finish_reason: "tool_calls",
             },
           ],
         })
@@ -188,24 +251,26 @@ it.effect("rejects malformed canonical tool arguments without exposing provider 
 it.effect("rejects unfinished, refused, and empty provider output", () =>
   Effect.gen(function* () {
     const invalidResponses = [
-      completed({ status: "queued" }),
+      completed({ choices: [] }),
       completed({ usage: undefined }),
       completed({
         usage: {
-          input_tokens: 12,
-          output_tokens: excessiveOutputTokens,
+          prompt_tokens: 12,
+          completion_tokens: excessiveOutputTokens,
           total_tokens: excessiveOutputTokens + 12,
         },
       }),
       completed({
-        output: [
+        choices: [
           {
-            type: "message",
-            content: [{ type: "refusal", refusal: "private refusal content" }],
+            message: { role: "assistant", content: null, refusal: "private refusal content" },
+            finish_reason: "stop",
           },
         ],
       }),
-      completed({ output: [] }),
+      completed({
+        choices: [{ message: { role: "assistant", content: null }, finish_reason: "stop" }],
+      }),
     ];
 
     for (const invalidResponse of invalidResponses) {
@@ -247,13 +312,71 @@ it.effect("preserves provider continuation across repeated bounded rounds", () =
     yield* second.execute;
 
     expect(binding.calls).toHaveLength(2);
-    expect(binding.calls[1]?.request.input).toEqual(
+    expect(binding.calls[1]?.request.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ role: "assistant" }),
         expect.objectContaining({
           role: "system",
           content: "Answer with the corrected shape.",
         }),
+      ])
+    );
+  })
+);
+
+it.effect("continues a canonical operation with the matching tool result in Gemma messages", () =>
+  Effect.gen(function* () {
+    const binding = captureRun(() =>
+      Promise.resolve(
+        binding.calls.length === 1
+          ? completed({
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call-1",
+                        type: "function",
+                        function: {
+                          name: "transactions__listTransactions",
+                          arguments: '{"query":{}}',
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            })
+          : completed()
+      )
+    );
+    const inference = yield* makeConfiguredInference(binding.run);
+    const prepared = yield* inference.prepareText({
+      context: initialContext(),
+      availableOperations: [CanonicalOperationId.make("transactions.listTransactions")],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const first = yield* prepared.execute;
+    const next = yield* first.continuation.prepare([
+      {
+        _tag: "ToolResult",
+        toolCallId: ToolCallId.make("call-1"),
+        operation: CanonicalOperationId.make("transactions.listTransactions"),
+        outcome: { _tag: "Succeeded", output: { count: 1 } },
+      },
+    ]);
+    expect((yield* next.execute).text).toBe("Listo");
+    expect(binding.calls[1]?.request.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          tool_calls: [expect.objectContaining({ id: "call-1" })],
+        }),
+        { role: "tool", tool_call_id: "call-1", content: '{"count":1}' },
       ])
     );
   })
@@ -290,13 +413,10 @@ it.effect("bounds provider responses and performs no hidden retry", () =>
     const binding = captureRun(() =>
       Promise.resolve(
         completed({
-          output: [
+          choices: [
             {
-              id: "message-1",
-              type: "message",
-              role: "assistant",
-              status: "completed",
-              content: [{ type: "output_text", text: `${privateValue}${"x".repeat(600_000)}` }],
+              message: { role: "assistant", content: `${privateValue}${"x".repeat(600_000)}` },
+              finish_reason: "stop",
             },
           ],
         })
@@ -358,16 +478,24 @@ it.effect("times out stalled response bodies and cancels their reader", () =>
 it.effect("enforces the per-round tool-call bound before decoding arguments", () =>
   Effect.gen(function* () {
     const call = {
-      type: "function_call",
-      name: "transactions__createTransaction",
-      arguments: "{}",
+      type: "function",
+      function: { name: "transactions__createTransaction", arguments: "{}" },
     };
     const binding = captureRun(() =>
       Promise.resolve(
         completed({
-          output: [
-            { ...call, call_id: "call-1" },
-            { ...call, call_id: "call-2" },
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  { ...call, id: "call-1" },
+                  { ...call, id: "call-2" },
+                ],
+              },
+              finish_reason: "tool_calls",
+            },
           ],
         })
       )
@@ -398,13 +526,10 @@ it.effect("strictly decodes bounded structured output", () =>
     const binding = captureRun(() =>
       Promise.resolve(
         completed({
-          output: [
+          choices: [
             {
-              id: "message-1",
-              type: "message",
-              role: "assistant",
-              status: "completed",
-              content: [{ type: "output_text", text: '{"text":"resumen"}' }],
+              message: { role: "assistant", content: '{"text":"resumen"}' },
+              finish_reason: "stop",
             },
           ],
         })
@@ -418,9 +543,38 @@ it.effect("strictly decodes bounded structured output", () =>
     });
 
     expect(yield* prepared.execute).toEqual({ text: "resumen" });
-    expect(binding.calls[0]?.request.text).toMatchObject({
-      format: { type: "json_schema", strict: true },
+    expect(binding.calls[0]?.request.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: { strict: true },
     });
+  })
+);
+
+it.effect("rejects truncated structured output even if its JSON happens to parse", () =>
+  Effect.gen(function* () {
+    const binding = captureRun(() =>
+      Promise.resolve(
+        completed({
+          choices: [
+            {
+              message: { role: "assistant", content: '{"text":"partial"}' },
+              finish_reason: "length",
+            },
+          ],
+        })
+      )
+    );
+    const inference = yield* makeConfiguredInference(binding.run);
+    const prepared = yield* inference.prepareStructured({
+      context: { prior: Option.none(), entries: [] },
+      purpose: "conversation-compaction",
+      outputSchema: Schema.Struct({ text: Schema.String }),
+    });
+
+    assertHostedFailure(
+      yield* Effect.exit(prepared.execute),
+      hostedFailure({ _tag: "StructuredOutputExceeded" })
+    );
   })
 );
 
@@ -430,11 +584,8 @@ it.effect("rejects malformed structured output without exposing it", () =>
     const binding = captureRun(() =>
       Promise.resolve(
         completed({
-          output: [
-            {
-              type: "message",
-              content: [{ type: "output_text", text: `{${privateValue}` }],
-            },
+          choices: [
+            { message: { role: "assistant", content: `{${privateValue}` }, finish_reason: "stop" },
           ],
         })
       )

@@ -60,18 +60,25 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
-if ! curl --silent --show-error --fail \
+status=$(curl --silent --show-error \
   --request POST \
+  --write-out '%{http_code}' \
   --output "$response_file" \
-  "http://127.0.0.1:${port}/conformance"; then
-  echo "The configured Workers AI model did not pass conformance." >&2
-  exit 1
-fi
+  "http://127.0.0.1:${port}/conformance")
 
-if ! jq --exit-status \
-  '. == {modelApprovalRevision: "workers-ai-2026-09-22", outcome: "conforming"}' \
+if [[ "$status" != 200 ]] || ! jq --exit-status \
+  '. == {modelApprovalRevision: "workers-ai-gemma-4-2026-09-22", outcome: "conforming"}' \
   "$response_file" >/dev/null; then
-  echo "The configured Workers AI model did not pass conformance." >&2
+  diagnostic=$(jq --raw-output '
+    if .modelApprovalRevision == "workers-ai-gemma-4-2026-09-22"
+      and .outcome == "non_conforming"
+      and (.check | IN("configuration", "canonical_query", "canonical_mutation", "canonical_mutation_money", "canonical_mutation_time", "invalid_output_recovery", "structured_es_co", "internal"))
+      and (.category | IN("InvalidAuthority", "CapacityExceeded", "ActiveRequestCapacityExceeded", "InvalidOutput", "ProviderUnavailable", "StructuredOutputExceeded", "StructuredOutputTimedOut", "UnexpectedFailure"))
+    then "check=\(.check) category=\(.category)"
+    else "check=internal category=UnexpectedFailure"
+    end
+  ' "$response_file" 2>/dev/null || printf 'check=internal category=UnexpectedFailure')
+  echo "Workers AI conformance failed: $diagnostic" >&2
   exit 1
 fi
 

@@ -981,6 +981,7 @@ it("continues the canonical history beyond its first bounded page without losing
           selection: {
             request: request(0, "/transactions?direction=outflow"),
             subject,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1015,6 +1016,7 @@ it("continues the canonical history beyond its first bounded page without losing
               `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
             ),
             subject,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1105,6 +1107,7 @@ it("commits exact manual Money, immutable capture context, and audit before cano
           selection: {
             request: request(0),
             subject: owner.value,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1178,6 +1181,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
           selection: {
             request: request(1),
             subject: other.value,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1194,6 +1198,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
             selection: {
               request: request(1, `/transactions/${created.data.id}`),
               subject: other.value,
+              search: false,
               id: Option.some(created.data.id),
             },
           })
@@ -1217,7 +1222,12 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         (yield* fromTestPromise(() =>
           browseTransactions({
             db,
-            selection: { request: request(0), subject: owner.value, id: Option.none() },
+            selection: {
+              request: request(0),
+              subject: owner.value,
+              search: false,
+              id: Option.none(),
+            },
           })
         )).status
       ).toBe(401);
@@ -1227,6 +1237,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
           selection: {
             request: request(1),
             subject: other.value,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1296,6 +1307,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
           selection: {
             request: request(0),
             subject: first.value,
+            search: false,
             id: Option.none(),
           },
         })
@@ -1306,6 +1318,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
           selection: {
             request: request(1),
             subject: second.value,
+            search: false,
             id: Option.none(),
           },
         })

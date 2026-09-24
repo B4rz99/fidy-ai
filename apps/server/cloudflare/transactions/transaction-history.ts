@@ -84,8 +84,7 @@ type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
     // History callers select a single record by id or list when id is absent.
-    // oxlint-disable-next-line effect-guards/no-nullable-type
-    | Readonly<{ search?: never; id: Option.Option<string> }>
+    | Readonly<{ search: false; id: Option.Option<string> }>
   );
 type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 

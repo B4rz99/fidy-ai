@@ -472,6 +472,7 @@ const executeCanonicalWork = (
               : {
                   request,
                   subject,
+                  search: false,
                   id:
                     operation.id === "transactions.getTransaction"
                       ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")

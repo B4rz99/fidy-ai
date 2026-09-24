@@ -43,15 +43,26 @@ const LookupWork = Schema.Struct({
   kind: Schema.Literal("lookup"),
   transactionId: WompiTransactionId,
 });
+// Version 1 is new: no legacy payload migration. D1 is authoritative after Workflow history expires.
+// Three days fits Workers Free and Paid; expired execution IDs never rearm a sent mutation.
+const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
 }>;
 type CollectionWorkflow = Readonly<{
-  create: (options: { id: string; params: typeof CollectionMessage.Type }) => Promise<unknown>;
+  create: (options: {
+    id: string;
+    params: typeof CollectionMessage.Type;
+    retention: typeof workflowRetention;
+  }) => Promise<unknown>;
   get: (id: string) => Promise<unknown>;
 }>;
 type LookupWorkflowBinding = Readonly<{
-  create: (options: { id: string; params: typeof LookupWork.Type }) => Promise<unknown>;
+  create: (options: {
+    id: string;
+    params: typeof LookupWork.Type;
+    retention: typeof workflowRetention;
+  }) => Promise<unknown>;
   get: (id: string) => Promise<unknown>;
 }>;
 /** Identify this Queue payload without interpreting any provider data as authority. */
@@ -260,6 +271,7 @@ export const receiveBillingCollection = (
           input.environment.BILLING_COLLECTION_WORKFLOW.create({
             id: work.value.attemptId,
             params: work.value,
+            retention: workflowRetention,
           })
         )
       );
@@ -427,8 +439,10 @@ export const receiveWompiBillingEvent = (
     const now = yield* Clock.currentTimeMillis;
     const retained = yield* Effect.exit(
       attempt(() =>
-        input.environment.DB.prepare(`INSERT OR IGNORE INTO billing_event_candidates
-      (transaction_id, received_at_ms) VALUES (?, ?)`)
+        input.environment.DB.prepare(`INSERT INTO billing_event_candidates
+      (transaction_id, received_at_ms) VALUES (?, ?)
+      ON CONFLICT(transaction_id) DO UPDATE SET received_at_ms = excluded.received_at_ms,
+        last_checked_at_ms = NULL WHERE resolved_at_ms IS NULL`)
           .bind(id, now)
           .run()
       )
@@ -550,6 +564,7 @@ const offerBillingLookup = (
         workflow.create({
           id,
           params: { version: 1, kind: "lookup", transactionId },
+          retention: workflowRetention,
         })
       )
     );
@@ -586,12 +601,17 @@ export const reconcileBillingCandidates = (
       environment.DB.prepare(`SELECT transaction_id FROM (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority
         FROM billing_transaction_candidates AS c
-        JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status <> 'succeeded'
+        JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
-      SELECT transaction_id, COALESCE(last_checked_at_ms, received_at_ms) AS priority
-        FROM billing_event_candidates WHERE resolved_at_ms IS NULL
-        AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)
+      SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority
+        FROM billing_event_candidates AS c
+        LEFT JOIN billing_transaction_evidence AS e ON e.transaction_id = c.transaction_id
+        LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
+        WHERE c.resolved_at_ms IS NULL
+        AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
+        AND (a.id IS NULL OR a.status = 'pending' OR (a.status = 'failed'
+          AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < c.received_at_ms)))
     ) ORDER BY priority LIMIT ?`)
         .bind(now - candidateCooldownMs, now - candidateCooldownMs, pendingBatchSize)
         .all()

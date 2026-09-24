@@ -1,4 +1,9 @@
-import { type WompiBillingStatus, wompiRetryOpportunity } from "@fidy/server/subscription-runtime";
+import {
+  type BillingAttemptId,
+  type WompiBillingStatus,
+  type WompiTransactionId,
+  wompiRetryOpportunity,
+} from "@fidy/server/subscription-runtime";
 import { Duration, Option } from "effect";
 
 type PaidPeriod = Readonly<{
@@ -8,8 +13,8 @@ type PaidPeriod = Readonly<{
 }>;
 type Settlement = Readonly<{
   db: D1Database;
-  attemptId: string;
-  transactionId: string;
+  attemptId: BillingAttemptId;
+  transactionId: WompiTransactionId;
   status: WompiBillingStatus;
   observedAtMs: number;
   finalizedAtMs: Option.Option<number>;

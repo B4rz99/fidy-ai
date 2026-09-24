@@ -1,6 +1,6 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   type WompiBillingClientService,
   WompiSourceId,
@@ -182,6 +182,22 @@ it("holds verified negative until the retry opportunity and admits a later verif
       );
       yield* verify();
       expect(yield* Effect.promise(() => state(db))).toBe("failed");
+      const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
+      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).not.toHaveBeenCalled();
+      const callbackAt = yield* Clock.currentTimeMillis;
+      yield* Effect.promise(() =>
+        db
+          .prepare(`INSERT INTO billing_event_candidates
+        (transaction_id, received_at_ms) VALUES (?, ?)`)
+          .bind(transactionId, callbackAt)
+          .run()
+      );
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(1);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(1);
       observed = transaction("APPROVED");
       yield* verify();
       expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
@@ -362,6 +378,7 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
       expect(create.mock.calls[0]?.[0]).toEqual({
         id: attemptId,
         params: { version: 1, attemptId },
+        retention: { successRetention: "3 days", errorRetention: "3 days" },
       });
       expect(get).toHaveBeenCalledExactlyOnceWith(attemptId);
       expect(ack).toHaveBeenCalledTimes(2);

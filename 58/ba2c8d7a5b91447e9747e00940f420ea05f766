@@ -1,0 +1,33 @@
+apps/server/cloudflare/core-worker.ts
+  s_de6c7d29aa90cd::t_b1387b048e5ac3 23,55,245,283
+apps/server/cloudflare/transactions/transaction-mutations.ts
+  s_de6c7d29aa90cd::t_163d3f3892d761 2,6,24,48-49,82-85,138,161-169,181,217,352,361,379,381,384,427,436,488,528
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_de6c7d29aa90cd::t_94619b8c22cd1f 1-2,30-32,202-205,207-208,261-271,313-321
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_de6c7d29aa90cd::t_0e09e1eda8f1b8 3-7,31-32,34
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  s_de6c7d29aa90cd::t_bbecab7027ba58 16,226,276,310
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_de6c7d29aa90cd::t_a8c356c51dc9de 2151-2366
+apps/server/cloudflare/transactions/transactions.ts
+  s_de6c7d29aa90cd::t_2d9c07446e37ef 17,255
+apps/server/src/shell/canonical-runtime.ts
+  s_de6c7d29aa90cd::t_f654d9bf30055b 8,10,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "58ba2c8d7a5b91447e9747e00940f420ea05f766",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

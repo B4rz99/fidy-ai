@@ -128,6 +128,49 @@ const client = (read: () => WompiTransaction): WompiBillingClientService => ({
   createTransaction: () => Effect.succeed(read()),
   findTransaction: () => Effect.succeed(read()),
 });
+const sendSignedEvent = (
+  db: D1Database,
+  input: Readonly<{ transactionId: string; status: "APPROVED" | "DECLINED"; timestamp: number }>
+): Promise<Response> => {
+  const amount = 990000;
+  const secret = "test_events_payment_test_secret";
+  return crypto.subtle
+    .digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        `${input.transactionId}${input.status}${amount}${input.timestamp}${secret}`
+      )
+    )
+    .then((bytes) => {
+      const checksum = Array.from(new Uint8Array(bytes), (byte) =>
+        byte.toString(16).padStart(2, "0")
+      ).join("");
+      return publicBillingCallback(
+        db,
+        new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-event-checksum": checksum },
+          body: JSON.stringify({
+            event: "transaction.updated",
+            environment: "test",
+            timestamp: input.timestamp,
+            data: {
+              transaction: {
+                id: input.transactionId,
+                status: input.status,
+                amount_in_cents: amount,
+              },
+            },
+            signature: {
+              properties: ["transaction.id", "transaction.status", "transaction.amount_in_cents"],
+              checksum,
+            },
+          }),
+        })
+      );
+    });
+};
+
 const state = (db: D1Database): Promise<string> =>
   db
     .prepare("SELECT status FROM billing_attempts WHERE id = ?")
@@ -208,12 +251,32 @@ it("holds verified negative until the retry opportunity and admits a later verif
       );
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(2);
+      yield* Effect.promise(() =>
+        db
+          .prepare(`UPDATE billing_collection_arms
+        SET state = 'sent', sent_at_ms = 1 WHERE attempt_id = ?`)
+          .bind(attemptId)
+          .run()
+      );
+      yield* Effect.promise(() =>
+        db
+          .prepare(`INSERT INTO billing_no_charge_confirmations
+        (attempt_id, wompi_reference, wompi_environment, provider_case_id, operator_id, confirmed_at_ms)
+        VALUES (?, ?, 'sandbox', 'case-123', 'operator-42', 180002)`)
+          .bind(attemptId, reference)
+          .run()
+      );
       observed = transaction("APPROVED");
       yield* verify();
       expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
       expect(
         (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(2);
+      expect(
+        (yield* Effect.promise(() =>
+          db.prepare("SELECT provider_case_id FROM billing_recovery_reviews").all()
+        )).results
+      ).toEqual([{ provider_case_id: "case-123" }]);
     })
   ));
 
@@ -432,6 +495,43 @@ it("rejects forged callback evidence across Public and Core ingress without writ
     })
   ));
 
+it("bounds pending provider-ID lookups and resumes only from a confirmed lookup hint", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      yield* reconcileBillingTransaction({
+        db,
+        client: client(() => transaction("PENDING")),
+        transactionId,
+      });
+      const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
+      const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
+      for (let index = 0; index < 8; index++) {
+        yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+        yield* Effect.promise(() =>
+          db
+            .prepare(`UPDATE billing_transaction_candidates
+        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+            .run()
+        );
+      }
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(8);
+      // A support-confirmed ID may renew GET without creating another arm or POST.
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.promise(() =>
+        db
+          .prepare(`INSERT OR IGNORE INTO billing_event_candidates
+      (transaction_id, received_at_ms) VALUES (?, ?)`)
+          .bind(transactionId, now)
+          .run()
+      );
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(create).toHaveBeenCalledTimes(9);
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+    })
+  ));
+
 it("bounds unrelated signed callback lookups and ignores identical event replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -521,6 +621,178 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
     })
   ));
 
+it("accepts same-second signed approval after a verified negative without replaying collection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      const timestamp = 1530291411;
+      const environment = {
+        DB: db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      };
+      let observed: "APPROVED" | "DECLINED" = "DECLINED";
+      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              id: transactionId,
+              reference,
+              status: observed,
+              amount_in_cents: 990000,
+              currency: "COP",
+              finalized_at: "2026-09-08T12:00:00Z",
+            },
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
+          runBillingCollectionWorkflow({
+            environment,
+            payload: options.params,
+            activity: (_name, _options, run) => run(),
+          }).then(() => ({}))
+        ),
+        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+      };
+      expect(
+        (yield* Effect.promise(() =>
+          sendSignedEvent(db, { transactionId, status: "DECLINED", timestamp })
+        )).status
+      ).toBe(200);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      observed = "APPROVED";
+      expect(
+        (yield* Effect.promise(() =>
+          sendSignedEvent(db, { transactionId, status: "APPROVED", timestamp })
+        )).status
+      ).toBe(200);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(
+        (yield* Effect.promise(() =>
+          sendSignedEvent(db, { transactionId, status: "DECLINED", timestamp })
+        )).status
+      ).toBe(200);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(provider).toHaveBeenCalledTimes(2);
+    })
+  ));
+
+it("rejects a signed callback with another User's source even when its reference matches", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.promise(fixture);
+      const otherUser = "10000000-0000-4000-8000-000000000002";
+      const otherEnrollment = "20000000-0000-4000-8000-000000000002";
+      const otherSource = "30000000-0000-4000-8000-000000000002";
+      const otherAttempt = "40000000-0000-4000-8000-000000000002";
+      yield* Effect.promise(() =>
+        db.batch([
+          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(otherUser),
+          db
+            .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
+        payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
+        payment_request_id, wompi_candidate_source_id)
+        VALUES (?, ?, ?, 'other@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3892)`)
+            .bind(otherEnrollment, otherUser, priceId, "50000000-0000-4000-8000-000000000002"),
+          db
+            .prepare(`INSERT INTO card_payment_sources
+        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
+        VALUES (?, ?, ?, 3892, 'other@example.com', 0)`)
+            .bind(otherSource, otherUser, otherEnrollment),
+          db
+            .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
+            .bind(otherEnrollment),
+          db
+            .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
+        payment_source_id, price_id, amount, currency, billing_period, service_market,
+        tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
+        VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
+          'America/Bogota', 'sandbox', ?, 0)`)
+            .bind(
+              otherAttempt,
+              otherUser,
+              otherEnrollment,
+              "50000000-0000-4000-8000-000000000002",
+              otherSource,
+              priceId,
+              `fidy-${otherAttempt}`
+            ),
+        ])
+      );
+      expect(
+        (yield* Effect.promise(() =>
+          sendSignedEvent(db, { transactionId, status: "APPROVED", timestamp: 1530291411 })
+        )).status
+      ).toBe(200);
+      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              id: transactionId,
+              reference,
+              status: "APPROVED",
+              payment_source_id: 3892,
+              amount_in_cents: 990000,
+              currency: "COP",
+              finalized_at: "2026-09-08T12:00:00Z",
+            },
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const environment = {
+        DB: db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      };
+      const workflow = {
+        create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
+          runBillingCollectionWorkflow({
+            environment,
+            payload: options.params,
+            activity: (_name, _options, run) => run(),
+          }).then(
+            () => ({}),
+            () => ({})
+          )
+        ),
+        get: (_id: string): Promise<unknown> => Promise.resolve({}),
+      };
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(
+        (yield* Effect.promise(() =>
+          db
+            .prepare("SELECT status FROM billing_attempts WHERE id = ?")
+            .bind(otherAttempt)
+            .first<{ status: string }>()
+        ))?.status
+      ).toBe("pending");
+      expect(
+        (yield* Effect.promise(() =>
+          db.prepare("SELECT * FROM billing_transaction_evidence").all()
+        )).results
+      ).toHaveLength(0);
+      expect(
+        (yield* Effect.promise(() => db.prepare("SELECT * FROM subscriptions").all())).results
+      ).toHaveLength(0);
+      expect(
+        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+      ).toHaveLength(0);
+    })
+  ));
+
 it("publishes the armed intent once per cooldown and deduplicates Queue redelivery by Workflow identity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -561,6 +833,12 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       const secondRequest = "50000000-0000-4000-8000-000000000002";
       const secondReference = WompiTransactionReference.make(`fidy-${secondAttempt}`);
       const secondTransaction = WompiTransactionId.make("provider-transaction-2");
+      yield* reconcileBillingTransaction({
+        db,
+        client: client(() => transaction("APPROVED")),
+        transactionId,
+      });
+      // A settled attempt releases admission for a separately authorized action.
       yield* Effect.promise(() =>
         db.batch([
           db
@@ -589,11 +867,6 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
             ),
         ])
       );
-      yield* reconcileBillingTransaction({
-        db,
-        client: client(() => transaction("APPROVED")),
-        transactionId,
-      });
       const older = {
         ...transaction("APPROVED"),
         transactionId: secondTransaction,

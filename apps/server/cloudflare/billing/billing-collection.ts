@@ -91,7 +91,7 @@ const billingAmount = (
 const pendingBatchSize = 32;
 const dispatchCooldownMs = 60_000;
 const candidateCooldownMs = 60_000;
-const maximumEventLookupAttempts = 8;
+const maximumCandidateLookupAttempts = 8;
 const eventCandidateLifetimeMs = 86_400_000;
 
 class BillingCollectionFailure extends Data.TaggedError("BillingCollectionFailure")<{
@@ -442,20 +442,23 @@ export const receiveWompiBillingEvent = (
     if (Exit.isFailure(verified) || Option.isNone(verified.value)) {
       return new Response(null, { status: 400 });
     }
-    const { transactionId, signedAt } = verified.value.value;
+    const { transactionId, signedAt, signedStatus } = verified.value.value;
     const now = yield* Clock.currentTimeMillis;
     const retained = yield* Effect.exit(
       attempt(() =>
         input.environment.DB.prepare(`INSERT INTO billing_event_candidates
-      (transaction_id, received_at_ms, signed_at) VALUES (?, ?, ?)
+      (transaction_id, received_at_ms, signed_at, signed_status) VALUES (?, ?, ?, ?)
       ON CONFLICT(transaction_id) DO UPDATE SET received_at_ms = excluded.received_at_ms,
-        signed_at = excluded.signed_at, lookup_attempts = 0,
-        last_checked_at_ms = NULL, resolved_at_ms = NULL
-      WHERE excluded.signed_at > billing_event_candidates.signed_at
+        signed_at = excluded.signed_at, signed_status = excluded.signed_status,
+        lookup_attempts = 0, last_checked_at_ms = NULL, resolved_at_ms = NULL
+      WHERE (excluded.signed_at > billing_event_candidates.signed_at OR
+        (excluded.signed_at = billing_event_candidates.signed_at
+          AND excluded.signed_status = 'APPROVED'
+          AND billing_event_candidates.signed_status <> 'APPROVED'))
         AND NOT EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
           JOIN billing_attempts AS a ON a.id = e.attempt_id
           WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded')`)
-          .bind(transactionId, now, signedAt)
+          .bind(transactionId, now, signedAt, signedStatus)
           .run()
       )
     );
@@ -589,14 +592,14 @@ const offerBillingLookup = (
         db.batch([
           db
             .prepare(
-              "UPDATE billing_transaction_candidates SET last_checked_at_ms = ? WHERE transaction_id = ?"
+              "UPDATE billing_transaction_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ?"
             )
-            .bind(now, transactionId),
+            .bind(now, transactionId, maximumCandidateLookupAttempts),
           db
             .prepare(
               "UPDATE billing_event_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ?"
             )
-            .bind(now, transactionId, maximumEventLookupAttempts),
+            .bind(now, transactionId, maximumCandidateLookupAttempts),
         ])
       )
     );
@@ -614,6 +617,7 @@ export const reconcileBillingCandidates = (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority
         FROM billing_transaction_candidates AS c
         JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
+          AND c.lookup_attempts < ?
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority
@@ -627,8 +631,9 @@ export const reconcileBillingCandidates = (
           AND c.received_at_ms >= a.finalized_at_ms))
     ) ORDER BY priority LIMIT ?`)
         .bind(
+          maximumCandidateLookupAttempts,
           now - candidateCooldownMs,
-          maximumEventLookupAttempts,
+          maximumCandidateLookupAttempts,
           now - eventCandidateLifetimeMs,
           now - candidateCooldownMs,
           pendingBatchSize

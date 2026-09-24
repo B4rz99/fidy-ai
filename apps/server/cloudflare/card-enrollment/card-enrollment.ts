@@ -707,6 +707,17 @@ const submit = (
         });
         return json(presented);
       }
+      // The same PaymentRequestId was handled above; a different action cannot collect
+      // while this User has an attempt without success or confirmed no-charge evidence.
+      const blocked = yield* waitFor(() =>
+        environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
+      WHERE a.user_id = ? AND a.status <> 'succeeded'
+        AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations AS c
+          WHERE c.attempt_id = a.id) LIMIT 1`)
+          .bind(session.user_id)
+          .first()
+      );
+      if (blocked !== null) return unavailable();
       if (row.value.status === "creating") {
         return json({ status: "source-verifying", enrollmentId: row.value.id });
       }

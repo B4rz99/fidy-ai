@@ -116,6 +116,13 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
       SELECT id, status, ? FROM billing_attempts WHERE id = ? AND status IN ('succeeded','failed')`)
       .bind(observedAtMs, attemptId),
     db
+      .prepare(`INSERT OR IGNORE INTO billing_recovery_reviews
+      (attempt_id, provider_case_id, occurred_at_ms)
+      SELECT a.id, c.provider_case_id, ? FROM billing_attempts AS a
+      JOIN billing_no_charge_confirmations AS c ON c.attempt_id = a.id
+      WHERE a.id = ? AND a.status = 'succeeded'`)
+      .bind(observedAtMs, attemptId),
+    db
       .prepare(`DELETE FROM billing_followup_outbox
       WHERE attempt_id IN (SELECT id FROM billing_attempts WHERE user_id =
         (SELECT user_id FROM billing_attempts WHERE id = ?))

@@ -9,10 +9,13 @@ const checksumPattern = /^[0-9a-fA-F]{64}$/u;
 const propertyPattern = /^[a-zA-Z][a-zA-Z0-9_.]*$/u;
 const hexBase = 16;
 const idProperty = "transaction.id";
+const statusProperty = "transaction.status";
 const Body = Schema.Struct({
   event: Schema.Literal("transaction.updated"),
   environment: Schema.Literals(["test", "prod"]),
-  data: Schema.Struct({ transaction: Schema.Struct({ id: WompiTransactionId }) }),
+  data: Schema.Struct({
+    transaction: Schema.Struct({ id: WompiTransactionId, status: Schema.String }),
+  }),
   signature: Schema.Struct({
     properties: Schema.Array(Schema.String).check(Schema.isMaxLength(maximumSignedProperties)),
     checksum: Schema.String.check(Schema.isPattern(checksumPattern)),
@@ -54,7 +57,12 @@ const equalHex = (expected: string, observed: string): boolean => {
 };
 
 const signedValues = (event: typeof Body.Type, rawData: unknown): Option.Option<string> => {
-  if (!event.signature.properties.includes(idProperty)) return Option.none();
+  if (
+    !event.signature.properties.includes(idProperty) ||
+    !event.signature.properties.includes(statusProperty)
+  ) {
+    return Option.none();
+  }
   const values = event.signature.properties.map((name) => ownValue(rawData, name));
   if (values.some(Option.isNone)) return Option.none();
   return Option.some(values.map((value) => Option.getOrThrow(value)).join(""));
@@ -118,7 +126,9 @@ const readEvent = (
 export const verifiedWompiEventHint = (
   input: Readonly<{ request: Request; secret: string; environment: "sandbox" | "production" }>
 ): Effect.Effect<
-  Option.Option<Readonly<{ transactionId: WompiTransactionId; signedAt: number }>>
+  Option.Option<
+    Readonly<{ transactionId: WompiTransactionId; signedAt: number; signedStatus: string }>
+  >
 > =>
   Effect.gen(function* () {
     if (input.secret.length === 0) return Option.none();
@@ -137,6 +147,10 @@ export const verifiedWompiEventHint = (
       values: values.value,
     });
     return trusted
-      ? Option.some({ transactionId: event.data.transaction.id, signedAt: event.timestamp })
+      ? Option.some({
+          transactionId: event.data.transaction.id,
+          signedAt: event.timestamp,
+          signedStatus: event.data.transaction.status,
+        })
       : Option.none();
   });

@@ -301,11 +301,66 @@ it("prepares a Price and creates exactly one provider source and pending Billing
           environment,
         })
       );
-      expect(reuse.status).toBe(200);
-      expect(yield* fromTestPromise(() => reuse.json())).toMatchObject({
+      expect(reuse.status).toBe(503);
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
+      ).toHaveLength(1);
+      // Even a failed BillingAttempt cannot release another collection without no-charge evidence.
+      const confirmation = (ref: string): Promise<D1Result> =>
+        db
+          .prepare(`INSERT INTO billing_no_charge_confirmations
+        (attempt_id, wompi_reference, wompi_environment, provider_case_id, operator_id, confirmed_at_ms)
+        VALUES (?, ?, 'sandbox', 'case-123', 'operator-42', 180002)`)
+          .bind(expectedId, ref)
+          .run();
+      yield* fromTestPromise(() => expect(confirmation(`fidy-${expectedId}`)).rejects.toThrow());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`UPDATE billing_collection_arms
+        SET state = 'sent', sent_at_ms = 1 WHERE attempt_id = ?`)
+          .bind(expectedId)
+          .run()
+      );
+      yield* fromTestPromise(() => expect(confirmation("fidy-foreign")).rejects.toThrow());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`UPDATE billing_attempts SET status = 'failed',
+        finalized_at_ms = 180001 WHERE id = ?`)
+          .bind(expectedId)
+          .run()
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          handleCardEnrollment({
+            request: request("/web/subscription/card-enrollments/submit", "POST", {
+              enrollmentId: secondEnrollment.enrollmentId,
+              paymentSourceMode: "reuse",
+              billingEmail: submission.billingEmail,
+              decisions: submission.decisions,
+              paymentRequestId: "30000000-0000-4000-8000-000000000002",
+            }),
+            environment,
+          })
+        )).status
+      ).toBe(503);
+      yield* fromTestPromise(() => confirmation(`fidy-${expectedId}`));
+      const cleared = yield* fromTestPromise(() =>
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/submit", "POST", {
+            enrollmentId: secondEnrollment.enrollmentId,
+            paymentSourceMode: "reuse",
+            billingEmail: submission.billingEmail,
+            decisions: submission.decisions,
+            paymentRequestId: "30000000-0000-4000-8000-000000000002",
+          }),
+          environment,
+        })
+      );
+      expect(cleared.status).toBe(200);
+      expect(yield* fromTestPromise(() => cleared.json())).toMatchObject({
         status: "payment-pending",
       });
-      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT id FROM card_payment_sources").all()))
           .results

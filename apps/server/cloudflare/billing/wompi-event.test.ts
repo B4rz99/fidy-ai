@@ -26,7 +26,9 @@ const request = (body: unknown, header = checksum): Request =>
 const verify = (
   body: unknown,
   header = checksum
-): Promise<Option.Option<Readonly<{ transactionId: string; signedAt: number }>>> =>
+): Promise<
+  Option.Option<Readonly<{ transactionId: string; signedAt: number; signedStatus: string }>>
+> =>
   Effect.runPromise(
     verifiedWompiEventHint({ request: request(body, header), secret, environment: "production" })
   );
@@ -35,7 +37,11 @@ it("authenticates an independently calculated ordered-property Wompi event vecto
   Effect.runPromise(
     Effect.gen(function* () {
       expect(yield* Effect.promise(() => verify(event))).toEqual(
-        Option.some({ transactionId: event.data.transaction.id, signedAt: event.timestamp })
+        Option.some({
+          transactionId: event.data.transaction.id,
+          signedAt: event.timestamp,
+          signedStatus: event.data.transaction.status,
+        })
       );
     })
   ));

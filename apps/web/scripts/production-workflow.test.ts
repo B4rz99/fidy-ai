@@ -29,6 +29,7 @@ describe("Production release workflow policy", () => {
     );
     expect(workflow).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
     expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
+    expect(workflow).toContain("PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}");
   });
 
   it("provides complete production runtime config to Alchemy plan and deploy", () => {

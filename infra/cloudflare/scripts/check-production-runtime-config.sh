@@ -2,6 +2,7 @@
 set -euo pipefail
 
 required_configuration=(
+  PAT_ADMISSION_KEY
   KAPSO_API_KEY
   KAPSO_WEBHOOK_SECRET
   WHATSAPP_BUSINESS_PORTFOLIO_ID

@@ -1,5 +1,5 @@
-import { verifyHostedInferenceConformance } from "@fidy/server/hosted-inference";
-import { Effect, Exit } from "effect";
+import { verifyHostedInferenceConformanceChecks } from "@fidy/server/hosted-inference";
+import { Cause, Effect, Exit, Option } from "effect";
 import { type WorkersAiEnvironment, makeCloudflareHostedInference } from "./workers-ai";
 
 const jsonHeaders = {
@@ -15,19 +15,35 @@ const handler = {
       );
     }
     return makeCloudflareHostedInference(environment).pipe(
-      Effect.flatMap(verifyHostedInferenceConformance),
+      Effect.mapError(() => ({
+        check: "configuration" as const,
+        category: "ProviderUnavailable" as const,
+      })),
+      Effect.flatMap(verifyHostedInferenceConformanceChecks),
       Effect.exit,
-      Effect.map((exit) =>
-        Exit.isSuccess(exit)
-          ? Response.json(
-              { modelApprovalRevision: "workers-ai-2026-09-22", outcome: "conforming" },
-              { headers: jsonHeaders, status: 200 }
-            )
-          : Response.json(
-              { modelApprovalRevision: "workers-ai-2026-09-22", outcome: "non_conforming" },
-              { headers: jsonHeaders, status: 503 }
-            )
-      ),
+      Effect.map((exit) => {
+        if (Exit.isSuccess(exit)) {
+          return Response.json(
+            { modelApprovalRevision: "workers-ai-gemma-4-2026-09-22", outcome: "conforming" },
+            { headers: jsonHeaders, status: 200 }
+          );
+        }
+        const failure =
+          Cause.hasDies(exit.cause) || Cause.hasInterrupts(exit.cause)
+            ? { check: "internal", category: "UnexpectedFailure" }
+            : Option.getOrElse(Cause.findErrorOption(exit.cause), () => ({
+                check: "internal" as const,
+                category: "UnexpectedFailure" as const,
+              }));
+        return Response.json(
+          {
+            modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+            outcome: "non_conforming",
+            ...failure,
+          },
+          { headers: jsonHeaders, status: 503 }
+        );
+      }),
       Effect.runPromise
     );
   },

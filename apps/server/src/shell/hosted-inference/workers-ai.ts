@@ -26,56 +26,65 @@ import { hostedOutputTokenReserve } from "~/shell/hosted-inference/internal/limi
 import { exactTranscriptPromptInternal } from "~/shell/hosted-inference/internal/prompt";
 import { ApprovedWorkersAiModel } from "./model";
 
-/** Provider input item accepted by the direct binding; callers must use projected content only. */
+const ChatContent = Schema.NullOr(Schema.String);
+
+/** One Gemma Chat Completions function call, preserving its provider id for tool continuation. */
+export type WorkersAiFunctionCall = Readonly<{
+  id: string;
+  type: "function";
+  function: Readonly<{ name: string; arguments: string }>;
+}>;
+
+/** Provider message accepted by the direct binding; callers must use projected content only. */
 export type WorkersAiInputItem =
   | Readonly<{ role: "system" | "user"; content: string }>
-  | Readonly<{
+  | (Readonly<{
       role: "assistant";
-      content: ReadonlyArray<Readonly<{ type: "input_text"; text: string }>>;
-    }>
-  | Readonly<{
-      type: "function_call";
-      call_id: string;
-      name: string;
-      arguments: string;
-      status: "completed";
-    }>
-  | Readonly<{
-      type: "function_call_output";
-      call_id: string;
-      output: string;
-      status: "completed";
-    }>;
+      content: typeof ChatContent.Type;
+    }> &
+      Partial<Readonly<{ tool_calls: ReadonlyArray<WorkersAiFunctionCall> }>>)
+  | Readonly<{ role: "tool"; tool_call_id: string; content: string }>;
 
 /** Strict function tool definition derived from one canonical operation schema. */
 export type WorkersAiTool = Readonly<{
   type: "function";
-  name: string;
-  description: string;
-  parameters: JsonSchema.JsonSchema;
-  strict: true;
+  function: Readonly<{
+    name: string;
+    description: string;
+    parameters: JsonSchema.JsonSchema;
+    strict: true;
+  }>;
 }>;
 
-/** Closed direct-binding request shape; gateway routing and provider-side storage are unavailable. */
-export type WorkersAiRequest = Readonly<{
-  input: ReadonlyArray<WorkersAiInputItem>;
-  max_output_tokens: number;
-  parallel_tool_calls: false;
-  reasoning: Readonly<{ effort: "low" }>;
-  text: Readonly<{
-    format:
-      | Readonly<{ type: "text" }>
-      | Readonly<{
-          type: "json_schema";
-          name: string;
-          schema: JsonSchema.JsonSchema;
-          strict: true;
-        }>;
-  }>;
-  tool_choice: "none" | "auto";
-  tools: ReadonlyArray<WorkersAiTool>;
-  truncation: "disabled";
+type WorkersAiRequestBase = Readonly<{
+  messages: ReadonlyArray<WorkersAiInputItem>;
+  max_tokens: number;
+  temperature: 0;
+  stream: false;
+  chat_template_kwargs: Readonly<{ enable_thinking: false }>;
 }>;
+
+/** Closed direct-binding request: canonical tools, structured output, or text only, never mixed. */
+export type WorkersAiRequest = WorkersAiRequestBase &
+  (
+    | (Readonly<{
+        tool_choice: "auto";
+        tools: ReadonlyArray<WorkersAiTool>;
+      }> &
+        Partial<Readonly<{ response_format: never }>>)
+    | (Readonly<{
+        response_format: Readonly<{
+          type: "json_schema";
+          json_schema: Readonly<{
+            name: string;
+            schema: JsonSchema.JsonSchema;
+            strict: true;
+          }>;
+        }>;
+      }> &
+        Partial<Readonly<{ tool_choice: never; tools: never }>>)
+    | Partial<Readonly<{ tool_choice: never; tools: never; response_format: never }>>
+  );
 
 /** The only Cloudflare capability the portable hosted-inference adapter accepts. */
 export type WorkersAiBindingRun = (
@@ -100,7 +109,7 @@ type PreparedWorkersAiRequest = Readonly<{
 const bytesPerKibibyte = 1024;
 const providerResponseMaximumKibibytes = 512;
 const providerResponseMaximumBytes = providerResponseMaximumKibibytes * bytesPerKibibyte;
-const workersAiContextTokens = 128_000;
+const workersAiContextTokens = 256_000;
 const HTTP_OK_MINIMUM = 200;
 const HTTP_REDIRECTION_MINIMUM = 300;
 const HTTP_REQUEST_TIMEOUT = 408;
@@ -136,45 +145,39 @@ const structuredOutputTimedOut = (): HostedInferenceError =>
     retryAfter: Option.none(),
   });
 
+const ProviderFunctionCall = Schema.Struct({
+  id: Schema.String,
+  type: Schema.Literal("function"),
+  function: Schema.Struct({ name: Schema.String, arguments: Schema.String }),
+});
+
 const ProviderResponse = Schema.Struct({
-  status: Schema.optionalKey(
-    Schema.Literals(["completed", "failed", "in_progress", "cancelled", "queued", "incomplete"])
-  ),
-  incomplete_details: Schema.optionalKey(
-    Schema.NullOr(Schema.Struct({ reason: Schema.optionalKey(Schema.String) }))
-  ),
-  output: Schema.Array(
-    Schema.Union([
-      Schema.Struct({
-        type: Schema.Literal("message"),
-        content: Schema.Array(
-          Schema.Union([
-            Schema.Struct({ type: Schema.Literal("output_text"), text: Schema.String }),
-            Schema.Struct({ type: Schema.Literal("refusal"), refusal: Schema.String }),
-          ])
-        ),
+  choices: Schema.Array(
+    Schema.Struct({
+      message: Schema.Struct({
+        role: Schema.Literal("assistant"),
+        content: Schema.NullOr(Schema.String),
+        refusal: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        tool_calls: Schema.optionalKey(Schema.Array(ProviderFunctionCall)),
       }),
-      Schema.Struct({
-        type: Schema.Literal("function_call"),
-        call_id: Schema.String,
-        name: Schema.String,
-        arguments: Schema.String,
-      }),
-      Schema.Struct({ type: Schema.Literal("reasoning") }),
-    ])
+      finish_reason: Schema.Literals([
+        "stop",
+        "length",
+        "tool_calls",
+        "content_filter",
+        "function_call",
+      ]),
+    })
   ),
   usage: Schema.Struct({
-    input_tokens: Schema.Finite,
-    output_tokens: Schema.Finite,
+    prompt_tokens: Schema.Finite,
+    completion_tokens: Schema.Finite,
     total_tokens: Schema.Finite,
   }),
 });
 
 type ProviderResponse = typeof ProviderResponse.Type;
-type FunctionCallItem = Extract<
-  ProviderResponse["output"][number],
-  { readonly type: "function_call" }
->;
+type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
 const workersAiOperationBindings = hostedOperationBindings(operationCatalog).map(
   ({ operation, wireName }) => ({
@@ -194,7 +197,7 @@ if (operationByWireName.size !== workersAiOperationBindings.length) {
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
 
-// GPT-style tokenizers cannot produce more ordinary input tokens than the UTF-8 byte sequence;
+// Byte-backed text tokenization cannot produce more ordinary input tokens than the UTF-8 bytes;
 // counting bytes is intentionally conservative and never sends content to another tokenizer.
 const tokenUpperBound = (value: string): number => byteLength(value);
 
@@ -205,36 +208,38 @@ const promptParts = (
 
 const projectAssistant = (
   message: Prompt.AssistantMessageEncoded
-): ReadonlyArray<WorkersAiInputItem> =>
-  promptParts(message.content).flatMap((part): ReadonlyArray<WorkersAiInputItem> => {
-    if (part.type === "text") {
-      return [{ role: "assistant", content: [{ type: "input_text", text: part.text }] }];
-    }
-    if (part.type === "tool-call") {
-      return [
-        {
-          type: "function_call",
-          name: part.name,
-          call_id: part.id,
-          arguments: JSON.stringify(part.params),
-          status: "completed",
-        },
-      ];
-    }
+): ReadonlyArray<WorkersAiInputItem> => {
+  const parts = promptParts(message.content);
+  const text = parts.flatMap((part) => (part.type === "text" ? [part.text] : []));
+  const toolCalls = parts.flatMap((part): ReadonlyArray<WorkersAiFunctionCall> =>
+    part.type === "tool-call"
+      ? [
+          {
+            id: part.id,
+            type: "function",
+            function: { name: part.name, arguments: JSON.stringify(part.params) },
+          },
+        ]
+      : []
+  );
+  if (text.length + toolCalls.length !== parts.length) {
     throw new Error("Hosted context contains unsupported assistant content");
-  });
+  }
+  return [
+    {
+      role: "assistant",
+      content: text.length > 0 ? text.join("\n") : null,
+      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+    },
+  ];
+};
 
 const projectTool = (message: Prompt.ToolMessageEncoded): ReadonlyArray<WorkersAiInputItem> =>
   message.content.map((part) => {
     if (part.type !== "tool-result") {
       throw new Error("Hosted context contains unsupported tool content");
     }
-    return {
-      type: "function_call_output",
-      call_id: part.id,
-      output: JSON.stringify(part.result),
-      status: "completed",
-    };
+    return { role: "tool", tool_call_id: part.id, content: JSON.stringify(part.result) };
   });
 
 const projectMessage = (message: Prompt.MessageEncoded): ReadonlyArray<WorkersAiInputItem> => {
@@ -291,26 +296,30 @@ const toolsFor = (
     .filter(({ operation }) => available.has(operation.id))
     .map(({ operation, parameters, wireName }) => ({
       type: "function",
-      name: wireName,
-      description: hostedToolDescription(operation),
-      parameters,
-      strict: true,
+      function: {
+        name: wireName,
+        description: hostedToolDescription(operation),
+        parameters,
+        strict: true,
+      },
     }));
 };
 
-const makeRequest = (
-  input: ReadonlyArray<WorkersAiInputItem>,
-  policy: HostedTextToolPolicy
-): WorkersAiRequest => ({
-  input,
-  max_output_tokens: hostedOutputTokenReserve,
-  parallel_tool_calls: false,
-  reasoning: { effort: "low" },
-  text: { format: { type: "text" } },
-  tool_choice: policy.toolChoice,
-  tools: toolsFor(policy.availableOperations),
-  truncation: "disabled",
+const makeRequest = (messages: ReadonlyArray<WorkersAiInputItem>): WorkersAiRequestBase => ({
+  messages,
+  max_tokens: hostedOutputTokenReserve,
+  temperature: 0,
+  stream: false,
+  chat_template_kwargs: { enable_thinking: false },
 });
+
+const makeTextRequest = (
+  messages: ReadonlyArray<WorkersAiInputItem>,
+  policy: HostedTextToolPolicy
+): WorkersAiRequest =>
+  policy.toolChoice === "auto"
+    ? { ...makeRequest(messages), tool_choice: "auto", tools: toolsFor(policy.availableOperations) }
+    : makeRequest(messages);
 
 const capacityCheck = (request: WorkersAiRequest): Effect.Effect<number, HostedInferenceError> => {
   const inputTokens = tokenUpperBound(JSON.stringify(request));
@@ -406,24 +415,26 @@ type InvokeInput = Readonly<{
 }>;
 
 const hasInvalidUsage = (usage: ProviderResponse["usage"]): boolean =>
-  usage.input_tokens < 0 ||
-  usage.output_tokens < 0 ||
+  usage.prompt_tokens < 0 ||
+  usage.completion_tokens < 0 ||
   usage.total_tokens < 0 ||
-  usage.output_tokens > hostedOutputTokenReserve;
+  usage.completion_tokens > hostedOutputTokenReserve;
+
+const invalidCompletion = (choice: ProviderResponse["choices"][number]): boolean =>
+  choice.finish_reason === "content_filter" ||
+  choice.finish_reason === "function_call" ||
+  (choice.finish_reason === "length" && (choice.message.tool_calls?.length ?? 0) > 0) ||
+  choice.message.refusal != null;
 
 const validateProviderResponse = (
   response: ProviderResponse
 ): Effect.Effect<ProviderResponse, HostedInferenceError> => {
+  const choice = response.choices[0];
   if (
-    response.status === "failed" ||
-    response.status === "cancelled" ||
-    response.status === "queued" ||
-    response.status === "in_progress" ||
-    hasInvalidUsage(response.usage) ||
-    response.output.some(
-      (item) =>
-        item.type === "message" && item.content.some((content) => content.type === "refusal")
-    )
+    choice === undefined ||
+    response.choices.length !== 1 ||
+    invalidCompletion(choice) ||
+    hasInvalidUsage(response.usage)
   ) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
@@ -468,14 +479,14 @@ const decodeToolCall = (
   item: FunctionCallItem,
   visibleOperations: HostedTextToolPolicy["availableOperations"]
 ): Effect.Effect<HostedTextResult["toolCalls"][number], HostedInferenceError> => {
-  const binding = Schema.is(HostedOperationWireName)(item.name)
-    ? operationByWireName.get(item.name)
+  const binding = Schema.is(HostedOperationWireName)(item.function.name)
+    ? operationByWireName.get(item.function.name)
     : undefined;
   if (binding === undefined || !visibleOperations.includes(binding.operation.id)) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
   return Effect.try({
-    try: () => Tool.unsafeSecureJsonParse(item.arguments),
+    try: () => Tool.unsafeSecureJsonParse(item.function.arguments),
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(binding.operation.input)),
@@ -484,23 +495,19 @@ const decodeToolCall = (
         ? error
         : invalidProviderOutput("Hosted tool arguments were invalid")
     ),
-    Effect.map((params) => ({ id: item.call_id, operation: binding.operation.id, params }))
+    Effect.map((params) => ({ id: item.id, operation: binding.operation.id, params }))
   );
 };
 
-const outputText = (response: ProviderResponse): ReadonlyArray<string> =>
-  response.output.flatMap((item) =>
-    item.type === "message"
-      ? item.content.flatMap((content) => (content.type === "output_text" ? [content.text] : []))
-      : []
-  );
+const outputText = (response: ProviderResponse): string =>
+  response.choices[0]?.message.content ?? "";
 
 const finishReason = (
   response: ProviderResponse,
   hasToolCalls: boolean
 ): HostedTextResult["finishReason"] => {
   if (hasToolCalls) return "tool-calls";
-  return response.status === "incomplete" ? "length" : "stop";
+  return response.choices[0]?.finish_reason === "length" ? "length" : "stop";
 };
 
 const decodeResult = (
@@ -508,9 +515,7 @@ const decodeResult = (
   request: PreparedWorkersAiRequest
 ): Effect.Effect<Omit<HostedTextResult, "continuation">, HostedInferenceError> =>
   Effect.gen(function* () {
-    const functionCalls = response.output.filter(
-      (item): item is FunctionCallItem => item.type === "function_call"
-    );
+    const functionCalls = response.choices[0]?.message.tool_calls ?? [];
     if (functionCalls.length > request.maximumToolCalls) {
       return yield* invalidProviderOutput(
         "Deterministic model exceeded the hosted tool-call limit"
@@ -519,7 +524,7 @@ const decodeResult = (
     const toolCalls = yield* Effect.forEach(functionCalls, (item) =>
       decodeToolCall(item, request.visibleOperations)
     );
-    const text = outputText(response).join("");
+    const text = outputText(response);
     if (toolCalls.length === 0 && text.trim().length === 0) {
       return yield* invalidProviderOutput("Hosted provider response was invalid");
     }
@@ -528,8 +533,8 @@ const decodeResult = (
       toolCalls,
       finishReason: finishReason(response, toolCalls.length > 0),
       usage: {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: response.usage.prompt_tokens,
+        outputTokens: response.usage.completion_tokens,
         cachedInputTokens: 0,
       },
     };
@@ -556,16 +561,11 @@ const makeStructuredAdapter = (
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
       const request: WorkersAiRequest = {
-        input: messages.input,
-        max_output_tokens: hostedOutputTokenReserve,
-        parallel_tool_calls: false,
-        reasoning: { effort: "low" },
-        text: {
-          format: { type: "json_schema", name: input.objectName, schema, strict: true },
+        ...makeRequest(messages.input),
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: input.objectName, schema, strict: true },
         },
-        tool_choice: "none",
-        tools: [],
-        truncation: "disabled",
       };
       yield* capacityCheck(request);
       return {
@@ -578,34 +578,33 @@ const makeStructuredAdapter = (
           timeoutFailure: structuredOutputTimedOut,
         }).pipe(
           Effect.flatMap((response) =>
-            Schema.decodeEffect(Schema.fromJsonString(input.outputSchema))(
-              outputText(response).join("")
-            ).pipe(
-              Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
-            )
+            response.choices[0]?.finish_reason !== "stop" ||
+            (response.choices[0].message.tool_calls?.length ?? 0) > 0
+              ? Effect.fail(structuredOutputExceeded())
+              : Schema.decodeEffect(Schema.fromJsonString(input.outputSchema))(
+                  outputText(response)
+                ).pipe(
+                  Effect.mapError(() =>
+                    invalidProviderOutput("Hosted structured output was malformed")
+                  )
+                )
           )
         ),
       };
     }),
 });
 
-const continuationItems = (response: ProviderResponse): ReadonlyArray<WorkersAiInputItem> =>
-  response.output.flatMap((item): ReadonlyArray<WorkersAiInputItem> => {
-    if (item.type === "function_call") {
-      return [{ ...item, status: "completed" }];
-    }
-    if (item.type === "message") {
-      return [
-        {
-          role: "assistant",
-          content: item.content.flatMap((content) =>
-            content.type === "output_text" ? [{ type: "input_text", text: content.text }] : []
-          ),
-        },
-      ];
-    }
-    return [];
-  });
+const continuationItems = (response: ProviderResponse): ReadonlyArray<WorkersAiInputItem> => {
+  const message = response.choices[0]?.message;
+  if (message === undefined) return [];
+  return [
+    {
+      role: "assistant",
+      content: message.content,
+      ...(message.tool_calls === undefined ? {} : { tool_calls: message.tool_calls }),
+    },
+  ];
+};
 
 const makeService = (
   run: WorkersAiBindingRun,
@@ -634,7 +633,7 @@ const makeService = (
           semanticInput.projection,
           semanticInput.continuation
         );
-        const request = makeRequest(messages.input, semanticInput);
+        const request = makeTextRequest(messages.input, semanticInput);
         yield* capacityCheck(request);
         return {
           continuationPrefix: messages.continuationPrefix,

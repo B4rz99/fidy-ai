@@ -5,7 +5,7 @@ import {
   type DateTime,
   Effect,
   Layer,
-  type Option,
+  Option,
   Result,
   Schema,
 } from "effect";
@@ -28,7 +28,7 @@ const TransactionResponse = Schema.Struct({
     status: WompiBillingStatus,
     amount_in_cents: Schema.Int,
     currency: Schema.String,
-    payment_source_id: WompiSourceId,
+    payment_source_id: Schema.optionalKey(Schema.NullOr(WompiSourceId)),
     finalized_at: Schema.OptionFromNullOr(Schema.DateTimeUtcFromString),
   }),
 });
@@ -54,7 +54,7 @@ export type WompiTransaction = Readonly<{
   status: WompiBillingStatus;
   amountInCents: number;
   currency: string;
-  sourceId: WompiSourceId;
+  sourceId: Option.Option<WompiSourceId>;
   finalizedAt: Option.Option<DateTime.Utc>;
 }>;
 
@@ -91,7 +91,7 @@ const parseTransaction = Effect.fn(function* (body: Uint8Array) {
     status: data.status,
     amountInCents: data.amount_in_cents,
     currency: data.currency,
-    sourceId: data.payment_source_id,
+    sourceId: Option.fromNullishOr(data.payment_source_id),
     finalizedAt: data.finalized_at,
   };
 });

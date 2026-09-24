@@ -34,15 +34,20 @@ import {
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
-const Work = Schema.Struct({ version: Schema.Literal(1), attemptId: BillingAttemptId });
+const CollectionMessage = Schema.Struct({
+  version: Schema.Literal(1),
+  attemptId: BillingAttemptId,
+});
 const LookupWork = Schema.Struct({
   version: Schema.Literal(1),
   kind: Schema.Literal("lookup"),
   transactionId: WompiTransactionId,
 });
-type CollectionQueue = Readonly<{ send: (work: typeof Work.Type) => Promise<unknown> }>;
+type CollectionQueue = Readonly<{
+  send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
+}>;
 type CollectionWorkflow = Readonly<{
-  create: (options: { id: string; params: typeof Work.Type }) => Promise<unknown>;
+  create: (options: { id: string; params: typeof CollectionMessage.Type }) => Promise<unknown>;
   get: (id: string) => Promise<unknown>;
 }>;
 type LookupWorkflowBinding = Readonly<{
@@ -51,7 +56,7 @@ type LookupWorkflowBinding = Readonly<{
 }>;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
-  Option.isSome(Schema.decodeUnknownOption(Work)(body));
+  Option.isSome(Schema.decodeUnknownOption(CollectionMessage)(body));
 const Snapshot = Schema.Struct({
   id: BillingAttemptId,
   user_id: Schema.String.check(Schema.isUUID()),
@@ -233,7 +238,7 @@ export const receiveBillingCollection = (
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     for (const message of input.batch.messages) {
-      const work = Schema.decodeUnknownOption(Work)(message.body);
+      const work = Schema.decodeUnknownOption(CollectionMessage)(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
@@ -283,11 +288,12 @@ const matchesSnapshot = (
     [input.found.reference, input.captured.wompi_reference],
     [input.found.amountInCents, input.expectedAmount],
     [input.found.currency, input.captured.currency],
-    [input.found.sourceId, input.captured.wompi_source_id],
     [input.environment, input.captured.wompi_environment],
   ];
   return (
     facts.every(([observed, expected]) => observed === expected) &&
+    (Option.isNone(input.found.sourceId) ||
+      input.found.sourceId.value === input.captured.wompi_source_id) &&
     (!input.requireFinalization ||
       input.found.status !== "APPROVED" ||
       Option.isSome(input.found.finalizedAt))
@@ -354,11 +360,11 @@ export const reconcileBillingTransaction = (
             )
           )
         : Option.none();
-    const periodStart = Option.map(period, (value) => DateTime.toEpochMillis(value.startsAt));
-    const periodEnd = Option.map(period, (value) => DateTime.toEpochMillis(value.endsAt));
-    const renewalAnchor = Option.map(period, (value) =>
-      DateTime.toEpochMillis(value.renewalAnchor)
-    );
+    const paidPeriod = Option.map(period, (value) => ({
+      startsAtMs: DateTime.toEpochMillis(value.startsAt),
+      endsAtMs: DateTime.toEpochMillis(value.endsAt),
+      renewalAnchorMs: DateTime.toEpochMillis(value.renewalAnchor),
+    }));
     yield* attempt(() =>
       recordVerifiedBillingEvidence({
         db: input.db,
@@ -367,9 +373,7 @@ export const reconcileBillingTransaction = (
         status: found.status,
         observedAtMs: now,
         finalizedAtMs: finalizedAt,
-        periodStartMs: periodStart,
-        periodEndMs: periodEnd,
-        renewalAnchorMs: renewalAnchor,
+        paidPeriod,
       })
     );
   });
@@ -381,9 +385,14 @@ const reconcileEventCandidate = (
   Effect.gen(function* () {
     const client = yield* billingClient(environment);
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
+    const now = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
-      environment.DB.prepare("DELETE FROM billing_event_candidates WHERE transaction_id = ?")
-        .bind(transactionId)
+      environment.DB.prepare(`UPDATE billing_event_candidates
+      SET resolved_at_ms = ? WHERE transaction_id = ? AND resolved_at_ms IS NULL
+      AND EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
+        JOIN billing_attempts AS a ON a.id = e.attempt_id
+        WHERE e.transaction_id = ? AND e.status = 'APPROVED' AND a.status = 'succeeded')`)
+        .bind(now, transactionId, transactionId)
         .run()
     );
   }).pipe(Effect.withSpan("billing.collection.lookup"));
@@ -491,7 +500,9 @@ type CollectionActivity = (
 export const runBillingCollectionWorkflow = (
   input: Readonly<{ environment: BillingRuntime; payload: unknown; activity: CollectionActivity }>
 ): Promise<void> => {
-  const work = Schema.decodeUnknownOption(Schema.Union([Work, LookupWork]))(input.payload);
+  const work = Schema.decodeUnknownOption(Schema.Union([CollectionMessage, LookupWork]))(
+    input.payload
+  );
   if (Option.isNone(work)) return Promise.resolve();
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
   if ("kind" in work.value) {
@@ -579,8 +590,8 @@ export const reconcileBillingCandidates = (
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
       SELECT transaction_id, COALESCE(last_checked_at_ms, received_at_ms) AS priority
-        FROM billing_event_candidates
-        WHERE last_checked_at_ms IS NULL OR last_checked_at_ms < ?
+        FROM billing_event_candidates WHERE resolved_at_ms IS NULL
+        AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)
     ) ORDER BY priority LIMIT ?`)
         .bind(now - candidateCooldownMs, now - candidateCooldownMs, pendingBatchSize)
         .all()

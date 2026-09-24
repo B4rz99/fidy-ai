@@ -15,7 +15,6 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import {
   dispatchBillingCollection,
   receiveBillingCollection,
-  receiveWompiBillingEvent,
   reconcileBillingCandidates,
   reconcileBillingTransaction,
   runBillingCollectionWorkflow,
@@ -79,13 +78,47 @@ const fixture = (): Promise<D1Database> =>
     })
   );
 
+const publicBillingCallback = (db: D1Database, request: Request): Promise<Response> =>
+  publicWorker.fetch(request, {
+    BROWSER_ORIGIN: "https://app.fidyapp.com",
+    LOCAL_CANONICAL_READ_BEARER: "local",
+    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+    CORE: {
+      fetch: (forwarded) =>
+        coreWorker.fetch(new Request(forwarded), {
+          AI: { run: () => Promise.reject(new Error("unused")) },
+          DB: db,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          BROWSER_ORIGIN: "https://app.fidyapp.com",
+          WOMPI_ENVIRONMENT: "sandbox",
+          WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          WOMPI_EVENT_SECRET: "test_events_payment_test_secret",
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (): { fetch: () => Promise<Response> } => ({
+              fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+            }),
+          },
+          KAPSO_WEBHOOK_SECRET: "",
+          CLOUDFLARE_ACCESS_ISSUER: "",
+          CLOUDFLARE_ACCESS_AUDIENCE: "",
+          KAPSO_API_KEY: "",
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+          RELEASE_GIT_SHA: "",
+        }),
+    },
+  });
+
 const transaction = (status: WompiTransaction["status"]): WompiTransaction => ({
   transactionId,
   reference,
   status,
   amountInCents: 990000,
   currency: "COP",
-  sourceId: WompiSourceId.make(3891),
+  sourceId: Option.some(WompiSourceId.make(3891)),
   finalizedAt:
     status === "PENDING" ? Option.none() : Option.some(DateTime.makeUnsafe("2026-09-08T12:00:00Z")),
 });
@@ -181,7 +214,6 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
               status: "APPROVED",
               amount_in_cents: 990000,
               currency: "COP",
-              payment_source_id: 3891,
               finalized_at: "2026-09-08T12:00:00Z",
             },
           })
@@ -221,14 +253,21 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
         signature: { properties, checksum },
         timestamp,
       };
-      const send = (payload: unknown = event): ReturnType<typeof receiveWompiBillingEvent> =>
-        receiveWompiBillingEvent({
-          environment,
-          request: new Request("https://core.internal/providers/wompi/billing-events", {
-            method: "POST",
-            headers: { "x-event-checksum": checksum, "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          }),
+      const send = (payload: unknown = event): Effect.Effect<Response> =>
+        Effect.gen(function* () {
+          const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            payload
+          ).pipe(Effect.orDie);
+          return yield* Effect.promise(() =>
+            publicBillingCallback(
+              db,
+              new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
+                method: "POST",
+                headers: { "x-event-checksum": checksum, "content-type": "application/json" },
+                body,
+              })
+            )
+          );
         });
       expect(
         (yield* send({ ...event, data: { transaction: { ...data.transaction, id: "forged-id" } } }))
@@ -259,6 +298,10 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).toHaveBeenCalledTimes(1);
       expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect((yield* send()).status).toBe(200);
+      yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
+      expect(workflow.create).toHaveBeenCalledTimes(1);
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "GET")).toHaveLength(1);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
         (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
@@ -279,40 +322,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
           data: { transaction: { id: transactionId } },
         }),
       });
-      const response = yield* Effect.promise(() =>
-        publicWorker.fetch(request, {
-          BROWSER_ORIGIN: "https://app.fidyapp.com",
-          LOCAL_CANONICAL_READ_BEARER: "local",
-          PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          CORE: {
-            fetch: (forwarded) =>
-              coreWorker.fetch(new Request(forwarded), {
-                AI: { run: () => Promise.reject(new Error("unused")) },
-                DB: db,
-                HOSTED_AI_MODEL: approvedWorkersAiModel,
-                CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-                BROWSER_ORIGIN: "https://app.fidyapp.com",
-                WOMPI_ENVIRONMENT: "sandbox",
-                WOMPI_PUBLIC_KEY: "",
-                WOMPI_PRIVATE_KEY: "",
-                WOMPI_INTEGRITY_SECRET: "",
-                WOMPI_EVENT_SECRET: "test_events_payment_test_secret",
-                USER_TRANSACTION_COORDINATOR: {
-                  getByName: (): { fetch: () => Promise<Response> } => ({
-                    fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
-                  }),
-                },
-                KAPSO_WEBHOOK_SECRET: "",
-                CLOUDFLARE_ACCESS_ISSUER: "",
-                CLOUDFLARE_ACCESS_AUDIENCE: "",
-                KAPSO_API_KEY: "",
-                WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
-                RELEASE_GIT_SHA: "",
-              }),
-          },
-        })
-      );
+      const response = yield* Effect.promise(() => publicBillingCallback(db, request));
       expect(response.status).toBe(400);
       expect(yield* Effect.promise(() => state(db))).toBe("pending");
       expect(
@@ -434,7 +444,7 @@ it("refuses a mismatched source even with a valid provider id and reference", ()
       const db = yield* Effect.promise(fixture);
       const forged = client(() => ({
         ...transaction("APPROVED"),
-        sourceId: WompiSourceId.make(3892),
+        sourceId: Option.some(WompiSourceId.make(3892)),
       }));
       const result = yield* Effect.exit(
         reconcileBillingTransaction({ db, client: forged, transactionId })

@@ -38,7 +38,8 @@ CREATE TABLE billing_transaction_candidates (
 CREATE TABLE billing_event_candidates (
   transaction_id TEXT PRIMARY KEY NOT NULL CHECK (length(transaction_id) BETWEEN 1 AND 128),
   received_at_ms INTEGER NOT NULL,
-  last_checked_at_ms INTEGER
+  last_checked_at_ms INTEGER,
+  resolved_at_ms INTEGER
 ) STRICT;
 CREATE TRIGGER billing_evidence_reject_foreign_id BEFORE INSERT ON billing_transaction_evidence
 WHEN EXISTS (SELECT 1 FROM billing_transaction_evidence AS e

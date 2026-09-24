@@ -1,6 +1,11 @@
 import { type WompiBillingStatus, wompiRetryOpportunity } from "@fidy/server/subscription-runtime";
 import { Duration, Option } from "effect";
 
+type PaidPeriod = Readonly<{
+  startsAtMs: number;
+  endsAtMs: number;
+  renewalAnchorMs: number;
+}>;
 type Settlement = Readonly<{
   db: D1Database;
   attemptId: string;
@@ -8,9 +13,7 @@ type Settlement = Readonly<{
   status: WompiBillingStatus;
   observedAtMs: number;
   finalizedAtMs: Option.Option<number>;
-  periodStartMs: Option.Option<number>;
-  periodEndMs: Option.Option<number>;
-  renewalAnchorMs: Option.Option<number>;
+  paidPeriod: Option.Option<PaidPeriod>;
 }>;
 const retryOpportunityMs = Duration.toMillis(wompiRetryOpportunity);
 
@@ -67,7 +70,7 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
 };
 
 const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement> => {
-  const { db, attemptId, observedAtMs, periodStartMs, periodEndMs, renewalAnchorMs } = input;
+  const { db, attemptId, observedAtMs, paidPeriod } = input;
   return [
     db
       .prepare(`INSERT OR IGNORE INTO billing_paid_periods
@@ -76,10 +79,10 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
       (SELECT 1 FROM billing_attempts WHERE id = ? AND status = 'succeeded')`)
       .bind(
         attemptId,
-        Option.getOrNull(periodStartMs),
-        Option.getOrNull(periodEndMs),
-        Option.getOrNull(renewalAnchorMs),
-        Option.getOrNull(periodStartMs),
+        Option.map(paidPeriod, (period) => period.startsAtMs).pipe(Option.getOrNull),
+        Option.map(paidPeriod, (period) => period.endsAtMs).pipe(Option.getOrNull),
+        Option.map(paidPeriod, (period) => period.renewalAnchorMs).pipe(Option.getOrNull),
+        Option.map(paidPeriod, (period) => period.startsAtMs).pipe(Option.getOrNull),
         attemptId
       ),
     // User is the stable coordination key: the guarded upsert serializes competing attempts in D1.

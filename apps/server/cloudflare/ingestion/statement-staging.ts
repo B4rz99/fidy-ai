@@ -297,7 +297,10 @@ const writeStagingObject = (
 ): Effect.Effect<boolean, StatementStagingUnavailable> =>
   platformUnavailable(() =>
     config.bucket.put(input.objectKey, input.bytes, { sha256: input.digest })
-  ).pipe(Effect.map((stored) => stored !== null));
+  ).pipe(
+    Effect.map(() => true),
+    Effect.orElseSucceed(() => false)
+  );
 
 const markStagingAvailable = (
   config: StatementStagingConfig,

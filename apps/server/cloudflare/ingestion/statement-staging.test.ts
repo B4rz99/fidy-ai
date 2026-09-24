@@ -274,7 +274,7 @@ const read = (
 const sweep = (runtime: Runtime): Promise<StagingResult<StatementStagingSweep>> =>
   Effect.runPromise(Effect.result(runtime.staging.sweepExpiredStatementStaging));
 
-const requireValue = <A, E>(result: Result.Result<A, E>): A => {
+const requireValue = <A, E extends Error>(result: Result.Result<A, E>): A => {
   if (Result.isFailure(result)) throw result.failure;
   return result.success;
 };

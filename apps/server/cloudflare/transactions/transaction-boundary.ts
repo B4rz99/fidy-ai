@@ -30,6 +30,13 @@ export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPA
 /** The exact PAT capability a caller operates under; a WebSession carries none. */
 export const callerScope = (subject: TransactionCaller): Option.Option<CanonicalCapability> =>
   isPATCaller(subject) ? subject.requiredScope : Option.none();
+/** Restore the exact authority one canonical child is executed and audited under: a PAT scope. */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const childCaller = (
+  subject: TransactionCaller,
+  requiredScope: Option.Option<CanonicalCapability>
+): TransactionCaller =>
+  isPATCaller(subject) && Option.isSome(requiredScope) ? { ...subject, requiredScope } : subject;
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 export const transactionNoStore = { "cache-control": "no-store" };
@@ -259,8 +266,10 @@ export const rejectInvalidTransactionInput = ({
   });
 
 /**
- * Refuse an atomic batch whose body failed validation before any child was decoded. No child can
- * be held responsible for a body that never named one, so no refusal Audit is recorded.
+ * Refuse an atomic batch whose body does not satisfy the published schemas. This is the declared
+ * `ValidationFailed` failure every canonical operation exposes through the ValidationGate, not a
+ * child failure: no child was named by a decodable call, so no refusal Audit is recorded and no
+ * child index is fabricated.
  */
 export const rejectInvalidBatchInput = (): Response =>
   transactionFailure({

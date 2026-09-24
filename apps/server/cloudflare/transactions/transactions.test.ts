@@ -231,6 +231,7 @@ const BatchResult = Schema.Struct({
   }),
   next: Schema.Array(Schema.Unknown),
 });
+const CallerFailure = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
 const BatchRejection = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -284,6 +285,15 @@ const countRows = (
     .bind(...bindings)
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
+const seedDailyTransactions = (db: D1Database, count: number): Promise<unknown> => {
+  const today = DateTime.formatIso(DateTime.nowUnsafe());
+  return db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
+    .bind(count, users[0], category, today, today)
+    .run();
+};
 const seedTransaction = ({
   db,
   userId,
@@ -876,15 +886,7 @@ it("enforces the stable-User daily write budget atomically and preserves append-
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const today = DateTime.formatIso(DateTime.nowUnsafe());
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 100)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
-          .bind(users[0], category, today, today)
-          .run()
-      );
+      yield* fromTestPromise(() => seedDailyTransactions(db, 100));
       const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       if (Option.isNone(session)) throw new Error("Missing fixture session");
       const decoded = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(CreateTransactionInput))(
@@ -2107,15 +2109,7 @@ it("attributes a per-day budget guard abort to the capture child that met it", (
   Effect.runPromise(
     Effect.gen(function* () {
       const movementDb = yield* fromTestPromise(() => setup());
-      const today = DateTime.formatIso(DateTime.nowUnsafe());
-      yield* fromTestPromise(() =>
-        movementDb
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
-          .bind(users[0], category, today, today)
-          .run()
-      );
+      yield* fromTestPromise(() => seedDailyTransactions(movementDb, 99));
       const limited = yield* fromTestPromise(() =>
         sendPublicRequest(
           movementDb,
@@ -2336,15 +2330,7 @@ it("records a PAT refusal Audit for a refused batch child and attributes a PAT b
       ).toBe(1);
 
       const budgetDb = yield* fromTestPromise(() => setup());
-      const today = DateTime.formatIso(DateTime.nowUnsafe());
-      yield* fromTestPromise(() =>
-        budgetDb
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
-          .bind(users[0], category, today, today)
-          .run()
-      );
+      yield* fromTestPromise(() => seedDailyTransactions(budgetDb, 99));
       const budgetToken = `fin_${"u".repeat(8)}_${"d".repeat(43)}`;
       yield* seedPAT({
         db: budgetDb,
@@ -2443,9 +2429,9 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
         sendPublicRequest(db, bearerRequest(1, neighborToken, [transactionCall(1, input())]))
       );
       expect(withdrawn.status).toBe(403);
-      const withdrawal = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })
-      )(yield* fromTestPromise(() => withdrawn.json())).pipe(Effect.orDie);
+      const withdrawal = yield* Schema.decodeUnknownEffect(CallerFailure)(
+        yield* fromTestPromise(() => withdrawn.json())
+      ).pipe(Effect.orDie);
       expect(withdrawal.error.code).toBe("user_action_required");
       const neighborSession = yield* fromTestPromise(() =>
         sendPublicRequest(db, batchRequest(1, [transactionCall(1, input())]))
@@ -2490,9 +2476,9 @@ it("refuses a malformed batch body with the canonical validation failure and no 
         )
       );
       expect(malformed.status).toBe(400);
-      const failure = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })
-      )(yield* fromTestPromise(() => malformed.json())).pipe(Effect.orDie);
+      const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+        yield* fromTestPromise(() => malformed.json())
+      ).pipe(Effect.orDie);
       expect(failure.error.code).toBe("validation_failed");
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))

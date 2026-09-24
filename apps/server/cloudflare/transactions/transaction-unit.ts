@@ -7,7 +7,7 @@ import {
   type TransactionMutationOperation,
   type TransactionRefusal,
   boundaryCause,
-  isPATCaller,
+  childCaller,
   liveTransactionCaller,
   liveTransactionCredential,
   recordTransactionRefusal,
@@ -181,13 +181,6 @@ const staleCorrectionIndex = ({
     return Option.none();
   });
 
-/** Restore the exact child authority the owner prepared a mutation under. */
-const childSubject = (
-  subject: TransactionCaller,
-  mutation: PreparedTransactionMutation
-): TransactionCaller =>
-  isPATCaller(subject) ? { ...subject, requiredScope: mutation.requiredScope } : subject;
-
 const rejectRecorded = ({
   db,
   subject,
@@ -208,7 +201,7 @@ const rejectRecorded = ({
   return Effect.tryPromise(() =>
     recordTransactionRefusal({
       db,
-      subject: childSubject(subject, mutation),
+      subject: childCaller(subject, mutation.requiredScope),
       outcome: refusal.outcome,
       operation: mutation.operation,
       current,

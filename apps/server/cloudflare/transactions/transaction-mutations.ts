@@ -17,6 +17,7 @@ import { Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
+  childCaller,
   isPATCaller,
   liveTransactionCaller,
   liveTransactionCredential,
@@ -97,7 +98,7 @@ const invalidChildMessage = "Invalid input for this child mutation.";
 const repeatedCallIdMessage =
   "Each child call needs its own callId; a repeated identity cannot commit twice.";
 /** The only canonical mutations this adapter composes; every other child fails closed. */
-const implementedMutations: ReadonlySet<string> = new Set([
+const implementedMutations: ReadonlySet<string> = new Set<TransactionMutationOperation>([
   "transactions.createTransaction",
   "transactions.updateTransaction",
 ]);
@@ -158,15 +159,6 @@ const batchRejection = ({
 
 type ChildAccess = "allowed" | "scope_missing" | "credential_refused";
 
-/** Restore the exact child authority a PAT needs for one canonical child scope. */
-const childSubject = (
-  subject: TransactionCaller,
-  capability: ReturnType<typeof patScopeCapability>
-): TransactionCaller =>
-  isPATCaller(subject) && Option.isSome(capability)
-    ? { ...subject, requiredScope: capability }
-    : subject;
-
 const childAccess = ({
   db,
   subject,
@@ -178,7 +170,7 @@ const childAccess = ({
   current: number;
   capability: ReturnType<typeof patScopeCapability>;
 }>): Promise<ChildAccess> => {
-  const scoped = childSubject(subject, capability);
+  const scoped = childCaller(subject, capability);
   return liveTransactionCaller({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
     if (!isPATCaller(subject)) return "credential_refused" as const;
@@ -424,7 +416,7 @@ const prepareChild = ({
         }),
       };
     }
-    const scopedSubject = childSubject(subject, capability);
+    const scopedSubject = childCaller(subject, capability);
     const preparation = yield* prepareDecodedChild({
       db,
       subject: scopedSubject,

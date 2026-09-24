@@ -28,7 +28,7 @@ import {
   rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
 } from "./transactions/transaction-boundary";
-import { RequestBodyPolicy, readBoundedRequestBody } from "./http/request-body";
+import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import {
   completeBrowserPairingEmail,
   startBrowserPairingEmail,
@@ -255,17 +255,22 @@ const coordinatorCommand = (
   return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
 };
 
+/** Inert per-command URL suffix; the coordinator decodes the command from the body alone. */
+const coordinatorRoutes = {
+  Capture: "create",
+  Correction: "correct",
+  Batch: "batch",
+} as const;
+
 /** Encode one admitted command and deliver it to the caller's User coordinator. */
 const sendToCoordinator = ({
   environment,
   subject,
   work,
-  path,
 }: Readonly<{
   environment: CoreEnvironment;
   subject: TransactionCaller;
   work: CoordinatorWork;
-  path: string;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
     // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
@@ -275,29 +280,13 @@ const sendToCoordinator = ({
     );
     return yield* Effect.tryPromise(() =>
       stub.fetch(
-        new Request(`https://coordinator.internal/${path}`, {
+        new Request(`https://coordinator.internal/${coordinatorRoutes[work._tag]}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body,
         })
       )
     );
-  });
-
-const forwardTransaction = ({
-  environment,
-  subject,
-  work,
-}: Readonly<{
-  environment: CoreEnvironment;
-  subject: TransactionCaller;
-  work: ForwardWork;
-}>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
-  sendToCoordinator({
-    environment,
-    subject,
-    work,
-    path: work._tag === "Capture" ? "create" : "correct",
   });
 
 // One canonical child input is bounded by its own operation policy; a batch carries at most one
@@ -308,18 +297,6 @@ const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
-const batchBody = (request: Request): Promise<Option.Option<BatchInput>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromise(readBoundedRequestBody(request, batchPolicy))
-    .then((bytes) => {
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(BatchInput)(parsed);
-    })
-    .catch(() => Option.none());
-};
-
 const dispatchCanonicalBatch = (
   request: Request,
   environment: CoreEnvironment,
@@ -327,13 +304,14 @@ const dispatchCanonicalBatch = (
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const parsed = yield* Effect.tryPromise(() => batchBody(request));
+      const parsed = yield* Effect.tryPromise(() =>
+        boundedJsonBody(request, batchPolicy, BatchInput)
+      );
       if (Option.isNone(parsed)) return rejectInvalidBatchInput();
       return yield* sendToCoordinator({
         environment,
         subject,
         work: { _tag: "Batch", calls: parsed.value.calls },
-        path: "batch",
       });
     })
   );
@@ -355,7 +333,7 @@ const dispatchCanonicalCapture = (
           })
         );
       }
-      return yield* forwardTransaction({
+      return yield* sendToCoordinator({
         environment,
         subject,
         work: { _tag: "Capture", input: input.value },
@@ -380,7 +358,7 @@ const dispatchCanonicalCorrection = (
           })
         );
       }
-      return yield* forwardTransaction({
+      return yield* sendToCoordinator({
         environment,
         subject,
         work: {

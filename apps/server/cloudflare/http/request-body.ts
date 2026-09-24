@@ -1,4 +1,4 @@
-import { Cause, Data, Effect, Schema } from "effect";
+import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /** The public request body exceeded the route's byte budget before it was accepted. */
 export class RequestBodyCapacityExceeded extends Data.TaggedError("RequestBodyCapacityExceeded") {}
@@ -106,3 +106,25 @@ export const readBoundedRequestBody = Effect.fn(function* (
     )
   );
 });
+
+/**
+ * Decode one bounded JSON request body against a route schema. A non-JSON content type and any
+ * unreadable, oversized, late, malformed, or schema-invalid body are all refused as `Option.none`
+ * without retaining any body detail.
+ */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>(
+  request: Request,
+  policy: RequestBodyPolicy,
+  schema: A
+): Promise<Option.Option<A["Type"]>> => {
+  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    return Promise.resolve(Option.none());
+  }
+  return Effect.runPromise(readBoundedRequestBody(request, policy))
+    .then((bytes) => {
+      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      return Schema.decodeUnknownOption(schema)(parsed);
+    })
+    .catch(() => Option.none());
+};

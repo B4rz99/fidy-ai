@@ -6,7 +6,7 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { recordAuditedPATUse, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionBoundaryFailure,
@@ -53,17 +53,8 @@ type Change = Readonly<{
 }>;
 
 /** Decode a bounded correction without treating omitted facts as explicit decisions. */
-export const correctionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromise(readBoundedRequestBody(request, policy))
-    .then((bytes) => {
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(Input)(parsed);
-    })
-    .catch(() => Option.none());
-};
+export const correctionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+  boundedJsonBody(request, policy, Input);
 
 const retain = <A>(value: Option.Option<A>, previous: A): A =>
   Option.getOrElse(value, () => previous);

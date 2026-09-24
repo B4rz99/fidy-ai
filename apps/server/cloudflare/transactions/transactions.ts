@@ -6,7 +6,7 @@ import {
 import { recordAuditedPATUse, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { sessionCookie, sha256 } from "../identity/browser-login";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionBoundaryFailure,
@@ -81,17 +81,8 @@ export const transactionSession = ({
 };
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
-export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromise(readBoundedRequestBody(request, policy))
-    .then((bytes) => {
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(Input)(parsed);
-    })
-    .catch(() => Option.none());
-};
+export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+  boundedJsonBody(request, policy, Input);
 
 const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
   const { subject, id, current, auditId } = capture;

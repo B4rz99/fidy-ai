@@ -459,6 +459,7 @@ const executeCanonicalWork = (
   }
   if (
     operation.id === "transactions.listTransactions" ||
+    operation.id === "transactions.searchTransactions" ||
     operation.id === "transactions.getTransaction"
   ) {
     return Effect.tryPromise({
@@ -468,6 +469,7 @@ const executeCanonicalWork = (
           selection: {
             request,
             subject,
+            search: operation.id === "transactions.searchTransactions",
             id:
               operation.id === "transactions.getTransaction"
                 ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")

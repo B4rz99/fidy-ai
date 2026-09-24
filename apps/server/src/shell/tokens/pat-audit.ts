@@ -109,6 +109,7 @@ type CanonicalPATOperation =
   | "transactions.createTransaction"
   | "transactions.updateTransaction"
   | "transactions.listTransactions"
+  | "transactions.searchTransactions"
   | "transactions.getTransaction";
 
 type CanonicalAuditInput = AuditTime &

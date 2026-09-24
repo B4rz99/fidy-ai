@@ -147,6 +147,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0009_transactions",
           "0010_pat_lifecycle",
           "0011_transaction_corrections",
+          "0012_transaction_search",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -258,6 +259,73 @@ const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
 });
+
+it("searches only the caller's FinancialRecord with bounded literal terms", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const send = (index: number, path: string, body?: object): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com${path}`, {
+            method: body === undefined ? "GET" : "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(index)}`,
+              ...(body === undefined ? {} : { "content-type": "application/json" }),
+            },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          })
+        );
+      const own = yield* fromTestPromise(() =>
+        send(0, "/transactions", input({ counterparty: "Café 100%", notes: "Almuerzo" }))
+      );
+      const foreign = yield* fromTestPromise(() =>
+        send(1, "/transactions", input({ counterparty: "Café 100%" }))
+      );
+      expect(own.status).toBe(201);
+      expect(foreign.status).toBe(201);
+      const ownId = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() => own.json())
+      )).data.id;
+      const foreignId = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() => foreign.json())
+      )).data.id;
+      const found = yield* fromTestPromise(() =>
+        send(0, "/transactions/search?q=%20%20Caf%C3%A9%20100%25%20")
+      );
+      expect(found.status).toBe(200);
+      const result = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => found.json())
+      );
+      expect(result.data.map((item) => item.id)).toEqual([ownId]);
+      expect(result.next).toEqual([]);
+      for (const [index, term] of [
+        [1, ownId],
+        [0, foreignId],
+        [0, "100_"],
+      ] as const) {
+        const response = yield* fromTestPromise(() =>
+          send(index, `/transactions/search?q=${encodeURIComponent(term)}`)
+        );
+        expect(
+          (yield* Schema.decodeUnknownEffect(Listed)(yield* fromTestPromise(() => response.json())))
+            .data
+        ).toEqual([]);
+      }
+      for (const path of [
+        "/transactions/search?q=%25",
+        "/transactions/search?q=a",
+        `/transactions/search?q=${"x".repeat(100)}`,
+        "/transactions/search?q=valid&q=valid",
+        "/transactions/search?q=valid&cursor=bad",
+      ]) {
+        const rejected = yield* fromTestPromise(() => send(0, path));
+        expect(rejected.status).toBe(400);
+        expect(rejected.headers.get("cache-control")).toBe("no-store");
+      }
+    })
+  ));
 
 it("corrects selected facts once, retains decisions and evidence, and rejects stale or foreign corrections", () =>
   Effect.runPromise(
@@ -884,8 +952,8 @@ it("continues the canonical history beyond its first bounded page without losing
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, ?,
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
+    SELECT printf('00000000-0000-4000-8000-%012d', n), ?, '1', 'COP', 'outflow', ?, 'Pago literal', ?,
       CASE WHEN n = 101 THEN ? ELSE ? END FROM seq`)
           .bind(users[0], category, previous, previous, createdAt)
           .run()
@@ -950,6 +1018,58 @@ it("continues the canonical history beyond its first bounded page without losing
       expect(remainder.data).toHaveLength(1);
       expect(remainder.next).toEqual([]);
       expect(new Set([...page.data, ...remainder.data].map(({ id }) => id)).size).toBe(101);
+
+      const search = yield* fromTestPromise(() =>
+        browseTransactions({
+          db,
+          selection: {
+            request: request(0, "/transactions/search?q=Pago%20literal"),
+            subject,
+            id: Option.none(),
+            search: true,
+          },
+        })
+      );
+      const SearchPage = Schema.Struct({
+        data: Schema.Array(Schema.toCodecJson(Transaction)),
+        next: Schema.Array(
+          Schema.Struct({
+            tool: Schema.String,
+            args: Schema.Struct({
+              query: Schema.Struct({ cursor: Schema.String, q: Schema.String }),
+            }),
+          })
+        ),
+      });
+      const matches = yield* Schema.decodeUnknownEffect(SearchPage)(
+        yield* fromTestPromise(() => search.json())
+      );
+      expect(matches.data).toHaveLength(100);
+      expect(matches.next[0]?.tool).toBe("transactions.searchTransactions");
+      expect(matches.next[0]?.args.query.q).toBe("Pago literal");
+      const searchCursor = Option.getOrThrow(
+        Option.fromUndefinedOr(matches.next[0]?.args.query.cursor)
+      );
+      const nextSearch = yield* fromTestPromise(() =>
+        browseTransactions({
+          db,
+          selection: {
+            request: request(
+              0,
+              `/transactions/search?q=Pago%20literal&cursor=${encodeURIComponent(searchCursor)}`
+            ),
+            subject,
+            id: Option.none(),
+            search: true,
+          },
+        })
+      );
+      const lastPage = yield* Schema.decodeUnknownEffect(SearchPage)(
+        yield* fromTestPromise(() => nextSearch.json())
+      );
+      expect(lastPage.data).toHaveLength(1);
+      expect(lastPage.next).toEqual([]);
+      expect(new Set([...matches.data, ...lastPage.data].map(({ id }) => id)).size).toBe(101);
     })
   ));
 

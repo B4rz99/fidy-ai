@@ -6,6 +6,7 @@ import {
   TransactionId,
   TransactionPresentation,
   TransactionQueryValues,
+  TransactionSearchQuery,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
@@ -47,6 +48,7 @@ const Query = TransactionQueryValues.mapFields((fields) => ({
   direction: Schema.OptionFromOptionalKey(fields.direction),
   currency: Schema.OptionFromOptionalKey(fields.currency),
   cursor: Schema.OptionFromOptionalKey(fields.cursor),
+  q: Schema.OptionFromOptionalKey(TransactionSearchQuery.fields.q),
 }));
 const filters = new Set([
   "from",
@@ -58,6 +60,8 @@ const filters = new Set([
   "cursor",
 ]);
 const maxFilters = 7;
+const maxSearchUrlLength = 512;
+const minimumSearchLength = 2;
 const pageSize = 100;
 const boundarySize = pageSize + 1;
 const failure = (
@@ -76,7 +80,14 @@ const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
 type Subject = TransactionSubject | AuthorizedPAT;
 const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
-type Selection = Readonly<{ request: Request; subject: Subject; id: Option.Option<string> }>;
+type Selection = Readonly<{
+  request: Request;
+  subject: Subject;
+  id: Option.Option<string>;
+  // Search is absent only for the pre-existing history adapter callers.
+  // oxlint-disable-next-line effect-guards/no-nullable-type
+  search?: boolean;
+}>;
 type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
@@ -90,8 +101,33 @@ const decodeCursor = (cursor: string): Option.Option<readonly [string, string, s
     : Option.none();
 };
 
+const searchValues = (values: Record<string, string>): Option.Option<Record<string, string>> => {
+  const parsed = Schema.decodeUnknownOption(TransactionSearchQuery)(values);
+  if (Option.isNone(parsed)) return Option.none();
+  const term = parsed.value.q.trim().replace(/\s+/gu, " ");
+  return term.length < minimumSearchLength ? Option.none() : Option.some({ ...values, q: term });
+};
+
+const validParameters = (params: URLSearchParams, search: boolean, hasId: boolean): boolean =>
+  !(hasId && params.size > 0) &&
+  params.size <= (search ? minimumSearchLength : maxFilters) &&
+  new Set(params.keys()).size === params.size &&
+  [...params.keys()].every((key) => (search ? key === "q" || key === "cursor" : filters.has(key)));
+
+const historyOperation = (
+  selection: Pick<Selection, "id" | "search">
+):
+  | "transactions.getTransaction"
+  | "transactions.listTransactions"
+  | "transactions.searchTransactions" => {
+  if (Option.isSome(selection.id)) return "transactions.getTransaction";
+  return selection.search === true
+    ? "transactions.searchTransactions"
+    : "transactions.listTransactions";
+};
+
 const parseQuery = (
-  selection: Pick<Selection, "id" | "request">
+  selection: Pick<Selection, "id" | "request" | "search">
 ): Option.Option<typeof Query.Type> => {
   if (
     Option.isSome(selection.id) &&
@@ -99,17 +135,20 @@ const parseQuery = (
   ) {
     return Option.none();
   }
+  const search = selection.search === true;
+  if (search && selection.request.url.length > maxSearchUrlLength) return Option.none();
   const params = new URL(selection.request.url).searchParams;
-  if (
-    (Option.isSome(selection.id) && params.size > 0) ||
-    params.size > maxFilters ||
-    [...params.keys()].some((key) => !filters.has(key))
-  ) {
-    return Option.none();
-  }
+  if (!validParameters(params, search, Option.isSome(selection.id))) return Option.none();
+  const values = search
+    ? searchValues(Object.fromEntries(params))
+    : Option.some(Object.fromEntries(params));
+  if (Option.isNone(values)) return Option.none();
+  const decoded = Schema.decodeOption(Query)(values.value);
   return Option.filter(
-    Schema.decodeOption(Query)(Object.fromEntries(params)),
-    (query) => Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value))
+    decoded,
+    (query) =>
+      (search ? Option.isSome(query.q) : Option.isNone(query.q)) &&
+      (Option.isNone(query.cursor) || Option.isSome(decodeCursor(query.cursor.value)))
   );
 };
 
@@ -147,6 +186,11 @@ const selectStatement = (
       values.push(value.value);
     }
   }
+  if (Option.isSome(query.q)) {
+    const literal = query.q.value.replace(/[\\%_]/gu, "\\$&");
+    conditions.push("(counterparty LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')");
+    values.push(`%${literal}%`, `%${literal}%`);
+  }
   if (Option.isSome(query.cursor)) {
     const [occurred, created, recordId] = Option.getOrThrow(decodeCursor(query.cursor.value));
     conditions.push("(occurred_at, created_at, id) < (?, ?, ?)");
@@ -178,16 +222,16 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
   });
 };
 
-const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "request">): Response => {
+const presentHistory = (
+  rows: D1Result,
+  selection: Pick<Selection, "id" | "request" | "search">
+): Response => {
   const { id, request } = selection;
   const decoded = rows.results.map(decodeTransactionRow);
   if (decoded.some(Option.isNone)) {
     return unavailable();
   }
   const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
-  if (Option.isSome(id) && transactions.length === 0) {
-    return notFound();
-  }
   if (Option.isSome(id)) {
     const first = transactions[0];
     if (first === undefined) {
@@ -207,7 +251,10 @@ const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "reque
           `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
           Object.fromEntries(
             [...new URL(request.url).searchParams].filter(([name]) => name !== "cursor")
-          )
+          ),
+          selection.search === true
+            ? "transactions.searchTransactions"
+            : "transactions.listTransactions"
         )
       : [];
   return Response.json(
@@ -232,7 +279,7 @@ const invalidQueryAudit = (
       SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
         .bind(
           uuid(),
-          invalidGet ? "transactions.getTransaction" : "transactions.listTransactions",
+          historyOperation(selection),
           invalidGet ? "not_found" : "validation_failed",
           current,
           ...authority.bindings
@@ -271,9 +318,7 @@ const browserHistoryStatements = (
           ? FROM ${authority.table} WHERE ${authority.predicate}`)
       .bind(
         uuid(),
-        Option.isNone(selection.id)
-          ? "transactions.listTransactions"
-          : "transactions.getTransaction",
+        historyOperation(selection),
         Option.getOrNull(selection.id),
         Option.getOrNull(selection.id),
         current,
@@ -293,7 +338,7 @@ const patHistoryStatements = (
   }>
 ): Array<D1PreparedStatement> => {
   const { selection, query, current } = input;
-  const { subject, id } = selection;
+  const { subject } = selection;
   const authority = livePATAuthority({ subject, current });
   return [
     prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
@@ -315,9 +360,7 @@ const patHistoryStatements = (
         subject,
         input: {
           id: uuid(),
-          operation: Option.isNone(id)
-            ? "transactions.listTransactions"
-            : "transactions.getTransaction",
+          operation: historyOperation(selection),
           outcome: Option.isSome(query) ? "accepted" : "rejected",
           afterSourceAttestation: false,
           current,

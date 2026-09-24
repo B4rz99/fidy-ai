@@ -225,6 +225,14 @@ export const TransactionQueryValues = Schema.Struct({
   ),
 });
 
+const maximumSearchLength = 80;
+
+/** Bounded literal text search; a cursor is only a position in the caller's own result set. */
+export const TransactionSearchQuery = Schema.Struct({
+  q: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(maximumSearchLength)),
+  cursor: Schema.optionalKey(TransactionQueryValues.fields.cursor),
+});
+
 /**
  * Canonical history filters. Every possible absence is explicit, periods are half-open, and every
  * provided field combines with AND.

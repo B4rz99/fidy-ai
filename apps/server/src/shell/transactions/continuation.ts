@@ -10,14 +10,17 @@ import {
 // @effect-diagnostics-next-line missingPipeableSignature:off
 export const nextTransactionPage = (
   cursor: string,
-  filters: Readonly<Record<string, string>>
+  filters: Readonly<Record<string, string>>,
+  operation:
+    | "transactions.listTransactions"
+    | "transactions.searchTransactions" = "transactions.listTransactions"
 ): typeof NextOperations.Encoded =>
   Schema.encodeSync(NextOperations)(
     checkpointSuggestedOperations({
       candidates: [
         suggestOperation({
-          tool: "transactions.listTransactions",
-          hint: "Continue browsing the next page of your Transaction history.",
+          tool: operation,
+          hint: "Continue browsing the next page of your FinancialRecord.",
           args: Option.some({ query: { ...filters, cursor } }),
         }),
       ],

@@ -28,13 +28,14 @@ import { ApprovedWorkersAiModel } from "./model";
 
 const ChatContent = Schema.NullOr(Schema.String);
 
-/** Provider input item accepted by the direct binding; callers must use projected content only. */
+/** One Gemma Chat Completions function call, preserving its provider id for tool continuation. */
 export type WorkersAiFunctionCall = Readonly<{
   id: string;
   type: "function";
   function: Readonly<{ name: string; arguments: string }>;
 }>;
 
+/** Provider message accepted by the direct binding; callers must use projected content only. */
 export type WorkersAiInputItem =
   | Readonly<{ role: "system" | "user"; content: string }>
   | (Readonly<{
@@ -569,7 +570,7 @@ const makeStructuredAdapter = (
         }).pipe(
           Effect.flatMap((response) =>
             response.choices[0]?.finish_reason !== "stop" ||
-            (response.choices[0]?.message.tool_calls?.length ?? 0) > 0
+            (response.choices[0].message.tool_calls?.length ?? 0) > 0
               ? Effect.fail(structuredOutputExceeded())
               : Schema.decodeEffect(Schema.fromJsonString(input.outputSchema))(
                   outputText(response)

@@ -155,12 +155,7 @@ const verifyStructuredColombianSpanish = (
       Effect.asVoid
     );
 
-/**
- * Live provider-conformance gate for an approval candidate. It intentionally returns no generated
- * content: callers may report only pass/fail metadata. The gate script first runs deterministic
- * adapter conformance for malformed output and arguments, recovery, bounds, interruption, and
- * hidden-retry prohibition; this live phase then verifies approved-model behavior.
- */
+/** Closed live approval checks, identifying a failing capability without exposing model content. */
 export type HostedConformanceCheck =
   | "canonical_query"
   | "canonical_mutation"
@@ -175,7 +170,7 @@ export type HostedConformanceFailure = Readonly<{
   category: HostedInferenceError["reason"]["_tag"];
 }>;
 
-/** Live checks with privacy-safe, check-level failure evidence for the release gate. */
+/** Evaluate a live model candidate; return no generated content, only closed failure evidence. */
 export const verifyHostedInferenceConformanceChecks = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedConformanceFailure> => {
@@ -200,15 +195,3 @@ export const verifyHostedInferenceConformanceChecks = (
     Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference)))
   );
 };
-
-export const verifyHostedInferenceConformance = (
-  inference: HostedInferenceService
-): Effect.Effect<void, HostedInferenceError> =>
-  verifyCanonicalQuery(inference).pipe(
-    Effect.andThen(verifyCanonicalMutation(inference)),
-    Effect.flatMap((args) =>
-      verifyMutationMoney(args).pipe(Effect.andThen(verifyMutationTime(args)))
-    ),
-    Effect.andThen(verifyInvalidOutputRecovery(inference)),
-    Effect.andThen(verifyStructuredColombianSpanish(inference))
-  );

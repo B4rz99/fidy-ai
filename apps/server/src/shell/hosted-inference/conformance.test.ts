@@ -1,14 +1,10 @@
 import { strict as assert } from "node:assert";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Option, Ref, Schema } from "effect";
+import { Effect, Exit, Ref, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { CreateTransactionInput } from "~/core/transactions/model";
-import {
-  HostedInferenceError,
-  type HostedInferenceService,
-  type HostedTextResult,
-} from "./contract";
-import { verifyHostedInferenceConformance } from "./conformance";
+import { type HostedInferenceService, type HostedTextResult } from "./contract";
+import { verifyHostedInferenceConformanceChecks } from "./conformance";
 import { makeHostedInferenceStub } from "./operations";
 
 const representativeAmount = 42_000;
@@ -75,7 +71,7 @@ it.effect("accepts canonical tools, corrected repeated rounds, structured output
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido");
 
-    yield* verifyHostedInferenceConformance(inference);
+    yield* verifyHostedInferenceConformanceChecks(inference);
   })
 );
 
@@ -83,14 +79,8 @@ it.effect("rejects a canonical mutation whose Money differs from the User's requ
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido", 41_000);
     assert.deepStrictEqual(
-      yield* Effect.exit(verifyHostedInferenceConformance(inference)),
-      Exit.fail(
-        new HostedInferenceError({
-          reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
-          retryable: false,
-          retryAfter: Option.none(),
-        })
-      )
+      yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+      Exit.fail({ check: "canonical_mutation_money", category: "InvalidOutput" })
     );
   })
 );
@@ -103,14 +93,8 @@ it.effect("rejects local wall time when the canonical mutation needs the UTC ins
       "2026-09-22T07:00:00Z"
     );
     assert.deepStrictEqual(
-      yield* Effect.exit(verifyHostedInferenceConformance(inference)),
-      Exit.fail(
-        new HostedInferenceError({
-          reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
-          retryable: false,
-          retryAfter: Option.none(),
-        })
-      )
+      yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+      Exit.fail({ check: "canonical_mutation_time", category: "InvalidOutput" })
     );
   })
 );
@@ -120,14 +104,8 @@ it.effect("fails closed when Spanish invalid-output evidence is absent", () =>
     const inference = yield* conformanceStub("I can help with your finances.");
 
     assert.deepStrictEqual(
-      yield* Effect.exit(verifyHostedInferenceConformance(inference)),
-      Exit.fail(
-        new HostedInferenceError({
-          reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
-          retryable: false,
-          retryAfter: Option.none(),
-        })
-      )
+      yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+      Exit.fail({ check: "invalid_output_recovery", category: "InvalidOutput" })
     );
   })
 );

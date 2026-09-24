@@ -76,14 +76,7 @@ jobs:
 
       - name: Reject drift from the deployed Cloudflare topology
         working-directory: infra/cloudflare
-        run: |
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
-          drift=$(NO_COLOR=1 alchemy drift --stage production --no-input 2>&1)
-          printf '%s\n' "$drift"
-          if ! grep --fixed-strings --quiet "Plan: no changes" <<<"$drift"; then
-            echo "The deployed topology has drifted from Alchemy state; refusing promotion." >&2
-            exit 1
-          fi
+        run: bash scripts/check-topology-drift.sh
 
       - name: Require the reviewed Cloudflare security policy
         working-directory: infra/cloudflare

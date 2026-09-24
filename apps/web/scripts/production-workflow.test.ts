@@ -38,13 +38,11 @@ describe("Production release workflow policy", () => {
   it("rejects provider drift before planning and approves the non-interactive deploy", () => {
     const profile = workflow.indexOf("alchemy profile edit");
     const bootstrap = workflow.indexOf("alchemy provider cloudflare bootstrap");
-    const drift = workflow.indexOf("alchemy drift --stage production --no-input");
-    const driftGate = workflow.indexOf('grep --fixed-strings --quiet "Plan: no changes"');
+    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
     const plan = workflow.indexOf("alchemy plan");
 
     expect(profile).toBeLessThan(bootstrap);
-    expect(bootstrap).toBeLessThan(drift);
-    expect(drift).toBeLessThan(driftGate);
+    expect(bootstrap).toBeLessThan(driftGate);
     expect(driftGate).toBeLessThan(plan);
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
   });
@@ -70,12 +68,16 @@ describe("Production release workflow policy", () => {
     const deploy = workflow.indexOf("alchemy deploy");
     const verification = workflow.indexOf("Verify the migrated public topology");
     const postDeploymentDrift = workflow.indexOf("Reject post-deployment Cloudflare drift");
+    const postDeploymentDriftCommand = workflow.indexOf(
+      "alchemy drift --stage production --no-input"
+    );
     const releaseRecord = workflow.indexOf("Record the release");
 
     expect(deploy).toBeLessThan(verification);
     expect(verification).toBeLessThan(postDeploymentDrift);
-    expect(postDeploymentDrift).toBeLessThan(releaseRecord);
-    expect(workflow.match(/alchemy drift --stage production --no-input/gu)).toHaveLength(2);
+    expect(postDeploymentDrift).toBeLessThan(postDeploymentDriftCommand);
+    expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
+    expect(workflow.match(/alchemy drift --stage production --no-input/gu)).toHaveLength(1);
     expect(workflow).toContain("https://fidyapp.com/health-check");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
     expect(workflow).toContain("https://api.fidyapp.com/health");

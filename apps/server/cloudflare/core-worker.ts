@@ -89,11 +89,11 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
     readonly CLOUDFLARE_ACCESS_ISSUER: string;
     readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
-    readonly BROWSER_ORIGIN?: string;
-    readonly WOMPI_ENVIRONMENT?: string;
-    readonly WOMPI_PUBLIC_KEY?: string;
-    readonly WOMPI_PRIVATE_KEY?: string;
-    readonly WOMPI_INTEGRITY_SECRET?: string;
+    readonly BROWSER_ORIGIN: string;
+    readonly WOMPI_ENVIRONMENT: string;
+    readonly WOMPI_PUBLIC_KEY: string;
+    readonly WOMPI_PRIVATE_KEY: string;
+    readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">>;
@@ -442,8 +442,10 @@ const fetchEffect = (request: Request, environment: CoreEnvironment): Effect.Eff
   if (url.pathname === "/web/onboarding/email/verify") {
     return verificationEffect(request, environment.DB);
   }
-  const patListing = canonicalOperation({ method: request.method, path: url.pathname });
-  if (Option.isSome(patListing) && patListing.value.id === "pats.listPATs") {
+  const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
+    Option.filter((operation) => operation.id === "pats.listPATs")
+  );
+  if (Option.isSome(patListing)) {
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }
   if (patRoute(url.pathname)) {

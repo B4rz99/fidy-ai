@@ -3,7 +3,7 @@ import {
   Transaction,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Function, Option, Schema } from "effect";
 import {
   livePATAuthority,
   recordCanonicalPATWork,
@@ -43,17 +43,29 @@ const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_RATE_LIMITED = 429;
 const noSession = (): Response =>
-  transactionFailure(
-    "unauthenticated",
-    HTTP_UNAUTHENTICATED,
-    "Present a valid credential and retry."
-  );
+  transactionFailure({
+    code: "unauthenticated",
+    status: HTTP_UNAUTHENTICATED,
+    message: "Present a valid credential and retry.",
+  });
 const invalid = (): Response =>
-  transactionFailure("validation_failed", HTTP_INVALID, "Invalid Transaction input.");
+  transactionFailure({
+    code: "validation_failed",
+    status: HTTP_INVALID,
+    message: "Invalid Transaction input.",
+  });
 const missing = (): Response =>
-  transactionFailure("not_found", HTTP_NOT_FOUND, "Transaction unavailable.");
+  transactionFailure({
+    code: "not_found",
+    status: HTTP_NOT_FOUND,
+    message: "Transaction unavailable.",
+  });
 const limited = (): Response =>
-  transactionFailure("rate_limited", HTTP_RATE_LIMITED, "Manual Transaction budget exhausted.");
+  transactionFailure({
+    code: "rate_limited",
+    status: HTTP_RATE_LIMITED,
+    message: "Manual Transaction budget exhausted.",
+  });
 type Subject = TransactionSubject | AuthorizedPAT;
 const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
 const refusedCaptureWork = (db: D1Database, subject: Subject): Promise<Response> =>
@@ -61,16 +73,14 @@ const refusedCaptureWork = (db: D1Database, subject: Subject): Promise<Response>
 type Refusal = "not_found" | "validation_failed" | "resource_limit";
 
 /** Record a rejected authenticated canonical mutation without retaining its body or granting expired sessions access. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const rejectManualTransaction = async (
-  db: D1Database,
-  subject: Subject,
-  outcome: Refusal
-): Promise<Response> => {
+export const rejectManualTransaction: {
+  (db: D1Database, subject: Subject, outcome: Refusal): Promise<Response>;
+  (subject: Subject, outcome: Refusal): (db: D1Database) => Promise<Response>;
+} = Function.dual(3, (db: D1Database, subject: Subject, outcome: Refusal) => {
   const current = now();
-  try {
-    const audit = await (
-      isPAT(subject)
+  return Promise.resolve()
+    .then(() => {
+      const statement = isPAT(subject)
         ? prepareOwnedStatement({
             db,
             statement: recordCanonicalPATWork({
@@ -98,21 +108,24 @@ export const rejectManualTransaction = async (
               subject.digest,
               current,
               current
-            )
-    ).run();
-    if (audit.meta.changes !== 1) return refusedCaptureWork(db, subject);
-    switch (outcome) {
-      case "not_found":
-        return missing();
-      case "validation_failed":
-        return invalid();
-      case "resource_limit":
-        return limited();
-    }
-  } catch (error) {
-    return String(error).includes("transaction_audit_limit") ? limited() : unavailable();
-  }
-};
+            );
+      return statement.run();
+    })
+    .then((audit) => {
+      if (audit.meta.changes !== 1) return refusedCaptureWork(db, subject);
+      switch (outcome) {
+        case "not_found":
+          return missing();
+        case "validation_failed":
+          return invalid();
+        case "resource_limit":
+          return limited();
+      }
+    })
+    .catch((error: unknown) =>
+      String(error).includes("transaction_audit_limit") ? limited() : unavailable()
+    );
+});
 type Capture = Readonly<{
   input: typeof Input.Type;
   subject: Subject;
@@ -122,44 +135,44 @@ type Capture = Readonly<{
   auditId: string;
 }>;
 
+const sessionSubject = (raw: unknown, digest: Uint8Array): Option.Option<TransactionSubject> =>
+  Option.map(Schema.decodeUnknownOption(Session)(raw), (value) => ({
+    id: value.id,
+    userId: value.user_id,
+    digest,
+  }));
+
 /** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const transactionSession = async (
-  request: Request,
-  db: D1Database
-): Promise<Option.Option<TransactionSubject>> => {
+export const transactionSession: {
+  (request: Request, db: D1Database): Promise<Option.Option<TransactionSubject>>;
+  (db: D1Database): (request: Request) => Promise<Option.Option<TransactionSubject>>;
+} = Function.dual(2, (request: Request, db: D1Database) => {
   const cookie = sessionCookie(request);
-  if (Option.isNone(cookie)) {
-    return Option.none();
-  }
-  const digest = await sha256(cookie.value);
-  const current = now();
-  const raw = await db
-    .prepare(
-      `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+  if (Option.isNone(cookie)) return Promise.resolve(Option.none());
+  return sha256(cookie.value).then((digest) => {
+    const current = now();
+    return db
+      .prepare(
+        `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
       AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
-    )
-    .bind(digest, current, current)
-    .first();
-  const session = Schema.decodeUnknownOption(Session)(raw);
-  return Option.map(session, (value) => ({ id: value.id, userId: value.user_id, digest }));
-};
+      )
+      .bind(digest, current, current)
+      .first()
+      .then((raw) => sessionSubject(raw, digest));
+  });
+});
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
-// @effect-diagnostics-next-line asyncFunction:off
-export const transactionInput = async (
-  request: Request
-): Promise<Option.Option<typeof Input.Type>> => {
+export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Option.none();
+    return Promise.resolve(Option.none());
   }
-  try {
-    const bytes = await Effect.runPromise(readBoundedRequestBody(request, policy));
-    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    return Schema.decodeUnknownOption(Input)(parsed);
-  } catch {
-    return Option.none();
-  }
+  return Effect.runPromise(readBoundedRequestBody(request, policy))
+    .then((bytes) => {
+      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      return Schema.decodeUnknownOption(Input)(parsed);
+    })
+    .catch(() => Option.none());
 };
 
 const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
@@ -247,18 +260,14 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   ];
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const hasUnknownCategory = async (
-  db: D1Database,
-  categoryId: Option.Option<string>
-): Promise<boolean> => {
-  if (Option.isNone(categoryId)) return false;
-  const category = await db
-    .prepare("SELECT id FROM categories WHERE id = ?")
-    .bind(categoryId.value)
-    .first();
-  return category === null;
-};
+const hasUnknownCategory = (db: D1Database, categoryId: Option.Option<string>): Promise<boolean> =>
+  Option.isNone(categoryId)
+    ? Promise.resolve(false)
+    : db
+        .prepare("SELECT id FROM categories WHERE id = ?")
+        .bind(categoryId.value)
+        .first()
+        .then((category) => category === null);
 
 const classifyCaptureAuthority = (db: D1Database, subject: Subject): Promise<Response> => {
   try {
@@ -293,58 +302,73 @@ const captureCompleted = (results: ReadonlyArray<D1Result>, pat: boolean): boole
   return writes.length === expectedWrites && writes.every((result) => result.meta.changes === 1);
 };
 
+class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
+  readonly cause: unknown;
+}> {}
+const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, TransactionBoundaryFailure> =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TransactionBoundaryFailure({ cause }) });
+
 /** Persist one manual Transaction, its captured context and AuditLogEntry in one D1 atomic batch. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const createManualTransaction = async (
-  db: D1Database,
-  subject: Subject,
-  input: typeof Input.Type
-): Promise<Response> => {
+export const createManualTransaction: {
+  (db: D1Database, subject: Subject, input: typeof Input.Type): Promise<Response>;
+  (subject: Subject, input: typeof Input.Type): (db: D1Database) => Promise<Response>;
+} = Function.dual(3, (db: D1Database, subject: Subject, input: typeof Input.Type) => {
   const current = now();
   if (DateTime.toEpochMillis(input.occurredAt) > current) {
     return rejectManualTransaction(db, subject, "validation_failed");
   }
-  try {
-    const contextRaw = await db
-      .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
-      .bind(subject.userId)
-      .first();
-    const context = Schema.decodeUnknownOption(UserContext)(contextRaw);
-    if (Option.isNone(context)) {
-      return unavailable();
-    }
-    if (await hasUnknownCategory(db, input.categoryId)) {
-      return rejectManualTransaction(db, subject, "not_found");
-    }
-    const id = uuid();
-    const result = await db.batch([
-      ...captureStatements(db, {
-        input,
-        subject,
-        context: context.value,
-        id,
-        current,
-        auditId: uuid(),
-      }),
-      db.prepare(transactionCaptureCompletion),
-    ]);
-    if (!captureCompleted(result, isPAT(subject))) return refusedCaptureWork(db, subject);
-    const raw = await db
-      .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const contextRaw = yield* waitFor(() =>
+        db
+          .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
+          .bind(subject.userId)
+          .first()
+      );
+      const context = Schema.decodeUnknownOption(UserContext)(contextRaw);
+      if (Option.isNone(context)) return unavailable();
+      if (yield* waitFor(() => hasUnknownCategory(db, input.categoryId))) {
+        return yield* waitFor(() => rejectManualTransaction(db, subject, "not_found"));
+      }
+      const id = uuid();
+      const result = yield* waitFor(() =>
+        db.batch([
+          ...captureStatements(db, {
+            input,
+            subject,
+            context: context.value,
+            id,
+            current,
+            auditId: uuid(),
+          }),
+          db.prepare(transactionCaptureCompletion),
+        ])
+      );
+      if (!captureCompleted(result, isPAT(subject))) {
+        return yield* waitFor(() => refusedCaptureWork(db, subject));
+      }
+      const raw = yield* waitFor(() =>
+        db
+          .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at
       FROM transactions WHERE user_id = ? AND id = ?`)
-      .bind(subject.userId, id)
-      .first();
-    const stored = decodeTransactionRow(raw);
-    if (Option.isNone(stored)) {
-      return unavailable();
-    }
-    return Response.json(
-      { data: Schema.encodeSync(Output)(stored.value), next: [] },
-      { status: 201, headers: noStore }
-    );
-  } catch (error) {
-    return failedCapture(db, subject, error);
-  }
-};
+          .bind(subject.userId, id)
+          .first()
+      );
+      const stored = decodeTransactionRow(raw);
+      if (Option.isNone(stored)) return unavailable();
+      return Response.json(
+        { data: yield* Schema.encodeEffect(Output)(stored.value), next: [] },
+        { status: 201, headers: noStore }
+      );
+    }).pipe(
+      Effect.catchTag("TransactionBoundaryFailure", (failure) =>
+        Effect.tryPromise({
+          try: () => failedCapture(db, subject, failure.cause),
+          catch: (cause) => new TransactionBoundaryFailure({ cause }),
+        })
+      )
+    )
+  ).catch((error: unknown) => failedCapture(db, subject, error));
+});
 
 export { noSession as unauthenticatedTransaction, unavailable as unavailableTransaction };

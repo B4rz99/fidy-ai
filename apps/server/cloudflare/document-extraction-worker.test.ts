@@ -1,5 +1,3 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
@@ -24,6 +22,8 @@ const extract = (
   );
 
 const responseBody = (response: Response): Promise<unknown> => response.json();
+const readFixture = (name: string): Promise<ArrayBuffer> =>
+  Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).arrayBuffer();
 type ToMarkdownResult = Awaited<
   ReturnType<Parameters<typeof documentExtractionWorker.fetch>[1]["AI"]["toMarkdown"]>
 >;
@@ -42,9 +42,7 @@ describe("Document extraction Worker proof", () => {
     "converts a bounded $expectedName through the Workers AI binding",
     ({ fixture, expectedName }) =>
       Effect.gen(function* () {
-        const body = yield* Effect.promise(() =>
-          readFile(new URL(`./fixtures/${fixture}`, import.meta.url))
-        );
+        const body = yield* Effect.promise(() => readFixture(fixture));
         const bindings = successfulBindings("bounded markdown");
         const response = yield* Effect.promise(() => extract(body, bindings));
 
@@ -64,9 +62,7 @@ describe("Document extraction Worker proof", () => {
 
   it.effect("selects the converter from bytes rather than a mismatched content-type claim", () =>
     Effect.gen(function* () {
-      const body = yield* Effect.promise(() =>
-        readFile(new URL("./fixtures/valid-image.png", import.meta.url))
-      );
+      const body = yield* Effect.promise(() => readFixture("valid-image.png"));
       const bindings = successfulBindings("image");
       const response = yield* Effect.promise(() =>
         extract(body, bindings, { headers: { "content-type": "application/pdf" } })
@@ -126,9 +122,7 @@ describe("Document extraction Worker proof", () => {
 
   it.effect("rejects an encrypted PDF for the isolated protected-document path", () =>
     Effect.gen(function* () {
-      const body = yield* Effect.promise(() =>
-        readFile(new URL("./fixtures/protected-document.pdf", import.meta.url))
-      );
+      const body = yield* Effect.promise(() => readFixture("protected-document.pdf"));
       const bindings = successfulBindings("must not run");
       const response = yield* Effect.promise(() => extract(body, bindings));
 

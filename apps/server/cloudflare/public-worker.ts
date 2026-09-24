@@ -237,28 +237,37 @@ const forwardsSession = (request: Request, path: string): boolean =>
   transactionPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
-const forwardedHeaders = (request: Request, path: string): Headers => {
+const transactionBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
+  transactionPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
+    ? Option.some(
+        new Headers({
+          authorization: request.headers.get("authorization") ?? "",
+          "content-type": request.headers.get("content-type") ?? "",
+        })
+      )
+    : Option.none();
+const browserForwardPath = (path: string): boolean =>
+  path === verificationPath || isBrowserMutation(path) || enrollmentPath(path);
+const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
-    return new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+    return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
   }
-  if (patBrowserRoute(path)) return browserHeaders(request, path);
-  if (path === callbackPath) return callbackHeaders(request);
-  if (path === supportRecoveryPath) return supportHeaders(request);
-  if (
-    transactionPath(path) &&
-    !request.headers.has("cookie") &&
-    request.headers.has("authorization")
-  ) {
-    return new Headers({
-      authorization: request.headers.get("authorization") ?? "",
-      "content-type": request.headers.get("content-type") ?? "",
-    });
-  }
-  if (path === verificationPath || isBrowserMutation(path) || enrollmentPath(path)) {
-    const headers = browserHeaders(request, path);
-    if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
-    return headers;
-  }
+  if (patBrowserRoute(path)) return Option.some(browserHeaders(request, path));
+  if (path === callbackPath) return Option.some(callbackHeaders(request));
+  if (path === supportRecoveryPath) return Option.some(supportHeaders(request));
+  return Option.none();
+};
+const browserForwardHeaders = (request: Request, path: string): Headers => {
+  const headers = browserHeaders(request, path);
+  if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
+  return headers;
+};
+const forwardedHeaders = (request: Request, path: string): Headers => {
+  const direct = directHeaders(request, path);
+  if (Option.isSome(direct)) return direct.value;
+  const bearerHeaders = transactionBearerHeaders(request, path);
+  if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
+  if (browserForwardPath(path)) return browserForwardHeaders(request, path);
   return forwardsSession(request, path)
     ? new Headers({
         cookie: request.headers.get("cookie") ?? "",

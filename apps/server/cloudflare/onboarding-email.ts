@@ -6,7 +6,18 @@ import {
 } from "@fidy/server/onboarding-email-delivery";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
-import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Function,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 const Work = Schema.Struct({
@@ -169,20 +180,32 @@ type DeliveryActivity = (
 ) => Promise<void>;
 
 /** Resolve only versioned identity work; the Activity returns no proof material. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const runOnboardingEmailWorkflow = (
-  environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
-  payload: unknown,
-  activity: DeliveryActivity
-): Promise<void> => {
-  const decoded = Schema.decodeUnknownOption(Work)(payload);
-  if (Option.isNone(decoded)) return Promise.resolve();
-  return activity(
-    "send-onboarding-verification-v1",
-    { retries: { limit: 0, delay: "1 second" } },
-    () => deliverOnboardingEmail(environment)(decoded.value.id)
-  );
-};
+export const runOnboardingEmailWorkflow: {
+  (
+    environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
+    payload: unknown,
+    activity: DeliveryActivity
+  ): Promise<void>;
+  (
+    payload: unknown,
+    activity: DeliveryActivity
+  ): (environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">) => Promise<void>;
+} = Function.dual(
+  3,
+  (
+    environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
+    payload: unknown,
+    activity: DeliveryActivity
+  ): Promise<void> => {
+    const decoded = Schema.decodeUnknownOption(Work)(payload);
+    if (Option.isNone(decoded)) return Promise.resolve();
+    return activity(
+      "send-onboarding-verification-v1",
+      { retries: { limit: 0, delay: "1 second" } },
+      () => deliverOnboardingEmail(environment)(decoded.value.id)
+    );
+  }
+);
 
 /** Version 1 stores only a work identity; the named Activity never returns proof material. */
 export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
@@ -237,51 +260,61 @@ export const deliveryState = (
 /** One claimed Activity invocation: never repeats a send when its prior result was lost. */
 export const deliverOnboardingEmail =
   (environment: Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">) =>
-  // @effect-diagnostics-next-line asyncFunction:off
-  async (id: string): Promise<void> => {
-    const raw = await environment.DB.prepare(`SELECT email_address, expires_at_ms, state
+  (id: string): Promise<void> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const raw = yield* attempt(() =>
+          environment.DB.prepare(`SELECT email_address, expires_at_ms, state
     FROM pending_email_enrollments WHERE id = ?`)
-      .bind(id)
-      .first();
-    if (raw === null) return;
-    const pending = Schema.decodeUnknownOption(Pending)(raw);
-    if (Option.isNone(pending)) return;
-    // @effect-diagnostics-next-line globalDate:off
-    if (!canClaim(pending.value, Date.now())) return;
-    const publicCode = group(randomSymbols(publicSymbols));
-    const proof = group(randomSymbols(proofSymbols));
-    const combinedCode = Schema.decodeSync(EmailVerificationCode)(`${publicCode}-${proof}`);
-    const digest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(proof))
-    );
-    // The claim and digest commit before the outbound call. Restarting this Activity cannot resend.
-    // @effect-diagnostics-next-line globalDate:off
-    const now = Date.now();
-    const claim = await environment.DB.prepare(`UPDATE pending_email_enrollments
+            .bind(id)
+            .first()
+        );
+        if (raw === null) return;
+        const pending = Schema.decodeUnknownOption(Pending)(raw);
+        if (Option.isNone(pending)) return;
+        if (!canClaim(pending.value, yield* Clock.currentTimeMillis)) return;
+        const publicCode = group(randomSymbols(publicSymbols));
+        const proof = group(randomSymbols(proofSymbols));
+        const combinedCode = yield* Schema.decodeEffect(EmailVerificationCode)(
+          `${publicCode}-${proof}`
+        ).pipe(Effect.orDie);
+        const digest = new Uint8Array(
+          yield* attempt(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(proof)))
+        );
+        // The claim and digest commit before the outbound call. Restarting this Activity cannot resend.
+        const now = yield* Clock.currentTimeMillis;
+        const claim = yield* attempt(() =>
+          environment.DB.prepare(`UPDATE pending_email_enrollments
     SET state = 'sending', public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
     WHERE id = ? AND state = 'awaiting_delivery' AND expires_at_ms > ?`)
-      .bind(
-        publicCode,
-        digest,
-        Math.min(now + proofLifetimeMs, pending.value.expires_at_ms),
-        id,
-        now
-      )
-      .run();
-    if (claim.meta.changes !== 1) return;
-    // The step retains no proof or provider body; state is D1-owned.
-    const outcome = await sendThroughResend({
-      purpose: "verified-onboarding",
-      environment,
-      to: pending.value.email_address,
-      combinedCode,
-      id,
-    });
-    await environment.DB.prepare(`UPDATE pending_email_enrollments SET state = ?
+            .bind(
+              publicCode,
+              digest,
+              Math.min(now + proofLifetimeMs, pending.value.expires_at_ms),
+              id,
+              now
+            )
+            .run()
+        );
+        if (claim.meta.changes !== 1) return;
+        // The step retains no proof or provider body; state is D1-owned.
+        const outcome = yield* attempt(() =>
+          sendThroughResend({
+            purpose: "verified-onboarding",
+            environment,
+            to: pending.value.email_address,
+            combinedCode,
+            id,
+          })
+        );
+        yield* attempt(() =>
+          environment.DB.prepare(`UPDATE pending_email_enrollments SET state = ?
     WHERE id = ? AND state = 'sending'`)
-      .bind(deliveryState(outcome), id)
-      .run();
-  };
+            .bind(deliveryState(outcome), id)
+            .run()
+        );
+      })
+    );
 
 /** Recover an interrupted post-claim send as ambiguous, never as a reason to send again. */
 export const reconcileOnboardingEmail = (db: D1Database): Effect.Effect<void, void> =>

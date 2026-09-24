@@ -18,14 +18,13 @@ const Claim = Schema.Struct({
  * expiry, an unrelated User, or another concurrent claimant; none authorizes a retry of
  * an ambiguous provider request.
  */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const claimPreparedCardEnrollment = async (
-  db: D1Database,
-  input: typeof Claim.Type,
-  nowMs: number
-): Promise<boolean> => {
+export const claimPreparedCardEnrollment = ({
+  db,
+  input,
+  nowMs,
+}: Readonly<{ db: D1Database; input: typeof Claim.Type; nowMs: number }>): Promise<boolean> => {
   const claim = Schema.decodeSync(Claim)(input);
-  const result = await db
+  return db
     .prepare(`UPDATE card_enrollments SET status = 'creating',
       payment_request_id = ?, accepted_at_ms = ?
     WHERE id = ? AND user_id = ? AND status = 'prepared' AND expires_at_ms > ?
@@ -39,6 +38,6 @@ export const claimPreparedCardEnrollment = async (
       claim.paymentSourceMode,
       claim.billingEmail
     )
-    .run();
-  return result.meta.changes === 1;
+    .run()
+    .then((result) => result.meta.changes === 1);
 };

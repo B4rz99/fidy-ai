@@ -3,12 +3,15 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { Effect, Result } from "effect";
 import { describe, expect } from "vitest";
-import coreWorker, { makeCoreWorker } from "./core-worker";
+import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
-import publicWorker, { makePublicWorker } from "./public-worker";
-import { makeWorkerTelemetry } from "./telemetry";
-import { localCanonicalReadBearer, productionTopology } from "./topology";
+import publicWorker, { makePublicWorker } from "../../apps/server/cloudflare/public-worker";
+import { makeWorkerTelemetry } from "../../apps/server/cloudflare/telemetry";
+import {
+  localCanonicalReadBearer,
+  productionTopology,
+} from "../../apps/server/cloudflare/topology";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -37,6 +40,11 @@ const coreEnvironment = {
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
   HOSTED_AI_MODEL: approvedWorkersAiModel,
+  BROWSER_ORIGIN: "https://app.fidyapp.com",
+  WOMPI_ENVIRONMENT: "",
+  WOMPI_PUBLIC_KEY: "",
+  WOMPI_PRIVATE_KEY: "",
+  WOMPI_INTEGRITY_SECRET: "",
   USER_TRANSACTION_COORDINATOR: {
     getByName: (): Pick<Fetcher, "fetch"> => ({
       fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
@@ -245,20 +253,9 @@ describe("Cloudflare Worker topology", () => {
     Effect.gen(function* () {
       const response = yield* Effect.promise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), {
-          AI: unusedAiBinding,
+          ...coreEnvironment,
           CONTRACT_DIGEST: "secret configuration",
-          DB: failingDatabase,
           HOSTED_AI_MODEL: "unsupported private model",
-          USER_TRANSACTION_COORDINATOR: {
-            getByName: (): Pick<Fetcher, "fetch"> => ({
-              fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
-            }),
-          },
-          KAPSO_API_KEY: "",
-          KAPSO_WEBHOOK_SECRET: "",
-          CLOUDFLARE_ACCESS_ISSUER: "",
-          CLOUDFLARE_ACCESS_AUDIENCE: "",
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
           RELEASE_GIT_SHA: "wrong",
         })
       );

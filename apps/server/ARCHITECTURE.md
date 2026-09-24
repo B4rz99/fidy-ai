@@ -12,15 +12,17 @@ production listener.
 - `shell/` contains operation declarations, provider-boundary contracts, policy projection, and
   portable adapter code. It must not manufacture a local runtime authority.
 - `contracts/` contains generated OpenAPI and operation-policy evidence owned by the canonical API.
+- `cloudflare/` contains the Worker entrypoints, platform adapters, D1 migrations, and their tests;
+  it implements the server-owned contracts without changing the portable core or shell.
 - `src/client.ts` is the browser-safe declaration seam. It exports no server implementation.
 
 The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
 provider-specific hosted inference implementations are not compatibility surfaces. Railway,
 PostgreSQL, and a Bun process are superseded Production architecture under ADR 0026. The private
-Core Worker in `infra/cloudflare` owns the D1-backed Categories adapter path, the direct Workers AI
-binding boundary, the service-binding boundary, and the bounded health projection. The Cloudflare
-infrastructure package owns the reusable resource-admission foundation that later Core adapters
-install with their policies. Those adapters will compose this package's published contracts with
+Core Worker in `apps/server/cloudflare` owns the D1-backed Categories adapter path, the direct Workers AI
+binding boundary, the service-binding boundary, and the bounded health projection. The server's
+Cloudflare runtime owns the reusable resource-admission foundation that later Core adapters install
+with their policies. Those adapters will compose this package's published contracts with
 Durable Objects, Queues, Workflows, R2, or Email Workers. Operations without an adapter fail closed.
 
 ## 2. Slices and ownership

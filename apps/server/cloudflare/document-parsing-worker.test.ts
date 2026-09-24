@@ -1,10 +1,18 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { statementParserLimits } from "@fidy/server/statement-parser";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { describe, expect, vi } from "vitest";
 import documentParsingWorker from "./document-parsing-worker";
+
+class FixtureReadFailure extends Data.TaggedError("FixtureReadFailure") {}
+const readFixture = (path: string): Effect.Effect<Uint8Array> =>
+  Effect.tryPromise({
+    try: () => Bun.file(new URL(path, import.meta.url)).arrayBuffer(),
+    catch: () => new FixtureReadFailure(),
+  }).pipe(
+    Effect.map((bytes) => new Uint8Array(bytes)),
+    Effect.orDie
+  );
 
 const parse = (body: BodyInit, headers?: HeadersInit, signal?: AbortSignal): Promise<Response> =>
   documentParsingWorker.fetch(
@@ -35,15 +43,8 @@ describe("Document parsing Worker proof", () => {
   it.effect("parses the representative XLSX fixture without evaluating active content", () =>
     Effect.gen(function* () {
       const outboundFetch = vi.spyOn(globalThis, "fetch");
-      const bytes = yield* Effect.promise(() =>
-        readFile(
-          new URL(
-            "../../apps/server/src/shell/ingestion/fixtures/synthetic-statement.xlsx",
-            import.meta.url
-          )
-        )
-      );
-      const response = yield* Effect.promise(() => parse(bytes));
+      const bytes = yield* readFixture("../src/shell/ingestion/fixtures/synthetic-statement.xlsx");
+      const response = yield* Effect.promise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(200);
       expect(yield* Effect.promise(() => response.json())).toMatchObject({
@@ -58,10 +59,8 @@ describe("Document parsing Worker proof", () => {
 
   it.effect("rejects a genuinely encrypted PDF instead of interpreting it as CSV", () =>
     Effect.gen(function* () {
-      const bytes = yield* Effect.promise(() =>
-        readFile(new URL("./fixtures/protected-document.pdf", import.meta.url))
-      );
-      const response = yield* Effect.promise(() => parse(bytes));
+      const bytes = yield* readFixture("./fixtures/protected-document.pdf");
+      const response = yield* Effect.promise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(422);
       expect(yield* Effect.promise(() => response.json())).toEqual({
@@ -127,10 +126,9 @@ describe("Document parsing Worker proof", () => {
     })
   );
 
-  it.effect("interrupts body collection when the request is cancelled in flight", () =>
-    Effect.gen(function* () {
-      // @effect-diagnostics-next-line abortControllerInEffect:off -- the HTTP signal is the seam under test.
-      const abort = new AbortController();
+  it.effect("interrupts body collection when the request is cancelled in flight", () => {
+    const abort = new AbortController();
+    return Effect.gen(function* () {
       let cancelled = false;
       const body = new ReadableStream<Uint8Array>({
         cancel: (): void => {
@@ -149,6 +147,6 @@ describe("Document parsing Worker proof", () => {
         outcome: "rejected",
         reason: "cancelled",
       });
-    })
-  );
+    });
+  });
 });

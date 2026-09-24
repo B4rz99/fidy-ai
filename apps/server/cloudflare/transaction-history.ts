@@ -7,7 +7,7 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
 } from "@fidy/server/transactions-runtime";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Function, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "./pat-authorization";
 import {
   livePATAuthority,
@@ -62,7 +62,7 @@ const boundarySize = pageSize + 1;
 const failure = (
   code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
   status: number
-): Response => transactionFailure(code, status, "Transaction unavailable.");
+): Response => transactionFailure({ code, status, message: "Transaction unavailable." });
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;
@@ -214,36 +214,34 @@ const presentHistory = (rows: D1Result, selection: Pick<Selection, "id" | "reque
   );
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const invalidQueryAudit = async (
+const invalidQueryAudit = (
   db: D1Database,
   selection: BrowserSelection,
   current: number
 ): Promise<Response> => {
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
-  const outcome = invalidGet ? "not_found" : "validation_failed";
-  const authority = liveWebSessionAuthority({ subject, current });
-  try {
-    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
-    const audit = await db
-      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+  return transactionAuditExhausted({ db, userId: subject.userId, current })
+    .then((exhausted) => {
+      if (exhausted) return rateLimited();
+      const authority = liveWebSessionAuthority({ subject, current });
+      return db
+        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
       SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(
-        uuid(),
-        Option.isNone(selection.id)
-          ? "transactions.listTransactions"
-          : "transactions.getTransaction",
-        outcome,
-        current,
-        ...authority.bindings
-      )
-      .run();
-    if (audit.meta.changes !== 1) return noSession();
-    return invalidGet ? notFound() : invalid();
-  } catch (error) {
-    return failedAudit(error);
-  }
+        .bind(
+          uuid(),
+          invalidGet ? "transactions.getTransaction" : "transactions.listTransactions",
+          invalidGet ? "not_found" : "validation_failed",
+          current,
+          ...authority.bindings
+        )
+        .run()
+        .then((audit) => {
+          if (audit.meta.changes !== 1) return noSession();
+          return invalidGet ? notFound() : invalid();
+        });
+    })
+    .catch(failedAudit);
 };
 
 /** Assemble a WebSession's protected read and its Transaction-owner audit. */
@@ -378,21 +376,19 @@ const readAuthorizedHistory = (
 };
 
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const browseTransactions = async (
-  db: D1Database,
-  selection: Selection
-): Promise<Response> => {
+export const browseTransactions: {
+  (db: D1Database, selection: Selection): Promise<Response>;
+  (selection: Selection): (db: D1Database) => Promise<Response>;
+} = Function.dual(2, (db: D1Database, selection: Selection) => {
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
   if (Option.isNone(query) && !isPAT(subject)) {
     return invalidQueryAudit(db, { ...selection, subject }, current);
   }
-  try {
-    if (await transactionAuditExhausted(db, subject.userId, current)) return rateLimited();
-    return readAuthorizedHistory(db, { selection, query, current });
-  } catch (error) {
-    return failedAudit(error);
-  }
-};
+  return transactionAuditExhausted({ db, userId: subject.userId, current })
+    .then((exhausted) =>
+      exhausted ? rateLimited() : readAuthorizedHistory(db, { selection, query, current })
+    )
+    .catch(failedAudit);
+});

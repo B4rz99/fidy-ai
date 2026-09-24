@@ -445,7 +445,7 @@ const makeResourceAdmissionAuthorityService = (
 export class ResourceAdmissionAuthority extends Context.Service<
   ResourceAdmissionAuthority,
   ResourceAdmissionAuthorityService
->()("@fidy/cloudflare-infra/resource-admission/ResourceAdmissionAuthority") {
+>()("@fidy/server/cloudflare/resource-admission/ResourceAdmissionAuthority") {
   /** Constructs an authority value for direct Worker adapter composition. */
   static readonly make = (
     config: ResourceAdmissionAuthorityConfig

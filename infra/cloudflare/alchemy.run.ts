@@ -9,7 +9,11 @@ import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
-import { browserOrigins, productionTopology, resolveLocalCanonicalReadBearer } from "./topology";
+import {
+  browserOrigins,
+  productionTopology,
+  resolveLocalCanonicalReadBearer,
+} from "../../apps/server/cloudflare/topology";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
@@ -153,7 +157,7 @@ export default Alchemy.Stack(
     yield* provisionEdgeSecurity.pipe(Effect.when(Effect.succeed(production)));
 
     const database = yield* Cloudflare.D1.Database("Database", {
-      migrations: "./migrations",
+      migrations: "../../apps/server/cloudflare/migrations",
       readReplication: { mode: "disabled" },
     });
 
@@ -170,7 +174,7 @@ export default Alchemy.Stack(
       className: "EmailReplacementWorkflowV1",
     });
     const core = yield* Cloudflare.Worker("Core", {
-      main: "./core-worker.ts",
+      main: "../../apps/server/cloudflare/core-worker.ts",
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
       dev: {
@@ -233,7 +237,7 @@ export default Alchemy.Stack(
     });
 
     const ingress = yield* Cloudflare.Worker("Ingress", {
-      main: "./public-worker.ts",
+      main: "../../apps/server/cloudflare/public-worker.ts",
       compatibility: { date: "2026-09-08" },
       dev: {
         host: "127.0.0.1",

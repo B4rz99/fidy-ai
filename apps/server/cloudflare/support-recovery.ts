@@ -1,7 +1,8 @@
 import { BackupRecoveryCode } from "@fidy/server/client";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Function, Option, Schema } from "effect";
+import { newId } from "./pat-shared";
 import { RequestBodyPolicy, readBoundedRequestBody } from "./request-body";
 
 const Payload = Schema.Struct({
@@ -56,58 +57,65 @@ const currentClaims = (claims: Option.Option<typeof Claims.Type>, now: number): 
   claims.value.exp - now <= maximumAssertionLifetimeSeconds;
 
 /** Origin-side Access JWT validation, including signed issuer, audience and short lived identity. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const verifySupportAccess = async (
-  assertion: Option.Option<string>,
-  issuer: string,
-  audience: string
-): Promise<Option.Option<{ issuer: string; subject: string }>> => {
+export const verifySupportAccess: {
+  (
+    assertion: Option.Option<string>,
+    issuer: string,
+    audience: string
+  ): Promise<Option.Option<{ issuer: string; subject: string }>>;
+  (
+    issuer: string,
+    audience: string
+  ): (
+    assertion: Option.Option<string>
+  ) => Promise<Option.Option<{ issuer: string; subject: string }>>;
+} = Function.dual(3, (assertion: Option.Option<string>, issuer: string, audience: string) => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
-    return Option.none();
+    return Promise.resolve(Option.none());
   }
-  try {
-    let jwks = keys.get(issuer);
-    if (jwks === undefined) {
-      jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
-      keys.set(issuer, jwks);
-    }
-    const { payload } = await jwtVerify(assertion.value, jwks, {
-      issuer,
-      audience,
-      algorithms: ["RS256"],
-    });
-    const claims = Schema.decodeUnknownOption(Claims)(payload);
-    // @effect-diagnostics-next-line globalDate:off
-    const now = Math.floor(Date.now() / millisecondsPerSecond);
-    if (!currentClaims(claims, now) || Option.isNone(claims)) return Option.none();
-    return Option.some({ issuer, subject: claims.value.sub });
-  } catch {
-    return Option.none();
-  }
-};
+  return Promise.resolve()
+    .then(() => {
+      let jwks = keys.get(issuer);
+      if (jwks === undefined) {
+        jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
+        keys.set(issuer, jwks);
+      }
+      return jwtVerify(assertion.value, jwks, {
+        issuer,
+        audience,
+        algorithms: ["RS256"],
+      });
+    })
+    .then(({ payload }) => {
+      const claims = Schema.decodeUnknownOption(Claims)(payload);
+      const now = Math.floor(Effect.runSync(Clock.currentTimeMillis) / millisecondsPerSecond);
+      if (!currentClaims(claims, now) || Option.isNone(claims)) {
+        return Option.none<{ issuer: string; subject: string }>();
+      }
+      return Option.some({ issuer, subject: claims.value.sub });
+    })
+    .catch(() => Option.none());
+});
 
-// @effect-diagnostics-next-line asyncFunction:off
-const readPayload = async (request: Request): Promise<Option.Option<typeof Payload.Type>> => {
+const readPayload = (request: Request): Promise<Option.Option<typeof Payload.Type>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Option.none();
+    return Promise.resolve(Option.none());
   }
-  try {
-    const bytes = await Effect.runPromise(readBoundedRequestBody(request, policy));
-    return Schema.decodeUnknownOption(Payload)(
-      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-    );
-  } catch {
-    return Option.none();
-  }
+  return Effect.runPromise(readBoundedRequestBody(request, policy))
+    .then((bytes) =>
+      Schema.decodeUnknownOption(Payload)(
+        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+      )
+    )
+    .catch(() => Option.none());
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const admitOperator = async (
+const admitOperator = (
   db: D1Database,
   operator: { issuer: string; subject: string },
   now: number
-): Promise<"allowed" | "limited" | "unavailable"> => {
-  const limit = await db
+): Promise<"allowed" | "limited" | "unavailable"> =>
+  db
     .prepare(`INSERT INTO support_recovery_operator_limits
     (operator_issuer, operator_subject, window_started_at_ms, attempts) VALUES (?, ?, ?, 1)
     ON CONFLICT (operator_issuer, operator_subject) DO UPDATE SET
@@ -122,19 +130,19 @@ const admitOperator = async (
       now - operatorWindowMilliseconds,
       now - operatorWindowMilliseconds
     )
-    .first();
-  const attempts = Schema.decodeUnknownOption(Schema.Struct({ attempts: Schema.Int }))(limit);
-  if (Option.isNone(attempts)) return "unavailable";
-  return attempts.value.attempts >= maximumOperatorAttempts ? "limited" : "allowed";
-};
+    .first()
+    .then((limit) => {
+      const attempts = Schema.decodeUnknownOption(Schema.Struct({ attempts: Schema.Int }))(limit);
+      if (Option.isNone(attempts)) return "unavailable";
+      return attempts.value.attempts >= maximumOperatorAttempts ? "limited" : "allowed";
+    });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const matchingRecoveryCandidate = async (
+const matchingRecoveryCandidate = (
   db: D1Database,
   input: { codeDigest: Uint8Array; publicCode: string; now: number }
 ): Promise<boolean> => {
   const { codeDigest, publicCode, now } = input;
-  const candidate = await db
+  return db
     .prepare(`SELECT p.id FROM browser_login_pairings AS p
     JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
     WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
@@ -142,8 +150,8 @@ const matchingRecoveryCandidate = async (
         WHERE e.pairing_id = p.id AND e.user_id <> b.user_id)
       AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.id)`)
     .bind(codeDigest, publicCode, now)
-    .first();
-  return candidate !== null;
+    .first()
+    .then((candidate) => candidate !== null);
 };
 
 const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready', user_id = (
@@ -183,30 +191,33 @@ type CaseDecision = Readonly<{
   now: number;
 }>;
 
-// @effect-diagnostics-next-line asyncFunction:off
-const approveCase = async (db: D1Database, input: CaseDecision): Promise<boolean> => {
-  // @effect-diagnostics-next-line cryptoRandomUUID:off
-  const caseId = crypto.randomUUID();
-  // @effect-diagnostics-next-line cryptoRandomUUID:off
-  const openedId = crypto.randomUUID();
-  // @effect-diagnostics-next-line cryptoRandomUUID:off
-  const approvedId = crypto.randomUUID();
+const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
+  const caseId = newId();
+  const openedId = newId();
+  const approvedId = newId();
   const { operator, codeDigest, publicCode, now } = input;
-  const pairing = await db.batch([
-    db.prepare(supportPairingUpdate).bind(codeDigest, publicCode, now, codeDigest),
-    db
-      .prepare(recoveryCredentialConsume)
-      .bind(crypto.getRandomValues(new Uint8Array(digestBytes)), now, codeDigest, publicCode, now),
-    db
-      .prepare(supportCaseInsert)
-      .bind(caseId, operator.issuer, operator.subject, now, now, publicCode, now, now),
-    db.prepare(supportCaseOpened).bind(openedId, now, caseId),
-    // If any conditional transition did not create its case, the final FK aborts the D1 batch.
-    db
-      .prepare(supportCaseApproved)
-      .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
-  ]);
-  return pairing.every((entry) => entry.meta.changes === 1);
+  return db
+    .batch([
+      db.prepare(supportPairingUpdate).bind(codeDigest, publicCode, now, codeDigest),
+      db
+        .prepare(recoveryCredentialConsume)
+        .bind(
+          crypto.getRandomValues(new Uint8Array(digestBytes)),
+          now,
+          codeDigest,
+          publicCode,
+          now
+        ),
+      db
+        .prepare(supportCaseInsert)
+        .bind(caseId, operator.issuer, operator.subject, now, now, publicCode, now, now),
+      db.prepare(supportCaseOpened).bind(openedId, now, caseId),
+      // If any conditional transition did not create its case, the final FK aborts the D1 batch.
+      db
+        .prepare(supportCaseApproved)
+        .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
+    ])
+    .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
 };
 
 const configuredAccess = (config: {
@@ -217,55 +228,69 @@ const configuredAccess = (config: {
 const admissionResponse = (admission: "limited" | "unavailable"): Response =>
   admission === "limited" ? response(httpTooManyRequests, { status: "limited" }) : unavailable();
 
-// @effect-diagnostics-next-line asyncFunction:off
-const decideSupportCase = async (db: D1Database, input: CaseDecision): Promise<Response> => {
-  try {
-    if (await approveCase(db, input)) return response(httpOk, { status: "approved" });
-  } catch {
-    // A competing approval can invalidate a conditional D1 batch after its preflight read.
-  }
-  return (await matchingRecoveryCandidate(db, input)) ? unavailable() : notApproved();
-};
+const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Response> =>
+  Promise.resolve()
+    .then(() => approveCase(db, input))
+    .catch(() => false) // A competing approval can invalidate a conditional D1 batch.
+    .then((approved) =>
+      approved
+        ? response(httpOk, { status: "approved" })
+        : matchingRecoveryCandidate(db, input).then((matches) =>
+            matches ? unavailable() : notApproved()
+          )
+    );
+
+class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<{
+  readonly cause: unknown;
+}> {}
+const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, SupportBoundaryFailure> =>
+  Effect.tryPromise({ try: run, catch: (cause) => new SupportBoundaryFailure({ cause }) });
 
 /** The one case-decision boundary: stable User resolution, credential consumption, pairing approval
  * and case events commit in one D1 batch. No public reference can resolve a User alone. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const handleSupportRecovery = async (
-  request: Request,
-  db: D1Database,
-  config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
-): Promise<Response> => {
-  if (!configuredAccess(config)) return unavailable();
-  const operator = await verifySupportAccess(
-    Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
-    config.CLOUDFLARE_ACCESS_ISSUER,
-    config.CLOUDFLARE_ACCESS_AUDIENCE
-  );
-  if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
-  // @effect-diagnostics-next-line globalDate:off
-  const now = Date.now();
-  try {
-    const admission = await admitOperator(db, operator.value, now);
-    if (admission !== "allowed") return admissionResponse(admission);
-    const payload = await readPayload(request);
-    if (Option.isNone(payload)) return notApproved();
-    const codeDigest = await digest(payload.value.backupRecoveryCode);
-    if (
-      !(await matchingRecoveryCandidate(db, {
-        codeDigest,
-        publicCode: payload.value.pairingCode,
-        now,
-      }))
-    ) {
-      return notApproved();
-    }
-    return decideSupportCase(db, {
-      operator: operator.value,
-      codeDigest,
-      publicCode: payload.value.pairingCode,
-      now,
-    });
-  } catch {
-    return unavailable();
+export const handleSupportRecovery: {
+  (
+    request: Request,
+    db: D1Database,
+    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
+  ): Promise<Response>;
+  (
+    db: D1Database,
+    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
+  ): (request: Request) => Promise<Response>;
+} = Function.dual(
+  3,
+  (
+    request: Request,
+    db: D1Database,
+    config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string }
+  ) => {
+    if (!configuredAccess(config)) return Promise.resolve(unavailable());
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const operator = yield* waitFor(() =>
+          verifySupportAccess(
+            Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
+            config.CLOUDFLARE_ACCESS_ISSUER,
+            config.CLOUDFLARE_ACCESS_AUDIENCE
+          )
+        );
+        if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
+        const now = yield* Clock.currentTimeMillis;
+        const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
+        if (admission !== "allowed") return admissionResponse(admission);
+        const payload = yield* waitFor(() => readPayload(request));
+        if (Option.isNone(payload)) return notApproved();
+        const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
+        const decision = {
+          operator: operator.value,
+          codeDigest,
+          publicCode: payload.value.pairingCode,
+          now,
+        };
+        if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
+        return yield* waitFor(() => decideSupportCase(db, decision));
+      })
+    ).catch(() => unavailable());
   }
-};
+);

@@ -56,28 +56,35 @@ export type WorkersAiTool = Readonly<{
   }>;
 }>;
 
-/** Closed direct-binding request shape; gateway routing and provider-side storage are unavailable. */
-export type WorkersAiRequest = Readonly<{
+type WorkersAiRequestBase = Readonly<{
   messages: ReadonlyArray<WorkersAiInputItem>;
   max_tokens: number;
   temperature: 0;
   stream: false;
   chat_template_kwargs: Readonly<{ enable_thinking: false }>;
-}> &
-  Partial<
-    Readonly<{
-      response_format: Readonly<{
-        type: "json_schema";
-        json_schema: Readonly<{
-          name: string;
-          schema: JsonSchema.JsonSchema;
-          strict: true;
+}>;
+
+/** Closed direct-binding request: canonical tools, structured output, or text only, never mixed. */
+export type WorkersAiRequest = WorkersAiRequestBase &
+  (
+    | (Readonly<{
+        tool_choice: "auto";
+        tools: ReadonlyArray<WorkersAiTool>;
+      }> &
+        Partial<Readonly<{ response_format: never }>>)
+    | (Readonly<{
+        response_format: Readonly<{
+          type: "json_schema";
+          json_schema: Readonly<{
+            name: string;
+            schema: JsonSchema.JsonSchema;
+            strict: true;
+          }>;
         }>;
-      }>;
-      tool_choice: "auto";
-      tools: ReadonlyArray<WorkersAiTool>;
-    }>
-  >;
+      }> &
+        Partial<Readonly<{ tool_choice: never; tools: never }>>)
+    | Partial<Readonly<{ tool_choice: never; tools: never; response_format: never }>>
+  );
 
 /** The only Cloudflare capability the portable hosted-inference adapter accepts. */
 export type WorkersAiBindingRun = (
@@ -298,19 +305,21 @@ const toolsFor = (
     }));
 };
 
-const makeRequest = (
-  messages: ReadonlyArray<WorkersAiInputItem>,
-  policy: HostedTextToolPolicy
-): WorkersAiRequest => ({
+const makeRequest = (messages: ReadonlyArray<WorkersAiInputItem>): WorkersAiRequestBase => ({
   messages,
   max_tokens: hostedOutputTokenReserve,
   temperature: 0,
   stream: false,
   chat_template_kwargs: { enable_thinking: false },
-  ...(policy.toolChoice === "auto"
-    ? { tool_choice: "auto" as const, tools: toolsFor(policy.availableOperations) }
-    : {}),
 });
+
+const makeTextRequest = (
+  messages: ReadonlyArray<WorkersAiInputItem>,
+  policy: HostedTextToolPolicy
+): WorkersAiRequest =>
+  policy.toolChoice === "auto"
+    ? { ...makeRequest(messages), tool_choice: "auto", tools: toolsFor(policy.availableOperations) }
+    : makeRequest(messages);
 
 const capacityCheck = (request: WorkersAiRequest): Effect.Effect<number, HostedInferenceError> => {
   const inputTokens = tokenUpperBound(JSON.stringify(request));
@@ -552,7 +561,7 @@ const makeStructuredAdapter = (
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
       const request: WorkersAiRequest = {
-        ...makeRequest(messages.input, { toolChoice: "none", availableOperations: [] }),
+        ...makeRequest(messages.input),
         response_format: {
           type: "json_schema",
           json_schema: { name: input.objectName, schema, strict: true },
@@ -624,7 +633,7 @@ const makeService = (
           semanticInput.projection,
           semanticInput.continuation
         );
-        const request = makeRequest(messages.input, semanticInput);
+        const request = makeTextRequest(messages.input, semanticInput);
         yield* capacityCheck(request);
         return {
           continuationPrefix: messages.continuationPrefix,

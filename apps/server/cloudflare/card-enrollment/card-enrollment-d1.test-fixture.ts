@@ -34,14 +34,16 @@ export const makeCardEnrollmentD1 = Effect.fnUntraced(function* (
   yield* fromPromise(() => instance.ready);
   const db = yield* fromPromise(() => instance.getD1Database("DB"));
   yield* fromPromise(() => db.batch(authSchema.map((statement) => db.prepare(statement))));
-  const migration = yield* fromPromise(() =>
-    Bun.file(new URL("../migrations/0009_card_enrollment.sql", import.meta.url)).text()
-  );
-  for (const statement of migration
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=CREATE |$)/u)) {
-    yield* fromPromise(() => db.prepare(statement).run());
+  for (const file of ["0009_card_enrollment.sql", "0012_billing_collection.sql"]) {
+    const migration = yield* fromPromise(() =>
+      Bun.file(new URL(`../migrations/${file}`, import.meta.url)).text()
+    );
+    for (const statement of migration
+      .replace(/^--.*$/gmu, "")
+      .trim()
+      .split(/;\s*\n(?=CREATE |DROP |$)/u)) {
+      yield* fromPromise(() => db.prepare(statement).run());
+    }
   }
   return { db, instance };
 });

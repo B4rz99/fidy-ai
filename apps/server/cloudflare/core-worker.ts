@@ -33,6 +33,14 @@ import {
 } from "./identity/browser-pairing-email-delivery";
 import { handleSupportRecovery } from "./identity/support-recovery";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
+import {
+  type BillingCollectionEnvironment,
+  dispatchBillingCollection,
+  isBillingCollectionWork,
+  receiveBillingCollection,
+  receiveWompiBillingEvent,
+  reconcileBillingCandidates,
+} from "./billing/billing-collection";
 import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
 import {
   type EmailReplacementEnvironment,
@@ -72,6 +80,7 @@ import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./ai/w
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { BillingCollectionWorkflowV1 } from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 
@@ -100,7 +109,13 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
-  Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">>;
+  Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
+  Partial<
+    Pick<
+      BillingCollectionEnvironment,
+      "BILLING_COLLECTION_QUEUE" | "BILLING_COLLECTION_WORKFLOW" | "WOMPI_EVENT_SECRET"
+    >
+  >;
 
 type CoreWorker = Readonly<{
   fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
@@ -145,6 +160,20 @@ const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.
   request.method === "POST"
     ? receiveConsentWebhook(environment)(request)
     : Effect.succeed(methodNotAllowed());
+
+const providerCallbackEffect = (
+  request: Request,
+  environment: CoreEnvironment,
+  path: string
+): Effect.Effect<Response> => {
+  if (path === "/providers/kapso/callback") return callbackEffect(request, environment);
+  if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+  if (environment.WOMPI_EVENT_SECRET === undefined) return Effect.succeed(unavailable());
+  return receiveWompiBillingEvent({
+    request,
+    environment: { ...environment, WOMPI_EVENT_SECRET: environment.WOMPI_EVENT_SECRET },
+  }).pipe(Effect.withSpan("billing.collection.event"));
+};
 
 const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Response> =>
   request.method === "POST"
@@ -281,6 +310,7 @@ const ownedCorePath = (path: string): boolean =>
     "/health",
     listCategoriesPath,
     "/providers/kapso/callback",
+    "/providers/wompi/billing-events",
     "/web/onboarding/email/verify",
     "/web/pairings",
     "/web/pairings/redeem",
@@ -564,7 +594,9 @@ const fetchEffect = (
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
-  if (url.pathname === "/providers/kapso/callback") return callbackEffect(request, environment);
+  if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
+    return providerCallbackEffect(request, environment, url.pathname);
+  }
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
       try: () => handleCardEnrollment({ request, environment }),
@@ -637,6 +669,44 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
   })(batch).pipe(Effect.runPromise);
 };
 
+const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (!batch.messages.some((message) => isBillingCollectionWork(message.body))) {
+    return receiveEmailQueue(batch, environment);
+  }
+  if (environment.BILLING_COLLECTION_WORKFLOW === undefined) {
+    return Promise.reject(new Error("Billing collection unavailable"));
+  }
+  return receiveBillingCollection({
+    environment: {
+      DB: environment.DB,
+      BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
+    },
+    batch,
+  }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
+};
+
+const billingScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if (
+      environment.BILLING_COLLECTION_QUEUE === undefined ||
+      environment.BILLING_COLLECTION_WORKFLOW === undefined
+    ) {
+      return;
+    }
+    const workflow = environment.BILLING_COLLECTION_WORKFLOW;
+    const dispatched = yield* Effect.exit(
+      dispatchBillingCollection({
+        DB: environment.DB,
+        BILLING_COLLECTION_QUEUE: environment.BILLING_COLLECTION_QUEUE,
+      }).pipe(Effect.withSpan("billing.collection.dispatch"))
+    );
+    yield* reconcileBillingCandidates({
+      DB: environment.DB,
+      BILLING_COLLECTION_WORKFLOW: workflow,
+    });
+    if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
+  }).pipe(Effect.orDie);
+
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment) =>
@@ -683,6 +753,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       yield* reconcileEmailReplacement(environment.DB).pipe(
         Effect.withSpan("emailReplacement.reconcile")
       );
+      yield* billingScheduled(environment);
       yield* sweepExpiredConsent(environment.DB)();
       yield* Effect.tryPromise({
         try: () => sweepExpiredPATPairings(environment.DB),
@@ -690,7 +761,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       });
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
-  queue: receiveEmailQueue,
+  queue: receiveWorkQueue,
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

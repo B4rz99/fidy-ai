@@ -25,6 +25,7 @@ const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
 const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
 const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
+const wompiEventSecret = Config.Redacted("WOMPI_EVENT_SECRET");
 const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
@@ -161,6 +162,10 @@ export default Alchemy.Stack(
       readReplication: { mode: "disabled" },
     });
 
+    const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
+    const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
+      className: "BillingCollectionWorkflowV1",
+    });
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
       className: "OnboardingEmailWorkflowV1",
@@ -192,6 +197,8 @@ export default Alchemy.Stack(
         HOSTED_AI_MODEL: yield* hostedAiModel,
         KAPSO_API_KEY: kapsoBindings.apiKey,
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
+        BILLING_COLLECTION_QUEUE: billingCollectionQueue,
+        BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
         ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
@@ -212,12 +219,21 @@ export default Alchemy.Stack(
         WOMPI_INTEGRITY_SECRET: yield* development
           ? wompiIntegritySecret.pipe(Config.withDefault(Redacted.make("")))
           : wompiIntegritySecret,
+        WOMPI_EVENT_SECRET: yield* development
+          ? wompiEventSecret.pipe(Config.withDefault(Redacted.make("")))
+          : wompiEventSecret,
         CLOUDFLARE_ACCESS_ISSUER: accessConfig.issuer,
         CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("BillingCollectionConsumer", {
+      queueId: billingCollectionQueue.queueId,
+      scriptName: core.workerName,
+      settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {

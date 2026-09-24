@@ -6,6 +6,7 @@ import {
   CardEnrollmentId,
   CardPaymentSourceId,
   CardPaymentSubmission,
+  PaymentRequestId,
   PrepareCardEnrollmentPayload,
   Price,
   RecurringDisclosure,
@@ -16,26 +17,13 @@ import {
   cardEnrollmentInvalidBody,
   cardEnrollmentUnavailableBody,
   makeWompiEnrollmentClient,
-  makeWompiOutboundHttp,
 } from "@fidy/server/subscription-runtime";
-import {
-  Clock,
-  Context,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-} from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserId } from "@fidy/server/identity-runtime";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { browserOrigins } from "../runtime/topology";
+import { wompiOutboundHttp, workerCrypto } from "../wompi/wompi-runtime";
 
 const Origin = Schema.Literals([browserOrigins.production, browserOrigins.local]);
 const WompiConfiguration = Schema.Struct({
@@ -103,6 +91,8 @@ const AttemptRow = Schema.Struct({
   created_at_ms: Schema.Finite,
   status: Schema.Literals(["pending", "succeeded", "failed"]),
   finalized_at_ms: Schema.NullOr(Schema.Finite),
+  ends_at_ms: Schema.NullOr(Schema.Finite),
+  renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
 const preparationWindowMs = 3_600_000;
 const verificationCooldownMs = 3_000;
@@ -110,6 +100,17 @@ const maximumVerificationAttempts = 8;
 const maximumPreparationsPerHour = 12;
 const enrollmentLifetimeMs = 900_000;
 const hexBase = 16;
+const uuidByteCount = 16;
+const uuidVersionByte = 6;
+const uuidVariantByte = 8;
+const versionMask = 0x0f;
+const versionBits = 0x40;
+const variantMask = 0x3f;
+const variantBits = 0x80;
+const firstGroupEnd = 8;
+const secondGroupEnd = 12;
+const thirdGroupEnd = 16;
+const fourthGroupEnd = 20;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
 const uuidPath = /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/([0-9a-f-]{36})$/u;
@@ -129,23 +130,26 @@ const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
+
+/** Derive one BillingAttempt ID from the authenticated User and the validated, retry-stable PaymentRequestId for a single payment action. Never use a new PaymentRequestId to retry the same action. */
+export const billingAttemptIdFor = (
+  input: Readonly<{ userId: UserId; requestId: PaymentRequestId }>
+): Promise<BillingAttemptId> =>
+  digest(`billing-attempt-v1:${input.userId}:${input.requestId}`).then((hash) => {
+    const bytes = hash.slice(0, uuidByteCount);
+    // The digest supplies the identity; UUID version/variant bits preserve the public ID contract.
+    bytes[uuidVersionByte] = ((bytes[uuidVersionByte] ?? 0) & versionMask) | versionBits;
+    bytes[uuidVariantByte] = ((bytes[uuidVariantByte] ?? 0) & variantMask) | variantBits;
+    const hex = Array.from(bytes, (byte) => byte.toString(hexBase).padStart(2, "0")).join("");
+    return BillingAttemptId.make(
+      `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
+    );
+  });
 const decodeJson = (text: string): unknown => JSON.parse(text);
 const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A> =>
   Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(decodeJson(text));
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
-
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, bytes) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, new Uint8Array(bytes))
-          .then((value) => new Uint8Array(value)),
-      catch: () => undefined,
-    }).pipe(Effect.orDie),
-});
 
 type EnrollmentEnvironment = { readonly DB: D1Database } & Partial<{
   readonly BROWSER_ORIGIN: string;
@@ -159,27 +163,13 @@ type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & { readon
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
 ): Promise<WompiEnrollmentClientService> =>
-  Effect.runPromise(
-    Effect.scoped(
-      Layer.build(FetchHttpClient.layer).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
-      )
-    )
-  ).then((clients) => {
-    const outboundHttp = makeWompiOutboundHttp({
-      environment: environment.WOMPI_ENVIRONMENT,
-      publicKey: environment.WOMPI_PUBLIC_KEY,
-      privateKey: Redacted.make(environment.WOMPI_PRIVATE_KEY),
-      integritySecret: Redacted.make(environment.WOMPI_INTEGRITY_SECRET),
-      httpClient: Context.get(clients, HttpClient.HttpClient),
-      crypto: workerCrypto,
-    });
-    return makeWompiEnrollmentClient({
+  Effect.runPromise(wompiOutboundHttp(environment)).then((outboundHttp) =>
+    makeWompiEnrollmentClient({
       outboundHttp,
       crypto: workerCrypto,
       publicKey: environment.WOMPI_PUBLIC_KEY,
-    });
-  });
+    })
+  );
 
 const authority = (
   request: Request,
@@ -450,14 +440,15 @@ const attemptFor = (
   attemptId: string
 ): Promise<Option.Option<BillingAttempt>> =>
   db
-    .prepare("SELECT * FROM billing_attempts WHERE id = ? AND user_id = ?")
+    .prepare(`SELECT a.*, p.ends_at_ms, p.renewal_anchor_ms FROM billing_attempts AS a
+      LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
+      WHERE a.id = ? AND a.user_id = ?`)
     .bind(attemptId, userId)
     .first()
     .then((raw) => {
       const row = decodeRow(AttemptRow, raw);
-      if (Option.isNone(row) || row.value.status !== "pending") return Option.none();
-      return decodeRow(Schema.toCodecJson(BillingAttempt), {
-        status: "pending",
+      if (Option.isNone(row)) return Option.none();
+      const snapshot = {
         id: row.value.id,
         priceId: row.value.price_id,
         money: { amount: row.value.amount, currency: row.value.currency },
@@ -466,6 +457,27 @@ const attemptFor = (
         taxTreatment: row.value.tax_treatment,
         timeZone: row.value.time_zone,
         createdAt: instant(row.value.created_at_ms),
+      };
+      if (row.value.status === "pending") {
+        return decodeRow(Schema.toCodecJson(BillingAttempt), { status: "pending", ...snapshot });
+      }
+      if (row.value.finalized_at_ms === null) return Option.none();
+      if (row.value.status === "failed") {
+        return decodeRow(Schema.toCodecJson(BillingAttempt), {
+          status: "failed",
+          ...snapshot,
+          failedAt: instant(row.value.finalized_at_ms),
+        });
+      }
+      if (row.value.ends_at_ms === null || row.value.renewal_anchor_ms === null) {
+        return Option.none();
+      }
+      return decodeRow(Schema.toCodecJson(BillingAttempt), {
+        status: "succeeded",
+        ...snapshot,
+        finalizedAt: instant(row.value.finalized_at_ms),
+        paidPeriodEndsAt: instant(row.value.ends_at_ms),
+        renewalAnchor: instant(row.value.renewal_anchor_ms),
       });
     });
 
@@ -489,7 +501,12 @@ const finish = (
     Effect.gen(function* () {
       const selected = yield* waitFor(() => price(environment.DB, row.price_id));
       if (Option.isNone(selected)) return unavailable();
-      const attemptId = BillingAttemptId.make(id());
+      const attemptId = yield* waitFor(() =>
+        billingAttemptIdFor({
+          userId: UserId.make(userId),
+          requestId: PaymentRequestId.make(requestId),
+        })
+      );
       const reference = `fidy-${attemptId}`;
       const statements = [
         ...(wompiSourceId === undefined
@@ -530,7 +547,8 @@ const finish = (
         ),
       ];
       const committed = yield* waitFor(() => environment.DB.batch(statements));
-      if (committed.at(-1)?.meta.changes !== 1) return unavailable();
+      // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
+      if ((committed.at(-1)?.meta.changes ?? 0) === 0) return unavailable();
       const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
       if (Option.isNone(attempt)) return unavailable();
       const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardPaymentSubmission))({
@@ -650,6 +668,17 @@ const submit = (
         });
         return json(presented);
       }
+      // The same PaymentRequestId was handled above; a different action cannot collect
+      // while this User has an attempt without success or confirmed no-charge evidence.
+      const blocked = yield* waitFor(() =>
+        environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
+      WHERE a.user_id = ? AND a.status <> 'succeeded'
+        AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations AS c
+          WHERE c.attempt_id = a.id) LIMIT 1`)
+          .bind(session.user_id)
+          .first()
+      );
+      if (blocked !== null) return unavailable();
       if (row.value.status === "creating") {
         return json({ status: "source-verifying", enrollmentId: row.value.id });
       }

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
-import { type Config, ConfigProvider, Effect, Layer, Schema } from "effect";
+import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import {
   type TestOutboundTransportRequest,
@@ -100,8 +100,26 @@ layer(TestLayer, { excludeTestServices: true })("Wompi billing adapter", (it) =>
         yield* wompi.findTransaction(WompiTransactionId.make("transaction-123"))
       ).toMatchObject({
         status: "APPROVED",
-        sourceId: 3891,
+        sourceId: Option.some(WompiSourceId.make(3891)),
       });
+    })
+  );
+});
+
+const providerGetWithoutSource = clientLayer((method) =>
+  method === "GET"
+    ? new Response(
+        `{"data":{"id":"transaction-123","reference":"fidy-22900000-0000-4000-8000-000000000001","status":"APPROVED","amount_in_cents":2890000,"currency":"COP","finalized_at":"2026-03-01T12:00:00.000Z"}}`
+      )
+    : new Response(recordedCreatedTransaction, { status: 201 })
+);
+layer(providerGetWithoutSource, { excludeTestServices: true })("Wompi documented GET", (it) => {
+  it.effect("accepts a provider lookup without the optional payment source field", () =>
+    Effect.gen(function* () {
+      const wompi = yield* WompiBillingClient;
+      const found = yield* wompi.findTransaction(WompiTransactionId.make("transaction-123"));
+      expect(found.sourceId).toEqual(Option.none());
+      expect(found.status).toBe("APPROVED");
     })
   );
 });

@@ -85,6 +85,17 @@ Domain-specific mutation and outbox adapters remain later work. If an adapter is
 mutation execution returns the closed unavailable failure. It must not use an in-memory map, local
 queue, process lock, or best-effort continuation as a substitute.
 
+The statement-byte staging adapter keeps bytes in private R2 as bounded, User-owned,
+non-authoritative material before a canonical submission cites them. R2 and D1 never share a
+transaction: staging records only an expiring non-authoritative row, R2's own SHA-256 verification
+covers the object write, and a publication re-verifies the object's actual size and digest before its
+conditional D1 unit makes the material authoritative
+([ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The adapter's
+bounded sweep deletes expired unpublished staging rows and objects when the private Core Worker
+installs the staging binding; until then the local D1/R2 proof is the evidence. Published material is
+excluded from the sweep and follows the submission's retention. Failure, interruption, replay, and
+abandonment leave no authoritative submission referring to missing or mismatched bytes.
+
 ## 6. Testing seams
 
 Use the smallest seam that proves the behavior:
@@ -97,8 +108,10 @@ Use the smallest seam that proves the behavior:
 - browser tests exercise the built static shell with explicit HTTP fixtures;
 - Cloudflare adapter tests exercise Categories through public ingress, the real service binding, and
   local D1; resource-admission tests exercise atomic D1 batches through independent adapters and
-  persisted runtime restarts; the release gate exercises Workers AI through its real binding; later
-  DO/Queue/Workflow/R2 tests use those platform seams rather than recreating the removed local runtime.
+  persisted runtime restarts; statement-byte staging exercises local D1 and R2 directly to prove
+  actual bytes, digests, ownership, interruption, replay, and bounded expiry; the release gate
+  exercises Workers AI through its real binding; later DO/Queue/Workflow tests use those platform
+  seams rather than recreating the removed local runtime.
 
 Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
 domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains

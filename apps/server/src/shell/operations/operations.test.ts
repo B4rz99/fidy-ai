@@ -33,6 +33,34 @@ it("keeps mailbox-proof replacement out of atomic batches", () => {
   ).toBe("None");
 });
 
+it("keeps statement submission inside the derived atomic-batch child union", () => {
+  // #788 decided that statement bytes are staged before the canonical submission; the derived
+  // child union must keep carrying the submission itself rather than exempting ingestion from
+  // batching through an eligibility flag. The fixture mirrors the declaration until #698 lands the
+  // staged-reference input.
+  const ingestion = operationCatalog.byId.get("ingestion.submitForExtraction");
+  expect(ingestion?.atomicBatchEligible).toBe(true);
+  expect(ingestion?.policy.kind).toBe("mutation");
+  const callId = "10000000-0000-4000-8000-000000000002";
+  const decode = Schema.decodeUnknownOption(getAtomicBatchCallSchema());
+  expect(
+    decode({
+      callId,
+      operation: "ingestion.submitForExtraction",
+      input: {
+        payload: {
+          file: {
+            contentBase64: "ZmVjaGEsdmFsb3I=",
+            declaredMediaType: "text/csv",
+            name: "extracto.csv",
+          },
+          idempotencyKey: "20000000-0000-4000-8000-000000000201",
+        },
+      },
+    })._tag
+  ).toBe("Some");
+});
+
 it("guards reusable dispatch completeness against the reflected ordinary mutation set", () => {
   const ordinary = {
     operations: operationCatalog.operations.filter(

@@ -8,19 +8,18 @@ import type {
   StatementMappingSample,
   XlsxCellEvidence,
 } from "~/core/ingestion/model";
+import { maximumStatementBytes } from "~/core/ingestion/model";
 import type { StatementSourceFormat } from "~/core/ingestion/reference";
 import { statementSourceFormat } from "./source-format";
 
 const bytesPerKibibyte = 1024;
-const maximumDecodedMebibytes = 5;
 const maximumExpandedMebibytes = 25;
 const maximumCsvRecordKibibytes = 256;
-const maximumDecodedBytes = maximumDecodedMebibytes * bytesPerKibibyte * bytesPerKibibyte;
 const maximumExpandedBytes = maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte;
 
 /** Compressed-input and in-parser expanded-content ceilings for one statement parse. */
 export const statementParserLimits = {
-  maximumDecodedBytes,
+  maximumDecodedBytes: maximumStatementBytes,
   maximumExpandedBytes,
 } as const;
 const maximumZipEntries = 1_000;
@@ -388,7 +387,7 @@ export const parseStatementFile = (
   Effect.try({
     try: () => {
       if (bytes.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
-      if (bytes.length > maximumDecodedBytes) {
+      if (bytes.length > maximumStatementBytes) {
         throw new StatementParseFailed({ safeReason: "resource-limit" });
       }
       return detectedFormat(bytes) === "xlsx" ? parseXlsx(bytes) : parseCsv(bytes);

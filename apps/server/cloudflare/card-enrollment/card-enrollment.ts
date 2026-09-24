@@ -110,6 +110,17 @@ const maximumVerificationAttempts = 8;
 const maximumPreparationsPerHour = 12;
 const enrollmentLifetimeMs = 900_000;
 const hexBase = 16;
+const uuidByteCount = 16;
+const uuidVersionByte = 6;
+const uuidVariantByte = 8;
+const versionMask = 0x0f;
+const versionBits = 0x40;
+const variantMask = 0x3f;
+const variantBits = 0x80;
+const firstGroupEnd = 8;
+const secondGroupEnd = 12;
+const thirdGroupEnd = 16;
+const fourthGroupEnd = 20;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
 const uuidPath = /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/([0-9a-f-]{36})$/u;
@@ -129,6 +140,21 @@ const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
+
+/** One subject-scoped collection identity for a browser payment action, independent of retry order. */
+export const billingAttemptIdFor = (
+  input: Readonly<{ userId: string; requestId: string }>
+): Promise<BillingAttemptId> =>
+  digest(`billing-attempt-v1:${input.userId}:${input.requestId}`).then((hash) => {
+    const bytes = hash.slice(0, uuidByteCount);
+    // The digest supplies the identity; UUID version/variant bits preserve the public ID contract.
+    bytes[uuidVersionByte] = ((bytes[uuidVersionByte] ?? 0) & versionMask) | versionBits;
+    bytes[uuidVariantByte] = ((bytes[uuidVariantByte] ?? 0) & variantMask) | variantBits;
+    const hex = Array.from(bytes, (byte) => byte.toString(hexBase).padStart(2, "0")).join("");
+    return BillingAttemptId.make(
+      `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
+    );
+  });
 const decodeJson = (text: string): unknown => JSON.parse(text);
 const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A> =>
   Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(decodeJson(text));
@@ -489,7 +515,7 @@ const finish = (
     Effect.gen(function* () {
       const selected = yield* waitFor(() => price(environment.DB, row.price_id));
       if (Option.isNone(selected)) return unavailable();
-      const attemptId = BillingAttemptId.make(id());
+      const attemptId = yield* waitFor(() => billingAttemptIdFor({ userId, requestId }));
       const reference = `fidy-${attemptId}`;
       const statements = [
         ...(wompiSourceId === undefined

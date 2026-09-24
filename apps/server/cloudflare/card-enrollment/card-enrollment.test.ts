@@ -2,7 +2,7 @@ import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { CardEnrollment } from "@fidy/server/client";
 import { Clock, Data, Effect, Schema } from "effect";
-import { handleCardEnrollment } from "./card-enrollment";
+import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
 import { browserOrigins, localCanonicalReadBearer } from "../runtime/topology";
 import { makePublicWorker } from "../public-worker";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry";
@@ -140,6 +140,25 @@ const providerBody = (url: URL, status: "PENDING" | "AVAILABLE"): string => {
   }
   return JSON.stringify({ data: { id: 3891, status } });
 };
+
+it("derives the same BillingAttempt and checkout reference for one User action without sharing another User's identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const paymentRequestId = "40000000-0000-4000-8000-000000000001";
+      const first = yield* fromTestPromise(() =>
+        billingAttemptIdFor({ userId: userA, requestId: paymentRequestId })
+      );
+      const retry = yield* fromTestPromise(() =>
+        billingAttemptIdFor({ userId: userA, requestId: paymentRequestId })
+      );
+      const otherUser = yield* fromTestPromise(() =>
+        billingAttemptIdFor({ userId: userB, requestId: paymentRequestId })
+      );
+      expect(retry).toBe(first);
+      expect(otherUser).not.toBe(first);
+      expect(`fidy-${first}`).toMatch(/^fidy-[0-9a-f-]{36}$/u);
+    })
+  ));
 
 it("prepares a Price and creates exactly one provider source and pending BillingAttempt across duplicate submissions", () =>
   Effect.runPromise(

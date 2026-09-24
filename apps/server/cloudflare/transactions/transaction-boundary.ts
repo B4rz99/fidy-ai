@@ -1,11 +1,121 @@
-import { Clock, Effect } from "effect";
+import { Clock, Data, Effect } from "effect";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import {
+  livePATAuthority,
+  livePATCredential,
+  recordCanonicalPATWork,
+} from "@fidy/server/tokens-runtime";
+import type { AuthorizedPAT } from "../pats/pat-authorization";
+import { prepareOwnedStatement } from "../pats/pat-unit";
 import { newId } from "../pats/pat-shared";
 
-/** Shared, request-scoped identity and safe response vocabulary for the two D1 Transaction adapters. */
+/** A Transaction adapter dependency failure whose kind is classified and never exposed. */
+export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
+  readonly cause: unknown;
+}> {}
+/** Wrap one rejected dependency promise so the failure channel stays typed. */
+export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
+  new TransactionBoundaryFailure({ cause });
+/** Recover the dependency detail a boundary failure carries for budget and authority checks. */
+export const boundaryCause = (failure: unknown): unknown =>
+  failure instanceof TransactionBoundaryFailure ? failure.cause : failure;
+
+/** Shared, request-scoped identity and safe response vocabulary for the D1 Transaction adapters. */
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
+/** The two live caller subjects that may execute Transaction work. */
+export type TransactionCaller = TransactionSubject | AuthorizedPAT;
+export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPAT =>
+  "patId" in subject;
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 export const transactionNoStore = { "cache-control": "no-store" };
+
+/** The two canonical mutations this adapter executes, individually or as children of one batch. */
+export type TransactionMutationOperation =
+  | "transactions.createTransaction"
+  | "transactions.updateTransaction";
+
+/**
+ * Why one canonical Transaction mutation was refused without changing domain state. The outcome is
+ * the metadata-only rejection Audit either an individual call or a batch child reports; `message`
+ * is addressed to the calling agent and never carries input bodies or database detail.
+ */
+export type TransactionRefusal = Readonly<{
+  outcome: "not_found" | "validation_failed" | "resource_limit";
+  message: string;
+}>;
+
+type RefusalRecord = "recorded" | "credential_refused" | "rate_limited" | "unavailable";
+
+const refusalStatement = ({
+  db,
+  subject,
+  outcome,
+  operation,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  outcome: TransactionRefusal["outcome"];
+  operation: TransactionMutationOperation;
+  current: number;
+}>): D1PreparedStatement =>
+  isPATCaller(subject)
+    ? prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          subject,
+          input: {
+            id: transactionId(),
+            current,
+            operation,
+            outcome: "rejected",
+            afterSourceAttestation: false,
+          },
+        }),
+      })
+    : db
+        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+          SELECT ?, user_id, id, ?, ?, ? FROM web_sessions WHERE id = ? AND user_id = ?
+          AND token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+        .bind(
+          transactionId(),
+          operation,
+          outcome,
+          current,
+          subject.id,
+          subject.userId,
+          subject.digest,
+          current,
+          current
+        );
+
+/**
+ * Record one refused Transaction mutation's metadata-only AuditLogEntry. A refusal whose audit
+ * cannot commit for a dead credential, an exhausted shared daily budget, or a database defect is
+ * reported as that cause instead: the caller never reports a refusal the durable record denies.
+ */
+export const recordTransactionRefusal = ({
+  db,
+  subject,
+  outcome,
+  operation,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  outcome: TransactionRefusal["outcome"];
+  operation: TransactionMutationOperation;
+  current: number;
+}>): Promise<RefusalRecord> =>
+  Promise.resolve()
+    .then(() => refusalStatement({ db, subject, outcome, operation, current }).run())
+    .then((audit) => (audit.meta.changes === 1 ? "recorded" : "credential_refused"))
+    .catch((error: unknown) =>
+      String(error).includes("transaction_audit_limit") ? "rate_limited" : "unavailable"
+    );
+
 const utcDayMilliseconds = 86_400_000;
 // Matches the 256-entry stable-User triggers in 0010_pat_lifecycle.sql. These remain the
 // atomic authority if concurrent browser and PAT requests pass this cheap preflight together.
@@ -64,9 +174,90 @@ export const transactionFailure = ({
     { status, headers: transactionNoStore }
   );
 
-/** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
 const HTTP_UNAUTHENTICATED = 401;
-const HTTP_ACTION_REQUIRED = 403;
+const invalid = (): Response =>
+  transactionFailure({
+    code: "validation_failed",
+    status: 400,
+    message: "Invalid Transaction input.",
+  });
+const missing = (): Response =>
+  transactionFailure({
+    code: "not_found",
+    status: 404,
+    message: "Transaction unavailable.",
+  });
+const limited = (): Response =>
+  transactionFailure({
+    code: "rate_limited",
+    status: 429,
+    message: "Manual Transaction budget exhausted.",
+  });
+
+/** Map one already-recorded Transaction refusal to its canonical individual response. */
+export const refusedTransactionResponse = (refusal: TransactionRefusal): Response => {
+  switch (refusal.outcome) {
+    case "not_found":
+      return missing();
+    case "validation_failed":
+      return invalid();
+    case "resource_limit":
+      return limited();
+  }
+};
+
+/** Refuse one authenticated canonical Transaction mutation after its refusal Audit committed. */
+export const rejectTransactionMutation = ({
+  db,
+  subject,
+  operation,
+  refusal,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  operation: TransactionMutationOperation;
+  refusal: TransactionRefusal;
+  current: number;
+}>): Promise<Response> =>
+  recordTransactionRefusal({
+    db,
+    subject,
+    outcome: refusal.outcome,
+    operation,
+    current,
+  }).then((record) => {
+    switch (record) {
+      case "credential_refused":
+        return refusedTransactionWork({ db, subject });
+      case "rate_limited":
+        return limited();
+      case "unavailable":
+        return transactionUnavailable();
+      case "recorded":
+        return refusedTransactionResponse(refusal);
+    }
+  });
+
+/** Refuse one authenticated canonical Transaction call whose input failed validation. */
+export const rejectInvalidTransactionInput = ({
+  db,
+  subject,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  operation: TransactionMutationOperation;
+}>): Promise<Response> =>
+  rejectTransactionMutation({
+    db,
+    subject,
+    operation,
+    current: transactionNow(),
+    refusal: { outcome: "validation_failed", message: "Invalid Transaction input." },
+  });
+
+/** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
 export const refusedPATWork = ({
   db,
   userId,
@@ -85,9 +276,79 @@ export const refusedPATWork = ({
           })
         : transactionFailure({
             code: "user_action_required",
-            status: HTTP_ACTION_REQUIRED,
+            status: 403,
             message: "Return to Fidy to review your withdrawn Consent.",
           })
     ),
     Effect.runPromise
   );
+
+/** Classify a Transaction credential refusal against the live PAT and Consent decisions. */
+export const refusedTransactionWork = ({
+  db,
+  subject,
+}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Promise<Response> =>
+  isPATCaller(subject)
+    ? refusedPATWork({ db, userId: subject.userId })
+    : Promise.resolve(
+        transactionFailure({
+          code: "unauthenticated",
+          status: HTTP_UNAUTHENTICATED,
+          message: "Present a valid credential and retry.",
+        })
+      );
+
+/** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
+export const callerAuthority = ({
+  subject,
+  current,
+}: Readonly<{ subject: TransactionCaller; current: number }>): Readonly<{
+  table: string;
+  predicate: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}> =>
+  isPATCaller(subject)
+    ? livePATAuthority({ subject, current })
+    : liveWebSessionAuthority({ subject, current });
+
+const authorityExists = (
+  db: D1Database,
+  authority: Readonly<{
+    table: string;
+    predicate: string;
+    bindings: ReadonlyArray<string | number | Uint8Array>;
+  }>
+): Promise<boolean> =>
+  db
+    .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
+    .bind(...authority.bindings)
+    .first()
+    .then((row) => row !== null);
+
+/** True only while either Transaction caller's live credential still exists. */
+export const liveTransactionCredential = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+}>): Promise<boolean> =>
+  authorityExists(
+    db,
+    isPATCaller(subject)
+      ? livePATCredential({ subject, current })
+      : liveWebSessionAuthority({ subject, current })
+  );
+
+/** True only while either Transaction caller's authority row is still live. */
+export const liveTransactionCaller = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+}>): Promise<boolean> => authorityExists(db, callerAuthority({ subject, current }));

@@ -216,6 +216,173 @@ const Created = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
+const BatchResult = Schema.Struct({
+  data: Schema.Struct({
+    results: Schema.Array(
+      Schema.Struct({
+        callId: Schema.String,
+        operation: Schema.String,
+        output: Schema.Struct({
+          data: Schema.toCodecJson(Transaction),
+          next: Schema.Array(Schema.Unknown),
+        }),
+      })
+    ),
+  }),
+  next: Schema.Array(Schema.Unknown),
+});
+const BatchRejection = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.String,
+    message: Schema.String,
+    failedCallIndex: Schema.Int,
+    operation: Schema.String,
+    fields: Schema.Array(Schema.Unknown),
+  }),
+  next: Schema.Array(Schema.Unknown),
+});
+const batchCallId = (suffix: number): string =>
+  `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
+const transactionCall = (suffix: number, payload: object): object => ({
+  callId: batchCallId(suffix),
+  operation: "transactions.createTransaction",
+  input: { payload },
+});
+const correctionCall = (suffix: number, id: string, payload: object): object => ({
+  callId: batchCallId(suffix),
+  operation: "transactions.updateTransaction",
+  input: { params: { id }, payload },
+});
+const batchRequest = (index: number, calls: ReadonlyArray<object>): Request =>
+  new Request("https://api.fidyapp.com/operations/atomic-batch", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ calls }),
+  });
+const bearerRequest = (index: number, token: string, calls: ReadonlyArray<object>): Request =>
+  new Request("https://api.fidyapp.com/operations/atomic-batch", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      authorization: `Bearer ${token}`,
+      "x-provider-id": users[index] ?? "",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ calls }),
+  });
+const countRows = (
+  db: D1Database,
+  sql: string,
+  ...bindings: ReadonlyArray<string>
+): Promise<number> =>
+  db
+    .prepare(sql)
+    .bind(...bindings)
+    .first<{ count: number }>()
+    .then((row) => row?.count ?? -1);
+const seedTransaction = ({
+  db,
+  userId,
+  id,
+  categoryId,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  id: string;
+  categoryId: string;
+}>): Promise<unknown> =>
+  db
+    .prepare(`INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
+      VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', '2025-01-05T12:00:00.000Z', '2025-01-05T12:00:00.000Z')`)
+    .bind(id, userId, categoryId)
+    .run();
+let seededPATSequence = 0;
+const seedPAT = ({
+  db,
+  userId,
+  token,
+  scopes,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  token: string;
+  scopes: ReadonlyArray<string>;
+  current: number;
+}>): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    seededPATSequence += 1;
+    const suffix = String(seededPATSequence).padStart(12, "0");
+    const bearerDigest = yield* fromTestPromise(() => digest(token));
+    yield* fromTestPromise(() =>
+      db
+        .prepare(`INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json, lifetime_days,
+          created_at_ms, issued_at_ms, expires_at_ms, request_id) VALUES (?, ?, ?, ?, 'Atomic batch agent', ?, 7, ?, ?, ?, ?)`)
+        .bind(
+          `40000000-0000-4000-8000-${suffix}`,
+          userId,
+          token.slice("fin_".length, "fin_".length + 8),
+          bearerDigest,
+          JSON.stringify(scopes),
+          current,
+          current,
+          current + 7 * 86_400_000,
+          `40000000-0000-4000-9000-${suffix}`
+        )
+        .run()
+    );
+  });
+const countingDb = (db: D1Database): Readonly<{ db: D1Database; batches: () => number }> => {
+  let batches = 0;
+  return {
+    db: {
+      prepare: (sql) => db.prepare(sql),
+      batch: (statements) => {
+        batches += 1;
+        return db.batch(statements);
+      },
+      exec: (sql) => db.exec(sql),
+      withSession: (constraint) => db.withSession(constraint),
+      dump: () => db.dump(),
+    },
+    batches: () => batches,
+  };
+};
+const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database => ({
+  prepare: (sql) => db.prepare(sql),
+  batch: (statements) => before().then(() => db.batch(statements)),
+  exec: (sql) => db.exec(sql),
+  withSession: (constraint) => db.withSession(constraint),
+  dump: () => db.dump(),
+});
+const concurrentCorrection = ({
+  db,
+  userId,
+  transactionId,
+  evidenceId,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  transactionId: string;
+  evidenceId: string;
+}>): Promise<unknown> =>
+  db
+    .prepare(`INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision, changed_fields, before_facts, after_facts, corrected_at)
+      VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}', '2025-01-06T12:00:00.000Z')`)
+    .bind(evidenceId, userId, transactionId)
+    .run()
+    .then(() =>
+      db
+        .prepare(
+          "UPDATE transactions SET notes = 'concurrent', revision = 1 WHERE user_id = ? AND id = ? AND revision = 0"
+        )
+        .bind(userId, transactionId)
+        .run()
+    );
 const sendPublicRequest = (
   db: D1Database,
   request: Request,
@@ -1393,5 +1560,731 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
         )
       );
       expect(counts.map((result) => result?.count)).toEqual([0, 0, 1]);
+    })
+  ));
+
+it("commits an ordered two-child batch in one D1 unit and agrees with immediate canonical reads", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const counted = countingDb(db);
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          counted.db,
+          batchRequest(0, [
+            transactionCall(1, input({ counterparty: "Acme" })),
+            transactionCall(
+              2,
+              input({
+                counterparty: "Bravo",
+                categoryId: "10000000-0000-4000-8000-000000000001",
+              })
+            ),
+          ])
+        )
+      );
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(BatchResult)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.results.map(({ callId }) => callId)).toEqual([
+        batchCallId(1),
+        batchCallId(2),
+      ]);
+      expect(body.data.results.map(({ operation }) => operation)).toEqual([
+        "transactions.createTransaction",
+        "transactions.createTransaction",
+      ]);
+      const [first, second] = body.data.results.map(({ output }) => output.data);
+      if (first === undefined || second === undefined) throw new Error("Missing results");
+      expect(Option.getOrNull(first.counterparty)).toBe("Acme");
+      expect(Option.getOrNull(second.counterparty)).toBe("Bravo");
+      expect([first.revision, second.revision]).toEqual([0, 0]);
+      expect(counted.batches()).toBe(1);
+
+      const session = Option.getOrThrow(
+        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
+      );
+      const listed = yield* fromTestPromise(() =>
+        browseTransactions({
+          db,
+          selection: { request: request(0), subject: session, id: Option.none() },
+        })
+      );
+      const page = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => listed.json())
+      ).pipe(Effect.orDie);
+      expect(new Set(page.data.map(({ id }) => id))).toEqual(new Set([first.id, second.id]));
+      expect(page.data.find(({ id }) => id === first.id)).toEqual(first);
+      expect(page.data.find(({ id }) => id === second.id)).toEqual(second);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM source_attestations WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(2);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND outcome = 'success' AND operation = 'transactions.createTransaction'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(2);
+    })
+  ));
+
+it("rolls back an earlier child when a later child's revision is stale", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000001";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            correctionCall(2, seededId, {
+              expectedRevision: 1,
+              changes: { notes: "late" },
+            }),
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
+        )
+      ).toBe(0);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+          )
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("aborts the D1 unit and attributes the child when a guarded correction changes no row", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000002";
+      const evidenceId = "30000000-0000-4000-8000-000000000012";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          racingBatch(db, () =>
+            concurrentCorrection({
+              db,
+              userId: users[0] ?? "",
+              transactionId: seededId,
+              evidenceId,
+            })
+          ),
+          batchRequest(0, [
+            transactionCall(1, input()),
+            correctionCall(2, seededId, {
+              expectedRevision: 0,
+              changes: { notes: "batch" },
+            }),
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      // The earlier capture must not survive a guard that aborts at commit time, not after it.
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+        )
+      ).toBe(0);
+      const evidence = yield* fromTestPromise(() =>
+        db.prepare("SELECT id FROM transaction_corrections").all<{ id: string }>()
+      );
+      expect(evidence.results).toEqual([{ id: evidenceId }]);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+          )
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("rolls back earlier children and every success Audit when a child audit is silently refused", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000003";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON transaction_audit
+            WHEN NEW.operation = 'transactions.updateTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            correctionCall(2, seededId, {
+              expectedRevision: 0,
+              changes: { notes: "refused audit" },
+            }),
+          ])
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("rejects a duplicate call identity before any child commits", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const duplicate = transactionCall(1, input());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [duplicate, transactionCall(1, input({ counterparty: "Dup" }))])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("fails closed on a canonical mutation without a batch adapter", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            {
+              callId: batchCallId(2),
+              operation: "transactions.deleteTransaction",
+              input: { params: { id: "30000000-0000-4000-8000-000000000009" } },
+            },
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("unavailable");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.deleteTransaction");
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("gives a stale correction the same refusal Audit alone and inside a batch", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const firstId = "30000000-0000-4000-8000-000000000004";
+      const secondId = "30000000-0000-4000-8000-000000000005";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: firstId, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: secondId, categoryId: category })
+      );
+      const individual = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions/${firstId}`, {
+            method: "PUT",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ expectedRevision: 1, changes: { notes: "alone" } }),
+          })
+        )
+      );
+      expect(individual.status).toBe(400);
+      const batch = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            correctionCall(2, secondId, { expectedRevision: 1, changes: { notes: "batched" } }),
+          ])
+        )
+      );
+      expect(batch.status).toBe(400);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(2);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+          )
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("enforces each child's live PAT scope and commits a mixed two-child batch under one PAT unit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000006";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[0] ?? "", id: seededId, categoryId: category })
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const writeToken = `fin_${"w".repeat(8)}_${"a".repeat(43)}`;
+      const readToken = `fin_${"r".repeat(8)}_${"b".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token: writeToken, scopes: ["write"], current });
+      yield* seedPAT({ db, userId: users[0] ?? "", token: readToken, scopes: ["read"], current });
+      const refused = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(0, readToken, [transactionCall(1, input())]))
+      );
+      expect(refused.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => refused.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("scope_missing");
+      expect(rejection.error.failedCallIndex).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+        )
+      ).toBe(0);
+
+      const committed = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          bearerRequest(0, writeToken, [
+            transactionCall(1, input({ counterparty: "Agent capture" })),
+            correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "agent" } }),
+          ])
+        )
+      );
+      expect(committed.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(BatchResult)(
+        yield* fromTestPromise(() => committed.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.results).toHaveLength(2);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM pat_audit WHERE operation LIKE 'transactions.%' ORDER BY operation"
+          )
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "transactions.createTransaction", outcome: "accepted" },
+        { operation: "transactions.updateTransaction", outcome: "accepted" },
+      ]);
+      const activity = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ last_used_at_ms: Schema.Int })
+      )(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
+            .bind(writeToken.slice(4, 12))
+            .first()
+        )
+      ).pipe(Effect.orDie);
+      expect(activity.last_used_at_ms).toBeGreaterThan(0);
+    })
+  ));
+
+it("serializes concurrent batches and individual mutations through one User coordination turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup(true));
+      const instance = instances.at(-1);
+      if (instance === undefined) throw new Error("Missing Miniflare runtime");
+      const namespace = yield* fromTestPromise(() =>
+        instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
+      );
+      const coordinator = {
+        getByName: (
+          name: string
+        ): Readonly<{ fetch: (command: Request) => Promise<Response> }> => ({
+          fetch: (command: Request): Promise<Response> =>
+            command.text().then((body) =>
+              namespace
+                .getByName(name)
+                .fetch(command.url, {
+                  method: command.method,
+                  headers: Object.fromEntries(command.headers),
+                  body,
+                })
+                .then(replayResponse)
+            ),
+        }),
+      };
+      const individual = (index: number): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(index)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(input({ counterparty: "Single" })),
+          }),
+          coordinator
+        );
+      const batch = (index: number, suffix: number): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          batchRequest(index, [
+            transactionCall(suffix, input({ counterparty: `Batch ${suffix}` })),
+            transactionCall(suffix + 1, input({ counterparty: `Batch ${suffix + 1}` })),
+          ]),
+          coordinator
+        );
+      const responses = yield* fromTestPromise(() =>
+        Promise.all([individual(0), batch(0, 10), batch(0, 20), individual(1)])
+      );
+      expect(responses.map(({ status }) => status)).toEqual([201, 200, 200, 201]);
+      const ownerList = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions", {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          }),
+          coordinator
+        )
+      );
+      const owner = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => ownerList.json())
+      ).pipe(Effect.orDie);
+      expect(owner.data).toHaveLength(5);
+      expect(new Set(owner.data.map(({ id }) => id)).size).toBe(5);
+      const neighborList = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions", {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(1)}`,
+            },
+          }),
+          coordinator
+        )
+      );
+      const neighbor = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => neighborList.json())
+      ).pipe(Effect.orDie);
+      expect(neighbor.data).toHaveLength(1);
+    })
+  ));
+
+it("attributes a per-day budget guard abort to the capture child that met it", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const movementDb = yield* fromTestPromise(() => setup());
+      const today = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* fromTestPromise(() =>
+        movementDb
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
+    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
+          .bind(users[0], category, today, today)
+          .run()
+      );
+      const limited = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          movementDb,
+          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
+        )
+      );
+      expect(limited.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => limited.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("rate_limited");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.createTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            movementDb,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(99);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            movementDb,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND outcome = 'resource_limit'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+
+      const auditDb = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        auditDb
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 254)
+    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+    SELECT 'budget-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+          .bind(users[0], sessions[0], current)
+          .run()
+      );
+      const exhausted = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          auditDb,
+          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
+        )
+      );
+      expect(exhausted.status).toBe(400);
+      const exhaustedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => exhausted.json())
+      ).pipe(Effect.orDie);
+      expect(exhaustedRejection.error.code).toBe("rate_limited");
+      expect(exhaustedRejection.error.failedCallIndex).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(auditDb, "SELECT COUNT(*) AS count FROM transactions")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(auditDb, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(255);
+    })
+  ));
+
+it("fails closed on a foreign Transaction or an unknown Category without partial state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const neighborId = "30000000-0000-4000-8000-000000000007";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[1] ?? "", id: neighborId, categoryId: category })
+      );
+      const foreign = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            correctionCall(2, neighborId, { expectedRevision: 0, changes: { notes: "foreign" } }),
+          ])
+        )
+      );
+      expect(foreign.status).toBe(400);
+      const foreignRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => foreign.json())
+      ).pipe(Effect.orDie);
+      expect(foreignRejection.error.code).toBe("not_found");
+      expect(foreignRejection.error.failedCallIndex).toBe(1);
+      expect(foreignRejection.error.operation).toBe("transactions.updateTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      const neighborRows = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT notes, revision FROM transactions WHERE user_id = ?")
+          .bind(users[1])
+          .all<{ notes: string; revision: number }>()
+      );
+      expect(neighborRows.results).toEqual([{ notes: "seed", revision: 0 }]);
+
+      const unknown = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            transactionCall(2, input({ categoryId: "10000000-0000-4000-8000-000000009999" })),
+          ])
+        )
+      );
+      expect(unknown.status).toBe(400);
+      const unknownRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => unknown.json())
+      ).pipe(Effect.orDie);
+      expect(unknownRejection.error.code).toBe("not_found");
+      expect(unknownRejection.error.failedCallIndex).toBe(1);
+      expect(unknownRejection.error.operation).toBe("transactions.createTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      const refusals = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+          .bind(users[0])
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(refusals.results.map(({ outcome }) => outcome)).toEqual(["not_found", "not_found"]);
+      expect(new Set(refusals.results.map(({ operation }) => operation)).size).toBe(2);
+    })
+  ));
+
+it("maps a batch dependency defect to the closed unavailable failure without partial state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const brokenDb: D1Database = {
+        prepare: (sql) => db.prepare(sql),
+        batch: () => Promise.reject(new Error("database defect")),
+        exec: (sql) => db.exec(sql),
+        withSession: (constraint) => db.withSession(constraint),
+        dump: () => db.dump(),
+      };
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          brokenDb,
+          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
     })
   ));

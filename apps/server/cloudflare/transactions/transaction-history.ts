@@ -235,6 +235,24 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
   });
 };
 
+/** A stored Transaction decoded into the canonical JSON projection every response carries. */
+export type StoredTransaction = typeof Output.Type;
+
+/** Read one owned Transaction projection by id; absence is an answer rather than a defect. */
+export const findTransaction = ({
+  db,
+  userId,
+  id,
+}: Readonly<{ db: D1Database; userId: string; id: string }>): Promise<
+  Option.Option<StoredTransaction>
+> =>
+  db
+    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
+      FROM transactions WHERE user_id = ? AND id = ?`)
+    .bind(userId, id)
+    .first()
+    .then(decodeTransactionRow);
+
 const presentHistory = (
   rows: D1Result,
   selection: Pick<Selection, "id" | "request" | "search">

@@ -1,8 +1,10 @@
 import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
 import { correctTransaction } from "./transaction-corrections";
-import { CanonicalCapability } from "@fidy/server/canonical-runtime";
+import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
+import { type TransactionBatchCall, executeTransactionBatch } from "./transaction-mutations";
+import { type TransactionCaller, transactionNow } from "./transaction-boundary";
 
 const digestBytes = 32;
 const Credentials = {
@@ -22,12 +24,72 @@ const Correction = {
     input: Schema.toCodecJson(UpdateTransactionInput),
   }),
 } as const;
+const BatchCall = Schema.Struct({
+  callId: Schema.String.check(Schema.isUUID()),
+  operation: Schema.String,
+  input: Schema.Unknown,
+});
+const Batch = {
+  calls: Schema.NonEmptyArray(BatchCall).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
+} as const;
 const Command = Schema.Union([
   Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
   Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),
+  Schema.TaggedStruct("WebSessionBatch", { ...WebSession, ...Batch }),
   Schema.TaggedStruct("PATCapture", { ...PAT, ...Capture }),
   Schema.TaggedStruct("PATCorrection", { ...PAT, ...Correction }),
+  Schema.TaggedStruct("PATBatch", { ...PAT, ...Batch }),
 ]);
+type Command = typeof Command.Type;
+
+/** Rebuild the exact live subject the admitted command was issued for. */
+const commandSubject = (command: Command): TransactionCaller =>
+  command._tag === "PATCapture" || command._tag === "PATCorrection" || command._tag === "PATBatch"
+    ? {
+        patId: command.patId,
+        userId: command.userId,
+        digest: new Uint8Array(command.digest),
+        requiredScope: Option.fromNullishOr(command.requiredScope),
+      }
+    : {
+        id: command.sessionId,
+        userId: command.userId,
+        digest: new Uint8Array(command.digest),
+      };
+
+/** Dispatch one admitted command to the shared Transaction mutation implementation. */
+const executeCommand = ({
+  db,
+  command,
+}: Readonly<{ db: D1Database; command: Command }>): Effect.Effect<Response, Response> =>
+  Effect.gen(function* () {
+    const subject = commandSubject(command);
+    switch (command._tag) {
+      case "WebSessionCorrection":
+      case "PATCorrection": {
+        const { correction } = command;
+        return yield* Effect.tryPromise({
+          try: () =>
+            correctTransaction({ db, subject, id: correction.id, input: correction.input }),
+          catch: () => unavailableTransaction(),
+        });
+      }
+      case "WebSessionBatch":
+      case "PATBatch": {
+        const calls: ReadonlyArray<TransactionBatchCall> = command.calls;
+        return yield* Effect.tryPromise({
+          try: () => executeTransactionBatch({ db, subject, calls, current: transactionNow() }),
+          catch: () => unavailableTransaction(),
+        });
+      }
+      case "WebSessionCapture":
+      case "PATCapture":
+        return yield* Effect.tryPromise({
+          try: () => createManualTransaction({ db, subject, input: command.input }),
+          catch: () => unavailableTransaction(),
+        });
+    }
+  });
 
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
@@ -57,32 +119,7 @@ export class UserTransactionCoordinator {
           ) {
             return unavailableTransaction();
           }
-          const subject =
-            command.value._tag === "PATCapture" || command.value._tag === "PATCorrection"
-              ? {
-                  patId: command.value.patId,
-                  userId: command.value.userId,
-                  digest: new Uint8Array(command.value.digest),
-                  requiredScope: Option.fromNullishOr(command.value.requiredScope),
-                }
-              : {
-                  id: command.value.sessionId,
-                  userId: command.value.userId,
-                  digest: new Uint8Array(command.value.digest),
-                };
-          const authorized = command.value;
-          if ("correction" in authorized) {
-            const { correction } = authorized;
-            return yield* Effect.tryPromise({
-              try: () =>
-                correctTransaction({ db, subject, id: correction.id, input: correction.input }),
-              catch: () => unavailableTransaction(),
-            });
-          }
-          return yield* Effect.tryPromise({
-            try: () => createManualTransaction({ db, subject, input: authorized.input }),
-            catch: () => unavailableTransaction(),
-          });
+          return yield* executeCommand({ db, command: command.value });
         }).pipe(Effect.catch((response) => Effect.succeed(response)))
       )
     );

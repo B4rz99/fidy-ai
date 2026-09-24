@@ -112,14 +112,29 @@ type PATAuthority = Readonly<{
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
+const liveCredentialPredicate = `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
+  AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)`;
+
+/**
+ * The live bearer, lifetime, and Consent decision without any scope clause. Only a classification
+ * read: protected work always rechecks the exact required scope through `livePATAuthority`.
+ */
+export const livePATCredential = ({
+  subject,
+  current,
+}: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => ({
+  table: "pats",
+  predicate: liveCredentialPredicate,
+  bindings: [subject.patId, subject.userId, subject.digest, current],
+});
+
 /** Guard protected D1 work with the same live bearer and Consent decision as PAT use. */
 export const livePATAuthority = ({
   subject,
   current,
 }: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => ({
   table: "pats",
-  predicate: `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
+  predicate: `${liveCredentialPredicate}
     AND ${Option.isSome(subject.requiredScope) ? "EXISTS (SELECT 1 FROM json_each(pats.scopes_json) WHERE value = ?)" : "0"}`,
   bindings: [
     subject.patId,
@@ -142,18 +157,22 @@ export const recordLivePATUse = ({
   };
 };
 
-type CapturedUseInput = Readonly<{ auditId: string; current: number }>;
-/** Advance PAT activity only after the matching successful capture audit committed in this D1 unit. */
-export const recordCapturedPATUse = ({
+type AuditedUseInput = Readonly<{
+  auditId: string;
+  current: number;
+  operation: "transactions.createTransaction" | "transactions.updateTransaction";
+}>;
+/** Advance PAT activity only after the matching successful Transaction audit committed in this D1 unit. */
+export const recordAuditedPATUse = ({
   subject,
   input,
-}: Readonly<{ subject: PATSubject; input: CapturedUseInput }>): OwnedStatement => {
+}: Readonly<{ subject: PATSubject; input: AuditedUseInput }>): OwnedStatement => {
   const authority = livePATAuthority({ subject, current: input.current });
   return {
     sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
       AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
-      AND pat_id = pats.id AND operation = 'transactions.createTransaction' AND outcome = 'accepted')`,
-    params: [input.current, ...authority.bindings, input.auditId],
+      AND pat_id = pats.id AND operation = ? AND outcome = 'accepted')`,
+    params: [input.current, ...authority.bindings, input.auditId, input.operation],
   };
 };
 

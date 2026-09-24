@@ -1,0 +1,86 @@
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_0df162e7b0807c::t_9123d1ad967d32 12-13,21,26,73-75
+  s_0df162e7b0807c::t_6036f14d17fa59 1-2
+  s_0df162e7b0807c::t_38d3d8ffdfb78b 14-16,77-82
+  s_0df162e7b0807c::t_aa55a9385375b7 76,83
+  s_0df162e7b0807c::t_b32252d42a9fba 11,84,86
+apps/server/src/core/transactions/model.test.ts
+  s_0df162e7b0807c::t_84837fd8544edf 33,149-150,152-153
+  s_0df162e7b0807c::t_38d3d8ffdfb78b 91-97
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_0df162e7b0807c::t_517cc15a2de3ab 40,157,177
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  s_0df162e7b0807c::t_bc727f7b6cc4c9 1-8,15-18,20-21,23-31,39,55,72-73,77-82,197,282,297
+  s_0df162e7b0807c::t_b70e3612c0c4e0 33-34,46-54,71,83-84,95-96,99,104,108,123-125,141,147,159-160,163-165,182-184,196,198,204-205,219-220,224-225,228,242-243,246,250-254,257-259,267-270,276,281,298
+  s_0df162e7b0807c::t_8c3789e8259e95 19
+  s_0df162e7b0807c::t_e3c603b331ac09 35-38,40-45,59-70,75,85-86,89-94,100-102,105-107,109-122,126-140,142-146,148-158,161-162,166-181,185-195,199-203,206-218,221-223,226-227,229-241,244-245,247-249,255-256,260-266,273-274,277-280,283-286,289-295,299-300,302-336
+  s_0df162e7b0807c::t_a230e52009d555 14,56-58,87-88
+  s_0df162e7b0807c::t_77bd9f98a1eb2b 74,76,301
+  s_0df162e7b0807c::t_dac00976efa013 271-272,275,287-288,296
+  s_0df162e7b0807c::t_02b5152a44a8de 97-98,103
+  s_0df162e7b0807c::t_47817ec6efd995 9-13,32
+  s_80d919865c178f::t_18fbb71d928664 22
+apps/server/cloudflare/migrations/0009_transactions.sql
+  s_0df162e7b0807c::t_619e4dfdbc600b 44
+apps/server/cloudflare/transactions/transactions.ts
+  s_0df162e7b0807c::t_e3c603b331ac09 106-112,120-134,138-148,244,246-265,327-332,384-389,405-410
+  s_0df162e7b0807c::t_443e2d897103ae 80,85,89,105,113-119
+  s_0df162e7b0807c::t_413be4150868b4 438
+  s_0df162e7b0807c::t_f1ca50e972064b 225-226,243,266-270,272
+  s_0df162e7b0807c::t_e9803ecf7acbd9 245
+  s_0df162e7b0807c::t_566c3657a8ad9b 135
+  s_0df162e7b0807c::t_349a5e5661bfb5 136-137
+apps/server/contracts/openapi.json
+  s_0df162e7b0807c::t_f7e7a16106a6e6 77,141,330,493,532,541,549,583,747,750,778,802,808,957,1027-1032,1063,1066,1591,1603,1630,1645,1829,1835,1922,2173,2267,2357,2843,3166-3180,3206,3209,3229,3527,3533,3546-3549,3559,4173,4803,5037,5040,5069,5075,5180,5311,5327,5382,5392,5408,5462,5472,5491,5548,5580,5622,5673,6600,7289,7295,7305-7308,7317-7318,7339-7344,7366,7369,7563,7569,7624-7627,7637,8235,8716,9349,9360,9368,9375,9383,9397,9404-9415,9432,9475-9517,9519-9521,9524-9527,9530,9533-9580,9582-9584,13018,13024,13051,13057,14086,14535,14551
+apps/server/src/core/transactions/model.ts
+  s_0df162e7b0807c::t_38d3d8ffdfb78b 192-198
+  s_0df162e7b0807c::t_df4ef7da6a89f9 115-116,176,184-191,199-201
+apps/server/cloudflare/migrations/0011_transaction_corrections.sql
+  s_0df162e7b0807c::t_5eb7dfd035ab3b 4-14
+  s_0df162e7b0807c::t_ca3bd7b9bba389 1-2,15-30
+  s_0df162e7b0807c::t_6fe569c43479db 3
+apps/server/src/shell/tokens/pat-audit.ts
+  s_0df162e7b0807c::t_e85a5e59fd0db7 110
+apps/server/src/shell/transactions/cloudflare-routes.ts
+  s_0df162e7b0807c::t_5c04c919b5b116 20
+apps/server/cloudflare/core-worker.ts
+  s_0df162e7b0807c::t_38d3d8ffdfb78b 226-231,235-252,254-255,257-265
+  s_0df162e7b0807c::t_e53ebd0b67a38f 176
+  s_0df162e7b0807c::t_0ed2398155c2da 11-12,216-223,234,253,256,266-268,409-411
+  s_0df162e7b0807c::t_e3c603b331ac09 224-225,232-233
+  s_0df162e7b0807c::t_356031048a567c 412-414
+apps/server/src/shell/transactions/operations.ts
+  s_0df162e7b0807c::t_d01c43742828a1 121
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_0df162e7b0807c::t_837a1d60ee3dd0 149
+  s_0df162e7b0807c::t_e3c603b331ac09 314
+  s_0df162e7b0807c::t_38d3d8ffdfb78b 271-273,275-283,285,287-289,291-294,296-313,315,318-320,329-334,336-346,349-369,374-434
+  s_0df162e7b0807c::t_90e581f0ae2ec1 373,435
+  s_0df162e7b0807c::t_655301cba627e0 270,284,295,316,326-327
+  s_0df162e7b0807c::t_47779b7a633b24 266-269,274
+  s_0df162e7b0807c::t_71b1d2c3a8a4f5 262-265,286,290,317,321-325,328,335,347-348,370-372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdd8f5a0079715cbbc635048dd3bf128307c4e85",
+  "prompts": {},
+  "sessions": {
+    "s_0df162e7b0807c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d4c6-5482-7787-9cce-190d0cf05323",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_80d919865c178f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d4c6-0ceb-77e7-9746-36b3526012c0",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

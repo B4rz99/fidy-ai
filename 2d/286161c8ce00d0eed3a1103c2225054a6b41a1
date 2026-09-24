@@ -1,0 +1,22 @@
+apps/server/src/shell/hosted-inference/workers-ai.ts
+  s_20c7bd04cb455a::t_979237e0092956 75
+  s_20c7bd04cb455a::t_dc93e75f05ad2f 59,65-69,71-72,76-82,87,308,316-323,564,636
+  s_20c7bd04cb455a::t_ce21556961282b 73-74,84-85
+  s_20c7bd04cb455a::t_9134e5d221a0f1 70,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2d286161c8ce00d0eed3a1103c2225054a6b41a1",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

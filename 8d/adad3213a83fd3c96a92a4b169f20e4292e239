@@ -1,0 +1,28 @@
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_20c7bd04cb455a::t_a92170204649ff 3
+  s_20c7bd04cb455a::t_58c8957b453e8d 7,74,82-83,96-97,107-108
+  s_20c7bd04cb455a::t_d59f68a3e0a5cf 6
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_20c7bd04cb455a::t_cc0cff2fea09e8 2
+apps/server/src/shell/hosted-inference/conformance.ts
+  s_20c7bd04cb455a::t_bdace671b9f505 158,173
+apps/server/src/shell/hosted-inference/workers-ai.ts
+  s_20c7bd04cb455a::t_4fdeada41bf24d 31,38
+  s_20c7bd04cb455a::t_7d8358166f61ec 573
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8dadad3213a83fd3c96a92a4b169f20e4292e239",
+  "prompts": {},
+  "sessions": {
+    "s_20c7bd04cb455a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d345-0da5-7309-8713-18ad01313e11",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

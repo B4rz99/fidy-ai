@@ -1,0 +1,19 @@
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_de6c7d29aa90cd::t_70f4db3fe547f8 227-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8d2491a8affcec38d80788c79aed6a97bdcb6814",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

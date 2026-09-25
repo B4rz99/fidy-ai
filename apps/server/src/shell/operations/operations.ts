@@ -69,6 +69,7 @@ export class AtomicBatchRejected extends Schema.Error<AtomicBatchRejected>("Atom
 let boundAtomicBatchCall = Option.none<Schema.Codec<AtomicBatchCall, Schema.Json>>();
 let boundAtomicBatchInput = Option.none<AtomicBatchInputSchema>();
 let boundAtomicBatchResult = Option.none<Schema.Codec<AtomicBatchResult, Schema.Json>>();
+let boundAtomicBatchChildren = Option.none<ReadonlyArray<CanonicalOperationId>>();
 
 /** The catalog-derived call schema used to recover exact registry correlation after HTTP decoding. */
 export const getAtomicBatchCallSchema = (): Schema.Codec<AtomicBatchCall, Schema.Json> =>
@@ -97,6 +98,13 @@ export const decodeAtomicBatchResult = (
     )
   )(value);
 
+/** The operation ids the published child-call union covers, bound when the batch group builds. */
+export const getAtomicBatchChildIds = (): ReadonlyArray<CanonicalOperationId> =>
+  Option.getOrThrowWith(
+    boundAtomicBatchChildren,
+    () => new Error("Atomic batch children have not been derived")
+  );
+
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
   catalog.operations.filter(
     (operation) =>
@@ -105,6 +113,17 @@ const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOpe
       (isPATScoped(operation.policy.access) ||
         operation.policy.access._tag === "FreshWebSessionOnly")
   );
+
+/**
+ * The catalog-derived mutations one atomic batch accepts as children, in catalog order: every
+ * atomic-batch-eligible canonical mutation except the batch operation itself, so a nested batch is
+ * unrepresentable and ADR 0027 standalone mutations stay excluded. The Cloudflare execution
+ * registry derives its completeness from this same set rather than restating a readiness list.
+ */
+export const atomicBatchChildOperations = (
+  catalog: OperationCatalog
+): ReadonlyArray<CatalogOperation> =>
+  mutationOperations(catalog).filter((operation) => operation.id !== atomicBatchOperation);
 
 const mutationCallMember = (operation: CatalogOperation): Schema.Top =>
   Schema.Struct({
@@ -168,6 +187,7 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
   );
   boundAtomicBatchCall = Option.some(call);
   boundAtomicBatchResult = Option.some(result);
+  boundAtomicBatchChildren = Option.some(mutations.map((operation) => operation.id));
   const input = Schema.Struct({
     calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   });

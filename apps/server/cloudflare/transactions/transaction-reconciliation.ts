@@ -10,6 +10,7 @@ import {
   decideTransactionLink,
   orderTransactionPair,
 } from "@fidy/server/transaction-reconciliation";
+import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
@@ -17,6 +18,7 @@ import {
   type TransactionAuthority,
   type TransactionBoundaryFailure,
   type TransactionCaller,
+  type TransactionRefusal,
   acceptedPATStatements,
   alreadyLinkedMessage,
   boundaryFailure,
@@ -28,16 +30,14 @@ import {
   missingTransactionMessage,
   pairPolicyMessage,
   transactionId,
-  transactionNow,
-  transactionUnavailable,
   unlinkedPairMessage,
 } from "./transaction-boundary";
 import {
-  type TransactionMutationPreparation,
-  executeSingleTransactionMutation,
+  type CanonicalMutationPreparation,
+  credentialRefusedPreparation,
   failedPreparation,
-  refusedPreparation,
-} from "./transaction-unit";
+} from "../mutations/mutation-types";
+import { refusedTransactionMutation } from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(TransactionPairInput);
 const policy = Schema.decodeSync(RequestBodyPolicy)({
@@ -292,57 +292,77 @@ const unlinkStatements = (
 };
 
 /** Decide one canonical link against live authority and both retained candidates. */
-export const prepareLink = (work: PairWork): Effect.Effect<TransactionMutationPreparation> =>
+export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
+    const refuse = (refusal: TransactionRefusal): CanonicalMutationPreparation =>
+      refusedTransactionMutation({
+        db: work.db,
+        subject: work.subject,
+        operation: "transactions.linkTransactions",
+        refusal,
+        current: work.current,
+      });
     if (work.pair.firstTransactionId === work.pair.secondTransactionId) {
-      return refusedPreparation("validation_failed", samePairMessage);
+      return refuse({ outcome: "validation_failed", message: samePairMessage });
     }
     const authority = yield* liveAuthority(work);
-    if (Option.isNone(authority)) return { _tag: "CredentialRefused" } as const;
+    if (Option.isNone(authority)) return credentialRefusedPreparation();
     const candidates = yield* findPair(work);
     if (Option.isNone(candidates)) {
-      return refusedPreparation("not_found", missingTransactionMessage);
+      return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
     const [first, second] = candidates.value;
     if (first.alreadyLinked || second.alreadyLinked) {
-      return refusedPreparation("validation_failed", alreadyLinkedMessage);
+      return refuse({ outcome: "validation_failed", message: alreadyLinkedMessage });
     }
     const decided = yield* decideTransactionLink(first.member, second.member).pipe(Effect.option);
     if (Option.isNone(decided)) {
-      return refusedPreparation("validation_failed", pairPolicyMessage);
+      return refuse({ outcome: "validation_failed", message: pairPolicyMessage });
     }
     const decision = decided.value;
     return {
       _tag: "Prepared",
       mutation: {
-        operation: "transactions.linkTransactions",
-        transactionId: decision.visibleTransactionId,
-        response: { _tag: "EffectiveTransaction", pair: decision.pair },
-        expectedRevision: Option.none(),
         requiredScope: callerScope(work.subject),
+        outcome: {
+          _tag: "Transaction",
+          operation: "transactions.linkTransactions",
+          transactionId: decision.visibleTransactionId,
+          readback: { _tag: "EffectiveTransaction", pair: decision.pair },
+          expectedRevision: Option.none(),
+        },
         statements: linkStatements({
           ...work,
           pair: decision.pair,
           visibleTransactionId: decision.visibleTransactionId,
           authority: authority.value,
         }),
+        completion: work.db.prepare(transactionCaptureCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Decide one canonical unlink against live authority and the pair's current decision state. */
-export const prepareUnlink = (work: PairWork): Effect.Effect<TransactionMutationPreparation> =>
+export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
+    const refuse = (refusal: TransactionRefusal): CanonicalMutationPreparation =>
+      refusedTransactionMutation({
+        db: work.db,
+        subject: work.subject,
+        operation: "transactions.unlinkTransactions",
+        refusal,
+        current: work.current,
+      });
     const ordered = yield* orderTransactionPair(work.pair).pipe(Effect.option);
     if (Option.isNone(ordered)) {
-      return refusedPreparation("validation_failed", samePairMessage);
+      return refuse({ outcome: "validation_failed", message: samePairMessage });
     }
     const pair = ordered.value;
     const authority = yield* liveAuthority(work);
-    if (Option.isNone(authority)) return { _tag: "CredentialRefused" } as const;
+    if (Option.isNone(authority)) return credentialRefusedPreparation();
     const candidates = yield* findPair({ ...work, pair });
     if (Option.isNone(candidates)) {
-      return refusedPreparation("not_found", missingTransactionMessage);
+      return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
     const decision = yield* Effect.tryPromise({
       try: () =>
@@ -355,63 +375,21 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<TransactionMutation
     });
     const state = Schema.decodeUnknownOption(ReconciliationDecisionRow)(decision);
     if (Option.isNone(state) || state.value.state !== "linked") {
-      return refusedPreparation("validation_failed", unlinkedPairMessage);
+      return refuse({ outcome: "validation_failed", message: unlinkedPairMessage });
     }
     return {
       _tag: "Prepared",
       mutation: {
-        operation: "transactions.unlinkTransactions",
-        transactionId: pair.firstTransactionId,
-        response: { _tag: "RestoredPair", pair },
-        expectedRevision: Option.none(),
         requiredScope: callerScope(work.subject),
+        outcome: {
+          _tag: "Transaction",
+          operation: "transactions.unlinkTransactions",
+          transactionId: pair.firstTransactionId,
+          readback: { _tag: "RestoredPair", pair },
+          expectedRevision: Option.none(),
+        },
         statements: unlinkStatements({ ...work, pair, authority: authority.value }),
+        completion: work.db.prepare(transactionCaptureCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
-
-const executePair = (
-  work: Readonly<{
-    db: D1Database;
-    subject: TransactionCaller;
-    input: Pair;
-    operation: "transactions.linkTransactions" | "transactions.unlinkTransactions";
-    prepare: (work: PairWork) => Effect.Effect<TransactionMutationPreparation>;
-  }>
-): Promise<Response> => {
-  const current = transactionNow();
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const preparation = yield* work.prepare({
-        db: work.db,
-        subject: work.subject,
-        pair: work.input,
-        current,
-      });
-      return yield* executeSingleTransactionMutation({
-        db: work.db,
-        subject: work.subject,
-        current,
-        operation: work.operation,
-        preparation,
-        status: 200,
-      });
-    })
-  ).catch(() => transactionUnavailable());
-};
-
-/** Link one exact owned pair under live caller authority, retaining both originals and evidence. */
-export const linkTransactions = (work: {
-  db: D1Database;
-  subject: TransactionCaller;
-  input: Pair;
-}): Promise<Response> =>
-  executePair({ ...work, operation: "transactions.linkTransactions", prepare: prepareLink });
-
-/** Remove one exact reversible link under live caller authority and remember keep-separate. */
-export const unlinkTransactions = (work: {
-  db: D1Database;
-  subject: TransactionCaller;
-  input: Pair;
-}): Promise<Response> =>
-  executePair({ ...work, operation: "transactions.unlinkTransactions", prepare: prepareUnlink });

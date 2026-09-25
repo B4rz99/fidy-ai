@@ -26,6 +26,28 @@ export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRu
 export const KeywordRuleResponse = OperationResponse(KeywordRule);
 export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
 
+/**
+ * The retained keyword-rule path parameter, rebuilt at each declaration. The published document
+ * componentizes one schema instance reached from several declarations, so sharing the instance
+ * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
+ */
+const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
+  Schema.Struct({ id: KeywordRuleId });
+
+/** The canonical operation input of `categories.createKeywordRule`, owned beside its endpoint. */
+export const CreateKeywordRuleCanonicalInput = Schema.Struct({ payload: CreateKeywordRuleInput });
+
+/** The canonical operation input of `categories.updateKeywordRule`, owned beside its endpoint. */
+export const UpdateKeywordRuleCanonicalInput = Schema.Struct({
+  params: retainedKeywordRuleParams(),
+  payload: UpdateKeywordRuleInput,
+});
+
+/** The canonical operation input of `categories.deleteKeywordRule`, owned beside its endpoint. */
+export const DeleteKeywordRuleCanonicalInput = Schema.Struct({
+  params: retainedKeywordRuleParams(),
+});
+
 const read = operationPolicy({
   access: patScoped("read"),
   requiredTier: "free",
@@ -82,7 +104,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
   )
   .add(
     HttpApiEndpoint.put("updateKeywordRule", retainedKeywordRulePath, {
-      params: Schema.Struct({ id: KeywordRuleId }),
+      params: retainedKeywordRuleParams(),
       payload: UpdateKeywordRuleInput,
       success: KeywordRuleResponse,
       error: [NotFound, ValidationFailed],
@@ -95,7 +117,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
   )
   .add(
     HttpApiEndpoint.delete("deleteKeywordRule", retainedKeywordRulePath, {
-      params: Schema.Struct({ id: KeywordRuleId }),
+      params: retainedKeywordRuleParams(),
       success: RemovedKeywordRuleResponse,
       error: NotFound,
     })

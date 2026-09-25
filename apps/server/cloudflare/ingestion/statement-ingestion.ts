@@ -13,6 +13,7 @@ import {
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import type * as Arr from "effect/Array";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
+import { pathId } from "../http/path";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { currentMillis } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -769,8 +770,7 @@ export const readStatementSubmission = ({
       if (yield* budgetSpent(environment.DB, subject.userId, currentMillis())) {
         return dailyBudgetSpent();
       }
-      const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
-      const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
+      const submissionId = pathId({ schema: StatementSubmissionId, request });
       const refused = yield* commitReadAudit(
         environment,
         subject,

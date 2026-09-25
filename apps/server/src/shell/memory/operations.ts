@@ -30,6 +30,14 @@ const recallPolicy = operationPolicy({
   kind: "query",
 });
 
+/**
+ * The retained Memory path parameter, rebuilt at each declaration. The published document
+ * componentizes one schema instance reached from several declarations, so sharing the instance
+ * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
+ */
+const retainedMemoryParams = (): Schema.Struct<{ readonly id: typeof MemoryId }> =>
+  Schema.Struct({ id: MemoryId });
+
 /** Canonical durable Memory lifecycle and deterministic retrieval for the caller. */
 export const MemoryGroup = HttpApiGroup.make("memory")
   .add(
@@ -46,7 +54,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
   )
   .add(
     HttpApiEndpoint.put("revise", "/memories/:id", {
-      params: Schema.Struct({ id: MemoryId }),
+      params: retainedMemoryParams(),
       payload: ReviseInput,
       success: OperationResponse(Memory),
       error: [MemoryCapacityExceededApi, NotFound, ResourceLimited, Unavailable],
@@ -59,7 +67,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
   )
   .add(
     HttpApiEndpoint.delete("forget", "/memories/:id", {
-      params: Schema.Struct({ id: MemoryId }),
+      params: retainedMemoryParams(),
       success: OperationResponse(MemoryId),
       error: [NotFound, ResourceLimited, Unavailable],
     })
@@ -83,6 +91,18 @@ export const MemoryGroup = HttpApiGroup.make("memory")
 
 /** Every canonical Memory operation id, derived from the endpoints this group declares. */
 export type MemoryOperationId = `memory.${keyof typeof MemoryGroup.endpoints}`;
+
+/** The canonical operation input of `memory.remember`, owned beside its endpoint. */
+export const RememberCanonicalInput = Schema.Struct({ payload: RememberInput });
+
+/** The canonical operation input of `memory.revise`, owned beside its endpoint. */
+export const ReviseCanonicalInput = Schema.Struct({
+  params: retainedMemoryParams(),
+  payload: ReviseInput,
+});
+
+/** The canonical operation input of `memory.forget`, owned beside its endpoint. */
+export const ForgetCanonicalInput = Schema.Struct({ params: retainedMemoryParams() });
 
 /** Adapter dispatch list; an alignment test proves it covers exactly the declared group. */
 export const memoryOperationIds = [

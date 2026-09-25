@@ -19,10 +19,12 @@ production listener.
 The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
 provider-specific hosted inference implementations are not compatibility surfaces. Railway,
 PostgreSQL, and a Bun process are superseded Production architecture under ADR 0026. The private
-Core Worker in `apps/server/cloudflare` owns the D1-backed Categories adapter path, the direct Workers AI
-binding boundary, the service-binding boundary, and the bounded health projection. The server's
-Cloudflare runtime owns the reusable resource-admission foundation that later Core adapters install
-with their policies. Those adapters will compose this package's published contracts with
+Core Worker in `apps/server/cloudflare` owns the D1-backed Categories adapter path, the direct
+Workers AI binding boundary, the service-binding boundary, and the bounded health projection. It
+declares that binding without building it: the User coordinator Durable Object builds the
+hosted-inference layer, and only for the Memory work that consumes it. The server's Cloudflare
+runtime owns the reusable resource-admission foundation that later Core adapters install with their
+policies. Those adapters will compose this package's published contracts with
 Durable Objects, Queues, Workflows, R2, or Email Workers. Operations without an adapter fail closed.
 
 ## 2. Slices and ownership
@@ -62,10 +64,11 @@ requests for the retained specialist providers—Kapso/Meta, Wompi, and outbound
 destinations, credential handling, redirects, byte limits, status projection, and safe failures.
 Provider adapters cannot import raw transport or private implementation modules.
 
-Hosted inference exposes a provider-neutral contract backed only by the Core Worker's direct Workers
-AI binding. A closed approved-model schema and live provider-conformance gate protect canonical tool,
-continuation, structured-output, and `es-CO` behavior. Unsupported or absent configuration fails with
-typed unavailability, and there is no gateway, direct OpenAI, or external-model fallback.
+Hosted inference exposes a provider-neutral contract backed only by the direct Workers AI binding
+the User coordinator Durable Object builds for Memory work, which the Core Worker declares without
+building. A closed approved-model schema and live provider-conformance gate protect canonical tool,
+continuation, structured-output, and `es-CO` behavior. Unsupported or absent configuration fails
+with typed unavailability, and there is no gateway, direct OpenAI, or external-model fallback.
 
 ## 5. Persistence and asynchronous execution
 
@@ -84,9 +87,12 @@ rewrites retained history.
 The infrastructure admission primitive atomically charges Stable-User, source, operation,
 outstanding-work, and spend policies with caller-owned proof, replay, or outbox statements. Its
 resource refusal and authority-unavailable failures are separate from commercial allowance results.
-Domain-specific mutation and outbox adapters remain later work. If an adapter is absent, canonical
-mutation execution returns the closed unavailable failure. It must not use an in-memory map, local
-queue, process lock, or best-effort continuation as a substitute.
+The shared canonical mutation unit in `cloudflare/mutations` composes the Reconciliation, Category
+keyword-rule, and Memory owners into one User-scoped D1 commit, derived from the operation catalog
+so a new canonical mutation joins it without editing the unit. Domain-specific outbox adapters
+remain later work. If an adapter is absent, canonical mutation execution returns the closed
+unavailable failure. It must not use an in-memory map, local queue, process lock, or best-effort
+continuation as a substitute.
 
 The statement-byte staging adapter keeps bytes in private R2 as bounded, User-owned,
 non-authoritative material before a canonical submission cites them. Staging is a browser-session

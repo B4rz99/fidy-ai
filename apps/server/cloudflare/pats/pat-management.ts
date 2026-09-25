@@ -32,6 +32,7 @@ import {
   webSession,
 } from "./pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 
 export { createManualPAT } from "./pat-manual";
 
@@ -62,9 +63,7 @@ export const listPATs = ({
               }),
             ]),
           catch: (error) =>
-            String(error).includes("transaction_audit_limit")
-              ? ("rate_limited" as const)
-              : ("unavailable" as const),
+            refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
         });
         if (recorded?.meta.changes !== 1) return unauthorized();
         if (rows === undefined) return unavailable();

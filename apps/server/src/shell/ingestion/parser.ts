@@ -10,7 +10,7 @@ import type {
 } from "~/core/ingestion/model";
 import { maximumStatementBytes } from "~/core/ingestion/model";
 import type { StatementSourceFormat } from "~/core/ingestion/reference";
-import { statementSourceFormat } from "./source-format";
+import { knownUnsupportedStatementBytes, statementSourceFormat } from "./source-format";
 
 const bytesPerKibibyte = 1024;
 const maximumExpandedMebibytes = 25;
@@ -363,18 +363,8 @@ const parseXlsx = (bytes: Uint8Array): ParsedStatement => {
   };
 };
 
-const unsupportedSignatures = ["JVBERg==", "iVBORw==", "/9j/", "R0lGOA==", "Qk0=", "UklGRg=="].map(
-  (signature) => Uint8Array.fromBase64(signature)
-);
-
-const startsWith = (bytes: Uint8Array, signature: Uint8Array): boolean =>
-  signature.every((value, index) => bytes[index] === value);
-
-const knownUnsupportedSignature = (bytes: Uint8Array): boolean =>
-  unsupportedSignatures.some((signature) => startsWith(bytes, signature));
-
 const detectedFormat = (bytes: Uint8Array): StatementSourceFormat => {
-  if (knownUnsupportedSignature(bytes)) {
+  if (knownUnsupportedStatementBytes(bytes)) {
     throw new StatementParseFailed({ safeReason: "unsupported-format" });
   }
   return statementSourceFormat(bytes);

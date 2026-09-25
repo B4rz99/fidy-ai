@@ -5,16 +5,20 @@ import {
   type StatementStagingFailureReason,
   StatementStagingId,
 } from "@fidy/server/statement-staging";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import { Data, Effect, Encoding, Fiber, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
+import type { TransactionAuthority } from "../transactions/transaction-boundary";
 import {
   type PublishedStatementSubmission,
   StatementStaging,
   StatementStagingFailed,
+  type StatementStagingRefused,
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
+  statementSubmissionReplayAudit,
 } from "./statement-staging";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -35,16 +39,31 @@ const statementBytes = new TextEncoder().encode(
   `fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n${secretSentinel}\n`
 );
 
-type StagingResult<A> = Result.Result<A, StatementStagingFailed | StatementStagingUnavailable>;
+type StagingResult<A> = Result.Result<
+  A,
+  StatementStagingFailed | StatementStagingRefused | StatementStagingUnavailable
+>;
 
 const instances = new Set<Miniflare>();
 const migrationsDirectoryUrl = new URL("../migrations/", import.meta.url);
-// The proof needs stable User ownership and the statement staging schema, in deployment order.
+// The proof needs stable User ownership, the statement staging schema, and the Subscription
+// standing tables publication decides the Free allowance against, in deployment order. #698's
+// migration also joins the shared canonical read budget, so the canonical audit tables and their
+// budget triggers must exist before it runs.
 const migrationNames = [
+  "0001_categories",
   "0003_pending_consent",
   "0004_onboarding_email",
   "0005_verified_onboarding",
+  "0006_browser_login",
+  "0009_card_enrollment",
+  "0009_transactions",
+  "0010_pat_lifecycle",
+  "0011_transaction_corrections",
   "0012_statement_staging",
+  "0012_billing_collection",
+  "0014_memory",
+  "0015_statement_submission",
 ] as const;
 const workerScript = "export default { fetch() { return new Response('ok') } }";
 const stagingWorkerName = "statement-staging-test-worker";
@@ -97,6 +116,60 @@ const migrateDatabase = (database: D1Database): Promise<void> =>
     Promise.resolve()
   );
 
+/** Deterministic WebSession identity per seeded User, standing in for the browser login proof. */
+const sessionIds = [
+  "30000000-0000-4000-8000-000000000001",
+  "30000000-0000-4000-8000-000000000002",
+] as const;
+const pairingIds = [
+  "30000000-0000-4000-8000-000000000011",
+  "30000000-0000-4000-8000-000000000012",
+] as const;
+const publicCodes = ["AAA111111", "BBB222222"] as const;
+const sessionDigest = (index: number): Uint8Array => new Uint8Array(32).fill(index + 1);
+const seededSessions = [
+  { digest: sessionDigest(0), id: sessionIds[0], userId: userA },
+  { digest: sessionDigest(1), id: sessionIds[1], userId: userB },
+] as const;
+/** Seeds one consumed pairing and its live WebSession per User, the caller the service rechecks. */
+const seedSessions = (database: D1Database): Promise<void> =>
+  database
+    .batch(
+      seededSessions.flatMap((session, index) => [
+        database
+          .prepare(
+            `INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state,
+               created_at_ms, expires_at_ms)
+             VALUES (?, ?, ?, ?, 'consumed', ?, ?)`
+          )
+          .bind(
+            pairingIds[index],
+            publicCodes[index],
+            sessionDigest(index),
+            session.userId,
+            startedAtEpochMs,
+            startedAtEpochMs + 600_000
+          ),
+        database
+          .prepare(
+            `INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
+               fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            session.id,
+            pairingIds[index],
+            session.userId,
+            session.digest,
+            startedAtEpochMs,
+            startedAtEpochMs + 600_000,
+            startedAtEpochMs + 7_776_000_000,
+            startedAtEpochMs + 7_776_000_000
+          ),
+      ])
+    )
+    .then(() => undefined);
+
 type Runtime = Readonly<{
   readonly database: D1Database;
   readonly bucket: R2Bucket;
@@ -130,6 +203,7 @@ const makeRuntime = (): Promise<Runtime> =>
           Promise.resolve()
         )
       );
+      yield* fromTestPromise(() => seedSessions(bindings.DB));
       return {
         bucket: bindings.BUCKET,
         database: bindings.DB,
@@ -147,6 +221,7 @@ afterEach(() =>
   Effect.runPromise(
     Effect.gen(function* () {
       nowEpochMs = (): number => startedAtEpochMs;
+      replayAuditSequence = 0;
       yield* fromTestPromise(() =>
         Promise.all([...instances].map((miniflare): Promise<void> => miniflare.dispose()))
       );
@@ -178,6 +253,15 @@ const failingBucket = (bucket: R2Bucket): R2Bucket =>
         : Reflect.get(target, property, target),
   });
 
+/** Fails the object write and its compensating delete, so a discarded upload keeps its row. */
+const failingUploadBucket = (bucket: R2Bucket): R2Bucket =>
+  new Proxy(bucket, {
+    get: (target, property): unknown =>
+      property === "put" || property === "delete"
+        ? (): Promise<void> => Promise.reject(new Error("object storage unavailable"))
+        : Reflect.get(target, property, target),
+  });
+
 /** Holds the object write open after it lands, so an interruption can race the availability update. */
 const gatedBucket = (
   bucket: R2Bucket,
@@ -195,14 +279,36 @@ const gatedBucket = (
         : Reflect.get(target, property, target),
   });
 
+/** The proof's live-caller gate: the seeded WebSession the canonical caller would present. */
+const callerAuthorityFor = (userId: string): TransactionAuthority => {
+  const session = seededSessions.find((candidate) => candidate.userId === userId);
+  if (session === undefined) throw new Error(`No seeded WebSession for ${userId}`);
+  return liveWebSessionAuthority({ subject: session, current: currentNowEpochMs() });
+};
+
+/** The one authority-guarded attribution write a replayed call must commit. */
+let replayAuditSequence = 0;
+const replayStatement = (runtime: Runtime, userId: string): D1PreparedStatement => {
+  replayAuditSequence += 1;
+  return statementSubmissionReplayAudit({
+    authority: callerAuthorityFor(userId),
+    current: currentNowEpochMs(),
+    database: runtime.database,
+    id: `30000000-0000-4000-9000-${replayAuditSequence.toString().padStart(12, "0")}`,
+  });
+};
+
 /** The winner's real publication, invoked later to race the losing call's conditional unit. */
 const winnerPublication =
   (runtime: Runtime, staged: StagedStatementBytes): (() => Promise<unknown>) =>
   () =>
     Effect.runPromise(
       runtime.staging.publishStagedStatementSubmission({
+        authority: callerAuthorityFor(userA),
         idempotencyKey,
         reference: reference(staged),
+        replayStatements: [replayStatement(runtime, userA)],
+        statements: [],
         userId: userA,
       })
     );
@@ -245,8 +351,11 @@ const publish = (
   Effect.runPromise(
     Effect.result(
       input.runtime.staging.publishStagedStatementSubmission({
+        authority: callerAuthorityFor(input.userId),
         idempotencyKey: input.key,
         reference: Schema.decodeUnknownSync(StagedStatementReferenceSchema)(input.reference),
+        replayStatements: [replayStatement(input.runtime, input.userId)],
+        statements: [],
         userId: input.userId,
       })
     )
@@ -593,10 +702,10 @@ describe("Cloudflare statement byte staging", () => {
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           1
         );
-        // A replay is not another success; audit must not duplicate.
+        // A replay adds no authoritative state but stays attributable: one audit row per call.
         expect(
           yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(1);
+        ).toBe(2);
 
         const other = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
@@ -626,6 +735,53 @@ describe("Cloudflare statement byte staging", () => {
       })
     ));
 
+  it("refuses a replay whose credential died after dispatch", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => makeRuntime());
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        const first = requireValue(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userA })
+          )
+        );
+        // The session is revoked between dispatch and the replay's own authority unit.
+        yield* fromTestPromise(() =>
+          runtime.database
+            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+            .bind(currentNowEpochMs(), userA)
+            .run()
+        );
+        const replayed = yield* Effect.result(
+          runtime.staging.publishStagedStatementSubmission({
+            authority: callerAuthorityFor(userA),
+            idempotencyKey,
+            reference: reference(staged),
+            replayStatements: [replayStatement(runtime, userA)],
+            statements: [],
+            userId: userA,
+          })
+        );
+        expect(Result.isFailure(replayed)).toBe(true);
+        if (Result.isFailure(replayed)) {
+          expect(replayed.failure).toMatchObject({
+            _tag: "StatementStagingRefused",
+            reason: "authority",
+          });
+        }
+        // The refused replay returned nothing, attributed nothing, and changed no authority.
+        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
+          1
+        );
+        expect(
+          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
+        ).toBe(1);
+        expect(first.replayed).toBe(false);
+      })
+    ));
+
   it("keeps a losing reference unpromoted when one idempotency key already won", () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -646,8 +802,11 @@ describe("Cloudflare statement byte staging", () => {
         });
         const refused = yield* Effect.result(
           stale.publishStagedStatementSubmission({
+            authority: callerAuthorityFor(userA),
             idempotencyKey,
             reference: reference(loser),
+            replayStatements: [replayStatement(runtime, userA)],
+            statements: [],
             userId: userA,
           })
         );
@@ -673,6 +832,44 @@ describe("Cloudflare statement byte staging", () => {
           required(yield* fromTestPromise(() => stagingRow(runtime.database, winner.stagingId)))
             .status
         ).toBe("published");
+      })
+    ));
+
+  it("attributes a losing call that resolves to the winner's same-material replay", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => makeRuntime());
+        const winner = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+
+        // The winner commits after the losing call has already read "no submission for this key",
+        // so its refused unit classifies as a replay of the winner's own material. That replay must
+        // still commit its caller-owned attribution: one audit row per canonical call, never zero.
+        const stale = StatementStaging.make({
+          bucket: runtime.bucket,
+          database: publishWinnerBeforeBatch(runtime.database, winnerPublication(runtime, winner)),
+          nowEpochMs: currentNowEpochMs,
+        });
+        const replayed = requireValue(
+          yield* Effect.result(
+            stale.publishStagedStatementSubmission({
+              authority: callerAuthorityFor(userA),
+              idempotencyKey,
+              reference: reference(winner),
+              replayStatements: [replayStatement(runtime, userA)],
+              statements: [],
+              userId: userA,
+            })
+          )
+        );
+        expect(replayed.replayed).toBe(true);
+        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
+          1
+        );
+        expect(
+          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
+        ).toBe(2);
       })
     ));
 
@@ -872,6 +1069,41 @@ describe("Cloudflare statement byte staging", () => {
           rowsDeleted: 1,
         });
         expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
+        expect(
+          yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
+        ).toBe(0);
+      })
+    ));
+
+  it("keeps a discarded upload's row when its object delete fails, then sweeps it", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => makeRuntime());
+        // The object write and its compensating delete both fail, so the discarded upload must keep
+        // its durable row: the bounded sweep finds the object again instead of leaking one.
+        const failing = StatementStaging.make({
+          bucket: failingUploadBucket(runtime.bucket),
+          database: runtime.database,
+          nowEpochMs: currentNowEpochMs,
+        });
+        const discarded = yield* Effect.result(
+          failing.stageStatementBytes({ request: request(statementBytes), userId: userA })
+        );
+        if (!Result.isFailure(discarded)) throw new Error("Expected the upload to fail");
+        expect(discarded.failure).toBeInstanceOf(StatementStagingUnavailable);
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.database
+              .prepare("SELECT status FROM statement_staging_objects")
+              .first<{ status: string }>()
+          )
+        ).toEqual({ status: "deleting" });
+
+        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
+          objectsDeleted: 1,
+          rowsDeleted: 1,
+        });
         expect(
           yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
         ).toBe(0);

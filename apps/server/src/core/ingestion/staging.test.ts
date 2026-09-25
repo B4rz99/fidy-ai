@@ -32,6 +32,7 @@ it("rejects staged bytes that are empty or above the platform statement bound", 
     stagingId,
     byteLength,
     sha256,
+    sourceFormat: "csv" as const,
     expiresAt: "2026-08-01T12:00:00Z",
   });
   expect(Result.isSuccess(decode(bytes(maximumStatementBytes)))).toBe(true);

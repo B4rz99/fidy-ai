@@ -3,6 +3,7 @@ import {
   emailReplacementCompletionPath,
   emailReplacementPath,
 } from "@fidy/server/email-replacement-path";
+import { statementStagingPath } from "@fidy/server/statement-path";
 import type * as Cloudflare from "alchemy/Cloudflare";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 
@@ -111,6 +112,7 @@ const reservedRateLimitPaths = [
   "/user",
   "/pat-pairings",
   "/pat-pairings/claim",
+  statementStagingPath,
 ] as const;
 const declaredRoutes = operationCatalog.operations.map((operation) => operation.route);
 const exactPaths = Array.from(

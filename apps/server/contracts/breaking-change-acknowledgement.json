@@ -1,0 +1,2479 @@
+{
+  "baseDigest": "571ccadef8453e2bc7f788cced99fa54152d909f94e1a5e27ac390467f71bd18",
+  "candidateDigest": "441295aebeca3c9bf757a11e091790128cc9572db323002db0025baeb5fe4a5f",
+  "findings": [
+    {
+      "source": "openapi",
+      "rule": "new-required-request-property",
+      "location": {
+        "operationId": "operations.executeAtomicBatch",
+        "operation": "POST",
+        "path": "/operations/atomic-batch",
+        "section": "paths",
+        "fingerprint": "489f371de733"
+      },
+      "detail": "added the new required request property `calls/items/anyOf[subschema #17]/input/payload/reference`"
+    },
+    {
+      "source": "openapi",
+      "rule": "new-required-request-property",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "09b7e3da3a4f"
+      },
+      "detail": "added the new required request property `reference`"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.completeEmailReplacement",
+        "operation": "POST",
+        "path": "/web/email/replacement/verify",
+        "section": "paths",
+        "fingerprint": "100b4c706b96"
+      },
+      "detail": "removed the optional property `anyOf[subschema #2]/next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.completeEmailReplacement",
+        "operation": "POST",
+        "path": "/web/email/replacement/verify",
+        "section": "paths",
+        "fingerprint": "478e920e38b5"
+      },
+      "detail": "removed the optional property `anyOf[subschema #2]/next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.requestEmailReplacement",
+        "operation": "POST",
+        "path": "/email/replacement",
+        "section": "paths",
+        "fingerprint": "041f7e35b90a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.applyDashboardEdit",
+        "operation": "POST",
+        "path": "/dashboard/edits",
+        "section": "paths",
+        "fingerprint": "07e0fb62b2e1"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.completeEmailReplacement",
+        "operation": "POST",
+        "path": "/web/email/replacement/verify",
+        "section": "paths",
+        "fingerprint": "115b3fa7c367"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.unlinkTransactions",
+        "operation": "POST",
+        "path": "/transactions/unlink",
+        "section": "paths",
+        "fingerprint": "125353a51dd0"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.resolveNeedsReviewItem",
+        "operation": "POST",
+        "path": "/ingestion/needs-review/{id}/resolve",
+        "section": "paths",
+        "fingerprint": "15fbff46dcf4"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.deleteBudget",
+        "operation": "DELETE",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "161b31aa83d1"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listTransactions",
+        "operation": "GET",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "27ba62af3e9c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.updateKeywordRule",
+        "operation": "PUT",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "2e037373fbb1"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokeAllPATs",
+        "operation": "DELETE",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "3f6072a5de10"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.inspectPATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/inspect",
+        "section": "paths",
+        "fingerprint": "44ac5dcde80b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.listPendingInsights",
+        "operation": "GET",
+        "path": "/insights/pending",
+        "section": "paths",
+        "fingerprint": "461715fc049d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "470b723097af"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.dismissInsight",
+        "operation": "POST",
+        "path": "/insights/{id}/dismissed",
+        "section": "paths",
+        "fingerprint": "4ef498008636"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.deleteKeywordRule",
+        "operation": "DELETE",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "52a3bd502b99"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.searchTransactions",
+        "operation": "GET",
+        "path": "/transactions/search",
+        "section": "paths",
+        "fingerprint": "557b66b18dc6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.linkTransactions",
+        "operation": "POST",
+        "path": "/transactions/link",
+        "section": "paths",
+        "fingerprint": "5d5c478057a8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.updateBudget",
+        "operation": "PUT",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "614b540421ff"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.listSubscriptionOffers",
+        "operation": "GET",
+        "path": "/subscription/offers",
+        "section": "paths",
+        "fingerprint": "618f59658438"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.listNeedsReviewItems",
+        "operation": "GET",
+        "path": "/ingestion/needs-review",
+        "section": "paths",
+        "fingerprint": "62731d15aaee"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.enableEmailForwarding",
+        "operation": "POST",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "67138bc6d7cc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokePAT",
+        "operation": "DELETE",
+        "path": "/pats/{shortId}",
+        "section": "paths",
+        "fingerprint": "7781550e521e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getStatementSubmission",
+        "operation": "GET",
+        "path": "/ingestion/statements/{id}",
+        "section": "paths",
+        "fingerprint": "7a86983eda0b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.updateUserPreferences",
+        "operation": "PATCH",
+        "path": "/user/preferences",
+        "section": "paths",
+        "fingerprint": "7e2762c1c91b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listKeywordRules",
+        "operation": "GET",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "8c0c71415efa"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getEmailForwarding",
+        "operation": "GET",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "8c877599f8fd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.listPATs",
+        "operation": "GET",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "8ed7b2061d80"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "operations.executeAtomicBatch",
+        "operation": "POST",
+        "path": "/operations/atomic-batch",
+        "section": "paths",
+        "fingerprint": "900d6b83f5b7"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudgetStatus",
+        "operation": "GET",
+        "path": "/budget-status",
+        "section": "paths",
+        "fingerprint": "91523ecaf4a7"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.listDashboardCatalog",
+        "operation": "GET",
+        "path": "/dashboard/catalog",
+        "section": "paths",
+        "fingerprint": "92312f27428b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.getTransaction",
+        "operation": "GET",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "92571c43ef20"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboardView",
+        "operation": "GET",
+        "path": "/dashboard/view",
+        "section": "paths",
+        "fingerprint": "997894840441"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.approvePATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/approve",
+        "section": "paths",
+        "fingerprint": "9e060a43a7c8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightRead",
+        "operation": "POST",
+        "path": "/insights/{id}/read",
+        "section": "paths",
+        "fingerprint": "a2152656cd80"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listCategories",
+        "operation": "GET",
+        "path": "/categories",
+        "section": "paths",
+        "fingerprint": "a68f5aa94d22"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.recall",
+        "operation": "GET",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "a6c86a1af474"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.getCurrentUser",
+        "operation": "GET",
+        "path": "/user",
+        "section": "paths",
+        "fingerprint": "a70c91206cdd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.deleteTransaction",
+        "operation": "DELETE",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "aca23fdd7e32"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudget",
+        "operation": "GET",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "b0e14e997216"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboard",
+        "operation": "GET",
+        "path": "/dashboard",
+        "section": "paths",
+        "fingerprint": "c8bbd052c6fb"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "recovery.rotateBackupRecoveryCode",
+        "operation": "POST",
+        "path": "/recovery/backup-code/rotate",
+        "section": "paths",
+        "fingerprint": "c9a47934947b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "caff5e67838d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "browserLogin.approvePairing",
+        "operation": "POST",
+        "path": "/browser-login/pairings/approve",
+        "section": "paths",
+        "fingerprint": "cbeb5dc53a24"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.getUpgradeUrl",
+        "operation": "GET",
+        "path": "/subscription/upgrade-url",
+        "section": "paths",
+        "fingerprint": "d1cefc527d3b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "d3ab14672617"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightDelivered",
+        "operation": "POST",
+        "path": "/insights/{id}/delivered",
+        "section": "paths",
+        "fingerprint": "d57e46be36cd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.listBudgets",
+        "operation": "GET",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "d944d61bde76"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listSourceAttestations",
+        "operation": "GET",
+        "path": "/transactions/{id}/source-attestations",
+        "section": "paths",
+        "fingerprint": "da4325e87a2f"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.updateTransaction",
+        "operation": "PUT",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "f1fee2de1649"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `200` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.createKeywordRule",
+        "operation": "POST",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "0af45cae2363"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `201` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "0ee517f5abf9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `201` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.createBudget",
+        "operation": "POST",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "19ab5fd65f8a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `201` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.createTransaction",
+        "operation": "POST",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "7352b4127474"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `201` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "5f77b40496c7"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `202` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.updateBudget",
+        "operation": "PUT",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "00b54bda132e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "013814b6897b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokeAllPATs",
+        "operation": "DELETE",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "033faff5d080"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "0913b8be6e42"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.dismissInsight",
+        "operation": "POST",
+        "path": "/insights/{id}/dismissed",
+        "section": "paths",
+        "fingerprint": "0a2be12ff18e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudgetStatus",
+        "operation": "GET",
+        "path": "/budget-status",
+        "section": "paths",
+        "fingerprint": "0bb757fddd30"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.requestEmailReplacement",
+        "operation": "POST",
+        "path": "/email/replacement",
+        "section": "paths",
+        "fingerprint": "106eb038f480"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getStatementSubmission",
+        "operation": "GET",
+        "path": "/ingestion/statements/{id}",
+        "section": "paths",
+        "fingerprint": "174da6efeaf9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.createKeywordRule",
+        "operation": "POST",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "19c80e7b7a20"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboard",
+        "operation": "GET",
+        "path": "/dashboard",
+        "section": "paths",
+        "fingerprint": "2beb9fc6b26b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightRead",
+        "operation": "POST",
+        "path": "/insights/{id}/read",
+        "section": "paths",
+        "fingerprint": "2d339299df85"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.getCurrentUser",
+        "operation": "GET",
+        "path": "/user",
+        "section": "paths",
+        "fingerprint": "3a2dc10ed5fd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.listNeedsReviewItems",
+        "operation": "GET",
+        "path": "/ingestion/needs-review",
+        "section": "paths",
+        "fingerprint": "3da3c8e3f494"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.updateUserPreferences",
+        "operation": "PATCH",
+        "path": "/user/preferences",
+        "section": "paths",
+        "fingerprint": "4041e3d37fbb"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudget",
+        "operation": "GET",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "434f463bab35"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "46afccb21e1f"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.listPendingInsights",
+        "operation": "GET",
+        "path": "/insights/pending",
+        "section": "paths",
+        "fingerprint": "47b699421505"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.linkTransactions",
+        "operation": "POST",
+        "path": "/transactions/link",
+        "section": "paths",
+        "fingerprint": "4bf23c41b234"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "recovery.rotateBackupRecoveryCode",
+        "operation": "POST",
+        "path": "/recovery/backup-code/rotate",
+        "section": "paths",
+        "fingerprint": "59a76cfbb171"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "6236d7fb5d00"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.listDashboardCatalog",
+        "operation": "GET",
+        "path": "/dashboard/catalog",
+        "section": "paths",
+        "fingerprint": "6a4642b2c79d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getEmailForwarding",
+        "operation": "GET",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "74ba8318e53d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.applyDashboardEdit",
+        "operation": "POST",
+        "path": "/dashboard/edits",
+        "section": "paths",
+        "fingerprint": "7773c2d56ed9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.deleteBudget",
+        "operation": "DELETE",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "7e8c4f22f6d0"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.recall",
+        "operation": "GET",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "7f320cae67f1"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.listBudgets",
+        "operation": "GET",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "8096b5c4412d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.unlinkTransactions",
+        "operation": "POST",
+        "path": "/transactions/unlink",
+        "section": "paths",
+        "fingerprint": "8480fab03da5"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listSourceAttestations",
+        "operation": "GET",
+        "path": "/transactions/{id}/source-attestations",
+        "section": "paths",
+        "fingerprint": "8507a9493f36"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokePAT",
+        "operation": "DELETE",
+        "path": "/pats/{shortId}",
+        "section": "paths",
+        "fingerprint": "8712a86651fb"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.enableEmailForwarding",
+        "operation": "POST",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "880cbee76f5e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.updateTransaction",
+        "operation": "PUT",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "974d12edfc7a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.createTransaction",
+        "operation": "POST",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "97d86ebbfadc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightDelivered",
+        "operation": "POST",
+        "path": "/insights/{id}/delivered",
+        "section": "paths",
+        "fingerprint": "9b0ce202db64"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listKeywordRules",
+        "operation": "GET",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "a6f6e4772666"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.updateKeywordRule",
+        "operation": "PUT",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "aadc18b893dd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.deleteKeywordRule",
+        "operation": "DELETE",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "b0fb2b5fba64"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboardView",
+        "operation": "GET",
+        "path": "/dashboard/view",
+        "section": "paths",
+        "fingerprint": "cae42f87ebcc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.getTransaction",
+        "operation": "GET",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "d043f5339d0c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listTransactions",
+        "operation": "GET",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "d37c16723de7"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.createBudget",
+        "operation": "POST",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "e0780d3b13a6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.searchTransactions",
+        "operation": "GET",
+        "path": "/transactions/search",
+        "section": "paths",
+        "fingerprint": "e144bbcd7f25"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.listSubscriptionOffers",
+        "operation": "GET",
+        "path": "/subscription/offers",
+        "section": "paths",
+        "fingerprint": "e2d1ed5df90b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.getUpgradeUrl",
+        "operation": "GET",
+        "path": "/subscription/upgrade-url",
+        "section": "paths",
+        "fingerprint": "e585a30bcb4e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listCategories",
+        "operation": "GET",
+        "path": "/categories",
+        "section": "paths",
+        "fingerprint": "e5f01ca65893"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.listPATs",
+        "operation": "GET",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "f50d98b605be"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.deleteTransaction",
+        "operation": "DELETE",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "fde9da711bc6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.resolveNeedsReviewItem",
+        "operation": "POST",
+        "path": "/ingestion/needs-review/{id}/resolve",
+        "section": "paths",
+        "fingerprint": "fef79ee31741"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "ff2e0adcdb20"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `400` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboardView",
+        "operation": "GET",
+        "path": "/dashboard/view",
+        "section": "paths",
+        "fingerprint": "0201e25d0ece"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.getCurrentUser",
+        "operation": "GET",
+        "path": "/user",
+        "section": "paths",
+        "fingerprint": "03053dfa8bad"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getEmailForwarding",
+        "operation": "GET",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "0478da89ff4b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.resolveNeedsReviewItem",
+        "operation": "POST",
+        "path": "/ingestion/needs-review/{id}/resolve",
+        "section": "paths",
+        "fingerprint": "0ec8c6b511aa"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getStatementSubmission",
+        "operation": "GET",
+        "path": "/ingestion/statements/{id}",
+        "section": "paths",
+        "fingerprint": "13d20a516eb6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.listSubscriptionOffers",
+        "operation": "GET",
+        "path": "/subscription/offers",
+        "section": "paths",
+        "fingerprint": "15ec3a8d020f"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.listPATs",
+        "operation": "GET",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "1a9e3142ea63"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.createTransaction",
+        "operation": "POST",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "26da09b184e4"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightDelivered",
+        "operation": "POST",
+        "path": "/insights/{id}/delivered",
+        "section": "paths",
+        "fingerprint": "26f8d28d2248"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.createBudget",
+        "operation": "POST",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "2891039c359b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.listPendingInsights",
+        "operation": "GET",
+        "path": "/insights/pending",
+        "section": "paths",
+        "fingerprint": "2c010e8b2d12"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.deleteTransaction",
+        "operation": "DELETE",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "304414ce77cb"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokePAT",
+        "operation": "DELETE",
+        "path": "/pats/{shortId}",
+        "section": "paths",
+        "fingerprint": "3e0041a8639a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listCategories",
+        "operation": "GET",
+        "path": "/categories",
+        "section": "paths",
+        "fingerprint": "4247a404b4b3"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "4ad12308e7f0"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "5d7dbbc6400a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokeAllPATs",
+        "operation": "DELETE",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "5ffecb80e9f6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.deleteKeywordRule",
+        "operation": "DELETE",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "6186e2cf7707"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.unlinkTransactions",
+        "operation": "POST",
+        "path": "/transactions/unlink",
+        "section": "paths",
+        "fingerprint": "61cc06d1b932"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listSourceAttestations",
+        "operation": "GET",
+        "path": "/transactions/{id}/source-attestations",
+        "section": "paths",
+        "fingerprint": "623d7973b944"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "emailAuthentication.requestEmailReplacement",
+        "operation": "POST",
+        "path": "/email/replacement",
+        "section": "paths",
+        "fingerprint": "632d63a6e77a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.enableEmailForwarding",
+        "operation": "POST",
+        "path": "/ingestion/email-forwarding",
+        "section": "paths",
+        "fingerprint": "688f2bb200bc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.listNeedsReviewItems",
+        "operation": "GET",
+        "path": "/ingestion/needs-review",
+        "section": "paths",
+        "fingerprint": "6dccf6e13756"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudget",
+        "operation": "GET",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "70553d06f62d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "browserLogin.approvePairing",
+        "operation": "POST",
+        "path": "/browser-login/pairings/approve",
+        "section": "paths",
+        "fingerprint": "723eeb7bdefe"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.getDashboard",
+        "operation": "GET",
+        "path": "/dashboard",
+        "section": "paths",
+        "fingerprint": "75f85a885435"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.applyDashboardEdit",
+        "operation": "POST",
+        "path": "/dashboard/edits",
+        "section": "paths",
+        "fingerprint": "783beecbd267"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.updateBudget",
+        "operation": "PUT",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "7dd691cc6873"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "subscription.getUpgradeUrl",
+        "operation": "GET",
+        "path": "/subscription/upgrade-url",
+        "section": "paths",
+        "fingerprint": "7e0180687af6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "operations.executeAtomicBatch",
+        "operation": "POST",
+        "path": "/operations/atomic-batch",
+        "section": "paths",
+        "fingerprint": "842ca57e1263"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.recall",
+        "operation": "GET",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "848489a8387e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.approvePATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/approve",
+        "section": "paths",
+        "fingerprint": "8538f459644e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.listDashboardCatalog",
+        "operation": "GET",
+        "path": "/dashboard/catalog",
+        "section": "paths",
+        "fingerprint": "98b7d707e697"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listTransactions",
+        "operation": "GET",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "9d5d35615ff8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.searchTransactions",
+        "operation": "GET",
+        "path": "/transactions/search",
+        "section": "paths",
+        "fingerprint": "9da7e6dd9731"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.updateTransaction",
+        "operation": "PUT",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "a16bd71a4ba4"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.inspectPATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/inspect",
+        "section": "paths",
+        "fingerprint": "a3cdc7541724"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.createKeywordRule",
+        "operation": "POST",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "a40827b6f2c2"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.deleteBudget",
+        "operation": "DELETE",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "a7dc38e636b8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.updateKeywordRule",
+        "operation": "PUT",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "aa1a1bc0a006"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.linkTransactions",
+        "operation": "POST",
+        "path": "/transactions/link",
+        "section": "paths",
+        "fingerprint": "b35d07fcfbe4"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "b987775832f5"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "cb0a0157847a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.getTransaction",
+        "operation": "GET",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "cf5a45c32391"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightRead",
+        "operation": "POST",
+        "path": "/insights/{id}/read",
+        "section": "paths",
+        "fingerprint": "d7c40c3788fd"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.updateUserPreferences",
+        "operation": "PATCH",
+        "path": "/user/preferences",
+        "section": "paths",
+        "fingerprint": "e4a1a270bdb8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "recovery.rotateBackupRecoveryCode",
+        "operation": "POST",
+        "path": "/recovery/backup-code/rotate",
+        "section": "paths",
+        "fingerprint": "e4ed4f3a7455"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudgetStatus",
+        "operation": "GET",
+        "path": "/budget-status",
+        "section": "paths",
+        "fingerprint": "e576e2b2b66b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listKeywordRules",
+        "operation": "GET",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "ebf8cf43249d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "f373f0a6dd1e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.dismissInsight",
+        "operation": "POST",
+        "path": "/insights/{id}/dismissed",
+        "section": "paths",
+        "fingerprint": "fc66caa1ed7c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.listBudgets",
+        "operation": "GET",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "fd545810ea44"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `401` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "723ebc35246f"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `402` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.linkTransactions",
+        "operation": "POST",
+        "path": "/transactions/link",
+        "section": "paths",
+        "fingerprint": "1b79b9244821"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.updateTransaction",
+        "operation": "PUT",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "1f0731414208"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.deleteKeywordRule",
+        "operation": "DELETE",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "2651cf9423c6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "2aa7ba5ad05a"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.deleteBudget",
+        "operation": "DELETE",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "3662c1693d4c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "dashboard.applyDashboardEdit",
+        "operation": "POST",
+        "path": "/dashboard/edits",
+        "section": "paths",
+        "fingerprint": "59c3e58f1ca6"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.updateBudget",
+        "operation": "PUT",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "5f7abeefc71d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.dismissInsight",
+        "operation": "POST",
+        "path": "/insights/{id}/dismissed",
+        "section": "paths",
+        "fingerprint": "69d7c7bc5d87"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightDelivered",
+        "operation": "POST",
+        "path": "/insights/{id}/delivered",
+        "section": "paths",
+        "fingerprint": "7dd45573831c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.revokePAT",
+        "operation": "DELETE",
+        "path": "/pats/{shortId}",
+        "section": "paths",
+        "fingerprint": "87fa4dc0775d"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listSourceAttestations",
+        "operation": "GET",
+        "path": "/transactions/{id}/source-attestations",
+        "section": "paths",
+        "fingerprint": "880d293a39b5"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "88379fc6fe13"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.updateKeywordRule",
+        "operation": "PUT",
+        "path": "/category-keyword-rules/{id}",
+        "section": "paths",
+        "fingerprint": "8e844cf82b08"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.getStatementSubmission",
+        "operation": "GET",
+        "path": "/ingestion/statements/{id}",
+        "section": "paths",
+        "fingerprint": "ade376e92196"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.createBudget",
+        "operation": "POST",
+        "path": "/budgets",
+        "section": "paths",
+        "fingerprint": "bcc77c44f204"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.unlinkTransactions",
+        "operation": "POST",
+        "path": "/transactions/unlink",
+        "section": "paths",
+        "fingerprint": "bf1fed354859"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.deleteTransaction",
+        "operation": "DELETE",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "d4d2d4bc705b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "budgets.getBudget",
+        "operation": "GET",
+        "path": "/budgets/{id}",
+        "section": "paths",
+        "fingerprint": "e1a31cec92d9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.createTransaction",
+        "operation": "POST",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "e4a4eca32919"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.getTransaction",
+        "operation": "GET",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "e788a71ba688"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.createKeywordRule",
+        "operation": "POST",
+        "path": "/category-keyword-rules",
+        "section": "paths",
+        "fingerprint": "f39981dc8c36"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "insights.markInsightRead",
+        "operation": "POST",
+        "path": "/insights/{id}/read",
+        "section": "paths",
+        "fingerprint": "fe5dce65ec52"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "ingestion.resolveNeedsReviewItem",
+        "operation": "POST",
+        "path": "/ingestion/needs-review/{id}/resolve",
+        "section": "paths",
+        "fingerprint": "ff8b2265cb76"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `404` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "09c0d5e6676c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `409` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "5fcd3a7717c9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `409` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "d6b66dc80b01"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `409` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "8e5d05f249cc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `422` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.recall",
+        "operation": "GET",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "0a29e4c8e703"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "20bc239863cc"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.getTransaction",
+        "operation": "GET",
+        "path": "/transactions/{id}",
+        "section": "paths",
+        "fingerprint": "2aa798f425e8"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.approvePATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/approve",
+        "section": "paths",
+        "fingerprint": "32ec6c850173"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.searchTransactions",
+        "operation": "GET",
+        "path": "/transactions/search",
+        "section": "paths",
+        "fingerprint": "625f3ed651fb"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "669dca48a81b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "browserLogin.approvePairing",
+        "operation": "POST",
+        "path": "/browser-login/pairings/approve",
+        "section": "paths",
+        "fingerprint": "70b765f5352f"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.createManualPAT",
+        "operation": "POST",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "8c550654393e"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "b51dae99e9d5"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.listTransactions",
+        "operation": "GET",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "c9b937980a92"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "transactions.createTransaction",
+        "operation": "POST",
+        "path": "/transactions",
+        "section": "paths",
+        "fingerprint": "cf9f6a967e71"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.inspectPATPairing",
+        "operation": "POST",
+        "path": "/pats/pairings/inspect",
+        "section": "paths",
+        "fingerprint": "d5588ced63ff"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `429` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.revise",
+        "operation": "PUT",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "1ec26e5b06c2"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.forget",
+        "operation": "DELETE",
+        "path": "/memories/{id}",
+        "section": "paths",
+        "fingerprint": "20f55c2a82b1"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.remember",
+        "operation": "POST",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "2c2b349ec45b"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "pats.listPATs",
+        "operation": "GET",
+        "path": "/pats",
+        "section": "paths",
+        "fingerprint": "374c9f4b6ea0"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "categories.listCategories",
+        "operation": "GET",
+        "path": "/categories",
+        "section": "paths",
+        "fingerprint": "823fb7c8a41c"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "identity.getCurrentUser",
+        "operation": "GET",
+        "path": "/user",
+        "section": "paths",
+        "fingerprint": "c69f9fe6c6f0"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "response-optional-property-removed",
+      "location": {
+        "operationId": "memory.recall",
+        "operation": "GET",
+        "path": "/memories",
+        "section": "paths",
+        "fingerprint": "c8fb042b67d9"
+      },
+      "detail": "removed the optional property `next/items/anyOf[subschema #29]/args/payload/file` from the response with the `503` status"
+    },
+    {
+      "source": "openapi",
+      "rule": "request-property-removed",
+      "location": {
+        "operationId": "operations.executeAtomicBatch",
+        "operation": "POST",
+        "path": "/operations/atomic-batch",
+        "section": "paths",
+        "fingerprint": "3d02c61836cf"
+      },
+      "detail": "removed the request property `calls/items/anyOf[subschema #17]/input/payload/file`"
+    },
+    {
+      "source": "openapi",
+      "rule": "request-property-removed",
+      "location": {
+        "operationId": "ingestion.submitForExtraction",
+        "operation": "POST",
+        "path": "/ingestion/statements",
+        "section": "paths",
+        "fingerprint": "3fe3b126f868"
+      },
+      "detail": "removed the request property `file`"
+    }
+  ],
+  "rolloutIssue": "https://github.com/B4rz99/fidy-ai/issues/698"
+}

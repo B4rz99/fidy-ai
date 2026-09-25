@@ -2902,12 +2902,6 @@
         "type": "array",
         "uniqueItems": true
       },
-      "Literal_": {
-        "enum": [
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ],
-        "type": "string"
-      },
       "Locale": {
         "enum": [
           "es-CO"
@@ -5135,6 +5129,45 @@
         "minimum": 0.001,
         "type": "number"
       },
+      "StagedStatementReference": {
+        "additionalProperties": false,
+        "properties": {
+          "byteLength": {
+            "maximum": 5242880,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/StatementContentDigest"
+          },
+          "stagingId": {
+            "$ref": "#/components/schemas/StatementStagingId"
+          }
+        },
+        "required": [
+          "stagingId",
+          "byteLength",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "StagedStatementReferencePartial": {
+        "additionalProperties": false,
+        "properties": {
+          "byteLength": {
+            "maximum": 5242880,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/StatementContentDigest"
+          },
+          "stagingId": {
+            "$ref": "#/components/schemas/StatementStagingId"
+          }
+        },
+        "type": "object"
+      },
       "StatementAccounting": {
         "additionalProperties": false,
         "properties": {
@@ -5157,6 +5190,10 @@
           "needsReviewRows"
         ],
         "type": "object"
+      },
+      "StatementContentDigest": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
       },
       "StatementNeedsReviewItem": {
         "anyOf": [
@@ -5532,6 +5569,11 @@
           }
         ]
       },
+      "StatementStagingId": {
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
+      },
       "StatementSubmission": {
         "anyOf": [
           {
@@ -5707,114 +5749,31 @@
       "SubmitForExtractionInput": {
         "additionalProperties": false,
         "properties": {
-          "file": {
-            "additionalProperties": false,
-            "properties": {
-              "contentBase64": {
-                "maxLength": 6990508,
-                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
-                "type": "string"
-              },
-              "declaredMediaType": {
-                "anyOf": [
-                  {
-                    "enum": [
-                      "text/csv"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "enum": [
-                      "application/csv"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "enum": [
-                      "application/vnd.ms-excel"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "$ref": "#/components/schemas/Literal_"
-                  }
-                ]
-              },
-              "name": {
-                "maxLength": 255,
-                "minLength": 1,
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "name",
-              "declaredMediaType",
-              "contentBase64"
-            ],
-            "type": "object"
-          },
           "idempotencyKey": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
             "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/StagedStatementReference"
           }
         },
         "required": [
           "idempotencyKey",
-          "file"
+          "reference"
         ],
         "type": "object"
       },
       "SubmitForExtractionInputPartial": {
         "additionalProperties": false,
         "properties": {
-          "file": {
-            "additionalProperties": false,
-            "properties": {
-              "contentBase64": {
-                "maxLength": 6990508,
-                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
-                "type": "string"
-              },
-              "declaredMediaType": {
-                "anyOf": [
-                  {
-                    "enum": [
-                      "text/csv"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "enum": [
-                      "application/csv"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "enum": [
-                      "application/vnd.ms-excel"
-                    ],
-                    "type": "string"
-                  },
-                  {
-                    "$ref": "#/components/schemas/Literal_"
-                  }
-                ]
-              },
-              "name": {
-                "maxLength": 255,
-                "minLength": 1,
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                "type": "string"
-              }
-            },
-            "type": "object"
-          },
           "idempotencyKey": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
             "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/StagedStatementReferencePartial"
           }
         },
         "type": "object"
@@ -12027,7 +11986,7 @@
     },
     "/ingestion/statements": {
       "post": {
-        "description": "Idempotently queue one bounded CSV or XLSX statement. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion.",
+        "description": "Idempotently queue one bounded CSV or XLSX statement whose bytes were first staged through the authenticated statement staging transport. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion.",
         "operationId": "ingestion.submitForExtraction",
         "parameters": [],
         "requestBody": {

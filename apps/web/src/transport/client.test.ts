@@ -35,6 +35,7 @@ import {
   makeFidyClient,
   makeSubscriptionEnrollmentClient,
 } from "./client";
+import { SubmitForExtractionInput } from "@fidy/server/client";
 
 const responseJson = (
   request: HttpClientRequestType.HttpClientRequest,
@@ -60,6 +61,30 @@ const makeHttpClient = (
     HttpClientError.HttpClientError,
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
+
+/** The encoded JSON body one intercepted browser request carried. */
+const requestBodyText = (request: HttpClientRequestType.HttpClientRequest): string =>
+  request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+
+const queuedStatementSubmissionBody = (): unknown => ({
+  data: {
+    id: "f1d1a000-0000-4000-8000-000000000401",
+    parserRevision: "statement-parser-v1",
+    sourceFormat: "csv",
+    status: "queued",
+    submittedAt: "2026-09-24T00:00:00.000Z",
+  },
+  next: [],
+});
+
+const SentStatementSubmission = Schema.Struct({
+  idempotencyKey: Schema.String,
+  reference: Schema.Struct({
+    byteLength: Schema.Int,
+    sha256: Schema.String,
+    stagingId: Schema.String,
+  }),
+});
 
 const interruptibleWork = (
   onStarted: () => void,
@@ -595,6 +620,61 @@ describe("canonical browser transport", () => {
       expect(Redacted.value(response.data.bearer)).toBe(rawBearer);
       expect(Redacted.isRedacted(response.data.bearer)).toBe(true);
       expect(JSON.stringify(registry.get(mutation))).not.toContain(rawBearer);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it("submits one staged statement reference and decodes visible queued status", async () => {
+    const requests: Array<Readonly<{ body: string; url: string }>> = [];
+    const httpClient = makeHttpClient((request) => {
+      requests.push({ body: requestBodyText(request), url: request.url });
+      return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
+    });
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const payload = Schema.decodeSync(SubmitForExtractionInput)({
+      idempotencyKey: "20000000-0000-4000-8000-000000000201",
+      reference: {
+        byteLength: 42,
+        sha256: "a".repeat(64),
+        stagingId: "30000000-0000-4000-8000-000000000301",
+      },
+    });
+    const mutation = client.mutation("ingestion", "submitForExtraction", {});
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(mutation);
+
+    try {
+      registry.set(mutation, { payload });
+      const response = await Effect.runPromise(AtomRegistry.getResult(registry, mutation));
+
+      expect(response.data.status).toBe("queued");
+      // The browser sends exactly the retry key and the opaque staged reference: no name, media
+      // type, or byte claim travels beside them.
+      expect(
+        requests.map(({ body, url }) => ({
+          body: Schema.decodeUnknownSync(SentStatementSubmission)(
+            Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body)
+          ),
+          url,
+        }))
+      ).toEqual([
+        {
+          body: {
+            idempotencyKey: "20000000-0000-4000-8000-000000000201",
+            reference: {
+              byteLength: 42,
+              sha256: "a".repeat(64),
+              stagingId: "30000000-0000-4000-8000-000000000301",
+            },
+          },
+          url: "https://api.test.fidyapp.com/ingestion/statements",
+        },
+      ]);
     } finally {
       unmount();
       registry.dispose();

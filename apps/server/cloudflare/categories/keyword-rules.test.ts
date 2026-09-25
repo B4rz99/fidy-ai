@@ -121,8 +121,11 @@ const setup = (): Promise<{
         "0009_transactions",
         "0010_pat_lifecycle",
         "0011_transaction_corrections",
+        "0012_statement_staging",
         "0012_transaction_search",
         "0013_category_keyword_rules",
+        "0014_memory",
+        "0015_statement_submission",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(

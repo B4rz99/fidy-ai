@@ -605,14 +605,10 @@ const canonicalStateTables = [
   "statement_submission_audit",
 ] as const;
 
-/**
- * The one assertion for what a canonical turn left behind. Naming no table asserts a turn that
- * committed nothing at all; naming some states each of those exactly, so a test states its outcome
- * once instead of re-listing the same table reads.
- */
+/** The one assertion for the rows a canonical turn left behind, stated once per named table. */
 const expectCanonicalState = (
   db: D1Database,
-  expected: Partial<Record<(typeof canonicalStateTables)[number], number>> = {}
+  expected: Partial<Record<(typeof canonicalStateTables)[number], number>>
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     for (const table of canonicalStateTables) {
@@ -623,9 +619,22 @@ const expectCanonicalState = (
     }
   });
 
-const count = (db: D1Database, table: string): Promise<number> =>
+/**
+ * The assertion for a turn that committed nothing: every table one turn can touch, at zero. Naming
+ * no table asserts none of them by accident — this walks all five, so a stray audit or domain row
+ * written outside the aborted unit's own batch still fails the claim.
+ */
+const expectNothingCommitted = (db: D1Database): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    for (const table of canonicalStateTables) {
+      expect(yield* fromTestPromise(() => count(db, table)), table).toBe(0);
+    }
+  });
+
+/** Row count over one relation: a table, or a table with a WHERE fragment, in the caller's schema. */
+const count = (db: D1Database, relation: string): Promise<number> =>
   db
-    .prepare(`SELECT count(*) AS total FROM ${table}`)
+    .prepare(`SELECT count(*) AS total FROM ${relation}`)
     .first<{ total: number }>()
     .then((row) => row?.total ?? -1);
 
@@ -1860,7 +1869,7 @@ it(
         expect(batched.status).toBe(503);
 
         // A defect is never an invented refusal: nothing authoritative, audited, or promoted.
-        yield* expectCanonicalState(runtime.db);
+        yield* expectNothingCommitted(runtime.db);
         expect(
           yield* fromTestPromise(() =>
             scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
@@ -2202,7 +2211,7 @@ it(
 
         // A credential death at commit time refuses the whole coordination turn: neither child's
         // state or success audit survives, and no refusal row is invented for a dead credential.
-        yield* expectCanonicalState(runtime.db);
+        yield* expectNothingCommitted(runtime.db);
         expect(
           yield* fromTestPromise(() =>
             scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")

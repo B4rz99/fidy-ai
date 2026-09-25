@@ -8,6 +8,15 @@ import {
   TransactionPresentation,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
+import {
+  BatchEnvelope,
+  batchCallId,
+  concurrentCorrection,
+  correctionCall,
+  defectiveBatchDb,
+  seedTransaction,
+} from "./atomic-batch.test-fixture";
+
 import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";

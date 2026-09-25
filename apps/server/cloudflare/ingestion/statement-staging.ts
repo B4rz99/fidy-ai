@@ -753,8 +753,6 @@ export const statementSubmissionReadAudit = ({
     )
     .bind(id, submissionId, current, ...authority.bindings);
 
-/** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
- * a refused call stays attributable without recording any submitted material. */
 /**
  * The two outcomes a statement refusal audit can record. The closed publication refusal map already
  * answers every reason as `resource_limit` or `validation_failed`; narrowing through one total map
@@ -766,6 +764,8 @@ const refusalAuditOutcome = (
 ): "resource_limit" | "validation_failed" =>
   outcome === "resource_limit" ? "resource_limit" : "validation_failed";
 
+/** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
+ * a refused call stays attributable without recording any submitted material. */
 const statementSubmissionRefusalAudit = ({
   authority,
   current,

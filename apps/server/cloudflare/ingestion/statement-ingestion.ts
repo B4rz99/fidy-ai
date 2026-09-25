@@ -72,7 +72,8 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_UNAVAILABLE = 503;
-const submissionInputBytes = 4096;
+/** The body bound one canonical statement submission request accepts. */
+export const submissionInputBytes = 4096;
 const uploadWindowMilliseconds = 3_600_000;
 const uploadLeaseMilliseconds = 600_000;
 const maximumUploadsPerUserPerHour = 20;

@@ -1,10 +1,23 @@
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const scriptPath = fileURLToPath(new URL("./check-production-runtime-config.sh", import.meta.url));
 const workingDirectory = fileURLToPath(new URL("../", import.meta.url));
+const productionWorkflowPath = fileURLToPath(
+  new URL("../../../.github/workflows/production.yml", import.meta.url)
+);
 const testValue = "runtime-config-test-value";
+
+const workflowStep = async (stepName: string): Promise<string> => {
+  const workflow = await readFile(productionWorkflowPath, "utf8");
+  const stepStart = workflow.indexOf(`      - name: ${stepName}\n`);
+  if (stepStart < 0) return "";
+
+  const stepEnd = workflow.indexOf("\n      - name:", stepStart + 1);
+  return workflow.slice(stepStart, stepEnd < 0 ? undefined : stepEnd);
+};
 const requiredConfiguration = [
   "PAT_ADMISSION_KEY",
   "KAPSO_API_KEY",
@@ -70,6 +83,15 @@ describe("Production runtime configuration gate", () => {
     );
     expect(result.output).not.toContain("PAT_ADMISSION_KEY");
     expect(result.output).not.toContain(testValue);
+  });
+
+  it("passes the Wompi event secret to both Production planning and deployment", async () => {
+    const mapping = "WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}";
+    const planning = await workflowStep("Plan the complete Cloudflare topology");
+    const deployment = await workflowStep("Deploy the exact planned topology with Alchemy");
+
+    expect(planning).toContain(mapping);
+    expect(deployment).toContain(mapping);
   });
 
   it("rejects whitespace-only configuration", () => {

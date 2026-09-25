@@ -93,6 +93,7 @@ jobs:
           WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
           WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
           WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}
           CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
@@ -123,6 +124,7 @@ jobs:
           WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
           WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
           WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}
           CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |

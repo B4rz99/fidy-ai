@@ -1669,15 +1669,13 @@ it(
 
         // One D1 unit committed both children, both metadata-only success audits, and the bounded
         // extraction identity; the staging row is promoted only because the submission exists.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
-          1
-        );
-        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          1
-        );
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 1,
+          statement_ingestion_outbox: 1,
+          transactions: 1,
+          transaction_audit: 1,
+          statement_submission_audit: 1,
+        });
         expect(
           yield* fromTestPromise(() =>
             firstRow(
@@ -1900,15 +1898,13 @@ it(
         // The retry still commits its sibling child, but the statement is the same submission and
         // a second canonical call is attributable as one replay audit row.
         expect(batchSubmissionOf(replayBody.data.results[0]?.output)).toEqual(published);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
-          1
-        );
-        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
-        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(2);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          2
-        );
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 1,
+          statement_ingestion_outbox: 1,
+          transactions: 2,
+          transaction_audit: 2,
+          statement_submission_audit: 2,
+        });
       })
     ),
   30_000
@@ -2108,8 +2104,7 @@ it(
         );
         expect(committed.status).toBe(200);
         // A scoped agent commits under the same unit, with one accepted PAT audit per child.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+        yield* expectCanonicalState(runtime.db, { statement_submissions: 1, transactions: 1 });
         expect(
           yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
         ).toBe(2);
@@ -2289,15 +2284,13 @@ it(
 
         // The unit committed before the read failed, so the bounded retry reports the committed
         // records instead of answering an unreadable 503 a client retry would re-commit.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
-          1
-        );
-        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          1
-        );
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 1,
+          statement_ingestion_outbox: 1,
+          transactions: 1,
+          transaction_audit: 1,
+          statement_submission_audit: 1,
+        });
       })
     ),
   30_000
@@ -2581,10 +2574,10 @@ it(
 
         // Neither batch published anything: the one committed submission stands, both siblings
         // rolled back, and each refusal was audited once under the caller's authority.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
-          1
-        );
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 1,
+          statement_ingestion_outbox: 1,
+        });
         yield* expectCanonicalState(runtime.db, { transactions: 0, transaction_audit: 0 });
         expect(
           yield* fromTestPromise(() =>

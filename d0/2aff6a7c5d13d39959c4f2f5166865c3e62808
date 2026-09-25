@@ -1,0 +1,22 @@
+apps/server/cloudflare/categories/canonical-keyword-rules.ts
+  h_c6d49c804e0ad2 194,320
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  h_c6d49c804e0ad2 70-78,223-224,226-227,296-326,666-669,733-787
+apps/server/cloudflare/public-worker.ts
+  h_c6d49c804e0ad2 1,342-344,348-349
+apps/server/src/shell/categories/operations.ts
+  h_c6d49c804e0ad2 18,62,72,84,97
+apps/server/src/shell/categories/path.ts
+  h_c6d49c804e0ad2 3-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d02aff6a7c5d13d39959c4f2f5166865c3e62808",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

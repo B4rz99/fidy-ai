@@ -425,6 +425,50 @@ const beforeBatchDb = (db: D1Database, before: () => Promise<unknown>): D1Databa
   });
 };
 
+/**
+ * A D1 binding whose first row read after the unit batch fails once, then recovers: the committed
+ * readback must retry a transient read defect instead of reporting an unreadable published unit.
+ */
+const flakyReadbackDb = (db: D1Database): D1Database => {
+  let batched = false;
+  let failed = false;
+  const wrapStatement = (statement: unknown): object => {
+    if (typeof statement !== "object" || statement === null) {
+      throw new Error("Expected a D1 prepared statement");
+    }
+    return new Proxy(statement, {
+      get: (target, property): unknown => {
+        if (property === "first" && batched && !failed) {
+          failed = true;
+          return (): Promise<never> => Promise.reject(new Error("transient readback defect"));
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        if (property === "bind" && typeof value === "function") {
+          return (...args: ReadonlyArray<unknown>): object => {
+            const bound: unknown = value.apply(target, args);
+            return wrapStatement(bound);
+          };
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
+  return new Proxy(db, {
+    get: (target, property): unknown => {
+      if (property === "batch") {
+        return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
+          batched = true;
+          return target.batch(...args);
+        };
+      }
+      if (property === "prepare") {
+        return (query: string): unknown => wrapStatement(target.prepare(query));
+      }
+      return Reflect.get(target, property, target);
+    },
+  });
+};
+
 /** Seeds one retained Transaction directly, so a correction has a premise the unit re-checks. */
 const seedTransaction = (
   runtime: Runtime,
@@ -1476,6 +1520,11 @@ const lostRaceIdempotencyKey = Schema.decodeSync(StatementIdempotencyKey)(
   "20000000-0000-4000-8000-000000000921"
 );
 
+/** The idempotency key whose submission dies between dispatch and its own unit commit. */
+const revokedAtCommitIdempotencyKey = Schema.decodeSync(StatementIdempotencyKey)(
+  "20000000-0000-4000-8000-000000000941"
+);
+
 it(
   "records one refusal audit when a publication loses its own unit race",
   () =>
@@ -2052,6 +2101,306 @@ it(
         expect(
           yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
         ).toBe(2);
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses a submission whose credential died between dispatch and its unit commit",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const current = yield* Clock.currentTimeMillis;
+        const subject = Option.getOrThrow(
+          yield* fromTestPromise(() =>
+            transactionSession({
+              db: runtime.db,
+              request: new Request("https://api.fidyapp.com/ingestion/statements", {
+                headers: sessionHeaders(0),
+              }),
+            })
+          )
+        );
+        // The session is live for dispatch and every preparation read; it dies only when the
+        // publication unit is about to run, so only the unit's own live-authority guard can see it.
+        const database = beforeBatchDb(runtime.db, () =>
+          runtime.db
+            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+            .bind(current, userA)
+            .run()
+        );
+        const refused = yield* fromTestPromise(() =>
+          executeStatementSubmission({
+            current,
+            environment: { DB: database, STATEMENT_STAGING_BUCKET: runtime.bucket },
+            input: {
+              idempotencyKey: revokedAtCommitIdempotencyKey,
+              reference: {
+                byteLength: staged.byteLength,
+                sha256: staged.sha256,
+                stagingId: staged.stagingId,
+              },
+            },
+            subject,
+          })
+        );
+        expect(refused.status).toBe(401);
+        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("unauthenticated");
+
+        // The dead credential refused the whole unit: no submission, no outbox, no audit row of
+        // any outcome, and the staged material never became authoritative.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "rolls back a mixed batch when the caller's credential dies at commit time",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const current = yield* Clock.currentTimeMillis;
+        // Both children were admitted under a live session; it is revoked only before the unit.
+        const raced = {
+          ...runtime,
+          db: beforeBatchDb(runtime.db, () =>
+            runtime.db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+              .bind(current, userA)
+              .run()
+          ),
+        };
+        const refused = yield* fromTestPromise(() =>
+          batch(raced, 0, [
+            captureCall(1),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000942",
+              reference: staged,
+            }),
+          ])
+        );
+        expect(refused.status).toBe(401);
+        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("unauthenticated");
+
+        // A credential death at commit time refuses the whole coordination turn: neither child's
+        // state or success audit survives, and no refusal row is invented for a dead credential.
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses a single child whose input outgrows the individual operation bound",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const oversized = {
+          callId: batchCallId(1),
+          operation: "transactions.createTransaction",
+          input: {
+            payload: {
+              categoryId: batchCategory,
+              direction: "outflow",
+              money: { amount: "45000.00", currency: "COP" },
+              occurredAt: "2026-08-01T12:00:00.000Z",
+              notes: "x".repeat(5_000),
+            },
+          },
+        };
+        const refused = yield* fromTestPromise(() =>
+          batch(runtime, 0, [oversized, captureCall(2)])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        // The aggregate bound alone would let one child exceed the per-operation body cap: each
+        // child is named and refused on the failure contract before any child is admitted.
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 0,
+          operation: "transactions.createTransaction",
+        });
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+      })
+    ),
+  30_000
+);
+
+it(
+  "retries a transient committed readback and answers the committed batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const flaky = { ...runtime, db: flakyReadbackDb(runtime.db) };
+
+        const committed = yield* fromTestPromise(() =>
+          batch(flaky, 0, [
+            captureCall(1),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000943",
+              reference: staged,
+            }),
+          ])
+        );
+        const body = yield* fromTestPromise(() => committed.text());
+        expect(committed.status, body).toBe(200);
+
+        // The unit committed before the read failed, so the bounded retry reports the committed
+        // records instead of answering an unreadable 503 a client retry would re-commit.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          1
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          1
+        );
+      })
+    ),
+  30_000
+);
+
+it(
+  "enforces the Free backfill for a statement child inside an atomic batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const first = yield* fromTestPromise(() => stageOne(runtime));
+        const queued = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000944",
+            index: 0,
+            reference: first.staged,
+          })
+        );
+        expect(queued.status).toBe(202);
+        const second = yield* fromTestPromise(() => stageOne(runtime));
+
+        const paywalled = yield* fromTestPromise(() =>
+          batch(runtime, 0, [
+            captureCall(1),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000945",
+              reference: second.staged,
+            }),
+          ])
+        );
+        expect(paywalled.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(paywalled));
+        // The Free-backfill decision is a child decision: the batch answers it with the same code
+        // the individual submission answers, naming the statement child that met it.
+        expect(rejection.error).toMatchObject({
+          code: "paywall_required",
+          failedCallIndex: 1,
+          operation: "ingestion.submitForExtraction",
+        });
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
+          )
+        ).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
+          )
+        ).toBe(1);
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses a statement child beyond the submission pressure limits inside an atomic batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const current = yield* Clock.currentTimeMillis;
+        yield* fromTestPromise(() =>
+          seedSubmissions(runtime, {
+            first: 1,
+            last: 5,
+            status: "queued",
+            submittedAtMs: current - 1_000,
+            userId: userA,
+          })
+        );
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+
+        const refused = yield* fromTestPromise(() =>
+          batch(runtime, 0, [
+            captureCall(1),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000946",
+              reference: staged,
+            }),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 1,
+          operation: "ingestion.submitForExtraction",
+        });
+
+        // Submission pressure is the same child decision inside a batch: no sixth submission, no
+        // sibling capture, and one bounded refusal audit under the caller's authority.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(5);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
+          )
+        ).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
+          )
+        ).toBe(1);
       })
     ),
   30_000

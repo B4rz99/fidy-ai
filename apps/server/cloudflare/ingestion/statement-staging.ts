@@ -42,6 +42,7 @@ import { activeProUserParams, activeProUserSql } from "../access-tier";
 import {
   type AtomicAbortAttributor,
   type AtomicMutationRefusal,
+  AtomicReadbackFailed,
   type AtomicUnitChild,
   type AtomicUnitExecution,
   type RefusalRecord,
@@ -54,7 +55,7 @@ import {
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
 import { prepareOwnedStatement } from "../pats/pat-unit";
-import type { TransactionAuthority } from "../transactions/transaction-boundary";
+import { type TransactionAuthority, isPATAuthority } from "../transactions/transaction-boundary";
 
 /** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";
@@ -800,7 +801,9 @@ const statementSubmissionReplayAudit = ({
  * The guarded writes that own the staged material, the Free-backfill reservation, the
  * AuditLogEntry, and the bounded extraction outbox identity. Each changes a row only when the
  * previous step did, so the assertion that follows the caller's accountability writes can turn any
- * silently skipped step into a rolled-back unit.
+ * silently skipped step into a rolled-back unit. The outbox row this commits is the durable seam a
+ * future extraction Workflow consumes with replay-safe identity (#805); this unit only ever writes
+ * the identity and never does provider work itself.
  */
 const publicationAccountabilityStatements = (
   config: StatementStagingConfig,
@@ -862,7 +865,7 @@ const classifyStagedRow = (
 };
 
 /** The one canonical mutation this module publishes, with its staged-reference input. */
-const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
+export const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
 
 const stagedMaterialMessage =
   "The staged statement material is unavailable; upload the file again.";
@@ -1070,7 +1073,7 @@ const statementPublicationAccountability = ({
   current: number;
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> =>
-  authority.table === "pats"
+  isPATAuthority(authority)
     ? statementPATAccountability({ afterOwnerWrite: true, authority, current, database })
     : [];
 
@@ -1089,7 +1092,7 @@ const statementReplayAccountability = ({
   current: number;
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> =>
-  authority.table === "pats"
+  isPATAuthority(authority)
     ? statementPATAccountability({ afterOwnerWrite: false, authority, current, database })
     : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
 
@@ -1183,11 +1186,21 @@ type PublicationPremise =
   | Readonly<{ _tag: "Refused"; reason: StatementStagingFailureReason }>
   | Readonly<{ _tag: "Unavailable" }>;
 
-/** The non-committing premise of one admitted staged row: ready, a closed refusal, or unreadable. */
-const publicationPremise = (
+/**
+ * The premise every classification of one owned staged row shares: its own state and the User's
+ * admission pressure, as a closed refusal, an unreadable admission, or `Holds` when the row still
+ * admits publication. The object check stays with the caller: only a preparation that will commit
+ * needs the staged bytes to be present, while a post-abort classification must not depend on R2.
+ */
+const premiseDecision = (
   config: StatementStagingConfig,
   input: Readonly<{ attempt: PublicationAttempt; row: StagingRow }>
-): Effect.Effect<PublicationPremise, StatementStagingUnavailable> =>
+): Effect.Effect<
+  | Readonly<{ _tag: "Refused"; reason: StatementStagingFailureReason }>
+  | Readonly<{ _tag: "Unavailable" }>
+  | Readonly<{ _tag: "Holds" }>,
+  StatementStagingUnavailable
+> =>
   Effect.gen(function* () {
     const refusal = classifyStagedRow(input.row, input.attempt.nowEpochMs);
     if (Option.isSome(refusal)) return { _tag: "Refused", reason: refusal.value } as const;
@@ -1197,7 +1210,19 @@ const publicationPremise = (
     });
     if (Option.isNone(admission)) return { _tag: "Unavailable" } as const;
     const pressure = admissionRefusal(admission.value);
-    if (Option.isSome(pressure)) return { _tag: "Refused", reason: pressure.value } as const;
+    return Option.isSome(pressure)
+      ? ({ _tag: "Refused", reason: pressure.value } as const)
+      : ({ _tag: "Holds" } as const);
+  });
+
+/** The non-committing premise of one admitted staged row: ready, a closed refusal, or unreadable. */
+const publicationPremise = (
+  config: StatementStagingConfig,
+  input: Readonly<{ attempt: PublicationAttempt; row: StagingRow }>
+): Effect.Effect<PublicationPremise, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    const decision = yield* premiseDecision(config, input);
+    if (decision._tag !== "Holds") return decision;
     const objectRefusal = yield* headStagedObject(config, input.row);
     return Option.isSome(objectRefusal)
       ? ({ _tag: "Refused", reason: objectRefusal.value.reason } as const)
@@ -1275,7 +1300,7 @@ export const recordStatementRefusal = (
 ): Promise<RefusalRecord> =>
   input.database
     .batch([
-      input.authority.table === "pats"
+      isPATAuthority(input.authority)
         ? prepareOwnedStatement({
             db: input.database,
             statement: recordRejectedPATWork({
@@ -1311,7 +1336,7 @@ const publicationAuditRows = (
   authority: TransactionAuthority
 ): number => {
   if (publication.replayed) return 1;
-  return authority.table === "pats" ? 2 : 1;
+  return isPATAuthority(authority) ? 2 : 1;
 };
 
 /**
@@ -1345,7 +1370,7 @@ export const preparedStatementChild = ({
         ? Effect.succeedNone
         : Effect.succeed(submissionProjection(stored.value))
     ),
-    Effect.orElseSucceed(() => Option.none())
+    Effect.mapError((cause) => new AtomicReadbackFailed({ cause }))
   ),
   recordRefusal: (refusal) =>
     Effect.tryPromise(() =>
@@ -1382,18 +1407,15 @@ const classifyLostPublication = (
     }
     const row = yield* ownedStagingRow(config, input.attempt.userId, input.attempt.stagingId);
     if (Option.isNone(row)) return { _tag: "Refused", reason: "not-found" } as const;
-    const refusal = classifyStagedRow(row.value, input.attempt.nowEpochMs);
-    if (Option.isSome(refusal)) return { _tag: "Refused", reason: refusal.value } as const;
-    const admission = yield* readAdmissionState(config, {
-      nowEpochMs: input.attempt.nowEpochMs,
-      userId: input.attempt.userId,
-    });
-    if (Option.isNone(admission)) return { _tag: "Unavailable" } as const;
-    const pressure = admissionRefusal(admission.value);
-    return Option.isSome(pressure)
-      ? ({ _tag: "Refused", reason: pressure.value } as const)
-      : ({ _tag: "Unattributable" } as const);
+    const decision = yield* premiseDecision(config, { attempt: input.attempt, row: row.value });
+    return decision._tag === "Holds" ? ({ _tag: "Unattributable" } as const) : decision;
   });
+
+/** One prepared statement publication beside the child index it occupies in the composed unit. */
+export type IndexedStatementPublication = Readonly<{
+  childIndex: number;
+  publication: PreparedStatementPublication;
+}>;
 
 /** The attribution one aborted unit's statement child is classified with, or none when it cannot be proven. */
 export const statementAbortAttributors = ({
@@ -1401,9 +1423,7 @@ export const statementAbortAttributors = ({
   publications,
 }: Readonly<{
   config: StatementStagingConfig;
-  publications: ReadonlyArray<
-    Readonly<{ childIndex: number; publication: PreparedStatementPublication }>
-  >;
+  publications: ReadonlyArray<IndexedStatementPublication>;
 }>): ReadonlyArray<AtomicAbortAttributor> => [
   () =>
     Effect.gen(function* () {
@@ -1419,7 +1439,6 @@ export const statementAbortAttributors = ({
 ];
 
 const settleStatementUnit = (
-  config: StatementStagingConfig,
   input: Readonly<{
     child: AtomicUnitChild<StatementSubmission>;
     execution: AtomicUnitExecution<StatementSubmission>;
@@ -1484,7 +1503,7 @@ const replayStatementSubmission = (
       db: config.database,
       userId: input.attempt.userId,
     });
-    return yield* settleStatementUnit(config, { child, execution, publication });
+    return yield* settleStatementUnit({ child, execution, publication });
   });
 
 /**
@@ -1510,7 +1529,7 @@ const settleStatementExecution = (
 > =>
   Effect.gen(function* () {
     if (input.execution._tag !== "Unavailable") {
-      return yield* settleStatementUnit(config, {
+      return yield* settleStatementUnit({
         child: input.child,
         execution: input.execution,
         publication: input.publication,
@@ -1526,7 +1545,7 @@ const settleStatementExecution = (
       });
     }
     if (lost._tag === "Refused") {
-      return yield* settleStatementUnit(config, {
+      return yield* settleStatementUnit({
         child: input.child,
         execution: {
           _tag: "Attributed",

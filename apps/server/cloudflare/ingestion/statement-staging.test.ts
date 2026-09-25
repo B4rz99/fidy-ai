@@ -408,6 +408,18 @@ const expectsStagedMaterialRefusal = (result: StagingResult<StatementPublication
   });
 };
 
+/** The one bounded refusal both directions of a same-key material conflict share. */
+const expectsMaterialConflictRefusal = (
+  result: StagingResult<StatementPublicationOutcome>
+): void => {
+  expect(refusalOf(result)).toEqual({
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message:
+      "The idempotency key already names different statement material. Stage that material and use a new key.",
+  });
+};
+
 const reference = (staged: StagedStatementBytes): StagedStatementReference => ({
   byteLength: staged.byteLength,
   sha256: staged.sha256,
@@ -720,35 +732,21 @@ describe("Cloudflare statement byte staging", () => {
         );
         // Both directions of the same-key conflict pin the conflict refusal itself, not only the
         // code it shares with other validation refusals.
-        expect(
-          refusalOf(
-            yield* fromTestPromise(() =>
-              publish({ key: idempotencyKey, reference: reference(other), runtime, userId: userA })
-            )
+        expectsMaterialConflictRefusal(
+          yield* fromTestPromise(() =>
+            publish({ key: idempotencyKey, reference: reference(other), runtime, userId: userA })
           )
-        ).toEqual({
-          auditOutcome: "validation_failed",
-          code: "validation_failed",
-          message:
-            "The idempotency key already names different statement material. Stage that material and use a new key.",
-        });
-        expect(
-          refusalOf(
-            yield* fromTestPromise(() =>
-              publish({
-                key: otherIdempotencyKey,
-                reference: reference(staged),
-                runtime,
-                userId: userA,
-              })
-            )
+        );
+        expectsMaterialConflictRefusal(
+          yield* fromTestPromise(() =>
+            publish({
+              key: otherIdempotencyKey,
+              reference: reference(staged),
+              runtime,
+              userId: userA,
+            })
           )
-        ).toEqual({
-          auditOutcome: "validation_failed",
-          code: "validation_failed",
-          message:
-            "The idempotency key already names different statement material. Stage that material and use a new key.",
-        });
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           1
         );
@@ -826,12 +824,7 @@ describe("Cloudflare statement byte staging", () => {
             userId: userA,
           })
         );
-        expect(refusalOf(refused)).toEqual({
-          auditOutcome: "validation_failed",
-          code: "validation_failed",
-          message:
-            "The idempotency key already names different statement material. Stage that material and use a new key.",
-        });
+        expectsMaterialConflictRefusal(refused);
         expect(
           required(yield* fromTestPromise(() => stagingRow(runtime.database, loser.stagingId)))
             .status

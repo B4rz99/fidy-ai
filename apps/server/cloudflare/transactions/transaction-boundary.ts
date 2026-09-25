@@ -137,9 +137,9 @@ export const recordTransactionRefusal = ({
     );
 
 const utcDayMilliseconds = 86_400_000;
-/** Matches the 256-entry stable-User triggers in 0010_pat_lifecycle.sql; the triggers stay the authority. */
+/** Matches the 256-entry stable-User triggers in 0014_memory.sql; the triggers stay the authority. */
 export const dailyAuditBudget = 256;
-/** The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, and category audit. */
+/** The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, category, Memory. */
 const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
@@ -147,6 +147,9 @@ const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id
       AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM category_audit WHERE user_id = ?
+      AND occurred_at_ms >= ? AND occurred_at_ms < ?
+      UNION ALL
+      SELECT occurred_at_ms FROM memory_audit WHERE user_id = ?
       AND occurred_at_ms >= ? AND occurred_at_ms < ?`;
 /** How many canonical audit rows one User has committed in the UTC day containing `current`. */
 export const dailyAuditCount = ({
@@ -158,6 +161,9 @@ export const dailyAuditCount = ({
   return db
     .prepare(`SELECT count(*) AS total FROM (${auditDayRows})`)
     .bind(
+      userId,
+      start,
+      start + utcDayMilliseconds,
       userId,
       start,
       start + utcDayMilliseconds,

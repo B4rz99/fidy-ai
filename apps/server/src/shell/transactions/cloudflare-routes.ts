@@ -1,17 +1,7 @@
 import { Option } from "effect";
 import { operationCatalog } from "~/shell/api";
 import type { CatalogOperation } from "~/shell/_shared/operation-catalog";
-
-const matches = (template: string, path: string): boolean => {
-  const expected = template.split("/");
-  const actual = path.split("/");
-  return (
-    expected.length === actual.length &&
-    expected.every((segment, index) =>
-      segment.startsWith(":") ? (actual[index]?.length ?? 0) > 0 : segment === actual[index]
-    )
-  );
-};
+import { matchesRouteTemplate } from "~/shell/_shared/route-template";
 
 const implemented = [
   "transactions.createTransaction",
@@ -31,12 +21,15 @@ const routes = implemented.map((id) => {
 // @effect-diagnostics-next-line missingPipeableSignature:off
 export const transactionRoute = (path: string, method: string): Option.Option<CatalogOperation> =>
   Option.fromUndefinedOr(
-    routes.find((operation) => operation.method === method && matches(operation.route, path))
+    routes.find(
+      (operation) =>
+        operation.method === method && matchesRouteTemplate({ template: operation.route, path })
+    )
   );
 
 /** True only for paths backed by an implemented canonical Transaction adapter. */
 export const ownsTransactionPath = (path: string): boolean =>
-  routes.some((operation) => matches(operation.route, path));
+  routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));
 
 /** Published HTTP methods for the matched canonical path, not a parallel route registry. */
 export const transactionMethods = (path: string): ReadonlyArray<string> =>

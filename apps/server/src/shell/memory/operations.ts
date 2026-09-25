@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import { Memory, MemoryId, RecallOutput, RememberInput, ReviseInput } from "~/core/memory/model";
-import { NotFound, OperationResponse, createdStatus } from "~/shell/public-http/contract";
+import {
+  NotFound,
+  OperationResponse,
+  ResourceLimited,
+  Unavailable,
+  createdStatus,
+} from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { MemoryCapacityExceededApi } from "./errors";
 
@@ -30,7 +36,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
     HttpApiEndpoint.post("remember", "/memories", {
       payload: RememberInput,
       success: OperationResponse(Memory).pipe(HttpApiSchema.status(createdStatus)),
-      error: MemoryCapacityExceededApi,
+      error: [MemoryCapacityExceededApi, ResourceLimited, Unavailable],
     })
       .annotate(
         OpenApi.Description,
@@ -43,7 +49,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
       params: Schema.Struct({ id: MemoryId }),
       payload: ReviseInput,
       success: OperationResponse(Memory),
-      error: [MemoryCapacityExceededApi, NotFound],
+      error: [MemoryCapacityExceededApi, NotFound, ResourceLimited, Unavailable],
     })
       .annotate(
         OpenApi.Description,
@@ -55,7 +61,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
     HttpApiEndpoint.delete("forget", "/memories/:id", {
       params: Schema.Struct({ id: MemoryId }),
       success: OperationResponse(MemoryId),
-      error: NotFound,
+      error: [NotFound, ResourceLimited, Unavailable],
     })
       .annotate(
         OpenApi.Description,
@@ -66,6 +72,7 @@ export const MemoryGroup = HttpApiGroup.make("memory")
   .add(
     HttpApiEndpoint.get("recall", "/memories", {
       success: OperationResponse(RecallOutput),
+      error: [ResourceLimited, Unavailable],
     })
       .annotate(
         OpenApi.Description,
@@ -73,3 +80,14 @@ export const MemoryGroup = HttpApiGroup.make("memory")
       )
       .annotateMerge(recallPolicy)
   );
+
+/** Every canonical Memory operation id, derived from the endpoints this group declares. */
+export type MemoryOperationId = `memory.${keyof typeof MemoryGroup.endpoints}`;
+
+/** Adapter dispatch list; an alignment test proves it covers exactly the declared group. */
+export const memoryOperationIds = [
+  "memory.remember",
+  "memory.revise",
+  "memory.forget",
+  "memory.recall",
+] as const satisfies ReadonlyArray<MemoryOperationId>;

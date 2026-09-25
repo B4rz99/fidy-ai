@@ -5,6 +5,7 @@ import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
 } from "@fidy/server/transaction-routes";
+import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Effect, Encoding, Option } from "effect";
 import {
@@ -245,10 +246,13 @@ const supportHeaders = (request: Request): Headers =>
 const forwardsSession = (request: Request, path: string): boolean =>
   path === userPath ||
   transactionPath(path) ||
+  memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
-const transactionBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
-  transactionPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
+/** Declared canonical paths that accept either the browser cookie or a PAT bearer. */
+const credentialPath = (path: string): boolean => transactionPath(path) || memoryPath(path);
+const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
+  credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
     ? Option.some(
         new Headers({
           authorization: request.headers.get("authorization") ?? "",
@@ -277,7 +281,7 @@ const browserForwardHeaders = (request: Request, path: string): Headers => {
 const forwardedHeaders = (request: Request, path: string): Headers => {
   const direct = directHeaders(request, path);
   if (Option.isSome(direct)) return direct.value;
-  const bearerHeaders = transactionBearerHeaders(request, path);
+  const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
   return forwardsSession(request, path)
@@ -361,6 +365,7 @@ const atomicBatchPath = (path: string): boolean =>
 const cookieAdmittedPath = (path: string): boolean =>
   transactionPath(path) ||
   atomicBatchPath(path) ||
+  memoryPath(path) ||
   path === listCategoriesPath ||
   keywordRulePath(path);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>

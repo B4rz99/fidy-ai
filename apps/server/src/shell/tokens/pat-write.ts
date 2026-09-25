@@ -167,6 +167,8 @@ export type AuditedPATMutation = Extract<
   AuditedPATOperation,
   | "ingestion.submitForExtraction"
   | "transactions.createTransaction"
+  | "transactions.linkTransactions"
+  | "transactions.unlinkTransactions"
   | "transactions.updateTransaction"
 >;
 

@@ -7,15 +7,14 @@ import {
   keywordRulesFromRows,
   keywordRulesQuery,
 } from "@fidy/server/categories";
-import { recordAuditedPATUse, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { sessionCookie, sha256 } from "../identity/browser-login";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
-import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionSubject,
+  acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
   callerScope,
@@ -52,7 +51,6 @@ type Capture = Readonly<{
   categoryId: CategoryId;
   id: string;
   current: number;
-  auditId: string;
 }>;
 
 const sessionSubject = (raw: unknown, digest: Uint8Array): Option.Option<TransactionSubject> =>
@@ -89,28 +87,17 @@ export const transactionSession = ({
 export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
   boundedJsonBody(request, policy, Input);
 
-const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => {
-  const { subject, id, current, auditId } = capture;
-  return isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          subject,
-          input: {
-            id: auditId,
-            current,
-            operation: "transactions.createTransaction",
-            outcome: "accepted",
-            afterSourceAttestation: true,
-          },
-        }),
-      })
-    : db
-        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
-        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
-        AND changes() = 1`)
-        .bind(transactionId(), subject.id, current, subject.userId, id);
+const captureAudit = (
+  db: D1Database,
+  capture: Omit<Capture, "subject"> & Readonly<{ subject: TransactionSubject }>
+): D1PreparedStatement => {
+  const { subject, id, current } = capture;
+  return db
+    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
+      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
+      AND changes() = 1`)
+    .bind(transactionId(), subject.id, current, subject.userId, id);
 };
 
 const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {
@@ -143,7 +130,7 @@ const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement =>
 };
 
 const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
-  const { subject, context, id, current, auditId } = capture;
+  const { subject, context, id, current } = capture;
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
   return [
     captureInsert(db, capture),
@@ -159,18 +146,14 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         subject.userId,
         id
       ),
-    captureAudit(db, capture),
     ...(isPATCaller(subject)
-      ? [
-          prepareOwnedStatement({
-            db,
-            statement: recordAuditedPATUse({
-              subject,
-              input: { auditId, current, operation: "transactions.createTransaction" },
-            }),
-          }),
-        ]
-      : []),
+      ? acceptedPATStatements({
+          db,
+          subject,
+          operation: "transactions.createTransaction",
+          current,
+        })
+      : [captureAudit(db, { ...capture, subject })]),
   ];
 };
 
@@ -292,6 +275,7 @@ export const prepareCapture = ({
       mutation: {
         operation: "transactions.createTransaction",
         transactionId: id,
+        response: { _tag: "Transaction" },
         expectedRevision: Option.none(),
         requiredScope: callerScope(subject),
         statements: captureStatements(db, {
@@ -301,7 +285,6 @@ export const prepareCapture = ({
           categoryId,
           id,
           current,
-          auditId: transactionId(),
         }),
       },
     } as const;

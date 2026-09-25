@@ -17,7 +17,7 @@ import { NotificationInterpretationEvidence } from "./account-hints";
 import { TransactionId } from "./reference";
 
 export { TransactionId } from "./reference";
-export { encodeMoneyAmount } from "~/core/_shared/money";
+export { Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
@@ -129,6 +129,12 @@ export type TransactionPairInput = typeof TransactionPairInput.Type;
 const IndependentPresentationMetadata = Schema.Struct({
   kind: Schema.Literal("independent"),
 });
+/**
+ * How one requested id maps to the visible identity of a linked pair: the visible member itself,
+ * or the member the caller did not request, named by `requestedId`. `suppressed-member` is the
+ * established contract literal for that second case; it is unrelated to SourceAttestation evidence
+ * suppression, and renaming it is a coordinated contract change rather than a local edit.
+ */
 const LinkedPresentationMetadata = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("visible-member"),

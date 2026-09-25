@@ -1,59 +1,27 @@
-import { DateTime, Effect, Equal, Option } from "effect";
+import { DateTime, Effect, Equal } from "effect";
 import { IneligibleTransactionPair, SameTransactionPair } from "./errors";
 import type { ReadonlyMoney } from "~/core/_shared/money";
-import { type AccountHints, type HintComparison, compareAccountHints } from "./account-hints";
 import type { Transaction, TransactionId, TransactionPairInput } from "./model";
-/** Canonical policy facts required to validate a link and choose authoritative members. */
+
+/** Canonical policy facts required to validate a link and choose its visible member. */
 export type ReconciliationMember = Readonly<{
   id: Transaction["id"];
   money: ReadonlyMoney;
   direction: Transaction["direction"];
   createdAt: DateTime.Utc;
-  correctedAt: Option.Option<DateTime.Utc>;
-  hasStatementSource: boolean;
-  categoryUserDecided: boolean;
-  counterpartyUserDecided: boolean;
-  notesUserDecided: boolean;
 }>;
-
-/**
- * Projects source-attached hints into the only semantics candidate selection may expose. Any
- * conflict excludes the pair; otherwise equality is supporting evidence and absence stays unknown.
- */
-export const projectReconciliationHints = Effect.fn("projectReconciliationHints")(function* (
-  anchor: ReadonlyArray<AccountHints>,
-  candidate: ReadonlyArray<AccountHints>
-) {
-  const comparisons = yield* Effect.forEach(anchor, (anchorHints) =>
-    Effect.forEach(candidate, (candidateHints) => compareAccountHints(anchorHints, candidateHints))
-  );
-  const flattened = comparisons.flat();
-  let hintComparison: HintComparison = "unknown";
-  if (flattened.includes("conflict")) {
-    hintComparison = "conflict";
-  } else if (flattened.includes("equal")) {
-    hintComparison = "equal";
-  }
-  return { hintComparison };
-});
 
 /** Canonically ordered pair used by persistence so caller order cannot create a second decision. */
 export type TransactionPair = TransactionPairInput;
 
-/** Source Transaction ids selected by core policy for each effective fact group. */
-export type EffectiveTransactionAuthorities = Readonly<{
-  movementTransactionId: TransactionId;
-  categoryTransactionId: TransactionId;
-  counterpartyTransactionId: TransactionId;
-  notesTransactionId: TransactionId;
-}>;
-
-/** Complete pure decision persisted after an explicit link succeeds. */
+/**
+ * The one reversible decision persistence stores: the canonical pair and the member a caller reads
+ * the effective Transaction under. Effective fact authorities are never stored; the shared read
+ * relation selects them from the retained members on every read.
+ */
 export type LinkedTransactionDecision = Readonly<{
   pair: TransactionPair;
   visibleTransactionId: TransactionId;
-  statementTransactionId: Option.Option<TransactionId>;
-  authorities: EffectiveTransactionAuthorities;
 }>;
 
 /** Orders one exact pair independently of caller argument order. */
@@ -85,70 +53,8 @@ const selectVisibleMember = (
     first
   );
 
-const latestMember = (
-  members: ReadonlyArray<ReconciliationMember>
-): Option.Option<ReconciliationMember> => {
-  const [head, ...tail] = members;
-  if (head === undefined) return Option.none();
-  return Option.some(
-    tail.reduce((latest, candidate) => {
-      const latestAt = Option.getOrElse(latest.correctedAt, () => latest.createdAt);
-      const candidateAt = Option.getOrElse(candidate.correctedAt, () => candidate.createdAt);
-      const order = DateTime.Order(candidateAt, latestAt);
-      if (order > 0) return candidate;
-      if (order < 0) return latest;
-      return candidate.id.localeCompare(latest.id) > 0 ? candidate : latest;
-    }, head)
-  );
-};
-
-const explicitlyDecidedMember = (
-  first: ReconciliationMember,
-  second: ReconciliationMember,
-  field: "categoryUserDecided" | "counterpartyUserDecided" | "notesUserDecided"
-): Option.Option<ReconciliationMember> =>
-  latestMember([first, second].filter((member) => member[field]));
-
-const statementMember = (
-  first: ReconciliationMember,
-  second: ReconciliationMember
-): Option.Option<ReconciliationMember> => {
-  const statements = [first, second].filter((member) => member.hasStatementSource);
-  return latestMember(statements);
-};
-
-/** Selects the domain-owned source Transaction for every effective fact group. */
-export const decideEffectiveTransactionAuthorities = (input: {
-  readonly first: ReconciliationMember;
-  readonly second: ReconciliationMember;
-}): EffectiveTransactionAuthorities => {
-  const { first, second } = input;
-  const visibleMember = selectVisibleMember(first, second);
-  const statement = statementMember(first, second);
-  const corrected = latestMember(
-    [first, second].filter((member) => Option.isSome(member.correctedAt))
-  );
-  return {
-    movementTransactionId: Option.getOrElse(corrected, () =>
-      Option.getOrElse(statement, () => visibleMember)
-    ).id,
-    categoryTransactionId: Option.getOrElse(
-      explicitlyDecidedMember(first, second, "categoryUserDecided"),
-      () => visibleMember
-    ).id,
-    counterpartyTransactionId: Option.getOrElse(
-      explicitlyDecidedMember(first, second, "counterpartyUserDecided"),
-      () => visibleMember
-    ).id,
-    notesTransactionId: Option.getOrElse(
-      explicitlyDecidedMember(first, second, "notesUserDecided"),
-      () => visibleMember
-    ).id,
-  };
-};
-
 /**
- * Validates one explicit pair and selects the effective facts. Exact Money, Currency, and direction
+ * Validates one explicit pair and selects its visible member. Exact Money, Currency, and direction
  * are hard gates; timing ambiguity is deliberately bypassed because the authorized User decided.
  */
 export const decideTransactionLink = Effect.fn(function* (
@@ -169,11 +75,8 @@ export const decideTransactionLink = Effect.fn(function* (
     secondTransactionId: second.id,
   });
   const visibleMember = selectVisibleMember(first, second);
-  const statement = statementMember(first, second);
   return {
     pair,
     visibleTransactionId: visibleMember.id,
-    statementTransactionId: Option.map(statement, (member) => member.id),
-    authorities: decideEffectiveTransactionAuthorities({ first, second }),
   } satisfies LinkedTransactionDecision;
 });

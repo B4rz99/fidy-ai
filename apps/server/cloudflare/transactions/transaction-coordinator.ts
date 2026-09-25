@@ -1,5 +1,10 @@
-import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
+import {
+  CreateTransactionInput,
+  TransactionPairInput,
+  UpdateTransactionInput,
+} from "@fidy/server/transactions-runtime";
 import { correctTransaction } from "./transaction-corrections";
+import { linkTransactions, unlinkTransactions } from "./transaction-reconciliation";
 import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
@@ -34,6 +39,8 @@ export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
 );
 export type BatchCalls = typeof BatchCalls.Type;
 const Batch = { calls: BatchCalls } as const;
+/** The same bounded pair envelope every Reconciliation command carries. */
+const Pair = { pair: Schema.toCodecJson(TransactionPairInput) } as const;
 /** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
 export const BatchInput = Schema.Struct(Batch);
 export type BatchInput = typeof BatchInput.Type;
@@ -42,15 +49,23 @@ export const TransactionCommand = Schema.Union([
   Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
   Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),
   Schema.TaggedStruct("WebSessionBatch", { ...WebSession, ...Batch }),
+  Schema.TaggedStruct("WebSessionLink", { ...WebSession, ...Pair }),
+  Schema.TaggedStruct("WebSessionUnlink", { ...WebSession, ...Pair }),
   Schema.TaggedStruct("PATCapture", { ...PAT, ...Capture }),
   Schema.TaggedStruct("PATCorrection", { ...PAT, ...Correction }),
   Schema.TaggedStruct("PATBatch", { ...PAT, ...Batch }),
+  Schema.TaggedStruct("PATLink", { ...PAT, ...Pair }),
+  Schema.TaggedStruct("PATUnlink", { ...PAT, ...Pair }),
 ]);
 export type TransactionCommand = typeof TransactionCommand.Type;
 
 /** Rebuild the exact live subject the admitted command was issued for. */
 const commandSubject = (command: TransactionCommand): TransactionCaller =>
-  command._tag === "PATCapture" || command._tag === "PATCorrection" || command._tag === "PATBatch"
+  command._tag === "PATCapture" ||
+  command._tag === "PATCorrection" ||
+  command._tag === "PATBatch" ||
+  command._tag === "PATLink" ||
+  command._tag === "PATUnlink"
     ? {
         patId: command.patId,
         userId: command.userId,
@@ -63,6 +78,33 @@ const commandSubject = (command: TransactionCommand): TransactionCaller =>
         digest: new Uint8Array(command.digest),
       };
 
+type PairCommand = Extract<
+  TransactionCommand,
+  { _tag: "WebSessionLink" | "PATLink" | "WebSessionUnlink" | "PATUnlink" }
+>;
+
+/** Whether one admitted command is a Reconciliation pair mutation. */
+const isPairCommand = (command: TransactionCommand): command is PairCommand =>
+  command._tag === "WebSessionLink" ||
+  command._tag === "PATLink" ||
+  command._tag === "WebSessionUnlink" ||
+  command._tag === "PATUnlink";
+
+/** Execute one Reconciliation pair command through the shared Transaction mutation unit. */
+const executePairCommand = (
+  command: PairCommand,
+  work: Readonly<{ db: D1Database; subject: TransactionCaller }>
+): Effect.Effect<Response, Response> => {
+  const linking = command._tag === "WebSessionLink" || command._tag === "PATLink";
+  return Effect.tryPromise({
+    try: () =>
+      linking
+        ? linkTransactions({ ...work, input: command.pair })
+        : unlinkTransactions({ ...work, input: command.pair }),
+    catch: () => unavailableTransaction(),
+  });
+};
+
 /** Dispatch one admitted command to the shared Transaction mutation implementation. */
 const executeCommand = ({
   db,
@@ -70,6 +112,9 @@ const executeCommand = ({
 }: Readonly<{ db: D1Database; command: TransactionCommand }>): Effect.Effect<Response, Response> =>
   Effect.gen(function* () {
     const subject = commandSubject(command);
+    if (isPairCommand(command)) {
+      return yield* executePairCommand(command, { db, subject });
+    }
     switch (command._tag) {
       case "WebSessionCorrection":
       case "PATCorrection": {

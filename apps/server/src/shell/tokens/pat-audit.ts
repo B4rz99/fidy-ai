@@ -109,7 +109,7 @@ type CanonicalAuditInput = AuditTime &
   Readonly<{
     operation: AuditedPATOperation;
     outcome: "accepted" | "rejected";
-    afterSourceAttestation: boolean;
+    afterOwnerWrite: boolean;
   }>;
 
 /** Audit protected canonical work only while the PAT bearer and User Consent remain live. */
@@ -121,7 +121,7 @@ export const recordCanonicalPATWork = ({
   return {
     sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
       SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate}
-      ${input.afterSourceAttestation ? "AND changes() = 1" : ""}`,
+      ${input.afterOwnerWrite ? "AND changes() = 1" : ""}`,
     params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
   };
 };

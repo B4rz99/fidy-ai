@@ -11,9 +11,11 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import type {
   CreateTransactionInput,
+  TransactionPairInput,
   UpdateTransactionInput,
 } from "@fidy/server/transactions-runtime";
 import { correctionInput } from "./transactions/transaction-corrections";
+import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./onboarding/consent-ingress";
@@ -223,40 +225,35 @@ const enrollmentCorePath = (path: string): boolean =>
 
 type ForwardWork =
   | Readonly<{ _tag: "Capture"; input: CreateTransactionInput }>
-  | Readonly<{ _tag: "Correction"; id: string; input: UpdateTransactionInput }>;
+  | Readonly<{ _tag: "Correction"; id: string; input: UpdateTransactionInput }>
+  | Readonly<{ _tag: "Link"; pair: TransactionPairInput }>
+  | Readonly<{ _tag: "Unlink"; pair: TransactionPairInput }>;
 
 type CoordinatorWork = ForwardWork | Readonly<{ _tag: "Batch"; calls: BatchCalls }>;
 
-/**
- * Bind one admitted caller to the exact coordinator command variant for this Transaction work. The
- * coordinator's own published schema types every field here, so the Worker cannot drift from it.
- */
-const coordinatorCommand = (
-  subject: TransactionCaller,
-  work: CoordinatorWork
-): TransactionCommand => {
-  if (isPATCaller(subject)) {
-    const authority = {
-      patId: subject.patId,
-      userId: subject.userId,
-      digest: Array.from(subject.digest),
-      requiredScope: Option.getOrNull(subject.requiredScope),
+type PATAuthority = Omit<Extract<TransactionCommand, { _tag: "PATCapture" }>, "_tag" | "input">;
+type SessionAuthority = Omit<
+  Extract<TransactionCommand, { _tag: "WebSessionCapture" }>,
+  "_tag" | "input"
+>;
+
+/** The PAT command variant for one admitted piece of Transaction work. */
+const patCommand = (authority: PATAuthority, work: CoordinatorWork): TransactionCommand => {
+  if (work._tag === "Capture") return { _tag: "PATCapture", ...authority, input: work.input };
+  if (work._tag === "Correction") {
+    return {
+      _tag: "PATCorrection",
+      ...authority,
+      correction: { id: work.id, input: work.input },
     };
-    if (work._tag === "Capture") return { _tag: "PATCapture", ...authority, input: work.input };
-    if (work._tag === "Correction") {
-      return {
-        _tag: "PATCorrection",
-        ...authority,
-        correction: { id: work.id, input: work.input },
-      };
-    }
-    return { _tag: "PATBatch", ...authority, calls: work.calls };
   }
-  const authority = {
-    sessionId: subject.id,
-    userId: subject.userId,
-    digest: Array.from(subject.digest),
-  };
+  if (work._tag === "Link") return { _tag: "PATLink", ...authority, pair: work.pair };
+  if (work._tag === "Unlink") return { _tag: "PATUnlink", ...authority, pair: work.pair };
+  return { _tag: "PATBatch", ...authority, calls: work.calls };
+};
+
+/** The WebSession command variant for one admitted piece of Transaction work. */
+const sessionCommand = (authority: SessionAuthority, work: CoordinatorWork): TransactionCommand => {
   if (work._tag === "Capture") {
     return { _tag: "WebSessionCapture", ...authority, input: work.input };
   }
@@ -267,14 +264,45 @@ const coordinatorCommand = (
       correction: { id: work.id, input: work.input },
     };
   }
+  if (work._tag === "Link") return { _tag: "WebSessionLink", ...authority, pair: work.pair };
+  if (work._tag === "Unlink") return { _tag: "WebSessionUnlink", ...authority, pair: work.pair };
   return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
 };
+
+/**
+ * Bind one admitted caller to the exact coordinator command variant for this Transaction work. The
+ * coordinator's own published schema types every field here, so the Worker cannot drift from it.
+ */
+const coordinatorCommand = (
+  subject: TransactionCaller,
+  work: CoordinatorWork
+): TransactionCommand =>
+  isPATCaller(subject)
+    ? patCommand(
+        {
+          patId: subject.patId,
+          userId: subject.userId,
+          digest: Array.from(subject.digest),
+          requiredScope: Option.getOrNull(subject.requiredScope),
+        },
+        work
+      )
+    : sessionCommand(
+        {
+          sessionId: subject.id,
+          userId: subject.userId,
+          digest: Array.from(subject.digest),
+        },
+        work
+      );
 
 /** Inert per-command URL suffix; the coordinator decodes the command from the body alone. */
 const coordinatorRoutes = {
   Capture: "create",
   Correction: "correct",
   Batch: "batch",
+  Link: "link",
+  Unlink: "unlink",
 } as const;
 
 /** Encode one admitted command and deliver it to the caller's User coordinator. */
@@ -384,6 +412,48 @@ const dispatchCanonicalCorrection = (
       });
     })
   );
+
+const dispatchCanonicalPair = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+    operation: "transactions.linkTransactions" | "transactions.unlinkTransactions";
+  }>
+): Promise<Response> => {
+  const { request, environment, subject, operation } = input;
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const pair = yield* Effect.tryPromise(() => transactionPairInput(request));
+      if (Option.isNone(pair)) {
+        return yield* Effect.tryPromise(() =>
+          rejectInvalidTransactionInput({ db: environment.DB, subject, operation })
+        );
+      }
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work:
+          operation === "transactions.linkTransactions"
+            ? { _tag: "Link", pair: pair.value }
+            : { _tag: "Unlink", pair: pair.value },
+      });
+    })
+  );
+};
+
+/** The Reconciliation mutation an admitted operation names, when it names one. */
+const reconciliationOperation = (
+  operation: CatalogOperation
+): Option.Option<"transactions.linkTransactions" | "transactions.unlinkTransactions"> => {
+  if (operation.id === "transactions.linkTransactions") {
+    return Option.some("transactions.linkTransactions");
+  }
+  if (operation.id === "transactions.unlinkTransactions") {
+    return Option.some("transactions.unlinkTransactions");
+  }
+  return Option.none();
+};
 
 const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
@@ -707,7 +777,9 @@ const ingestionCanonicalResponse = (
   return Option.none();
 };
 
-/** The Transaction work this dispatch owns, or None when another slice owns the operation. */
+/**
+ * The Transaction work this dispatch owns, or None when another slice owns the operation.
+ */
 const transactionResponse = (
   input: Readonly<{
     request: Request;
@@ -731,6 +803,21 @@ const transactionResponse = (
         try: () => dispatchCanonicalCorrection(request, environment, subject),
         catch: () => undefined,
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"))
+    );
+  }
+  const reconciliation = reconciliationOperation(operation);
+  if (Option.isSome(reconciliation)) {
+    return Option.some(
+      Effect.tryPromise({
+        try: () =>
+          dispatchCanonicalPair({
+            request,
+            environment,
+            subject,
+            operation: reconciliation.value,
+          }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(reconciliation.value))
     );
   }
   if (operation.id === atomicBatchOperation) {

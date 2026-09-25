@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, SchemaTransformation } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 
 const maxHintTextCodePoints = 64;
 
@@ -69,52 +69,3 @@ export const NotificationInterpretationEvidence = Schema.Struct({
   accountHints: AccountHints,
 }).annotate({ identifier: "NotificationInterpretationEvidence" });
 export type NotificationInterpretationEvidence = typeof NotificationInterpretationEvidence.Type;
-
-/** Comparison is supporting evidence only, never authority to link or resolve an Account. */
-export const HintComparison = Schema.Literals(["equal", "conflict", "unknown"]);
-export type HintComparison = typeof HintComparison.Type;
-
-const differs = (
-  left: Option.Option<LastFourDigits>,
-  right: Option.Option<LastFourDigits>
-): boolean =>
-  Option.match(Option.all([left, right]), {
-    onNone: () => false,
-    onSome: (values: readonly [LastFourDigits, LastFourDigits]) => values[0] !== values[1],
-  });
-
-const tupleEquals: <Value>(values: readonly [Value, Value]) => boolean = (values) =>
-  values[0] === values[1];
-
-const equals: <Value>(left: Option.Option<Value>, right: Option.Option<Value>) => boolean = (
-  left,
-  right
-) =>
-  Option.match(Option.all([left, right]), {
-    onNone: () => false,
-    onSome: tupleEquals,
-  });
-
-/**
- * Compares already-decoded SourceAttestation hints without exposing their values to callers of
- * Reconciliation. Any differing same-kind suffix overrides agreement; different labels alone do
- * not conflict. Missing and cross-kind evidence never establishes equality.
- */
-export const compareAccountHints = Effect.fn("compareAccountHints")(function (
-  left: Readonly<AccountHints>,
-  right: Readonly<AccountHints>
-): Effect.Effect<HintComparison> {
-  if (
-    differs(left.cardLastFour, right.cardLastFour) ||
-    differs(left.accountLastFour, right.accountLastFour)
-  ) {
-    return Effect.succeed("conflict");
-  }
-  const comparison =
-    equals(left.cardLastFour, right.cardLastFour) ||
-    equals(left.accountLastFour, right.accountLastFour) ||
-    equals(left.instrumentLabel, right.instrumentLabel)
-      ? "equal"
-      : "unknown";
-  return Effect.succeed(comparison);
-});

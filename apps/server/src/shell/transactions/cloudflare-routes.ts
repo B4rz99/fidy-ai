@@ -8,6 +8,8 @@ const implemented = [
   "transactions.listTransactions",
   "transactions.searchTransactions",
   "transactions.getTransaction",
+  "transactions.linkTransactions",
+  "transactions.unlinkTransactions",
   "transactions.updateTransaction",
 ] as const;
 

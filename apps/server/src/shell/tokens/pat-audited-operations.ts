@@ -18,6 +18,8 @@ export type AuditedPATOperation =
   | "memory.revise"
   | "transactions.createTransaction"
   | "transactions.getTransaction"
+  | "transactions.linkTransactions"
   | "transactions.listTransactions"
   | "transactions.searchTransactions"
+  | "transactions.unlinkTransactions"
   | "transactions.updateTransaction";

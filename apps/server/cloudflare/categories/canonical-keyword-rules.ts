@@ -333,7 +333,7 @@ const writeStatements = ({
               current,
               operation,
               outcome: "accepted",
-              afterSourceAttestation: true,
+              afterOwnerWrite: true,
             },
           })
         : recordBrowserKeywordRuleWork({ subject, operation, id: uuid(), current }),
@@ -391,7 +391,7 @@ const listStatements = ({
               current,
               operation: "categories.listKeywordRules",
               outcome: "accepted",
-              afterSourceAttestation: false,
+              afterOwnerWrite: false,
             },
           })
         : recordBrowserKeywordRuleRead({

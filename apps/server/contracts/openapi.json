@@ -14698,6 +14698,16 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [
@@ -14913,6 +14923,16 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [
@@ -15139,6 +15159,16 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                }
+              }
+            },
+            "description": "ResourceLimited"
           }
         },
         "security": [

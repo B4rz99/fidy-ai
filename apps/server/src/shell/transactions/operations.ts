@@ -52,6 +52,12 @@ export const UpdateTransactionCanonicalInput = Schema.Struct({
   payload: UpdateTransactionInput,
 });
 
+/** The canonical operation input of `transactions.linkTransactions`, owned beside its endpoint. */
+export const LinkTransactionsCanonicalInput = Schema.Struct({ payload: TransactionPairInput });
+
+/** The canonical operation input of `transactions.unlinkTransactions`, owned beside its endpoint. */
+export const UnlinkTransactionsCanonicalInput = Schema.Struct({ payload: TransactionPairInput });
+
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
 
@@ -112,7 +118,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.post("linkTransactions", "/transactions/link", {
       payload: TransactionPairInput,
       success: OperationResponse(TransactionPresentation),
-      error: [NotFound, ValidationFailed],
+      error: [NotFound, ValidationFailed, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
@@ -124,7 +130,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.post("unlinkTransactions", "/transactions/unlink", {
       payload: TransactionPairInput,
       success: OperationResponse(RestoredTransactionPair),
-      error: [NotFound, ValidationFailed],
+      error: [NotFound, ValidationFailed, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
@@ -137,7 +143,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
       params: UpdateTransactionParams,
       payload: UpdateTransactionInput,
       success: OperationResponse(Transaction),
-      error: [NotFound, ValidationFailed],
+      error: [NotFound, ValidationFailed, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,

@@ -6,7 +6,6 @@ import {
   type TransactionFailure,
   type TransactionNotFound,
   type TransactionNotYetOccurred,
-  type TransactionPairNotLinked,
 } from "~/core/transactions/errors";
 import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
 import {
@@ -74,12 +73,11 @@ const futureMovementRejected = (failure: TransactionNotYetOccurred): ValidationF
   });
 
 const invalidPairRejected = (
-  failure: IneligibleTransactionPair | SameTransactionPair | TransactionPairNotLinked
+  failure: IneligibleTransactionPair | SameTransactionPair
 ): ValidationFailed => {
   const messages = {
     IneligibleTransactionPair: "The Transactions cannot be linked in their current state.",
     SameTransactionPair: "Linking requires two different Transaction ids.",
-    TransactionPairNotLinked: "That exact Transaction pair is not currently linked.",
   } as const;
   return ValidationFailed.make({
     error: {
@@ -95,8 +93,7 @@ type TransactionValidationFailure =
   | IneligibleTransactionPair
   | InvalidTransactionPeriod
   | SameTransactionPair
-  | TransactionNotYetOccurred
-  | TransactionPairNotLinked;
+  | TransactionNotYetOccurred;
 
 type FailureMappingInput<Failure extends TransactionFailure> = {
   readonly failure: Failure;
@@ -116,7 +113,6 @@ function toApiFailure({
     TransactionNotFound: (notFound) => unknownTransactionRejected(notFound, caller),
     // An API-shaped failure the input schema cannot express, because it depends on the clock.
     TransactionNotYetOccurred: futureMovementRejected,
-    TransactionPairNotLinked: invalidPairRejected,
   })(failure);
 }
 

@@ -2,12 +2,15 @@ import { nextTransactionPage } from "@fidy/server/transaction-continuation";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   Counterparty,
+  Currency,
+  Direction,
   Transaction,
   TransactionId,
   TransactionPresentation,
   TransactionQueryValues,
   TransactionSearchQuery,
 } from "@fidy/server/transactions-runtime";
+import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import {
@@ -36,8 +39,8 @@ export const TransactionOutput = Schema.toCodecJson(Transaction);
 const Row = Schema.Struct({
   id: TransactionId,
   amount: Schema.String,
-  currency: Schema.String,
-  direction: Schema.String,
+  currency: Currency,
+  direction: Direction,
   counterparty: Schema.NullOr(Schema.String),
   category_id: Schema.String,
   notes: Schema.NullOr(Schema.String),
@@ -168,23 +171,29 @@ const parseQuery = (
   return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
-type AuthorityCondition = Pick<TransactionAuthority, "predicate" | "bindings">;
-const selectStatement = (
-  db: D1Database,
-  args: Readonly<{
-    selection: Pick<Selection, "id">;
-    query: typeof Query.Type;
-    authority: AuthorityCondition;
-  }>
-): D1PreparedStatement => {
-  const { selection, query, authority } = args;
-  const { id } = selection;
-  const conditions = ["user_id = ?", authority.predicate];
-  const values: Array<string | number | Uint8Array> = [...authority.bindings];
-  if (Option.isSome(id)) {
-    conditions.push("id = ?");
-    values.push(id.value);
-  }
+type AuthorityCondition = Pick<TransactionAuthority, "table" | "predicate" | "bindings">;
+type HistoryRow = Readonly<{
+  db: D1Database;
+  userId: string;
+  query: typeof Query.Type;
+  authority: AuthorityCondition;
+}>;
+
+/**
+ * One bounded effective-history page for the caller. Filters and the keyset cursor apply to the
+ * effective Transaction, so a linked pair is filtered and paged as the one record it represents.
+ */
+const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
+  const relation = effectiveTransactionRelation(userId);
+  const conditions = [
+    "user_id = ?",
+    `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+  ];
+  const values: Array<string | number | Uint8Array> = [
+    ...relation.bindings,
+    userId,
+    ...authority.bindings,
+  ];
   const fields = [
     ["occurred_at >=", Option.map(query.from, DateTime.formatIso)],
     ["occurred_at <", Option.map(query.to, DateTime.formatIso)],
@@ -212,29 +221,102 @@ const selectStatement = (
   }
   return db
     .prepare(
-      `SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision FROM transactions WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
+      `WITH ${relation.sql} SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision FROM effective_transaction WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
     )
     .bind(...values);
 };
+
+type PresentationSelection = Readonly<{
+  db: D1Database;
+  userId: string;
+  id: string;
+  authority: Option.Option<AuthorityCondition>;
+}>;
+
+/**
+ * One effective presentation by either original id, optionally gated on a live caller authority.
+ * A linked member resolves to the effective Transaction and records which original id was requested.
+ * `revision` is the requested member's, so the value a caller reads for an id is exactly the value
+ * its correction compare-and-swaps.
+ */
+const presentationStatement = ({
+  db,
+  userId,
+  id,
+  authority,
+}: PresentationSelection): D1PreparedStatement => {
+  const relation = effectiveTransactionRelation(userId);
+  const guard: Readonly<{
+    sql: string;
+    bindings: ReadonlyArray<string | number | Uint8Array>;
+  }> = Option.match(authority, {
+    onNone: () => ({ sql: "", bindings: [] }),
+    onSome: (live) => ({
+      sql: ` AND EXISTS (SELECT 1 FROM ${live.table} WHERE ${live.predicate})`,
+      bindings: live.bindings,
+    }),
+  });
+  return db
+    .prepare(
+      `WITH ${relation.sql} SELECT effective.id, effective.amount, effective.currency,
+        effective.direction, effective.counterparty, effective.category_id, effective.notes,
+        effective.occurred_at, effective.created_at, requested.revision AS revision,
+        requested.id AS requested_id, (linked.id IS NOT NULL) AS linked
+      FROM transactions requested
+      LEFT JOIN linked_member linked ON linked.id = requested.id
+      LEFT JOIN linked_decision decision
+        ON decision.first_transaction_id = linked.first_transaction_id
+        AND decision.second_transaction_id = linked.second_transaction_id
+      INNER JOIN effective_transaction effective
+        ON effective.id = COALESCE(decision.visible_transaction_id, requested.id)
+      WHERE requested.user_id = ? AND requested.id = ?${guard.sql}`
+    )
+    .bind(...relation.bindings, userId, id, ...guard.bindings);
+};
+
+const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
+  id: row.id,
+  money: { amount: row.amount, currency: row.currency },
+  direction: row.direction,
+  categoryId: row.category_id,
+  ...(row.counterparty === null ? {} : { counterparty: row.counterparty }),
+  ...(row.notes === null ? {} : { notes: row.notes }),
+  occurredAt: row.occurred_at,
+  createdAt: row.created_at,
+  revision: row.revision,
+});
 
 /** Decode untrusted D1 projection into the canonical Transaction shape before it may be returned. */
 export const decodeTransactionRow = (
   raw: unknown
 ): Option.Option<typeof TransactionOutput.Type> => {
   const row = Schema.decodeUnknownOption(Row)(raw);
-  if (Option.isNone(row)) {
-    return Option.none();
-  }
-  return Schema.decodeOption(TransactionOutput)({
-    id: row.value.id,
-    money: { amount: row.value.amount, currency: row.value.currency },
-    direction: row.value.direction,
-    categoryId: row.value.category_id,
-    ...(row.value.counterparty === null ? {} : { counterparty: row.value.counterparty }),
-    ...(row.value.notes === null ? {} : { notes: row.value.notes }),
-    occurredAt: row.value.occurred_at,
-    createdAt: row.value.created_at,
-    revision: row.value.revision,
+  return Option.isNone(row)
+    ? Option.none()
+    : Schema.decodeOption(TransactionOutput)(storedFields(row.value));
+};
+
+const PresentationRow = Schema.Struct({
+  ...Row.fields,
+  requested_id: TransactionId,
+  linked: Schema.Literals([0, 1]),
+});
+
+type PresentationMetadata = TransactionPresentation["presentation"];
+
+const presentationMetadata = (row: typeof PresentationRow.Type): PresentationMetadata => {
+  if (row.linked === 0) return { kind: "independent" };
+  if (row.requested_id === row.id) return { kind: "visible-member" };
+  return { kind: "suppressed-member", requestedId: row.requested_id };
+};
+
+/** Decode one effective projection and explain how the requested id maps to its visible identity. */
+const decodePresentationRow = (raw: unknown): Option.Option<TransactionPresentation> => {
+  const row = Schema.decodeUnknownOption(PresentationRow)(raw);
+  if (Option.isNone(row)) return Option.none();
+  return Schema.decodeOption(TransactionPresentation)({
+    ...storedFields(row.value),
+    presentation: presentationMetadata(row.value),
   });
 };
 
@@ -256,27 +338,46 @@ export const findTransaction = ({
     .first()
     .then(decodeTransactionRow);
 
+/** Read one effective presentation by either original id, as an immediate canonical read would. */
+export const findTransactionPresentation = ({
+  db,
+  userId,
+  id,
+}: Readonly<{ db: D1Database; userId: string; id: string }>): Promise<
+  Option.Option<TransactionPresentation>
+> =>
+  presentationStatement({ db, userId, id, authority: Option.none() })
+    .first()
+    .then(decodePresentationRow);
+
 const presentHistory = (
   rows: D1Result,
   selection: Pick<Selection, "id" | "request" | "search">
 ): Response => {
   const { id, request } = selection;
+  if (Option.isSome(id)) {
+    const first = rows.results[0];
+    if (first === undefined) {
+      return notFound();
+    }
+    const presentation = decodePresentationRow(first);
+    return Option.isNone(presentation)
+      ? unavailable()
+      : Response.json(
+          {
+            data: Schema.encodeSync(Schema.toCodecJson(TransactionPresentation))(
+              presentation.value
+            ),
+            next: [],
+          },
+          { headers: noStore }
+        );
+  }
   const decoded = rows.results.map(decodeTransactionRow);
   if (decoded.some(Option.isNone)) {
     return unavailable();
   }
   const transactions = decoded.flatMap((item) => (Option.isSome(item) ? [item.value] : []));
-  if (Option.isSome(id)) {
-    const first = transactions[0];
-    if (first === undefined) {
-      return notFound();
-    }
-    const data = Schema.encodeSync(Schema.toCodecJson(TransactionPresentation))({
-      ...first,
-      presentation: { kind: "independent" },
-    });
-    return Response.json({ data, next: [] }, { headers: noStore });
-  }
   const visible = transactions.slice(0, pageSize);
   const last = visible.at(-1);
   const next =
@@ -327,6 +428,26 @@ const invalidQueryAudit = (
     .catch(failedAudit);
 };
 
+const historyStatement = (
+  input: Readonly<{
+    db: D1Database;
+    selection: Selection;
+    query: typeof Query.Type;
+    authority: AuthorityCondition;
+  }>
+): D1PreparedStatement => {
+  const { db, selection, query, authority } = input;
+  const userId = selection.subject.userId;
+  return Option.isSome(selection.id)
+    ? presentationStatement({
+        db,
+        userId,
+        id: selection.id.value,
+        authority: Option.some(authority),
+      })
+    : listStatement({ db, userId, query, authority });
+};
+
 /** Assemble a WebSession's protected read and its Transaction-owner audit. */
 const browserHistoryStatements = (
   db: D1Database,
@@ -336,13 +457,11 @@ const browserHistoryStatements = (
   const { subject } = selection;
   const authority = liveWebSessionAuthority({ subject, current });
   return [
-    selectStatement(db, {
+    historyStatement({
+      db,
       selection,
       query,
-      authority: {
-        predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
-        bindings: [subject.userId, ...authority.bindings],
-      },
+      authority,
     }),
     db
       .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
@@ -378,13 +497,11 @@ const patHistoryStatements = (
     prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
     ...(Option.isSome(query)
       ? [
-          selectStatement(db, {
+          historyStatement({
+            db,
             selection,
             query: query.value,
-            authority: {
-              predicate: `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
-              bindings: [subject.userId, ...authority.bindings],
-            },
+            authority,
           }),
         ]
       : []),
@@ -396,7 +513,7 @@ const patHistoryStatements = (
           id: uuid(),
           operation: historyOperation(selection),
           outcome: Option.isSome(query) ? "accepted" : "rejected",
-          afterSourceAttestation: false,
+          afterOwnerWrite: false,
           current,
         },
       }),

@@ -75,9 +75,17 @@ _Avoid_: Correction, deletion, cancellation, refund (unless that is what the mov
 
 **Reconciliation**:
 Deciding that two records describe the same real-world purchase, and linking them. Candidates must
-have equal Currency and exact amount. The link is reversible, never a deletion. Not an entity — a
-process over Transactions.
+have equal Currency, exact amount, and direction. The link is reversible, never a deletion. Not an
+entity — a process over Transactions.
 _Avoid_: Deduplication, matching, merge (as a noun).
+
+**Effective Transaction**:
+The one purchase a linked Reconciliation pair reads as: the visible member's identity, each fact
+group selected from the member the Transaction-owned policy chooses and recomputed on every read,
+and the addressed member's revision so a correction compare-and-swaps what the read returned.
+History and search read it, and a future Dashboard reuses the same relation; the linked originals
+stay retained.
+_Avoid_: Merged Transaction, canonical Transaction, deduplicated Transaction.
 
 **Category**:
 A user-facing classification for spending with an identity that survives label, seed-order, and

@@ -5,6 +5,8 @@ import {
   type CatalogOperation,
   CreateTransactionCanonicalInput,
   type ErrorCode,
+  LinkTransactionsCanonicalInput,
+  UnlinkTransactionsCanonicalInput,
   UpdateTransactionCanonicalInput,
   decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
@@ -14,6 +16,7 @@ import {
 } from "@fidy/server/canonical-runtime";
 import type {
   CreateTransactionInput,
+  TransactionPairInput,
   UpdateTransactionInput,
 } from "@fidy/server/transactions-runtime";
 import { Effect, Option, Schema } from "effect";
@@ -36,16 +39,21 @@ import {
   type PreparedTransactionMutation,
   type TransactionMutationPreparation,
   type TransactionUnitExecution,
+  committedMutationPayload,
+  committedMutationValue,
   dailyAuditMessage,
   executeTransactionUnit,
 } from "./transaction-unit";
 import { prepareCapture } from "./transactions";
 import { prepareCorrection } from "./transaction-corrections";
+import { prepareLink, prepareUnlink } from "./transaction-reconciliation";
 
 // The catalog-derived call schema already validated each child's canonical input; these accept
 // the decoded canonical input so the batch only extracts the typed payload the owner prepares.
 const CaptureInput = Schema.toType(CreateTransactionCanonicalInput);
 const CorrectionInput = Schema.toType(UpdateTransactionCanonicalInput);
+const LinkInput = Schema.toType(LinkTransactionsCanonicalInput);
+const UnlinkInput = Schema.toType(UnlinkTransactionsCanonicalInput);
 
 /** One raw child as the published batch command carries it; the catalog call schema decodes it. */
 export type TransactionBatchCall = unknown;
@@ -61,6 +69,16 @@ type DecodedCall =
       operation: "transactions.updateTransaction";
       id: string;
       input: UpdateTransactionInput;
+    }>
+  | Readonly<{
+      _tag: "Link";
+      operation: "transactions.linkTransactions";
+      pair: TransactionPairInput;
+    }>
+  | Readonly<{
+      _tag: "Unlink";
+      operation: "transactions.unlinkTransactions";
+      pair: TransactionPairInput;
     }>;
 
 type PreparedCall = Readonly<{
@@ -104,6 +122,8 @@ const repeatedCallIdMessage =
 const implementedMutations: ReadonlySet<string> = new Set<TransactionMutationOperation>([
   "transactions.createTransaction",
   "transactions.updateTransaction",
+  "transactions.linkTransactions",
+  "transactions.unlinkTransactions",
 ]);
 const isImplementedMutation = (id: string): id is TransactionMutationOperation =>
   implementedMutations.has(id);
@@ -122,6 +142,20 @@ const decodeChild = (operation: string, input: unknown): Option.Option<DecodedCa
       operation: "transactions.updateTransaction" as const,
       id: value.params.id,
       input: value.payload,
+    }));
+  }
+  if (operation === "transactions.linkTransactions") {
+    return Option.map(Schema.decodeUnknownOption(LinkInput)(input), (value) => ({
+      _tag: "Link" as const,
+      operation: "transactions.linkTransactions" as const,
+      pair: value.payload,
+    }));
+  }
+  if (operation === "transactions.unlinkTransactions") {
+    return Option.map(Schema.decodeUnknownOption(UnlinkInput)(input), (value) => ({
+      _tag: "Unlink" as const,
+      operation: "transactions.unlinkTransactions" as const,
+      pair: value.payload,
     }));
   }
   return Option.none();
@@ -325,10 +359,18 @@ const prepareOwnerMutation = ({
   subject: TransactionCaller;
   decoded: DecodedCall;
   current: number;
-}>): Effect.Effect<TransactionMutationPreparation> =>
-  decoded._tag === "Capture"
-    ? prepareCapture({ db, subject, input: decoded.input, current })
-    : prepareCorrection({ db, subject, id: decoded.id, input: decoded.input, current });
+}>): Effect.Effect<TransactionMutationPreparation> => {
+  switch (decoded._tag) {
+    case "Capture":
+      return prepareCapture({ db, subject, input: decoded.input, current });
+    case "Correction":
+      return prepareCorrection({ db, subject, id: decoded.id, input: decoded.input, current });
+    case "Link":
+      return prepareLink({ db, subject, pair: decoded.pair, current });
+    case "Unlink":
+      return prepareUnlink({ db, subject, pair: decoded.pair, current });
+  }
+};
 
 const preparationStep = ({
   db,
@@ -578,22 +620,32 @@ const prepareBatch = ({
   });
 
 const presentCommitted = ({
+  db,
+  subject,
   children,
   execution,
 }: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
   children: ReadonlyArray<PreparedCall>;
   execution: Extract<TransactionUnitExecution, { readonly _tag: "Committed" }>;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const results: Array<Readonly<{ callId: string; operation: string; output: unknown }>> = [];
     for (const [index, child] of children.entries()) {
-      const stored = execution.results[index];
-      if (stored === undefined) return transactionUnavailable();
+      // Every child presents the same canonical success value its individual response would.
+      const data = yield* committedMutationValue({
+        db,
+        userId: subject.userId,
+        mutation: child.mutation,
+        records: execution.results[index] ?? [],
+      });
+      if (Option.isNone(data)) return transactionUnavailable();
       // Revalidate each result against the published correlated union before it is encoded.
       const result = yield* decodeAtomicBatchResult({
         callId: child.call.callId,
         operation: child.operation.id,
-        output: { data: stored, next: [] },
+        output: { data: committedMutationPayload(data.value), next: [] },
       });
       const output = yield* Schema.encodeEffect(child.operation.success)(result.output);
       results.push({ callId: result.callId, operation: result.operation, output });
@@ -612,7 +664,7 @@ const executionResponse = ({
   children: ReadonlyArray<PreparedCall>;
   execution: TransactionUnitExecution;
 }>): Effect.Effect<Response> => {
-  if (execution._tag === "Committed") return presentCommitted({ children, execution });
+  if (execution._tag === "Committed") return presentCommitted({ db, subject, children, execution });
   if (execution._tag === "CredentialRefused") return refusedCredentialResponse({ db, subject });
   if (execution._tag === "Unavailable") return Effect.succeed(transactionUnavailable());
   const child = children[execution.callIndex];

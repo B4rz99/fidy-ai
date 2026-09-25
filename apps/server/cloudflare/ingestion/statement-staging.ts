@@ -43,6 +43,7 @@ import {
   type AtomicAbortAttributor,
   type AtomicMutationRefusal,
   AtomicReadbackFailed,
+  type AtomicRefusalAuditOutcome,
   type AtomicUnitChild,
   type AtomicUnitExecution,
   type RefusalRecord,
@@ -754,6 +755,17 @@ export const statementSubmissionReadAudit = ({
 
 /** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
  * a refused call stays attributable without recording any submitted material. */
+/**
+ * The two outcomes a statement refusal audit can record. The closed publication refusal map already
+ * answers every reason as `resource_limit` or `validation_failed`; narrowing through one total map
+ * keeps that invariant checkable at the audit column's closed set, so an id a caller cannot prove
+ * ownership of can never be recorded as `not_found`.
+ */
+const refusalAuditOutcome = (
+  outcome: AtomicRefusalAuditOutcome
+): "resource_limit" | "validation_failed" =>
+  outcome === "resource_limit" ? "resource_limit" : "validation_failed";
+
 const statementSubmissionRefusalAudit = ({
   authority,
   current,
@@ -867,7 +879,8 @@ const classifyStagedRow = (
 /** The one canonical mutation this module publishes, with its staged-reference input. */
 export const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
 
-const stagedMaterialMessage =
+/** The one sentence every absent, foreign, or mismatched staged reference is answered with. */
+export const stagedMaterialMessage =
   "The staged statement material is unavailable; upload the file again.";
 
 /**
@@ -1317,10 +1330,7 @@ export const recordStatementRefusal = (
             current: input.current,
             database: input.database,
             id: newId(),
-            outcome:
-              input.refusal.auditOutcome === "not_found"
-                ? "validation_failed"
-                : input.refusal.auditOutcome,
+            outcome: refusalAuditOutcome(input.refusal.auditOutcome),
           }),
     ])
     .then((results): RefusalRecord =>
@@ -1431,7 +1441,7 @@ export const statementAbortAttributors = ({
         if (publication.replayed) continue;
         const lost = yield* classifyLostPublication(config, { attempt: publication.attempt });
         if (lost._tag === "Refused") {
-          return Option.some({ childIndex, refusal: statementRefusal(lost.reason) });
+          return Option.some({ callIndex: childIndex, refusal: statementRefusal(lost.reason) });
         }
       }
       return Option.none();

@@ -38,6 +38,7 @@ import {
   type StoredStatementSubmission,
   newIngestionId,
   recordStatementRefusal,
+  stagedMaterialMessage,
   statementSubmissionReadAudit,
   submissionProjection,
 } from "./statement-staging";
@@ -258,15 +259,12 @@ const submissionResponse = (
 const stagingFailureResponses: Record<StatementStagingFailureReason, () => Response> = {
   cancelled: () =>
     validationFailed("The statement upload did not complete; upload the file again."),
-  conflict: () =>
-    validationFailed("The staged statement material is unavailable; upload the file again."),
+  conflict: () => validationFailed(stagedMaterialMessage),
   "malformed-file": () => validationFailed("The uploaded statement is malformed."),
-  "not-found": () =>
-    validationFailed("The staged statement material is unavailable; upload the file again."),
+  "not-found": () => validationFailed(stagedMaterialMessage),
   paywall: unavailable,
   "resource-limit": () => payloadTooLarge("A statement file may be at most 5 MiB."),
-  "retention-expired": () =>
-    validationFailed("The staged statement material is unavailable; upload the file again."),
+  "retention-expired": () => validationFailed(stagedMaterialMessage),
   "unsupported-format": () =>
     validationFailed("The uploaded bytes are not a CSV or XLSX statement."),
 };
@@ -323,6 +321,21 @@ export const uploadStagedStatement = ({
   });
 
 /**
+ * The one answer to a refusal the caller's own live credential decides: the credential refusal,
+ * classified against live authority, or this endpoint's canonical unavailable answer. It is this
+ * endpoint's seam rather than the transaction boundary's own `refusedCredentialResponse` because an
+ * unreadable authority must answer with the ingestion failure contract, not the transaction one.
+ */
+const refusedCredential = ({
+  db,
+  subject,
+}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    try: () => refusedTransactionWork({ db, subject }),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+/**
  * Records one refused submission attempt's metadata-only audit before its refusal is answered: a
  * PAT's rejected `pat_audit` row, or a session caller's bounded refusal outcome. Only a refusal the
  * publication unit did not settle reaches here; an already-recorded refusal is answered from its own
@@ -341,23 +354,18 @@ const recordRefusedSubmission = ({
   subject: TransactionCaller;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const record = yield* Effect.tryPromise({
-      try: () =>
-        recordStatementRefusal({
-          authority: callerAuthority({ subject, current }),
-          current,
-          database: environment.DB,
-          refusal,
-        }),
-      catch: () => "unavailable" as const,
-    }).pipe(Effect.orElseSucceed(() => "unavailable" as const));
+    const record = yield* Effect.tryPromise(() =>
+      recordStatementRefusal({
+        authority: callerAuthority({ subject, current }),
+        current,
+        database: environment.DB,
+        refusal,
+      })
+    ).pipe(Effect.orElseSucceed(() => "unavailable" as const));
     if (record === "recorded") return statementRefusalResponse(refusal);
     if (record === "rate_limited") return dailyBudgetSpent();
     if (record === "credential_refused") {
-      return yield* Effect.tryPromise({
-        try: () => refusedTransactionWork({ db: environment.DB, subject }),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable));
+      return yield* refusedCredential({ db: environment.DB, subject });
     }
     return unavailable();
   });
@@ -394,10 +402,7 @@ export const executeStatementSubmission = ({
       );
       if (Result.isFailure(published)) {
         if (published.failure._tag === "StatementStagingRefused") {
-          return yield* Effect.tryPromise({
-            try: () => refusedTransactionWork({ db: environment.DB, subject }),
-            catch: () => undefined,
-          }).pipe(Effect.orElseSucceed(unavailable));
+          return yield* refusedCredential({ db: environment.DB, subject });
         }
         return unavailable();
       }
@@ -503,12 +508,7 @@ const commitReadAudit = (
     const results = outcome.success;
     const committed = results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
     if (committed) return Option.none<Response>();
-    return Option.some(
-      yield* Effect.tryPromise({
-        try: () => refusedTransactionWork({ db: environment.DB, subject }),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
-    );
+    return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
   });
 
 /**

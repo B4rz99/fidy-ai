@@ -86,7 +86,7 @@ export type AtomicAbortAttributor = (input: {
   readonly db: D1Database;
   readonly userId: string;
   readonly current: number;
-}) => Effect.Effect<Option.Option<Readonly<{ childIndex: number; refusal: AtomicUnitRefusal }>>>;
+}) => Effect.Effect<Option.Option<Readonly<{ callIndex: number; refusal: AtomicUnitRefusal }>>>;
 
 /**
  * What one caller-owned D1 unit did with its ordered canonical mutation children. `Attributed` is
@@ -100,7 +100,10 @@ export type AtomicUnitExecution<Committed> =
   | Readonly<{ _tag: "CredentialRefused" }>
   | Readonly<{ _tag: "Unavailable" }>;
 
-/** The one message both the individual caller and a batch child report for an exhausted day. */
+/**
+ * The one message a batch child reports for the exhausted shared day. Individual callers answer
+ * with their own bounded budget refusals, so this is the batch contract's sentence alone.
+ */
 export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";
 
 /** The canonical outcome when the shared daily budget itself refused a child's audit write. */
@@ -191,9 +194,9 @@ const provenAttribution = ({
   current: number;
   db: D1Database;
   userId: string;
-}>): Effect.Effect<Option.Option<Readonly<{ childIndex: number; refusal: AtomicUnitRefusal }>>> =>
+}>): Effect.Effect<Option.Option<Readonly<{ callIndex: number; refusal: AtomicUnitRefusal }>>> =>
   Effect.gen(function* () {
-    let proven: Option.Option<Readonly<{ childIndex: number; refusal: AtomicUnitRefusal }>> =
+    let proven: Option.Option<Readonly<{ callIndex: number; refusal: AtomicUnitRefusal }>> =
       Option.none();
     for (const attributor of attributors) {
       const attributed = yield* attributor({ cause, current, db, userId }).pipe(
@@ -201,7 +204,7 @@ const provenAttribution = ({
       );
       if (
         Option.isSome(attributed) &&
-        (Option.isNone(proven) || attributed.value.childIndex < proven.value.childIndex)
+        (Option.isNone(proven) || attributed.value.callIndex < proven.value.callIndex)
       ) {
         proven = attributed;
       }
@@ -247,7 +250,7 @@ const classifyAborted = <Committed>({
     if (Option.isSome(proven)) {
       return {
         _tag: "Attributed",
-        callIndex: proven.value.childIndex,
+        callIndex: proven.value.callIndex,
         refusal: proven.value.refusal,
       } as const;
     }

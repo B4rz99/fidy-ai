@@ -579,32 +579,26 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
 
-        expect(
-          refusalOf(
-            yield* fromTestPromise(() =>
-              publishOnce({
-                reference: { ...reference(staged), sha256: "0".repeat(64) },
-                runtime,
-                userId: userA,
-              })
-            )
+        // A digest that no staged object carries and a size no staged object has are the same
+        // closed refusal: neither the code alone nor its message alone identifies the decision.
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({
+              reference: { ...reference(staged), sha256: "0".repeat(64) },
+              runtime,
+              userId: userA,
+            })
           )
-        ).toEqual({
-          auditOutcome: "validation_failed",
-          code: "validation_failed",
-          message: "The staged statement material is unavailable; upload the file again.",
-        });
-        expect(
-          refusalOf(
-            yield* fromTestPromise(() =>
-              publishOnce({
-                reference: { ...reference(staged), byteLength: staged.byteLength + 1 },
-                runtime,
-                userId: userA,
-              })
-            )
-          ).code
-        ).toBe("validation_failed");
+        );
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({
+              reference: { ...reference(staged), byteLength: staged.byteLength + 1 },
+              runtime,
+              userId: userA,
+            })
+          )
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );

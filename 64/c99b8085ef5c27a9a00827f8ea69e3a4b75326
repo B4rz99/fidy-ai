@@ -1,0 +1,25 @@
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_de6c7d29aa90cd::t_4ff1ce4d2e85b7 33-39,269-272
+apps/server/cloudflare/transactions/transaction-mutations.ts
+  s_de6c7d29aa90cd::t_1c360daff0a6fc 20,101,173,419
+apps/server/cloudflare/transactions/transaction-unit.ts
+  s_de6c7d29aa90cd::t_5059cb4fe11283 10,204
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_de6c7d29aa90cd::t_1053662ee9b563 234,288-296,889,2112,2333,2432-2434,2479-2481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "64c99b8085ef5c27a9a00827f8ea69e3a4b75326",
+  "prompts": {},
+  "sessions": {
+    "s_de6c7d29aa90cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d506-b8f9-763c-b820-c039524baf4d",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

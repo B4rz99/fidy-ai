@@ -1,0 +1,30 @@
+apps/server/cloudflare/categories/canonical-category.ts
+  h_c6d49c804e0ad2 17,43,82,105,126
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 25-26,64-68,75,170,220,223,264,293,300,308,333,358,544
+apps/server/cloudflare/public-worker.ts
+  h_c6d49c804e0ad2 2,17,354-362,366-367
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 24
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  h_c6d49c804e0ad2 37-40
+apps/server/cloudflare/transactions/transaction-history.ts
+  h_c6d49c804e0ad2 20,22,84,435,467
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 303-313,2313-2314,2360,2362
+apps/server/cloudflare/transactions/transactions.ts
+  h_c6d49c804e0ad2 232,236
+docs/adr/0028-atomic-batch-accountability-boundaries.md
+  h_c6d49c804e0ad2 21-23,35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f0199f134f1a63054b36f29650b70456160e90ba",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

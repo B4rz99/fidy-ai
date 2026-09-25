@@ -1,0 +1,34 @@
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 3,5,359-360,365,370,395
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  h_c6d49c804e0ad2 19,33,232-233,291-294
+apps/server/cloudflare/transactions/transaction-history.ts
+  h_c6d49c804e0ad2 20,34-35,171,221-223,228,242,295
+apps/server/cloudflare/transactions/transaction-mutations.ts
+  h_c6d49c804e0ad2 26,53,66,72-73,77,111,181,286,300,308-309,318,326,349,351,353-358,367,393,416,424,436,468,481,497,511,568,570,584,612
+apps/server/cloudflare/transactions/transaction-unit.ts
+  h_c6d49c804e0ad2 11,20,325,350
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 10,237-238
+apps/server/src/shell/canonical-runtime.ts
+  h_c6d49c804e0ad2 8
+apps/server/src/shell/identity/browser-runtime.ts
+  h_c6d49c804e0ad2 9
+apps/server/src/shell/identity/session-guard.ts
+  h_c6d49c804e0ad2 7-8
+apps/server/src/shell/tokens/pat-write.ts
+  h_c6d49c804e0ad2 110-111
+apps/server/src/shell/tokens/runtime.ts
+  h_c6d49c804e0ad2 57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7d615871091c1dcac343299b0bde94a8167dc898",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

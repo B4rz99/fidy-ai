@@ -6,7 +6,7 @@ export {
 } from "~/core/web-session/rules";
 export { getCurrentUser } from "./current-user";
 export { freshSessionExists, freshSessionParams, liveWebSessionAuthority } from "./session-guard";
-export type { FreshSessionSubject } from "./session-guard";
+export type { FreshSessionSubject, WebSessionAuthority } from "./session-guard";
 export { BrowserLoginPairingId } from "~/core/browser-login/reference";
 export {
   BrowserLoginPublicCodeSymbols,

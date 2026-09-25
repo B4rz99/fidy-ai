@@ -33,8 +33,9 @@ export {
   claimPairingGrant,
   insertClaimedPAT,
   livePATAuthority,
+  livePATCredential,
   recordLivePATUse,
-  recordCapturedPATUse,
+  recordAuditedPATUse,
   revokeOnePAT,
   revokeEveryPAT,
   revokeEveryPairing,
@@ -53,6 +54,7 @@ export {
   recordWrongPairingProof,
   slowPairingPoll,
   recordPendingPoll,
+  type PATAuthority,
 } from "./pat-write";
 export {
   recordSessionPATTransition,

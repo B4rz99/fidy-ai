@@ -1,4 +1,5 @@
 import { listCategoriesPath } from "@fidy/server/categories-path";
+import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import {
   transactionMethods,
@@ -13,7 +14,7 @@ import {
 } from "./runtime/telemetry";
 import { browserOrigins } from "./runtime/topology";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/pat-routes";
-import { canonicalMethods, canonicalRoute } from "./routing/canonical-routes";
+import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 
 const minimumAdmissionKeyLength = 32;
 type PublicEnvironment = WorkerTelemetryEnvironment & {
@@ -350,12 +351,20 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);
+/** The cookie-admitted atomic-batch route, recognized through the canonical catalog. */
+const atomicBatchPath = (path: string): boolean =>
+  Option.exists(
+    canonicalOperation({ method: "POST", path }),
+    (operation) => operation.id === atomicBatchOperation
+  );
+/** Declared paths that may be admitted by the browser session cookie instead of a PAT. */
+const cookieAdmittedPath = (path: string): boolean =>
+  transactionPath(path) || atomicBatchPath(path) || path === listCategoriesPath;
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   sessionPaths.has(path) ||
   enrollmentPath(path) ||
-  (transactionPath(path) && request.headers.has("cookie")) ||
-  patBrowserRoute(path) ||
-  (path === listCategoriesPath && request.headers.has("cookie"));
+  (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
+  patBrowserRoute(path);
 
 const gateOwnedRequest = (
   request: Request,

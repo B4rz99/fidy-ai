@@ -41,6 +41,16 @@ const destructiveWrite = operationPolicy({
 });
 
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
+const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
+
+/** The canonical operation input of `transactions.createTransaction`, owned beside its endpoint. */
+export const CreateTransactionCanonicalInput = Schema.Struct({ payload: CreateTransactionInput });
+
+/** The canonical operation input of `transactions.updateTransaction`, owned beside its endpoint. */
+export const UpdateTransactionCanonicalInput = Schema.Struct({
+  params: UpdateTransactionParams,
+  payload: UpdateTransactionInput,
+});
 
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
@@ -124,7 +134,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   )
   .add(
     HttpApiEndpoint.put("updateTransaction", "/transactions/:id", {
-      params: Schema.Struct({ id: TransactionId }),
+      params: UpdateTransactionParams,
       payload: UpdateTransactionInput,
       success: OperationResponse(Transaction),
       error: [NotFound, ValidationFailed],

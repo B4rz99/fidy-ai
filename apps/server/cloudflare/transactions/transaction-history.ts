@@ -17,7 +17,11 @@ import {
 } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
+  type TransactionAuthority,
+  type TransactionCaller,
   type TransactionSubject,
+  isPATCaller,
+  missingTransactionMessage,
   transactionNoStore as noStore,
   transactionNow as now,
   refusedPATWork,
@@ -27,7 +31,8 @@ import {
   transactionId as uuid,
 } from "./transaction-boundary";
 
-const Output = Schema.toCodecJson(Transaction);
+/** The canonical stored-Transaction encoding every Transaction adapter returns. */
+export const TransactionOutput = Schema.toCodecJson(Transaction);
 const Row = Schema.Struct({
   id: TransactionId,
   amount: Schema.String,
@@ -67,7 +72,7 @@ const boundarySize = pageSize + 1;
 const failure = (
   code: "unauthenticated" | "validation_failed" | "not_found" | "rate_limited",
   status: number
-): Response => transactionFailure({ code, status, message: "Transaction unavailable." });
+): Response => transactionFailure({ code, status, message: missingTransactionMessage });
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;
@@ -78,8 +83,7 @@ const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
   String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
-type Subject = TransactionSubject | AuthorizedPAT;
-const isPAT = (subject: Subject): subject is AuthorizedPAT => "patId" in subject;
+type Subject = TransactionCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
@@ -164,10 +168,7 @@ const parseQuery = (
   return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
-type AuthorityCondition = Readonly<{
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
+type AuthorityCondition = Pick<TransactionAuthority, "predicate" | "bindings">;
 const selectStatement = (
   db: D1Database,
   args: Readonly<{
@@ -217,12 +218,14 @@ const selectStatement = (
 };
 
 /** Decode untrusted D1 projection into the canonical Transaction shape before it may be returned. */
-export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.Type> => {
+export const decodeTransactionRow = (
+  raw: unknown
+): Option.Option<typeof TransactionOutput.Type> => {
   const row = Schema.decodeUnknownOption(Row)(raw);
   if (Option.isNone(row)) {
     return Option.none();
   }
-  return Schema.decodeOption(Output)({
+  return Schema.decodeOption(TransactionOutput)({
     id: row.value.id,
     money: { amount: row.value.amount, currency: row.value.currency },
     direction: row.value.direction,
@@ -234,6 +237,24 @@ export const decodeTransactionRow = (raw: unknown): Option.Option<typeof Output.
     revision: row.value.revision,
   });
 };
+
+/** A stored Transaction decoded into the canonical JSON projection every response carries. */
+export type StoredTransaction = typeof TransactionOutput.Type;
+
+/** Read one owned Transaction projection by id; absence is an answer rather than a defect. */
+export const findTransaction = ({
+  db,
+  userId,
+  id,
+}: Readonly<{ db: D1Database; userId: string; id: string }>): Promise<
+  Option.Option<StoredTransaction>
+> =>
+  db
+    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
+      FROM transactions WHERE user_id = ? AND id = ?`)
+    .bind(userId, id)
+    .first()
+    .then(decodeTransactionRow);
 
 const presentHistory = (
   rows: D1Result,
@@ -271,7 +292,7 @@ const presentHistory = (
         )
       : [];
   return Response.json(
-    { data: visible.map((transaction) => Schema.encodeSync(Output)(transaction)), next },
+    { data: visible.map((transaction) => Schema.encodeSync(TransactionOutput)(transaction)), next },
     { headers: noStore }
   );
 };
@@ -412,7 +433,7 @@ const readAuthorizedHistory = (
 ): Promise<Response> => {
   const { selection, query, current } = input;
   const { subject } = selection;
-  if (isPAT(subject)) {
+  if (isPATCaller(subject)) {
     const patSelection = { ...selection, subject };
     return db
       .batch(patHistoryStatements(db, { selection: patSelection, query, current }))
@@ -444,7 +465,7 @@ export const browseTransactions = ({
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
-  if (Option.isNone(query) && !isPAT(subject)) {
+  if (Option.isNone(query) && !isPATCaller(subject)) {
     return invalidQueryAudit(db, { ...selection, subject }, current);
   }
   return transactionAuditExhausted({ db, userId: subject.userId, current })

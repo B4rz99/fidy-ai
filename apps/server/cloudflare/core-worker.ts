@@ -8,18 +8,27 @@ import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
-import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
+import type {
+  CreateTransactionInput,
+  UpdateTransactionInput,
+} from "@fidy/server/transactions-runtime";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
 import { receiveConsentWebhook, sweepExpiredConsent } from "./onboarding/consent-ingress";
 import {
-  rejectManualTransaction,
   transactionInput,
   transactionSession,
   unauthenticatedTransaction,
 } from "./transactions/transactions";
-import type { TransactionSubject } from "./transactions/transaction-boundary";
+import {
+  type TransactionCaller,
+  isPATCaller,
+  maximumTransactionInputBytes,
+  rejectInvalidBatchInput,
+  rejectInvalidTransactionInput,
+} from "./transactions/transaction-boundary";
+import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import {
   completeBrowserPairingEmail,
   startBrowserPairingEmail,
@@ -52,9 +61,18 @@ import {
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
-import type { CatalogOperation } from "@fidy/server/canonical-runtime";
+import {
+  type BatchCalls,
+  BatchInput,
+  TransactionCommand,
+} from "./transactions/transaction-coordinator";
+import {
+  type CatalogOperation,
+  atomicBatchOperation,
+  maximumAtomicBatchCalls,
+} from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
-import { type AuthorizedPAT, authorizeCanonicalPAT } from "./pats/pat-authorization";
+import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
 import {
   currentUser,
@@ -149,7 +167,7 @@ const methodNotAllowed = (): Response =>
 
 const categoriesResponse = (
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Effect.Effect<Response> =>
   Effect.tryPromise({
     try: () => executeProtectedCategories({ db: environment.DB, subject }),
@@ -189,51 +207,80 @@ const enrollmentCorePath = (path: string): boolean =>
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
 type ForwardWork =
-  | Readonly<{ _tag: "Capture"; input: unknown }>
-  | Readonly<{ _tag: "Correction"; id: string; input: unknown }>;
-const forwardTransaction = ({
+  | Readonly<{ _tag: "Capture"; input: CreateTransactionInput }>
+  | Readonly<{ _tag: "Correction"; id: string; input: UpdateTransactionInput }>;
+
+type CoordinatorWork = ForwardWork | Readonly<{ _tag: "Batch"; calls: BatchCalls }>;
+
+/**
+ * Bind one admitted caller to the exact coordinator command variant for this Transaction work. The
+ * coordinator's own published schema types every field here, so the Worker cannot drift from it.
+ */
+const coordinatorCommand = (
+  subject: TransactionCaller,
+  work: CoordinatorWork
+): TransactionCommand => {
+  if (isPATCaller(subject)) {
+    const authority = {
+      patId: subject.patId,
+      userId: subject.userId,
+      digest: Array.from(subject.digest),
+      requiredScope: Option.getOrNull(subject.requiredScope),
+    };
+    if (work._tag === "Capture") return { _tag: "PATCapture", ...authority, input: work.input };
+    if (work._tag === "Correction") {
+      return {
+        _tag: "PATCorrection",
+        ...authority,
+        correction: { id: work.id, input: work.input },
+      };
+    }
+    return { _tag: "PATBatch", ...authority, calls: work.calls };
+  }
+  const authority = {
+    sessionId: subject.id,
+    userId: subject.userId,
+    digest: Array.from(subject.digest),
+  };
+  if (work._tag === "Capture") {
+    return { _tag: "WebSessionCapture", ...authority, input: work.input };
+  }
+  if (work._tag === "Correction") {
+    return {
+      _tag: "WebSessionCorrection",
+      ...authority,
+      correction: { id: work.id, input: work.input },
+    };
+  }
+  return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
+};
+
+/** Inert per-command URL suffix; the coordinator decodes the command from the body alone. */
+const coordinatorRoutes = {
+  Capture: "create",
+  Correction: "correct",
+  Batch: "batch",
+} as const;
+
+/** Encode one admitted command and deliver it to the caller's User coordinator. */
+const sendToCoordinator = ({
   environment,
   subject,
   work,
 }: Readonly<{
   environment: CoreEnvironment;
-  subject: TransactionSubject | AuthorizedPAT;
-  work: ForwardWork;
+  subject: TransactionCaller;
+  work: CoordinatorWork;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
     // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-    const capture = work._tag === "Capture";
-    const authority =
-      "patId" in subject
-        ? {
-            _tag: capture ? "PATCapture" : "PATCorrection",
-            patId: subject.patId,
-            userId: subject.userId,
-            digest: Array.from(subject.digest),
-            requiredScope: Option.getOrNull(subject.requiredScope),
-          }
-        : {
-            _tag: capture ? "WebSessionCapture" : "WebSessionCorrection",
-            sessionId: subject.id,
-            userId: subject.userId,
-            digest: Array.from(subject.digest),
-          };
-    const payload = capture
-      ? { input: work.input }
-      : {
-          correction: {
-            id: work.id,
-            input: work.input,
-          },
-        };
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-      ...authority,
-      ...payload,
-    });
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
+      coordinatorCommand(subject, work)
+    );
     return yield* Effect.tryPromise(() =>
       stub.fetch(
-        new Request(`https://coordinator.internal/${capture ? "create" : "correct"}`, {
+        new Request(`https://coordinator.internal/${coordinatorRoutes[work._tag]}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body,
@@ -242,31 +289,54 @@ const forwardTransaction = ({
     );
   });
 
+// One canonical child input is bounded by its own operation policy; a batch carries at most one
+// such input per declared child, and each child is decoded and attributed by the batch adapter.
+const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
+const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: maximumBatchBytes,
+  deadlineMilliseconds: 2000,
+});
+
+const dispatchCanonicalBatch = (
+  request: Request,
+  environment: CoreEnvironment,
+  subject: TransactionCaller
+): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const parsed = yield* Effect.tryPromise(() =>
+        boundedJsonBody(request, batchPolicy, BatchInput)
+      );
+      if (Option.isNone(parsed)) return rejectInvalidBatchInput();
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: { _tag: "Batch", calls: parsed.value.calls },
+      });
+    })
+  );
+
 const dispatchCanonicalCapture = (
   request: Request,
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const input = yield* Effect.tryPromise(() => transactionInput(request));
       if (Option.isNone(input)) {
         return yield* Effect.tryPromise(() =>
-          rejectManualTransaction({
+          rejectInvalidTransactionInput({
             db: environment.DB,
             subject,
-            outcome: "validation_failed",
             operation: "transactions.createTransaction",
           })
         );
       }
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
-        input.value
-      );
-      return yield* forwardTransaction({
+      return yield* sendToCoordinator({
         environment,
         subject,
-        work: { _tag: "Capture", input: encoded },
+        work: { _tag: "Capture", input: input.value },
       });
     })
   );
@@ -274,31 +344,27 @@ const dispatchCanonicalCapture = (
 const dispatchCanonicalCorrection = (
   request: Request,
   environment: CoreEnvironment,
-  subject: TransactionSubject | AuthorizedPAT
+  subject: TransactionCaller
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const input = yield* Effect.tryPromise(() => correctionInput(request));
       if (Option.isNone(input)) {
         return yield* Effect.tryPromise(() =>
-          rejectManualTransaction({
+          rejectInvalidTransactionInput({
             db: environment.DB,
             subject,
-            outcome: "validation_failed",
             operation: "transactions.updateTransaction",
           })
         );
       }
-      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(UpdateTransactionInput))(
-        input.value
-      );
-      return yield* forwardTransaction({
+      return yield* sendToCoordinator({
         environment,
         subject,
         work: {
           _tag: "Correction",
           id: new URL(request.url).pathname.split("/").at(-1) ?? "",
-          input: encoded,
+          input: input.value,
         },
       });
     })
@@ -458,13 +524,46 @@ const unavailableCanonicalAdapter = (): Response =>
     HTTP_SERVICE_UNAVAILABLE
   );
 
+/** True for the admitted read operations Transaction history owns. */
+const isTransactionHistoryRead = (operation: CatalogOperation): boolean =>
+  operation.id === "transactions.listTransactions" ||
+  operation.id === "transactions.searchTransactions" ||
+  operation.id === "transactions.getTransaction";
+
+/** Dispatch one admitted Transaction history read: search, one record, or the list. */
+const dispatchCanonicalHistory = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+    operation: CatalogOperation;
+  }>
+): Promise<Response> => {
+  const { request, environment, subject, operation } = input;
+  return browseTransactions({
+    db: environment.DB,
+    selection:
+      operation.id === "transactions.searchTransactions"
+        ? { request, subject, search: true, id: Option.none() }
+        : {
+            request,
+            subject,
+            search: false,
+            id:
+              operation.id === "transactions.getTransaction"
+                ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+                : Option.none(),
+          },
+  });
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
     request: Request;
     environment: CoreEnvironment;
     operation: CatalogOperation;
-    subject: TransactionSubject | AuthorizedPAT;
+    subject: TransactionCaller;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
@@ -479,36 +578,23 @@ const executeCanonicalWork = (
     return Effect.tryPromise({
       try: () => dispatchCanonicalCapture(request, environment, subject),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.createTransaction"));
   }
   if (operation.id === "transactions.updateTransaction") {
     return Effect.tryPromise({
       try: () => dispatchCanonicalCorrection(request, environment, subject),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"));
   }
-  if (
-    operation.id === "transactions.listTransactions" ||
-    operation.id === "transactions.searchTransactions" ||
-    operation.id === "transactions.getTransaction"
-  ) {
+  if (operation.id === atomicBatchOperation) {
     return Effect.tryPromise({
-      try: () =>
-        browseTransactions({
-          db: environment.DB,
-          selection:
-            operation.id === "transactions.searchTransactions"
-              ? { request, subject, search: true, id: Option.none() }
-              : {
-                  request,
-                  subject,
-                  search: false,
-                  id:
-                    operation.id === "transactions.getTransaction"
-                      ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-                      : Option.none(),
-                },
-        }),
+      try: () => dispatchCanonicalBatch(request, environment, subject),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation));
+  }
+  if (isTransactionHistoryRead(operation)) {
+    return Effect.tryPromise({
+      try: () => dispatchCanonicalHistory({ request, environment, subject, operation }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }

@@ -1,8 +1,10 @@
 import { CreateTransactionInput, UpdateTransactionInput } from "@fidy/server/transactions-runtime";
 import { correctTransaction } from "./transaction-corrections";
-import { CanonicalCapability } from "@fidy/server/canonical-runtime";
+import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { createManualTransaction, unavailableTransaction } from "./transactions";
+import { executeTransactionBatch } from "./transaction-mutations";
+import { type TransactionCaller, transactionNow } from "./transaction-boundary";
 
 const digestBytes = 32;
 const Credentials = {
@@ -22,12 +24,82 @@ const Correction = {
     input: Schema.toCodecJson(UpdateTransactionInput),
   }),
 } as const;
-const Command = Schema.Union([
+/**
+ * The bounded raw child list a batch command carries. Each entry stays `Unknown` here because the
+ * Transaction batch adapter decodes it against the published catalog call union, where a malformed
+ * child can still be attributed and audited as the child it named.
+ */
+export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
+  Schema.isMaxLength(maximumAtomicBatchCalls)
+);
+export type BatchCalls = typeof BatchCalls.Type;
+const Batch = { calls: BatchCalls } as const;
+/** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
+export const BatchInput = Schema.Struct(Batch);
+export type BatchInput = typeof BatchInput.Type;
+/** Every coordinator command: the live subject authority plus the exact work it admitted. */
+export const TransactionCommand = Schema.Union([
   Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
   Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),
+  Schema.TaggedStruct("WebSessionBatch", { ...WebSession, ...Batch }),
   Schema.TaggedStruct("PATCapture", { ...PAT, ...Capture }),
   Schema.TaggedStruct("PATCorrection", { ...PAT, ...Correction }),
+  Schema.TaggedStruct("PATBatch", { ...PAT, ...Batch }),
 ]);
+export type TransactionCommand = typeof TransactionCommand.Type;
+
+/** Rebuild the exact live subject the admitted command was issued for. */
+const commandSubject = (command: TransactionCommand): TransactionCaller =>
+  command._tag === "PATCapture" || command._tag === "PATCorrection" || command._tag === "PATBatch"
+    ? {
+        patId: command.patId,
+        userId: command.userId,
+        digest: new Uint8Array(command.digest),
+        requiredScope: Option.fromNullishOr(command.requiredScope),
+      }
+    : {
+        id: command.sessionId,
+        userId: command.userId,
+        digest: new Uint8Array(command.digest),
+      };
+
+/** Dispatch one admitted command to the shared Transaction mutation implementation. */
+const executeCommand = ({
+  db,
+  command,
+}: Readonly<{ db: D1Database; command: TransactionCommand }>): Effect.Effect<Response, Response> =>
+  Effect.gen(function* () {
+    const subject = commandSubject(command);
+    switch (command._tag) {
+      case "WebSessionCorrection":
+      case "PATCorrection": {
+        const { correction } = command;
+        return yield* Effect.tryPromise({
+          try: () =>
+            correctTransaction({ db, subject, id: correction.id, input: correction.input }),
+          catch: () => unavailableTransaction(),
+        });
+      }
+      case "WebSessionBatch":
+      case "PATBatch":
+        return yield* Effect.tryPromise({
+          try: () =>
+            executeTransactionBatch({
+              db,
+              subject,
+              calls: command.calls,
+              current: transactionNow(),
+            }),
+          catch: () => unavailableTransaction(),
+        });
+      case "WebSessionCapture":
+      case "PATCapture":
+        return yield* Effect.tryPromise({
+          try: () => createManualTransaction({ db, subject, input: command.input }),
+          catch: () => unavailableTransaction(),
+        });
+    }
+  });
 
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
@@ -49,7 +121,7 @@ export class UserTransactionCoordinator {
             try: () => request.json(),
             catch: () => unavailableTransaction(),
           });
-          const command = Schema.decodeUnknownOption(Command)(candidate);
+          const command = Schema.decodeUnknownOption(TransactionCommand)(candidate);
           if (
             Option.isNone(command) ||
             command.value.digest.length !== digestBytes ||
@@ -57,32 +129,7 @@ export class UserTransactionCoordinator {
           ) {
             return unavailableTransaction();
           }
-          const subject =
-            command.value._tag === "PATCapture" || command.value._tag === "PATCorrection"
-              ? {
-                  patId: command.value.patId,
-                  userId: command.value.userId,
-                  digest: new Uint8Array(command.value.digest),
-                  requiredScope: Option.fromNullishOr(command.value.requiredScope),
-                }
-              : {
-                  id: command.value.sessionId,
-                  userId: command.value.userId,
-                  digest: new Uint8Array(command.value.digest),
-                };
-          const authorized = command.value;
-          if ("correction" in authorized) {
-            const { correction } = authorized;
-            return yield* Effect.tryPromise({
-              try: () =>
-                correctTransaction({ db, subject, id: correction.id, input: correction.input }),
-              catch: () => unavailableTransaction(),
-            });
-          }
-          return yield* Effect.tryPromise({
-            try: () => createManualTransaction({ db, subject, input: authorized.input }),
-            catch: () => unavailableTransaction(),
-          });
+          return yield* executeCommand({ db, command: command.value });
         }).pipe(Effect.catch((response) => Effect.succeed(response)))
       )
     );

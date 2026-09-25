@@ -1,0 +1,90 @@
+ARCHITECTURE.md
+  h_c6d49c804e0ad2 104-107
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 92-104,118-120
+apps/server/cloudflare/access-tier.ts
+  h_c6d49c804e0ad2 1-25
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  h_c6d49c804e0ad2 124,127-128
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 11,104-110,144-145,406,642-753,768-771,869-870,972-997,1050-1052
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 1-1321
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  h_c6d49c804e0ad2 1-790
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 8,12,17,21,42-45,49-52,54,58-62,64-66,119-172,206,224,256-264,282-300,307,310-311,354,357-358,705,708,738-784,805,808-809,838-875,1078-1112
+apps/server/cloudflare/ingestion/statement-staging.ts
+  h_c6d49c804e0ad2 6,9,12-13,15,17-21,32,35,40,45-54,91-103,116-135,155-162,168-170,173,175-189,210,219-242,244,265-268,314,336-338,341-352,370-376,399,408-410,418,448-449,453,455,457,467-469,485,502,583-584,586-589,591-599,602-784,793-801,810-816,823-824,838,842-846,872,875-883,914-920,924-1080,1087-1089,1095,1100-1113,1115-1181,1184-1219,1238,1256-1259,1263-1266,1268-1279,1283,1285
+apps/server/cloudflare/memory/memory.test.ts
+  h_c6d49c804e0ad2 114,118
+apps/server/cloudflare/migrations/0015_statement_submission.sql
+  h_c6d49c804e0ad2 1-235
+apps/server/cloudflare/pats/pats.test.ts
+  h_c6d49c804e0ad2 128,131
+apps/server/cloudflare/public-worker.ts
+  h_c6d49c804e0ad2 4,189,196,231-236,240
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 140,142,153-155,178-180
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 153,157
+apps/server/cloudflare/vitest.config.ts
+  h_c6d49c804e0ad2 12-16
+apps/server/contracts/breaking-change-acknowledgement.json
+  h_c6d49c804e0ad2 1-2479
+apps/server/contracts/openapi.json
+  h_c6d49c804e0ad2 5132-5170,5194-5197,5572-5576,5756-5758,5763,5774-5776,11989
+apps/server/package.json
+  h_c6d49c804e0ad2 112-121
+apps/server/src/client.ts
+  h_c6d49c804e0ad2 46
+apps/server/src/core/ingestion/model.test.ts
+  h_c6d49c804e0ad2 9,15,18,25-26,28-37,39-47,49
+apps/server/src/core/ingestion/model.ts
+  h_c6d49c804e0ad2 138-167,169-180,188,191
+apps/server/src/core/ingestion/staging.test.ts
+  h_c6d49c804e0ad2 35
+apps/server/src/core/ingestion/staging.ts
+  h_c6d49c804e0ad2 2,4-16,23-24,35-37,39-42,44-45,47-48,50-51,54-58,62,68
+apps/server/src/shell/ingestion/operations.ts
+  h_c6d49c804e0ad2 71
+apps/server/src/shell/ingestion/parser.ts
+  h_c6d49c804e0ad2 13,367
+apps/server/src/shell/ingestion/path.ts
+  h_c6d49c804e0ad2 1-7
+apps/server/src/shell/ingestion/source-format.ts
+  h_c6d49c804e0ad2 6-21
+apps/server/src/shell/operations/operations.test.ts
+  h_c6d49c804e0ad2 39,52-56
+apps/server/src/shell/tokens/pat-audit.ts
+  h_c6d49c804e0ad2 9,110,114
+apps/server/src/shell/tokens/pat-audited-operations.ts
+  h_c6d49c804e0ad2 1-23
+apps/server/src/shell/tokens/pat-write.ts
+  h_c6d49c804e0ad2 10,162-172,176,178
+apps/web/src/transport/client.test.ts
+  h_c6d49c804e0ad2 38,65-88,629-683
+bun.lock
+  h_c6d49c804e0ad2 19,250,252,254,256,258,618,620,622,624,626,628,1460,1744,1746,1970
+infra/cloudflare/alchemy.run.ts
+  h_c6d49c804e0ad2 164-166,197
+infra/cloudflare/edge-security.ts
+  h_c6d49c804e0ad2 6,115
+infra/cloudflare/verify-edge-policy.test.ts
+  h_c6d49c804e0ad2 7
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5
+package.json
+  h_c6d49c804e0ad2 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "878435ac4aa00bcc927f55b4089a591b80f6efa3",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

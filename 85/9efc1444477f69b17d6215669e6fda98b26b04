@@ -1,0 +1,78 @@
+apps/server/cloudflare/migrations/0013_transaction_reconciliation.sql
+  h_c6d49c804e0ad2 1-89
+apps/server/cloudflare/transactions/transaction-history.ts
+  h_c6d49c804e0ad2 5-6,13,42-43,174-187,192-196,224,229-286,292-317,339-350,357,361-372,374-378,429-448,458-459,498-499
+  h_c6d49c804e0ad2 188-191,462,502
+apps/server/src/shell/transactions/cloudflare-routes.ts
+  h_c6d49c804e0ad2 21-22
+apps/server/src/shell/tokens/pat-write.ts
+  h_c6d49c804e0ad2 164-168
+apps/server/src/shell/transactions/errors.ts
+  h_c6d49c804e0ad2 76,96
+apps/server/cloudflare/transactions/effective-transaction.ts
+  h_c6d49c804e0ad2 1-23,26-27,29,31-32,34-50,52-64,66-71,73-78,80-111,113-117
+apps/server/src/shell/tokens/pat-audit.ts
+  h_c6d49c804e0ad2 111-112
+apps/server/src/core/transactions/model.ts
+  h_c6d49c804e0ad2 20
+apps/server/cloudflare/transactions/transaction-mutations.ts
+  h_c6d49c804e0ad2 8-9,19,42-43,49,55-56,72-81,125-126,147-160,362-373,623-624,628-629,636-643,648,667
+apps/server/cloudflare/pats/pats.test.ts
+  h_c6d49c804e0ad2 128-129
+apps/server/cloudflare/transactions/transaction-unit.ts
+  h_c6d49c804e0ad2 3-4,6-7,29-42,52-54,63,90-94,235-239,248,250,252-262,491-594,598,604,609-616,680-690
+  h_c6d49c804e0ad2 5,13,19-20,27,47-51,55-58,64,267-398,447-452,461-462
+apps/server/src/shell/canonical-runtime.ts
+  h_c6d49c804e0ad2 21-22
+apps/server/src/core/transactions/reconciliation.test.ts
+  h_c6d49c804e0ad2 1-2,4,6,18,32,34-35,40-46,50,61-69,71-88,92,94-101,103-137
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 6,8,156,240-252,267-276,357-510,663-670,692-1454,1456,1460-1481,1483-1510,1512-1543,1545-1553,1556-1653,3017-3132,3138-3143,3145-3165,3167-3168,3171-3176,3182-3187,3189-3232,3238-3243,3245-3248
+  h_c6d49c804e0ad2 594-619,1455,1457-1459,1482,3133-3137,3144,3166,3169-3170,3177-3181,3188,3233-3237,3244
+apps/server/src/core/transactions/errors.ts
+  h_c6d49c804e0ad2 42,60
+apps/server/cloudflare/transactions/transaction-reconciliation.ts
+  h_c6d49c804e0ad2 1-19,21-27,29-31,33-320,322-366,368-419
+  h_c6d49c804e0ad2 20,28,32,321,367
+apps/server/src/core/transactions/account-hints.test.ts
+  h_c6d49c804e0ad2 3
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 8,57,60-62,74-111
+  h_c6d49c804e0ad2 48-55
+apps/server/src/core/transactions/reconciliation.ts
+  h_c6d49c804e0ad2 1,5-6,17-21,57
+apps/server/package.json
+  h_c6d49c804e0ad2 42-46
+apps/server/src/shell/transactions/operations.ts
+  h_c6d49c804e0ad2 55-60
+  h_c6d49c804e0ad2 121,133
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 13,17,213-215,219-232,235-241,252-253,257-283,289-290,401-442,659-666
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  h_c6d49c804e0ad2 12,165-170,231
+  h_c6d49c804e0ad2 232
+apps/server/cloudflare/transactions/transactions.ts
+  h_c6d49c804e0ad2 13,85-95,135,152-158,222
+  h_c6d49c804e0ad2 223
+docs/adr/0030-reversible-reconciliation-links.md
+  h_c6d49c804e0ad2 1-37
+apps/server/src/core/transactions/account-hints.ts
+  h_c6d49c804e0ad2 1
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  h_c6d49c804e0ad2 1-5,7,42-43,52-53,57-58,64-68,81-107,115-117
+CONTEXT.md
+  h_c6d49c804e0ad2 78-79,82-88
+apps/server/contracts/openapi.json
+  h_c6d49c804e0ad2 14877-14886,15113-15122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "859efc1444477f69b17d6215669e6fda98b26b04",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

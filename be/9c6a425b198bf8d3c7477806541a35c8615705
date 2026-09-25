@@ -1,0 +1,52 @@
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 13,17,213-215,219-232,235-241,252-253,257-283,289-290,401-442,659-666
+apps/server/cloudflare/migrations/0013_transaction_reconciliation.sql
+  h_c6d49c804e0ad2 1-89
+apps/server/cloudflare/pats/pats.test.ts
+  h_c6d49c804e0ad2 128-129
+apps/server/cloudflare/transactions/effective-transaction.ts
+  h_c6d49c804e0ad2 1-23,26-27,29,31-32,34-49,51-63,65-70,72-77,79-110,112-116
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 8,49,52-54,66-103
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  h_c6d49c804e0ad2 1-5,7,42-43,52-53,57-58,64-68,81-107,115-117
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  h_c6d49c804e0ad2 12,165-170,231
+apps/server/cloudflare/transactions/transaction-history.ts
+  h_c6d49c804e0ad2 5-6,13,42-43,174-187,189-193,221,226-283,289-314,336-347,354,358-369,371-375,426-445,455-456,460,462,499-500,504,506
+apps/server/cloudflare/transactions/transaction-mutations.ts
+  h_c6d49c804e0ad2 104-105,109,591
+apps/server/cloudflare/transactions/transaction-reconciliation.ts
+  h_c6d49c804e0ad2 1-418
+apps/server/cloudflare/transactions/transaction-unit.ts
+  h_c6d49c804e0ad2 3-6,24-37,44-45,54,80-84,225-229,238,240,242-252,343-389,393,399,404-411,475-485
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 6,8,156,334-454,581-588,664-1574
+apps/server/cloudflare/transactions/transactions.ts
+  h_c6d49c804e0ad2 13,85-95,135,152-158,222
+apps/server/package.json
+  h_c6d49c804e0ad2 42-46
+apps/server/src/core/transactions/model.ts
+  h_c6d49c804e0ad2 20
+apps/server/src/core/transactions/reconciliation.test.ts
+  h_c6d49c804e0ad2 87-150
+apps/server/src/shell/tokens/pat-audit.ts
+  h_c6d49c804e0ad2 111-112
+apps/server/src/shell/tokens/pat-write.ts
+  h_c6d49c804e0ad2 164-168
+apps/server/src/shell/transactions/cloudflare-routes.ts
+  h_c6d49c804e0ad2 21-22
+docs/adr/0030-reversible-reconciliation-links.md
+  h_c6d49c804e0ad2 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "be9c6a425b198bf8d3c7477806541a35c8615705",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

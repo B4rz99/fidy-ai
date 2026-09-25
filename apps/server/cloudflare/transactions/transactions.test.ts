@@ -15,7 +15,7 @@ import {
   correctionCall,
   defectiveBatchDb,
   seedTransaction,
-} from "./atomic-batch.test-fixture";
+} from "../atomic/atomic-batch.test-fixture";
 
 import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";

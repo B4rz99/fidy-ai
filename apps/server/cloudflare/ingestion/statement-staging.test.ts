@@ -19,6 +19,7 @@ import {
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
+  statementConflictMessage,
 } from "./statement-staging";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -415,8 +416,7 @@ const expectsMaterialConflictRefusal = (
   expect(refusalOf(result)).toEqual({
     auditOutcome: "validation_failed",
     code: "validation_failed",
-    message:
-      "The idempotency key already names different statement material. Stage that material and use a new key.",
+    message: statementConflictMessage,
   });
 };
 

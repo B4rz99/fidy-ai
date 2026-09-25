@@ -879,6 +879,10 @@ const classifyStagedRow = (
 /** The one canonical mutation this module publishes, with its staged-reference input. */
 export const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
 
+/** The one sentence a same-key material conflict is answered with, in every caller and suite. */
+export const statementConflictMessage =
+  "The idempotency key already names different statement material. Stage that material and use a new key.";
+
 /** The one sentence every absent, foreign, or mismatched staged reference is answered with. */
 export const stagedMaterialMessage =
   "The staged statement material is unavailable; upload the file again.";
@@ -898,8 +902,7 @@ const statementPublicationRefusals: Record<StatementStagingFailureReason, Atomic
   conflict: {
     auditOutcome: "validation_failed",
     code: "validation_failed",
-    message:
-      "The idempotency key already names different statement material. Stage that material and use a new key.",
+    message: statementConflictMessage,
   },
   "malformed-file": {
     auditOutcome: "validation_failed",

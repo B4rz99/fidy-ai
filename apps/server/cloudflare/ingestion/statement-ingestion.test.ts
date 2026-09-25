@@ -16,12 +16,13 @@ import {
   correctionCall,
   defectiveBatchDb,
   seedTransaction,
-} from "../transactions/atomic-batch.test-fixture";
+} from "../atomic/atomic-batch.test-fixture";
 import { dailyAuditMessage } from "../atomic/atomic-mutation-unit";
-import { oversizedChildMessage } from "../transactions/canonical-batch";
+import { oversizedChildMessage } from "../atomic/canonical-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { transactionSession } from "../transactions/transactions";
 import { executeStatementSubmission } from "./statement-ingestion";
+import { statementConflictMessage } from "./statement-staging";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
@@ -596,13 +597,18 @@ const stagedWithBody = (body: string): StagedBody => ({
   staged: Schema.decodeSync(Schema.fromJsonString(StagedResponse))(body).data,
 });
 
-/** The tables one canonical turn can commit: both children's state, the outbox, and both audits. */
+/**
+ * Every table a composed turn writes: both children's domain state, the Free-backfill reservation,
+ * the bounded outbox identity, and both audit trails. A turn that published nothing left every one
+ * of them at zero, which is what the two assertions below state from this one list.
+ */
 const canonicalStateTables = [
   "transactions",
   "transaction_audit",
   "statement_submissions",
   "statement_ingestion_outbox",
   "statement_submission_audit",
+  "statement_backfill_entitlements",
 ] as const;
 
 /** The one assertion for the rows a canonical turn left behind, stated once per named table. */
@@ -620,9 +626,9 @@ const expectCanonicalState = (
   });
 
 /**
- * The assertion for a turn that committed nothing: every table one turn can touch, at zero. Naming
- * no table asserts none of them by accident — this walks all five, so a stray audit or domain row
- * written outside the aborted unit's own batch still fails the claim.
+ * The assertion for a turn that committed nothing: every table a turn writes, at zero. This walks
+ * the whole list, so a stray audit, domain, entitlement, or outbox row written outside the aborted
+ * unit's own batch still fails the claim.
  */
 const expectNothingCommitted = (db: D1Database): Effect.Effect<void> =>
   Effect.gen(function* () {
@@ -2548,8 +2554,7 @@ it(
         expect(conflict.error).toMatchObject({
           code: "validation_failed",
           failedCallIndex: 1,
-          message:
-            "The idempotency key already names different statement material. Stage that material and use a new key.",
+          message: statementConflictMessage,
           operation: "ingestion.submitForExtraction",
         });
 

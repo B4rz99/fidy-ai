@@ -1,0 +1,24 @@
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_f9aa3e90839713::t_243687d3f2539a 8-10,12-13,15-20,88-94
+  s_f9aa3e90839713::t_5e1da80f7de912 2,14
+  s_f9aa3e90839713::t_c339a3ff0c1c1c 95
+  s_f9aa3e90839713::t_792ae0d6e5df34 96
+.github/workflows/production.yml
+  s_f9aa3e90839713::t_cefdd46bbd28cf 96,127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7df612284a638e64feffeff343bb128dfaed41fe",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

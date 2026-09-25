@@ -1,0 +1,16 @@
+apps/server/cloudflare/core-worker.ts
+  h_c6d49c804e0ad2 527-559,595,597
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 1631
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "09c9a34fce040ad0845668525019d4ba71db9cc8",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

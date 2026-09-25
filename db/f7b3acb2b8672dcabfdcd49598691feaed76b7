@@ -1,0 +1,18 @@
+apps/server/package.json
+  h_c6d49c804e0ad2 147
+bun.lock
+  h_c6d49c804e0ad2 36,101,260
+infra/cloudflare/package.json
+  h_c6d49c804e0ad2 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dbf7b3acb2b8672dcabfdcd49598691feaed76b7",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

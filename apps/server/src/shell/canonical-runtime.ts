@@ -18,5 +18,7 @@ export type { AtomicBatchCall } from "~/shell/operations/operations";
 /** Canonical input codecs stay owned by the operation module that declares them. */
 export {
   CreateTransactionCanonicalInput,
+  LinkTransactionsCanonicalInput,
+  UnlinkTransactionsCanonicalInput,
   UpdateTransactionCanonicalInput,
 } from "~/shell/transactions/operations";

@@ -37,19 +37,9 @@ export class SameTransactionPair extends Data.TaggedError("SameTransactionPair")
   readonly transactionId: TransactionId;
 }> {}
 
-/** The exact pair cannot represent one effective purchase under the linking invariants. */
+/** The exact pair cannot represent one effective Transaction under the linking invariants. */
 export class IneligibleTransactionPair extends Data.TaggedError("IneligibleTransactionPair")<{
-  readonly reason:
-    | "different-currency"
-    | "different-amount"
-    | "incompatible-direction"
-    | "already-linked-member";
-}> {}
-
-/** Preserves canonical pair order, making this failure invariant to caller-supplied order. */
-export class TransactionPairNotLinked extends Data.TaggedError("TransactionPairNotLinked")<{
-  readonly firstTransactionId: TransactionId;
-  readonly secondTransactionId: TransactionId;
+  readonly reason: "different-currency" | "different-amount" | "incompatible-direction";
 }> {}
 
 /**
@@ -67,5 +57,4 @@ export type TransactionFailure =
   | InvalidTransactionPeriod
   | SameTransactionPair
   | TransactionNotFound
-  | TransactionNotYetOccurred
-  | TransactionPairNotLinked;
+  | TransactionNotYetOccurred;

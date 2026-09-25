@@ -450,7 +450,7 @@ const patAccountability = ({
     db: database,
     statement: recordCanonicalPATWork({
       input: {
-        afterSourceAttestation: true,
+        afterOwnerWrite: true,
         current,
         id: auditId,
         operation: "ingestion.submitForExtraction",
@@ -631,7 +631,7 @@ const recordRefusedSubmission = (
             db: input.environment.DB,
             statement: recordCanonicalPATWork({
               input: {
-                afterSourceAttestation: false,
+                afterOwnerWrite: false,
                 current: input.current,
                 id: newIngestionId(),
                 operation: "ingestion.submitForExtraction",
@@ -699,7 +699,7 @@ const readStatements = (
       db: database,
       statement: recordCanonicalPATWork({
         input: {
-          afterSourceAttestation: false,
+          afterOwnerWrite: false,
           current,
           id: newIngestionId(),
           operation: "ingestion.getStatementSubmission",

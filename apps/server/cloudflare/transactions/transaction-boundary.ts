@@ -1,10 +1,11 @@
-import { Clock, Data, Effect, Option } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   type PATAuthority,
   livePATAuthority,
   livePATCredential,
+  recordAuditedPATUse,
   recordCanonicalPATWork,
 } from "@fidy/server/tokens-runtime";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
@@ -44,11 +45,25 @@ export const maximumTransactionInputBytes = 4096;
 export const missingTransactionMessage = "Transaction unavailable.";
 /** The message every adapter shares for an input that fails its canonical schema. */
 export const invalidTransactionMessage = "Invalid Transaction input.";
+/** The message both pair entry points share when the pair cannot describe one purchase. */
+export const pairPolicyMessage =
+  "Only two different Transactions with equal Currency, exact amount, and the same direction can describe one purchase.";
+/** The message both pair entry points share when either member is already linked. */
+export const alreadyLinkedMessage =
+  "One of the Transactions is already linked to another Transaction.";
+/** The message both pair entry points share when the exact pair is not currently linked. */
+export const unlinkedPairMessage = "That exact Transaction pair is not currently linked.";
+/** The closed state of one Reconciliation decision row, exactly as the 0013 migration constrains it. */
+export const ReconciliationDecisionRow = Schema.Struct({
+  state: Schema.Literals(["linked", "keep-separate"]),
+});
 
-/** The two canonical mutations this adapter executes, individually or as children of one batch. */
+/** The canonical mutations this adapter executes, individually or as children of one batch. */
 export type TransactionMutationOperation =
   | "transactions.createTransaction"
-  | "transactions.updateTransaction";
+  | "transactions.updateTransaction"
+  | "transactions.linkTransactions"
+  | "transactions.unlinkTransactions";
 
 /**
  * Why one canonical Transaction mutation was refused without changing domain state. The outcome is
@@ -59,6 +74,44 @@ export type TransactionRefusal = Readonly<{
   outcome: "not_found" | "validation_failed" | "resource_limit";
   message: string;
 }>;
+
+/**
+ * One accepted canonical PAT AuditLogEntry and the PAT use it accounts for, in the guard-chained
+ * order the unit requires: the AuditLogEntry immediately follows the owner write it attests, and
+ * the PAT use immediately follows the AuditLogEntry that accounts for it.
+ */
+export const acceptedPATStatements = ({
+  db,
+  subject,
+  operation,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: AuthorizedPAT;
+  operation: TransactionMutationOperation;
+  current: number;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const auditId = transactionId();
+  return [
+    prepareOwnedStatement({
+      db,
+      statement: recordCanonicalPATWork({
+        subject,
+        input: {
+          id: auditId,
+          current,
+          operation,
+          outcome: "accepted",
+          afterOwnerWrite: true,
+        },
+      }),
+    }),
+    prepareOwnedStatement({
+      db,
+      statement: recordAuditedPATUse({ subject, input: { auditId, current, operation } }),
+    }),
+  ];
+};
 
 type RefusalRecord = "recorded" | "credential_refused" | "rate_limited" | "unavailable";
 
@@ -85,7 +138,7 @@ const refusalStatement = ({
             current,
             operation,
             outcome: "rejected",
-            afterSourceAttestation: false,
+            afterOwnerWrite: false,
           },
         }),
       })

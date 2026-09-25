@@ -59,7 +59,7 @@ const categoryStatements = (
             current,
             operation: "categories.listCategories",
             outcome: "accepted",
-            afterSourceAttestation: false,
+            afterOwnerWrite: false,
           },
         }),
       }),

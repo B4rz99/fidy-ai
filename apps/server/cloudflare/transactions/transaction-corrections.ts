@@ -4,13 +4,12 @@ import {
   UpdateTransactionInput,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
-import { recordAuditedPATUse, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
-import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
+  acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
   callerScope,
@@ -156,37 +155,19 @@ const auditStatements = ({
   subject,
   current,
   correctionId,
-  auditId,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
   correctionId: string;
-  auditId: string;
 }>): ReadonlyArray<D1PreparedStatement> =>
   isPATCaller(subject)
-    ? [
-        prepareOwnedStatement({
-          db,
-          statement: recordCanonicalPATWork({
-            subject,
-            input: {
-              id: auditId,
-              current,
-              operation: "transactions.updateTransaction",
-              outcome: "accepted",
-              afterSourceAttestation: true,
-            },
-          }),
-        }),
-        prepareOwnedStatement({
-          db,
-          statement: recordAuditedPATUse({
-            subject,
-            input: { auditId, current, operation: "transactions.updateTransaction" },
-          }),
-        }),
-      ]
+    ? acceptedPATStatements({
+        db,
+        subject,
+        operation: "transactions.updateTransaction",
+        current,
+      })
     : [
         db
           .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
@@ -247,6 +228,7 @@ const preparedCorrection = ({
     mutation: {
       operation: "transactions.updateTransaction",
       transactionId: id,
+      response: { _tag: "Transaction" },
       expectedRevision: Option.some(input.expectedRevision),
       requiredScope: callerScope(subject),
       statements: [
@@ -256,7 +238,6 @@ const preparedCorrection = ({
           subject,
           current,
           correctionId: evidence.id,
-          auditId: transactionId(),
         }),
       ],
     },

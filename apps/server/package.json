@@ -39,6 +39,11 @@
       "import": "./src/shell/transactions/capture.ts",
       "default": "./src/shell/transactions/capture.ts"
     },
+    "./transaction-reconciliation": {
+      "types": "./src/core/transactions/reconciliation.ts",
+      "import": "./src/core/transactions/reconciliation.ts",
+      "default": "./src/core/transactions/reconciliation.ts"
+    },
     "./transactions-runtime": {
       "types": "./src/core/transactions/model.ts",
       "import": "./src/core/transactions/model.ts",

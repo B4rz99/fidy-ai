@@ -211,7 +211,7 @@ const rejectionStatement = ({
         db,
         statement: recordCanonicalPATWork({
           subject,
-          input: { id, current, operation, outcome: "rejected", afterSourceAttestation: false },
+          input: { id, current, operation, outcome: "rejected", afterOwnerWrite: false },
         }),
       })
     : prepareOwnedStatement({
@@ -272,7 +272,7 @@ const acceptedStatements = ({
             current,
             operation,
             outcome: "accepted",
-            afterSourceAttestation: afterMutation,
+            afterOwnerWrite: afterMutation,
           },
         }),
       })
@@ -628,7 +628,7 @@ const patRecallAudit = ({
         current,
         operation: "memory.recall",
         outcome: "accepted",
-        afterSourceAttestation: false,
+        afterOwnerWrite: false,
       },
     }),
   });

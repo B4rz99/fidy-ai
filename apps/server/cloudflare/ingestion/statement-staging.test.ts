@@ -718,13 +718,20 @@ describe("Cloudflare statement byte staging", () => {
         const other = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
+        // Both directions of the same-key conflict pin the conflict refusal itself, not only the
+        // code it shares with other validation refusals.
         expect(
           refusalOf(
             yield* fromTestPromise(() =>
               publish({ key: idempotencyKey, reference: reference(other), runtime, userId: userA })
             )
-          ).code
-        ).toBe("validation_failed");
+          )
+        ).toEqual({
+          auditOutcome: "validation_failed",
+          code: "validation_failed",
+          message:
+            "The idempotency key already names different statement material. Stage that material and use a new key.",
+        });
         expect(
           refusalOf(
             yield* fromTestPromise(() =>
@@ -735,8 +742,13 @@ describe("Cloudflare statement byte staging", () => {
                 userId: userA,
               })
             )
-          ).code
-        ).toBe("validation_failed");
+          )
+        ).toEqual({
+          auditOutcome: "validation_failed",
+          code: "validation_failed",
+          message:
+            "The idempotency key already names different statement material. Stage that material and use a new key.",
+        });
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           1
         );

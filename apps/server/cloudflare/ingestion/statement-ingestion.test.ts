@@ -582,24 +582,6 @@ const scalar = <A>(db: D1Database, sql: string, ...bindings: ReadonlyArray<strin
       return row;
     });
 
-/** Runs one real publication just before a wrapped D1 handle's first batch, forcing a lost race. */
-const publishBeforeBatch = (
-  database: D1Database,
-  beforeBatch: () => Promise<unknown>
-): D1Database => {
-  let fired = false;
-  return new Proxy(database, {
-    get: (target, property): unknown =>
-      property === "batch"
-        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
-            if (fired) return target.batch(...args);
-            fired = true;
-            return beforeBatch().then(() => target.batch(...args));
-          }
-        : Reflect.get(target, property, target),
-  });
-};
-
 /** One D1 row decoded through its exact schema; absence is an exception, not a value. */
 const firstRow = <A, E>(
   db: D1Database,
@@ -1518,7 +1500,7 @@ it(
         // The winner commits after the losing call has read "no submission for this key" and before
         // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
         // call remains one refusal: the unit's recorded refusal is answered without a second write.
-        const database = publishBeforeBatch(runtime.db, () =>
+        const database = beforeBatchDb(runtime.db, () =>
           executeStatementSubmission({
             current,
             environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },

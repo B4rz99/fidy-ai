@@ -753,7 +753,7 @@ export const statementSubmissionReadAudit = ({
 
 /** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
  * a refused call stays attributable without recording any submitted material. */
-export const statementSubmissionRefusalAudit = ({
+const statementSubmissionRefusalAudit = ({
   authority,
   current,
   database,
@@ -777,7 +777,7 @@ export const statementSubmissionRefusalAudit = ({
 /** Metadata-only audit for one canonical submission replay by its live session caller: the stored
  * submission is returned unchanged, so the replay stays attributable without new authoritative
  * state. Its live-authority guard also refuses a credential revoked after dispatch. */
-export const statementSubmissionReplayAudit = ({
+const statementSubmissionReplayAudit = ({
   authority,
   current,
   database,

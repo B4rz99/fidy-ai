@@ -75,9 +75,12 @@ application state authority, Durable Objects the keyed coordination authority, Q
 mechanism, Workflows the durable multi-step mechanism, and R2 the bounded content authority. Those
 platform services must remain infrastructure, not alternate domain models.
 
-The D1 baseline contains the stable Category taxonomy and the Cloudflare resource-admission tables.
-The canonical Categories implementation runs the bounded ordered query, decodes every row through the
-published Category schema, and is shared by the operation registry and the private Core Worker adapter.
+The D1 baseline contains the stable Category taxonomy, User-owned keyword rules, and the
+Cloudflare resource-admission tables. The canonical Categories implementation runs the bounded
+ordered query, decodes every row through the published Category schema, and is shared by the
+operation registry and the private Core Worker adapter. Keyword rules are scoped to one User and
+reference stable CategoryIds; capture reads them for future Transactions and no rule change
+rewrites retained history.
 The infrastructure admission primitive atomically charges Stable-User, source, operation,
 outstanding-work, and spend policies with caller-owned proof, replay, or outbox statements. Its
 resource refusal and authority-unavailable failures are separate from commercial allowance results.

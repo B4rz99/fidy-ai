@@ -101,9 +101,10 @@ policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cac
 headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
 is the first exception: its Cloudflare integration gate exercises public ingress, the private service
 binding, and local D1. Resource-admission integration exercises local D1 directly to prove atomic
-concurrency and restart behavior without inventing a public route. Statement-byte staging exercises
-local D1 and R2 directly to prove actual bytes, digests, User ownership, interruption, replay, and
-bounded expiry; the production binding and its scheduled sweep land with statement submission
+concurrency and restart behavior without inventing a public route. Statement staging and acceptance
+exercise local D1 and R2 directly to prove actual bytes, digests, User ownership, interruption,
+replay, admission bounds, and bounded retention, including issue through public ingress, the private
+Core Worker's staging binding, and its scheduled sweep
 ([ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The Workers AI
 release gate exercises the approved model through the real AI binding without a gateway or
 external-model fallback. DO/Queue/Workflow integration gates remain future work.

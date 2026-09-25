@@ -43,6 +43,7 @@ export {
   StartPATPairingPayload,
 } from "~/core/tokens/pairing";
 export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
+export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/model";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {

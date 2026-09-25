@@ -6,6 +6,7 @@ import {
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
 import { livePATAuthority } from "./pat-write";
+import type { AuditedPATOperation } from "./pat-audited-operations";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 
 type PATSubject = Readonly<{
@@ -104,28 +105,13 @@ export const recordAllPATRevocations = ({
   ],
 });
 
-type CanonicalPATOperation =
-  | "categories.listCategories"
-  | "categories.listKeywordRules"
-  | "categories.createKeywordRule"
-  | "categories.updateKeywordRule"
-  | "categories.deleteKeywordRule"
-  | "transactions.createTransaction"
-  | "transactions.updateTransaction"
-  | "transactions.listTransactions"
-  | "transactions.searchTransactions"
-  | "transactions.getTransaction"
-  | "memory.remember"
-  | "memory.recall"
-  | "memory.revise"
-  | "memory.forget";
-
 type CanonicalAuditInput = AuditTime &
   Readonly<{
-    operation: CanonicalPATOperation;
+    operation: AuditedPATOperation;
     outcome: "accepted" | "rejected";
     afterSourceAttestation: boolean;
   }>;
+
 /** Audit protected canonical work only while the PAT bearer and User Consent remain live. */
 export const recordCanonicalPATWork = ({
   subject,

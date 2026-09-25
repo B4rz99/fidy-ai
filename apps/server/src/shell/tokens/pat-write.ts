@@ -7,6 +7,7 @@ import {
 } from "~/shell/identity/browser-runtime";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { AuditedPATOperation } from "./pat-audited-operations";
 
 export const pairingMilliseconds = 600_000;
 // One source cannot exhaust this pool under the edge's 60-per-10-second budget.
@@ -158,12 +159,23 @@ export const recordLivePATUse = ({
   };
 };
 
+/**
+ * Canonical mutations whose successful canonical audit row gates PAT activity. Reads advance
+ * activity through `recordLivePATUse` instead, so the closed set stays mutation-only.
+ */
+export type AuditedPATMutation = Extract<
+  AuditedPATOperation,
+  | "ingestion.submitForExtraction"
+  | "transactions.createTransaction"
+  | "transactions.updateTransaction"
+>;
+
 type AuditedUseInput = Readonly<{
   auditId: string;
   current: number;
-  operation: "transactions.createTransaction" | "transactions.updateTransaction";
+  operation: AuditedPATMutation;
 }>;
-/** Advance PAT activity only after the matching successful Transaction audit committed in this D1 unit. */
+/** Advance PAT activity only after the matching successful canonical audit committed in this D1 unit. */
 export const recordAuditedPATUse = ({
   subject,
   input,

@@ -36,8 +36,7 @@ it("keeps mailbox-proof replacement out of atomic batches", () => {
 it("keeps statement submission inside the derived atomic-batch child union", () => {
   // #788 decided that statement bytes are staged before the canonical submission; the derived
   // child union must keep carrying the submission itself rather than exempting ingestion from
-  // batching through an eligibility flag. The fixture mirrors the declaration until #698 lands the
-  // staged-reference input.
+  // batching through an eligibility flag. The fixture mirrors the staged-reference declaration.
   const ingestion = operationCatalog.byId.get("ingestion.submitForExtraction");
   expect(ingestion?.atomicBatchEligible).toBe(true);
   expect(ingestion?.policy.kind).toBe("mutation");
@@ -49,12 +48,12 @@ it("keeps statement submission inside the derived atomic-batch child union", () 
       operation: "ingestion.submitForExtraction",
       input: {
         payload: {
-          file: {
-            contentBase64: "ZmVjaGEsdmFsb3I=",
-            declaredMediaType: "text/csv",
-            name: "extracto.csv",
-          },
           idempotencyKey: "20000000-0000-4000-8000-000000000201",
+          reference: {
+            stagingId: "30000000-0000-4000-8000-000000000301",
+            byteLength: 42,
+            sha256: "a".repeat(64),
+          },
         },
       },
     })._tag

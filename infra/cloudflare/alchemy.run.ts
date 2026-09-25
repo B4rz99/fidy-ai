@@ -161,6 +161,9 @@ export default Alchemy.Stack(
       migrations: "../../apps/server/cloudflare/migrations",
       readReplication: { mode: "disabled" },
     });
+    // Private statement byte staging. The ingress never receives this binding; only the Core Worker
+    // writes, verifies, and reclaims staged material through its authorized paths (#788, ADR 0028).
+    const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
 
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
@@ -191,6 +194,7 @@ export default Alchemy.Stack(
         AI: Cloudflare.Workers.AI(),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
+        STATEMENT_STAGING_BUCKET: statementStagingBucket,
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),

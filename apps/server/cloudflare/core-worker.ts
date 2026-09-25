@@ -8,7 +8,7 @@ import {
 import { HostedInference } from "@fidy/server/hosted-inference";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import type {
   CreateTransactionInput,
   UpdateTransactionInput,
@@ -101,6 +101,13 @@ import {
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./ai/workers-ai";
+import { statementStagingPath } from "@fidy/server/statement-path";
+import {
+  readStatementSubmission,
+  submitStagedStatement,
+  uploadStagedStatement,
+} from "./ingestion/statement-ingestion";
+import { StatementStaging } from "./ingestion/statement-staging";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
@@ -134,6 +141,8 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
+  /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
+  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>> &
   Partial<
     Pick<
       BillingCollectionEnvironment,
@@ -394,6 +403,7 @@ const ownedCorePath = (path: string): boolean =>
     emailReplacementOperations.complete.path,
     "/internal/support-recovery",
     "/user",
+    statementStagingPath,
   ].includes(path) ||
   transactionPath(path) ||
   patRoute(path) ||
@@ -629,6 +639,118 @@ const memoryResponse = (
         }).pipe(Effect.withSpan(input.operation.id))
       )
     : Option.none();
+/** Session-authorized statement byte staging; neither a PAT nor an anonymous caller may stage. */
+const statementUploadResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> => {
+  if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
+  return Effect.tryPromise({
+    try: () => transactionSession({ request, db: environment.DB }),
+    catch: () => undefined,
+  }).pipe(
+    Effect.flatMap((session) =>
+      Option.isNone(session)
+        ? Effect.succeed(unauthenticatedTransaction())
+        : uploadStagedStatement({ environment, request, subject: session.value }).pipe(
+            Effect.withSpan("ingestion.stageStatement")
+          )
+    ),
+    Effect.orElseSucceed(unavailable)
+  );
+};
+
+/** Direct Core paths that own their own admission and session resolution. */
+const directPathResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Option.Option<Effect.Effect<Response>> => {
+  const path = new URL(request.url).pathname;
+  if (path === "/web/onboarding/email/verify") {
+    return Option.some(verificationEffect(request, environment.DB));
+  }
+  if (path === statementStagingPath) {
+    return Option.some(statementUploadResponse(request, environment));
+  }
+  return Option.none();
+};
+
+/** Ingestion canonical work: the one adapter whose response is a staged-material projection. */
+const ingestionCanonicalResponse = (
+  input: Readonly<{
+    operation: CatalogOperation;
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response>> => {
+  const { operation, request, environment, subject } = input;
+  if (operation.id === "ingestion.submitForExtraction") {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => submitStagedStatement({ environment, request, subject }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("ingestion.submitForExtraction"))
+    );
+  }
+  if (operation.id === "ingestion.getStatementSubmission") {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => readStatementSubmission({ environment, request, subject }),
+        catch: () => undefined,
+      }).pipe(
+        Effect.orElseSucceed(unavailable),
+        Effect.withSpan("ingestion.getStatementSubmission")
+      )
+    );
+  }
+  return Option.none();
+};
+
+/** The Transaction work this dispatch owns, or None when another slice owns the operation. */
+const transactionResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response>> => {
+  const { request, environment, operation, subject } = input;
+  if (operation.id === "transactions.createTransaction") {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => dispatchCanonicalCapture(request, environment, subject),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.createTransaction"))
+    );
+  }
+  if (operation.id === "transactions.updateTransaction") {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => dispatchCanonicalCorrection(request, environment, subject),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"))
+    );
+  }
+  if (operation.id === atomicBatchOperation) {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => dispatchCanonicalBatch(request, environment, subject),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation))
+    );
+  }
+  if (isTransactionHistoryRead(operation)) {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => dispatchCanonicalHistory({ request, environment, subject, operation }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable))
+    );
+  }
+  return Option.none();
+};
 
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
@@ -643,33 +765,13 @@ const executeCanonicalWork = (
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
   const ownerResponse = Option.orElse(keywordRuleResponse(input), () => memoryResponse(input));
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
+  const transaction = transactionResponse(input);
+  if (Option.isSome(transaction)) return transaction.value;
+  const ingestion = ingestionCanonicalResponse({ environment, operation, request, subject });
+  if (Option.isSome(ingestion)) return ingestion.value;
   if (operation.id === "pats.listPATs") {
     return Effect.tryPromise({
       try: () => listPATs({ request, db: environment.DB }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
-  }
-  if (operation.id === "transactions.createTransaction") {
-    return Effect.tryPromise({
-      try: () => dispatchCanonicalCapture(request, environment, subject),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.createTransaction"));
-  }
-  if (operation.id === "transactions.updateTransaction") {
-    return Effect.tryPromise({
-      try: () => dispatchCanonicalCorrection(request, environment, subject),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"));
-  }
-  if (operation.id === atomicBatchOperation) {
-    return Effect.tryPromise({
-      try: () => dispatchCanonicalBatch(request, environment, subject),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation));
-  }
-  if (isTransactionHistoryRead(operation)) {
-    return Effect.tryPromise({
-      try: () => dispatchCanonicalHistory({ request, environment, subject, operation }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
@@ -764,9 +866,8 @@ const fetchEffect = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
   }
-  if (url.pathname === "/web/onboarding/email/verify") {
-    return verificationEffect(request, environment.DB);
-  }
+  const directPath = directPathResponse(request, environment);
+  if (Option.isSome(directPath)) return directPath.value;
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter((operation) => operation.id === "pats.listPATs")
   );
@@ -868,6 +969,32 @@ const billingScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
     if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
   }).pipe(Effect.orDie);
 
+/**
+ * Reclaims expired staged material and fails submissions past their retention bound. Both steps are
+ * bounded, idempotent, and re-selectable from durable `deleting`/retention state, so a transient D1
+ * or R2 failure is deliberately swallowed and retried by the next scheduled run instead of failing
+ * the whole schedule; each step keeps its own span so that retry is visible.
+ */
+const statementIngestionScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const bucket = environment.STATEMENT_STAGING_BUCKET;
+    if (bucket === undefined) return;
+    const nowEpochMs = yield* Clock.currentTimeMillis;
+    const staging = StatementStaging.make({
+      bucket,
+      database: environment.DB,
+      nowEpochMs: () => nowEpochMs,
+    });
+    yield* staging.expireStatementSubmissions.pipe(
+      Effect.withSpan("ingestion.submissionRetention"),
+      Effect.ignore
+    );
+    yield* staging.sweepExpiredStatementStaging.pipe(
+      Effect.withSpan("ingestion.stagingSweep"),
+      Effect.ignore
+    );
+  });
+
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment) =>
@@ -920,6 +1047,9 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
         try: () => sweepExpiredPATPairings(environment.DB),
         catch: () => undefined,
       });
+      yield* statementIngestionScheduled(environment).pipe(
+        Effect.withSpan("ingestion.statementSweep")
+      );
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
   queue: receiveWorkQueue,

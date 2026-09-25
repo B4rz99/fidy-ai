@@ -1,6 +1,7 @@
 import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
 import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
@@ -185,12 +186,14 @@ const postPaths = new Set<string>([
   ...pairingPaths,
   enrollmentPreparePath,
   enrollmentSubmitPath,
+  statementStagingPath,
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
   ...emailAuthenticationPaths,
   ...pairingPaths,
+  statementStagingPath,
 ]);
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
@@ -225,11 +228,16 @@ const wompiEventHeaders = (request: Request): Headers =>
   });
 const providerHeaders = (request: Request, path: string): Headers =>
   path === callbackPath ? callbackHeaders(request) : wompiEventHeaders(request);
+const cookieForwardPaths = new Set<string>([
+  "/web/session/logout",
+  rotateRecoveryPath,
+  statementStagingPath,
+]);
+
 const browserHeaders = (request: Request, path: string): Headers => {
   const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
   if (
-    path === "/web/session/logout" ||
-    path === rotateRecoveryPath ||
+    cookieForwardPaths.has(path) ||
     replacementPaths.some((owned) => owned === path) ||
     patBrowserRoute(path) ||
     enrollmentPath(path)

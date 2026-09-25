@@ -109,6 +109,16 @@
       "import": "./src/core/ingestion/staging.ts",
       "default": "./src/core/ingestion/staging.ts"
     },
+    "./statement-format": {
+      "types": "./src/shell/ingestion/source-format.ts",
+      "import": "./src/shell/ingestion/source-format.ts",
+      "default": "./src/shell/ingestion/source-format.ts"
+    },
+    "./statement-path": {
+      "types": "./src/shell/ingestion/path.ts",
+      "import": "./src/shell/ingestion/path.ts",
+      "default": "./src/shell/ingestion/path.ts"
+    },
     "./telemetry": {
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",

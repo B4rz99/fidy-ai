@@ -3,12 +3,22 @@ import {
   type StagedStatementReference,
   StagedStatementReference as StagedStatementReferenceSchema,
   StatementContentDigest,
+  StatementFailureReason,
   type StatementStagingFailureReason,
   StatementStagingId,
+  maximumOutstandingStatementSubmissions,
   maximumStatementBytes,
   maximumStatementStagingSweep,
+  maximumStatementSubmissionsPerHour,
+  statementParserRevision,
   statementStagingLifetimeMilliseconds,
+  statementSubmissionRetentionMilliseconds,
 } from "@fidy/server/statement-staging";
+import {
+  knownUnsupportedStatementBytes,
+  statementSourceFormat,
+} from "@fidy/server/statement-format";
+import type * as Arr from "effect/Array";
 import {
   Context,
   Crypto,
@@ -19,16 +29,29 @@ import {
   Layer,
   Option,
   PlatformError,
+  Result,
   Schema,
 } from "effect";
+import { activeProUserParams, activeProUserSql } from "../access-tier";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
+import type { TransactionAuthority } from "../transactions/transaction-boundary";
 
 /** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";
 const statementStagingObjectEntropyBytes = 32;
+const millisecondsPerHour = 3_600_000;
+/** Stable SQLite constraint name that marks one refused conditional publication unit. */
+const statementSubmissionRefusalMarker = "statement_submission_refused";
+/** Stable SQLite abort message the shared stable-User daily canonical work budget raises. */
+export const statementAuditLimitMarker = "statement_audit_limit";
+
+/** The one-row assertion that rolls back a publication unit when a guarded step changed no row. */
+export const statementSubmissionCompletion = `INSERT INTO statement_submission_assertion (id, accepted)
+VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
+ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 
 /**
  * Worker-backed entropy and digest for staging identities, object locators, and content digests.
@@ -65,6 +88,19 @@ export class StatementStagingUnavailable extends Data.TaggedError("StatementStag
   readonly reason: "authority_unavailable";
 }> {}
 
+/** The canonical call was refused by its own dead authority or the shared daily work budget. */
+export class StatementStagingRefused extends Data.TaggedError("StatementStagingRefused")<{
+  readonly reason: "authority" | "budget";
+}> {}
+
+/** One non-empty, read-only batch of caller-owned accountability statements. */
+export type ReplayStatements = Readonly<Arr.NonEmptyArray<D1PreparedStatement>>;
+
+/** One D1 publication unit that failed; its cause is inspected only for a known refusal marker. */
+class StatementPublicationBatchFailed extends Data.TaggedError("StatementPublicationBatchFailed")<{
+  readonly cause: unknown;
+}> {}
+
 /** Durable identity of one published submission, with whether this call replayed an earlier one. */
 export type PublishedStatementSubmission = Readonly<{
   readonly submissionId: string;
@@ -75,6 +111,26 @@ export type PublishedStatementSubmission = Readonly<{
 export type StatementStagingSweep = Readonly<{
   readonly rowsDeleted: number;
   readonly objectsDeleted: number;
+}>;
+
+/** One bounded retention result: queued submissions failed with their material queued for cleanup. */
+export type ExpiredStatementSubmissions = Readonly<{
+  readonly submissionsFailed: number;
+}>;
+
+/** Stored lifecycle of one submission, exactly as the public projection needs it. */
+export type StoredStatementSubmission = Readonly<{
+  readonly id: string;
+  readonly sourceFormat: "csv" | "xlsx";
+  readonly parserRevision: string;
+  readonly status: "queued" | "processing" | "completed" | "failed";
+  readonly submittedAtMs: number;
+  readonly startedAtMs: Option.Option<number>;
+  readonly completedAtMs: Option.Option<number>;
+  readonly failureReason: Option.Option<typeof StatementFailureReason.Type>;
+  readonly inputRows: Option.Option<number>;
+  readonly acceptedRows: Option.Option<number>;
+  readonly needsReviewRows: Option.Option<number>;
 }>;
 
 /**
@@ -96,18 +152,41 @@ export type StatementStagingService = Readonly<{
   }) => Effect.Effect<Uint8Array, StatementStagingFailed | StatementStagingUnavailable>;
   /**
    * Publishes one authoritative D1 submission for an owned, unexpired, digest-verified staged
-   * object. A replay of the same idempotency key returns the original submission; the same key
-   * pointing at different material is a conflict.
+   * object, together with its AuditLogEntry, Free-backfill reservation, and extraction outbox
+   * identity. A replay of the same idempotency key returns the original submission; the same key
+   * pointing at different material is a conflict. `authority` is the caller's live credential gate,
+   * rechecked inside the unit so a credential revoked after dispatch cannot publish. `statements`
+   * are caller-owned, guard-chained accountability writes (for example PAT Audit) that commit inside
+   * the same unit or not at all. `replayStatements` are the caller-owned writes a replayed call
+   * must commit instead: every one is live-authority guarded and must change exactly one row, so a
+   * credential revoked after dispatch refuses the replay rather than returning stored state.
    */
   readonly publishStagedStatementSubmission: (input: {
     readonly userId: string;
     readonly idempotencyKey: string;
     readonly reference: StagedStatementReference;
+    readonly authority: TransactionAuthority;
+    readonly statements: ReadonlyArray<D1PreparedStatement>;
+    readonly replayStatements: ReplayStatements;
   }) => Effect.Effect<
     PublishedStatementSubmission,
-    StatementStagingFailed | StatementStagingUnavailable
+    StatementStagingFailed | StatementStagingRefused | StatementStagingUnavailable
   >;
-  /** Deletes at most one bounded page of expired unpublished staging rows and their R2 objects. */
+  /** Reads one owned submission's stored lifecycle for the canonical projection. */
+  readonly readOwnedStatementSubmission: (input: {
+    readonly userId: string;
+    readonly submissionId: string;
+  }) => Effect.Effect<Option.Option<StoredStatementSubmission>, StatementStagingUnavailable>;
+  /**
+   * Fails at most one bounded page of queued submissions past their retention bound, releases any
+   * Free-backfill reservation they held, and queues their published material for the next staging
+   * sweep. It never deletes the authoritative row.
+   */
+  readonly expireStatementSubmissions: Effect.Effect<
+    ExpiredStatementSubmissions,
+    StatementStagingUnavailable
+  >;
+  /** Deletes at most one bounded page of expired staging rows and their R2 objects. */
   readonly sweepExpiredStatementStaging: Effect.Effect<
     StatementStagingSweep,
     StatementStagingUnavailable
@@ -128,6 +207,7 @@ const StagingRow = Schema.Struct({
   object_key: Schema.String,
   byte_length: Schema.Int,
   sha256: Schema.String,
+  source_format: Schema.NullOr(Schema.Literals(["csv", "xlsx"])),
   status: Schema.Literals(["pending", "available", "published", "deleting"]),
   expires_at_ms: Schema.Int,
 });
@@ -136,7 +216,32 @@ type StagingRow = typeof StagingRow.Type;
 const SubmissionRow = Schema.Struct({ id: Schema.String, staging_id: Schema.String });
 type SubmissionRow = typeof SubmissionRow.Type;
 
+/** One owned submission's stored lifecycle, read as the public projection's exact fields. */
+const StoredSubmissionRow = Schema.Struct({
+  accepted_rows: Schema.OptionFromNullOr(Schema.Int),
+  completed_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  failure_reason: Schema.OptionFromNullOr(StatementFailureReason),
+  id: Schema.String,
+  input_rows: Schema.OptionFromNullOr(Schema.Int),
+  needs_review_rows: Schema.OptionFromNullOr(Schema.Int),
+  parser_revision: Schema.String,
+  source_format: Schema.Literals(["csv", "xlsx"]),
+  started_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  status: Schema.Literals(["queued", "processing", "completed", "failed"]),
+  submitted_at_ms: Schema.Int,
+});
+
+/** Bounded publication-admission facts read in one D1 statement under the same binding. */
+const AdmissionStateRow = Schema.Struct({
+  outstanding: Schema.Int,
+  recent: Schema.Int,
+  backfill_reserved: Schema.Int,
+  pro: Schema.Int,
+});
+type AdmissionStateRow = typeof AdmissionStateRow.Type;
+
 const ExpiredRow = Schema.Struct({ id: Schema.String, object_key: Schema.String });
+const ExpiredSubmissionRow = Schema.Struct({ id: Schema.String, staging_id: Schema.String });
 
 const unavailable = (): StatementStagingUnavailable =>
   new StatementStagingUnavailable({ reason: "authority_unavailable" });
@@ -156,6 +261,10 @@ const platformUnavailable = <A>(
 const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
 
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+
+/** Worker-generated random identity for one ingested statement record: a submission, audit, or
+ * admission grant. It is never derived from User input, a digest, or a locator. */
+export const newIngestionId = (): string => newId();
 
 const randomObjectKey = (): string => {
   const entropy = Effect.runSync(
@@ -202,7 +311,7 @@ const findOwnedStagingRow = (
   platformUnavailable(() =>
     database
       .prepare(
-        `SELECT id, object_key, byte_length, sha256, status, expires_at_ms
+        `SELECT id, object_key, byte_length, sha256, source_format, status, expires_at_ms
          FROM statement_staging_objects WHERE id = ? AND user_id = ?`
       )
       .bind(stagingId, userId)
@@ -224,10 +333,23 @@ const findSubmissionByKey = (
       .first()
   ).pipe(Effect.map((value) => Schema.decodeUnknownOption(SubmissionRow)(value)));
 
-const removePendingStagingRow = (database: D1Database, stagingId: string): Effect.Effect<void> =>
+/** Marks one abandoned upload's row deleting before any object delete, so the bounded sweep can
+ * always find the object again from durable state. */
+const markStagingDeleting = (database: D1Database, stagingId: string): Effect.Effect<void> =>
   settleStatement(
     database
-      .prepare("DELETE FROM statement_staging_objects WHERE id = ? AND status = 'pending'")
+      .prepare(
+        `UPDATE statement_staging_objects SET status = 'deleting'
+         WHERE id = ? AND status IN ('pending', 'available') AND object_deleted_at_ms IS NULL`
+      )
+      .bind(stagingId)
+  ).pipe(Effect.ignore);
+
+/** Removes one sweepable staging row only after its object is gone. */
+const removeDeletingStagingRow = (database: D1Database, stagingId: string): Effect.Effect<void> =>
+  settleStatement(
+    database
+      .prepare("DELETE FROM statement_staging_objects WHERE id = ? AND status = 'deleting'")
       .bind(stagingId)
   ).pipe(Effect.ignore);
 
@@ -245,8 +367,13 @@ const submissionByKey = (
 ): Effect.Effect<Option.Option<SubmissionRow>, StatementStagingUnavailable> =>
   findSubmissionByKey(config.database, userId, idempotencyKey);
 
-const removeObject = (bucket: R2Bucket, objectKey: string): Effect.Effect<void> =>
-  platformUnavailable(() => bucket.delete(objectKey)).pipe(Effect.ignore);
+/** Delete one staged object. A failed delete is a real failure: the caller keeps the durable
+ * `deleting` row, so the bounded sweep retries instead of leaking an unreachable object. */
+const removeObject = (
+  bucket: R2Bucket,
+  objectKey: string
+): Effect.Effect<void, StatementStagingUnavailable> =>
+  platformUnavailable(() => bucket.delete(objectKey));
 
 const statementFailure = (reason: BoundedBodyReadFailed["reason"]): StatementStagingFailed => {
   if (reason === "resource-limit") return failed("resource-limit");
@@ -269,6 +396,7 @@ const insertPendingStagingRow = (
     objectKey: string;
     byteLength: number;
     sha256: string;
+    sourceFormat: string;
     createdAtEpochMs: number;
     expiresAtEpochMs: number;
   }>
@@ -277,8 +405,9 @@ const insertPendingStagingRow = (
     config.database
       .prepare(
         `INSERT INTO statement_staging_objects (
-           id, user_id, object_key, byte_length, sha256, status, created_at_ms, expires_at_ms
-         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+           id, user_id, object_key, byte_length, sha256, source_format, status,
+           created_at_ms, expires_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
       )
       .bind(
         input.stagingId,
@@ -286,6 +415,7 @@ const insertPendingStagingRow = (
         input.objectKey,
         input.byteLength,
         input.sha256,
+        input.sourceFormat,
         input.createdAtEpochMs,
         input.expiresAtEpochMs
       )
@@ -315,13 +445,16 @@ const markStagingAvailable = (
       .bind(stagingId)
   ).pipe(Effect.map((result) => result.meta.changes === 1));
 
+/** Reclaims one failed upload in sweep order: durable `deleting` row, object, then row. A failed
+ * object delete leaves the row behind for the bounded sweep instead of an unreachable object. */
 const discardStagedUpload = (
   config: StatementStagingConfig,
   input: Readonly<{ stagingId: string; objectKey: string }>
-): Effect.Effect<void> =>
+): Effect.Effect<void, StatementStagingUnavailable> =>
   Effect.gen(function* () {
-    yield* removePendingStagingRow(config.database, input.stagingId);
+    yield* markStagingDeleting(config.database, input.stagingId);
     yield* removeObject(config.bucket, input.objectKey);
+    yield* removeDeletingStagingRow(config.database, input.stagingId);
   });
 
 const stageStatementBytes = (
@@ -331,6 +464,9 @@ const stageStatementBytes = (
   Effect.gen(function* () {
     const bytes = yield* readBoundedStatementBytes(input.request);
     if (bytes.byteLength === 0) return yield* failed("malformed-file");
+    // Content, not a claimed name or media type, decides what may become durable staging state.
+    if (knownUnsupportedStatementBytes(bytes)) return yield* failed("unsupported-format");
+    const sourceFormat = statementSourceFormat(bytes);
     const digest = yield* digestUnavailable(bytes);
     const createdAtEpochMs = config.nowEpochMs();
     const expiresAtEpochMs = createdAtEpochMs + statementStagingLifetimeMilliseconds;
@@ -346,6 +482,7 @@ const stageStatementBytes = (
       expiresAtEpochMs,
       objectKey,
       sha256,
+      sourceFormat,
       stagingId,
       userId: input.userId,
     });
@@ -362,6 +499,7 @@ const stageStatementBytes = (
       stagingId: StatementStagingId.make(stagingId),
       byteLength: bytes.byteLength,
       sha256: StatementContentDigest.make(sha256),
+      sourceFormat,
       expiresAt: DateTime.makeUnsafe(expiresAtEpochMs),
     };
   });
@@ -442,43 +580,208 @@ const readOwnedStagedBytes = (
     return bytes;
   });
 
-const publicationStatements = (
+/** Reads this User's submission and rolling-window admission pressure in one bounded statement. */
+const readAdmissionState = (
   config: StatementStagingConfig,
-  input: Readonly<{
-    userId: string;
-    idempotencyKey: string;
-    stagingId: string;
-    submissionId: string;
-    auditId: string;
-    nowEpochMs: number;
-  }>
-): ReadonlyArray<D1PreparedStatement> => {
-  const { database } = config;
-  const { userId, idempotencyKey, stagingId, submissionId, auditId, nowEpochMs } = input;
-  return [
-    database
+  input: Readonly<{ userId: string; nowEpochMs: number }>
+): Effect.Effect<Option.Option<AdmissionStateRow>, StatementStagingUnavailable> =>
+  platformUnavailable(() =>
+    config.database
       .prepare(
-        `INSERT INTO statement_submissions (id, user_id, idempotency_key, staging_id, submitted_at_ms)
-         SELECT ?, ?, ?, ?, ?
-         FROM statement_staging_objects
-         WHERE id = ? AND user_id = ? AND status = 'available' AND expires_at_ms > ?
-           AND NOT EXISTS (
-             SELECT 1 FROM statement_submissions
-             WHERE user_id = ? AND idempotency_key = ?
-           )`
+        `SELECT
+           (SELECT count(*) FROM statement_submissions AS s
+             WHERE s.user_id = ? AND s.status IN ('queued', 'processing')) AS outstanding,
+           (SELECT count(*) FROM statement_submissions AS s
+             WHERE s.user_id = ? AND s.submitted_at_ms > ?) AS recent,
+           EXISTS (SELECT 1 FROM statement_backfill_entitlements AS e
+             WHERE e.user_id = ? AND (e.consumed_at_ms IS NOT NULL OR e.submission_id IS NOT NULL))
+             AS backfill_reserved,
+           ${activeProUserSql} AS pro`
       )
       .bind(
-        submissionId,
-        userId,
-        idempotencyKey,
-        stagingId,
-        nowEpochMs,
-        stagingId,
-        userId,
-        nowEpochMs,
-        userId,
-        idempotencyKey
-      ),
+        input.userId,
+        input.userId,
+        input.nowEpochMs - millisecondsPerHour,
+        input.userId,
+        ...activeProUserParams({ nowEpochMs: input.nowEpochMs, userId: input.userId })
+      )
+      .first()
+  ).pipe(Effect.map((value) => Schema.decodeUnknownOption(AdmissionStateRow)(value)));
+
+/** The closed refusal for exhausted submission pressure or a spent Free backfill, or `None`. */
+const admissionRefusal = (
+  state: AdmissionStateRow
+): Option.Option<StatementStagingFailureReason> => {
+  if (state.outstanding >= maximumOutstandingStatementSubmissions) {
+    return Option.some("resource-limit");
+  }
+  if (state.recent >= maximumStatementSubmissionsPerHour) {
+    return Option.some("resource-limit");
+  }
+  if (state.backfill_reserved !== 0 && state.pro === 0) {
+    return Option.some("paywall");
+  }
+  return Option.none();
+};
+
+/** One publication unit's identity and decision instant, shared by its statements and classifiers. */
+type PublicationAttempt = Readonly<{
+  readonly userId: string;
+  readonly idempotencyKey: string;
+  readonly stagingId: string;
+  readonly nowEpochMs: number;
+}>;
+
+/**
+ * The authoritative submission insert: every live precondition (ownership, availability, expiry,
+ * sniffed format, idempotency, submission pressure, and the Free backfill) is re-checked inside the
+ * one statement that creates authority, so a racing change can never admit a second submission.
+ */
+const submissionInsertStatement = (
+  config: StatementStagingConfig,
+  input: PublicationAttempt &
+    Readonly<{
+      authority: TransactionAuthority;
+      submissionId: string;
+      retentionExpiresAtEpochMs: number;
+    }>
+): D1PreparedStatement => {
+  const { userId, idempotencyKey, stagingId, submissionId, nowEpochMs } = input;
+  const hourStartEpochMs = nowEpochMs - millisecondsPerHour;
+  return config.database
+    .prepare(
+      `INSERT INTO statement_submissions (
+         id, user_id, idempotency_key, staging_id, source_format, parser_revision,
+         service_market, locale, time_zone, status, submitted_at_ms, retention_expires_at_ms)
+       SELECT ?, staging.user_id, ?, staging.id, staging.source_format, ?, users.service_market,
+              users.locale, users.time_zone, 'queued', ?, ?
+       FROM statement_staging_objects AS staging
+       JOIN users ON users.id = staging.user_id
+       WHERE staging.id = ? AND staging.user_id = ? AND staging.status = 'available'
+         AND staging.expires_at_ms > ? AND staging.source_format IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM statement_submissions AS existing
+           WHERE existing.user_id = ? AND existing.idempotency_key = ?)
+         AND (SELECT count(*) FROM statement_submissions AS pending
+               WHERE pending.user_id = staging.user_id
+                 AND pending.status IN ('queued', 'processing'))
+             < ?
+         AND (SELECT count(*) FROM statement_submissions AS hourly
+               WHERE hourly.user_id = staging.user_id AND hourly.submitted_at_ms > ?)
+             < ?
+         AND (${activeProUserSql} OR NOT EXISTS (
+               SELECT 1 FROM statement_backfill_entitlements AS entitlement
+               WHERE entitlement.user_id = staging.user_id
+                 AND (entitlement.consumed_at_ms IS NOT NULL
+                   OR entitlement.submission_id IS NOT NULL)))
+         AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`
+    )
+    .bind(
+      submissionId,
+      idempotencyKey,
+      statementParserRevision,
+      nowEpochMs,
+      input.retentionExpiresAtEpochMs,
+      stagingId,
+      userId,
+      nowEpochMs,
+      userId,
+      idempotencyKey,
+      maximumOutstandingStatementSubmissions,
+      hourStartEpochMs,
+      maximumStatementSubmissionsPerHour,
+      ...activeProUserParams({ nowEpochMs, userId }),
+      ...input.authority.bindings
+    );
+};
+
+/** Metadata-only audit for one canonical read by its live session caller. The stable subject,
+ * operation, outcome, and time are recorded; the submission body never enters the audit. A found
+ * and an absent submission share this one row shape. PAT callers are audited in `pat_audit`. */
+export const statementSubmissionReadAudit = ({
+  authority,
+  current,
+  database,
+  id,
+  submissionId,
+}: Readonly<{
+  authority: TransactionAuthority;
+  current: number;
+  database: D1Database;
+  id: string;
+  submissionId: string;
+}>): D1PreparedStatement =>
+  database
+    .prepare(
+      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
+       SELECT ?, ${authority.table}.user_id, 'ingestion.getStatementSubmission',
+         CASE WHEN EXISTS (
+           SELECT 1 FROM statement_submissions
+           WHERE id = ? AND user_id = ${authority.table}.user_id
+         ) THEN 'success' ELSE 'not_found' END, ?
+       FROM ${authority.table} WHERE ${authority.predicate}`
+    )
+    .bind(id, submissionId, current, ...authority.bindings);
+
+/** Metadata-only refusal audit for one canonical submission refusal by its live session caller, so
+ * a refused call stays attributable without recording any submitted material. */
+export const statementSubmissionRefusalAudit = ({
+  authority,
+  current,
+  database,
+  id,
+  outcome,
+}: Readonly<{
+  authority: TransactionAuthority;
+  current: number;
+  database: D1Database;
+  id: string;
+  outcome: "resource_limit" | "validation_failed";
+}>): D1PreparedStatement =>
+  database
+    .prepare(
+      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
+       SELECT ?, ${authority.table}.user_id, 'ingestion.submitForExtraction', ?, ?
+       FROM ${authority.table} WHERE ${authority.predicate}`
+    )
+    .bind(id, outcome, current, ...authority.bindings);
+
+/** Metadata-only audit for one canonical submission replay by its live session caller: the stored
+ * submission is returned unchanged, so the replay stays attributable without new authoritative
+ * state. Its live-authority guard also refuses a credential revoked after dispatch. */
+export const statementSubmissionReplayAudit = ({
+  authority,
+  current,
+  database,
+  id,
+}: Readonly<{
+  authority: TransactionAuthority;
+  current: number;
+  database: D1Database;
+  id: string;
+}>): D1PreparedStatement =>
+  database
+    .prepare(
+      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
+       SELECT ?, ${authority.table}.user_id, 'ingestion.submitForExtraction', 'success', ?
+       FROM ${authority.table} WHERE ${authority.predicate}`
+    )
+    .bind(id, current, ...authority.bindings);
+
+/**
+ * The guarded writes that own the staged material, the Free-backfill reservation, the
+ * AuditLogEntry, and the bounded extraction outbox identity. Each changes a row only when the
+ * previous step did, so the assertion that follows the caller's accountability writes can turn any
+ * silently skipped step into a rolled-back unit.
+ */
+const publicationAccountabilityStatements = (
+  config: StatementStagingConfig,
+  input: PublicationAttempt & Readonly<{ submissionId: string; auditId: string }>
+): ReadonlyArray<D1PreparedStatement> => {
+  const { database } = config;
+  const { userId, stagingId, submissionId, auditId, nowEpochMs } = input;
+  const proParams = activeProUserParams({ nowEpochMs, userId });
+  return [
     database
       .prepare(
         `UPDATE statement_staging_objects
@@ -489,19 +792,36 @@ const publicationStatements = (
       .bind(submissionId, stagingId, userId, nowEpochMs),
     database
       .prepare(
+        `INSERT INTO statement_backfill_entitlements (user_id, submission_id)
+         SELECT ?, CASE WHEN ${activeProUserSql} THEN NULL ELSE ? END WHERE changes() = 1
+         ON CONFLICT(user_id) DO UPDATE SET submission_id =
+           CASE WHEN ${activeProUserSql} THEN statement_backfill_entitlements.submission_id
+                ELSE excluded.submission_id END`
+      )
+      .bind(userId, ...proParams, submissionId, ...proParams),
+    database
+      .prepare(
         `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
          SELECT ?, user_id, 'ingestion.submitForExtraction', 'success', ?
          FROM statement_submissions
          WHERE user_id = ? AND id = ? AND changes() = 1`
       )
       .bind(auditId, nowEpochMs, userId, submissionId),
+    database
+      .prepare(
+        `INSERT INTO statement_ingestion_outbox (submission_id, user_id, revision, published_at_ms)
+         SELECT id, user_id, 1, ? FROM statement_submissions
+         WHERE user_id = ? AND id = ? AND changes() = 1`
+      )
+      .bind(nowEpochMs, userId, submissionId),
   ];
 };
 
 type PublicationPrecondition =
   | Readonly<{ _tag: "Publish"; row: StagingRow }>
   | Readonly<{ _tag: "Replay"; publication: PublishedStatementSubmission }>
-  | Readonly<{ _tag: "Refused"; failure: StatementStagingFailed }>;
+  | Readonly<{ _tag: "Refused"; failure: StatementStagingFailed }>
+  | Readonly<{ _tag: "Unavailable" }>;
 
 /**
  * The closed refusal for a row that cannot publish right now, or `None` when it can. Both the
@@ -515,8 +835,14 @@ const classifyStagedRow = (
   if (row.status === "pending" || row.status === "deleting") return Option.some("not-found");
   if (row.status === "published") return Option.some("conflict");
   if (row.expires_at_ms <= nowEpochMs) return Option.some("retention-expired");
+  if (row.source_format === null) return Option.some("unsupported-format");
   return Option.none();
 };
+
+const replayOrConflict = (existing: SubmissionRow, stagingId: string): PublicationPrecondition =>
+  existing.staging_id === stagingId
+    ? { _tag: "Replay", publication: { replayed: true, submissionId: existing.id } }
+    : { _tag: "Refused", failure: failed("conflict") };
 
 /**
  * Resolves the one non-committing outcome for a reference: publishable, an exact replay, or a
@@ -543,16 +869,18 @@ const readPublicationPrecondition = (
     }
     const existing = yield* submissionByKey(config, input.userId, input.idempotencyKey);
     if (Option.isSome(existing)) {
-      return existing.value.staging_id === row.value.id
-        ? {
-            _tag: "Replay",
-            publication: { replayed: true, submissionId: existing.value.id },
-          }
-        : { _tag: "Refused", failure: failed("conflict") };
+      return replayOrConflict(existing.value, row.value.id);
     }
     const refusal = classifyStagedRow(row.value, input.nowEpochMs);
-    return Option.isSome(refusal)
-      ? { _tag: "Refused", failure: failed(refusal.value) }
+    if (Option.isSome(refusal)) return { _tag: "Refused", failure: failed(refusal.value) };
+    const admission = yield* readAdmissionState(config, {
+      nowEpochMs: input.nowEpochMs,
+      userId: input.userId,
+    });
+    if (Option.isNone(admission)) return { _tag: "Unavailable" };
+    const pressure = admissionRefusal(admission.value);
+    return Option.isSome(pressure)
+      ? { _tag: "Refused", failure: failed(pressure.value) }
       : { _tag: "Publish", row: row.value };
   });
 
@@ -583,8 +911,172 @@ const classifyUnpublished = (
     if (Option.isNone(row)) return yield* failed("not-found");
     const refusal = classifyStagedRow(row.value, input.nowEpochMs);
     if (Option.isSome(refusal)) return yield* failed(refusal.value);
+    const admission = yield* readAdmissionState(config, {
+      nowEpochMs: input.nowEpochMs,
+      userId: input.userId,
+    });
+    if (Option.isNone(admission)) return yield* unavailable();
+    const pressure = admissionRefusal(admission.value);
+    if (Option.isSome(pressure)) return yield* failed(pressure.value);
     return yield* failed("conflict");
   });
+
+type PublicationUnitOutcome =
+  | Readonly<{ _tag: "Settled"; results: ReadonlyArray<D1Result<unknown>> }>
+  | Readonly<{ _tag: "Refused" }>
+  | Readonly<{ _tag: "BudgetSpent" }>
+  | Readonly<{ _tag: "Unavailable" }>;
+
+/**
+ * Runs the complete guard-chained publication unit in one D1 batch. A zero-row guard trips the
+ * final assertion, which rolls the unit back and is recognized here as a refusal; any other failure
+ * stays an unavailable authority rather than being reported as a domain decision.
+ */
+const publicationUnitOutcome = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    attempt: PublicationAttempt;
+    authority: TransactionAuthority;
+    submissionId: string;
+    statements: ReadonlyArray<D1PreparedStatement>;
+  }>
+): Effect.Effect<PublicationUnitOutcome> =>
+  Effect.result(
+    Effect.uninterruptible(
+      Effect.tryPromise({
+        try: () =>
+          config.database.batch([
+            submissionInsertStatement(config, {
+              ...input.attempt,
+              authority: input.authority,
+              retentionExpiresAtEpochMs:
+                input.attempt.nowEpochMs + statementSubmissionRetentionMilliseconds,
+              submissionId: input.submissionId,
+            }),
+            ...publicationAccountabilityStatements(config, {
+              ...input.attempt,
+              auditId: newId(),
+              submissionId: input.submissionId,
+            }),
+            ...input.statements,
+            config.database.prepare(statementSubmissionCompletion),
+          ]),
+        catch: (cause) => new StatementPublicationBatchFailed({ cause }),
+      })
+    )
+  ).pipe(
+    Effect.map((result): PublicationUnitOutcome => {
+      if (Result.isSuccess(result)) return { _tag: "Settled", results: result.success };
+      if (String(result.failure.cause).includes(statementAuditLimitMarker)) {
+        return { _tag: "BudgetSpent" };
+      }
+      return String(result.failure.cause).includes(statementSubmissionRefusalMarker)
+        ? { _tag: "Refused" }
+        : { _tag: "Unavailable" };
+    })
+  );
+
+type PublicationResolution =
+  | Readonly<{ _tag: "Ready"; reference: StagedStatementReference; nowEpochMs: number }>
+  | Readonly<{ _tag: "Replay"; publication: PublishedStatementSubmission }>
+  | Readonly<{ _tag: "Refused"; failure: StatementStagingFailed }>
+  | Readonly<{ _tag: "Unavailable" }>;
+
+/**
+ * Resolves one reference into a ready publication or a closed refusal, verifying the stored object's
+ * actual size and digest before the atomic unit is attempted.
+ */
+const resolvePublication = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    userId: string;
+    idempotencyKey: string;
+    reference: StagedStatementReference;
+  }>
+): Effect.Effect<PublicationResolution, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    const nowEpochMs = config.nowEpochMs();
+    const precondition = yield* readPublicationPrecondition(config, {
+      idempotencyKey: input.idempotencyKey,
+      nowEpochMs,
+      reference: input.reference,
+      userId: input.userId,
+    });
+    if (precondition._tag === "Replay") {
+      return { _tag: "Replay", publication: precondition.publication };
+    }
+    if (precondition._tag === "Unavailable") return { _tag: "Unavailable" };
+    if (precondition._tag === "Refused") {
+      return { _tag: "Refused", failure: precondition.failure };
+    }
+    const refusal = yield* headStagedObject(config, precondition.row);
+    if (Option.isSome(refusal)) return { _tag: "Refused", failure: refusal.value };
+    return { _tag: "Ready", nowEpochMs, reference: input.reference };
+  });
+
+/**
+ * Settles one replayed call: its caller-owned attribution writes must commit, each changing exactly
+ * one row under a live-authority guard. A write refused by a dead credential or a spent shared
+ * daily budget refuses the call, so the stored submission is never returned unattributed.
+ */
+const replayOutcome = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    publication: PublishedStatementSubmission;
+    statements: ReplayStatements;
+  }>
+): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(
+      Effect.uninterruptible(
+        Effect.tryPromise({
+          try: () => config.database.batch([...input.statements]),
+          catch: (cause) => new StatementPublicationBatchFailed({ cause }),
+        })
+      )
+    );
+    if (Result.isFailure(result)) {
+      if (String(result.failure.cause).includes(statementAuditLimitMarker)) {
+        return yield* new StatementStagingRefused({ reason: "budget" });
+      }
+      return yield* unavailable();
+    }
+    if (!result.success.every((statement) => statement.meta.changes === 1)) {
+      return yield* new StatementStagingRefused({ reason: "authority" });
+    }
+    return input.publication;
+  });
+
+/**
+ * Turns one settled unit into the published submission, or the refusal its guards prove. A lost
+ * race that classifies as a same-material replay still commits the caller-owned attribution the
+ * winning call's unit could not: the call is never returned unaudited or ungated.
+ */
+const publicationOutcome = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    attempt: PublicationAttempt;
+    outcome: PublicationUnitOutcome;
+    replayStatements: ReplayStatements;
+    submissionId: string;
+  }>
+): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> => {
+  if (input.outcome._tag === "Unavailable") return unavailable();
+  if (input.outcome._tag === "BudgetSpent") {
+    return Effect.fail(new StatementStagingRefused({ reason: "budget" }));
+  }
+  if (input.outcome._tag === "Settled" && input.outcome.results[0]?.meta.changes === 1) {
+    return Effect.succeed({ replayed: false, submissionId: input.submissionId });
+  }
+  return Effect.gen(function* () {
+    const publication = yield* classifyUnpublished(config, input.attempt);
+    if (!publication.replayed) return publication;
+    return yield* replayOutcome(config, {
+      publication,
+      statements: input.replayStatements,
+    });
+  });
+};
 
 const publishStagedStatementSubmission = (
   config: StatementStagingConfig,
@@ -592,42 +1084,139 @@ const publishStagedStatementSubmission = (
     userId: string;
     idempotencyKey: string;
     reference: StagedStatementReference;
+    authority: TransactionAuthority;
+    statements: ReadonlyArray<D1PreparedStatement>;
+    replayStatements: ReplayStatements;
   }>
 ): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> =>
   Effect.gen(function* () {
     const reference = Schema.decodeOption(StagedStatementReferenceSchema)(input.reference);
     if (Option.isNone(reference)) return yield* failed("malformed-file");
-    const nowEpochMs = config.nowEpochMs();
-    const precondition = yield* readPublicationPrecondition(config, {
+    const resolution = yield* resolvePublication(config, {
       idempotencyKey: input.idempotencyKey,
-      nowEpochMs,
       reference: reference.value,
       userId: input.userId,
     });
-    if (precondition._tag === "Replay") return precondition.publication;
-    if (precondition._tag === "Refused") return yield* precondition.failure;
-    const refusal = yield* headStagedObject(config, precondition.row);
-    if (Option.isSome(refusal)) return yield* refusal.value;
+    if (resolution._tag === "Replay") {
+      return yield* replayOutcome(config, {
+        publication: resolution.publication,
+        statements: input.replayStatements,
+      });
+    }
+    if (resolution._tag === "Unavailable") return yield* unavailable();
+    if (resolution._tag === "Refused") return yield* resolution.failure;
+    const attempt: PublicationAttempt = {
+      idempotencyKey: input.idempotencyKey,
+      nowEpochMs: resolution.nowEpochMs,
+      stagingId: reference.value.stagingId,
+      userId: input.userId,
+    };
     const submissionId = newId();
-    const results = yield* settleBatch(
-      config.database,
-      publicationStatements(config, {
-        auditId: newId(),
-        idempotencyKey: input.idempotencyKey,
-        nowEpochMs,
-        stagingId: reference.value.stagingId,
-        submissionId,
-        userId: input.userId,
+    const outcome = yield* publicationUnitOutcome(config, {
+      attempt,
+      authority: input.authority,
+      statements: input.statements,
+      submissionId,
+    });
+    return yield* publicationOutcome(config, {
+      attempt,
+      outcome,
+      replayStatements: input.replayStatements,
+      submissionId,
+    });
+  });
+
+const readOwnedStatementSubmission = (
+  config: StatementStagingConfig,
+  input: Readonly<{ userId: string; submissionId: string }>
+): ReturnType<StatementStagingService["readOwnedStatementSubmission"]> =>
+  platformUnavailable(() =>
+    config.database
+      .prepare(
+        `SELECT id, source_format, parser_revision, status, submitted_at_ms, started_at_ms,
+                completed_at_ms, failure_reason, input_rows, accepted_rows, needs_review_rows
+         FROM statement_submissions WHERE id = ? AND user_id = ?`
+      )
+      .bind(input.submissionId, input.userId)
+      .first()
+  ).pipe(
+    Effect.map((value) =>
+      Option.map(
+        Schema.decodeUnknownOption(StoredSubmissionRow)(value),
+        (row): StoredStatementSubmission => ({
+          acceptedRows: row.accepted_rows,
+          completedAtMs: row.completed_at_ms,
+          failureReason: row.failure_reason,
+          id: row.id,
+          inputRows: row.input_rows,
+          needsReviewRows: row.needs_review_rows,
+          parserRevision: row.parser_revision,
+          sourceFormat: row.source_format,
+          startedAtMs: row.started_at_ms,
+          status: row.status,
+          submittedAtMs: row.submitted_at_ms,
+        })
+      )
+    )
+  );
+
+const expireStatementSubmissions = (
+  config: StatementStagingConfig
+): Effect.Effect<ExpiredStatementSubmissions, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    const nowEpochMs = config.nowEpochMs();
+    if (!isSafeEpoch(nowEpochMs)) return yield* unavailable();
+    const candidates = yield* settleAll(
+      config.database
+        .prepare(
+          `SELECT id, staging_id FROM statement_submissions
+           WHERE status IN ('queued', 'processing') AND retention_expires_at_ms <= ?
+           ORDER BY retention_expires_at_ms LIMIT ?`
+        )
+        .bind(nowEpochMs, maximumStatementStagingSweep)
+    );
+    const rows = candidates.results.flatMap((value) =>
+      Option.match(Schema.decodeUnknownOption(ExpiredSubmissionRow)(value), {
+        onNone: () => [],
+        onSome: (row) => [row],
       })
     );
-    return results[0]?.meta.changes === 1
-      ? { replayed: false, submissionId }
-      : yield* classifyUnpublished(config, {
-          idempotencyKey: input.idempotencyKey,
-          nowEpochMs,
-          stagingId: reference.value.stagingId,
-          userId: input.userId,
-        });
+    if (rows.length === 0) return { submissionsFailed: 0 };
+    const placeholders = rows.map(() => "?").join(", ");
+    const ids = rows.map(({ id }) => id);
+    const stagingIds = rows.map(({ staging_id: stagingId }) => stagingId);
+    const stagingPlaceholders = stagingIds.map(() => "?").join(", ");
+    const results = yield* settleBatch(config.database, [
+      // The terminal transition commits before any object delete, so no authoritative submission
+      // that still lacks a useful outcome can ever point at material a later cleanup run reclaimed.
+      config.database
+        .prepare(
+          `UPDATE statement_submissions
+           SET status = 'failed', started_at_ms = coalesce(started_at_ms, ?),
+               completed_at_ms = ?, failure_reason = 'retention-expired'
+           WHERE id IN (${placeholders}) AND status IN ('queued', 'processing')`
+        )
+        .bind(nowEpochMs, nowEpochMs, ...ids),
+      // A submission that never produced a useful outcome returns the Free backfill to the User.
+      config.database
+        .prepare(
+          `UPDATE statement_backfill_entitlements SET submission_id = NULL
+           WHERE consumed_at_ms IS NULL AND submission_id IN (${placeholders})`
+        )
+        .bind(...ids),
+      // Published material becomes sweepable exactly once; the sweep deletes the object and keeps
+      // the referenced row as durable evidence that the locator's bytes are gone. Clearing the
+      // publication pointer is what lets the row leave `published` under the staging state check.
+      config.database
+        .prepare(
+          `UPDATE statement_staging_objects
+           SET status = 'deleting', published_submission_id = NULL
+           WHERE id IN (${stagingPlaceholders}) AND status = 'published'
+             AND object_deleted_at_ms IS NULL`
+        )
+        .bind(...stagingIds),
+    ]);
+    return { submissionsFailed: results[0]?.meta.changes ?? 0 };
   });
 
 const sweepExpiredStatementStaging = (
@@ -646,7 +1235,7 @@ const sweepExpiredStatementStaging = (
           `UPDATE statement_staging_objects SET status = 'deleting'
            WHERE id IN (
              SELECT id FROM statement_staging_objects
-             WHERE status != 'published' AND expires_at_ms <= ?
+             WHERE status != 'published' AND object_deleted_at_ms IS NULL AND expires_at_ms <= ?
              ORDER BY expires_at_ms
              LIMIT ?
            )
@@ -664,19 +1253,36 @@ const sweepExpiredStatementStaging = (
     yield* platformUnavailable(() =>
       config.bucket.delete(rows.map(({ object_key: objectKey }) => objectKey))
     );
-    const deleted = yield* settleStatement(
+    const placeholders = rows.map(() => "?").join(", ");
+    const ids = rows.map(({ id }) => id);
+    const results = yield* settleBatch(config.database, [
+      // Rows a submission still references stay as durable cleanup evidence; only the object goes.
       config.database
         .prepare(
           `DELETE FROM statement_staging_objects
-           WHERE id IN (${rows.map(() => "?").join(", ")}) AND status = 'deleting'`
+           WHERE id IN (${placeholders}) AND status = 'deleting'
+             AND NOT EXISTS (
+               SELECT 1 FROM statement_submissions
+               WHERE staging_id = statement_staging_objects.id)`
         )
-        .bind(...rows.map(({ id }) => id))
-    );
-    return { objectsDeleted: rows.length, rowsDeleted: deleted.meta.changes };
+        .bind(...ids),
+      config.database
+        .prepare(
+          `UPDATE statement_staging_objects SET object_deleted_at_ms = ?
+           WHERE id IN (${placeholders}) AND status = 'deleting' AND object_deleted_at_ms IS NULL
+             AND EXISTS (
+               SELECT 1 FROM statement_submissions
+               WHERE staging_id = statement_staging_objects.id)`
+        )
+        .bind(nowEpochMs, ...ids),
+    ]);
+    return { objectsDeleted: rows.length, rowsDeleted: results[0]?.meta.changes ?? 0 };
   });
 
 const makeStatementStagingService = (config: StatementStagingConfig): StatementStagingService => ({
+  expireStatementSubmissions: expireStatementSubmissions(config),
   publishStagedStatementSubmission: (input) => publishStagedStatementSubmission(config, input),
+  readOwnedStatementSubmission: (input) => readOwnedStatementSubmission(config, input),
   readOwnedStagedBytes: (input) => readOwnedStagedBytes(config, input),
   stageStatementBytes: (input) => stageStatementBytes(config, input),
   sweepExpiredStatementStaging: sweepExpiredStatementStaging(config),

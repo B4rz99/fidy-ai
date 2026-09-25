@@ -1,45 +1,52 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import {
-  Base64FileContent,
   type CsvRowEvidence,
   NeedsReviewItem,
   NeedsReviewReason,
   NeedsReviewStatus,
   ParsedStatementRow,
+  StagedStatementReference,
   StatementAccounting,
   StatementFailureReason,
-  StatementMediaType,
   StatementRowEvidence,
   StatementSubmission,
   StatementSubmissionStatus,
+  SubmitForExtractionInput,
   XlsxCellEvidence,
   type XlsxRowEvidence,
+  maximumStatementBytes,
 } from "./model";
 
 const timestamp = "2026-08-01T12:00:00Z";
 const submissionId = "f1d1a000-0000-4000-8000-000000000401";
 const reviewId = "f1d1a000-0000-4000-8000-000000000402";
 const transactionId = "f1d1a000-0000-4000-8000-000000000403";
+const idempotencyKey = "20000000-0000-4000-8000-000000000201";
+const stagingId = "30000000-0000-4000-8000-000000000301";
 
-it("keeps statement upload enums and Base64 content closed", () => {
-  for (const value of [
-    "text/csv",
-    "application/csv",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+it("keeps the canonical submission input to one bounded staged reference", () => {
+  const decode = Schema.decodeUnknownResult(SubmitForExtractionInput);
+  const reference = { byteLength: 42, sha256: "a".repeat(64), stagingId };
+  const decoded = decode({ idempotencyKey, reference });
+  expect(Result.isSuccess(decoded)).toBe(true);
+  if (Result.isSuccess(decoded)) {
+    // Only the retry key and the reference survive decoding: a name, media type, format, or byte
+    // claim sent alongside them is dropped rather than carried into publication.
+    expect(Object.keys(decoded.success).sort()).toEqual(["idempotencyKey", "reference"]);
+    expect(decoded.success.reference).toEqual(reference);
+  }
+  for (const invalid of [
+    { idempotencyKey: "not-a-uuid", reference },
+    { idempotencyKey, reference: { ...reference, byteLength: 0 } },
+    { idempotencyKey, reference: { ...reference, byteLength: maximumStatementBytes + 1 } },
+    { idempotencyKey, reference: { ...reference, sha256: "A".repeat(64) } },
+    { idempotencyKey, reference: { ...reference, stagingId: "not-a-uuid" } },
+    { idempotencyKey, reference: { ...reference, byteLength: 1.5 } },
   ]) {
-    expect(Result.isSuccess(Schema.decodeUnknownResult(StatementMediaType)(value))).toBe(true);
+    expect(Result.isFailure(decode(invalid))).toBe(true);
   }
-  expect(Result.isFailure(Schema.decodeUnknownResult(StatementMediaType)("text/plain"))).toBe(true);
-
-  const decodeBase64 = Schema.decodeUnknownResult(Base64FileContent);
-  for (const value of ["TQ", "TQ==", "SGVsbG8="]) {
-    expect(Result.isSuccess(decodeBase64(value))).toBe(true);
-  }
-  for (const value of ["!SGVsbG8=", "SGVsbG8=!", "TQ==="]) {
-    expect(Result.isFailure(decodeBase64(value))).toBe(true);
-  }
+  expect(Result.isSuccess(Schema.decodeResult(StagedStatementReference)(reference))).toBe(true);
 });
 
 it("accepts every public statement lifecycle and conserves its accounting", () => {

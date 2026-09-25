@@ -114,7 +114,11 @@ type CanonicalPATOperation =
   | "transactions.updateTransaction"
   | "transactions.listTransactions"
   | "transactions.searchTransactions"
-  | "transactions.getTransaction";
+  | "transactions.getTransaction"
+  | "memory.remember"
+  | "memory.recall"
+  | "memory.revise"
+  | "memory.forget";
 
 type CanonicalAuditInput = AuditTime &
   Readonly<{

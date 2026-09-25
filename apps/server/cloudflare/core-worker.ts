@@ -61,6 +61,7 @@ import {
 } from "./identity/email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
+import { executeMemoryOperation, isMemoryOperationId } from "./memory/memory";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
   type BatchCalls,
@@ -609,6 +610,26 @@ const keywordRuleResponse = (
   );
 };
 
+/** The Memory work this dispatch owns, or None when another slice owns the operation. */
+const memoryResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response, never, HostedInference>> =>
+  isMemoryOperationId(input.operation.id)
+    ? Option.some(
+        executeMemoryOperation({
+          request: input.request,
+          db: input.environment.DB,
+          subject: input.subject,
+          operation: input.operation.id,
+        }).pipe(Effect.withSpan(input.operation.id))
+      )
+    : Option.none();
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -617,11 +638,11 @@ const executeCanonicalWork = (
     operation: CatalogOperation;
     subject: TransactionCaller;
   }>
-): Effect.Effect<Response> => {
+): Effect.Effect<Response, never, HostedInference> => {
   const { request, environment, operation, subject } = input;
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
-  const keywordRules = keywordRuleResponse(input);
-  if (Option.isSome(keywordRules)) return keywordRules.value;
+  const ownerResponse = Option.orElse(keywordRuleResponse(input), () => memoryResponse(input));
+  if (Option.isSome(ownerResponse)) return ownerResponse.value;
   if (operation.id === "pats.listPATs") {
     return Effect.tryPromise({
       try: () => listPATs({ request, db: environment.DB }),
@@ -659,7 +680,7 @@ const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreEnvironment,
   operation: CatalogOperation
-): Effect.Effect<Response> => {
+): Effect.Effect<Response, never, HostedInference> => {
   if (!request.headers.has("authorization")) {
     return Effect.tryPromise({
       try: () => transactionSession({ request, db: environment.DB }),
@@ -716,7 +737,7 @@ const canonicalOrHealthResponse = (
   request: Request,
   environment: CoreEnvironment,
   path: string
-): Effect.Effect<Response> => {
+): Effect.Effect<Response, never, HostedInference> => {
   const operation = canonicalOperation({ method: request.method, path });
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
@@ -729,7 +750,7 @@ const fetchEffect = (
   request: Request,
   environment: CoreEnvironment,
   telemetry: TelemetryService
-): Effect.Effect<Response> => {
+): Effect.Effect<Response, never, HostedInference> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));

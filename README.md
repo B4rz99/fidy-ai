@@ -73,6 +73,7 @@ Slice scopes:
 | `tokens`       | PATs and scopes                       |
 | `audit`        | the audit trail                       |
 | `transcript`   | transcript and user notes             |
+| `memory`       | durable User-chosen prose             |
 | `billing`      | subscriptions and payments            |
 
 Cross-cutting scopes:

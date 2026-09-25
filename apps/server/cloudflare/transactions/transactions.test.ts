@@ -152,6 +152,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0011_transaction_corrections",
           "0012_transaction_search",
           "0013_category_keyword_rules",
+          "0014_memory",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()

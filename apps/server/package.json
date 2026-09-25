@@ -44,6 +44,16 @@
       "import": "./src/core/transactions/model.ts",
       "default": "./src/core/transactions/model.ts"
     },
+    "./memory-runtime": {
+      "types": "./src/shell/memory/runtime.ts",
+      "import": "./src/shell/memory/runtime.ts",
+      "default": "./src/shell/memory/runtime.ts"
+    },
+    "./memory-routes": {
+      "types": "./src/shell/memory/cloudflare-routes.ts",
+      "import": "./src/shell/memory/cloudflare-routes.ts",
+      "default": "./src/shell/memory/cloudflare-routes.ts"
+    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",

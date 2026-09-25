@@ -1,0 +1,16 @@
+tools/mutation/bun.lock
+  h_c6d49c804e0ad2 8,20,214
+tools/mutation/package.json
+  h_c6d49c804e0ad2 7,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "083fe732518efecab3ff3312ef0344fe1e6646d8",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

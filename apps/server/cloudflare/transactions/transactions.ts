@@ -1,8 +1,12 @@
+import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
-  CreateTransactionInput,
-  Transaction,
-  encodeMoneyAmount,
-} from "@fidy/server/transactions-runtime";
+  type CategoryId,
+  categoryIds,
+  findKeywordCategory,
+  findKnownCaptureCategory,
+  keywordRulesFromRows,
+  keywordRulesQuery,
+} from "@fidy/server/categories";
 import { recordAuditedPATUse, recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { sessionCookie, sha256 } from "../identity/browser-login";
@@ -45,6 +49,7 @@ type Capture = Readonly<{
   input: typeof Input.Type;
   subject: TransactionCaller;
   context: typeof UserContext.Type;
+  categoryId: CategoryId;
   id: string;
   current: number;
   auditId: string;
@@ -109,14 +114,7 @@ const captureAudit = (db: D1Database, capture: Capture): D1PreparedStatement => 
 };
 
 const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {
-  const { input, subject, id, current } = capture;
-  const categoryId = Option.getOrElse(input.categoryId, () =>
-    Schema.decodeSync(Transaction.fields.categoryId)(
-      input.direction === "inflow"
-        ? "10000000-0000-4000-8000-000000000015"
-        : "10000000-0000-4000-8000-000000000016"
-    )
-  );
+  const { input, subject, id, current, categoryId } = capture;
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
   const authority = callerAuthority({ subject, current });
   return db
@@ -199,6 +197,63 @@ const captureUserContext = (
   }).pipe(Effect.map(Schema.decodeUnknownOption(UserContext)));
 
 /**
+ * The Category a capture falls back to when neither an explicit choice nor a User keyword rule
+ * decided it. It reads no User state, so it stays the last step of the precedence.
+ */
+const fallbackCaptureCategory = (direction: typeof Input.Type.direction): CategoryId =>
+  direction === "inflow" ? categoryIds.ingresos : categoryIds.otros;
+
+const findRuleCategory = ({
+  db,
+  userId,
+  counterparty,
+}: Readonly<{ db: D1Database; userId: string; counterparty: string }>): Effect.Effect<
+  Option.Option<CategoryId>,
+  TransactionBoundaryFailure
+> =>
+  Effect.gen(function* () {
+    const query = keywordRulesQuery({ userId });
+    const stored = yield* Effect.tryPromise({
+      try: () =>
+        db
+          .prepare(query.sql)
+          .bind(...query.params)
+          .all(),
+      catch: boundaryFailure,
+    });
+    const rules = keywordRulesFromRows(stored.results);
+    if (Option.isNone(rules)) {
+      return yield* boundaryFailure("keyword_rules_unreadable");
+    }
+    return yield* findKeywordCategory({ counterparty, rules: rules.value });
+  });
+
+/** Explicit Category, then the User's keyword policy, then the direction fallback. */
+const resolveCaptureCategory = ({
+  db,
+  subject,
+  input,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  input: typeof Input.Type;
+}>): Effect.Effect<CategoryId, TransactionBoundaryFailure> =>
+  Effect.gen(function* () {
+    const keywordRule = Option.isNone(input.counterparty)
+      ? Option.none<CategoryId>()
+      : yield* findRuleCategory({
+          db,
+          userId: subject.userId,
+          counterparty: input.counterparty.value,
+        });
+    const known = yield* findKnownCaptureCategory({
+      caller: input.categoryId,
+      keywordRule,
+    });
+    return Option.getOrElse(known, () => fallbackCaptureCategory(input.direction));
+  });
+
+/**
  * Decide one canonical Transaction capture against live caller authority, User context, and the
  * Category taxonomy. The returned statements are guard-chained writes; the caller's D1 unit
  * commits them or none of them.
@@ -230,6 +285,7 @@ export const prepareCapture = ({
         "The Category does not exist; correct categoryId and retry."
       );
     }
+    const categoryId = yield* resolveCaptureCategory({ db, subject, input });
     const id = transactionId();
     return {
       _tag: "Prepared",
@@ -242,6 +298,7 @@ export const prepareCapture = ({
           input,
           subject,
           context: context.value,
+          categoryId,
           id,
           current,
           auditId: transactionId(),

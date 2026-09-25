@@ -15,9 +15,16 @@ import {
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { listCategoriesPath } from "./path";
+import { keywordRulesPath, listCategoriesPath, retainedKeywordRulePath } from "./path";
 
 export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
+
+/** The caller's own rules, in stable creation order. */
+export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
+
+/** One created or replaced rule, or the id of a removed one. */
+export const KeywordRuleResponse = OperationResponse(KeywordRule);
+export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
 
 const read = operationPolicy({
   access: patScoped("read"),
@@ -52,8 +59,8 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       .annotateMerge(read)
   )
   .add(
-    HttpApiEndpoint.get("listKeywordRules", "/category-keyword-rules", {
-      success: OperationResponse(Schema.Array(KeywordRule)),
+    HttpApiEndpoint.get("listKeywordRules", keywordRulesPath, {
+      success: ListKeywordRulesResponse,
     })
       .annotate(
         OpenApi.Description,
@@ -62,9 +69,9 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       .annotateMerge(read)
   )
   .add(
-    HttpApiEndpoint.post("createKeywordRule", "/category-keyword-rules", {
+    HttpApiEndpoint.post("createKeywordRule", keywordRulesPath, {
       payload: CreateKeywordRuleInput,
-      success: OperationResponse(KeywordRule).pipe(HttpApiSchema.status(createdStatus)),
+      success: KeywordRuleResponse.pipe(HttpApiSchema.status(createdStatus)),
       error: [NotFound, ValidationFailed],
     })
       .annotate(
@@ -74,10 +81,10 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       .annotateMerge(additiveWrite)
   )
   .add(
-    HttpApiEndpoint.put("updateKeywordRule", "/category-keyword-rules/:id", {
+    HttpApiEndpoint.put("updateKeywordRule", retainedKeywordRulePath, {
       params: Schema.Struct({ id: KeywordRuleId }),
       payload: UpdateKeywordRuleInput,
-      success: OperationResponse(KeywordRule),
+      success: KeywordRuleResponse,
       error: [NotFound, ValidationFailed],
     })
       .annotate(
@@ -87,9 +94,9 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
       .annotateMerge(destructiveWrite)
   )
   .add(
-    HttpApiEndpoint.delete("deleteKeywordRule", "/category-keyword-rules/:id", {
+    HttpApiEndpoint.delete("deleteKeywordRule", retainedKeywordRulePath, {
       params: Schema.Struct({ id: KeywordRuleId }),
-      success: OperationResponse(KeywordRuleId),
+      success: RemovedKeywordRuleResponse,
       error: NotFound,
     })
       .annotate(

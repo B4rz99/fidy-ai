@@ -1,4 +1,5 @@
 import {
+  type KeywordRuleOperation,
   ScopeMissing,
   UserActionRequired,
   categoryUnavailable,
@@ -74,6 +75,10 @@ import {
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
+import {
+  handleOwnKeywordRuleMutation,
+  listOwnKeywordRules,
+} from "./categories/canonical-keyword-rules";
 import {
   currentUser,
   logoutBrowser,
@@ -557,6 +562,53 @@ const dispatchCanonicalHistory = (
   });
 };
 
+/** One canonical keyword-rule mutation through the adapter that owns its declared contract. */
+const keywordRuleMutationResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+    operation: KeywordRuleOperation;
+  }>
+): Effect.Effect<Response> => {
+  const { request, environment, subject, operation } = input;
+  return Effect.tryPromise({
+    try: () => handleOwnKeywordRuleMutation({ request, db: environment.DB, subject, operation }),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable));
+};
+
+/** The keyword-rule mutation ids, and None for any other canonical operation. */
+const keywordRuleOperation = (id: string): Option.Option<KeywordRuleOperation> => {
+  if (id === "categories.createKeywordRule") return Option.some(id);
+  if (id === "categories.updateKeywordRule") return Option.some(id);
+  if (id === "categories.deleteKeywordRule") return Option.some(id);
+  return Option.none();
+};
+
+/** The keyword-rule work this dispatch owns, or None when another slice owns the operation. */
+const keywordRuleResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response>> => {
+  const { request, environment, operation, subject } = input;
+  if (operation.id === "categories.listKeywordRules") {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => listOwnKeywordRules({ db: environment.DB, subject }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable))
+    );
+  }
+  return Option.map(keywordRuleOperation(operation.id), (owned) =>
+    keywordRuleMutationResponse({ request, environment, subject, operation: owned })
+  );
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -568,6 +620,8 @@ const executeCanonicalWork = (
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  const keywordRules = keywordRuleResponse(input);
+  if (Option.isSome(keywordRules)) return keywordRules.value;
   if (operation.id === "pats.listPATs") {
     return Effect.tryPromise({
       try: () => listPATs({ request, db: environment.DB }),

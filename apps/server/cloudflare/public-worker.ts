@@ -1,4 +1,4 @@
-import { listCategoriesPath } from "@fidy/server/categories-path";
+import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
 import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import {
@@ -359,7 +359,10 @@ const atomicBatchPath = (path: string): boolean =>
   );
 /** Declared paths that may be admitted by the browser session cookie instead of a PAT. */
 const cookieAdmittedPath = (path: string): boolean =>
-  transactionPath(path) || atomicBatchPath(path) || path === listCategoriesPath;
+  transactionPath(path) ||
+  atomicBatchPath(path) ||
+  path === listCategoriesPath ||
+  keywordRulePath(path);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   sessionPaths.has(path) ||
   enrollmentPath(path) ||

@@ -1,0 +1,37 @@
+apps/server/src/shell/categories/operations.ts
+  s_f9aa3e90839713::t_d78f17481827ad 31-33
+  s_f9aa3e90839713::t_de2bd4b983d4ad 29-30
+  s_f9aa3e90839713::t_380f67b7c9d6c5 34-50
+apps/server/cloudflare/transactions/transaction-reconciliation.ts
+  s_f9aa3e90839713::t_f5bff218696eda 13,21,38-39,41-46,301,303-310,312,315,318,322,326,333-339,346,352,354-361,364,368,371,384,390-396,398,408,420,425,436,443
+apps/server/src/shell/memory/operations.ts
+  s_f9aa3e90839713::t_6aff9e553789b4 95-106
+apps/server/cloudflare/transactions/transactions.ts
+  s_f9aa3e90839713::t_08dcfd74702deb 11,17,31-32,34-40,246-303,319,322-330,333,339-347,352-359,377,382
+apps/server/src/shell/categories/runtime.ts
+  s_f9aa3e90839713::t_11ebf9e0f86c3e 34-35,40
+apps/server/src/shell/canonical-runtime.ts
+  s_f9aa3e90839713::t_1ca431d619721e 12
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  s_f9aa3e90839713::t_ec5dbc24699add 7,13,28-29,31-37,39,232,238-244,254,266,269-276,278,281,287,289-291,293,297,314,319
+apps/server/src/shell/operations/operations.ts
+  s_f9aa3e90839713::t_68347258fc572a 117-127
+apps/server/cloudflare/pats/pats.test.ts
+  s_f9aa3e90839713::t_b42cf0fe48308c 213-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "89187d4fb4e6e2ff8160fb5dd3cf5e737c2032b2",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1628,7 +1628,7 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       const listed = yield* fromTestPromise(() =>
         browseTransactions({
           db,
-          selection: { request: request(0), subject: session, id: Option.none() },
+          selection: { request: request(0), subject: session, search: false, id: Option.none() },
         })
       );
       const page = yield* Schema.decodeUnknownEffect(Listed)(

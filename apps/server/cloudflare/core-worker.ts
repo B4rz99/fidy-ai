@@ -524,6 +524,39 @@ const unavailableCanonicalAdapter = (): Response =>
     HTTP_SERVICE_UNAVAILABLE
   );
 
+/** True for the admitted read operations Transaction history owns. */
+const isTransactionHistoryRead = (operation: CatalogOperation): boolean =>
+  operation.id === "transactions.listTransactions" ||
+  operation.id === "transactions.searchTransactions" ||
+  operation.id === "transactions.getTransaction";
+
+/** Dispatch one admitted Transaction history read: search, one record, or the list. */
+const dispatchCanonicalHistory = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+    operation: CatalogOperation;
+  }>
+): Promise<Response> => {
+  const { request, environment, subject, operation } = input;
+  return browseTransactions({
+    db: environment.DB,
+    selection:
+      operation.id === "transactions.searchTransactions"
+        ? { request, subject, search: true, id: Option.none() }
+        : {
+            request,
+            subject,
+            search: false,
+            id:
+              operation.id === "transactions.getTransaction"
+                ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+                : Option.none(),
+          },
+  });
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -559,28 +592,9 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation));
   }
-  if (
-    operation.id === "transactions.listTransactions" ||
-    operation.id === "transactions.searchTransactions" ||
-    operation.id === "transactions.getTransaction"
-  ) {
+  if (isTransactionHistoryRead(operation)) {
     return Effect.tryPromise({
-      try: () =>
-        browseTransactions({
-          db: environment.DB,
-          selection:
-            operation.id === "transactions.searchTransactions"
-              ? { request, subject, search: true, id: Option.none() }
-              : {
-                  request,
-                  subject,
-                  search: false,
-                  id:
-                    operation.id === "transactions.getTransaction"
-                      ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-                      : Option.none(),
-                },
-        }),
+      try: () => dispatchCanonicalHistory({ request, environment, subject, operation }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }

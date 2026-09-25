@@ -5,7 +5,7 @@ import {
   freshSessionExists,
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
-import { livePATAuthority } from "./pat-write";
+import { type PATAuthority, livePATAuthority } from "./pat-write";
 import type { AuditedPATOperation } from "./pat-audited-operations";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 
@@ -116,12 +116,40 @@ type CanonicalAuditInput = AuditTime &
 export const recordCanonicalPATWork = ({
   subject,
   input,
-}: Readonly<{ subject: PATSubject; input: CanonicalAuditInput }>): OwnedStatement => {
-  const authority = livePATAuthority({ subject, current: input.current });
-  return {
-    sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate}
-      ${input.afterOwnerWrite ? "AND changes() = 1" : ""}`,
-    params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
-  };
-};
+}: Readonly<{ subject: PATSubject; input: CanonicalAuditInput }>): OwnedStatement =>
+  recordCanonicalPATWorkFromAuthority({
+    authority: livePATAuthority({ subject, current: input.current }),
+    input,
+  });
+
+/**
+ * The same canonical PAT audit built from the exact live-authority gate a consumer already holds,
+ * so a caller that is not the subject can still account for protected work without restating the
+ * bearer, Consent, and scope decision.
+ */
+export const recordCanonicalPATWorkFromAuthority = ({
+  authority,
+  input,
+}: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+    SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate}
+    ${input.afterOwnerWrite ? "AND changes() = 1" : ""}`,
+  params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
+});
+
+/**
+ * Audit one rejected canonical PAT call from the exact live-authority gate the caller presented.
+ * A consumer that already holds a `PATAuthority` — rather than the subject it was derived from —
+ * records the same refusal row without restating the bearer, Consent, and scope decision.
+ */
+export const recordRejectedPATWork = ({
+  authority,
+  input,
+}: Readonly<{
+  authority: PATAuthority;
+  input: AuditTime & Readonly<{ operation: AuditedPATOperation }>;
+}>): OwnedStatement =>
+  recordCanonicalPATWorkFromAuthority({
+    authority,
+    input: { ...input, afterOwnerWrite: false, outcome: "rejected" },
+  });

@@ -24,3 +24,4 @@ export {
   UnlinkTransactionsCanonicalInput,
   UpdateTransactionCanonicalInput,
 } from "~/shell/transactions/operations";
+export { SubmitForExtractionCanonicalInput } from "~/shell/ingestion/operations";

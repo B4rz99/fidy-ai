@@ -10,15 +10,15 @@ import { Data, Effect, Encoding, Fiber, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TransactionAuthority } from "../transactions/transaction-boundary";
+import type { AtomicMutationRefusal } from "../atomic/atomic-mutation-unit";
 import {
-  type PublishedStatementSubmission,
+  type StatementPublicationOutcome,
   StatementStaging,
   StatementStagingFailed,
   type StatementStagingRefused,
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
-  statementSubmissionReplayAudit,
 } from "./statement-staging";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -221,7 +221,6 @@ afterEach(() =>
   Effect.runPromise(
     Effect.gen(function* () {
       nowEpochMs = (): number => startedAtEpochMs;
-      replayAuditSequence = 0;
       yield* fromTestPromise(() =>
         Promise.all([...instances].map((miniflare): Promise<void> => miniflare.dispose()))
       );
@@ -286,18 +285,6 @@ const callerAuthorityFor = (userId: string): TransactionAuthority => {
   return liveWebSessionAuthority({ subject: session, current: currentNowEpochMs() });
 };
 
-/** The one authority-guarded attribution write a replayed call must commit. */
-let replayAuditSequence = 0;
-const replayStatement = (runtime: Runtime, userId: string): D1PreparedStatement => {
-  replayAuditSequence += 1;
-  return statementSubmissionReplayAudit({
-    authority: callerAuthorityFor(userId),
-    current: currentNowEpochMs(),
-    database: runtime.database,
-    id: `30000000-0000-4000-9000-${replayAuditSequence.toString().padStart(12, "0")}`,
-  });
-};
-
 /** The winner's real publication, invoked later to race the losing call's conditional unit. */
 const winnerPublication =
   (runtime: Runtime, staged: StagedStatementBytes): (() => Promise<unknown>) =>
@@ -307,8 +294,6 @@ const winnerPublication =
         authority: callerAuthorityFor(userA),
         idempotencyKey,
         reference: reference(staged),
-        replayStatements: [replayStatement(runtime, userA)],
-        statements: [],
         userId: userA,
       })
     );
@@ -347,15 +332,13 @@ const publish = (
     reference: unknown;
     key: string;
   }>
-): Promise<StagingResult<PublishedStatementSubmission>> =>
+): Promise<StagingResult<StatementPublicationOutcome>> =>
   Effect.runPromise(
     Effect.result(
       input.runtime.staging.publishStagedStatementSubmission({
         authority: callerAuthorityFor(input.userId),
         idempotencyKey: input.key,
         reference: Schema.decodeUnknownSync(StagedStatementReferenceSchema)(input.reference),
-        replayStatements: [replayStatement(input.runtime, input.userId)],
-        statements: [],
         userId: input.userId,
       })
     )
@@ -363,7 +346,7 @@ const publish = (
 
 const publishOnce = (
   input: Readonly<{ runtime: Runtime; userId: string; reference: unknown }>
-): Promise<StagingResult<PublishedStatementSubmission>> =>
+): Promise<StagingResult<StatementPublicationOutcome>> =>
   publish({ ...input, key: idempotencyKey });
 
 const read = (
@@ -396,6 +379,33 @@ const reasonOf = (result: StagingResult<unknown>): StatementStagingFailureReason
     if (result.failure instanceof StatementStagingFailed) return result.failure.reason;
   }
   throw new Error("Expected the staging adapter to refuse");
+};
+
+/** The one successful publication outcome, or the refusal the test did not expect. */
+const publishedOf = (
+  result: StagingResult<StatementPublicationOutcome>
+): Readonly<{ submissionId: string; replayed: boolean }> => {
+  const outcome = requireValue(result);
+  if (outcome._tag !== "Published") {
+    throw new Error(`Expected a published submission, refused as ${outcome.refusal.code}`);
+  }
+  return { replayed: outcome.replayed, submissionId: outcome.submissionId };
+};
+
+/** The one closed refusal a publication decided, or a failure when it published instead. */
+const refusalOf = (result: StagingResult<StatementPublicationOutcome>): AtomicMutationRefusal => {
+  const outcome = requireValue(result);
+  if (outcome._tag !== "Refused") throw new Error("Expected the statement publication to refuse");
+  return outcome.refusal;
+};
+
+/** The one bounded refusal every absent, foreign, or mismatched staged reference shares. */
+const expectsStagedMaterialRefusal = (result: StagingResult<StatementPublicationOutcome>): void => {
+  expect(refusalOf(result)).toEqual({
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message: "The staged statement material is unavailable; upload the file again.",
+  });
 };
 
 const reference = (staged: StagedStatementBytes): StagedStatementReference => ({
@@ -485,7 +495,7 @@ describe("Cloudflare statement byte staging", () => {
           requireValue(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))
         ).toEqual(statementBytes);
 
-        const published = requireValue(
+        const published = publishedOf(
           yield* fromTestPromise(() =>
             publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
@@ -558,7 +568,7 @@ describe("Cloudflare statement byte staging", () => {
         );
 
         expect(
-          reasonOf(
+          refusalOf(
             yield* fromTestPromise(() =>
               publishOnce({
                 reference: { ...reference(staged), sha256: "0".repeat(64) },
@@ -567,9 +577,13 @@ describe("Cloudflare statement byte staging", () => {
               })
             )
           )
-        ).toBe("malformed-file");
+        ).toEqual({
+          auditOutcome: "validation_failed",
+          code: "validation_failed",
+          message: "The staged statement material is unavailable; upload the file again.",
+        });
         expect(
-          reasonOf(
+          refusalOf(
             yield* fromTestPromise(() =>
               publishOnce({
                 reference: { ...reference(staged), byteLength: staged.byteLength + 1 },
@@ -577,8 +591,8 @@ describe("Cloudflare statement byte staging", () => {
                 userId: userA,
               })
             )
-          )
-        ).toBe("malformed-file");
+          ).code
+        ).toBe("validation_failed");
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -587,7 +601,7 @@ describe("Cloudflare statement byte staging", () => {
         ).toBe(0);
         // Refusals leave the real material fully publishable.
         expect(
-          requireValue(
+          publishedOf(
             yield* fromTestPromise(() =>
               publishOnce({ reference: reference(staged), runtime, userId: userA })
             )
@@ -607,13 +621,11 @@ describe("Cloudflare statement byte staging", () => {
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userB, staged.stagingId)))).toBe(
           "not-found"
         );
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userB })
-            )
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userB })
           )
-        ).toBe("not-found");
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -638,13 +650,11 @@ describe("Cloudflare statement byte staging", () => {
         );
         yield* fromTestPromise(() => runtime.bucket.delete(row.object_key));
 
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userA })
-            )
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
-        ).toBe("not-found");
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -668,13 +678,11 @@ describe("Cloudflare statement byte staging", () => {
         yield* fromTestPromise(() => runtime.bucket.delete(key));
         yield* fromTestPromise(() => putWithSha256(runtime.bucket, key, replaced));
 
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userA })
-            )
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
-        ).toBe("malformed-file");
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -688,12 +696,12 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        const first = requireValue(
+        const first = publishedOf(
           yield* fromTestPromise(() =>
             publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
         );
-        const replay = requireValue(
+        const replay = publishedOf(
           yield* fromTestPromise(() =>
             publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
@@ -711,14 +719,14 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
         expect(
-          reasonOf(
+          refusalOf(
             yield* fromTestPromise(() =>
               publish({ key: idempotencyKey, reference: reference(other), runtime, userId: userA })
             )
-          )
-        ).toBe("conflict");
+          ).code
+        ).toBe("validation_failed");
         expect(
-          reasonOf(
+          refusalOf(
             yield* fromTestPromise(() =>
               publish({
                 key: otherIdempotencyKey,
@@ -727,8 +735,8 @@ describe("Cloudflare statement byte staging", () => {
                 userId: userA,
               })
             )
-          )
-        ).toBe("conflict");
+          ).code
+        ).toBe("validation_failed");
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           1
         );
@@ -742,7 +750,7 @@ describe("Cloudflare statement byte staging", () => {
         const staged = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        const first = requireValue(
+        const first = publishedOf(
           yield* fromTestPromise(() =>
             publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
@@ -759,8 +767,6 @@ describe("Cloudflare statement byte staging", () => {
             authority: callerAuthorityFor(userA),
             idempotencyKey,
             reference: reference(staged),
-            replayStatements: [replayStatement(runtime, userA)],
-            statements: [],
             userId: userA,
           })
         );
@@ -805,12 +811,15 @@ describe("Cloudflare statement byte staging", () => {
             authority: callerAuthorityFor(userA),
             idempotencyKey,
             reference: reference(loser),
-            replayStatements: [replayStatement(runtime, userA)],
-            statements: [],
             userId: userA,
           })
         );
-        expect(reasonOf(refused)).toBe("conflict");
+        expect(refusalOf(refused)).toEqual({
+          auditOutcome: "validation_failed",
+          code: "validation_failed",
+          message:
+            "The idempotency key already names different statement material. Stage that material and use a new key.",
+        });
         expect(
           required(yield* fromTestPromise(() => stagingRow(runtime.database, loser.stagingId)))
             .status
@@ -851,14 +860,12 @@ describe("Cloudflare statement byte staging", () => {
           database: publishWinnerBeforeBatch(runtime.database, winnerPublication(runtime, winner)),
           nowEpochMs: currentNowEpochMs,
         });
-        const replayed = requireValue(
+        const replayed = publishedOf(
           yield* Effect.result(
             stale.publishStagedStatementSubmission({
               authority: callerAuthorityFor(userA),
               idempotencyKey,
               reference: reference(winner),
-              replayStatements: [replayStatement(runtime, userA)],
-              statements: [],
               userId: userA,
             })
           )
@@ -909,21 +916,19 @@ describe("Cloudflare statement byte staging", () => {
         expect(objects.objects).toHaveLength(1);
         const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
         // An unfinished upload is never publishable even though its bytes reached R2.
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({
-                reference: {
-                  byteLength: row.byte_length,
-                  sha256: row.sha256,
-                  stagingId: row.id,
-                },
-                runtime,
-                userId: userA,
-              })
-            )
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({
+              reference: {
+                byteLength: row.byte_length,
+                sha256: row.sha256,
+                stagingId: row.id,
+              },
+              runtime,
+              userId: userA,
+            })
           )
-        ).toBe("not-found");
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -961,13 +966,11 @@ describe("Cloudflare statement byte staging", () => {
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "retention-expired"
         );
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userA })
-            )
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userA })
           )
-        ).toBe("retention-expired");
+        );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -996,7 +999,7 @@ describe("Cloudflare statement byte staging", () => {
         const published = requireValue(
           yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
         );
-        const publication = requireValue(
+        const publication = publishedOf(
           yield* fromTestPromise(() =>
             publishOnce({ reference: reference(published), runtime, userId: userA })
           )
@@ -1018,7 +1021,7 @@ describe("Cloudflare statement byte staging", () => {
           requireValue(yield* fromTestPromise(() => read(runtime, userA, published.stagingId)))
         ).toEqual(statementBytes);
         expect(
-          requireValue(
+          publishedOf(
             yield* fromTestPromise(() =>
               publishOnce({ reference: reference(published), runtime, userId: userA })
             )
@@ -1053,15 +1056,13 @@ describe("Cloudflare statement byte staging", () => {
         );
         expect(row.status).toBe("deleting");
         expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).not.toBeNull();
-        expect(
-          reasonOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userA })
-            )
-          )
-        ).toBe("not-found");
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "not-found"
+        );
+        expectsStagedMaterialRefusal(
+          yield* fromTestPromise(() =>
+            publishOnce({ reference: reference(staged), runtime, userId: userA })
+          )
         );
 
         expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
@@ -1147,12 +1148,8 @@ describe("Cloudflare statement byte staging", () => {
           "outcome",
           "user_id",
         ]);
-        if (Result.isFailure(refusal)) {
-          expect(Object.keys(refusal.failure).sort()).toEqual(["_tag", "reason"]);
-          expect(encodeJsonText(refusal.failure)).not.toContain(secretSentinel);
-        } else {
-          throw new Error("Expected the tampered reference to be refused");
-        }
+        expect(Object.keys(refusalOf(refusal)).sort()).toEqual(["auditOutcome", "code", "message"]);
+        expect(encodeJsonText(refusalOf(refusal))).not.toContain(secretSentinel);
       })
     ));
 });

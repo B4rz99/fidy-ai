@@ -6,6 +6,8 @@ import {
   StatementFailureReason,
   type StatementStagingFailureReason,
   StatementStagingId,
+  type StatementSubmission,
+  StatementSubmissionId,
   maximumOutstandingStatementSubmissions,
   maximumStatementBytes,
   maximumStatementStagingSweep,
@@ -18,7 +20,12 @@ import {
   knownUnsupportedStatementBytes,
   statementSourceFormat,
 } from "@fidy/server/statement-format";
-import type * as Arr from "effect/Array";
+import { CanonicalOperationId } from "@fidy/server/canonical-runtime";
+import {
+  recordAuditedPATUseFromAuthority,
+  recordCanonicalPATWorkFromAuthority,
+  recordRejectedPATWork,
+} from "@fidy/server/tokens-runtime";
 import {
   Context,
   Crypto,
@@ -29,24 +36,30 @@ import {
   Layer,
   Option,
   PlatformError,
-  Result,
   Schema,
 } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
 import {
+  type AtomicAbortAttributor,
+  type AtomicMutationRefusal,
+  type AtomicUnitChild,
+  type AtomicUnitExecution,
+  type RefusalRecord,
+  executeAtomicMutationUnit,
+  settleAtomicRefusal,
+} from "../atomic/atomic-mutation-unit";
+import { sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
+import { prepareOwnedStatement } from "../pats/pat-unit";
 import type { TransactionAuthority } from "../transactions/transaction-boundary";
 
 /** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";
 const statementStagingObjectEntropyBytes = 32;
 const millisecondsPerHour = 3_600_000;
-/** Stable SQLite constraint name that marks one refused conditional publication unit. */
-const statementSubmissionRefusalMarker = "statement_submission_refused";
-/** Stable SQLite abort message the shared stable-User daily canonical work budget raises. */
-export const statementAuditLimitMarker = "statement_audit_limit";
 
 /** The one-row assertion that rolls back a publication unit when a guarded step changed no row. */
 export const statementSubmissionCompletion = `INSERT INTO statement_submission_assertion (id, accepted)
@@ -88,23 +101,43 @@ export class StatementStagingUnavailable extends Data.TaggedError("StatementStag
   readonly reason: "authority_unavailable";
 }> {}
 
-/** The canonical call was refused by its own dead authority or the shared daily work budget. */
+/** The canonical call was refused because the caller's credential died before its unit committed. */
 export class StatementStagingRefused extends Data.TaggedError("StatementStagingRefused")<{
-  readonly reason: "authority" | "budget";
+  readonly reason: "authority";
 }> {}
 
-/** One non-empty, read-only batch of caller-owned accountability statements. */
-export type ReplayStatements = Readonly<Arr.NonEmptyArray<D1PreparedStatement>>;
+/**
+ * The closed decision of one canonical statement publication: the durable submission identity, or
+ * the canonical refusal the calling agent reads. `recorded` is true when that refusal's
+ * accountability is already settled by the unit — the child's refusal AuditLogEntry committed, or
+ * the shared daily budget trigger itself was the refusal — so a caller answers it without writing a
+ * second refusal row. A pre-unit refusal is unrecorded and the caller records it before answering.
+ */
+export type StatementPublicationOutcome =
+  | Readonly<{
+      _tag: "Published";
+      readonly submissionId: string;
+      readonly replayed: boolean;
+    }>
+  | Readonly<{
+      _tag: "Refused";
+      readonly refusal: AtomicMutationRefusal;
+      readonly recorded: boolean;
+    }>;
 
-/** One D1 publication unit that failed; its cause is inspected only for a known refusal marker. */
-class StatementPublicationBatchFailed extends Data.TaggedError("StatementPublicationBatchFailed")<{
-  readonly cause: unknown;
-}> {}
-
-/** Durable identity of one published submission, with whether this call replayed an earlier one. */
-export type PublishedStatementSubmission = Readonly<{
-  readonly submissionId: string;
+/**
+ * One owner-prepared canonical statement publication, ready to join a caller-owned D1 unit. The
+ * statements create the authoritative submission, reserve the Free backfill, promote the staged
+ * material, record the metadata-only success Audit, publish the bounded extraction outbox identity,
+ * and end with the caller's own accountability writes. `replayed` selects the replay accountability
+ * writes an exact idempotent replay commits instead.
+ */
+export type PreparedStatementPublication = Readonly<{
+  readonly attempt: PublicationAttempt;
+  readonly operation: CanonicalOperationId;
   readonly replayed: boolean;
+  readonly statements: ReadonlyArray<D1PreparedStatement>;
+  readonly submissionId: string;
 }>;
 
 /** One bounded expired-staging cleanup result. */
@@ -155,22 +188,17 @@ export type StatementStagingService = Readonly<{
    * object, together with its AuditLogEntry, Free-backfill reservation, and extraction outbox
    * identity. A replay of the same idempotency key returns the original submission; the same key
    * pointing at different material is a conflict. `authority` is the caller's live credential gate,
-   * rechecked inside the unit so a credential revoked after dispatch cannot publish. `statements`
-   * are caller-owned, guard-chained accountability writes (for example PAT Audit) that commit inside
-   * the same unit or not at all. `replayStatements` are the caller-owned writes a replayed call
-   * must commit instead: every one is live-authority guarded and must change exactly one row, so a
-   * credential revoked after dispatch refuses the replay rather than returning stored state.
+   * rechecked inside the unit so a credential revoked after dispatch cannot publish, and it owns
+   * the credential-specific accountability the publication or its exact replay commits.
    */
   readonly publishStagedStatementSubmission: (input: {
     readonly userId: string;
     readonly idempotencyKey: string;
     readonly reference: StagedStatementReference;
     readonly authority: TransactionAuthority;
-    readonly statements: ReadonlyArray<D1PreparedStatement>;
-    readonly replayStatements: ReplayStatements;
   }) => Effect.Effect<
-    PublishedStatementSubmission,
-    StatementStagingFailed | StatementStagingRefused | StatementStagingUnavailable
+    StatementPublicationOutcome,
+    StatementStagingRefused | StatementStagingUnavailable
   >;
   /** Reads one owned submission's stored lifecycle for the canonical projection. */
   readonly readOwnedStatementSubmission: (input: {
@@ -817,15 +845,9 @@ const publicationAccountabilityStatements = (
   ];
 };
 
-type PublicationPrecondition =
-  | Readonly<{ _tag: "Publish"; row: StagingRow }>
-  | Readonly<{ _tag: "Replay"; publication: PublishedStatementSubmission }>
-  | Readonly<{ _tag: "Refused"; failure: StatementStagingFailed }>
-  | Readonly<{ _tag: "Unavailable" }>;
-
 /**
  * The closed refusal for a row that cannot publish right now, or `None` when it can. Both the
- * non-committing precondition and the post-batch classifier use it, so one staged state can never
+ * non-committing precondition and the post-rollback classifier use it, so one staged state can never
  * map to two different reasons.
  */
 const classifyStagedRow = (
@@ -839,293 +861,744 @@ const classifyStagedRow = (
   return Option.none();
 };
 
-const replayOrConflict = (existing: SubmissionRow, stagingId: string): PublicationPrecondition =>
-  existing.staging_id === stagingId
-    ? { _tag: "Replay", publication: { replayed: true, submissionId: existing.id } }
-    : { _tag: "Refused", failure: failed("conflict") };
+/** The one canonical mutation this module publishes, with its staged-reference input. */
+const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
+
+const stagedMaterialMessage =
+  "The staged statement material is unavailable; upload the file again.";
 
 /**
- * Resolves the one non-committing outcome for a reference: publishable, an exact replay, or a
- * closed refusal. The caller reference is verified against the stored row before any replay
- * decision, so a tampered digest or size is never reported as accepted or replayed.
+ * Every closed publication refusal as the bounded canonical failure the calling agent reads and the
+ * metadata-only audit outcome it records. None carries statement content, a filename, a digest, or
+ * platform detail, and the same code, message, and audit outcome answer a batch child. A missing or
+ * foreign staged record is answered and recorded as `validation_failed`, never as `not_found`.
  */
-const readPublicationPrecondition = (
+const statementPublicationRefusals: Record<StatementStagingFailureReason, AtomicMutationRefusal> = {
+  cancelled: {
+    auditOutcome: "validation_failed",
+    code: "unavailable",
+    message: "Canonical operation is temporarily unavailable.",
+  },
+  conflict: {
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message:
+      "The idempotency key already names different statement material. Stage that material and use a new key.",
+  },
+  "malformed-file": {
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message: stagedMaterialMessage,
+  },
+  "not-found": {
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message: stagedMaterialMessage,
+  },
+  paywall: {
+    auditOutcome: "resource_limit",
+    code: "paywall_required",
+    message:
+      "This User has already used the lifetime Free statement backfill. Upgrade to Pro before submitting another statement.",
+  },
+  "resource-limit": {
+    auditOutcome: "resource_limit",
+    code: "validation_failed",
+    message: "Finish existing statement extraction work before uploading another file.",
+  },
+  "retention-expired": {
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message: stagedMaterialMessage,
+  },
+  "unsupported-format": {
+    auditOutcome: "validation_failed",
+    code: "validation_failed",
+    message: stagedMaterialMessage,
+  },
+};
+
+/** The canonical child-refusal contract for one closed publication refusal reason. */
+export const statementRefusal = (reason: StatementStagingFailureReason): AtomicMutationRefusal =>
+  statementPublicationRefusals[reason];
+
+/** One submission's durable fields, decoded once from storage for the public projection. */
+type SubmissionBase = Readonly<{
+  readonly id: ReturnType<typeof StatementSubmissionId.make>;
+  readonly parserRevision: string;
+  readonly sourceFormat: "csv" | "xlsx";
+  readonly submittedAt: DateTime.Utc;
+}>;
+
+const submissionBase = (stored: StoredStatementSubmission): SubmissionBase => ({
+  id: StatementSubmissionId.make(stored.id),
+  parserRevision: stored.parserRevision,
+  sourceFormat: stored.sourceFormat,
+  submittedAt: DateTime.makeUnsafe(stored.submittedAtMs),
+});
+
+/** A failed submission can only project when it kept its timestamps and its closed failure reason. */
+const failedProjection = (
+  base: SubmissionBase,
+  stored: StoredStatementSubmission
+): Option.Option<StatementSubmission> => {
+  if (
+    Option.isNone(stored.startedAtMs) ||
+    Option.isNone(stored.completedAtMs) ||
+    Option.isNone(stored.failureReason)
+  ) {
+    return Option.none();
+  }
+  return Option.some({
+    ...base,
+    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
+    failureReason: stored.failureReason.value,
+    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
+    status: "failed",
+  });
+};
+
+/** A completed submission can only project when its row accounting conserves input rows. */
+const completedProjection = (
+  base: SubmissionBase,
+  stored: StoredStatementSubmission
+): Option.Option<StatementSubmission> => {
+  if (
+    Option.isNone(stored.startedAtMs) ||
+    Option.isNone(stored.completedAtMs) ||
+    Option.isNone(stored.inputRows) ||
+    Option.isNone(stored.acceptedRows) ||
+    Option.isNone(stored.needsReviewRows)
+  ) {
+    return Option.none();
+  }
+  return Option.some({
+    ...base,
+    accounting: {
+      acceptedRows: stored.acceptedRows.value,
+      inputRows: stored.inputRows.value,
+      needsReviewRows: stored.needsReviewRows.value,
+    },
+    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
+    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
+    status: "completed",
+  });
+};
+
+/** One stored submission rebuilt into the canonical projection; an impossible row is absent. */
+export const submissionProjection = (
+  stored: StoredStatementSubmission
+): Option.Option<StatementSubmission> => {
+  const base = submissionBase(stored);
+  if (stored.status === "queued") return Option.some({ ...base, status: "queued" });
+  if (stored.status === "failed") return failedProjection(base, stored);
+  if (stored.status === "completed") return completedProjection(base, stored);
+  return Option.map(stored.startedAtMs, (startedAtMs) => ({
+    ...base,
+    startedAt: DateTime.makeUnsafe(startedAtMs),
+    status: "processing",
+  }));
+};
+
+/**
+ * The non-committing resolution of one staged reference: a ready publication, an exact
+ * same-material replay, a closed refusal, or an unavailable authority. Ownership, the caller's
+ * reference size and digest, availability, expiry, format, idempotency, submission pressure, the
+ * Free backfill, and the stored object's actual size and checksum are verified here, so an
+ * authoritative submission can never cite missing or mismatched bytes.
+ */
+export type StatementPublicationPreparation =
+  | Readonly<{
+      _tag: "Prepared";
+      readonly publication: PreparedStatementPublication;
+    }>
+  | Readonly<{ _tag: "Refused"; readonly reason: StatementStagingFailureReason }>
+  | Readonly<{ _tag: "Unavailable" }>;
+
+/**
+ * The accepted PAT accountability pair one statement unit commits: the canonical AuditLogEntry and
+ * the activity update it gates. `afterOwnerWrite` chains the audit after the publication's own
+ * outbox identity, or leaves a replay's attribution unanchored because it changes no owner row.
+ */
+const statementPATAccountability = ({
+  afterOwnerWrite,
+  authority,
+  current,
+  database,
+}: Readonly<{
+  afterOwnerWrite: boolean;
+  authority: Extract<TransactionAuthority, { readonly table: "pats" }>;
+  current: number;
+  database: D1Database;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const auditId = newId();
+  return [
+    prepareOwnedStatement({
+      db: database,
+      statement: recordCanonicalPATWorkFromAuthority({
+        authority,
+        input: {
+          afterOwnerWrite,
+          current,
+          id: auditId,
+          operation: "ingestion.submitForExtraction",
+          outcome: "accepted",
+        },
+      }),
+    }),
+    prepareOwnedStatement({
+      db: database,
+      statement: recordAuditedPATUseFromAuthority({
+        authority,
+        input: { auditId, current, operation: "ingestion.submitForExtraction" },
+      }),
+    }),
+  ];
+};
+
+/**
+ * Credential-specific accountability that must commit inside one published statement unit: a PAT's
+ * accepted AuditLogEntry and activity update, chained after the publication's own outbox identity.
+ * A session publication writes its own success audit in the unit, so its list is empty.
+ */
+const statementPublicationAccountability = ({
+  authority,
+  current,
+  database,
+}: Readonly<{
+  authority: TransactionAuthority;
+  current: number;
+  database: D1Database;
+}>): ReadonlyArray<D1PreparedStatement> =>
+  authority.table === "pats"
+    ? statementPATAccountability({ afterOwnerWrite: true, authority, current, database })
+    : [];
+
+/**
+ * Credential-specific accountability a replayed statement call must commit instead of publishing
+ * again: a PAT's accepted AuditLogEntry and activity update, or a session caller's one replay audit
+ * row. Every statement is live-authority guarded, so a credential revoked after dispatch refuses
+ * the replay rather than returning stored state.
+ */
+const statementReplayAccountability = ({
+  authority,
+  current,
+  database,
+}: Readonly<{
+  authority: TransactionAuthority;
+  current: number;
+  database: D1Database;
+}>): ReadonlyArray<D1PreparedStatement> =>
+  authority.table === "pats"
+    ? statementPATAccountability({ afterOwnerWrite: false, authority, current, database })
+    : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
+
+/**
+ * One existing submission as the exact replay this call must commit instead of publishing again.
+ * The replay's live-authority-guarded accountability is what makes an idempotent retry and a lost
+ * same-material race attributable; neither re-runs a child decision nor changes authoritative state.
+ */
+const replayPublication = (
   config: StatementStagingConfig,
   input: Readonly<{
-    userId: string;
-    idempotencyKey: string;
-    reference: StagedStatementReference;
-    nowEpochMs: number;
+    authority: TransactionAuthority;
+    attempt: PublicationAttempt;
+    current: number;
+    submissionId: string;
   }>
-): Effect.Effect<PublicationPrecondition, StatementStagingUnavailable> =>
+): PreparedStatementPublication => ({
+  attempt: input.attempt,
+  operation: submitForExtraction,
+  replayed: true,
+  statements: statementReplayAccountability({
+    authority: input.authority,
+    current: input.current,
+    database: config.database,
+  }),
+  submissionId: input.submissionId,
+});
+
+/**
+ * The authoritative publication one admitted staged row commits: the submission, its promotion,
+ * the Free-backfill reservation, the metadata-only success Audit, and the bounded extraction
+ * outbox identity, ending in the caller's own credential accountability.
+ */
+const readyPublication = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    attempt: PublicationAttempt;
+    authority: TransactionAuthority;
+    submissionId: string;
+  }>
+): PreparedStatementPublication => ({
+  attempt: input.attempt,
+  operation: submitForExtraction,
+  replayed: false,
+  statements: [
+    submissionInsertStatement(config, {
+      ...input.attempt,
+      authority: input.authority,
+      retentionExpiresAtEpochMs:
+        input.attempt.nowEpochMs + statementSubmissionRetentionMilliseconds,
+      submissionId: input.submissionId,
+    }),
+    ...publicationAccountabilityStatements(config, {
+      ...input.attempt,
+      auditId: newId(),
+      submissionId: input.submissionId,
+    }),
+    ...statementPublicationAccountability({
+      authority: input.authority,
+      current: input.attempt.nowEpochMs,
+      database: config.database,
+    }),
+  ],
+  submissionId: input.submissionId,
+});
+
+/** One key that already names a submission: its exact replay, or the conflict of other material. */
+const existingPublication = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    authority: TransactionAuthority;
+    attempt: PublicationAttempt;
+    existing: SubmissionRow;
+    stagingId: string;
+  }>
+): StatementPublicationPreparation =>
+  input.existing.staging_id === input.stagingId
+    ? {
+        _tag: "Prepared",
+        publication: replayPublication(config, {
+          attempt: input.attempt,
+          authority: input.authority,
+          current: input.attempt.nowEpochMs,
+          submissionId: input.existing.id,
+        }),
+      }
+    : { _tag: "Refused", reason: "conflict" };
+
+type PublicationPremise =
+  | Readonly<{ _tag: "Ready" }>
+  | Readonly<{ _tag: "Refused"; reason: StatementStagingFailureReason }>
+  | Readonly<{ _tag: "Unavailable" }>;
+
+/** The non-committing premise of one admitted staged row: ready, a closed refusal, or unreadable. */
+const publicationPremise = (
+  config: StatementStagingConfig,
+  input: Readonly<{ attempt: PublicationAttempt; row: StagingRow }>
+): Effect.Effect<PublicationPremise, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    const refusal = classifyStagedRow(input.row, input.attempt.nowEpochMs);
+    if (Option.isSome(refusal)) return { _tag: "Refused", reason: refusal.value } as const;
+    const admission = yield* readAdmissionState(config, {
+      nowEpochMs: input.attempt.nowEpochMs,
+      userId: input.attempt.userId,
+    });
+    if (Option.isNone(admission)) return { _tag: "Unavailable" } as const;
+    const pressure = admissionRefusal(admission.value);
+    if (Option.isSome(pressure)) return { _tag: "Refused", reason: pressure.value } as const;
+    const objectRefusal = yield* headStagedObject(config, input.row);
+    return Option.isSome(objectRefusal)
+      ? ({ _tag: "Refused", reason: objectRefusal.value.reason } as const)
+      : ({ _tag: "Ready" } as const);
+  });
+
+/**
+ * Resolve one owner-held staged reference into a non-committing publication preparation a caller
+ * composes into its own D1 unit, or a closed refusal. It verifies ownership, the reference's actual
+ * size and digest, availability, expiry, format, idempotency, submission pressure, the Free
+ * backfill, and the stored object's own size and checksum, so nothing that reaches a unit can cite
+ * missing or mismatched material.
+ */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const prepareStagedStatementPublication = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    readonly authority: TransactionAuthority;
+    readonly current: number;
+    readonly idempotencyKey: string;
+    readonly reference: StagedStatementReference;
+    readonly userId: string;
+  }>
+): Effect.Effect<StatementPublicationPreparation, StatementStagingUnavailable> =>
   Effect.gen(function* () {
     const row = yield* ownedStagingRow(config, input.userId, input.reference.stagingId);
-    if (Option.isNone(row)) return { _tag: "Refused", failure: failed("not-found") };
+    if (Option.isNone(row)) return { _tag: "Refused", reason: "not-found" } as const;
     if (
       row.value.byte_length !== input.reference.byteLength ||
       row.value.sha256 !== input.reference.sha256
     ) {
-      return { _tag: "Refused", failure: failed("malformed-file") };
+      return { _tag: "Refused", reason: "malformed-file" } as const;
     }
+    const attempt: PublicationAttempt = {
+      idempotencyKey: input.idempotencyKey,
+      nowEpochMs: input.current,
+      stagingId: row.value.id,
+      userId: input.userId,
+    };
     const existing = yield* submissionByKey(config, input.userId, input.idempotencyKey);
     if (Option.isSome(existing)) {
-      return replayOrConflict(existing.value, row.value.id);
+      return existingPublication(config, {
+        attempt,
+        authority: input.authority,
+        existing: existing.value,
+        stagingId: row.value.id,
+      });
     }
-    const refusal = classifyStagedRow(row.value, input.nowEpochMs);
-    if (Option.isSome(refusal)) return { _tag: "Refused", failure: failed(refusal.value) };
+    const premise = yield* publicationPremise(config, { attempt, row: row.value });
+    if (premise._tag !== "Ready") return premise;
+    const submissionId = newId();
+    return {
+      _tag: "Prepared",
+      publication: readyPublication(config, {
+        attempt,
+        authority: input.authority,
+        submissionId,
+      }),
+    } as const;
+  });
+
+/**
+ * Records one refused canonical statement call's metadata-only AuditLogEntry under the exact
+ * authority the caller presented: a PAT's rejected `pat_audit` row, or a session caller's bounded
+ * `statement_submission_audit` refusal. A refusal whose audit cannot commit for a dead credential, a
+ * spent shared daily budget, or an unavailable authority is classified instead of answered.
+ */
+export const recordStatementRefusal = (
+  input: Readonly<{
+    readonly authority: TransactionAuthority;
+    readonly current: number;
+    readonly database: D1Database;
+    readonly refusal: AtomicMutationRefusal;
+  }>
+): Promise<RefusalRecord> =>
+  input.database
+    .batch([
+      input.authority.table === "pats"
+        ? prepareOwnedStatement({
+            db: input.database,
+            statement: recordRejectedPATWork({
+              authority: input.authority,
+              input: {
+                current: input.current,
+                id: newId(),
+                operation: "ingestion.submitForExtraction",
+              },
+            }),
+          })
+        : statementSubmissionRefusalAudit({
+            authority: input.authority,
+            current: input.current,
+            database: input.database,
+            id: newId(),
+            outcome:
+              input.refusal.auditOutcome === "not_found"
+                ? "validation_failed"
+                : input.refusal.auditOutcome,
+          }),
+    ])
+    .then((results): RefusalRecord =>
+      results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
+    )
+    .catch((cause: unknown) =>
+      sharedAuditLimitRefusal(cause) ? ("rate_limited" as const) : ("unavailable" as const)
+    );
+
+/** How many rows one prepared publication contributes to the shared daily canonical-work budget. */
+const publicationAuditRows = (
+  publication: PreparedStatementPublication,
+  authority: TransactionAuthority
+): number => {
+  if (publication.replayed) return 1;
+  return authority.table === "pats" ? 2 : 1;
+};
+
+/**
+ * One prepared statement publication as a child of the shared atomic unit. The child's assertion is
+ * the statement submission completion, so a silently skipped guard rolls back the whole unit; its
+ * refusal recorder writes the same metadata-only audit an individual refusal does, under the exact
+ * live authority the caller presented. A replay commits only its caller-owned attribution, so it
+ * contributes one budgeted audit row; a publication contributes the success audit and, for a PAT
+ * caller, the matching PAT audit its caller-owned statements append.
+ */
+export const preparedStatementChild = ({
+  authority,
+  config,
+  current,
+  publication,
+}: Readonly<{
+  authority: TransactionAuthority;
+  config: StatementStagingConfig;
+  current: number;
+  publication: PreparedStatementPublication;
+}>): AtomicUnitChild<StatementSubmission> => ({
+  assertion: config.database.prepare(statementSubmissionCompletion),
+  auditRows: publicationAuditRows(publication, authority),
+  operation: publication.operation,
+  readCommitted: readOwnedStatementSubmission(config, {
+    submissionId: publication.submissionId,
+    userId: publication.attempt.userId,
+  }).pipe(
+    Effect.flatMap((stored) =>
+      Option.isNone(stored)
+        ? Effect.succeedNone
+        : Effect.succeed(submissionProjection(stored.value))
+    ),
+    Effect.orElseSucceed(() => Option.none())
+  ),
+  recordRefusal: (refusal) =>
+    Effect.tryPromise(() =>
+      recordStatementRefusal({ authority, current, database: config.database, refusal })
+    ).pipe(Effect.orElseSucceed(() => "unavailable" as const)),
+  statements: publication.statements,
+});
+
+type LostPublication =
+  | Readonly<{ _tag: "Replay"; submissionId: string }>
+  | Readonly<{ _tag: "Refused"; reason: StatementStagingFailureReason }>
+  | Readonly<{ _tag: "Unavailable" }>
+  | Readonly<{ _tag: "Unattributable" }>;
+
+/**
+ * Classifies a publication whose conditional D1 unit lost: a concurrent call that published the
+ * same material under the same key is an exact replay, a premise that moved outside the unit is a
+ * closed refusal, and a defect is unavailable rather than an invented refusal.
+ */
+const classifyLostPublication = (
+  config: StatementStagingConfig,
+  input: Readonly<{ attempt: PublicationAttempt }>
+): Effect.Effect<LostPublication, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    const existing = yield* submissionByKey(
+      config,
+      input.attempt.userId,
+      input.attempt.idempotencyKey
+    );
+    if (Option.isSome(existing)) {
+      return existing.value.staging_id === input.attempt.stagingId
+        ? ({ _tag: "Replay", submissionId: existing.value.id } as const)
+        : ({ _tag: "Refused", reason: "conflict" } as const);
+    }
+    const row = yield* ownedStagingRow(config, input.attempt.userId, input.attempt.stagingId);
+    if (Option.isNone(row)) return { _tag: "Refused", reason: "not-found" } as const;
+    const refusal = classifyStagedRow(row.value, input.attempt.nowEpochMs);
+    if (Option.isSome(refusal)) return { _tag: "Refused", reason: refusal.value } as const;
     const admission = yield* readAdmissionState(config, {
-      nowEpochMs: input.nowEpochMs,
-      userId: input.userId,
+      nowEpochMs: input.attempt.nowEpochMs,
+      userId: input.attempt.userId,
     });
-    if (Option.isNone(admission)) return { _tag: "Unavailable" };
+    if (Option.isNone(admission)) return { _tag: "Unavailable" } as const;
     const pressure = admissionRefusal(admission.value);
     return Option.isSome(pressure)
-      ? { _tag: "Refused", failure: failed(pressure.value) }
-      : { _tag: "Publish", row: row.value };
+      ? ({ _tag: "Refused", reason: pressure.value } as const)
+      : ({ _tag: "Unattributable" } as const);
   });
 
-/**
- * Classifies a publication that lost its conditional D1 unit. A concurrent replay of the same
- * material is success; anything else is a closed refusal, never a partial write.
- */
-const classifyUnpublished = (
+/** The attribution one aborted unit's statement child is classified with, or none when it cannot be proven. */
+export const statementAbortAttributors = ({
+  config,
+  publications,
+}: Readonly<{
+  config: StatementStagingConfig;
+  publications: ReadonlyArray<
+    Readonly<{ childIndex: number; publication: PreparedStatementPublication }>
+  >;
+}>): ReadonlyArray<AtomicAbortAttributor> => [
+  () =>
+    Effect.gen(function* () {
+      for (const { childIndex, publication } of publications) {
+        if (publication.replayed) continue;
+        const lost = yield* classifyLostPublication(config, { attempt: publication.attempt });
+        if (lost._tag === "Refused") {
+          return Option.some({ childIndex, refusal: statementRefusal(lost.reason) });
+        }
+      }
+      return Option.none();
+    }).pipe(Effect.orElseSucceed(() => Option.none())),
+];
+
+const settleStatementUnit = (
   config: StatementStagingConfig,
   input: Readonly<{
-    userId: string;
-    idempotencyKey: string;
-    stagingId: string;
-    nowEpochMs: number;
+    child: AtomicUnitChild<StatementSubmission>;
+    execution: AtomicUnitExecution<StatementSubmission>;
+    publication: PreparedStatementPublication;
   }>
 ): Effect.Effect<
-  PublishedStatementSubmission,
-  StatementStagingFailed | StatementStagingUnavailable
+  StatementPublicationOutcome,
+  StatementStagingRefused | StatementStagingUnavailable
 > =>
   Effect.gen(function* () {
-    const existing = yield* submissionByKey(config, input.userId, input.idempotencyKey);
-    if (Option.isSome(existing)) {
-      return existing.value.staging_id === input.stagingId
-        ? { replayed: true, submissionId: existing.value.id }
-        : yield* failed("conflict");
+    if (input.execution._tag === "Committed") {
+      return {
+        _tag: "Published",
+        replayed: input.publication.replayed,
+        submissionId: input.publication.submissionId,
+      } as const;
     }
-    const row = yield* ownedStagingRow(config, input.userId, input.stagingId);
-    if (Option.isNone(row)) return yield* failed("not-found");
-    const refusal = classifyStagedRow(row.value, input.nowEpochMs);
-    if (Option.isSome(refusal)) return yield* failed(refusal.value);
-    const admission = yield* readAdmissionState(config, {
-      nowEpochMs: input.nowEpochMs,
-      userId: input.userId,
-    });
-    if (Option.isNone(admission)) return yield* unavailable();
-    const pressure = admissionRefusal(admission.value);
-    if (Option.isSome(pressure)) return yield* failed(pressure.value);
-    return yield* failed("conflict");
-  });
-
-type PublicationUnitOutcome =
-  | Readonly<{ _tag: "Settled"; results: ReadonlyArray<D1Result<unknown>> }>
-  | Readonly<{ _tag: "Refused" }>
-  | Readonly<{ _tag: "BudgetSpent" }>
-  | Readonly<{ _tag: "Unavailable" }>;
-
-/**
- * Runs the complete guard-chained publication unit in one D1 batch. A zero-row guard trips the
- * final assertion, which rolls the unit back and is recognized here as a refusal; any other failure
- * stays an unavailable authority rather than being reported as a domain decision.
- */
-const publicationUnitOutcome = (
-  config: StatementStagingConfig,
-  input: Readonly<{
-    attempt: PublicationAttempt;
-    authority: TransactionAuthority;
-    submissionId: string;
-    statements: ReadonlyArray<D1PreparedStatement>;
-  }>
-): Effect.Effect<PublicationUnitOutcome> =>
-  Effect.result(
-    Effect.uninterruptible(
-      Effect.tryPromise({
-        try: () =>
-          config.database.batch([
-            submissionInsertStatement(config, {
-              ...input.attempt,
-              authority: input.authority,
-              retentionExpiresAtEpochMs:
-                input.attempt.nowEpochMs + statementSubmissionRetentionMilliseconds,
-              submissionId: input.submissionId,
-            }),
-            ...publicationAccountabilityStatements(config, {
-              ...input.attempt,
-              auditId: newId(),
-              submissionId: input.submissionId,
-            }),
-            ...input.statements,
-            config.database.prepare(statementSubmissionCompletion),
-          ]),
-        catch: (cause) => new StatementPublicationBatchFailed({ cause }),
-      })
-    )
-  ).pipe(
-    Effect.map((result): PublicationUnitOutcome => {
-      if (Result.isSuccess(result)) return { _tag: "Settled", results: result.success };
-      if (String(result.failure.cause).includes(statementAuditLimitMarker)) {
-        return { _tag: "BudgetSpent" };
-      }
-      return String(result.failure.cause).includes(statementSubmissionRefusalMarker)
-        ? { _tag: "Refused" }
-        : { _tag: "Unavailable" };
-    })
-  );
-
-type PublicationResolution =
-  | Readonly<{ _tag: "Ready"; reference: StagedStatementReference; nowEpochMs: number }>
-  | Readonly<{ _tag: "Replay"; publication: PublishedStatementSubmission }>
-  | Readonly<{ _tag: "Refused"; failure: StatementStagingFailed }>
-  | Readonly<{ _tag: "Unavailable" }>;
-
-/**
- * Resolves one reference into a ready publication or a closed refusal, verifying the stored object's
- * actual size and digest before the atomic unit is attempted.
- */
-const resolvePublication = (
-  config: StatementStagingConfig,
-  input: Readonly<{
-    userId: string;
-    idempotencyKey: string;
-    reference: StagedStatementReference;
-  }>
-): Effect.Effect<PublicationResolution, StatementStagingUnavailable> =>
-  Effect.gen(function* () {
-    const nowEpochMs = config.nowEpochMs();
-    const precondition = yield* readPublicationPrecondition(config, {
-      idempotencyKey: input.idempotencyKey,
-      nowEpochMs,
-      reference: input.reference,
-      userId: input.userId,
-    });
-    if (precondition._tag === "Replay") {
-      return { _tag: "Replay", publication: precondition.publication };
-    }
-    if (precondition._tag === "Unavailable") return { _tag: "Unavailable" };
-    if (precondition._tag === "Refused") {
-      return { _tag: "Refused", failure: precondition.failure };
-    }
-    const refusal = yield* headStagedObject(config, precondition.row);
-    if (Option.isSome(refusal)) return { _tag: "Refused", failure: refusal.value };
-    return { _tag: "Ready", nowEpochMs, reference: input.reference };
-  });
-
-/**
- * Settles one replayed call: its caller-owned attribution writes must commit, each changing exactly
- * one row under a live-authority guard. A write refused by a dead credential or a spent shared
- * daily budget refuses the call, so the stored submission is never returned unattributed.
- */
-const replayOutcome = (
-  config: StatementStagingConfig,
-  input: Readonly<{
-    publication: PublishedStatementSubmission;
-    statements: ReplayStatements;
-  }>
-): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.result(
-      Effect.uninterruptible(
-        Effect.tryPromise({
-          try: () => config.database.batch([...input.statements]),
-          catch: (cause) => new StatementPublicationBatchFailed({ cause }),
-        })
-      )
-    );
-    if (Result.isFailure(result)) {
-      if (String(result.failure.cause).includes(statementAuditLimitMarker)) {
-        return yield* new StatementStagingRefused({ reason: "budget" });
-      }
-      return yield* unavailable();
-    }
-    if (!result.success.every((statement) => statement.meta.changes === 1)) {
+    if (input.execution._tag === "CredentialRefused") {
       return yield* new StatementStagingRefused({ reason: "authority" });
     }
-    return input.publication;
+    if (input.execution._tag === "Unavailable") return yield* unavailable();
+    const settled = yield* settleAtomicRefusal({
+      callIndex: input.execution.callIndex,
+      child: Option.some(input.child),
+      refusal: input.execution.refusal,
+    });
+    if (settled._tag === "Attributed") {
+      return { _tag: "Refused", refusal: settled.refusal, recorded: true } as const;
+    }
+    if (settled._tag === "CredentialRefused") {
+      return yield* new StatementStagingRefused({ reason: "authority" });
+    }
+    return yield* unavailable();
+  });
+
+/** Runs one prepared replay publication and presents its committed stored submission. */
+const replayStatementSubmission = (
+  config: StatementStagingConfig,
+  input: Readonly<{
+    authority: TransactionAuthority;
+    attempt: PublicationAttempt;
+    current: number;
+    submissionId: string;
+  }>
+): Effect.Effect<
+  StatementPublicationOutcome,
+  StatementStagingRefused | StatementStagingUnavailable
+> =>
+  Effect.gen(function* () {
+    const publication = replayPublication(config, input);
+    const child = preparedStatementChild({
+      authority: input.authority,
+      config,
+      current: input.current,
+      publication,
+    });
+    const execution = yield* executeAtomicMutationUnit<StatementSubmission>({
+      attributors: [],
+      authority: input.authority,
+      children: [child],
+      current: input.current,
+      db: config.database,
+      userId: input.attempt.userId,
+    });
+    return yield* settleStatementUnit(config, { child, execution, publication });
   });
 
 /**
- * Turns one settled unit into the published submission, or the refusal its guards prove. A lost
- * race that classifies as a same-material replay still commits the caller-owned attribution the
- * winning call's unit could not: the call is never returned unaudited or ungated.
+ * Settles one individual publication unit. A committed unit is the publication, a named refusal
+ * records its own metadata-only audit, and a dead credential is the authority refusal. An abort the
+ * unit could not name is resolved against durable state, because the conditional guard a concurrent
+ * publication of the same material trips is exactly this call's own committed replay, and every
+ * other moved premise is the same closed refusal the individual operation answers.
  */
-const publicationOutcome = (
+const settleStatementExecution = (
   config: StatementStagingConfig,
   input: Readonly<{
+    authority: TransactionAuthority;
     attempt: PublicationAttempt;
-    outcome: PublicationUnitOutcome;
-    replayStatements: ReplayStatements;
-    submissionId: string;
+    child: AtomicUnitChild<StatementSubmission>;
+    current: number;
+    execution: AtomicUnitExecution<StatementSubmission>;
+    publication: PreparedStatementPublication;
   }>
-): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> => {
-  if (input.outcome._tag === "Unavailable") return unavailable();
-  if (input.outcome._tag === "BudgetSpent") {
-    return Effect.fail(new StatementStagingRefused({ reason: "budget" }));
-  }
-  if (input.outcome._tag === "Settled" && input.outcome.results[0]?.meta.changes === 1) {
-    return Effect.succeed({ replayed: false, submissionId: input.submissionId });
-  }
-  return Effect.gen(function* () {
-    const publication = yield* classifyUnpublished(config, input.attempt);
-    if (!publication.replayed) return publication;
-    return yield* replayOutcome(config, {
-      publication,
-      statements: input.replayStatements,
-    });
+): Effect.Effect<
+  StatementPublicationOutcome,
+  StatementStagingRefused | StatementStagingUnavailable
+> =>
+  Effect.gen(function* () {
+    if (input.execution._tag !== "Unavailable") {
+      return yield* settleStatementUnit(config, {
+        child: input.child,
+        execution: input.execution,
+        publication: input.publication,
+      });
+    }
+    const lost = yield* classifyLostPublication(config, { attempt: input.attempt });
+    if (lost._tag === "Replay") {
+      return yield* replayStatementSubmission(config, {
+        attempt: input.attempt,
+        authority: input.authority,
+        current: input.current,
+        submissionId: lost.submissionId,
+      });
+    }
+    if (lost._tag === "Refused") {
+      return yield* settleStatementUnit(config, {
+        child: input.child,
+        execution: {
+          _tag: "Attributed",
+          callIndex: 0,
+          refusal: statementRefusal(lost.reason),
+        },
+        publication: input.publication,
+      });
+    }
+    return yield* unavailable();
   });
-};
 
 const publishStagedStatementSubmission = (
   config: StatementStagingConfig,
   input: Readonly<{
-    userId: string;
-    idempotencyKey: string;
-    reference: StagedStatementReference;
-    authority: TransactionAuthority;
-    statements: ReadonlyArray<D1PreparedStatement>;
-    replayStatements: ReplayStatements;
+    readonly userId: string;
+    readonly idempotencyKey: string;
+    readonly reference: StagedStatementReference;
+    readonly authority: TransactionAuthority;
   }>
 ): ReturnType<StatementStagingService["publishStagedStatementSubmission"]> =>
   Effect.gen(function* () {
     const reference = Schema.decodeOption(StagedStatementReferenceSchema)(input.reference);
-    if (Option.isNone(reference)) return yield* failed("malformed-file");
-    const resolution = yield* resolvePublication(config, {
+    if (Option.isNone(reference)) {
+      return {
+        _tag: "Refused",
+        refusal: statementRefusal("malformed-file"),
+        recorded: false,
+      } as const;
+    }
+    const current = config.nowEpochMs();
+    const preparation = yield* prepareStagedStatementPublication(config, {
+      authority: input.authority,
+      current,
       idempotencyKey: input.idempotencyKey,
       reference: reference.value,
       userId: input.userId,
     });
-    if (resolution._tag === "Replay") {
-      return yield* replayOutcome(config, {
-        publication: resolution.publication,
-        statements: input.replayStatements,
-      });
+    if (preparation._tag === "Unavailable") return yield* unavailable();
+    if (preparation._tag === "Refused") {
+      return {
+        _tag: "Refused",
+        refusal: statementRefusal(preparation.reason),
+        recorded: false,
+      } as const;
     }
-    if (resolution._tag === "Unavailable") return yield* unavailable();
-    if (resolution._tag === "Refused") return yield* resolution.failure;
-    const attempt: PublicationAttempt = {
-      idempotencyKey: input.idempotencyKey,
-      nowEpochMs: resolution.nowEpochMs,
-      stagingId: reference.value.stagingId,
-      userId: input.userId,
-    };
-    const submissionId = newId();
-    const outcome = yield* publicationUnitOutcome(config, {
-      attempt,
+    const child = preparedStatementChild({
       authority: input.authority,
-      statements: input.statements,
-      submissionId,
+      config,
+      current,
+      publication: preparation.publication,
     });
-    return yield* publicationOutcome(config, {
-      attempt,
-      outcome,
-      replayStatements: input.replayStatements,
-      submissionId,
+    const execution = yield* executeAtomicMutationUnit<StatementSubmission>({
+      attributors: statementAbortAttributors({
+        config,
+        publications: [{ childIndex: 0, publication: preparation.publication }],
+      }),
+      authority: input.authority,
+      children: [child],
+      current,
+      db: config.database,
+      userId: input.userId,
+    });
+    return yield* settleStatementExecution(config, {
+      attempt: preparation.publication.attempt,
+      authority: input.authority,
+      child,
+      current,
+      execution,
+      publication: preparation.publication,
     });
   });
-
 const readOwnedStatementSubmission = (
   config: StatementStagingConfig,
   input: Readonly<{ userId: string; submissionId: string }>

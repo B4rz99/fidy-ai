@@ -12,6 +12,7 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Option, Schema } from "effect";
+import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import {
   livePATAuthority,
@@ -29,7 +30,6 @@ import {
   transactionNoStore as noStore,
   transactionNow as now,
   refusedPATWork,
-  transactionAuditExhausted,
   transactionFailure,
   transactionUnavailable as unavailable,
   transactionId as uuid,
@@ -406,7 +406,7 @@ const invalidQueryAudit = (
 ): Promise<Response> => {
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
-  return transactionAuditExhausted({ db, userId: subject.userId, current })
+  return dailyAuditExhausted({ db, userId: subject.userId, current })
     .then((exhausted) => {
       if (exhausted) return rateLimited();
       const authority = liveWebSessionAuthority({ subject, current });
@@ -586,7 +586,7 @@ export const browseTransactions = ({
   if (Option.isNone(query) && !isPATCaller(subject)) {
     return invalidQueryAudit(db, { ...selection, subject }, current);
   }
-  return transactionAuditExhausted({ db, userId: subject.userId, current })
+  return dailyAuditExhausted({ db, userId: subject.userId, current })
     .then((exhausted) =>
       exhausted ? rateLimited() : readAuthorizedHistory(db, { selection, query, current })
     )

@@ -1,5 +1,6 @@
 import {
   StatementContentDigest,
+  StatementIdempotencyKey,
   StatementSourceFormat,
   StatementStagingId,
   StatementSubmissionId,
@@ -8,6 +9,9 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
+import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { transactionSession } from "../transactions/transactions";
+import { executeStatementSubmission } from "./statement-ingestion";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
@@ -206,8 +210,12 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   STATEMENT_STAGING_BUCKET: runtime.bucket,
   USER_TRANSACTION_COORDINATOR: {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+    getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+      fetch: (command: Request): Promise<Response> =>
+        new UserTransactionCoordinator(
+          { id: { name } },
+          { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket }
+        ).fetch(new Request(command)),
     }),
   },
   WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
@@ -321,6 +329,140 @@ const getSubmissionWithBearer = (runtime: Runtime, id: string, token: string): P
     })
   );
 
+const batchCallId = (suffix: number): string =>
+  `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
+const batchCategory = "10000000-0000-4000-8000-000000000016";
+
+/** One canonical manual capture child, exactly as an atomic batch call carries it. */
+const captureCall = (suffix: number): object => ({
+  callId: batchCallId(suffix),
+  operation: "transactions.createTransaction",
+  input: {
+    payload: {
+      categoryId: batchCategory,
+      direction: "outflow",
+      money: { amount: "45000.00", currency: "COP" },
+      occurredAt: "2026-08-01T12:00:00.000Z",
+    },
+  },
+});
+
+/** One canonical correction child addressing a seeded Transaction at an observed revision. */
+const correctionCall = (suffix: number, id: string, expectedRevision: number): object => ({
+  callId: batchCallId(suffix),
+  operation: "transactions.updateTransaction",
+  input: { params: { id }, payload: { expectedRevision, changes: { notes: "late" } } },
+});
+
+/** One canonical statement child citing an already-staged reference, never raw bytes. */
+const statementCall = (
+  suffix: number,
+  input: Readonly<{ idempotencyKey: string; reference: StagedData }>
+): object => ({
+  callId: batchCallId(suffix),
+  operation: "ingestion.submitForExtraction",
+  input: {
+    payload: {
+      idempotencyKey: input.idempotencyKey,
+      reference: {
+        byteLength: input.reference.byteLength,
+        sha256: input.reference.sha256,
+        stagingId: input.reference.stagingId,
+      },
+    },
+  },
+});
+
+const batch = (runtime: Runtime, index: number, calls: ReadonlyArray<object>): Promise<Response> =>
+  send(
+    runtime,
+    new Request("https://api.fidyapp.com/operations/atomic-batch", {
+      body: JSON.stringify({ calls }),
+      headers: { "content-type": "application/json", ...sessionHeaders(index) },
+      method: "POST",
+    })
+  );
+
+const batchWithBearer = (
+  runtime: Runtime,
+  token: string,
+  calls: ReadonlyArray<object>
+): Promise<Response> =>
+  send(
+    runtime,
+    new Request("https://api.fidyapp.com/operations/atomic-batch", {
+      body: JSON.stringify({ calls }),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        origin: browserOrigin,
+      },
+      method: "POST",
+    })
+  );
+
+/** A D1 binding whose unit batch always fails, so a defect can never leave partial state. */
+const defectiveDb = (db: D1Database): D1Database =>
+  new Proxy(db, {
+    get: (target, property): unknown =>
+      property === "batch"
+        ? (): Promise<never> => Promise.reject(new Error("D1 unit defect"))
+        : Reflect.get(target, property, target),
+  });
+
+/** Runs one competing write before the first unit batch, moving a premise after preparation. */
+const beforeBatchDb = (db: D1Database, before: () => Promise<unknown>): D1Database => {
+  let fired = false;
+  return new Proxy(db, {
+    get: (target, property): unknown =>
+      property === "batch"
+        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
+            if (fired) return target.batch(...args);
+            fired = true;
+            return before().then(() => target.batch(...args));
+          }
+        : Reflect.get(target, property, target),
+  });
+};
+
+/** Seeds one retained Transaction directly, so a correction has a premise the unit re-checks. */
+const seedTransaction = (
+  runtime: Runtime,
+  input: Readonly<{ id: string; userId: string }>
+): Promise<unknown> =>
+  runtime.db
+    .prepare(
+      `INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes,
+         occurred_at, created_at)
+       VALUES (?, ?, '10.00', 'COP', 'outflow', ?, 'seed', '2026-08-01T12:00:00.000Z',
+         '2026-08-01T12:00:00.000Z')`
+    )
+    .bind(input.id, input.userId, batchCategory)
+    .run();
+
+/** Advances one seeded Transaction to revision 1 through the same evidence a real correction keeps. */
+const concurrentCorrection = (
+  runtime: Runtime,
+  input: Readonly<{ evidenceId: string; id: string; userId: string }>
+): Promise<unknown> =>
+  runtime.db
+    .prepare(
+      `INSERT INTO transaction_corrections (id, user_id, transaction_id, previous_revision,
+         changed_fields, before_facts, after_facts, corrected_at)
+       VALUES (?, ?, ?, 0, '["notes"]', '{"notes":"seed"}', '{"notes":"concurrent"}',
+         '2026-08-01T12:00:00.000Z')`
+    )
+    .bind(input.evidenceId, input.userId, input.id)
+    .run()
+    .then(() =>
+      runtime.db
+        .prepare(
+          "UPDATE transactions SET notes = 'concurrent', revision = 1 WHERE user_id = ? AND id = ? AND revision = 0"
+        )
+        .bind(input.userId, input.id)
+        .run()
+    );
+
 const StagedResponse = Schema.Struct({
   data: Schema.Struct({
     byteLength: Schema.Int,
@@ -343,6 +485,29 @@ const SubmissionResponse = Schema.Struct({
 });
 const FailureResponse = Schema.Struct({
   error: Schema.Struct({ code: Schema.String, message: Schema.String }),
+  next: Schema.Array(Schema.Unknown),
+});
+/** One committed atomic batch envelope; each child output is decoded against its own schema. */
+const BatchEnvelope = Schema.Struct({
+  data: Schema.Struct({
+    results: Schema.Array(
+      Schema.Struct({
+        callId: Schema.String,
+        operation: Schema.String,
+        output: Schema.Unknown,
+      })
+    ),
+  }),
+  next: Schema.Array(Schema.Unknown),
+});
+/** One rejected atomic batch, before its child-specific failure details are asserted. */
+const BatchRejection = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.String,
+    failedCallIndex: Schema.Int,
+    message: Schema.String,
+    operation: Schema.String,
+  }),
   next: Schema.Array(Schema.Unknown),
 });
 
@@ -374,6 +539,22 @@ const submissionOf = (response: Response): Promise<SubmissionData> =>
     .then((body) => Schema.decodeUnknownSync(SubmissionResponse)(body))
     .then(({ data }) => data);
 
+/** One committed batch body decoded through its exact envelope; child outputs stay unknown. */
+const batchEnvelopeOf = (response: Response): Promise<typeof BatchEnvelope.Type> =>
+  response.json().then((body) => Schema.decodeUnknownSync(BatchEnvelope)(body));
+
+/** One already-read batch body decoded through its exact envelope, preserving it for messages. */
+const batchEnvelopeFrom = (body: string): typeof BatchEnvelope.Type =>
+  Schema.decodeSync(Schema.fromJsonString(BatchEnvelope))(body);
+
+/** One committed statement child output decoded into the canonical submission projection. */
+const batchSubmissionOf = (output: unknown): SubmissionData =>
+  Schema.decodeUnknownSync(SubmissionResponse)(output).data;
+
+/** One rejected batch body decoded into its child-specific failure details. */
+const batchRejectionOf = (response: Response): Promise<typeof BatchRejection.Type> =>
+  response.json().then((body) => Schema.decodeUnknownSync(BatchRejection)(body));
+
 type StagedBody = Readonly<{ body: string; staged: StagedData }>;
 
 /** Reads one staging response body as text, keeping the raw spelling for content-leak scans. */
@@ -400,6 +581,24 @@ const scalar = <A>(db: D1Database, sql: string, ...bindings: ReadonlyArray<strin
       if (row === null) throw new Error("Expected one row");
       return row;
     });
+
+/** Runs one real publication just before a wrapped D1 handle's first batch, forcing a lost race. */
+const publishBeforeBatch = (
+  database: D1Database,
+  beforeBatch: () => Promise<unknown>
+): D1Database => {
+  let fired = false;
+  return new Proxy(database, {
+    get: (target, property): unknown =>
+      property === "batch"
+        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
+            if (fired) return target.batch(...args);
+            fired = true;
+            return beforeBatch().then(() => target.batch(...args));
+          }
+        : Reflect.get(target, property, target),
+  });
+};
 
 /** One D1 row decoded through its exact schema; absence is an exception, not a value. */
 const firstRow = <A, E>(
@@ -1290,6 +1489,83 @@ it(
   30_000
 );
 
+/** The idempotency key whose losing unit race must record exactly one refusal audit. */
+const lostRaceIdempotencyKey = Schema.decodeSync(StatementIdempotencyKey)(
+  "20000000-0000-4000-8000-000000000921"
+);
+
+it(
+  "records one refusal audit when a publication loses its own unit race",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const current = yield* Clock.currentTimeMillis;
+        const idempotencyKey = lostRaceIdempotencyKey;
+        const { staged: winner } = yield* fromTestPromise(() => stageOne(runtime));
+        const { staged: loser } = yield* fromTestPromise(() => stageOne(runtime));
+        const subject = Option.getOrThrow(
+          yield* fromTestPromise(() =>
+            transactionSession({
+              db: runtime.db,
+              request: new Request("https://api.fidyapp.com/ingestion/statements", {
+                headers: sessionHeaders(0),
+              }),
+            })
+          )
+        );
+
+        // The winner commits after the losing call has read "no submission for this key" and before
+        // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
+        // call remains one refusal: the unit's recorded refusal is answered without a second write.
+        const database = publishBeforeBatch(runtime.db, () =>
+          executeStatementSubmission({
+            current,
+            environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },
+            input: {
+              idempotencyKey,
+              reference: {
+                byteLength: winner.byteLength,
+                sha256: winner.sha256,
+                stagingId: winner.stagingId,
+              },
+            },
+            subject,
+          }).then((response) => response.text())
+        );
+        const refused = yield* fromTestPromise(() =>
+          executeStatementSubmission({
+            current,
+            environment: { DB: database, STATEMENT_STAGING_BUCKET: runtime.bucket },
+            input: {
+              idempotencyKey,
+              reference: {
+                byteLength: loser.byteLength,
+                sha256: loser.sha256,
+                stagingId: loser.stagingId,
+              },
+            },
+            subject,
+          })
+        );
+        expect(refused.status).toBe(400);
+        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("validation_failed");
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ total: number }>(
+              runtime.db,
+              `SELECT count(*) AS total FROM statement_submission_audit
+               WHERE user_id = ? AND outcome = 'validation_failed'`,
+              userA
+            )
+          )
+        ).toEqual({ total: 1 });
+      })
+    ),
+  30_000
+);
+
 it(
   "refuses an unparseable canonical submission input before any staging lookup",
   () =>
@@ -1315,6 +1591,485 @@ it(
         expect(malformed.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(malformed))).toBe("validation_failed");
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+      })
+    ),
+  30_000
+);
+
+it(
+  "publishes a staged statement and another canonical mutation in one atomic batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const idempotencyKey = "20000000-0000-4000-8000-000000000920";
+
+        const committed = yield* fromTestPromise(() =>
+          batch(runtime, 0, [
+            captureCall(1),
+            statementCall(2, { idempotencyKey, reference: staged }),
+          ])
+        );
+        const body = yield* fromTestPromise(() => committed.text());
+        expect(committed.status, body).toBe(200);
+        const envelope = batchEnvelopeFrom(body);
+        expect(envelope.data.results.map(({ callId }) => callId)).toEqual([
+          batchCallId(1),
+          batchCallId(2),
+        ]);
+        expect(envelope.data.results.map(({ operation }) => operation)).toEqual([
+          "transactions.createTransaction",
+          "ingestion.submitForExtraction",
+        ]);
+        expect(batchSubmissionOf(envelope.data.results[1]?.output).status).toBe("queued");
+
+        // One D1 unit committed both children, both metadata-only success audits, and the bounded
+        // extraction identity; the staging row is promoted only because the submission exists.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          1
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          1
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            firstRow(
+              runtime.db,
+              Schema.Struct({ matches: Schema.Int, status: Schema.String }),
+              `SELECT staging.status AS status,
+                      (staging.published_submission_id = submission.id
+                        AND outbox.submission_id = submission.id) AS matches
+               FROM statement_staging_objects AS staging
+               JOIN statement_submissions AS submission ON submission.staging_id = staging.id
+               JOIN statement_ingestion_outbox AS outbox ON outbox.submission_id = submission.id`
+            )
+          )
+        ).toEqual({ matches: 1, status: "published" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "rolls back a mixed batch when the statement child refuses at commit time",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const current = yield* Clock.currentTimeMillis;
+        // The staged material expires after its child was admitted but before the unit commits.
+        const raced = {
+          ...runtime,
+          db: beforeBatchDb(runtime.db, () =>
+            runtime.db
+              .prepare("UPDATE statement_staging_objects SET expires_at_ms = ? WHERE id = ?")
+              .bind(current - 1, staged.stagingId)
+              .run()
+          ),
+        };
+        const refused = yield* fromTestPromise(() =>
+          batch(raced, 0, [
+            captureCall(1),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000921",
+              reference: staged,
+            }),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 1,
+          operation: "ingestion.submitForExtraction",
+        });
+
+        // The earlier capture child and the statement success audit both rolled back; only the
+        // statement child's own refusal audit remains, and the staged row was never promoted.
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(
+          yield* fromTestPromise(() => count(runtime.db, "statement_backfill_entitlements"))
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            firstRow(
+              runtime.db,
+              Schema.Struct({ outcome: Schema.String }),
+              "SELECT outcome FROM statement_submission_audit"
+            )
+          )
+        ).toEqual({ outcome: "validation_failed" });
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          1
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "rolls back a staged statement when a later batch child refuses at commit time",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const seededId = "30000000-0000-4000-8000-000000000790";
+        yield* fromTestPromise(() => seedTransaction(runtime, { id: seededId, userId: userA }));
+        // The correction's observed revision moves after it was admitted but before the unit.
+        const raced = {
+          ...runtime,
+          db: beforeBatchDb(runtime.db, () =>
+            concurrentCorrection(runtime, {
+              evidenceId: "30000000-0000-4000-8000-000000000791",
+              id: seededId,
+              userId: userA,
+            })
+          ),
+        };
+        const refused = yield* fromTestPromise(() =>
+          batch(raced, 0, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000922",
+              reference: staged,
+            }),
+            correctionCall(2, seededId, 0),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 1,
+          operation: "transactions.updateTransaction",
+        });
+
+        // The refused sibling rolls back the whole unit: no submission, no outbox, no statement
+        // audit, and only the correction's own refusal audit remains.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            firstRow(
+              runtime.db,
+              Schema.Struct({ outcome: Schema.String }),
+              "SELECT outcome FROM transaction_audit WHERE operation = 'transactions.updateTransaction'"
+            )
+          )
+        ).toEqual({ outcome: "validation_failed" });
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "maps an atomic batch unit D1 defect to the closed unavailable failure without partial state",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const defective = { ...runtime, db: defectiveDb(runtime.db) };
+
+        const individual = yield* fromTestPromise(() =>
+          submit(defective, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000923",
+            index: 0,
+            reference: staged,
+          })
+        );
+        expect(individual.status).toBe(503);
+        expect(yield* fromTestPromise(() => failureCode(individual))).toBe("unavailable");
+        const batched = yield* fromTestPromise(() =>
+          batch(defective, 0, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000924",
+              reference: staged,
+            }),
+            captureCall(2),
+          ])
+        );
+        expect(batched.status).toBe(503);
+
+        // A defect is never an invented refusal: nothing authoritative, audited, or promoted.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "replays an idempotent statement retry inside a later atomic batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const idempotencyKey = "20000000-0000-4000-8000-000000000925";
+        const calls = [statementCall(1, { idempotencyKey, reference: staged }), captureCall(2)];
+
+        const first = yield* fromTestPromise(() => batch(runtime, 0, calls));
+        expect(first.status).toBe(200);
+        const firstBody = yield* fromTestPromise(() => batchEnvelopeOf(first));
+        const published = batchSubmissionOf(firstBody.data.results[0]?.output);
+        const replayed = yield* fromTestPromise(() => batch(runtime, 0, calls));
+        expect(replayed.status).toBe(200);
+        const replayBody = yield* fromTestPromise(() => batchEnvelopeOf(replayed));
+        // The retry still commits its sibling child, but the statement is the same submission and
+        // a second canonical call is attributable as one replay audit row.
+        expect(batchSubmissionOf(replayBody.data.results[0]?.output)).toEqual(published);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          1
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(2);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          2
+        );
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses an oversized aggregate atomic batch body before any child is admitted",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const padding = "x".repeat(5_000);
+        const calls = Array.from({ length: 12 }, (_, index) => ({
+          callId: batchCallId(index + 1),
+          operation: "transactions.createTransaction",
+          input: {
+            payload: {
+              categoryId: batchCategory,
+              direction: "outflow",
+              money: { amount: "45000.00", currency: "COP" },
+              occurredAt: "2026-08-01T12:00:00.000Z",
+              padding,
+            },
+          },
+        }));
+        const refused = yield* fromTestPromise(() => batch(runtime, 0, calls));
+        expect(refused.status).toBe(400);
+        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("validation_failed");
+        // The aggregate bound is a request-shape refusal: no child is named, admitted, or audited.
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses a cross-User staged reference inside a batch without creating authoritative state",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime, 0));
+        const refused = yield* fromTestPromise(() =>
+          batch(runtime, 1, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000926",
+              reference: staged,
+            }),
+            captureCall(2),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 0,
+          operation: "ingestion.submitForExtraction",
+        });
+
+        // Ownership is a child decision the batch cannot bypass: the stranger's sibling child and
+        // the success audit roll back, and only the stranger's bounded refusal audit remains.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transaction_audit"))).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            firstRow(
+              runtime.db,
+              Schema.Struct({ outcome: Schema.String, user_id: Schema.String }),
+              "SELECT user_id, outcome FROM statement_submission_audit"
+            )
+          )
+        ).toEqual({ outcome: "validation_failed", user_id: userB });
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses a second staged statement child before any batch child is admitted",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const first = yield* fromTestPromise(() => stageOne(runtime));
+        const second = yield* fromTestPromise(() => stageOne(runtime));
+        const refused = yield* fromTestPromise(() =>
+          batch(runtime, 0, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000927",
+              reference: first.staged,
+            }),
+            statementCall(2, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000928",
+              reference: second.staged,
+            }),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "validation_failed",
+          failedCallIndex: 1,
+          operation: "ingestion.submitForExtraction",
+        });
+
+        // Several files cannot multiply staging admission in one coordination turn.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_ingestion_outbox"))).toBe(
+          0
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          0
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
+          )
+        ).toBe(2);
+      })
+    ),
+  30_000
+);
+
+it(
+  "enforces a statement child's PAT scope inside an atomic batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const current = yield* Clock.currentTimeMillis;
+        const readToken = `fin_${"r".repeat(8)}_${"r".repeat(43)}`;
+        const writeToken = `fin_${"w".repeat(8)}_${"w".repeat(43)}`;
+        const issue = (token: string, scopes: string, seed: number): Promise<unknown> =>
+          digest(token).then((tokenDigest) =>
+            runtime.db
+              .prepare(
+                `INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json,
+                   lifetime_days, created_at_ms, issued_at_ms, expires_at_ms, request_id)
+                 VALUES (?, ?, ?, ?, 'Statement batch agent', ?, 7, ?, ?, ?, ?)`
+              )
+              .bind(
+                `40000000-0000-4000-8000-${String(seed).padStart(12, "0")}`,
+                userA,
+                token.slice("fin_".length, "fin_".length + 8),
+                tokenDigest,
+                scopes,
+                current,
+                current,
+                current + 7 * dayMilliseconds,
+                `40000000-0000-4000-9000-${String(seed).padStart(12, "0")}`
+              )
+              .run()
+          );
+        yield* fromTestPromise(() => issue(readToken, '["read"]', 1));
+        yield* fromTestPromise(() => issue(writeToken, '["read","write"]', 2));
+
+        const outOfScope = yield* fromTestPromise(() =>
+          batchWithBearer(runtime, readToken, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000929",
+              reference: staged,
+            }),
+          ])
+        );
+        expect(outOfScope.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(outOfScope));
+        expect(rejection.error).toMatchObject({
+          code: "scope_missing",
+          failedCallIndex: 0,
+          operation: "ingestion.submitForExtraction",
+        });
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "pat_audit"))).toBe(0);
+
+        const committed = yield* fromTestPromise(() =>
+          batchWithBearer(runtime, writeToken, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000930",
+              reference: staged,
+            }),
+            captureCall(2),
+          ])
+        );
+        expect(committed.status).toBe(200);
+        // A scoped agent commits under the same unit, with one accepted PAT audit per child.
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+        expect(
+          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
+        ).toBe(2);
       })
     ),
   30_000

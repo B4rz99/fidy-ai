@@ -5,16 +5,11 @@ import {
   StatementSubmissionId,
   SubmitForExtractionInput,
 } from "@fidy/server/statement-staging";
-import {
-  recordAuditedPATUse,
-  recordCanonicalPATWork,
-  recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
-import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
-import type * as Arr from "effect/Array";
+import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { Data, Effect, Option, Result, Schema } from "effect";
+import { dailyAuditExhausted, sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import type { AtomicMutationRefusal } from "../atomic/atomic-mutation-unit";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
-import { pathId } from "../http/path";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { currentMillis } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
@@ -37,20 +32,14 @@ import {
   callerAuthority,
   isPATCaller,
   refusedTransactionWork,
-  transactionAuditExhausted,
 } from "../transactions/transaction-boundary";
 import {
-  type ReplayStatements,
   StatementStaging,
-  type StatementStagingFailed,
-  type StatementStagingRefused,
-  type StatementStagingUnavailable,
   type StoredStatementSubmission,
   newIngestionId,
-  statementAuditLimitMarker,
+  recordStatementRefusal,
   statementSubmissionReadAudit,
-  statementSubmissionRefusalAudit,
-  statementSubmissionReplayAudit,
+  submissionProjection,
 } from "./statement-staging";
 
 /** One audit batch that could not settle; its cause's stable marker classifies the refusal. */
@@ -65,7 +54,7 @@ const budgetSpent = (
   current: number
 ): Effect.Effect<boolean, IngestionAuditFailed> =>
   Effect.tryPromise({
-    try: () => transactionAuditExhausted({ db: database, userId, current }),
+    try: () => dailyAuditExhausted({ db: database, userId, current }),
     catch: (cause) => new IngestionAuditFailed({ cause }),
   });
 
@@ -157,7 +146,6 @@ const submissionInputPolicy = Schema.decodeSync(RequestBodyPolicy)({
 });
 
 const StatementSubmissionOutput = Schema.toCodecJson(StatementSubmission);
-const StagedStatementOutput = Schema.toCodecJson(StagedStatementBytes);
 
 const json = (body: unknown, status: number): Response =>
   Response.json(body, { headers: noStore, status });
@@ -171,7 +159,8 @@ const unavailable = (): Response =>
     HTTP_UNAVAILABLE
   );
 
-const validationFailed = (message: string): Response =>
+/** One bounded validation refusal whose issue list is always empty and carries no input detail. */
+export const validationFailed = (message: string): Response =>
   json({ error: { code: "validation_failed", fields: [], message }, next: [] }, HTTP_BAD_REQUEST);
 
 const payloadTooLarge = (message: string): Response =>
@@ -205,19 +194,6 @@ const dailyBudgetSpent = (): Response =>
     HTTP_TOO_MANY_REQUESTS
   );
 
-const paywallRequired = (): Response =>
-  json(
-    {
-      error: {
-        code: "paywall_required",
-        message:
-          "This User has already used the lifetime Free statement backfill. Upgrade to Pro before submitting another statement.",
-      },
-      next: [],
-    },
-    HTTP_PAYWALL
-  );
-
 /** The one message every absent or foreign submission shares; an id never proves ownership. */
 const submissionNotFound = (): Response =>
   json(
@@ -225,90 +201,44 @@ const submissionNotFound = (): Response =>
     HTTP_NOT_FOUND
   );
 
-const stagingService = (
-  environment: StatementIngestionEnvironment
-): Option.Option<ReturnType<typeof StatementStaging.make>> =>
-  Option.map(Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET), (bucket) =>
-    StatementStaging.make({ bucket, database: environment.DB, nowEpochMs: currentMillis })
+/** The one HTTP status for a closed canonical refusal code. */
+const refusalStatus = (code: AtomicMutationRefusal["code"]): number => {
+  if (code === "paywall_required") return HTTP_PAYWALL;
+  if (code === "rate_limited") return HTTP_TOO_MANY_REQUESTS;
+  if (code === "unavailable") return HTTP_UNAVAILABLE;
+  if (code === "not_found") return HTTP_NOT_FOUND;
+  return HTTP_BAD_REQUEST;
+};
+
+/**
+ * The one bounded HTTP answer for a closed canonical publication refusal. The refusal's own code,
+ * message, and status are what every individual caller receives; a refusal never echoes bytes.
+ */
+const statementRefusalResponse = (refusal: AtomicMutationRefusal): Response =>
+  json(
+    {
+      error: {
+        code: refusal.code,
+        ...(refusal.code === "validation_failed" ? { fields: [] } : {}),
+        message: refusal.message,
+      },
+      next: [],
+    },
+    refusalStatus(refusal.code)
   );
 
-/** The fields every StatementSubmission status carries, decoded once from storage. */
-type SubmissionBase = Readonly<{
-  id: ReturnType<typeof StatementSubmissionId.make>;
-  parserRevision: string;
-  sourceFormat: "csv" | "xlsx";
-  submittedAt: DateTime.Utc;
-}>;
-
-const submissionBase = (stored: StoredStatementSubmission): SubmissionBase => ({
-  id: StatementSubmissionId.make(stored.id),
-  parserRevision: stored.parserRevision,
-  sourceFormat: stored.sourceFormat,
-  submittedAt: DateTime.makeUnsafe(stored.submittedAtMs),
-});
-
-/** A failed submission can only project when it kept its timestamps and its closed failure reason. */
-const failedProjection = (
-  base: SubmissionBase,
-  stored: StoredStatementSubmission
-): Option.Option<StatementSubmission> => {
-  if (
-    Option.isNone(stored.startedAtMs) ||
-    Option.isNone(stored.completedAtMs) ||
-    Option.isNone(stored.failureReason)
-  ) {
-    return Option.none();
-  }
-  return Option.some({
-    ...base,
-    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
-    failureReason: stored.failureReason.value,
-    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
-    status: "failed",
-  });
-};
-
-/** A completed submission can only project when its row accounting conserves input rows. */
-const completedProjection = (
-  base: SubmissionBase,
-  stored: StoredStatementSubmission
-): Option.Option<StatementSubmission> => {
-  if (
-    Option.isNone(stored.startedAtMs) ||
-    Option.isNone(stored.completedAtMs) ||
-    Option.isNone(stored.inputRows) ||
-    Option.isNone(stored.acceptedRows) ||
-    Option.isNone(stored.needsReviewRows)
-  ) {
-    return Option.none();
-  }
-  return Option.some({
-    ...base,
-    accounting: {
-      acceptedRows: stored.acceptedRows.value,
-      inputRows: stored.inputRows.value,
-      needsReviewRows: stored.needsReviewRows.value,
-    },
-    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
-    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
-    status: "completed",
-  });
-};
-
-/** One stored submission rebuilt into the canonical projection; an impossible row is absent. */
-const submissionProjection = (
-  stored: StoredStatementSubmission
-): Option.Option<StatementSubmission> => {
-  const base = submissionBase(stored);
-  if (stored.status === "queued") return Option.some({ ...base, status: "queued" });
-  if (stored.status === "failed") return failedProjection(base, stored);
-  if (stored.status === "completed") return completedProjection(base, stored);
-  return Option.map(stored.startedAtMs, (startedAtMs) => ({
-    ...base,
-    startedAt: DateTime.makeUnsafe(startedAtMs),
-    status: "processing",
-  }));
-};
+const stagingService = (
+  environment: StatementIngestionEnvironment,
+  current: number
+): Option.Option<ReturnType<typeof StatementStaging.make>> =>
+  Option.map(Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET), (bucket) =>
+    StatementStaging.make({
+      bucket,
+      database: environment.DB,
+      // One decision instant for the whole call, so staging bounds and the D1 unit cannot disagree.
+      nowEpochMs: () => current,
+    })
+  );
 
 /** Encodes one stored submission into the canonical response body, or `None` for a broken row. */
 const submissionResponse = (
@@ -324,50 +254,7 @@ const submissionResponse = (
       ),
   });
 
-/** Every closed publication refusal, as its bounded canonical failure and audit outcome. */
-type PublicationRefusal = Readonly<{
-  audit: "resource_limit" | "validation_failed";
-  respond: () => Response;
-}>;
-
-const publicationRefusals: Record<StatementStagingFailureReason, PublicationRefusal> = {
-  cancelled: { audit: "validation_failed", respond: unavailable },
-  conflict: {
-    audit: "validation_failed",
-    respond: () =>
-      validationFailed(
-        "The idempotency key already names different statement material. Stage that material and use a new key."
-      ),
-  },
-  "malformed-file": {
-    audit: "validation_failed",
-    respond: () =>
-      validationFailed("The staged statement material is unavailable; upload the file again."),
-  },
-  "not-found": {
-    audit: "validation_failed",
-    respond: () =>
-      validationFailed("The staged statement material is unavailable; upload the file again."),
-  },
-  paywall: { audit: "resource_limit", respond: paywallRequired },
-  "resource-limit": {
-    audit: "resource_limit",
-    respond: () =>
-      validationFailed("Finish existing statement extraction work before uploading another file."),
-  },
-  "retention-expired": {
-    audit: "validation_failed",
-    respond: () =>
-      validationFailed("The staged statement material is unavailable; upload the file again."),
-  },
-  "unsupported-format": {
-    audit: "validation_failed",
-    respond: () =>
-      validationFailed("The staged statement material is unavailable; upload the file again."),
-  },
-};
-
-/** Every closed staging refusal, as its one bounded transport response. None echoes bytes. */
+/** Every closed staging transport refusal, as its one bounded response. None echoes bytes. */
 const stagingFailureResponses: Record<StatementStagingFailureReason, () => Response> = {
   cancelled: () =>
     validationFailed("The statement upload did not complete; upload the file again."),
@@ -399,9 +286,9 @@ export const uploadStagedStatement = ({
   subject: TransactionSubject;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const staging = stagingService(environment);
-    if (Option.isNone(staging)) return unavailable();
     const nowEpochMs = currentMillis();
+    const staging = stagingService(environment, nowEpochMs);
+    if (Option.isNone(staging)) return unavailable();
     const admission = ResourceAdmissionAuthority.make({
       database: environment.DB,
       nowEpochMs: () => ResourceAdmissionEpochMs.make(nowEpochMs),
@@ -429,138 +316,99 @@ export const uploadStagedStatement = ({
         ? stagingFailureResponses[staged.failure.reason]()
         : unavailable();
     }
-    const encoded = yield* Schema.encodeEffect(StagedStatementOutput)(staged.success).pipe(
-      Effect.orElseSucceed(() => undefined)
-    );
+    const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(StagedStatementBytes))(
+      staged.success
+    ).pipe(Effect.orElseSucceed(() => undefined));
     return encoded === undefined ? unavailable() : json({ data: encoded, next: [] }, HTTP_CREATED);
   });
 
-/** The PAT canonical audit and the activity update it gates, committed by the same unit. */
-const patAccountability = ({
-  database,
-  subject,
-  current,
-  auditId,
-}: Readonly<{
-  database: D1Database;
-  subject: AuthorizedPAT;
-  current: number;
-  auditId: string;
-}>): Arr.NonEmptyArray<D1PreparedStatement> => [
-  prepareOwnedStatement({
-    db: database,
-    statement: recordCanonicalPATWork({
-      input: {
-        afterOwnerWrite: true,
-        current,
-        id: auditId,
-        operation: "ingestion.submitForExtraction",
-        outcome: "accepted",
-      },
-      subject,
-    }),
-  }),
-  prepareOwnedStatement({
-    db: database,
-    statement: recordAuditedPATUse({
-      input: { auditId, current, operation: "ingestion.submitForExtraction" },
-      subject,
-    }),
-  }),
-];
-
-/** Credential-specific accountability that must commit inside the publication unit. A session
- * publication writes its own audit row in the unit, so its caller-owned list is empty. */
-const publicationAccountability = ({
-  database,
-  subject,
-  current,
-  auditId,
-}: Readonly<{
-  database: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  auditId: string;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATCaller(subject) ? patAccountability({ auditId, current, database, subject }) : [];
-
 /**
- * Credential-specific accountability that must commit when a call replays an existing submission.
- * Every statement is live-authority guarded, so a credential revoked after dispatch refuses the
- * replay instead of returning stored state; a session caller's one row is its own replay audit.
+ * Records one refused submission attempt's metadata-only audit before its refusal is answered: a
+ * PAT's rejected `pat_audit` row, or a session caller's bounded refusal outcome. Only a refusal the
+ * publication unit did not settle reaches here; an already-recorded refusal is answered from its own
+ * outcome. A refusal whose audit cannot commit for a dead credential, an exhausted daily budget, or
+ * an unavailable authority is answered as that cause instead.
  */
-const replayAccountability = ({
-  database,
-  subject,
+const recordRefusedSubmission = ({
   current,
-  auditId,
+  environment,
+  refusal,
+  subject,
 }: Readonly<{
-  database: D1Database;
-  subject: TransactionCaller;
   current: number;
-  auditId: string;
-}>): ReplayStatements =>
-  isPATCaller(subject)
-    ? patAccountability({ auditId, current, database, subject })
-    : [
-        statementSubmissionReplayAudit({
+  environment: StatementIngestionEnvironment;
+  refusal: AtomicMutationRefusal;
+  subject: TransactionCaller;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const record = yield* Effect.tryPromise({
+      try: () =>
+        recordStatementRefusal({
           authority: callerAuthority({ subject, current }),
           current,
-          database,
-          id: auditId,
+          database: environment.DB,
+          refusal,
         }),
-      ];
+      catch: () => "unavailable" as const,
+    }).pipe(Effect.orElseSucceed(() => "unavailable" as const));
+    if (record === "recorded") return statementRefusalResponse(refusal);
+    if (record === "rate_limited") return dailyBudgetSpent();
+    if (record === "credential_refused") {
+      return yield* Effect.tryPromise({
+        try: () => refusedTransactionWork({ db: environment.DB, subject }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable));
+    }
+    return unavailable();
+  });
 
 /**
- * Publishes one authorized statement submission from a caller-held staged reference. Live caller
- * authority, the Free allowance, submission pressure, material ownership, size, and digest are
- * re-verified inside one D1 atomic unit before any authoritative row exists.
+ * Publishes one authorized statement submission from a caller-held staged reference. The caller's
+ * live authority, the Free allowance, submission pressure, material ownership, size, digest, and
+ * expiry are re-verified inside one D1 atomic unit before any authoritative row exists; a refusal
+ * records its metadata-only AuditLogEntry before it is answered.
  */
-export const submitStagedStatement = ({
-  request,
+export const executeStatementSubmission = ({
+  current,
   environment,
+  input,
   subject,
 }: Readonly<{
-  request: Request;
+  current: number;
   environment: StatementIngestionEnvironment;
+  input: SubmitForExtractionInput;
   subject: TransactionCaller;
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const staging = stagingService(environment);
+      const staging = stagingService(environment, current);
       if (Option.isNone(staging)) return unavailable();
-      const input = yield* Effect.tryPromise(() =>
-        boundedJsonBody(request, submissionInputPolicy, SubmitForExtractionInput)
-      );
-      if (Option.isNone(input)) return validationFailed("Invalid statement submission input.");
-      const current = currentMillis();
       if (yield* budgetSpent(environment.DB, subject.userId, current)) return dailyBudgetSpent();
-      const accountabilityId = newIngestionId();
       const published = yield* Effect.result(
         staging.value.publishStagedStatementSubmission({
           authority: callerAuthority({ subject, current }),
-          idempotencyKey: input.value.idempotencyKey,
-          reference: input.value.reference,
-          replayStatements: replayAccountability({
-            auditId: accountabilityId,
-            current,
-            database: environment.DB,
-            subject,
-          }),
-          statements: publicationAccountability({
-            auditId: accountabilityId,
-            current,
-            database: environment.DB,
-            subject,
-          }),
+          idempotencyKey: input.idempotencyKey,
+          reference: input.reference,
           userId: subject.userId,
         })
       );
       if (Result.isFailure(published)) {
-        return yield* refusedPublication({
+        if (published.failure._tag === "StatementStagingRefused") {
+          return yield* Effect.tryPromise({
+            try: () => refusedTransactionWork({ db: environment.DB, subject }),
+            catch: () => undefined,
+          }).pipe(Effect.orElseSucceed(unavailable));
+        }
+        return unavailable();
+      }
+      if (published.success._tag === "Refused") {
+        // A refusal the unit already settled is answered from its own recorded outcome; only a
+        // pre-unit refusal still needs its metadata-only AuditLogEntry committed under live authority.
+        if (published.success.recorded) return statementRefusalResponse(published.success.refusal);
+        return yield* recordRefusedSubmission({
           current,
           environment,
-          failure: published.failure,
+          refusal: published.success.refusal,
           subject,
         });
       }
@@ -574,99 +422,11 @@ export const submitStagedStatement = ({
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );
 
-/**
- * Answers one refused publication as the cause its own failure proves: a spent shared daily budget,
- * a dead credential, a closed domain refusal (which records its metadata-only audit), or an outage.
- */
-const refusedPublication = (
-  input: Readonly<{
-    current: number;
-    environment: StatementIngestionEnvironment;
-    failure: StatementStagingFailed | StatementStagingRefused | StatementStagingUnavailable;
-    subject: TransactionCaller;
-  }>
-): Effect.Effect<Response> => {
-  if (input.failure._tag === "StatementStagingRefused") {
-    return input.failure.reason === "budget"
-      ? Effect.succeed(dailyBudgetSpent())
-      : refusedRead(input.environment.DB, input.subject);
-  }
-  if (input.failure._tag === "StatementStagingFailed") {
-    return recordRefusedSubmission({
-      current: input.current,
-      environment: input.environment,
-      refusal: publicationRefusals[input.failure.reason],
-      subject: input.subject,
-    });
-  }
-  return Effect.succeed(unavailable());
-};
-
-/** The one bounded refusal when a caller's authority died before its unit committed: the shared
- * Transaction credential decision answers 401/403, and only a defect in that shared read falls back
- * to the canonical unavailable envelope every ingestion path uses. */
-const refusedRead = (database: D1Database, subject: TransactionCaller): Effect.Effect<Response> =>
-  Effect.tryPromise({
-    try: () => refusedTransactionWork({ db: database, subject }),
-    catch: (cause) => new IngestionAuditFailed({ cause }),
-  }).pipe(Effect.orElseSucceed(unavailable));
-
-/**
- * Records one refused submission attempt's metadata-only audit before its refusal is answered: a
- * PAT's rejected `pat_audit` row, or a session caller's bounded refusal outcome. A refusal whose
- * audit cannot commit for a dead credential, an exhausted daily budget, or an unavailable authority
- * is answered as that cause instead.
- */
-const recordRefusedSubmission = (
-  input: Readonly<{
-    current: number;
-    environment: StatementIngestionEnvironment;
-    refusal: PublicationRefusal;
-    subject: TransactionCaller;
-  }>
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const statements = isPATCaller(input.subject)
-      ? [
-          prepareOwnedStatement({
-            db: input.environment.DB,
-            statement: recordCanonicalPATWork({
-              input: {
-                afterOwnerWrite: false,
-                current: input.current,
-                id: newIngestionId(),
-                operation: "ingestion.submitForExtraction",
-                outcome: "rejected",
-              },
-              subject: input.subject,
-            }),
-          }),
-        ]
-      : [
-          statementSubmissionRefusalAudit({
-            authority: callerAuthority({ subject: input.subject, current: input.current }),
-            current: input.current,
-            database: input.environment.DB,
-            id: newIngestionId(),
-            outcome: input.refusal.audit,
-          }),
-        ];
-    const outcome = yield* Effect.result(
-      Effect.tryPromise({
-        try: () => input.environment.DB.batch([...statements]),
-        catch: (cause) => new IngestionAuditFailed({ cause }),
-      })
-    );
-    if (Result.isFailure(outcome)) {
-      return String(outcome.failure.cause).includes(statementAuditLimitMarker)
-        ? dailyBudgetSpent()
-        : unavailable();
-    }
-    if (outcome.success[0]?.meta.changes !== 1) {
-      return yield* refusedRead(input.environment.DB, input.subject);
-    }
-    return input.refusal.respond();
-  });
+/** Decodes one bounded canonical submission input before it reaches the User coordination turn. */
+export const submitForExtractionInput = (
+  request: Request
+): Promise<Option.Option<SubmitForExtractionInput>> =>
+  boundedJsonBody(request, submissionInputPolicy, SubmitForExtractionInput);
 
 /**
  * One canonical read's attribution: a session caller commits one metadata-only read audit row, and
@@ -737,16 +497,18 @@ const commitReadAudit = (
     );
     if (Result.isFailure(outcome)) {
       return Option.some(
-        String(outcome.failure.cause).includes(statementAuditLimitMarker)
-          ? dailyBudgetSpent()
-          : unavailable()
+        sharedAuditLimitRefusal(outcome.failure.cause) ? dailyBudgetSpent() : unavailable()
       );
     }
     const results = outcome.success;
     const committed = results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
-    return committed
-      ? Option.none<Response>()
-      : Option.some(yield* refusedRead(environment.DB, subject));
+    if (committed) return Option.none<Response>();
+    return Option.some(
+      yield* Effect.tryPromise({
+        try: () => refusedTransactionWork({ db: environment.DB, subject }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable))
+    );
   });
 
 /**
@@ -765,12 +527,14 @@ export const readStatementSubmission = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const staging = stagingService(environment);
+      const current = currentMillis();
+      const staging = stagingService(environment, current);
       if (Option.isNone(staging)) return unavailable();
-      if (yield* budgetSpent(environment.DB, subject.userId, currentMillis())) {
+      if (yield* budgetSpent(environment.DB, subject.userId, current)) {
         return dailyBudgetSpent();
       }
-      const submissionId = pathId({ schema: StatementSubmissionId, request });
+      const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
+      const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
       const refused = yield* commitReadAudit(
         environment,
         subject,

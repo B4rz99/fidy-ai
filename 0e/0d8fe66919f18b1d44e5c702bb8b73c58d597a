@@ -1,0 +1,21 @@
+tools/mutation/package.json
+  s_f9aa3e90839713::t_21166407e18c26 7,17
+tools/mutation/bun.lock
+  s_f9aa3e90839713::t_67cd252f830647 8,20,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0e0d8fe66919f18b1d44e5c702bb8b73c58d597a",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

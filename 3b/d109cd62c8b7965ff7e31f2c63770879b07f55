@@ -1,0 +1,16 @@
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  h_c6d49c804e0ad2 738-744,748-771,773,780
+apps/server/src/shell/categories/path.ts
+  h_c6d49c804e0ad2 8,10-14,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3bd109cd62c8b7965ff7e31f2c63770879b07f55",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

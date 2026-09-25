@@ -1,0 +1,36 @@
+apps/server/src/shell/canonical-runtime.ts
+  s_f9aa3e90839713::t_1ca431d619721e 12
+apps/server/cloudflare/transactions/transactions.ts
+  s_f9aa3e90839713::t_08dcfd74702deb 11-12,18,32-33,35-41,247-305,321,324-332,335,341-349,354-361,379,384
+apps/server/cloudflare/pats/pats.test.ts
+  s_f9aa3e90839713::t_b42cf0fe48308c 213-214
+apps/server/src/shell/categories/runtime.ts
+  s_f9aa3e90839713::t_11ebf9e0f86c3e 34-35,40
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  s_f9aa3e90839713::t_ec5dbc24699add 7-8,14,29-30,32-38,40,233,238,240-246,256,268,271-278,280,283,289,291-293,295,299,316,321
+apps/server/src/shell/categories/operations.ts
+  s_f9aa3e90839713::t_380f67b7c9d6c5 34-50
+  s_f9aa3e90839713::t_d78f17481827ad 31-33
+apps/server/src/shell/memory/operations.ts
+  s_f9aa3e90839713::t_6aff9e553789b4 95-106
+apps/server/cloudflare/transactions/transaction-reconciliation.ts
+  s_f9aa3e90839713::t_f5bff218696eda 13-14,22,39-40,42-47,302,304-311,313,316,319,323,327,333,335-341,348,354,356-363,366,370,373,386,391,393-399,401,411,423,428,439,446
+apps/server/src/shell/operations/operations.ts
+  s_f9aa3e90839713::t_68347258fc572a 117-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2b947fd21a36111b1206ba73a3170ae38d92c1bb",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

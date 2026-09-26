@@ -1,0 +1,37 @@
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_fc3693cd6bcd2c::t_342be569487810 22,54-61
+  s_fc3693cd6bcd2c::t_bf4467b93b1724 145-147
+  s_fc3693cd6bcd2c::t_e1025c03e2b983 851-854,899-901
+  s_fc3693cd6bcd2c::t_a2d18929e9e358 62,718,1244,1326
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_fc3693cd6bcd2c::t_b9e4d1a1f28104 6,414-415
+  s_fc3693cd6bcd2c::t_e1025c03e2b983 32,416-417
+  s_fc3693cd6bcd2c::t_30c22e5392440a 36
+  s_fc3693cd6bcd2c::t_8c8506704cda0a 29,294,362,379,440
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_fc3693cd6bcd2c::t_8a0c3e7beab64b 574-581,589-601
+  s_fc3693cd6bcd2c::t_e1025c03e2b983 582-588
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_fc3693cd6bcd2c::t_898946cb026d46 1092-1135
+  s_fc3693cd6bcd2c::t_0172516ec2742e 1091
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_fc3693cd6bcd2c::t_0ba22bce49cd32 11,207,219
+apps/server/cloudflare/mutations/statement-mutation.ts
+  s_fc3693cd6bcd2c::t_3ff0872f2ba4f3 5,53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b2c541ef3acdaf31dcc004324f6ac935f0400347",
+  "prompts": {},
+  "sessions": {
+    "s_fc3693cd6bcd2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db10-a653-7399-bd96-d88433aa22ef",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

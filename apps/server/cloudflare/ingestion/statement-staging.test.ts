@@ -1,26 +1,17 @@
 import {
   type StagedStatementBytes,
-  type StagedStatementReference,
-  StagedStatementReference as StagedStatementReferenceSchema,
   type StatementStagingFailureReason,
   StatementStagingId,
 } from "@fidy/server/statement-staging";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
-import { Data, Effect, Encoding, Fiber, Option, Result, Schema } from "effect";
+import { Data, Effect, Encoding, Fiber, Option, Result } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
-import type { TransactionAuthority } from "../transactions/transaction-boundary";
-import type { AtomicMutationRefusal } from "../atomic/atomic-mutation-unit";
 import {
-  type StatementPublicationOutcome,
   StatementStaging,
   StatementStagingFailed,
-  type StatementStagingRefused,
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
-  stagedMaterialMessage,
-  statementConflictMessage,
 } from "./statement-staging";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -32,26 +23,17 @@ const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
-const idempotencyKey = "20000000-0000-4000-8000-000000000201";
-const otherIdempotencyKey = "20000000-0000-4000-8000-000000000202";
 const statementStagingLifetime = 24 * 60 * 60 * 1000;
 const startedAtEpochMs = Date.parse("2026-09-01T00:00:00Z");
-const secretSentinel = "password=hunter2-statement-secret";
 const statementBytes = new TextEncoder().encode(
-  `fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n${secretSentinel}\n`
+  `fecha,valor,descripcion\n2026-08-01,-45000,Cafe\npassword=hunter2-statement-secret\n`
 );
 
-type StagingResult<A> = Result.Result<
-  A,
-  StatementStagingFailed | StatementStagingRefused | StatementStagingUnavailable
->;
+type StagingResult<A> = Result.Result<A, StatementStagingFailed | StatementStagingUnavailable>;
 
 const instances = new Set<Miniflare>();
 const migrationsDirectoryUrl = new URL("../migrations/", import.meta.url);
-// The proof needs stable User ownership, the statement staging schema, and the Subscription
-// standing tables publication decides the Free allowance against, in deployment order. #698's
-// migration also joins the shared canonical read budget, so the canonical audit tables and their
-// budget triggers must exist before it runs.
+// Migrate in deployment order so staging and its retention sweep use real D1 schema.
 const migrationNames = [
   "0001_categories",
   "0003_pending_consent",
@@ -118,60 +100,6 @@ const migrateDatabase = (database: D1Database): Promise<void> =>
     Promise.resolve()
   );
 
-/** Deterministic WebSession identity per seeded User, standing in for the browser login proof. */
-const sessionIds = [
-  "30000000-0000-4000-8000-000000000001",
-  "30000000-0000-4000-8000-000000000002",
-] as const;
-const pairingIds = [
-  "30000000-0000-4000-8000-000000000011",
-  "30000000-0000-4000-8000-000000000012",
-] as const;
-const publicCodes = ["AAA111111", "BBB222222"] as const;
-const sessionDigest = (index: number): Uint8Array => new Uint8Array(32).fill(index + 1);
-const seededSessions = [
-  { digest: sessionDigest(0), id: sessionIds[0], userId: userA },
-  { digest: sessionDigest(1), id: sessionIds[1], userId: userB },
-] as const;
-/** Seeds one consumed pairing and its live WebSession per User, the caller the service rechecks. */
-const seedSessions = (database: D1Database): Promise<void> =>
-  database
-    .batch(
-      seededSessions.flatMap((session, index) => [
-        database
-          .prepare(
-            `INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state,
-               created_at_ms, expires_at_ms)
-             VALUES (?, ?, ?, ?, 'consumed', ?, ?)`
-          )
-          .bind(
-            pairingIds[index],
-            publicCodes[index],
-            sessionDigest(index),
-            session.userId,
-            startedAtEpochMs,
-            startedAtEpochMs + 600_000
-          ),
-        database
-          .prepare(
-            `INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
-               fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .bind(
-            session.id,
-            pairingIds[index],
-            session.userId,
-            session.digest,
-            startedAtEpochMs,
-            startedAtEpochMs + 600_000,
-            startedAtEpochMs + 7_776_000_000,
-            startedAtEpochMs + 7_776_000_000
-          ),
-      ])
-    )
-    .then(() => undefined);
-
 type Runtime = Readonly<{
   readonly database: D1Database;
   readonly bucket: R2Bucket;
@@ -205,7 +133,6 @@ const makeRuntime = (): Promise<Runtime> =>
           Promise.resolve()
         )
       );
-      yield* fromTestPromise(() => seedSessions(bindings.DB));
       return {
         bucket: bindings.BUCKET,
         database: bindings.DB,
@@ -280,44 +207,6 @@ const gatedBucket = (
         : Reflect.get(target, property, target),
   });
 
-/** The proof's live-caller gate: the seeded WebSession the canonical caller would present. */
-const callerAuthorityFor = (userId: string): TransactionAuthority => {
-  const session = seededSessions.find((candidate) => candidate.userId === userId);
-  if (session === undefined) throw new Error(`No seeded WebSession for ${userId}`);
-  return liveWebSessionAuthority({ subject: session, current: currentNowEpochMs() });
-};
-
-/** The winner's real publication, invoked later to race the losing call's conditional unit. */
-const winnerPublication =
-  (runtime: Runtime, staged: StagedStatementBytes): (() => Promise<unknown>) =>
-  () =>
-    Effect.runPromise(
-      runtime.staging.publishStagedStatementSubmission({
-        authority: callerAuthorityFor(userA),
-        idempotencyKey,
-        reference: reference(staged),
-        userId: userA,
-      })
-    );
-
-/** Commits the winning publication between the losing precondition read and its D1 unit. */
-const publishWinnerBeforeBatch = (
-  database: D1Database,
-  beforeBatch: () => Promise<unknown>
-): D1Database => {
-  let fired = false;
-  return new Proxy(database, {
-    get: (target, property): unknown =>
-      property === "batch"
-        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
-            if (fired) return target.batch(...args);
-            fired = true;
-            return beforeBatch().then(() => target.batch(...args));
-          }
-        : Reflect.get(target, property, target),
-  });
-};
-
 const stage = (
   runtime: Runtime,
   userId: string,
@@ -326,30 +215,6 @@ const stage = (
   Effect.runPromise(
     Effect.result(runtime.staging.stageStatementBytes({ request: request(body), userId }))
   );
-
-const publish = (
-  input: Readonly<{
-    runtime: Runtime;
-    userId: string;
-    reference: unknown;
-    key: string;
-  }>
-): Promise<StagingResult<StatementPublicationOutcome>> =>
-  Effect.runPromise(
-    Effect.result(
-      input.runtime.staging.publishStagedStatementSubmission({
-        authority: callerAuthorityFor(input.userId),
-        idempotencyKey: input.key,
-        reference: Schema.decodeUnknownSync(StagedStatementReferenceSchema)(input.reference),
-        userId: input.userId,
-      })
-    )
-  );
-
-const publishOnce = (
-  input: Readonly<{ runtime: Runtime; userId: string; reference: unknown }>
-): Promise<StagingResult<StatementPublicationOutcome>> =>
-  publish({ ...input, key: idempotencyKey });
 
 const read = (
   runtime: Runtime,
@@ -382,50 +247,6 @@ const reasonOf = (result: StagingResult<unknown>): StatementStagingFailureReason
   }
   throw new Error("Expected the staging adapter to refuse");
 };
-
-/** The one successful publication outcome, or the refusal the test did not expect. */
-const publishedOf = (
-  result: StagingResult<StatementPublicationOutcome>
-): Readonly<{ submissionId: string; replayed: boolean }> => {
-  const outcome = requireValue(result);
-  if (outcome._tag !== "Published") {
-    throw new Error(`Expected a published submission, refused as ${outcome.refusal.code}`);
-  }
-  return { replayed: outcome.replayed, submissionId: outcome.submissionId };
-};
-
-/** The one closed refusal a publication decided, or a failure when it published instead. */
-const refusalOf = (result: StagingResult<StatementPublicationOutcome>): AtomicMutationRefusal => {
-  const outcome = requireValue(result);
-  if (outcome._tag !== "Refused") throw new Error("Expected the statement publication to refuse");
-  return outcome.refusal;
-};
-
-/** The one bounded refusal every absent, foreign, or mismatched staged reference shares. */
-const expectsStagedMaterialRefusal = (result: StagingResult<StatementPublicationOutcome>): void => {
-  expect(refusalOf(result)).toEqual({
-    auditOutcome: "validation_failed",
-    code: "validation_failed",
-    message: stagedMaterialMessage,
-  });
-};
-
-/** The one bounded refusal both directions of a same-key material conflict share. */
-const expectsMaterialConflictRefusal = (
-  result: StagingResult<StatementPublicationOutcome>
-): void => {
-  expect(refusalOf(result)).toEqual({
-    auditOutcome: "validation_failed",
-    code: "validation_failed",
-    message: statementConflictMessage,
-  });
-};
-
-const reference = (staged: StagedStatementBytes): StagedStatementReference => ({
-  byteLength: staged.byteLength,
-  sha256: staged.sha256,
-  stagingId: staged.stagingId,
-});
 
 type StagingRowRecord = Readonly<{
   id: string;
@@ -469,16 +290,8 @@ const digestHex = (bytes: Uint8Array): Promise<string> =>
     .digest("SHA-256", Uint8Array.from(bytes))
     .then((value) => Encoding.encodeHex(new Uint8Array(value)));
 
-const putWithSha256 = (bucket: R2Bucket, key: string, bytes: Uint8Array): Promise<unknown> =>
-  crypto.subtle
-    .digest("SHA-256", new Uint8Array(bytes))
-    .then((digest) => bucket.put(key, bytes, { sha256: digest }));
-
-const encodeJsonText = (value: unknown): string =>
-  Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
-
 describe("Cloudflare statement byte staging", () => {
-  it("keeps staged bytes non-authoritative until one D1 submission makes them authoritative", () =>
+  it("keeps staged bytes non-authoritative and private until canonical publication", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => makeRuntime());
@@ -507,32 +320,6 @@ describe("Cloudflare statement byte staging", () => {
         expect(
           requireValue(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))
         ).toEqual(statementBytes);
-
-        const published = publishedOf(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        expect(published.replayed).toBe(false);
-        expect(
-          required(yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId)))
-            .status
-        ).toBe("published");
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(1);
-        const submission = yield* fromTestPromise(() =>
-          runtime.database
-            .prepare(
-              "SELECT id, staging_id FROM statement_submissions WHERE user_id = ? AND idempotency_key = ?"
-            )
-            .bind(userA, idempotencyKey)
-            .first<{ readonly id: string; readonly staging_id: string }>()
-        );
-        expect(submission).toEqual({ id: published.submissionId, staging_id: staged.stagingId });
       })
     ));
 
@@ -572,52 +359,7 @@ describe("Cloudflare statement byte staging", () => {
       })
     ));
 
-  it("refuses a caller reference whose digest or size does not match the staged material", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-
-        // A digest that no staged object carries and a size no staged object has are the same
-        // closed refusal: neither the code alone nor its message alone identifies the decision.
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({
-              reference: { ...reference(staged), sha256: "0".repeat(64) },
-              runtime,
-              userId: userA,
-            })
-          )
-        );
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({
-              reference: { ...reference(staged), byteLength: staged.byteLength + 1 },
-              runtime,
-              userId: userA,
-            })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          0
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
-        // Refusals leave the real material fully publishable.
-        expect(
-          publishedOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(staged), runtime, userId: userA })
-            )
-          ).replayed
-        ).toBe(false);
-      })
-    ));
-
-  it("cannot read or publish another User's staged reference", () =>
+  it("cannot read another User's staged reference", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => makeRuntime());
@@ -628,259 +370,13 @@ describe("Cloudflare statement byte staging", () => {
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userB, staged.stagingId)))).toBe(
           "not-found"
         );
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userB })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          0
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
         expect(
           requireValue(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))
         ).toEqual(statementBytes);
       })
     ));
 
-  it("refuses publication when the staged object no longer exists", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const row = required(
-          yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
-        );
-        yield* fromTestPromise(() => runtime.bucket.delete(row.object_key));
-
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          0
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
-      })
-    ));
-
-  it("refuses material whose stored checksum no longer matches its recorded digest", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const key = required(
-          yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
-        ).object_key;
-        const replaced = new TextEncoder().encode("x".repeat(statementBytes.byteLength));
-        yield* fromTestPromise(() => runtime.bucket.delete(key));
-        yield* fromTestPromise(() => putWithSha256(runtime.bucket, key, replaced));
-
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          0
-        );
-      })
-    ));
-
-  it("replays one idempotency key and refuses a different reference under it", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const first = publishedOf(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        const replay = publishedOf(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        expect(replay).toEqual({ replayed: true, submissionId: first.submissionId });
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        // A replay adds no authoritative state but stays attributable: one audit row per call.
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(2);
-
-        const other = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        // Both directions of the same-key conflict pin the conflict refusal itself, not only the
-        // code it shares with other validation refusals.
-        expectsMaterialConflictRefusal(
-          yield* fromTestPromise(() =>
-            publish({ key: idempotencyKey, reference: reference(other), runtime, userId: userA })
-          )
-        );
-        expectsMaterialConflictRefusal(
-          yield* fromTestPromise(() =>
-            publish({
-              key: otherIdempotencyKey,
-              reference: reference(staged),
-              runtime,
-              userId: userA,
-            })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-      })
-    ));
-
-  it("refuses a replay whose credential died after dispatch", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const first = publishedOf(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        // The session is revoked between dispatch and the replay's own authority unit.
-        yield* fromTestPromise(() =>
-          runtime.database
-            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
-            .bind(currentNowEpochMs(), userA)
-            .run()
-        );
-        const replayed = yield* Effect.result(
-          runtime.staging.publishStagedStatementSubmission({
-            authority: callerAuthorityFor(userA),
-            idempotencyKey,
-            reference: reference(staged),
-            userId: userA,
-          })
-        );
-        expect(Result.isFailure(replayed)).toBe(true);
-        if (Result.isFailure(replayed)) {
-          expect(replayed.failure).toMatchObject({
-            _tag: "StatementStagingRefused",
-            reason: "authority",
-          });
-        }
-        // The refused replay returned nothing, attributed nothing, and changed no authority.
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(1);
-        expect(first.replayed).toBe(false);
-      })
-    ));
-
-  it("keeps a losing reference unpromoted when one idempotency key already won", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const winner = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const loser = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-
-        // The winner commits after the losing call has already read "no submission for this key",
-        // so only the conditional D1 unit can decide what the losing reference may change.
-        const stale = StatementStaging.make({
-          bucket: runtime.bucket,
-          database: publishWinnerBeforeBatch(runtime.database, winnerPublication(runtime, winner)),
-          nowEpochMs: currentNowEpochMs,
-        });
-        const refused = yield* Effect.result(
-          stale.publishStagedStatementSubmission({
-            authority: callerAuthorityFor(userA),
-            idempotencyKey,
-            reference: reference(loser),
-            userId: userA,
-          })
-        );
-        expectsMaterialConflictRefusal(refused);
-        expect(
-          required(yield* fromTestPromise(() => stagingRow(runtime.database, loser.stagingId)))
-            .status
-        ).toBe("available");
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        expect(
-          requireValue(yield* fromTestPromise(() => read(runtime, userA, loser.stagingId)))
-        ).toEqual(statementBytes);
-
-        // The losing material stays inside the bounded expiry and is swept like any abandonment.
-        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
-        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
-          objectsDeleted: 1,
-          rowsDeleted: 1,
-        });
-        expect(
-          required(yield* fromTestPromise(() => stagingRow(runtime.database, winner.stagingId)))
-            .status
-        ).toBe("published");
-      })
-    ));
-
-  it("attributes a losing call that resolves to the winner's same-material replay", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const winner = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-
-        // The winner commits after the losing call has already read "no submission for this key",
-        // so its refused unit classifies as a replay of the winner's own material. That replay must
-        // still commit its caller-owned attribution: one audit row per canonical call, never zero.
-        const stale = StatementStaging.make({
-          bucket: runtime.bucket,
-          database: publishWinnerBeforeBatch(runtime.database, winnerPublication(runtime, winner)),
-          nowEpochMs: currentNowEpochMs,
-        });
-        const replayed = publishedOf(
-          yield* Effect.result(
-            stale.publishStagedStatementSubmission({
-              authority: callerAuthorityFor(userA),
-              idempotencyKey,
-              reference: reference(winner),
-              userId: userA,
-            })
-          )
-        );
-        expect(replayed.replayed).toBe(true);
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(2);
-      })
-    ));
-
-  it("leaves an interrupted upload unpublished, then sweeps its bounded staging state", () =>
+  it("sweeps an interrupted upload whose R2 write preceded availability", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => makeRuntime());
@@ -915,22 +411,10 @@ describe("Cloudflare statement byte staging", () => {
         );
         expect(objects.objects).toHaveLength(1);
         const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
-        // An unfinished upload is never publishable even though its bytes reached R2.
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({
-              reference: {
-                byteLength: row.byte_length,
-                sha256: row.sha256,
-                stagingId: row.id,
-              },
-              runtime,
-              userId: userA,
-            })
-          )
-        );
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          0
+        // An unfinished upload is never readable even though its bytes reached R2.
+        expect(row.status).toBe("pending");
+        expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, row.id)))).toBe(
+          "not-found"
         );
 
         nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime - 1;
@@ -953,7 +437,7 @@ describe("Cloudflare statement byte staging", () => {
       })
     ));
 
-  it("refuses expired staged material before any sweep touches it", () =>
+  it("refuses reads of expired staged material before a sweep", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => makeRuntime());
@@ -965,11 +449,6 @@ describe("Cloudflare statement byte staging", () => {
         // Expiry is a hard bound, not a sweep: the row is still present and both operations refuse.
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "retention-expired"
-        );
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
         );
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
@@ -986,50 +465,6 @@ describe("Cloudflare statement byte staging", () => {
           objectsDeleted: 1,
           rowsDeleted: 1,
         });
-      })
-    ));
-
-  it("sweeps expired abandoned staging but never published material", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const abandoned = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const published = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        const publication = publishedOf(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(published), runtime, userId: userA })
-          )
-        );
-
-        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
-        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
-          objectsDeleted: 1,
-          rowsDeleted: 1,
-        });
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
-        ).toBe(1);
-        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
-          1
-        );
-        // The published submission keeps its material readable and replayable past staging expiry.
-        expect(
-          requireValue(yield* fromTestPromise(() => read(runtime, userA, published.stagingId)))
-        ).toEqual(statementBytes);
-        expect(
-          publishedOf(
-            yield* fromTestPromise(() =>
-              publishOnce({ reference: reference(published), runtime, userId: userA })
-            )
-          )
-        ).toEqual({ replayed: true, submissionId: publication.submissionId });
-        expect(
-          reasonOf(yield* fromTestPromise(() => read(runtime, userA, abandoned.stagingId)))
-        ).toBe("not-found");
       })
     ));
 
@@ -1059,12 +494,6 @@ describe("Cloudflare statement byte staging", () => {
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "not-found"
         );
-        expectsStagedMaterialRefusal(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-
         expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
           objectsDeleted: 1,
           rowsDeleted: 1,
@@ -1108,48 +537,6 @@ describe("Cloudflare statement byte staging", () => {
         expect(
           yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
         ).toBe(0);
-      })
-    ));
-
-  it("records metadata-only audit success and keeps statement content out of refusals", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => makeRuntime());
-        const staged = requireValue(
-          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
-        );
-        requireValue(
-          yield* fromTestPromise(() =>
-            publishOnce({ reference: reference(staged), runtime, userId: userA })
-          )
-        );
-        const audit = yield* fromTestPromise(() =>
-          runtime.database.prepare("SELECT * FROM statement_submission_audit").first()
-        );
-        const staging = yield* fromTestPromise(() =>
-          runtime.database.prepare("SELECT * FROM statement_staging_objects").first()
-        );
-        const refusal = yield* fromTestPromise(() =>
-          publishOnce({
-            reference: { ...reference(staged), sha256: "0".repeat(64) },
-            runtime,
-            userId: userA,
-          })
-        );
-
-        for (const persisted of [audit, staging]) {
-          expect(encodeJsonText(persisted)).not.toContain(secretSentinel);
-          expect(encodeJsonText(persisted)).not.toContain("fecha,valor");
-        }
-        expect(Object.keys(audit ?? {}).sort()).toEqual([
-          "id",
-          "occurred_at_ms",
-          "operation",
-          "outcome",
-          "user_id",
-        ]);
-        expect(Object.keys(refusalOf(refusal)).sort()).toEqual(["auditOutcome", "code", "message"]);
-        expect(encodeJsonText(refusalOf(refusal))).not.toContain(secretSentinel);
       })
     ));
 });

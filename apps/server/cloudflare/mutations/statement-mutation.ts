@@ -2,7 +2,7 @@ import { SubmitForExtractionCanonicalInput } from "@fidy/server/canonical-runtim
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
-import type { AtomicMutationRefusal } from "../atomic/atomic-mutation-unit";
+import type { StatementPublicationRefusal } from "../ingestion/statement-staging";
 import { statementRefusalResponse } from "../ingestion/statement-ingestion";
 import {
   type StatementStagingConfig,
@@ -50,7 +50,7 @@ export const canonicalStatementRefusal = ({
   config: StatementStagingConfig;
   subject: Parameters<typeof callerAuthority>[0]["subject"];
   current: number;
-  refusal: AtomicMutationRefusal;
+  refusal: StatementPublicationRefusal;
 }>): CanonicalMutationRefusal => ({
   code: refusal.code,
   message: refusal.message,

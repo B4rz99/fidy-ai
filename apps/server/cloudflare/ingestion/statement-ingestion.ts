@@ -8,7 +8,7 @@ import {
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { dailyAuditExhausted, sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
-import type { AtomicMutationRefusal } from "../atomic/atomic-mutation-unit";
+import type { StatementPublicationRefusal } from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { currentMillis } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -204,7 +204,7 @@ const submissionNotFound = (): Response =>
   );
 
 /** The one HTTP status for a closed canonical refusal code. */
-const refusalStatus = (code: AtomicMutationRefusal["code"]): number => {
+const refusalStatus = (code: StatementPublicationRefusal["code"]): number => {
   if (code === "paywall_required") return HTTP_PAYWALL;
   if (code === "rate_limited") return HTTP_TOO_MANY_REQUESTS;
   if (code === "unavailable") return HTTP_UNAVAILABLE;
@@ -216,7 +216,7 @@ const refusalStatus = (code: AtomicMutationRefusal["code"]): number => {
  * The one bounded HTTP answer for a closed canonical publication refusal. The refusal's own code,
  * message, and status are what every individual caller receives; a refusal never echoes bytes.
  */
-export const statementRefusalResponse = (refusal: AtomicMutationRefusal): Response =>
+export const statementRefusalResponse = (refusal: StatementPublicationRefusal): Response =>
   json(
     {
       error: {

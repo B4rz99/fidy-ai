@@ -12,7 +12,6 @@ import {
   TransactionPresentation,
 } from "@fidy/server/transactions-runtime";
 import { canonicalTriggerNames, canonicalTriggerOf } from "../audit/audit-triggers";
-import { commitGuardedMutations } from "../atomic/guarded-mutation-commit";
 import {
   lostStatementReplay,
   readOwnedStatementSubmission,
@@ -572,24 +571,34 @@ export const executeCanonicalMutationUnit = ({
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
 }>): Effect.Effect<CanonicalMutationUnitExecution> =>
   Effect.uninterruptible(
-    commitGuardedMutations({
-      db,
-      children: mutations.map((mutation) => ({
-        statements: mutation.statements,
-        assertion: mutation.completion,
-        readCommitted: findCommittedValue({ db, userId: subject.userId, mutation }),
-      })),
-    }).pipe(
-      Effect.flatMap((commit): Effect.Effect<CanonicalMutationUnitExecution> =>
-        commit._tag === "Aborted"
-          ? classifyAbortedUnit({ db, subject, current, mutations, cause: commit.cause })
-          : Effect.succeed(
-              commit._tag === "Committed"
-                ? { _tag: "Committed", values: commit.values }
-                : { _tag: "Unavailable" }
-            )
-      )
-    )
+    Effect.gen(function* () {
+      if (mutations.length === 0) return { _tag: "Unavailable" } as const;
+      const statements = mutations.flatMap((mutation) => [
+        ...mutation.statements,
+        mutation.completion,
+      ]);
+      const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
+      if (Exit.isFailure(attempt)) {
+        return yield* classifyAbortedUnit({
+          db,
+          subject,
+          current,
+          mutations,
+          cause: attempt.cause,
+        });
+      }
+      const values: Array<CommittedMutationValue> = [];
+      for (const mutation of mutations) {
+        const read = findCommittedValue({ db, userId: subject.userId, mutation });
+        let value = yield* read;
+        for (let attempt = 1; attempt < 3 && Option.isNone(value); attempt += 1) {
+          value = yield* read;
+        }
+        if (Option.isNone(value)) return { _tag: "Unavailable" } as const;
+        values.push(value.value);
+      }
+      return { _tag: "Committed", values } as const;
+    })
   );
 
 /** The JSON payload one committed canonical value carries as its operation's success data. */

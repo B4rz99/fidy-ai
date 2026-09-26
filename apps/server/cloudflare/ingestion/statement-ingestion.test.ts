@@ -1089,6 +1089,51 @@ it(
 );
 
 it(
+  "refuses a missing or altered staged R2 object through the canonical route",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const missing = yield* fromTestPromise(() => stageOne(runtime));
+        const [missingKey] = yield* fromTestPromise(() => stagedObjectKeys(runtime));
+        if (missingKey === undefined) throw new Error("Expected a staged object");
+        yield* fromTestPromise(() => runtime.bucket.delete(missingKey));
+        const absent = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000910",
+            index: 0,
+            reference: missing.staged,
+          })
+        );
+        expect(absent.status).toBe(400);
+
+        const changed = yield* fromTestPromise(() => stageOne(runtime));
+        const keys = yield* fromTestPromise(() => stagedObjectKeys(runtime));
+        const alteredKey = keys.find((key) => key !== missingKey);
+        if (alteredKey === undefined) throw new Error("Expected a second staged object");
+        const bytes = new TextEncoder().encode("x".repeat(changed.staged.byteLength));
+        const digest = yield* fromTestPromise(() => crypto.subtle.digest("SHA-256", bytes));
+        yield* fromTestPromise(() => runtime.bucket.delete(alteredKey));
+        yield* fromTestPromise(() => runtime.bucket.put(alteredKey, bytes, { sha256: digest }));
+        const altered = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000911",
+            index: 0,
+            reference: changed.staged,
+          })
+        );
+        expect(altered.status).toBe(400);
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 0,
+          statement_ingestion_outbox: 0,
+          statement_submission_audit: 2,
+        });
+      })
+    ),
+  30_000
+);
+
+it(
   "bounds concurrent uploads with a released outstanding-work lease",
   () =>
     Effect.runPromise(

@@ -136,7 +136,9 @@ const checks: Array<Check> = [
     "--cwd",
     "apps/server",
     "test:cloudflare",
-    ...(Bun.env.CLOUDFLARE_TEST_SHARD ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`] : []),
+    ...(Bun.env.CLOUDFLARE_TEST_SHARD !== undefined
+      ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`]
+      : []),
   ]),
   rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
     "bun",

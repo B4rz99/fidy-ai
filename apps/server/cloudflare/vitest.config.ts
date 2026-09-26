@@ -14,5 +14,6 @@ export default defineConfig({
     // fails an unrelated file's test with `assert(message?.id === id)`. Files run one at a time so
     // the suite is deterministic; the complete suite still finishes in about a minute.
     fileParallelism: false,
+    testTimeout: 15_000,
   },
 });

@@ -19,7 +19,7 @@ class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 
 /** Decoded User-owned facts supplied by the storage adapter for one Dashboard projection. */
 export type DashboardFacts = Readonly<{
-  movements: ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>;
+  transactions: ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>;
   lists: ReadonlyMap<
     string,
     ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>
@@ -50,12 +50,14 @@ const renderChart = (
     result: {
       appliedPeriod: period,
       buckets: groupDashboardChart(
-        selected(facts.movements, widget, Option.some(period)).map(({ transaction, category }) => ({
-          category,
-          occurredAt: transaction.occurredAt.epochMilliseconds,
-          direction: transaction.direction,
-          money: transaction.money,
-        })),
+        selected(facts.transactions, widget, Option.some(period)).map(
+          ({ transaction, category }) => ({
+            category,
+            occurredAt: transaction.occurredAt.epochMilliseconds,
+            direction: transaction.direction,
+            money: transaction.money,
+          })
+        ),
         { groupBy: widget.groupBy, timeZone: facts.context.time_zone }
       ),
     },
@@ -99,7 +101,7 @@ const renderMetric = (
     result: {
       appliedPeriod: period,
       moneyGroups: projectDashboardMetric(
-        selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
+        selected(facts.transactions, widget, Option.some(period)).map(({ transaction }) => ({
           direction: transaction.direction,
           money: transaction.money,
         })),
@@ -115,7 +117,7 @@ const budgetSpent = (
   period: ReturnType<typeof resolveDashboardPeriod>
 ): Money =>
   dashboardBudgetSpent(
-    selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
+    selected(facts.transactions, widget, Option.some(period)).map(({ transaction }) => ({
       direction: transaction.direction,
       money: transaction.money,
     })),

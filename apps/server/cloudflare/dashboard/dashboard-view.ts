@@ -70,7 +70,7 @@ const decodeFacts = (
     userResult: D1Result<unknown>;
     categories: D1Result<unknown>;
     budgets: D1Result<unknown>;
-    movements: D1Result<unknown>;
+    transactions: D1Result<unknown>;
     lists: ReadonlyArray<Readonly<{ id: string; result: D1Result<unknown> }>>;
   }>
 ): Option.Option<DashboardFacts> => {
@@ -78,7 +78,7 @@ const decodeFacts = (
   if (
     Option.isNone(context) ||
     input.budgets.results.length > maximumBudgets ||
-    input.movements.results.length > maximumProjectionFacts
+    input.transactions.results.length > maximumProjectionFacts
   ) {
     return Option.none();
   }
@@ -90,7 +90,7 @@ const decodeFacts = (
       Option.flatMap(Schema.decodeUnknownOption(BudgetRow)(raw), () => budgetFromRow(raw))
     )
   );
-  const movements = Option.all(input.movements.results.map(decodeTransactionFact));
+  const transactions = Option.all(input.transactions.results.map(decodeTransactionFact));
   const lists = Option.all(
     input.lists.map(({ id, result }) =>
       Option.map(
@@ -99,7 +99,7 @@ const decodeFacts = (
       )
     )
   );
-  return Option.map(Option.all({ categories, budgets, movements, lists }), (facts) => ({
+  return Option.map(Option.all({ categories, budgets, transactions, lists }), (facts) => ({
     ...facts,
     lists: new Map(facts.lists),
     categories: new Map(facts.categories.map((category) => [category.id, category])),
@@ -107,11 +107,11 @@ const decodeFacts = (
   }));
 };
 
-const selectedColumns = `movement.id, movement.amount, movement.currency,
-  movement.direction, movement.counterparty, movement.notes, movement.category_id, category.label,
-  movement.occurred_at, movement.created_at, movement.revision`;
-const selectedFrom = `FROM effective_transaction movement
-  JOIN categories category ON category.id = movement.category_id`;
+const selectedColumns = `effective.id, effective.amount, effective.currency,
+  effective.direction, effective.counterparty, effective.notes, effective.category_id, category.label,
+  effective.occurred_at, effective.created_at, effective.revision`;
+const selectedFrom = `FROM effective_transaction effective
+  JOIN categories category ON category.id = effective.category_id`;
 
 const prepareTotals = ({
   db,
@@ -126,8 +126,8 @@ const prepareTotals = ({
 }>): D1PreparedStatement =>
   db
     .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
-      WHERE movement.user_id = ? AND ? = 1
-      ORDER BY movement.occurred_at DESC, movement.created_at DESC, movement.id DESC
+      WHERE effective.user_id = ? AND ? = 1
+      ORDER BY effective.occurred_at DESC, effective.created_at DESC, effective.id DESC
       LIMIT ${maximumProjectionFacts + 1}`)
     .bind(...relation.bindings, userId, needed ? 1 : 0);
 
@@ -142,7 +142,7 @@ const listSearchText = [
   ["Ñ", "ñ"],
 ].reduce(
   (expression, [upper, lower]) => `replace(${expression}, '${upper}', '${lower}')`,
-  "coalesce(movement.counterparty, '') || ' ' || coalesce(movement.notes, '')"
+  "coalesce(effective.counterparty, '') || ' ' || coalesce(effective.notes, '')"
 );
 
 const prepareList = ({
@@ -159,13 +159,13 @@ const prepareList = ({
   const categories = widget.categories ?? [];
   const filter =
     categories.length > 0
-      ? `AND movement.category_id IN (${categories.map(() => "?").join(",")})`
+      ? `AND effective.category_id IN (${categories.map(() => "?").join(",")})`
       : "";
   const search = widget.search === undefined ? "" : `AND instr(lower(${listSearchText}), ?) > 0`;
   return db
     .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
-      WHERE movement.user_id = ? ${filter} ${search}
-      ORDER BY movement.occurred_at DESC, movement.created_at DESC, movement.id DESC
+      WHERE effective.user_id = ? ${filter} ${search}
+      ORDER BY effective.occurred_at DESC, effective.created_at DESC, effective.id DESC
       LIMIT ?`)
     .bind(
       ...relation.bindings,
@@ -188,8 +188,8 @@ export const loadDashboardFacts = (
     const widgets = collectLayoutWidgets(document.layout);
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
     const needsTotals = widgets.some((widget) => widget.type !== "transaction-list");
-    const [userResult, categories, budgets, movements, ...listResults] = yield* Effect.tryPromise(
-      () =>
+    const [userResult, categories, budgets, transactions, ...listResults] =
+      yield* Effect.tryPromise(() =>
         db.batch([
           db
             .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
@@ -203,12 +203,12 @@ export const loadDashboardFacts = (
           prepareTotals({ db, relation, userId, needed: needsTotals }),
           ...lists.map((widget) => prepareList({ db, relation, userId, widget })),
         ])
-    );
+      );
     if (
       userResult === undefined ||
       categories === undefined ||
       budgets === undefined ||
-      movements === undefined ||
+      transactions === undefined ||
       listResults.length !== lists.length
     ) {
       return Option.none();
@@ -217,5 +217,5 @@ export const loadDashboardFacts = (
       const result = listResults[index];
       return result === undefined ? [] : [{ id: widget.id, result }];
     });
-    return decodeFacts({ userResult, categories, budgets, movements, lists: listPairs });
+    return decodeFacts({ userResult, categories, budgets, transactions, lists: listPairs });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

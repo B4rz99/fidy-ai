@@ -582,30 +582,33 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
-
-type LegacyPayloadValue = Exclude<
-  ExistingCommittedValue,
-  { _tag: "Budget" | "Insight" | "DeliveredInsight" }
->;
-const existingMutationPayload = (value: LegacyPayloadValue): unknown => {
-  if ("transaction" in value) return value.transaction;
-  if ("submission" in value) return value.submission;
-  if ("pair" in value) return value.pair;
-  if ("rule" in value) return value.rule;
-  if ("memory" in value) return value.memory;
-  return value.id;
-};
-
 /** The JSON payload one committed canonical value carries as its operation's success data. */
 export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
-  if (value._tag === "ForwardingAddress") return value.address;
-  if (value._tag === "Budget") return value.budget;
-  if (value._tag === "Insight") return value.insight;
-  if (value._tag === "DeliveredInsight") {
-    return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
+  switch (value._tag) {
+    case "Transaction":
+    case "EffectiveTransaction":
+      return value.transaction;
+    case "RestoredPair":
+      return value.pair;
+    case "KeywordRule":
+      return value.rule;
+    case "Memory":
+      return value.memory;
+    case "StatementSubmission":
+      return value.submission;
+    case "ForwardingAddress":
+      return value.address;
+    case "Budget":
+      return value.budget;
+    case "Insight":
+      return value.insight;
+    case "DeliveredInsight":
+      return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
+    case "RemovedKeywordRule":
+    case "RemovedMemory":
+    case "RemovedBudget":
+      return value.id;
   }
-  return existingMutationPayload(value);
 };
 
 const encodeRemovedValue = (

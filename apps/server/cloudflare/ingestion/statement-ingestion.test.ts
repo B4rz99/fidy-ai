@@ -2926,7 +2926,9 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
-        const first = yield* fromTestPromise(() => stageOne(runtime));
+        // The first reference belongs to another User. Counting two statement children must
+        // refuse the envelope before preparing that first child or recording its refusal Audit.
+        const first = yield* fromTestPromise(() => stageOne(runtime, 1));
         const second = yield* fromTestPromise(() => stageOne(runtime));
         const refused = yield* fromTestPromise(() =>
           batch(runtime, 0, [

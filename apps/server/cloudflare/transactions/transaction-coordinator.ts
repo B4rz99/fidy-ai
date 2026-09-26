@@ -1,6 +1,8 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
 import {
+  HostedDeliveryAdmission,
   HostedTurnAdmission,
+  acknowledgeBrowserTurn,
   browserHostedDelivery,
   completeHostedTurn,
 } from "../agent/hosted-turn";
@@ -375,37 +377,62 @@ export class UserTransactionCoordinator {
   fetch(request: Request): Promise<Response> {
     const environment = this.env;
     const userId = this.state.id.name;
-    const settledResponse = this.pending.then(() =>
-      new URL(request.url).pathname === "/hosted-turn"
-        ? this.runHostedTurn(request, userId)
-        : Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
-                if (Option.isNone(candidate)) return transactionUnavailable();
-                if (request.method === "POST" && new URL(request.url).pathname === "/statement-work") {
-                  const activity = authorizedStatementActivity(candidate.value, userId);
-                  if (Option.isNone(activity)) return transactionUnavailable();
-                  return yield* executeStatementActivity(activity.value, environment, userId);
-                }
-                const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
-                if (
-                  Option.isNone(admission) ||
-                  admission.value.digest.length !== digestBytes ||
-                  admission.value.userId !== userId
-                ) {
-                  return transactionUnavailable();
-                }
-                return yield* executeCanonicalAdmission(admission.value, environment);
-              })
-            )
-          )
-    );
+    const settledResponse = this.pending.then(() => {
+      const path = new URL(request.url).pathname;
+      if (path === "/hosted-turn") return this.runHostedTurn(request, userId);
+      if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
+      return Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
+            if (Option.isNone(candidate)) return transactionUnavailable();
+            if (request.method === "POST" && path === "/statement-work") {
+              const activity = authorizedStatementActivity(candidate.value, userId);
+              if (Option.isNone(activity)) return transactionUnavailable();
+              return yield* executeStatementActivity(activity.value, environment, userId);
+            }
+            const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
+            if (
+              Option.isNone(admission) ||
+              admission.value.digest.length !== digestBytes ||
+              admission.value.userId !== userId
+            ) {
+              return transactionUnavailable();
+            }
+            return yield* executeCanonicalAdmission(admission.value, environment);
+          })
+        )
+      );
+    });
     this.pending = settledResponse.then(
       () => undefined,
       () => undefined
     );
     return settledResponse;
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async runHostedReceipt(request: Request, userId: string): Promise<Response> {
+    const admission = Schema.decodeUnknownOption(HostedDeliveryAdmission)(
+      await request.json().catch(() => undefined)
+    );
+    if (
+      Option.isNone(admission) ||
+      admission.value.userId !== userId ||
+      admission.value.digest.length !== digestBytes
+    ) {
+      return transactionUnavailable();
+    }
+    return acknowledgeBrowserTurn({
+      db: this.env.DB,
+      subject: {
+        userId,
+        id: admission.value.sessionId,
+        digest: new Uint8Array(admission.value.digest),
+      },
+      turnId: admission.value.turnId,
+      receipt: admission.value.receipt,
+    }).catch(() => transactionUnavailable());
   }
 
   // @effect-diagnostics-next-line asyncFunction:off

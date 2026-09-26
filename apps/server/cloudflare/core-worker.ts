@@ -136,7 +136,12 @@ import {
   receiveStatementExtraction,
   reconcileStatementExtraction,
 } from "./ingestion/statement-delivery";
-import { HostedTurnAdmission, hostedTurnInput } from "./agent/hosted-turn";
+import {
+  HostedDeliveryAdmission,
+  HostedTurnAdmission,
+  hostedDeliveryReceipt,
+  hostedTurnInput,
+} from "./agent/hosted-turn";
 import { UserId } from "@fidy/server/agent-runtime";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
@@ -581,6 +586,7 @@ const ownedCorePath = (path: string): boolean =>
     "/user",
     statementStagingPath,
     "/web/hosted-turns",
+    "/web/hosted-turns/delivery",
   ].includes(path) ||
   transactionPath(path) ||
   patRoute(path) ||
@@ -1177,6 +1183,10 @@ const hostedTurnPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
 });
+const hostedReceiptPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 512,
+  deadlineMilliseconds: 2_000,
+});
 
 /** A browser-authenticated Turn crosses the same per-User coordinator as canonical work. */
 const hostedTurnResponse = (
@@ -1214,6 +1224,41 @@ const hostedTurnResponse = (
     );
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedTurn"));
 
+const hostedReceiptResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (request.method !== "POST") return methodNotAllowed();
+    const subject = yield* Effect.tryPromise(() =>
+      transactionSession({ request, db: environment.DB })
+    );
+    if (Option.isNone(subject)) return unauthenticatedTransaction();
+    const input = yield* Effect.tryPromise(() =>
+      boundedJsonBody(request, hostedReceiptPolicy, hostedDeliveryReceipt)
+    );
+    if (Option.isNone(input)) {
+      return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
+    }
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedDeliveryAdmission))({
+      userId: UserId.make(subject.value.userId),
+      sessionId: subject.value.id,
+      digest: Array.from(subject.value.digest),
+      ...input.value,
+    });
+    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
+    return yield* Effect.tryPromise(() =>
+      stub.fetch(
+        new Request("https://coordinator.internal/hosted-turn/receipt", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          signal: request.signal,
+        })
+      )
+    );
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedReceipt"));
+
 const directPathResponse = (
   request: Request,
   environment: CoreEnvironment
@@ -1227,6 +1272,9 @@ const directPathResponse = (
   }
   if (path === "/web/hosted-turns") {
     return Option.some(hostedTurnResponse(request, environment));
+  }
+  if (path === "/web/hosted-turns/delivery") {
+    return Option.some(hostedReceiptResponse(request, environment));
   }
   return Option.none();
 };

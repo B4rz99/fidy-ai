@@ -16,12 +16,14 @@ import { newId } from "../pats/pat-shared";
 import {
   type HostedTurnOutcome,
   type HostedTurnSnapshot,
+  acknowledgeHostedDelivery,
   admitHostedTurn,
   finishHostedTurn,
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
   selectHostedSession,
+  stageHostedDelivery,
 } from "./turn-store";
 
 const noStore = { "cache-control": "no-store" } as const;
@@ -36,12 +38,18 @@ const invalid = (): Response =>
 const interrupted = (): Response =>
   Response.json({ status: "interrupted" }, { status: 503, headers: noStore });
 
-/** The channel must acknowledge a visible reply before the Turn is terminalized as Completed. */
-export type HostedDelivery = (text: TranscriptText) => Promise<Response>;
+/** Construct a proposed reply. Only a separate browser-visible receipt permits completion. */
+export type HostedDelivery = (
+  proposal: Readonly<{
+    text: TranscriptText;
+    turnId: TranscriptTurnId;
+    receipt: string;
+  }>
+) => Promise<Response>;
 
-/** Render a bounded, inert JSON text response for the authenticated browser channel. */
-export const browserHostedDelivery: HostedDelivery = (text) =>
-  Promise.resolve(Response.json({ text }, { status: 200, headers: noStore }));
+/** Return an inert reply for the authenticated browser to render before acknowledging it. */
+export const browserHostedDelivery: HostedDelivery = ({ text, turnId, receipt }) =>
+  Promise.resolve(Response.json({ text, turnId, receipt }, { status: 202, headers: noStore }));
 
 type HostedTurnInput = Readonly<{
   db: D1Database;
@@ -67,27 +75,16 @@ export const completeHostedTurn = async ({
   signal,
 }: HostedTurnInput): Promise<Response> => {
   const userId = UserId.make(subject.userId);
-  const current = transactionNow();
-  const initial = await readHostedSnapshot(db, subject, current);
-  if (Option.isNone(initial)) return unauthenticated();
-  const recovered = await recoverPending({
-    db,
-    userId,
-    pending: initial.value.pending,
-    now: current,
-  });
-  if (!recovered) return unavailable();
-  const fresh = await readHostedSnapshot(db, subject, transactionNow());
-  if (Option.isNone(fresh)) return unauthenticated();
-  if (fresh.value.revoked) return consentRequired();
+  const snapshot = await readAdmissibleSnapshot({ db, subject, userId });
+  if (snapshot instanceof Response) return snapshot;
   const startedAtMs = transactionNow();
-  const selection = selectHostedSession(fresh.value, userId, startedAtMs);
+  const selection = selectHostedSession(snapshot, userId, startedAtMs);
   const activeTurnId = TranscriptTurnId.make(newId());
   const prepared = await prepareHostedWork({
     db,
     subject,
     selection,
-    snapshot: fresh.value,
+    snapshot,
     userId,
     activeTurnId,
     startedAtMs,
@@ -114,6 +111,38 @@ export const completeHostedTurn = async ({
     deliver,
     signal,
   });
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const readAdmissibleSnapshot = async ({
+  db,
+  subject,
+  userId,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  userId: UserId;
+}>): Promise<HostedTurnSnapshot | Response> => {
+  const current = transactionNow();
+  const initial = await readHostedSnapshot(db, subject, current);
+  if (Option.isNone(initial)) return unauthenticated();
+  const recovered = await recoverPending({
+    db,
+    userId,
+    pending: initial.value.pending,
+    now: current,
+  });
+  if (recovered === "awaiting") {
+    return Response.json({ status: "awaiting_delivery" }, { status: 409, headers: noStore });
+  }
+  if (recovered === "error") return unavailable();
+  const fresh = await readHostedSnapshot(db, subject, transactionNow());
+  if (Option.isNone(fresh)) return unauthenticated();
+  if (fresh.value.revoked) return consentRequired();
+  if (!fresh.value.capacityAvailable) {
+    return Response.json({ status: "capacity_exceeded" }, { status: 429, headers: noStore });
+  }
+  return fresh.value;
 };
 
 type WorkPreflight = Readonly<{
@@ -171,6 +200,7 @@ const prepareHostedWork = async ({
   return Exit.isFailure(prepared) || signal.aborted ? Option.none() : Option.some(prepared.value);
 };
 
+const deliveryAcknowledgmentWindowMs = 120_000;
 const recoverPending = ({
   db,
   userId,
@@ -181,10 +211,18 @@ const recoverPending = ({
   userId: UserId;
   pending: Option.Option<Parameters<typeof recoverHostedTurn>[0]["turn"]>;
   now: number;
-}>): Promise<boolean> =>
-  Option.isNone(pending)
-    ? Promise.resolve(true)
-    : recoverHostedTurn({ db, userId, turn: pending.value, now });
+}>): Promise<"clear" | "awaiting" | "error"> => {
+  if (Option.isNone(pending)) return Promise.resolve("clear");
+  if (
+    pending.value.proposed_at_ms !== null &&
+    now - pending.value.proposed_at_ms < deliveryAcknowledgmentWindowMs
+  ) {
+    return Promise.resolve("awaiting");
+  }
+  return recoverHostedTurn({ db, userId, turn: pending.value, now }).then((recovered) =>
+    recovered ? ("clear" as const) : ("error" as const)
+  );
+};
 
 type AdmittedWork = Readonly<{
   db: D1Database;
@@ -229,7 +267,7 @@ const executeAdmittedTurn = async ({
     await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
     return unavailable();
   }
-  return deliverAndFinish(answer.value, deliver, finish);
+  return proposeDelivery({ db, userId, turnId, answer: answer.value, deliver, finish });
 };
 
 const approvedAnswer = (result: HostedTextResult): Option.Option<TranscriptText> =>
@@ -238,23 +276,49 @@ const approvedAnswer = (result: HostedTextResult): Option.Option<TranscriptText>
     : Option.none();
 
 // @effect-diagnostics-next-line asyncFunction:off
-const deliverAndFinish = async (
-  answer: TranscriptText,
-  deliver: HostedDelivery,
-  finish: (result: HostedTurnOutcome) => Promise<boolean>
-): Promise<Response> => {
-  let response: Response;
+const proposeDelivery = async ({
+  db,
+  userId,
+  turnId,
+  answer,
+  deliver,
+  finish,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  answer: TranscriptText;
+  deliver: HostedDelivery;
+  finish: (outcome: HostedTurnOutcome) => Promise<boolean>;
+}>): Promise<Response> => {
+  const receipt = await stageHostedDelivery({ db, userId, turnId, text: answer });
   try {
-    response = await deliver(answer);
-    if (!response.ok) {
-      await finish({ _tag: "Failed", reason: "DeliveryFailed" });
-      return unavailable();
-    }
+    const response = await deliver({ text: answer, turnId, receipt });
+    if (response.ok) return response;
   } catch {
-    await finish({ _tag: "Failed", reason: "DeliveryFailed" });
-    return unavailable();
+    // The channel rejected the proposed reply. Nothing became visible.
   }
-  return (await finish({ _tag: "Completed", text: answer })) ? response : unavailable();
+  await finish({ _tag: "Failed", reason: "DeliveryFailed" });
+  return unavailable();
+};
+
+/** Complete only after the authenticated browser has rendered and acknowledged the staged reply. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const acknowledgeBrowserTurn = async ({
+  db,
+  subject,
+  turnId,
+  receipt,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  turnId: TranscriptTurnId;
+  receipt: string;
+}>): Promise<Response> => {
+  const acknowledged = await acknowledgeHostedDelivery({ db, subject, turnId, receipt });
+  return Option.isSome(acknowledged)
+    ? Response.json({ status: "completed" }, { status: 200, headers: noStore })
+    : unauthenticated();
 };
 
 /** Decode a bounded User request; the authenticated channel owns its credential separately. */
@@ -265,6 +329,18 @@ export const HostedTurnAdmission = Schema.Struct({
   sessionId: Schema.String.check(Schema.isUUID()),
   digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   text: TranscriptText,
+});
+/** The browser sends this receipt only after it has visibly rendered the exact reply. */
+export const hostedDeliveryReceipt = Schema.Struct({
+  turnId: TranscriptTurnId,
+  receipt: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
+});
+/** Receipt forwarded by Core with a fresh WebSession proof, never from public input. */
+export const HostedDeliveryAdmission = Schema.Struct({
+  userId: UserId,
+  sessionId: Schema.String.check(Schema.isUUID()),
+  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
+  ...hostedDeliveryReceipt.fields,
 });
 /** No model or D1 work is bought for invalid input. */
 export const invalidHostedTurn = invalid;

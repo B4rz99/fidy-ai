@@ -25,6 +25,9 @@ CREATE TABLE hosted_turns (
          (status IN ('completed','interrupted') AND terminal_at_ms >= started_at_ms AND failure_reason IS NULL))
 ) STRICT;
 CREATE UNIQUE INDEX hosted_turns_one_pending ON hosted_turns(user_id) WHERE status = 'pending';
+CREATE TRIGGER hosted_turns_begin_pending BEFORE INSERT ON hosted_turns
+WHEN NEW.status <> 'pending'
+BEGIN SELECT RAISE(ABORT, 'hosted_turn_must_begin_pending'); END;
 CREATE INDEX hosted_turns_by_user_session ON hosted_turns(user_id, hosted_session_id, started_at_ms);
 CREATE TRIGGER hosted_turns_terminal_once BEFORE UPDATE ON hosted_turns
 WHEN OLD.status <> 'pending' OR NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id
@@ -48,6 +51,18 @@ CREATE TABLE transcript_entries (
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
 CREATE INDEX transcript_entries_by_session ON transcript_entries(user_id, hosted_session_id, sequence);
+-- A reply awaiting browser-visible delivery is not Transcript evidence. It is discarded on
+-- acknowledgment or recovery; only then can the assistant entry become authoritative.
+CREATE TABLE hosted_delivery_proposals (
+  turn_id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  receipt_digest BLOB NOT NULL CHECK (length(receipt_digest) = 32),
+  proposed_at_ms INTEGER NOT NULL,
+  text TEXT NOT NULL CHECK (length(text) > 0),
+  FOREIGN KEY (user_id, turn_id) REFERENCES hosted_turns(user_id, id)
+) STRICT;
+CREATE TRIGGER hosted_delivery_proposals_no_update BEFORE UPDATE ON hosted_delivery_proposals
+BEGIN SELECT RAISE(ABORT, 'hosted_delivery_immutable'); END;
 CREATE UNIQUE INDEX transcript_one_user ON transcript_entries(turn_id) WHERE kind = 'user';
 CREATE UNIQUE INDEX transcript_one_terminal ON transcript_entries(turn_id) WHERE kind IN ('assistant','failed','interrupted');
 -- A terminal status cannot be committed without its matching exact or metadata-only marker.
@@ -55,7 +70,9 @@ CREATE TRIGGER hosted_turns_terminal_evidence BEFORE UPDATE ON hosted_turns
 WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND user_id = NEW.user_id
   AND occurred_at_ms = NEW.terminal_at_ms
   AND kind = CASE NEW.status WHEN 'completed' THEN 'assistant' ELSE NEW.status END
-  AND (NEW.status <> 'failed' OR failure_reason = NEW.failure_reason))
+  AND (NEW.status <> 'failed' OR failure_reason = NEW.failure_reason)
+  AND (NEW.status <> 'completed' OR text = (SELECT text FROM hosted_delivery_proposals
+     WHERE turn_id = NEW.id AND user_id = NEW.user_id)))
 BEGIN SELECT RAISE(ABORT, 'hosted_turn_terminal_evidence_required'); END;
 CREATE TRIGGER transcript_no_update BEFORE UPDATE ON transcript_entries
 BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;

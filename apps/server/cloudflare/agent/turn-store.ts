@@ -11,7 +11,7 @@ import {
   type SessionTranscriptEntry,
   TranscriptEntry,
   TranscriptEntryId,
-  type TranscriptText,
+  TranscriptText,
   TranscriptTurnId,
   TurnFailureReason,
   UserId,
@@ -22,11 +22,15 @@ import {
 } from "@fidy/server/agent-runtime";
 import { DateTime, Option, Schema } from "effect";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
-import { callerAuthority } from "../transactions/transaction-boundary";
+import { callerAuthority, transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
 
 const maximumRetainedEntries = 200;
 const maximumCurrentMemories = 100;
+const millisecondsPerDay = 86_400_000;
+const maximumDailyTurns = 50;
+const receiptBytes = 32;
+const hexRadix = 16;
 const SessionRow = Schema.Struct({
   id: HostedAgentSessionId,
   user_id: UserId,
@@ -38,6 +42,7 @@ const SessionRow = Schema.Struct({
 const TurnRow = Schema.Struct({
   id: TranscriptTurnId,
   started_at_ms: Schema.Int,
+  proposed_at_ms: Schema.NullOr(Schema.Int),
 });
 const ConsentUserRow = Schema.Struct({
   service_market: ServiceMarket,
@@ -71,6 +76,7 @@ export type HostedTurnSnapshot = Readonly<{
   }>;
   consentBasis: HostedAgentSessionConsentBasis;
   revoked: boolean;
+  capacityAvailable: boolean;
   session: Option.Option<SessionRow>;
   pending: Option.Option<TurnRow>;
 }>;
@@ -113,13 +119,22 @@ export const readHostedSnapshot = async (
     .bind(subject.userId)
     .first();
   const pendingRaw = await db
-    .prepare(`SELECT id, started_at_ms FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
+    .prepare(`SELECT id, started_at_ms,
+      (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id) AS proposed_at_ms
+      FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
     .bind(subject.userId)
     .first();
+  const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
+  const budget = await db
+    .prepare(`SELECT COUNT(*) AS used FROM hosted_turns
+    WHERE user_id = ? AND started_at_ms >= ? AND started_at_ms < ?`)
+    .bind(subject.userId, day, day + millisecondsPerDay)
+    .first<{ used: number }>();
   return Option.some({
     user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
     consentBasis: decodeConsent(user),
     revoked: user.revoked === 1,
+    capacityAvailable: (budget?.used ?? maximumDailyTurns) < maximumDailyTurns,
     session: Option.fromNullishOr(sessionRaw).pipe(
       Option.map(Schema.decodeUnknownSync(SessionRow))
     ),
@@ -148,6 +163,9 @@ export const recoverHostedTurn = async ({
       .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
       .bind(timestamp, turn.id, userId),
+    db
+      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
+      .bind(turn.id, userId),
     // A recovered Pending Turn's activity was its start, not this recovery instant.
     db
       .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
@@ -342,6 +360,84 @@ export const admitHostedTurn = async ({
     : Option.none();
 };
 
+const receiptHash = (receipt: string): Promise<Uint8Array> =>
+  crypto.subtle
+    .digest("SHA-256", new TextEncoder().encode(receipt))
+    .then((value) => new Uint8Array(value));
+
+/** Reserve one exact provider answer; this is not yet Transcript evidence. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const stageHostedDelivery = async ({
+  db,
+  userId,
+  turnId,
+  text,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  text: TranscriptText;
+}>): Promise<string> => {
+  const receipt = Array.from(crypto.getRandomValues(new Uint8Array(receiptBytes)), (byte) =>
+    byte.toString(hexRadix).padStart(2, "0")
+  ).join("");
+  const digest = await receiptHash(receipt);
+  const write = await db
+    .prepare(`INSERT INTO hosted_delivery_proposals
+    (turn_id, user_id, receipt_digest, proposed_at_ms, text)
+    SELECT id, user_id, ?, ?, ? FROM hosted_turns
+    WHERE id = ? AND user_id = ? AND status = 'pending'`)
+    .bind(digest, transactionNow(), text, turnId, userId)
+    .run();
+  if (write.meta.changes !== 1) {
+    throw new Error("Hosted Turn no longer pending");
+  }
+  return receipt;
+};
+
+const ProposalRow = Schema.Struct({
+  text: TranscriptText,
+  started_at_ms: Schema.Int,
+});
+/** Acknowledgment promotes only an exact staged provider reply with a fresh User-owned WebSession. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const acknowledgeHostedDelivery = async ({
+  db,
+  subject,
+  turnId,
+  receipt,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  turnId: TranscriptTurnId;
+  receipt: string;
+}>): Promise<Option.Option<TranscriptText>> => {
+  const current = transactionNow();
+  const digest = await receiptHash(receipt);
+  const raw = await db
+    .prepare(`SELECT p.text, t.started_at_ms FROM hosted_delivery_proposals AS p
+    JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
+    JOIN web_sessions AS w ON w.user_id = p.user_id
+    WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
+      AND t.status = 'pending' AND w.id = ? AND w.token_digest = ?
+      AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?`)
+    .bind(subject.userId, turnId, digest, subject.id, subject.digest, current, current)
+    .first();
+  if (raw === null) {
+    return Option.none();
+  }
+  const proposal = Schema.decodeUnknownSync(ProposalRow)(raw);
+  const saved = await finishHostedTurn({
+    db,
+    userId: UserId.make(subject.userId),
+    turnId,
+    startedAtMs: proposal.started_at_ms,
+    result: { _tag: "Completed", text: proposal.text },
+    now: current,
+  });
+  return saved ? Option.some(proposal.text) : Option.none();
+};
+
 /** Terminal outcome whose evidence must be stored in the same D1 batch. */
 export type HostedTurnOutcome =
   | Readonly<{ _tag: "Completed"; text: TranscriptText }>
@@ -381,6 +477,9 @@ export const finishHostedTurn = async ({
       .prepare(`UPDATE hosted_turns SET status = ?, terminal_at_ms = ?, failure_reason = ?
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
       .bind(status, time, reason, turnId, userId),
+    db
+      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
+      .bind(turnId, userId),
     db
       .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?)`)

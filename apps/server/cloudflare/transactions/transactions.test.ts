@@ -15,6 +15,9 @@ import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
+import { hostedDeliveryReceipt } from "../agent/hosted-turn";
+import { newId } from "../pats/pat-shared";
+import { transactionNow } from "./transaction-boundary";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { transactionInput, transactionSession } from "./transactions";
@@ -780,6 +783,11 @@ effectIt.effect(
           },
         }
       );
+      const hostedCoordinator = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request) => coordinator.fetch(new Request(request)),
+        }),
+      };
       const response = yield* fromTestPromise(() =>
         sendPublicRequest(
           db,
@@ -792,19 +800,270 @@ effectIt.effect(
             },
             body: '{"text":"Hola"}',
           }),
-          {
-            getByName: (): Pick<Fetcher, "fetch"> => ({
-              fetch: (request) => coordinator.fetch(new Request(request)),
-            }),
-          }
+          hostedCoordinator
         )
       );
-      expect(response.status).toBe(200);
-      expect(yield* fromTestPromise(() => response.json())).toEqual({ text: "Respuesta visible" });
+      expect(response.status).toBe(202);
+      const visible = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          text: Schema.String,
+          ...hostedDeliveryReceipt.fields,
+        })
+      )(yield* fromTestPromise(() => response.json()));
+      expect(visible.text).toBe("Respuesta visible");
+      const before = yield* fromTestPromise(() =>
+        db.prepare(`SELECT status FROM hosted_turns WHERE user_id = ?`).bind(users[0]).all()
+      );
+      expect(before.results).toEqual([{ status: "pending" }]);
+      const receiptBody = yield* Schema.encodeEffect(Schema.fromJsonString(hostedDeliveryReceipt))({
+        turnId: visible.turnId,
+        receipt: visible.receipt,
+      });
+      const badReceipt = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          hostedReceiptBrowserRequest(0, receiptBody.replace(visible.receipt, "0".repeat(64))),
+          hostedCoordinator
+        )
+      );
+      expect(badReceipt.status).toBe(401);
+      const confirmation = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedReceiptBrowserRequest(0, receiptBody), hostedCoordinator)
+      );
+      expect(confirmation.status).toBe(200);
+      const replay = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedReceiptBrowserRequest(0, receiptBody), hostedCoordinator)
+      );
+      expect(replay.status).toBe(401);
       const rows = yield* fromTestPromise(() =>
         db.prepare(`SELECT status FROM hosted_turns WHERE user_id = ?`).bind(users[0]).all()
       );
       expect(rows.results).toEqual([{ status: "completed" }]);
+    })
+);
+const hostedReceiptBrowserRequest = (index: number, body: string): Request =>
+  new Request("https://api.fidyapp.com/web/hosted-turns/delivery", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body,
+  });
+const hostedBrowserRequest = (index: number, text: string): Request =>
+  new Request("https://api.fidyapp.com/web/hosted-turns", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ text }),
+  });
+const grantHostedConsent = ({
+  db,
+  user,
+  grant,
+  time,
+}: Readonly<{
+  db: D1Database;
+  user: string;
+  grant: string;
+  time: number;
+}>): Promise<D1Response> => {
+  const disclosure = Schema.encodeSync(
+    Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+  )(currentDisclosureFor());
+  return db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+    VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+    .bind(grant, user, disclosure, time, time)
+    .run();
+};
+
+effectIt.effect("refuses repeated public over-allowance Turns before buying model context", () =>
+  Effect.gen(function* () {
+    const db = yield* fromTestPromise(() => setup());
+    const user = users[0] ?? "";
+    yield* fromTestPromise(() =>
+      grantHostedConsent({
+        db,
+        user,
+        grant: "10000000-0000-4000-8000-000000000091",
+        time: transactionNow(),
+      })
+    );
+    let calls = 0;
+    const coordinator = new UserTransactionCoordinator(
+      { id: { name: user } },
+      {
+        ...coordinatorEnvironment(db),
+        AI: {
+          run: (): Promise<Response> => {
+            calls++;
+            return Promise.resolve(
+              Response.json({
+                choices: [
+                  { message: { role: "assistant", content: "Listo" }, finish_reason: "stop" },
+                ],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+              })
+            );
+          },
+        },
+      }
+    );
+    const binding = {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: (request) => coordinator.fetch(new Request(request)),
+      }),
+    };
+    const first = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "First"), binding)
+    );
+    expect(first.status).toBe(202);
+    const visible = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ text: Schema.String, ...hostedDeliveryReceipt.fields })
+    )(yield* fromTestPromise(() => first.json()));
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(hostedDeliveryReceipt))({
+      turnId: visible.turnId,
+      receipt: visible.receipt,
+    });
+    const confirmed = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedReceiptBrowserRequest(0, body), binding)
+    );
+    expect(confirmed.status).toBe(200);
+    const session = yield* fromTestPromise(() =>
+      db
+        .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+        .bind(user)
+        .first<{ hosted_session_id: string }>()
+    );
+    if (session === null) throw Error("missing Hosted Agent Session");
+    const time = transactionNow();
+    const seed = (): Promise<unknown> => {
+      const turn = newId();
+      return db.batch([
+        db
+          .prepare(
+            "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+          )
+          .bind(turn, user, session.hosted_session_id, time),
+        db
+          .prepare(
+            "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Budget')"
+          )
+          .bind(newId(), user, session.hosted_session_id, turn, time),
+        db
+          .prepare(
+            "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+          )
+          .bind(newId(), user, session.hosted_session_id, turn, time),
+        db
+          .prepare(
+            "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+          )
+          .bind(time, turn),
+      ]);
+    };
+    yield* fromTestPromise(() =>
+      Array.from({ length: 49 }, () => undefined).reduce<Promise<unknown>>(
+        (previous) => previous.then(seed),
+        Promise.resolve()
+      )
+    );
+    const denied = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "Over quota"), binding)
+    );
+    const repeated = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "Again"), binding)
+    );
+    expect([denied.status, repeated.status]).toEqual([429, 429]);
+    expect(calls).toBe(1);
+    const rows = yield* fromTestPromise(() =>
+      db.prepare("SELECT id FROM transcript_entries WHERE user_id = ?").bind(user).all()
+    );
+    expect(rows.results).toHaveLength(100);
+  })
+);
+
+effectIt.effect(
+  "rejects revoked, cross-User and stale public Turns without provider work or evidence",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const now = transactionNow();
+      const grant = "10000000-0000-4000-8000-000000000091";
+      yield* fromTestPromise(() =>
+        grantHostedConsent({ db, user: users[0] ?? "", grant, time: now })
+      );
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: users[1] ?? "",
+          grant: "10000000-0000-4000-8000-000000000092",
+          time: now,
+        })
+      );
+      let calls = 0;
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: users[0] ?? "" } },
+        {
+          ...coordinatorEnvironment(db),
+          AI: {
+            run: (): Promise<Response> => {
+              calls++;
+              return Promise.resolve(
+                Response.json({
+                  choices: [
+                    { message: { role: "assistant", content: "Unsafe" }, finish_reason: "stop" },
+                  ],
+                  usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                })
+              );
+            },
+          },
+        }
+      );
+      const binding = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request) => coordinator.fetch(new Request(request)),
+        }),
+      };
+      const crossUser = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(1, "Other User"), binding)
+      );
+      expect(crossUser.status).toBe(503);
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO consent_user_revocations
+      (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .bind("10000000-0000-4000-8000-000000000093", users[0], grant, sessions[0], now)
+          .run()
+      );
+      const revoked = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Revoked"), binding)
+      );
+      expect(revoked.status).toBe(401);
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET idle_expires_at_ms = ? WHERE id = ?")
+          .bind(now, sessions[1])
+          .run()
+      );
+      const stale = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(1, "Expired"), binding)
+      );
+      expect(stale.status).toBe(401);
+      expect(calls).toBe(0);
+      const turns = yield* fromTestPromise(() => db.prepare("SELECT id FROM hosted_turns").all());
+      const entries = yield* fromTestPromise(() =>
+        db.prepare("SELECT id FROM transcript_entries").all()
+      );
+      expect(turns.results).toHaveLength(0);
+      expect(entries.results).toHaveLength(0);
     })
 );
 /** One manual capture submitted through the public ingress exactly as a client sends it. */

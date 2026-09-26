@@ -158,6 +158,7 @@ const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
+const hostedReceiptPath = "/web/hosted-turns/delivery";
 const enrollmentPreparePath = "/web/subscription/card-enrollments/prepare";
 const enrollmentSubmitPath = "/web/subscription/card-enrollments/submit";
 const enrollmentStatusPath =
@@ -189,6 +190,7 @@ const postPaths = new Set<string>([
   enrollmentSubmitPath,
   statementStagingPath,
   hostedTurnPath,
+  hostedReceiptPath,
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
@@ -197,6 +199,7 @@ const browserMutationPaths = new Set<string>([
   ...pairingPaths,
   statementStagingPath,
   hostedTurnPath,
+  hostedReceiptPath,
 ]);
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
@@ -236,6 +239,7 @@ const cookieForwardPaths = new Set<string>([
   rotateRecoveryPath,
   statementStagingPath,
   hostedTurnPath,
+  hostedReceiptPath,
 ]);
 
 const browserHeaders = (request: Request, path: string): Headers => {
@@ -258,6 +262,7 @@ const supportHeaders = (request: Request): Headers =>
 const forwardsSession = (request: Request, path: string): boolean =>
   path === userPath ||
   path === hostedTurnPath ||
+  path === hostedReceiptPath ||
   transactionPath(path) ||
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));

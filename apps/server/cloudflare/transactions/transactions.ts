@@ -8,11 +8,13 @@ import {
   keywordRulesQuery,
 } from "@fidy/server/categories";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { sessionCookie, sha256 } from "../identity/browser-login";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
+  type TransactionRefusal,
   type TransactionSubject,
   acceptedPATStatements,
   boundaryFailure,
@@ -26,11 +28,12 @@ import {
   unauthenticatedTransaction,
 } from "./transaction-boundary";
 import {
-  type TransactionMutationPreparation,
-  executeSingleTransactionMutation,
+  type CanonicalMutationPreparation,
+  type PreparedCanonicalMutation,
   failedPreparation,
-  refusedPreparation,
-} from "./transaction-unit";
+  unavailablePreparation,
+} from "../mutations/mutation-types";
+import { refusedTransactionMutation } from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
 const UserContext = Schema.Struct({
@@ -236,6 +239,64 @@ const resolveCaptureCategory = ({
     return Option.getOrElse(known, () => fallbackCaptureCategory(input.direction));
   });
 
+/** One capture refusal built from the shared Transaction refusal vocabulary. */
+const refusedCapture = ({
+  db,
+  subject,
+  current,
+  refusal,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  refusal: TransactionRefusal;
+}>): CanonicalMutationPreparation =>
+  refusedTransactionMutation({
+    db,
+    subject,
+    operation: "transactions.createTransaction",
+    refusal,
+    current,
+  });
+
+/** The guarded writes and canonical outcome for one admitted capture. */
+const captureMutation = ({
+  db,
+  subject,
+  input,
+  context,
+  categoryId,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  input: typeof Input.Type;
+  context: typeof UserContext.Type;
+  categoryId: CategoryId;
+  current: number;
+}>): PreparedCanonicalMutation => {
+  const id = transactionId();
+  return {
+    requiredScope: callerScope(subject),
+    outcome: {
+      _tag: "Transaction",
+      operation: "transactions.createTransaction",
+      transactionId: id,
+      readback: { _tag: "Transaction" },
+      expectedRevision: Option.none(),
+    },
+    statements: captureStatements(db, {
+      input,
+      subject,
+      context,
+      categoryId,
+      id,
+      current,
+    }),
+    completion: db.prepare(transactionCaptureCompletion),
+  };
+};
+
 /**
  * Decide one canonical Transaction capture against live caller authority, User context, and the
  * Category taxonomy. The returned statements are guard-chained writes; the caller's D1 unit
@@ -251,69 +312,48 @@ export const prepareCapture = ({
   subject: TransactionCaller;
   input: typeof Input.Type;
   current: number;
-}>): Effect.Effect<TransactionMutationPreparation> =>
+}>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     if (DateTime.toEpochMillis(input.occurredAt) > current) {
-      return refusedPreparation("validation_failed", "A Transaction cannot occur in the future.");
+      return refusedCapture({
+        db,
+        subject,
+        current,
+        refusal: {
+          outcome: "validation_failed",
+          message: "A Transaction cannot occur in the future.",
+        },
+      });
     }
     const context = yield* captureUserContext(db, subject.userId);
-    if (Option.isNone(context)) return { _tag: "Unavailable" } as const;
+    if (Option.isNone(context)) return unavailablePreparation();
     const unrecognizedCategory = yield* Effect.tryPromise({
       try: () => hasUnknownCategory(db, input.categoryId),
       catch: boundaryFailure,
     });
     if (unrecognizedCategory) {
-      return refusedPreparation(
-        "not_found",
-        "The Category does not exist; correct categoryId and retry."
-      );
-    }
-    const categoryId = yield* resolveCaptureCategory({ db, subject, input });
-    const id = transactionId();
-    return {
-      _tag: "Prepared",
-      mutation: {
-        operation: "transactions.createTransaction",
-        transactionId: id,
-        response: { _tag: "Transaction" },
-        expectedRevision: Option.none(),
-        requiredScope: callerScope(subject),
-        statements: captureStatements(db, {
-          input,
-          subject,
-          context: context.value,
-          categoryId,
-          id,
-          current,
-        }),
-      },
-    } as const;
-  }).pipe(Effect.orElseSucceed(failedPreparation));
-
-/** Record one manual Transaction, its captured context and AuditLogEntry in one D1 atomic unit. */
-export const createManualTransaction = ({
-  db,
-  subject,
-  input,
-}: {
-  db: D1Database;
-  subject: TransactionCaller;
-  input: typeof Input.Type;
-}): Promise<Response> => {
-  const current = now();
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const preparation = yield* prepareCapture({ db, subject, input, current });
-      return yield* executeSingleTransactionMutation({
+      return refusedCapture({
         db,
         subject,
         current,
-        operation: "transactions.createTransaction",
-        preparation,
-        status: 201,
+        refusal: {
+          outcome: "not_found",
+          message: "The Category does not exist; correct categoryId and retry.",
+        },
       });
-    })
-  ).catch(() => transactionUnavailable());
-};
+    }
+    const categoryId = yield* resolveCaptureCategory({ db, subject, input });
+    return {
+      _tag: "Prepared",
+      mutation: captureMutation({
+        db,
+        subject,
+        input,
+        context: context.value,
+        categoryId,
+        current,
+      }),
+    } as const;
+  }).pipe(Effect.orElseSucceed(failedPreparation));
 
 export { transactionUnavailable as unavailableTransaction, unauthenticatedTransaction };

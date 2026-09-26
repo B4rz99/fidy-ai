@@ -210,6 +210,8 @@ const setup = (
                 },
                 {
                   DB: db,
+                  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+                  HOSTED_AI_MODEL: approvedWorkersAiModel,
                 }
               );
               coordinators.set(name, coordinator);

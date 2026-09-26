@@ -9,11 +9,12 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { UserTransactionCoordinator } from "./transaction-coordinator";
-import { AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
+import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
+import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { createManualTransaction, transactionInput, transactionSession } from "./transactions";
+import { transactionInput, transactionSession } from "./transactions";
 import { browseTransactions } from "./transaction-history";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -54,7 +55,17 @@ const request = (index: number, path = "/transactions", body?: object): Request 
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-const input = (changes: object = {}): object => ({
+/** The Transaction capture facts one test submits, with partial overrides for a single case. */
+const TestTransactionPayload = Schema.Struct({
+  money: Schema.Struct({ amount: Schema.String, currency: Schema.String }),
+  direction: Schema.String,
+  categoryId: Schema.String,
+  occurredAt: Schema.String,
+  counterparty: Schema.optionalKey(Schema.String),
+  notes: Schema.optionalKey(Schema.String),
+});
+type TestTransactionPayload = typeof TestTransactionPayload.Type;
+const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPayload => ({
   money: { amount: "9007199254740993.15", currency: "USD" },
   direction: "outflow",
   categoryId: category,
@@ -74,6 +85,14 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
           Promise.resolve()
         )
     );
+
+/** The coordination environment a test DO instance runs with: D1 plus the hosted-inference seam. */
+type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
+const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
+  DB: db,
+  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+  HOSTED_AI_MODEL: approvedWorkersAiModel,
+});
 
 const platformModule = (platform: boolean): Promise<string> =>
   Effect.runPromise(
@@ -121,6 +140,8 @@ const setup = (platform = false): Promise<D1Database> =>
                         worker: `transactions-${sequence}`,
                         exportName: "UserTransactionCoordinator",
                       },
+                      AI: { type: "json" as const, value: { run: null } },
+                      HOSTED_AI_MODEL: { type: "text" as const, value: approvedWorkersAiModel },
                     },
                   }
                 : {}),
@@ -256,29 +277,82 @@ const BatchEnvelope = Schema.Struct({
 });
 const CallerFailure = Schema.Struct({ error: Schema.Struct({ code: ErrorCode }) });
 const BatchRejection = AtomicBatchRejected;
-const batchCallId = (suffix: number): string =>
-  `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
-const transactionCall = (suffix: number, payload: object): object => ({
+const batchCallId = (suffix: number): AtomicBatchCallId =>
+  Schema.decodeSync(AtomicBatchCallId)(
+    `20000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`
+  );
+/** The selected correction facts one test submits, with only the changed facts supplied. */
+const TestCorrectionPayload = Schema.Struct({
+  expectedRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  changes: Schema.Struct({
+    notes: Schema.optionalKey(Schema.String),
+    categoryId: Schema.optionalKey(Schema.String),
+    counterparty: Schema.optionalKey(Schema.String),
+    money: Schema.optionalKey(Schema.Struct({ amount: Schema.String, currency: Schema.String })),
+    direction: Schema.optionalKey(Schema.String),
+    occurredAt: Schema.optionalKey(Schema.String),
+  }),
+});
+type TestCorrectionPayload = typeof TestCorrectionPayload.Type;
+const transactionCall = (suffix: number, payload: TestTransactionPayload): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.createTransaction",
   input: { payload },
 });
-const correctionCall = (suffix: number, id: string, payload: object): object => ({
+const correctionCall = (
+  suffix: number,
+  id: string,
+  payload: TestCorrectionPayload
+): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.updateTransaction",
   input: { params: { id }, payload },
 });
-const linkCall = (suffix: number, first: string, second: string): object => ({
+const linkCall = (suffix: number, first: string, second: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.linkTransactions",
   input: { payload: { firstTransactionId: first, secondTransactionId: second } },
 });
-const unlinkCall = (suffix: number, first: string, second: string): object => ({
+const unlinkCall = (suffix: number, first: string, second: string): AtomicBatchCall => ({
   callId: batchCallId(suffix),
   operation: "transactions.unlinkTransactions",
   input: { payload: { firstTransactionId: first, secondTransactionId: second } },
 });
-const batchRequest = (index: number, calls: ReadonlyArray<object>): Request =>
+const memoryCall = (suffix: number, text: string): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "memory.remember",
+  input: { payload: { text } },
+});
+const reviseMemoryCall = (suffix: number, id: string, text: string): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "memory.revise",
+  input: { params: { id }, payload: { text } },
+});
+const keywordRuleCall = (suffix: number, keyword: string, categoryId: string): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "categories.createKeywordRule",
+  input: { payload: { keyword, categoryId } },
+});
+const updateKeywordRuleCall = (
+  suffix: number,
+  id: string,
+  payload: Readonly<{ keyword: string; categoryId: string }>
+): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "categories.updateKeywordRule",
+  input: { params: { id }, payload },
+});
+const deleteKeywordRuleCall = (suffix: number, id: string): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "categories.deleteKeywordRule",
+  input: { params: { id } },
+});
+const forgetMemoryCall = (suffix: number, id: string): AtomicBatchCall => ({
+  callId: batchCallId(suffix),
+  operation: "memory.forget",
+  input: { params: { id } },
+});
+const batchRequest = (index: number, calls: ReadonlyArray<AtomicBatchCall>): Request =>
   new Request("https://api.fidyapp.com/operations/atomic-batch", {
     method: "POST",
     headers: {
@@ -288,7 +362,11 @@ const batchRequest = (index: number, calls: ReadonlyArray<object>): Request =>
     },
     body: JSON.stringify({ calls }),
   });
-const bearerRequest = (index: number, token: string, calls: ReadonlyArray<object>): Request =>
+const bearerRequest = (
+  index: number,
+  token: string,
+  calls: ReadonlyArray<AtomicBatchCall>
+): Request =>
   new Request("https://api.fidyapp.com/operations/atomic-batch", {
     method: "POST",
     headers: {
@@ -647,7 +725,7 @@ const sendPublicRequest = (
           USER_TRANSACTION_COORDINATOR: coordinator ?? {
             getByName: (name) => ({
               fetch: (command) =>
-                new UserTransactionCoordinator({ id: { name } }, { DB: db }).fetch(
+                new UserTransactionCoordinator({ id: { name } }, coordinatorEnvironment(db)).fetch(
                   new Request(command)
                 ),
             }),
@@ -660,6 +738,18 @@ const sendPublicRequest = (
         }),
     },
   });
+/** One manual capture submitted through the public ingress exactly as a client sends it. */
+const postTransaction = (index: number, body: object): Request =>
+  new Request("https://api.fidyapp.com/transactions", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
 const Listed = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(Transaction)),
   next: Schema.Array(Schema.Unknown),
@@ -670,6 +760,16 @@ const EffectiveTransaction = Schema.Struct({
 });
 const RestoredPair = Schema.Struct({
   data: Schema.toCodecJson(RestoredTransactionPair),
+  next: Schema.Array(Schema.Unknown),
+});
+const ListedMemories = Schema.Struct({
+  data: Schema.Array(Schema.Struct({ id: Schema.String, text: Schema.String })),
+  next: Schema.Array(Schema.Unknown),
+});
+const ListedKeywordRules = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({ id: Schema.String, keyword: Schema.String, categoryId: Schema.String })
+  ),
   next: Schema.Array(Schema.Unknown),
 });
 
@@ -1763,6 +1863,20 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
       expect(
         (yield* fromTestPromise(() => send(0, path, { expectedRevision: 0, changes: {} }))).status
       ).toBe(400);
+      expect(
+        (yield* fromTestPromise(() => send(0, "/transactions/not-a-transaction-id", correction)))
+          .status
+      ).toBe(404);
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.updateTransaction' AND outcome = 'not_found'"
+            )
+            .bind(users[0] ?? "")
+            .first<{ count: number }>()
+        ))?.count
+      ).toBe(1);
       const changed = yield* fromTestPromise(() => send(0, path, correction));
       expect(changed.status).toBe(200);
       const result = (yield* Schema.decodeUnknownEffect(Created)(
@@ -2085,15 +2199,8 @@ it("enforces the stable-User daily write budget atomically and preserves append-
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       yield* fromTestPromise(() => seedDailyTransactions(db, 100));
-      const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      if (Option.isNone(session)) throw new Error("Missing fixture session");
-      const decoded = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(CreateTransactionInput))(
-        input()
-      ).pipe(Effect.orDie);
       expect(
-        (yield* fromTestPromise(() =>
-          createManualTransaction({ db, subject: session.value, input: decoded })
-        )).status
+        (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(0, input())))).status
       ).toBe(429);
       const rows = yield* fromTestPromise(() =>
         db
@@ -2102,17 +2209,8 @@ it("enforces the stable-User daily write budget atomically and preserves append-
           .first<{ count: number }>()
       );
       expect(rows?.count).toBe(100);
-      const neighborSession = yield* fromTestPromise(() =>
-        transactionSession({ request: request(1), db })
-      );
       expect(
-        (yield* fromTestPromise(() =>
-          createManualTransaction({
-            db,
-            subject: Option.getOrThrow(neighborSession),
-            input: decoded,
-          })
-        )).status
+        (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(1, input())))).status
       ).toBe(201);
       const evidence = yield* fromTestPromise(() =>
         db.prepare("SELECT id FROM transaction_audit").first<{ id: string }>()
@@ -2459,7 +2557,7 @@ it("commits exact manual Money, immutable capture context, and audit before cano
       );
       if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
       const response = yield* fromTestPromise(() =>
-        createManualTransaction({ db, subject: owner.value, input: parsed.value })
+        sendPublicRequest(db, postTransaction(0, input({ counterparty: "Acme" })))
       );
       expect(response.status).toBe(201);
       const created = yield* Schema.decodeUnknownEffect(Created)(
@@ -2536,7 +2634,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         throw new Error("fixture invalid");
       }
       const ownerLookupResponse = yield* fromTestPromise(() =>
-        createManualTransaction({ db, subject: owner.value, input: parsed.value })
+        sendPublicRequest(db, postTransaction(0, input()))
       );
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* fromTestPromise(() => ownerLookupResponse.json())
@@ -2581,9 +2679,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         Option.isNone(yield* fromTestPromise(() => transactionSession({ request: request(0), db })))
       ).toBe(true);
       expect(
-        (yield* fromTestPromise(() =>
-          createManualTransaction({ db, subject: owner.value, input: parsed.value })
-        )).status
+        (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(0, input())))).status
       ).toBe(401);
       expect(
         (yield* fromTestPromise(() =>
@@ -2636,11 +2732,11 @@ it("serializes concurrent mutations for one User without mixing another User's r
       }
       const coordinatorA = new UserTransactionCoordinator(
         { id: { name: first.value.userId } },
-        { DB: db }
+        coordinatorEnvironment(db)
       );
       const coordinatorB = new UserTransactionCoordinator(
         { id: { name: second.value.userId } },
-        { DB: db }
+        coordinatorEnvironment(db)
       );
       const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
         parsed.value
@@ -2650,11 +2746,15 @@ it("serializes concurrent mutations for one User without mixing another User's r
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            _tag: "WebSessionCapture",
+            _tag: "WebSessionWork",
             sessionId: session.id,
             userId: session.userId,
             digest: Array.from(session.digest),
-            input: encoded,
+            work: {
+              _tag: "Call",
+              operation: "transactions.createTransaction",
+              input: { payload: encoded },
+            },
           }),
         });
       const responses = yield* fromTestPromise(() =>
@@ -2703,6 +2803,81 @@ it("serializes concurrent mutations for one User without mixing another User's r
     })
   ));
 
+it("executes non-Memory work when hosted inference is unusable and refuses Memory work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const parsed = yield* fromTestPromise(() =>
+        transactionInput(request(0, "/transactions", input()))
+      );
+      if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
+      // The hosted-inference configuration cannot build a service; only Memory work may miss it.
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: session.value.userId } },
+        {
+          DB: db,
+          AI: {
+            run: (): Promise<Response> =>
+              Promise.reject(new Error("the model check must fail first")),
+          },
+          HOSTED_AI_MODEL: "unsupported-model",
+        }
+      );
+      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
+        parsed.value
+      ).pipe(Effect.orDie);
+      const command = (
+        work: Readonly<{ _tag: "Call"; operation: string; input: unknown }>
+      ): Request =>
+        new Request("https://coordinator.internal/call", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            _tag: "WebSessionWork",
+            sessionId: session.value.id,
+            userId: session.value.userId,
+            digest: Array.from(session.value.digest),
+            work,
+          }),
+        });
+      const captured = yield* fromTestPromise(() =>
+        coordinator.fetch(
+          command({
+            _tag: "Call",
+            operation: "transactions.createTransaction",
+            input: { payload: encoded },
+          })
+        )
+      );
+      expect(captured.status).toBe(201);
+      const remembered = yield* fromTestPromise(() =>
+        coordinator.fetch(
+          command({
+            _tag: "Call",
+            operation: "memory.remember",
+            input: { payload: { text: "Sin inferencia" } },
+          })
+        )
+      );
+      expect(remembered.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+    })
+  ));
+
 it("records one rejected audit when an atomic capture hits its resource limit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2720,7 +2895,7 @@ it("records one rejected audit when an atomic capture hits its resource limit", 
         dump: () => db.dump(),
       };
       const response = yield* fromTestPromise(() =>
-        createManualTransaction({ db: limitedDb, subject: owner.value, input: parsed.value })
+        sendPublicRequest(limitedDb, postTransaction(0, input()))
       );
       expect(response.status).toBe(429);
       const audit = yield* fromTestPromise(() =>
@@ -2749,7 +2924,10 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
       }
       expect(
         (yield* fromTestPromise(() =>
-          createManualTransaction({ db, subject: owner.value, input: parsed.value })
+          sendPublicRequest(
+            db,
+            postTransaction(0, input({ categoryId: "10000000-0000-4000-8000-000000009999" }))
+          )
         )).status
       ).not.toBe(201);
       const counts = yield* fromTestPromise(() =>
@@ -3476,6 +3654,638 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
     })
   ));
 
+it("commits a mixed-owner canonical batch once with ordered correlated results and immediate reads", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input({ counterparty: "Mixed owner" })),
+            memoryCall(2, "Prefiere pagar en efectivo"),
+            keywordRuleCall(3, "Panadería", category),
+          ])
+        )
+      );
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.results.map(({ callId, operation }) => [callId, operation])).toEqual([
+        [batchCallId(1), "transactions.createTransaction"],
+        [batchCallId(2), "memory.remember"],
+        [batchCallId(3), "categories.createKeywordRule"],
+      ]);
+      const send = (index: number, path: string): Promise<Response> =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com${path}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(index)}`,
+            },
+          })
+        );
+      const transactions = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => send(0, "/transactions").then((value) => value.json()))
+      ).pipe(Effect.orDie);
+      expect(transactions.data).toHaveLength(1);
+      expect(Option.getOrNull(transactions.data[0]?.counterparty ?? Option.none())).toBe(
+        "Mixed owner"
+      );
+      const memories = yield* Schema.decodeUnknownEffect(ListedMemories)(
+        yield* fromTestPromise(() => send(0, "/memories").then((value) => value.json()))
+      ).pipe(Effect.orDie);
+      expect(memories.data.map(({ text }) => text)).toEqual(["Prefiere pagar en efectivo"]);
+      const rules = yield* Schema.decodeUnknownEffect(ListedKeywordRules)(
+        yield* fromTestPromise(() =>
+          send(0, "/category-keyword-rules").then((value) => value.json())
+        )
+      ).pipe(Effect.orDie);
+      expect(rules.data.map(({ keyword }) => keyword)).toEqual(["Panadería"]);
+      // Every owner's success AuditLogEntry committed once, together with its owner write.
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memory_audit WHERE user_id = ? AND operation = 'memory.remember' AND outcome = 'success'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM category_audit WHERE user_id = ? AND operation = 'categories.createKeywordRule'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      // No child state leaked to another User.
+      const neighborTransactions = yield* Schema.decodeUnknownEffect(Listed)(
+        yield* fromTestPromise(() => send(1, "/transactions").then((value) => value.json()))
+      ).pipe(Effect.orDie);
+      expect(neighborTransactions.data).toEqual([]);
+      const neighborMemories = yield* Schema.decodeUnknownEffect(ListedMemories)(
+        yield* fromTestPromise(() => send(1, "/memories").then((value) => value.json()))
+      ).pipe(Effect.orDie);
+      expect(neighborMemories.data).toEqual([]);
+      const neighborRules = yield* Schema.decodeUnknownEffect(ListedKeywordRules)(
+        yield* fromTestPromise(() =>
+          send(1, "/category-keyword-rules").then((value) => value.json())
+        )
+      ).pipe(Effect.orDie);
+      expect(neighborRules.data).toEqual([]);
+    })
+  ));
+
+it("rolls back every owner when a later mixed-owner keyword-rule child exceeds capacity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
+            INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
+            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?, ?, ? FROM seq`)
+          .bind(users[0] ?? "", category, current, current)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            memoryCall(2, "Sobrevive al rollback"),
+            keywordRuleCall(3, "Panadería", category),
+            keywordRuleCall(4, "Cafetería", category),
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(3);
+      expect(rejection.error.operation).toBe("categories.createKeywordRule");
+      // The late trigger rolls back every earlier owner write and every owner success Audit.
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(99);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM memory_audit"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM category_audit"))
+      ).toBe(0);
+    })
+  ));
+
+it("attributes a cross-owner Memory conflict at commit time and keeps no earlier child state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const memoryId = "50000000-0000-4000-8000-000000000001";
+      const current = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Original', ?, ?)"
+          )
+          .bind(memoryId, users[0] ?? "", current, current)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          racingBatch(db, () =>
+            db
+              .prepare("DELETE FROM memories WHERE user_id = ? AND id = ?")
+              .bind(users[0] ?? "", memoryId)
+              .run()
+          ),
+          batchRequest(0, [transactionCall(1, input()), reviseMemoryCall(2, memoryId, "Revisado")])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("not_found");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("memory.revise");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM memory_audit WHERE user_id = ? ORDER BY operation"
+          )
+          .bind(users[0] ?? "")
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([{ operation: "memory.revise", outcome: "not_found" }]);
+    })
+  ));
+
+it("executes a mixed-owner batch under one write PAT and refuses a read PAT without writes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const writeToken = `fin_${"m".repeat(8)}_${"c".repeat(43)}`;
+      const readToken = `fin_${"n".repeat(8)}_${"d".repeat(43)}`;
+      yield* seedPAT({
+        db,
+        userId: users[0] ?? "",
+        token: writeToken,
+        scopes: ["write"],
+        current,
+      });
+      yield* seedPAT({ db, userId: users[0] ?? "", token: readToken, scopes: ["read"], current });
+      const refused = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          bearerRequest(0, readToken, [
+            memoryCall(1, "Memoria"),
+            keywordRuleCall(2, "Panadería", category),
+          ])
+        )
+      );
+      expect(refused.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => refused.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("scope_missing");
+      expect(rejection.error.failedCallIndex).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+        )
+      ).toBe(0);
+
+      const committed = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          bearerRequest(0, writeToken, [
+            transactionCall(1, input({ counterparty: "Mixed agent" })),
+            memoryCall(2, "Prefiere pagar en efectivo"),
+            keywordRuleCall(3, "Panadería", category),
+          ])
+        )
+      );
+      expect(committed.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
+        yield* fromTestPromise(() => committed.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.results.map(({ operation }) => operation)).toEqual([
+        "transactions.createTransaction",
+        "memory.remember",
+        "categories.createKeywordRule",
+      ]);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM pat_audit WHERE outcome = 'accepted' ORDER BY operation"
+          )
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "categories.createKeywordRule", outcome: "accepted" },
+        { operation: "memory.remember", outcome: "accepted" },
+        { operation: "transactions.createTransaction", outcome: "accepted" },
+      ]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it("rejects a duplicate call identity named across owners before any child commits", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [transactionCall(6, input()), memoryCall(6, "Identidad repetida")])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("memory.remember");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("refuses two children addressing one retained rule or Memory before any child commits", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = DateTime.formatIso(DateTime.nowUnsafe());
+      const ruleId = "70000000-0000-4000-8000-000000000001";
+      const memoryId = "70000000-0000-4000-8000-000000000002";
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
+            VALUES (?, ?, 'Original', 'original', ?, ?, ?)`)
+          .bind(ruleId, users[0] ?? "", category, current, current)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Repetida', ?, ?)"
+          )
+          .bind(memoryId, users[0] ?? "", current, current)
+          .run()
+      );
+      const repeatedRule = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            updateKeywordRuleCall(1, ruleId, { keyword: "Una", categoryId: category }),
+            deleteKeywordRuleCall(2, ruleId),
+          ])
+        )
+      );
+      expect(repeatedRule.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => repeatedRule.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("validation_failed");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("categories.deleteKeywordRule");
+      const repeatedMemory = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            reviseMemoryCall(1, memoryId, "Corregida"),
+            forgetMemoryCall(2, memoryId),
+          ])
+        )
+      );
+      expect(repeatedMemory.status).toBe(400);
+      const rule = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT keyword FROM keyword_rules WHERE id = ?")
+          .bind(ruleId)
+          .first<{ keyword: string }>()
+      );
+      expect(rule).toEqual({ keyword: "Original" });
+      const memory = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT text FROM memories WHERE id = ?")
+          .bind(memoryId)
+          .first<{ text: string }>()
+      );
+      expect(memory).toEqual({ text: "Repetida" });
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM category_audit"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM memory_audit"))
+      ).toBe(0);
+    })
+  ));
+
+it("commits retained keyword-rule updates and deletes and Memory forgets in one mixed-owner batch", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = DateTime.formatIso(DateTime.nowUnsafe());
+      const updatedRuleId = "60000000-0000-4000-8000-000000000001";
+      const deletedRuleId = "60000000-0000-4000-8000-000000000002";
+      const forgottenMemoryId = "60000000-0000-4000-8000-000000000003";
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
+            VALUES (?, ?, 'Antes', 'antes', ?, ?, ?), (?, ?, 'Borrar', 'borrar', ?, ?, ?)`)
+          .bind(
+            updatedRuleId,
+            users[0] ?? "",
+            category,
+            current,
+            current,
+            deletedRuleId,
+            users[0] ?? "",
+            category,
+            current,
+            current
+          )
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, 'Olvidar', ?, ?)"
+          )
+          .bind(forgottenMemoryId, users[0] ?? "", current, current)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            updateKeywordRuleCall(1, updatedRuleId, { keyword: "Después", categoryId: category }),
+            deleteKeywordRuleCall(2, deletedRuleId),
+            forgetMemoryCall(3, forgottenMemoryId),
+            transactionCall(4, input({ counterparty: "Mixed retained" })),
+          ])
+        )
+      );
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(BatchEnvelope)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.results.map(({ operation }) => operation)).toEqual([
+        "categories.updateKeywordRule",
+        "categories.deleteKeywordRule",
+        "memory.forget",
+        "transactions.createTransaction",
+      ]);
+      const rules = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT id, keyword FROM keyword_rules WHERE user_id = ? ORDER BY id")
+          .bind(users[0] ?? "")
+          .all<{ id: string; keyword: string }>()
+      );
+      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "Después" }]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+      const categoryAudits = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation FROM category_audit WHERE user_id = ? ORDER BY operation")
+          .bind(users[0] ?? "")
+          .all<{ operation: string }>()
+      );
+      expect(categoryAudits.results).toEqual([
+        { operation: "categories.deleteKeywordRule" },
+        { operation: "categories.updateKeywordRule" },
+      ]);
+      const memoryAudits = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT operation, outcome FROM memory_audit WHERE user_id = ? ORDER BY operation"
+          )
+          .bind(users[0] ?? "")
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(memoryAudits.results).toEqual([{ operation: "memory.forget", outcome: "success" }]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it("fails closed on a cross-owner dependency defect without partial state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const keywordDb = yield* fromTestPromise(() => setup());
+      const current = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* fromTestPromise(() =>
+        keywordDb
+          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
+            VALUES ('corrupt-rule', ?, 'corrupt', 'corrupt', ?, ?, ?)`)
+          .bind(users[0] ?? "", category, current, current)
+          .run()
+      );
+      const keywordResponse = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          keywordDb,
+          batchRequest(0, [transactionCall(1, input()), keywordRuleCall(2, "Panadería", category)])
+        )
+      );
+      expect(keywordResponse.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            keywordDb,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(keywordDb, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            keywordDb,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+
+      const memoryDb = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        memoryDb
+          .prepare(
+            "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES ('corrupt-memory', ?, 'Corrupt', ?, ?)"
+          )
+          .bind(users[0] ?? "", current, current)
+          .run()
+      );
+      const memoryResponse = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          memoryDb,
+          batchRequest(0, [transactionCall(1, input()), memoryCall(2, "Nueva")])
+        )
+      );
+      expect(memoryResponse.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            memoryDb,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(memoryDb, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            memoryDb,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
 it("serializes concurrent batches and individual mutations through one User coordination turn", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -3948,6 +4758,45 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
       ).toBe(1);
+    })
+  ));
+
+it("answers an unstable retained id the same in a batch child as on its individual route", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input({ counterparty: "Acme" })),
+            correctionCall(2, "not-a-transaction-id", {
+              expectedRevision: 0,
+              changes: { notes: "batch" },
+            }),
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.code).toBe("not_found");
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      const refusedAudits = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+      expect(refusedAudits).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "not_found" },
+      ]);
     })
   ));
 

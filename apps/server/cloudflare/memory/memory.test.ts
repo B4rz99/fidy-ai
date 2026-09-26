@@ -6,6 +6,7 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
+import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -73,6 +74,8 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }
 const setup = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      // Each test owns fresh coordinator instances so no request can reach a disposed database.
+      coordinators.clear();
       const mf = new Miniflare({
         workers: [
           {
@@ -175,7 +178,8 @@ const setup = (): Promise<D1Database> =>
     })
   );
 
-const coreEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
+const coordinators = new Map<string, UserTransactionCoordinator>();
+const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
   DB: db,
   AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
   CONTRACT_DIGEST: "a".repeat(64),
@@ -192,9 +196,21 @@ const coreEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1]
   CLOUDFLARE_ACCESS_ISSUER: "",
   CLOUDFLARE_ACCESS_AUDIENCE: "",
   USER_TRANSACTION_COORDINATOR: {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: () => Promise.reject(new Error("unused")),
-    }),
+    getByName: (name: string): Pick<Fetcher, "fetch"> => {
+      let coordinator = coordinators.get(name);
+      if (coordinator === undefined) {
+        coordinator = new UserTransactionCoordinator(
+          { id: { name } },
+          {
+            DB: db,
+            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+            HOSTED_AI_MODEL: approvedWorkersAiModel,
+          }
+        );
+        coordinators.set(name, coordinator);
+      }
+      return { fetch: (input) => coordinator.fetch(new Request(input)) };
+    },
   },
 });
 
@@ -222,7 +238,9 @@ const send = (db: D1Database, input: Send): Promise<Response> =>
       LOCAL_CANONICAL_READ_BEARER: "",
       PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
       RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-      CORE: { fetch: (incoming) => coreWorker.fetch(new Request(incoming), coreEnvironment(db)) },
+      CORE: {
+        fetch: (incoming) => coreWorker.fetch(new Request(incoming), coordinationEnvironment(db)),
+      },
     }
   );
 

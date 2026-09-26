@@ -18,6 +18,7 @@ import {
   recordCanonicalPATWork,
   recordLivePATUse,
 } from "@fidy/server/tokens-runtime";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionAuthority,
@@ -85,7 +86,7 @@ const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
 const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
-  String(error).includes("transaction_audit_limit") ? rateLimited() : unavailable();
+  refusedByAuditBudget(error) ? rateLimited() : unavailable();
 type Subject = TransactionCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (

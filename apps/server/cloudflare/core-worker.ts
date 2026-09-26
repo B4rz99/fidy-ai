@@ -1,19 +1,19 @@
 import {
-  type KeywordRuleOperation,
   ScopeMissing,
   UserActionRequired,
   categoryUnavailable,
   listCategoriesPath,
 } from "@fidy/server/categories";
-import { HostedInference } from "@fidy/server/hosted-inference";
+import {
+  MemoryId,
+  type MemoryOperationId,
+  RememberInput,
+  ReviseInput,
+  memoryOperationIds,
+} from "@fidy/server/memory-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Cause, Clock, Context, Effect, Exit, Layer, Option, Schema } from "effect";
-import type {
-  CreateTransactionInput,
-  TransactionPairInput,
-  UpdateTransactionInput,
-} from "@fidy/server/transactions-runtime";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
@@ -32,6 +32,7 @@ import {
   rejectInvalidTransactionInput,
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
+import { pathId, rawPathId } from "./http/path";
 import {
   completeBrowserPairingEmail,
   startBrowserPairingEmail,
@@ -63,23 +64,30 @@ import {
 } from "./identity/email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
-import { executeMemoryOperation, isMemoryOperationId } from "./memory/memory";
+import { recallMemories, rejectMemoryMutation } from "./memory/memory";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
-  type BatchCalls,
   BatchInput,
-  TransactionCommand,
+  type CanonicalWork,
+  CanonicalWorkAdmission,
+  type PATAuthority,
+  type WebSessionAuthority,
 } from "./transactions/transaction-coordinator";
 import {
+  CanonicalOperationId,
   type CatalogOperation,
   atomicBatchOperation,
   maximumAtomicBatchCalls,
+  operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
 import {
-  handleOwnKeywordRuleMutation,
+  keywordRuleIdFromPath,
+  keywordRuleInput,
+  keywordRuleInvalidInput,
+  keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
 import {
@@ -102,7 +110,7 @@ import {
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./runtime/telemetry";
-import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "./ai/workers-ai";
+import type { WorkersAiEnvironment } from "./ai/workers-ai";
 import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   readStatementSubmission,
@@ -223,62 +231,29 @@ const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/submit" ||
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
-type ForwardWork =
-  | Readonly<{ _tag: "Capture"; input: CreateTransactionInput }>
-  | Readonly<{ _tag: "Correction"; id: string; input: UpdateTransactionInput }>
-  | Readonly<{ _tag: "Link"; pair: TransactionPairInput }>
-  | Readonly<{ _tag: "Unlink"; pair: TransactionPairInput }>;
+/** The PAT admission variant for one piece of canonical work. */
+const patAdmission = (authority: PATAuthority, work: CanonicalWork): CanonicalWorkAdmission => ({
+  _tag: "PATWork",
+  ...authority,
+  work,
+});
 
-type CoordinatorWork = ForwardWork | Readonly<{ _tag: "Batch"; calls: BatchCalls }>;
-
-type PATAuthority = Omit<Extract<TransactionCommand, { _tag: "PATCapture" }>, "_tag" | "input">;
-type SessionAuthority = Omit<
-  Extract<TransactionCommand, { _tag: "WebSessionCapture" }>,
-  "_tag" | "input"
->;
-
-/** The PAT command variant for one admitted piece of Transaction work. */
-const patCommand = (authority: PATAuthority, work: CoordinatorWork): TransactionCommand => {
-  if (work._tag === "Capture") return { _tag: "PATCapture", ...authority, input: work.input };
-  if (work._tag === "Correction") {
-    return {
-      _tag: "PATCorrection",
-      ...authority,
-      correction: { id: work.id, input: work.input },
-    };
-  }
-  if (work._tag === "Link") return { _tag: "PATLink", ...authority, pair: work.pair };
-  if (work._tag === "Unlink") return { _tag: "PATUnlink", ...authority, pair: work.pair };
-  return { _tag: "PATBatch", ...authority, calls: work.calls };
-};
-
-/** The WebSession command variant for one admitted piece of Transaction work. */
-const sessionCommand = (authority: SessionAuthority, work: CoordinatorWork): TransactionCommand => {
-  if (work._tag === "Capture") {
-    return { _tag: "WebSessionCapture", ...authority, input: work.input };
-  }
-  if (work._tag === "Correction") {
-    return {
-      _tag: "WebSessionCorrection",
-      ...authority,
-      correction: { id: work.id, input: work.input },
-    };
-  }
-  if (work._tag === "Link") return { _tag: "WebSessionLink", ...authority, pair: work.pair };
-  if (work._tag === "Unlink") return { _tag: "WebSessionUnlink", ...authority, pair: work.pair };
-  return { _tag: "WebSessionBatch", ...authority, calls: work.calls };
-};
+/** The WebSession admission variant for one piece of canonical work. */
+const sessionAdmission = (
+  authority: WebSessionAuthority,
+  work: CanonicalWork
+): CanonicalWorkAdmission => ({ _tag: "WebSessionWork", ...authority, work });
 
 /**
- * Bind one admitted caller to the exact coordinator command variant for this Transaction work. The
+ * Bind one admitted caller to the exact admission variant for this canonical work. The
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
-const coordinatorCommand = (
+const coordinatorAdmission = (
   subject: TransactionCaller,
-  work: CoordinatorWork
-): TransactionCommand =>
+  work: CanonicalWork
+): CanonicalWorkAdmission =>
   isPATCaller(subject)
-    ? patCommand(
+    ? patAdmission(
         {
           patId: subject.patId,
           userId: subject.userId,
@@ -287,7 +262,7 @@ const coordinatorCommand = (
         },
         work
       )
-    : sessionCommand(
+    : sessionAdmission(
         {
           sessionId: subject.id,
           userId: subject.userId,
@@ -296,16 +271,32 @@ const coordinatorCommand = (
         work
       );
 
-/** Inert per-command URL suffix; the coordinator decodes the command from the body alone. */
+/** Inert per-admission URL suffix; the coordinator decodes the admission from the body alone. */
 const coordinatorRoutes = {
-  Capture: "create",
-  Correction: "correct",
+  Call: "call",
   Batch: "batch",
-  Link: "link",
-  Unlink: "unlink",
 } as const;
 
-/** Encode one admitted command and deliver it to the caller's User coordinator. */
+/**
+ * One canonical call for an individual mutation: the operation id plus its input encoded by that
+ * operation's own published codec, so the coordinator decodes exactly the JSON shape the catalog
+ * publishes. An input the codec cannot encode is sent as it stands, and the owner adapter classifies
+ * it (an unstable retained id, for example, stays the owner's not_found answer).
+ */
+const canonicalCall = (operation: CanonicalOperationId, input: unknown): CanonicalWork => {
+  const catalogOperation = operationCatalog.byId.get(operation);
+  const encoded =
+    catalogOperation === undefined
+      ? Option.none()
+      : Schema.encodeUnknownOption(catalogOperation.input)(input);
+  return {
+    _tag: "Call",
+    operation,
+    input: Option.getOrElse(encoded, () => input),
+  };
+};
+
+/** Encode one work admission and deliver it to the caller's User coordinator. */
 const sendToCoordinator = ({
   environment,
   subject,
@@ -313,13 +304,13 @@ const sendToCoordinator = ({
 }: Readonly<{
   environment: CoreEnvironment;
   subject: TransactionCaller;
-  work: CoordinatorWork;
+  work: CanonicalWork;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
     // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(TransactionCommand))(
-      coordinatorCommand(subject, work)
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalWorkAdmission))(
+      coordinatorAdmission(subject, work)
     );
     return yield* Effect.tryPromise(() =>
       stub.fetch(
@@ -379,7 +370,9 @@ const dispatchCanonicalCapture = (
       return yield* sendToCoordinator({
         environment,
         subject,
-        work: { _tag: "Capture", input: input.value },
+        work: canonicalCall(CanonicalOperationId.make("transactions.createTransaction"), {
+          payload: input.value,
+        }),
       });
     })
   );
@@ -404,11 +397,12 @@ const dispatchCanonicalCorrection = (
       return yield* sendToCoordinator({
         environment,
         subject,
-        work: {
-          _tag: "Correction",
-          id: new URL(request.url).pathname.split("/").at(-1) ?? "",
-          input: input.value,
-        },
+        work: canonicalCall(CanonicalOperationId.make("transactions.updateTransaction"), {
+          // The correction owner classifies the addressed Transaction, so an id that is not a
+          // stable identity is forwarded verbatim instead of being answered here.
+          params: { id: rawPathId({ request }) },
+          payload: input.value,
+        }),
       });
     })
   );
@@ -433,10 +427,7 @@ const dispatchCanonicalPair = (
       return yield* sendToCoordinator({
         environment,
         subject,
-        work:
-          operation === "transactions.linkTransactions"
-            ? { _tag: "Link", pair: pair.value }
-            : { _tag: "Unlink", pair: pair.value },
+        work: canonicalCall(CanonicalOperationId.make(operation), { payload: pair.value }),
       });
     })
   );
@@ -643,28 +634,55 @@ const dispatchCanonicalHistory = (
   });
 };
 
-/** One canonical keyword-rule mutation through the adapter that owns its declared contract. */
+/** One canonical call for an admitted owner operation, without restating its published id. */
+const ownerCall = (
+  operation: CanonicalOperationId | MemoryMutationId,
+  input: unknown
+): CanonicalWork => canonicalCall(CanonicalOperationId.make(operation), input);
+
+/** One canonical keyword-rule mutation delivered to the caller's User coordinator. */
 const keywordRuleMutationResponse = (
   input: Readonly<{
     request: Request;
     environment: CoreEnvironment;
     subject: TransactionCaller;
-    operation: KeywordRuleOperation;
+    operation: CanonicalOperationId;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, subject, operation } = input;
-  return Effect.tryPromise({
-    try: () => handleOwnKeywordRuleMutation({ request, db: environment.DB, subject, operation }),
-    catch: () => undefined,
+  return Effect.gen(function* () {
+    if (operation === "categories.createKeywordRule") {
+      const payload = yield* Effect.tryPromise(() => keywordRuleInput(request, false));
+      return Option.isNone(payload)
+        ? keywordRuleInvalidInput()
+        : yield* sendToCoordinator({
+            environment,
+            subject,
+            work: ownerCall(operation, { payload: payload.value }),
+          });
+    }
+    const id = keywordRuleIdFromPath(request);
+    if (Option.isNone(id)) return keywordRuleUnknownId();
+    if (operation === "categories.deleteKeywordRule") {
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: ownerCall(operation, { params: { id: id.value } }),
+      });
+    }
+    if (operation !== "categories.updateKeywordRule") return unavailable();
+    const payload = yield* Effect.tryPromise(() => keywordRuleInput(request, true));
+    return Option.isNone(payload)
+      ? keywordRuleInvalidInput()
+      : yield* sendToCoordinator({
+          environment,
+          subject,
+          work: ownerCall(operation, {
+            params: { id: id.value },
+            payload: payload.value,
+          }),
+        });
   }).pipe(Effect.orElseSucceed(unavailable));
-};
-
-/** The keyword-rule mutation ids, and None for any other canonical operation. */
-const keywordRuleOperation = (id: string): Option.Option<KeywordRuleOperation> => {
-  if (id === "categories.createKeywordRule") return Option.some(id);
-  if (id === "categories.updateKeywordRule") return Option.some(id);
-  if (id === "categories.deleteKeywordRule") return Option.some(id);
-  return Option.none();
 };
 
 /** The keyword-rule work this dispatch owns, or None when another slice owns the operation. */
@@ -685,9 +703,164 @@ const keywordRuleResponse = (
       }).pipe(Effect.orElseSucceed(unavailable))
     );
   }
-  return Option.map(keywordRuleOperation(operation.id), (owned) =>
-    keywordRuleMutationResponse({ request, environment, subject, operation: owned })
+  if (
+    operation.id !== "categories.createKeywordRule" &&
+    operation.id !== "categories.updateKeywordRule" &&
+    operation.id !== "categories.deleteKeywordRule"
+  ) {
+    return Option.none();
+  }
+  return Option.some(
+    keywordRuleMutationResponse({ request, environment, subject, operation: operation.id }).pipe(
+      Effect.withSpan(operation.id)
+    )
   );
+};
+
+/** The Memory id one retained-route path addresses, or None when it is not a stable identity. */
+const memoryIdFromPath = (request: Request): Option.Option<MemoryId> =>
+  pathId({ schema: MemoryId, request });
+
+/** Refuse one Memory mutation whose route or retained prose failed its published schema. */
+const rejectInvalidMemory = ({
+  environment,
+  subject,
+  operation,
+}: Readonly<{
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+  operation: MemoryMutationId;
+}>): Effect.Effect<Response> =>
+  rejectMemoryMutation({
+    db: environment.DB,
+    subject,
+    operation,
+    outcome: "validation_failed",
+  });
+
+/**
+ * Decode one Memory mutation's route and body, answer the owner's validation refusal when either
+ * fails the published schema, and dispatch the admitted call to the caller's coordinator. The
+ * remember, revise, and forget entry points differ only in what they decode.
+ */
+const dispatchMemoryMutation = <Input>({
+  environment,
+  subject,
+  operation,
+  decode,
+}: Readonly<{
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+  operation: MemoryMutationId;
+  decode: Effect.Effect<Option.Option<Input>>;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const decoded = yield* decode;
+    if (Option.isNone(decoded)) {
+      return yield* rejectInvalidMemory({ environment, subject, operation });
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: ownerCall(operation, decoded.value),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+/** Decode one `memory.remember` body and dispatch it to the caller's User coordinator. */
+const rememberMemoryResponse = ({
+  request,
+  environment,
+  subject,
+}: Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+}>): Effect.Effect<Response> =>
+  dispatchMemoryMutation({
+    environment,
+    subject,
+    operation: "memory.remember",
+    decode: Effect.tryPromise(() => boundedJsonBody(request, memoryBodyPolicy, RememberInput)).pipe(
+      Effect.map(Option.map((payload) => ({ payload }))),
+      Effect.orElseSucceed(() => Option.none<{ payload: RememberInput }>())
+    ),
+  });
+
+/** Decode one `memory.revise` path and body and dispatch it to the caller's User coordinator. */
+const reviseMemoryResponse = ({
+  request,
+  environment,
+  subject,
+}: Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+}>): Effect.Effect<Response> =>
+  dispatchMemoryMutation({
+    environment,
+    subject,
+    operation: "memory.revise",
+    decode: Effect.gen(function* () {
+      const payload = yield* Effect.tryPromise(() =>
+        boundedJsonBody(request, memoryBodyPolicy, ReviseInput)
+      ).pipe(Effect.orElseSucceed(() => Option.none<ReviseInput>()));
+      return Option.zipWith(memoryIdFromPath(request), payload, (id, value) => ({
+        params: { id },
+        payload: value,
+      }));
+    }),
+  });
+
+/** Dispatch one `memory.forget` path to the caller's User coordinator. */
+const forgetMemoryResponse = ({
+  request,
+  environment,
+  subject,
+}: Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+}>): Effect.Effect<Response> =>
+  dispatchMemoryMutation({
+    environment,
+    subject,
+    operation: "memory.forget",
+    decode: Effect.succeed(Option.map(memoryIdFromPath(request), (id) => ({ params: { id } }))),
+  });
+
+/** Decode and dispatch one canonical Memory mutation to the caller's User coordinator. */
+const memoryMutationResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: MemoryMutationId;
+    subject: TransactionCaller;
+  }>
+): Effect.Effect<Response> => {
+  const { request, environment, operation, subject } = input;
+  if (operation === "memory.remember") {
+    return rememberMemoryResponse({ request, environment, subject });
+  }
+  if (operation === "memory.revise") {
+    return reviseMemoryResponse({ request, environment, subject });
+  }
+  return forgetMemoryResponse({ request, environment, subject });
+};
+
+const memoryBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 16_384,
+  deadlineMilliseconds: 2_000,
+});
+
+/** The Memory mutation ids this dispatch owns, derived from the declared Memory operations. */
+type MemoryMutationId = Exclude<MemoryOperationId, "memory.recall">;
+
+/** The Memory mutation this dispatch owns, and None for any other canonical operation. */
+const memoryMutationOperation = (id: string): Option.Option<MemoryMutationId> => {
+  const declared = memoryOperationIds.find((operation) => operation === id);
+  return declared === undefined || declared === "memory.recall"
+    ? Option.none()
+    : Option.some(declared);
 };
 
 /** The Memory work this dispatch owns, or None when another slice owns the operation. */
@@ -698,17 +871,19 @@ const memoryResponse = (
     operation: CatalogOperation;
     subject: TransactionCaller;
   }>
-): Option.Option<Effect.Effect<Response, never, HostedInference>> =>
-  isMemoryOperationId(input.operation.id)
-    ? Option.some(
-        executeMemoryOperation({
-          request: input.request,
-          db: input.environment.DB,
-          subject: input.subject,
-          operation: input.operation.id,
-        }).pipe(Effect.withSpan(input.operation.id))
-      )
-    : Option.none();
+): Option.Option<Effect.Effect<Response>> => {
+  const { request, environment, operation, subject } = input;
+  if (operation.id === "memory.recall") {
+    return Option.some(
+      recallMemories({ db: environment.DB, subject }).pipe(Effect.withSpan("memory.recall"))
+    );
+  }
+  return Option.map(memoryMutationOperation(operation.id), (owned) =>
+    memoryMutationResponse({ request, environment, subject, operation: owned }).pipe(
+      Effect.withSpan(owned)
+    )
+  );
+};
 /** Session-authorized statement byte staging; neither a PAT nor an anonymous caller may stage. */
 const statementUploadResponse = (
   request: Request,
@@ -847,7 +1022,7 @@ const executeCanonicalWork = (
     operation: CatalogOperation;
     subject: TransactionCaller;
   }>
-): Effect.Effect<Response, never, HostedInference> => {
+): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
   const ownerResponse = Option.orElse(keywordRuleResponse(input), () => memoryResponse(input));
@@ -869,7 +1044,7 @@ const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreEnvironment,
   operation: CatalogOperation
-): Effect.Effect<Response, never, HostedInference> => {
+): Effect.Effect<Response> => {
   if (!request.headers.has("authorization")) {
     return Effect.tryPromise({
       try: () => transactionSession({ request, db: environment.DB }),
@@ -926,7 +1101,7 @@ const canonicalOrHealthResponse = (
   request: Request,
   environment: CoreEnvironment,
   path: string
-): Effect.Effect<Response, never, HostedInference> => {
+): Effect.Effect<Response> => {
   const operation = canonicalOperation({ method: request.method, path });
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
@@ -939,7 +1114,7 @@ const fetchEffect = (
   request: Request,
   environment: CoreEnvironment,
   telemetry: TelemetryService
-): Effect.Effect<Response, never, HostedInference> => {
+): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
@@ -1085,15 +1260,9 @@ const statementIngestionScheduled = (environment: CoreEnvironment): Effect.Effec
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const inference = yield* Layer.build(cloudflareHostedInferenceLive(environment));
-        return yield* fetchEffect(request, environment, telemetry).pipe(
-          Effect.provideService(HostedInference, Context.get(inference, HostedInference))
-        );
-      })
-    ).pipe(
-      Effect.catchTag("HostedInferenceError", () => Effect.succeed(unavailable())),
+    // The Core Worker runs no hosted inference: only the coordinator's Memory work builds the
+    // binding, so a missing or unusable one cannot deny any route here.
+    fetchEffect(request, environment, telemetry).pipe(
       observeWorkerRequest({
         environment,
         telemetry,

@@ -19,6 +19,12 @@
   ],
   "deferredUpdates": [
     {
+      "name": "@hugeicons/core-free-icons",
+      "manifest": "apps/web/package.json",
+      "reason": "4.3.4 publishes dist/esm/index.js exports for Grid2x2 and Grid3x2 icons with lowercase x, but its Linux tarball contains only uppercase X filenames. Vite production builds and browser acceptance fail on case-sensitive runners. Keep 4.3.3 until the publisher fixes the export paths; verify the package tarball and Linux build before updating.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
       "name": "jsdom",
       "manifest": "apps/web/package.json",
       "reason": "jsdom 30.1.0 breaks the Vitest 5.0.1 jsdom worker environment: its Window addEventListener rejects Vitest's Window proxy as an invalid EventTarget, so all browser unit tests fail before execution. Keep 30.0.1 until the Vitest/jsdom integration supports this release; rerun web and preview-policy tests before updating.",

@@ -9,9 +9,11 @@ export { ErrorCode } from "~/shell/public-http/contract";
 export {
   AtomicBatchCallId,
   AtomicBatchRejected,
+  atomicBatchChildOperations,
   atomicBatchOperation,
   decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
+  getAtomicBatchChildIds,
   maximumAtomicBatchCalls,
 } from "~/shell/operations/operations";
 export type { AtomicBatchCall } from "~/shell/operations/operations";

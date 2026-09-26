@@ -7,6 +7,9 @@ import type { PATAuthority } from "~/shell/tokens/pat-write";
 /** Live credential re-evaluated by D1 beside this owner-published Memory projection. */
 type MemoryAuthority = PATAuthority | WebSessionAuthority;
 
+/** The exact Memory row projection every owner query returns, kept in one place. */
+const memoryRowColumns = "id,text,created_at,updated_at";
+
 /**
  * Every current Memory of one explicit User in stable ascending creation and identity order —
  * exactly the order the aggregate capacity is counted in. The projection is guarded by the live
@@ -16,10 +19,23 @@ export const memoryRowsQuery = ({
   userId,
   authority,
 }: Readonly<{ userId: string; authority: MemoryAuthority }>): OwnedStatement => ({
-  sql: `SELECT id,text,created_at,updated_at FROM memories
+  sql: `SELECT ${memoryRowColumns} FROM memories
     WHERE user_id = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
     ORDER BY created_at, id`,
   params: [userId, ...authority.bindings],
+});
+
+/**
+ * One explicit owner's Memory by stable identity, or no row when it is absent or foreign. The
+ * readback runs after a guarded write already proved the caller's authority, so this projection
+ * stays unguarded and reuses the same row shape as the full owner query.
+ */
+export const memoryRowQuery = ({
+  userId,
+  id,
+}: Readonly<{ userId: string; id: string }>): OwnedStatement => ({
+  sql: `SELECT ${memoryRowColumns} FROM memories WHERE user_id = ? AND id = ?`,
+  params: [userId, id],
 });
 
 const MemoryRow = Schema.Struct({

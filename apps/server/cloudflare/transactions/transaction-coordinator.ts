@@ -1,15 +1,22 @@
+import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
 import {
-  CreateTransactionInput,
-  TransactionPairInput,
-  UpdateTransactionInput,
-} from "@fidy/server/transactions-runtime";
-import { correctTransaction } from "./transaction-corrections";
-import { linkTransactions, unlinkTransactions } from "./transaction-reconciliation";
-import { CanonicalCapability, maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
-import { Effect, Option, Schema } from "effect";
-import { createManualTransaction, unavailableTransaction } from "./transactions";
-import { executeTransactionBatch } from "./transaction-mutations";
-import { type TransactionCaller, transactionNow } from "./transaction-boundary";
+  CanonicalCapability,
+  CanonicalOperationId,
+  maximumAtomicBatchCalls,
+  operationCatalog,
+} from "@fidy/server/canonical-runtime";
+import { memoryOperationIds } from "@fidy/server/memory-runtime";
+import { Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
+import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
+import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
+import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
+import { refusedPreparation } from "../mutations/mutation-types";
+import {
+  type TransactionCaller,
+  transactionNow,
+  transactionUnavailable,
+} from "./transaction-boundary";
 
 const digestBytes = 32;
 const Credentials = {
@@ -22,166 +29,241 @@ const PAT = {
   patId: Schema.String.check(Schema.isUUID()),
   requiredScope: Schema.NullOr(CanonicalCapability),
 } as const;
-const Capture = { input: Schema.toCodecJson(CreateTransactionInput) } as const;
-const Correction = {
-  correction: Schema.Struct({
-    id: Schema.String,
-    input: Schema.toCodecJson(UpdateTransactionInput),
-  }),
-} as const;
 /**
- * The bounded raw child list a batch command carries. Each entry stays `Unknown` here because the
- * Transaction batch adapter decodes it against the published catalog call union, where a malformed
- * child can still be attributed and audited as the child it named.
+ * The bounded raw child list a Batch work payload carries. Each entry stays `Unknown` here because the
+ * batch adapter decodes it against the published catalog call union, where a malformed child can
+ * still be attributed and audited as the child it named.
  */
 export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
   Schema.isMaxLength(maximumAtomicBatchCalls)
 );
 export type BatchCalls = typeof BatchCalls.Type;
 const Batch = { calls: BatchCalls } as const;
-/** The same bounded pair envelope every Reconciliation command carries. */
-const Pair = { pair: Schema.toCodecJson(TransactionPairInput) } as const;
+/**
+ * One canonical call an individual work payload carries: the operation id the catalog publishes and the
+ * raw canonical input its owner adapter decodes. The operation id alone selects the owner adapter,
+ * so a new composable mutation joins this dispatcher without editing it.
+ */
+const Call = {
+  operation: CanonicalOperationId,
+  input: Schema.Unknown,
+} as const;
+
+/**
+ * Every piece of composable canonical work one User coordinator executes. A Call carries one
+ * catalog mutation's canonical input; a Batch carries the bounded raw child list the batch adapter
+ * decodes per child. Each owner adapter rechecks live authority and domain state before the shared
+ * D1 unit commits anything.
+ */
+export const CanonicalWork = Schema.Union([
+  Schema.TaggedStruct("Call", Call),
+  Schema.TaggedStruct("Batch", Batch),
+]);
+export type CanonicalWork = typeof CanonicalWork.Type;
+
 /** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
 export const BatchInput = Schema.Struct(Batch);
 export type BatchInput = typeof BatchInput.Type;
-/** Every coordinator command: the live subject authority plus the exact work it admitted. */
-export const TransactionCommand = Schema.Union([
-  Schema.TaggedStruct("WebSessionCapture", { ...WebSession, ...Capture }),
-  Schema.TaggedStruct("WebSessionCorrection", { ...WebSession, ...Correction }),
-  Schema.TaggedStruct("WebSessionBatch", { ...WebSession, ...Batch }),
-  Schema.TaggedStruct("WebSessionLink", { ...WebSession, ...Pair }),
-  Schema.TaggedStruct("WebSessionUnlink", { ...WebSession, ...Pair }),
-  Schema.TaggedStruct("PATCapture", { ...PAT, ...Capture }),
-  Schema.TaggedStruct("PATCorrection", { ...PAT, ...Correction }),
-  Schema.TaggedStruct("PATBatch", { ...PAT, ...Batch }),
-  Schema.TaggedStruct("PATLink", { ...PAT, ...Pair }),
-  Schema.TaggedStruct("PATUnlink", { ...PAT, ...Pair }),
-]);
-export type TransactionCommand = typeof TransactionCommand.Type;
 
-/** Rebuild the exact live subject the admitted command was issued for. */
-const commandSubject = (command: TransactionCommand): TransactionCaller =>
-  command._tag === "PATCapture" ||
-  command._tag === "PATCorrection" ||
-  command._tag === "PATBatch" ||
-  command._tag === "PATLink" ||
-  command._tag === "PATUnlink"
+/**
+ * One work admission: the live subject authority plus the exact work it admits. It is not
+ * itself a canonical mutation — the mutation travels inside `work` — so it is named for what it
+ * does rather than for the thing it carries.
+ */
+export const CanonicalWorkAdmission = Schema.Union([
+  Schema.TaggedStruct("WebSessionWork", { ...WebSession, work: CanonicalWork }),
+  Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork }),
+]);
+export type CanonicalWorkAdmission = typeof CanonicalWorkAdmission.Type;
+
+/**
+ * The live WebSession facts an admission carries for one piece of work: the session id, its
+ * User, and the proof digest the coordinator re-verifies against live authority before any D1 unit
+ * commits. The work itself is excluded — it is what the authority admits, not part of it.
+ */
+type WebSessionAuthority = Omit<
+  Extract<CanonicalWorkAdmission, { _tag: "WebSessionWork" }>,
+  "_tag" | "work"
+>;
+/**
+ * The live PAT facts an admission carries for one piece of work: the PAT id, its User, the
+ * proof digest, and the required capability the coordinator re-verifies against live authority
+ * before any D1 unit commits. The work itself is excluded — it is what the authority admits.
+ */
+type PATAuthority = Omit<Extract<CanonicalWorkAdmission, { _tag: "PATWork" }>, "_tag" | "work">;
+export type { WebSessionAuthority, PATAuthority };
+
+/** Rebuild the exact live subject the work admission was issued for. */
+const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller =>
+  admission._tag === "PATWork"
     ? {
-        patId: command.patId,
-        userId: command.userId,
-        digest: new Uint8Array(command.digest),
-        requiredScope: Option.fromNullishOr(command.requiredScope),
+        patId: admission.patId,
+        userId: admission.userId,
+        digest: new Uint8Array(admission.digest),
+        requiredScope: Option.fromNullishOr(admission.requiredScope),
       }
     : {
-        id: command.sessionId,
-        userId: command.userId,
-        digest: new Uint8Array(command.digest),
+        id: admission.sessionId,
+        userId: admission.userId,
+        digest: new Uint8Array(admission.digest),
       };
 
-type PairCommand = Extract<
-  TransactionCommand,
-  { _tag: "WebSessionLink" | "PATLink" | "WebSessionUnlink" | "PATUnlink" }
->;
-
-/** Whether one admitted command is a Reconciliation pair mutation. */
-const isPairCommand = (command: TransactionCommand): command is PairCommand =>
-  command._tag === "WebSessionLink" ||
-  command._tag === "PATLink" ||
-  command._tag === "WebSessionUnlink" ||
-  command._tag === "PATUnlink";
-
-/** Execute one Reconciliation pair command through the shared Transaction mutation unit. */
-const executePairCommand = (
-  command: PairCommand,
-  work: Readonly<{ db: D1Database; subject: TransactionCaller }>
-): Effect.Effect<Response, Response> => {
-  const linking = command._tag === "WebSessionLink" || command._tag === "PATLink";
-  return Effect.tryPromise({
-    try: () =>
-      linking
-        ? linkTransactions({ ...work, input: command.pair })
-        : unlinkTransactions({ ...work, input: command.pair }),
-    catch: () => unavailableTransaction(),
+/** Execute one admitted piece of work through the owner adapter and the shared mutation unit. */
+const executeWork = ({
+  db,
+  work,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  work: CanonicalWork;
+  subject: TransactionCaller;
+  current: number;
+}>): Effect.Effect<Response, never, HostedInference> =>
+  Effect.gen(function* () {
+    if (work._tag === "Batch") {
+      return yield* executeCanonicalBatch({ db, subject, calls: work.calls, current });
+    }
+    const adapter = canonicalMutationAdapter(work.operation);
+    if (Option.isNone(adapter)) return transactionUnavailable();
+    const catalogOperation = operationCatalog.byId.get(work.operation);
+    if (catalogOperation === undefined) return transactionUnavailable();
+    const input = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
+    if (Option.isNone(input)) {
+      // The call cannot be decoded against the operation it names, so the owner adapter answers for
+      // it under its own input classification and no write is attempted.
+      return yield* executeSingleCanonicalMutation({
+        db,
+        subject,
+        current,
+        preparation: refusedPreparation(
+          adapter.value.invalidRefusal({ db, subject, current, input: work.input })
+        ),
+        present: adapter.value.present,
+      });
+    }
+    const preparation = yield* adapter.value.prepare({
+      db,
+      subject,
+      current,
+      input: input.value,
+    });
+    return yield* executeSingleCanonicalMutation({
+      db,
+      subject,
+      current,
+      preparation,
+      present: adapter.value.present,
+    });
   });
+
+/** True for an operation id the Memory group declares, so a new one needs no second derivation. */
+const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
+  memoryOperationIds.some((declared) => declared === operation);
+
+/**
+ * True when the work can reach the Memory capacity policy, the only consumer of hosted
+ * inference. Every other owner decides without it, so a missing AI binding must not deny
+ * their work.
+ */
+const requiresHostedInference = (work: CanonicalWork): boolean => {
+  if (work._tag === "Batch") {
+    return work.calls.some((call) => Option.exists(rawOperation(call), isMemoryOperation));
+  }
+  return isMemoryOperation(work.operation);
 };
 
-/** Dispatch one admitted command to the shared Transaction mutation implementation. */
-const executeCommand = ({
-  db,
-  command,
-}: Readonly<{ db: D1Database; command: TransactionCommand }>): Effect.Effect<Response, Response> =>
+/**
+ * The coordination authority's dependencies: the D1 database it commits through, plus the hosted
+ * inference bindings the Memory owner's capacity policy needs. Only Memory work reads them, so an
+ * unusable binding denies that owner alone and every other owner decides without it.
+ */
+type CoordinatorEnvironment = Readonly<{
+  DB: D1Database;
+}> &
+  WorkersAiEnvironment;
+
+/**
+ * The hosted-inference service one Memory workload runs under, or None when the deployment's
+ * binding or model cannot provide it. The layer is built only for work that consumes it, so a
+ * missing or unsupported configuration never reaches the owners that decide without it.
+ */
+const hostedInferenceFor = (
+  environment: CoordinatorEnvironment
+): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const subject = commandSubject(command);
-    if (isPairCommand(command)) {
-      return yield* executePairCommand(command, { db, subject });
-    }
-    switch (command._tag) {
-      case "WebSessionCorrection":
-      case "PATCorrection": {
-        const { correction } = command;
-        return yield* Effect.tryPromise({
-          try: () =>
-            correctTransaction({ db, subject, id: correction.id, input: correction.input }),
-          catch: () => unavailableTransaction(),
-        });
-      }
-      case "WebSessionBatch":
-      case "PATBatch":
-        return yield* Effect.tryPromise({
-          try: () =>
-            executeTransactionBatch({
-              db,
-              subject,
-              calls: command.calls,
-              current: transactionNow(),
-            }),
-          catch: () => unavailableTransaction(),
-        });
-      case "WebSessionCapture":
-      case "PATCapture":
-        return yield* Effect.tryPromise({
-          try: () => createManualTransaction({ db, subject, input: command.input }),
-          catch: () => unavailableTransaction(),
-        });
-    }
+    const built = yield* Effect.exit(Layer.build(cloudflareHostedInferenceLive(environment)));
+    return Exit.isFailure(built)
+      ? Option.none()
+      : Option.some(Context.get(built.value, HostedInference));
   });
+
+/**
+ * The hosted-inference service non-Memory work runs under: every method dies. Only the Memory
+ * capacity policy consumes hosted inference, and it provisions the real service itself, so a
+ * consumer appearing anywhere else fails closed instead of deciding without inference.
+ */
+const unreachableHostedInference = HostedInference.of({
+  countText: () => Effect.die("Hosted inference reached without Memory work"),
+  countTranscript: () => Effect.die("Hosted inference reached without Memory work"),
+  prepareText: () => Effect.die("Hosted inference reached without Memory work"),
+  validateText: () => Effect.die("Hosted inference reached without Memory work"),
+  prepareStructured: () => Effect.die("Hosted inference reached without Memory work"),
+});
 
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
   private readonly state: Readonly<{ id: Readonly<{ name: string }> }>;
-  private readonly env: { DB: D1Database };
-  constructor(state: Readonly<{ id: Readonly<{ name: string }> }>, env: { DB: D1Database }) {
+  private readonly env: CoordinatorEnvironment;
+  constructor(state: Readonly<{ id: Readonly<{ name: string }> }>, env: CoordinatorEnvironment) {
     this.state = state;
     this.env = env;
   }
 
   fetch(request: Request): Promise<Response> {
     const db = this.env.DB;
+    const environment = this.env;
     const userId = this.state.id.name;
-    const work = this.pending.then(() =>
+    const settledResponse = this.pending.then(() =>
       Effect.runPromise(
-        Effect.gen(function* () {
-          const candidate = yield* Effect.tryPromise({
-            try: () => request.json(),
-            catch: () => unavailableTransaction(),
-          });
-          const command = Schema.decodeUnknownOption(TransactionCommand)(candidate);
-          if (
-            Option.isNone(command) ||
-            command.value.digest.length !== digestBytes ||
-            command.value.userId !== userId
-          ) {
-            return unavailableTransaction();
-          }
-          return yield* executeCommand({ db, command: command.value });
-        }).pipe(Effect.catch((response) => Effect.succeed(response)))
+        Effect.scoped(
+          Effect.gen(function* () {
+            const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
+            if (Option.isNone(candidate)) return transactionUnavailable();
+            const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
+            if (
+              Option.isNone(admission) ||
+              admission.value.digest.length !== digestBytes ||
+              admission.value.userId !== userId
+            ) {
+              return transactionUnavailable();
+            }
+            const work = admission.value.work;
+            const execution = executeWork({
+              db,
+              work,
+              subject: admissionSubject(admission.value),
+              current: transactionNow(),
+            });
+            if (!requiresHostedInference(work)) {
+              // Non-Memory work never consumes hosted inference, so its binding is never built and
+              // a missing or invalid one cannot deny it; any unexpected use still fails closed.
+              return yield* execution.pipe(
+                Effect.provideService(HostedInference, unreachableHostedInference)
+              );
+            }
+            const inference = yield* hostedInferenceFor(environment);
+            if (Option.isNone(inference)) return transactionUnavailable();
+            return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
+          })
+        )
       )
     );
-    this.pending = work.then(
+    this.pending = settledResponse.then(
       () => undefined,
       () => undefined
     );
-    return work;
+    return settledResponse;
   }
 }

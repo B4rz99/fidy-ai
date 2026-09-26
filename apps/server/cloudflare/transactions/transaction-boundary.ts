@@ -11,6 +11,19 @@ import {
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { newId } from "../pats/pat-shared";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
+
+/**
+ * How one decided refusal was durably handled. `"recorded"` means the refusal stands and the
+ * response follows from it, whether or not the owner keeps a refusal AuditLogEntry; the other
+ * values name the cause that denied the durable record instead. `recordTransactionRefusal`
+ * returns it, and it is the only answer a refusal Audit row can give.
+ */
+export type CanonicalRefusalDisposition =
+  | "recorded"
+  | "credential_refused"
+  | "rate_limited"
+  | "unavailable";
 
 /** A Transaction adapter dependency failure whose kind is classified and never exposed. */
 export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
@@ -113,8 +126,6 @@ export const acceptedPATStatements = ({
   ];
 };
 
-type RefusalRecord = "recorded" | "credential_refused" | "rate_limited" | "unavailable";
-
 const refusalStatement = ({
   db,
   subject,
@@ -181,13 +192,11 @@ export const recordTransactionRefusal = ({
   outcome: TransactionRefusal["outcome"];
   operation: TransactionMutationOperation;
   current: number;
-}>): Promise<RefusalRecord> =>
+}>): Promise<CanonicalRefusalDisposition> =>
   Promise.resolve()
     .then(() => refusalStatement({ db, subject, outcome, operation, current }).run())
     .then((audit) => (audit.meta.changes === 1 ? "recorded" : "credential_refused"))
-    .catch((error: unknown) =>
-      String(error).includes("transaction_audit_limit") ? "rate_limited" : "unavailable"
-    );
+    .catch((error: unknown) => (refusedByAuditBudget(error) ? "rate_limited" : "unavailable"));
 
 const utcDayMilliseconds = 86_400_000;
 /** Matches the 256-entry stable-User triggers in 0015_statement_submission.sql; the triggers stay the authority. */
@@ -300,6 +309,9 @@ const refusalOutcomes: Readonly<
 /** Map one already-recorded Transaction refusal to its canonical individual response. */
 export const refusedTransactionResponse = (refusal: TransactionRefusal): Response =>
   refusalOutcomes[refusal.outcome].response();
+
+/** The canonical daily-write-budget refusal every Transaction entry point shares. */
+export const rateLimitedTransactionResponse = (): Response => limited();
 
 /** The canonical failure code one already-recorded Transaction refusal is reported as. */
 export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>

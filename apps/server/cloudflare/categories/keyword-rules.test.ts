@@ -197,7 +197,14 @@ const setup = (): Promise<{
           getByName: (name: string): Pick<Fetcher, "fetch"> => {
             let coordinator = coordinators.get(name);
             if (coordinator === undefined) {
-              coordinator = new UserTransactionCoordinator({ id: { name } }, { DB: db });
+              coordinator = new UserTransactionCoordinator(
+                { id: { name } },
+                {
+                  DB: db,
+                  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+                  HOSTED_AI_MODEL: approvedWorkersAiModel,
+                }
+              );
               coordinators.set(name, coordinator);
             }
             return { fetch: (input) => coordinator.fetch(new Request(input)) };
@@ -492,6 +499,7 @@ it("updates and deletes only the caller's own rule", () =>
         })
       );
       expect(foreignDelete.status).toBe(404);
+
       const untouched = yield* awaitPromise(
         db
           .prepare("SELECT keyword, category_id, user_id FROM keyword_rules WHERE id = ?")
@@ -525,6 +533,30 @@ it("updates and deletes only the caller's own rule", () =>
       expect(removed.status).toBe(200);
       expect((yield* decodeJson(RemovedEnvelope, removed)).data).toBe(created.id);
       expect(yield* ruleCount(db, userA)).toBe(0);
+    })
+  ));
+
+it("answers a path segment that is not a stable rule identity as not found on both routes", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { send, sessions } = yield* awaitPromise(setup());
+      const malformedUpdate = yield* awaitPromise(
+        send({
+          path: "/category-keyword-rules/not-a-rule-id",
+          method: "PUT",
+          session: sessions[0],
+          payload: { keyword: "Malformado", categoryId: mercado },
+        })
+      );
+      expect(malformedUpdate.status).toBe(404);
+      const malformedDelete = yield* awaitPromise(
+        send({
+          path: "/category-keyword-rules/not-a-rule-id",
+          method: "DELETE",
+          session: sessions[0],
+        })
+      );
+      expect(malformedDelete.status).toBe(404);
     })
   ));
 

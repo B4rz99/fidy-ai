@@ -4,11 +4,13 @@ import {
   UpdateTransactionInput,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
+import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
+  type TransactionRefusal,
   acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
@@ -19,16 +21,16 @@ import {
   maximumTransactionInputBytes,
   missingTransactionMessage,
   transactionId,
-  transactionNow,
-  transactionUnavailable,
 } from "./transaction-boundary";
 import {
-  type TransactionMutationPreparation,
-  executeSingleTransactionMutation,
+  type CanonicalMutationPreparation,
+  credentialRefusedPreparation,
   failedPreparation,
-  refusedPreparation,
+} from "../mutations/mutation-types";
+import {
+  refusedTransactionMutation,
   staleCorrectionMessage,
-} from "./transaction-unit";
+} from "../mutations/transaction-outcome";
 import { type StoredTransaction, TransactionOutput, findTransaction } from "./transaction-history";
 
 const Input = Schema.toCodecJson(UpdateTransactionInput);
@@ -221,16 +223,19 @@ const preparedCorrection = ({
   previous: StoredTransaction;
   updated: StoredTransaction;
   evidence: Evidence;
-}>): TransactionMutationPreparation => {
+}>): CanonicalMutationPreparation => {
   const { db, subject, id, input, current } = correction;
   return {
     _tag: "Prepared",
     mutation: {
-      operation: "transactions.updateTransaction",
-      transactionId: id,
-      response: { _tag: "Transaction" },
-      expectedRevision: Option.some(input.expectedRevision),
       requiredScope: callerScope(subject),
+      outcome: {
+        _tag: "Transaction",
+        operation: "transactions.updateTransaction",
+        transactionId: id,
+        readback: { _tag: "Transaction" },
+        expectedRevision: Option.some(input.expectedRevision),
+      },
       statements: [
         ...changeStatements({ correction, current, previous, updated }, evidence),
         ...auditStatements({
@@ -240,6 +245,7 @@ const preparedCorrection = ({
           correctionId: evidence.id,
         }),
       ],
+      completion: db.prepare(transactionCaptureCompletion),
     },
   };
 };
@@ -251,28 +257,38 @@ const preparedCorrection = ({
  */
 export const prepareCorrection = (
   correction: Correction & { current: number }
-): Effect.Effect<TransactionMutationPreparation> =>
+): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const { db, subject, id, input, current } = correction;
+    const refuse = (refusal: TransactionRefusal): CanonicalMutationPreparation =>
+      refusedTransactionMutation({
+        db,
+        subject,
+        operation: "transactions.updateTransaction",
+        refusal,
+        current,
+      });
     if (Option.isNone(Schema.decodeOption(TransactionId)(id))) {
-      return refusedPreparation("not_found", missingTransactionMessage);
+      return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
     if (invalidCorrection(input, current)) {
-      return refusedPreparation("validation_failed", emptyChangeMessage);
+      return refuse({ outcome: "validation_failed", message: emptyChangeMessage });
     }
     const live = yield* Effect.tryPromise({
       try: () => liveTransactionAuthority({ db, subject, current }),
       catch: boundaryFailure,
     });
-    if (!live) return { _tag: "CredentialRefused" } as const;
+    if (!live) return credentialRefusedPreparation();
     const owned = yield* findOwnedCorrection({ db, subject, id });
-    if (Option.isNone(owned)) return refusedPreparation("not_found", missingTransactionMessage);
+    if (Option.isNone(owned)) {
+      return refuse({ outcome: "not_found", message: missingTransactionMessage });
+    }
     if (owned.value.revision !== input.expectedRevision) {
-      return refusedPreparation("validation_failed", staleCorrectionMessage);
+      return refuse({ outcome: "validation_failed", message: staleCorrectionMessage });
     }
     const updated = replaceFacts(owned.value, input.changes);
     if (Option.isNone(updated)) {
-      return refusedPreparation("validation_failed", invalidTransactionMessage);
+      return refuse({ outcome: "validation_failed", message: invalidTransactionMessage });
     }
     const evidence = yield* correctionEvidence(owned.value, updated.value, input.changes);
     return preparedCorrection({
@@ -282,21 +298,3 @@ export const prepareCorrection = (
       evidence,
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
-
-/** Correct selected owned facts under live caller authority, retaining immutable evidence atomically. */
-export const correctTransaction = (correction: Correction): Promise<Response> => {
-  const current = transactionNow();
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const preparation = yield* prepareCorrection({ ...correction, current });
-      return yield* executeSingleTransactionMutation({
-        db: correction.db,
-        subject: correction.subject,
-        current,
-        operation: "transactions.updateTransaction",
-        preparation,
-        status: 200,
-      });
-    })
-  ).catch(() => transactionUnavailable());
-};

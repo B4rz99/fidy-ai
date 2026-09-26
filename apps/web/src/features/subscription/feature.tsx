@@ -1077,6 +1077,13 @@ const readyOffersState = ({
   return { _tag: "Ready", offers };
 };
 
+const StandingAndOffers = ({ children }: Readonly<{ children: JSX.Element }>): JSX.Element => (
+  <>
+    <SubscriptionStanding />
+    {children}
+  </>
+);
+
 /** Authenticated route that displays offers and invokes only the direct enrollment transport. */
 export const SubscriptionOffersFeature = (): JSX.Element => {
   const router = useRouter();
@@ -1095,27 +1102,30 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
   switch (queryState._tag) {
     case "Initial":
       return (
-        <SubscriptionOffersView
-          gateway={Option.none()}
-          state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
-        />
+        <StandingAndOffers>
+          <SubscriptionOffersView
+            gateway={Option.none()}
+            state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
+          />
+        </StandingAndOffers>
       );
     case "Failure":
       return (
-        <SubscriptionOffersView
-          gateway={Option.none()}
-          state={{
-            _tag: "LoadFailure",
-            boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
-            onRetry: refresh,
-            waiting: queryState.waiting,
-          }}
-        />
+        <StandingAndOffers>
+          <SubscriptionOffersView
+            gateway={Option.none()}
+            state={{
+              _tag: "LoadFailure",
+              boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+              onRetry: refresh,
+              waiting: queryState.waiting,
+            }}
+          />
+        </StandingAndOffers>
       );
     case "Ready":
       return (
-        <>
-          <SubscriptionStanding />
+        <StandingAndOffers>
           <SubscriptionOffersView
             gateway={Option.some(gateway)}
             state={readyOffersState({
@@ -1125,7 +1135,7 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
               onRetry: refresh,
             })}
           />
-        </>
+        </StandingAndOffers>
       );
   }
 };

@@ -1,4 +1,9 @@
 export { projectSubscriptionOffers, projectSubscriptionStatus } from "./queries";
+export {
+  subscriptionOffersQuery,
+  subscriptionStandingQuery,
+  subscriptionAttemptsQuery,
+} from "./query-sql";
 export { makeWompiOutboundHttp } from "~/shell/outbound-http/operations";
 export {
   makeWompiBillingClient,

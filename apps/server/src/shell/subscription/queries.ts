@@ -1,8 +1,13 @@
-import { Clock, DateTime, Effect, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/model";
 import { Unavailable } from "~/shell/public-http/contract";
+import {
+  subscriptionAttemptsQuery,
+  subscriptionOffersQuery,
+  subscriptionStandingQuery,
+} from "./query-sql";
 
 const PriceRow = Schema.Struct({
   id: Price.fields.id,
@@ -77,12 +82,10 @@ export const projectSubscriptionOffers = (rows: ReadonlyArray<unknown>): Subscri
   );
 
 /** Load only published immutable Prices, validating the complete ordered offer set. */
-export const listSubscriptionOffersResponse = Effect.flatMap(
-  SqlClient.SqlClient,
-  (sql) =>
-    sql`SELECT id, amount, currency, billing_period, service_market, tax_treatment, terms_json
-    FROM subscription_prices WHERE published_order IS NOT NULL ORDER BY published_order LIMIT 4`
-).pipe(
+export const listSubscriptionOffersResponse = Effect.flatMap(SqlClient.SqlClient, (sql) => {
+  const query = subscriptionOffersQuery();
+  return sql.unsafe(query.sql, query.params);
+}).pipe(
   Effect.map((rows) => ({ data: projectSubscriptionOffers(rows), next: [] as const })),
   Effect.mapError(unavailable),
   Effect.catchDefect(() => Effect.fail(unavailable()))
@@ -99,18 +102,10 @@ export const getSubscriptionStatus = (
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const now = yield* Clock.currentTimeMillis;
-    const standing = yield* sql`SELECT t.started_at_ms, t.ends_at_ms AS trial_ends_at_ms,
-    s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
-    p.starts_at_ms, p.ends_at_ms, p.renewal_anchor_ms
-    FROM trial_periods AS t LEFT JOIN subscriptions AS s ON s.user_id = t.user_id
-    LEFT JOIN billing_attempts AS a ON a.id = s.attempt_id AND a.user_id = t.user_id
-    LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
-    WHERE t.user_id = ${userId} LIMIT 1`;
-    const attempts = yield* sql`SELECT a.id, a.price_id, a.amount, a.currency, a.billing_period,
-    a.service_market, a.tax_treatment, a.time_zone, a.created_at_ms, a.status, a.finalized_at_ms,
-    p.ends_at_ms, p.renewal_anchor_ms FROM billing_attempts AS a
-    LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
-    WHERE a.user_id = ${userId} ORDER BY a.created_at_ms DESC, a.id DESC LIMIT 10`;
+    const standingQuery = subscriptionStandingQuery({ userId, authority: Option.none() });
+    const attemptsQuery = subscriptionAttemptsQuery({ userId, authority: Option.none() });
+    const standing = yield* sql.unsafe(standingQuery.sql, standingQuery.params);
+    const attempts = yield* sql.unsafe(attemptsQuery.sql, attemptsQuery.params);
     return {
       data: projectSubscriptionStatus({ standingRow: standing[0], attemptRows: attempts, now }),
       next: [] as const,

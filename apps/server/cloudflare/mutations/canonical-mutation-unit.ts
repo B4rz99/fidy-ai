@@ -24,7 +24,7 @@ import {
   readOwnedStatementSubmission,
   submissionProjection,
 } from "../ingestion/statement-staging";
-import { canonicalStatementRefusal, statementDailyBudgetRefusal } from "./statement-mutation";
+import { statementDailyBudgetRefusal } from "./statement-mutation";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
@@ -580,8 +580,21 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-/** The JSON payload one committed canonical value carries as its operation's success data. */
-export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
+/** Select the published data from a retained Transaction, category, Memory, or statement value. */
+const retainedMutationPayload = (
+  value: Extract<
+    CommittedMutationValue,
+    {
+      _tag:
+        | "Transaction"
+        | "EffectiveTransaction"
+        | "RestoredPair"
+        | "KeywordRule"
+        | "Memory"
+        | "StatementSubmission";
+    }
+  >
+): unknown => {
   switch (value._tag) {
     case "Transaction":
     case "EffectiveTransaction":
@@ -594,20 +607,28 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
       return value.memory;
     case "StatementSubmission":
       return value.submission;
-    case "ForwardingAddress":
-      return value.address;
-    case "Budget":
-      return value.budget;
-    case "Insight":
-      return value.insight;
-    case "DeliveredInsight":
-      return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
-    case "RemovedKeywordRule":
-    case "RemovedMemory":
-    case "RemovedBudget":
-      return value.id;
   }
 };
+
+/** The JSON payload one committed canonical value carries as its operation's success data. */
+export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
+  if (value._tag === "ForwardingAddress") return value.address;
+  if (value._tag === "Budget") return value.budget;
+  if (value._tag === "Insight") return value.insight;
+  if (value._tag === "DeliveredInsight") {
+    return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
+  }
+  if (
+    value._tag === "RemovedKeywordRule" ||
+    value._tag === "RemovedMemory" ||
+    value._tag === "RemovedBudget"
+  ) {
+    return value.id;
+  }
+  return retainedMutationPayload(value);
+};
+
+type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
 
 const encodeRemovedValue = (
   value: Extract<

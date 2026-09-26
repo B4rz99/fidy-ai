@@ -20,16 +20,63 @@ import {
 import {
   type BudgetOutcome,
   type CanonicalMutationPreparation,
+  type CanonicalMutationRefusal,
+  type GuardRefusalWork,
   credentialRefusedPreparation,
   failedPreparation,
   refusedPreparation,
 } from "../mutations/mutation-types";
 import { budgetRefusal, findOwnedBudget } from "./budget-outcome";
+import { dailyBudgetAuditLimit } from "./budget-audit";
+import { utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 
-/** A skipped guarded write or audit aborts the entire canonical D1 unit. */
-export const budgetMutationCompletion = `INSERT INTO budget_mutation_assertion (id, accepted)
-  VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-  ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+/** The owner cap enforced by budget_capacity in migration 0016. */
+const maximumBudgetsPerUser = 128;
+
+/** Owner checks run under the same D1 lock as the child write and its Audit. */
+const budgetCommitGuards = ({
+  db,
+  userId,
+  current,
+  index,
+  operation,
+  browser,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  current: number;
+  index: number;
+  operation: BudgetOutcome["operation"];
+  browser: boolean;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const day = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
+  return [
+    ...(browser
+      ? [
+          db
+            .prepare(`INSERT INTO canonical_child_guard
+      (child_index,operation,accepted,budget_ok)
+      SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM budget_audit WHERE user_id = ?
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?) < ? THEN 1 ELSE 0 END
+      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+        accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
+            .bind(index, operation, userId, day, day + utcDayMilliseconds, dailyBudgetAuditLimit),
+        ]
+      : []),
+    ...(operation === "budgets.createBudget"
+      ? [
+          db
+            .prepare(`INSERT INTO canonical_child_guard
+      (child_index,operation,accepted,capacity_ok)
+      SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM budgets WHERE user_id = ?) < ?
+        THEN 1 ELSE 0 END
+      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+        accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
+            .bind(index, operation, userId, maximumBudgetsPerUser),
+        ]
+      : []),
+  ];
+};
 
 const budgetAudit = ({
   db,
@@ -65,6 +112,43 @@ const budgetAudit = ({
     .bind(transactionId(), subject.id, operation, current, ...authority.bindings);
 };
 
+/** Explain a proved Budget completion using retained earlier children and the post-rollback owner row. */
+const budgetGuardRefusal =
+  (outcome: BudgetOutcome) =>
+  ({
+    db,
+    subject,
+    current,
+    earlier,
+  }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> => {
+    const refusal = (code: "not_found" | "validation_failed"): CanonicalMutationRefusal =>
+      budgetRefusal({ db, subject, current, operation: outcome.operation, code });
+    if (outcome.operation === "budgets.createBudget") {
+      return Effect.succeed(refusal("validation_failed"));
+    }
+    // A completed deletion disappears in the unit but reappears after rollback.
+    if (
+      earlier.some(
+        (child) =>
+          child._tag === "Budget" &&
+          child.operation === "budgets.deleteBudget" &&
+          child.budgetId === outcome.budgetId
+      )
+    ) {
+      return Effect.succeed(refusal("not_found"));
+    }
+    return Effect.tryPromise(() =>
+      findOwnedBudget({
+        db,
+        userId: subject.userId,
+        id: outcome.budgetId,
+      })
+    ).pipe(
+      Effect.map((owned) => refusal(Option.isNone(owned) ? "not_found" : "validation_failed")),
+      Effect.orElseSucceed(() => refusal("validation_failed"))
+    );
+  };
+
 const statements = ({
   db,
   subject,
@@ -82,6 +166,18 @@ const statements = ({
   mutation: {
     requiredScope: callerScope(subject),
     outcome,
+    auditBudget: isPATCaller(subject) ? "shared" : "owner",
+    commitGuards: Option.some(({ db, userId, current, index }) =>
+      budgetCommitGuards({
+        db,
+        userId,
+        current,
+        index,
+        operation: outcome.operation,
+        browser: !isPATCaller(subject),
+      })
+    ),
+    guardRefusal: budgetGuardRefusal(outcome),
     statements: [
       ...(isPATCaller(subject)
         ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
@@ -89,7 +185,6 @@ const statements = ({
       write,
       budgetAudit({ db, subject, operation: outcome.operation, current }),
     ],
-    completion: db.prepare(budgetMutationCompletion),
   },
 });
 

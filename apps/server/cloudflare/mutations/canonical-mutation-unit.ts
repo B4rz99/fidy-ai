@@ -1,14 +1,15 @@
 import { Effect, Exit, Option, Schema } from "effect";
+import { maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import {
-  KeywordRule,
-  KeywordRuleId,
-  KeywordRuleLimitReached,
-  maximumKeywordRulesPerUser,
-} from "@fidy/server/categories";
-import { Memory, MemoryId, type MemoryOperationId } from "@fidy/server/memory-runtime";
+  auditDayBindings,
+  auditDayCountExpression,
+  dailyAuditBudget,
+} from "../atomic/daily-canonical-budget";
+import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
+import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import { InsightDeliveryAttempt, InsightEvent } from "@fidy/server/insights-runtime";
-import { findInsight, findInsightAttempt, insightRefusal } from "../insights/insight-store";
+import { findInsight, findInsightAttempt } from "../insights/insight-store";
 import { budgetAuditLimitRefusal, findBudgetValue } from "../budgets/budget-outcome";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
@@ -21,10 +22,8 @@ import { canonicalTriggerNames, canonicalTriggerOf } from "../audit/audit-trigge
 import {
   lostStatementReplay,
   readOwnedStatementSubmission,
-  statementAbortRefusal,
   submissionProjection,
 } from "../ingestion/statement-staging";
-import { canonicalStatementRefusal } from "./statement-mutation";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
@@ -36,25 +35,11 @@ import {
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
 import { TransactionOutput } from "../transactions/transaction-history";
-import {
-  findKeywordRuleValue,
-  keywordRuleAbortFailure,
-  keywordRuleBudgetRefusal,
-  keywordRuleCapacityIndex,
-  keywordRuleRefusal,
-} from "./keyword-rule-outcome";
-import {
-  findMemoryValue,
-  findOwnedMemory,
-  memoryBudgetRefusal,
-  memoryCapacityIndex,
-  memoryRefusal,
-} from "./memory-outcome";
+import { findKeywordRuleValue, keywordRuleBudgetRefusal } from "./keyword-rule-outcome";
+import { findMemoryValue, memoryBudgetRefusal } from "./memory-outcome";
 import {
   findTransactionValue,
-  transactionAbortRefusal,
   transactionBudgetRefusal,
-  transactionMovementIndex,
   transactionMovementRefusal,
   transactionRefusal,
 } from "./transaction-outcome";
@@ -62,7 +47,6 @@ import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
   CommittedMutationValue,
-  MemoryOutcome,
   PreparedCanonicalMutation,
   TransactionOutcome,
 } from "./mutation-types";
@@ -85,12 +69,66 @@ export type CanonicalMutationUnitExecution =
   | Readonly<{ _tag: "Aborted" }>;
 
 /** The commit-time trigger classes one aborted unit can name by its own D1 constraint message. */
-type TriggerKind = "movement" | "capacity" | "audit";
+type TriggerKind = "movement" | "audit";
 
-/**
- * A shared Audit budget trigger identifies its owner only in a single-child unit. A recount after
- * rollback can include unrelated commits and cannot safely select a child of a mixed batch.
- */
+/** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
+const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
+  mutation.outcome.operation;
+
+/** Reuse the owner's changes() completion premise while binding each child's identity to its slot. */
+const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
+    VALUES (?, ?, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
+    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+      accepted = excluded.accepted`)
+    .bind(index, operation);
+
+/** Check the shared Audit count atomically before the child's success Audit. */
+const childBudget = ({
+  db,
+  userId,
+  current,
+  index,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  current: number;
+  index: number;
+  operation: string;
+}>): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
+    SELECT ?,?,1,CASE WHEN (${auditDayCountExpression}) < ? THEN 1 ELSE 0 END
+    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+      accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
+    .bind(index, operation, ...auditDayBindings({ userId, current }), dailyAuditBudget);
+
+/** Decode only a known CHECK failure; a trigger with similar prose is not proof of a child. */
+const childGuardMarker = (
+  cause: unknown
+): Option.Option<
+  Readonly<{ index: number; kind: "completion" | "budget" | "movement" | "capacity" }>
+> => {
+  const detail = String(cause);
+  // SQLite appends the actual extended code after trigger-supplied prose. A forged CHECK phrase
+  // inside a RAISE(ABORT) message still ends with SQLITE_CONSTRAINT_TRIGGER and is not trusted.
+  if (detail.includes("extended: SQLITE_CONSTRAINT_TRIGGER")) return Option.none();
+  const match =
+    /D1_ERROR: CHECK constraint failed: canonical_child_(guard|budget|movement|capacity)_(0|[1-9]|10|11): SQLITE_CONSTRAINT \(extended: SQLITE_CONSTRAINT_CHECK\)/u.exec(
+      detail
+    );
+  if (match === null) return Option.none();
+  const index = Number(match[2]);
+  if (index >= maximumAtomicBatchCalls) return Option.none();
+  if (match[1] === "budget") return Option.some({ index, kind: "budget" as const });
+  if (match[1] === "movement") return Option.some({ index, kind: "movement" as const });
+  if (match[1] === "capacity") return Option.some({ index, kind: "capacity" as const });
+  return Option.some({ index, kind: "completion" as const });
+};
+
+/** A shared Audit trigger without a child marker is provable only in a single-child unit. */
 const auditBudgetIndex = (
   mutations: ReadonlyArray<PreparedCanonicalMutation>
 ): Option.Option<number> => (mutations.length === 1 ? Option.some(0) : Option.none());
@@ -114,9 +152,6 @@ const rejectRecorded = ({
       return { _tag: "Rejected", callIndex, refusal, disposition };
     })
   );
-
-const budgetTriggerRefusal = (kind: TriggerKind): Option.Option<CanonicalMutationRefusal> =>
-  kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none();
 
 const nonTransactionAuditLimitRefusal = (
   source: "ForwardingAddress" | "StatementSubmission"
@@ -149,12 +184,12 @@ const triggerRefusal = ({
   kind: TriggerKind;
 }>): Option.Option<CanonicalMutationRefusal> => {
   const scoped = childCaller(subject, mutation.requiredScope);
+  const auditOnly = (refusal: CanonicalMutationRefusal): Option.Option<CanonicalMutationRefusal> =>
+    kind === "audit" ? Option.some(refusal) : Option.none();
   switch (mutation.outcome._tag) {
     case "Budget":
     case "Insight":
-    case "ForwardingAddress":
-    case "StatementSubmission":
-      return metadataTriggerRefusal(mutation.outcome._tag, kind);
+      return auditOnly(budgetAuditLimitRefusal());
     case "Transaction":
       return transactionTriggerRefusal({
         db,
@@ -164,24 +199,13 @@ const triggerRefusal = ({
         kind,
       });
     case "KeywordRule":
-      return keywordRuleTriggerRefusal(scoped, kind);
+      return auditOnly(keywordRuleBudgetRefusal());
     case "Memory":
-      return memoryTriggerRefusal({
-        db,
-        subject: scoped,
-        current,
-        operation: mutation.outcome.operation,
-        kind,
-      });
+      return auditOnly(memoryBudgetRefusal());
+    case "ForwardingAddress":
+    case "StatementSubmission":
+      return auditOnly(nonTransactionAuditLimitRefusal(mutation.outcome._tag));
   }
-};
-
-const metadataTriggerRefusal = (
-  owner: "Budget" | "Insight" | "ForwardingAddress" | "StatementSubmission",
-  kind: TriggerKind
-): Option.Option<CanonicalMutationRefusal> => {
-  if (owner === "Budget" || owner === "Insight") return budgetTriggerRefusal(kind);
-  return kind === "audit" ? Option.some(nonTransactionAuditLimitRefusal(owner)) : Option.none();
 };
 
 /** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
@@ -209,238 +233,8 @@ const transactionTriggerRefusal = ({
       })
     );
   }
-  return kind === "audit" ? Option.some(transactionBudgetRefusal()) : Option.none();
+  return Option.some(transactionBudgetRefusal());
 };
-
-/** The refusal a keyword-rule child reports for a trigger that belongs to its own owner. */
-const keywordRuleTriggerRefusal = (
-  subject: TransactionCaller,
-  kind: TriggerKind
-): Option.Option<CanonicalMutationRefusal> => {
-  if (kind === "capacity") {
-    return Option.some(
-      keywordRuleRefusal({
-        failure: new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
-        subject,
-      })
-    );
-  }
-  return kind === "audit" ? Option.some(keywordRuleBudgetRefusal()) : Option.none();
-};
-
-/** The refusal a Memory child reports for a trigger that belongs to its own owner. */
-const memoryTriggerRefusal = ({
-  db,
-  subject,
-  current,
-  operation,
-  kind,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  operation: MemoryOperationId;
-  kind: TriggerKind;
-}>): Option.Option<CanonicalMutationRefusal> => {
-  if (kind === "capacity") {
-    return Option.some(
-      memoryRefusal({ db, subject, operation, outcome: "resource_limit", current })
-    );
-  }
-  return kind === "audit" ? Option.some(memoryBudgetRefusal()) : Option.none();
-};
-
-/** True when a correction child repeats an observed revision an earlier child already advanced. */
-const markObservedRevision = (observed: Set<string>, outcome: TransactionOutcome): boolean => {
-  if (Option.isNone(outcome.expectedRevision)) return false;
-  const key = `${outcome.transactionId}:${outcome.expectedRevision.value}`;
-  const seen = observed.has(key);
-  observed.add(key);
-  return seen;
-};
-
-/** The refusal one Transaction child explains after the unit rolled back, or None. */
-const transactionInferredRefusal = ({
-  db,
-  subject,
-  current,
-  outcome,
-  repeated,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  outcome: TransactionOutcome;
-  repeated: boolean;
-}>): Effect.Effect<Option.Option<CanonicalMutationRefusal>> =>
-  transactionAbortRefusal({
-    db,
-    userId: subject.userId,
-    outcome,
-    repeated,
-  }).pipe(
-    Effect.map(
-      Option.map((refusal) =>
-        transactionRefusal({
-          db,
-          subject,
-          operation: outcome.operation,
-          refusal,
-          current,
-        })
-      )
-    )
-  );
-
-/** The refusal one Memory child explains after the unit rolled back, or None. */
-const memoryInferredRefusal = ({
-  db,
-  subject,
-  current,
-  outcome,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  outcome: MemoryOutcome;
-}>): Effect.Effect<Option.Option<CanonicalMutationRefusal>> => {
-  if (outcome.operation === "memory.remember") return Effect.succeedNone;
-  return findOwnedMemory({ db, userId: subject.userId, id: outcome.memoryId }).pipe(
-    Effect.map((owns) =>
-      Option.flatMap(owns, (owned) =>
-        owned
-          ? Option.none()
-          : Option.some(
-              memoryRefusal({
-                db,
-                subject,
-                operation: outcome.operation,
-                outcome: "not_found",
-                current,
-              })
-            )
-      )
-    )
-  );
-};
-
-const inferredInsightRefusal = ({
-  db,
-  subject,
-  current,
-  outcome,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  outcome: Extract<PreparedCanonicalMutation["outcome"], { _tag: "Insight" }>;
-}>): Effect.Effect<Option.Option<CanonicalMutationRefusal>> =>
-  findInsight(db, subject.userId, outcome.insightEventId).pipe(
-    Effect.map((event) =>
-      Option.some(
-        insightRefusal({
-          db,
-          subject,
-          current,
-          operation: outcome.operation,
-          code: Option.isNone(event) ? "not_found" : "validation_failed",
-        })
-      )
-    ),
-    Effect.orElseSucceed(() => Option.none())
-  );
-
-/**
- * The refusal one prepared child explains after the unit rolled back, or None when the committed
- * state cannot prove it responsible. Transaction children replay their observed revision and pair
- * premises, keyword-rule children replay their own rule conflicts, and Memory children prove the
- * addressed row is no longer theirs.
- */
-const inferredAbortRefusal = ({
-  db,
-  subject,
-  current,
-  mutation,
-  observed,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  mutation: PreparedCanonicalMutation;
-  observed: Set<string>;
-}>): Effect.Effect<Option.Option<CanonicalMutationRefusal>> => {
-  const outcome = mutation.outcome;
-  const scoped = childCaller(subject, mutation.requiredScope);
-  switch (outcome._tag) {
-    case "Budget":
-      return Effect.succeedNone;
-    case "Insight":
-      return inferredInsightRefusal({ db, subject: scoped, current, outcome });
-    case "Transaction":
-      return transactionInferredRefusal({
-        db,
-        subject: scoped,
-        current,
-        outcome,
-        repeated: markObservedRevision(observed, outcome),
-      });
-    case "KeywordRule":
-      return keywordRuleAbortFailure({ db, userId: subject.userId, outcome }).pipe(
-        Effect.map(Option.map((failure) => keywordRuleRefusal({ failure, subject: scoped })))
-      );
-    case "Memory":
-      return memoryInferredRefusal({ db, subject: scoped, current, outcome });
-    case "ForwardingAddress":
-      return Effect.succeedNone;
-    case "StatementSubmission":
-      return statementAbortRefusal(outcome.config, outcome.publication).pipe(
-        Effect.map(
-          Option.map((refusal) =>
-            canonicalStatementRefusal({
-              config: outcome.config,
-              subject: scoped,
-              current,
-              refusal,
-            })
-          )
-        )
-      );
-  }
-};
-
-const inferredAbortIndex = ({
-  db,
-  subject,
-  current,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  mutations: ReadonlyArray<PreparedCanonicalMutation>;
-}>): Effect.Effect<Option.Option<Readonly<{ index: number; refusal: CanonicalMutationRefusal }>>> =>
-  Effect.gen(function* () {
-    const observed = new Set<string>();
-    for (const [index, mutation] of mutations.entries()) {
-      const refusal = yield* inferredAbortRefusal({
-        db,
-        subject,
-        current,
-        mutation,
-        observed,
-      });
-      if (Option.isSome(refusal)) return Option.some({ index, refusal: refusal.value });
-    }
-    return Option.none();
-  });
-
-/**
- * One child index an attribution read produced, or None when the read fails or the unit holds no
- * child the trigger can blame — never an index borrowed from another owner.
- */
-const attributedIndex = <E>(
-  attempt: Effect.Effect<Option.Option<number>, E>
-): Effect.Effect<Option.Option<number>> => attempt.pipe(Effect.option, Effect.map(Option.flatten));
 
 /**
  * The child index and trigger class one aborted unit's D1 constraint names, or None when the
@@ -449,48 +243,32 @@ const attributedIndex = <E>(
  * or refused the work.
  */
 const triggerAttribution = ({
-  db,
-  subject,
-  current,
   mutations,
   detail,
 }: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   detail: string;
-}>): Effect.Effect<Option.Option<Readonly<{ index: number; kind: TriggerKind }>>> =>
-  Effect.gen(function* () {
-    const trigger = canonicalTriggerOf(detail);
-    if (Option.isNone(trigger)) return Option.none();
-    // Every declared trigger name is matched here, so a new one must name the child class it
-    // blames or this build fails.
-    switch (trigger.value) {
-      case canonicalTriggerNames.resourceLimit: {
-        const index = yield* attributedIndex(
-          transactionMovementIndex({ db, userId: subject.userId, current, mutations })
-        );
-        return Option.map(index, (value) => ({ index: value, kind: "movement" as const }));
-      }
-      case canonicalTriggerNames.keywordRuleLimit: {
-        const index = yield* attributedIndex(
-          keywordRuleCapacityIndex({ db, userId: subject.userId, mutations })
-        );
-        return Option.map(index, (value) => ({ index: value, kind: "capacity" as const }));
-      }
-      case canonicalTriggerNames.memoryCapacity: {
-        const index = yield* attributedIndex(
-          memoryCapacityIndex({ db, subject, current, mutations })
-        );
-        return Option.map(index, (value) => ({ index: value, kind: "capacity" as const }));
-      }
-      case canonicalTriggerNames.auditLimit: {
-        const index = auditBudgetIndex(mutations);
-        return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
-      }
+}>): Option.Option<Readonly<{ index: number; kind: TriggerKind }>> => {
+  const trigger = canonicalTriggerOf(detail);
+  if (Option.isNone(trigger)) return Option.none();
+  // Every declared trigger name is matched here, so a new one must name the child class it
+  // blames or this build fails.
+  switch (trigger.value) {
+    case canonicalTriggerNames.resourceLimit:
+      // Recounting after rollback can include another caller's commit: no indexed CHECK, no owner.
+      return Option.none();
+    case canonicalTriggerNames.keywordRuleLimit:
+      // Rolled-back deletions make a capacity recount unsound; only indexed owner CHECKs prove it.
+      return Option.none();
+    case canonicalTriggerNames.memoryCapacity:
+      // A committed-state replay misses earlier forgets and concurrent writes; require indexed proof.
+      return Option.none();
+    case canonicalTriggerNames.auditLimit: {
+      const index = auditBudgetIndex(mutations);
+      return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
     }
-  });
+  }
+};
 
 /** Record one attributed trigger's child refusal, or answer Unavailable when it names no owner. */
 const refuseAttributed = ({
@@ -518,10 +296,96 @@ const refuseAttributed = ({
     : rejectRecorded({ callIndex: index, refusal: refusal.value });
 };
 
+/** Attribute an owner's indexed completion or capacity assertion only to the child it names. */
+const refuseChildGuard = ({
+  db,
+  subject,
+  current,
+  mutations,
+  index,
+  kind,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  mutations: ReadonlyArray<PreparedCanonicalMutation>;
+  index: number;
+  kind: "completion" | "capacity";
+}>): Effect.Effect<CanonicalMutationUnitExecution> =>
+  Effect.gen(function* () {
+    const mutation = mutations[index];
+    if (mutation === undefined) return { _tag: "Unavailable" } as const;
+    const scoped = childCaller(subject, mutation.requiredScope);
+    // A same-material publication that won the race is a retry, not a refused child.
+    if (
+      mutation.outcome._tag === "StatementSubmission" &&
+      (yield* lostStatementReplay(mutation.outcome.config, mutation.outcome.publication))
+    ) {
+      return { _tag: "Aborted" } as const;
+    }
+    const refusal = yield* mutation.guardRefusal({
+      db,
+      subject: scoped,
+      current,
+      earlier: mutations.slice(0, index).map((value) => value.outcome),
+      kind,
+    });
+    return yield* rejectRecorded({ callIndex: index, refusal });
+  });
+
+const isOwnerGuard = (
+  kind: "completion" | "capacity" | "movement" | "budget"
+): kind is "completion" | "capacity" => kind === "completion" || kind === "capacity";
+
+/** Classify a child-specific CHECK, refusing unknown lookalikes without guessing a child. */
+const markedAbort = ({
+  db,
+  subject,
+  current,
+  mutations,
+  cause,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  mutations: ReadonlyArray<PreparedCanonicalMutation>;
+  cause: unknown;
+}>): Option.Option<Effect.Effect<CanonicalMutationUnitExecution>> => {
+  const marker = childGuardMarker(cause);
+  if (Option.isSome(marker)) {
+    return Option.some(
+      isOwnerGuard(marker.value.kind)
+        ? refuseChildGuard({
+            db,
+            subject,
+            current,
+            mutations,
+            index: marker.value.index,
+            kind: marker.value.kind,
+          })
+        : refuseAttributed({
+            db,
+            subject,
+            current,
+            mutations,
+            index: marker.value.index,
+            kind: marker.value.kind === "budget" ? "audit" : marker.value.kind,
+          })
+    );
+  }
+  const detail = String(cause);
+  return detail.includes("canonical_child_guard_") ||
+    detail.includes("canonical_child_budget_") ||
+    detail.includes("canonical_child_movement_") ||
+    detail.includes("canonical_child_capacity_")
+    ? Option.some(Effect.succeed({ _tag: "Unavailable" } as const))
+    : Option.none();
+};
+
 /**
- * Attribute one aborted unit to the first child the committed state or its trigger message proves
- * responsible, then record that child's refusal evidence. The unit rolled back, so no child state
- * and no child success AuditLogEntry exists; a refusal it cannot attribute answers `Unavailable`.
+ * Attribute an aborted unit only when its indexed CHECK or a known trigger proves the child, then
+ * record that child's refusal after rollback. A forged marker or unowned trigger is Unavailable;
+ * an unmarked abort stays Aborted so a same-material statement can retry without a false Audit.
  */
 const classifyAbortedUnit = ({
   db,
@@ -541,10 +405,9 @@ const classifyAbortedUnit = ({
       liveTransactionCredential({ db, subject, current })
     ).pipe(Effect.orElseSucceed(() => false));
     if (!live) return { _tag: "CredentialRefused" } as const;
-    const attributed = yield* triggerAttribution({
-      db,
-      subject,
-      current,
+    const marked = markedAbort({ db, subject, current, mutations, cause });
+    if (Option.isSome(marked)) return yield* marked.value;
+    const attributed = triggerAttribution({
       mutations,
       detail: String(cause),
     });
@@ -558,13 +421,8 @@ const classifyAbortedUnit = ({
         kind: attributed.value.kind,
       });
     }
-    const inferred = yield* inferredAbortIndex({ db, subject, current, mutations });
-    if (Option.isSome(inferred)) {
-      return yield* rejectRecorded({
-        callIndex: inferred.value.index,
-        refusal: inferred.value.refusal,
-      });
-    }
+    // No unmarked abort proves a child; leave individual statement replay free to retry a
+    // same-material race while all other callers answer unavailable without a refusal Audit.
     return { _tag: "Aborted" } as const;
   });
 
@@ -645,10 +503,39 @@ const findCommittedValue = ({
   }
 };
 
+/** Guard every owner's known commit-time trigger before its write, then assert completion. */
+const childStatements = ({
+  db,
+  subject,
+  current,
+  mutation,
+  index,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  mutation: PreparedCanonicalMutation;
+  index: number;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const userId = subject.userId;
+  const operation = mutationOperation(mutation);
+  return [
+    ...(mutation.auditBudget === "shared"
+      ? [childBudget({ db, userId, current, index, operation })]
+      : []),
+    ...Option.match(mutation.commitGuards, {
+      onNone: (): ReadonlyArray<D1PreparedStatement> => [],
+      onSome: (guards) => guards({ db, userId, current, index, operation }),
+    }),
+    ...mutation.statements,
+    childCompletion(db, index, operation),
+  ];
+};
+
 /**
  * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
- * each committed value back. Every mutation is followed by its owner's completion assertion, so a
- * guard that silently changes no row aborts the whole unit instead of being noticed after a
+ * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
+ * a guard that silently changes no row aborts the whole unit instead of being noticed after a
  * successful commit. The unit never opens a nested D1 unit and never performs provider work; an
  * aborted unit is classified against the same live credential, budgets, and domain premises the
  * individual operations check.
@@ -667,10 +554,10 @@ export const executeCanonicalMutationUnit = ({
   Effect.uninterruptible(
     Effect.gen(function* () {
       if (mutations.length === 0) return { _tag: "Unavailable" } as const;
-      const statements = mutations.flatMap((mutation) => [
-        ...mutation.statements,
-        mutation.completion,
-      ]);
+      if (mutations.length > maximumAtomicBatchCalls) return { _tag: "Unavailable" } as const;
+      const statements = mutations.flatMap((mutation, index) =>
+        childStatements({ db, subject, current, mutation, index })
+      );
       const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
       if (Exit.isFailure(attempt)) {
         return yield* classifyAbortedUnit({

@@ -4,7 +4,6 @@ import {
   UpdateTransactionInput,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
-import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
@@ -24,12 +23,14 @@ import {
 } from "./transaction-boundary";
 import {
   type CanonicalMutationPreparation,
+  type TransactionOutcome,
   credentialRefusedPreparation,
   failedPreparation,
 } from "../mutations/mutation-types";
 import {
   refusedTransactionMutation,
   staleCorrectionMessage,
+  transactionGuardRefusal,
 } from "../mutations/transaction-outcome";
 import { type StoredTransaction, TransactionOutput, findTransaction } from "./transaction-history";
 
@@ -225,17 +226,21 @@ const preparedCorrection = ({
   evidence: Evidence;
 }>): CanonicalMutationPreparation => {
   const { db, subject, id, input, current } = correction;
+  const outcome: TransactionOutcome = {
+    _tag: "Transaction",
+    operation: "transactions.updateTransaction",
+    transactionId: id,
+    readback: { _tag: "Transaction" },
+    expectedRevision: Option.some(input.expectedRevision),
+  };
   return {
     _tag: "Prepared",
     mutation: {
       requiredScope: callerScope(subject),
-      outcome: {
-        _tag: "Transaction",
-        operation: "transactions.updateTransaction",
-        transactionId: id,
-        readback: { _tag: "Transaction" },
-        expectedRevision: Option.some(input.expectedRevision),
-      },
+      guardRefusal: transactionGuardRefusal(outcome),
+      auditBudget: "shared",
+      commitGuards: Option.none(),
+      outcome,
       statements: [
         ...changeStatements({ correction, current, previous, updated }, evidence),
         ...auditStatements({
@@ -245,7 +250,6 @@ const preparedCorrection = ({
           correctionId: evidence.id,
         }),
       ],
-      completion: db.prepare(transactionCaptureCompletion),
     },
   };
 };

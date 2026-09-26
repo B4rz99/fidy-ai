@@ -90,7 +90,7 @@ export type KeywordRuleRemoval = Readonly<{
  * between validation and commit changes no row.
  */
 export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
-  sql: `INSERT INTO keyword_rules (id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at)
+  sql: `INSERT OR IGNORE INTO keyword_rules (id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at)
     SELECT ?,?,?,?,id,?,? FROM categories WHERE id = ?
     AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
   params: [
@@ -107,7 +107,7 @@ export const insertKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
 
 /** Replace one User-owned rule under the same live credential and Category guarantees. */
 export const replaceKeywordRule = (input: KeywordRuleWrite): OwnedStatement => ({
-  sql: `UPDATE keyword_rules SET keyword = ?, normalized_keyword = ?, category_id = ?, updated_at = ?
+  sql: `UPDATE OR IGNORE keyword_rules SET keyword = ?, normalized_keyword = ?, category_id = ?, updated_at = ?
     WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
     AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
   params: [

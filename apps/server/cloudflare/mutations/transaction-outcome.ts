@@ -1,21 +1,19 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { TransactionPair } from "@fidy/server/transaction-reconciliation";
 import type {
-  CanonicalMutationOutcome,
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
   CommittedMutationValue,
+  GuardRefusalWork,
   TransactionOutcome,
 } from "./mutation-types";
 import { refusedPreparation } from "./mutation-types";
 import {
   ReconciliationDecisionRow,
-  type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionMutationOperation,
   type TransactionRefusal,
   alreadyLinkedMessage,
-  boundaryFailure,
   missingTransactionMessage,
   pairPolicyMessage,
   rateLimitedTransactionResponse,
@@ -43,10 +41,47 @@ const staleCorrectionRefusal: TransactionRefusal = {
   message: staleCorrectionMessage,
 };
 
-/**
- * Build one Transaction refusal: it records the metadata-only refusal Audit under the exact child
- * authority and renders the same individual response the operation's own entry point returns.
- */
+/** Classify an indexed Transaction guard abort using the owner's retained premises and earlier children. */
+export const transactionGuardRefusal =
+  (outcome: TransactionOutcome) =>
+  ({
+    db,
+    subject,
+    current,
+    earlier,
+  }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> => {
+    const operation = outcome.operation;
+    const generic = transactionRefusal({
+      db,
+      subject,
+      current,
+      operation,
+      refusal: {
+        outcome: "validation_failed",
+        message: "The Transaction could not complete its guarded write.",
+      },
+    });
+    const expected = outcome.expectedRevision;
+    const repeated =
+      Option.isSome(expected) &&
+      earlier.some(
+        (previous) =>
+          previous._tag === "Transaction" &&
+          previous.transactionId === outcome.transactionId &&
+          Option.isSome(previous.expectedRevision) &&
+          previous.expectedRevision.value === expected.value
+      );
+    return transactionAbortRefusal({ db, userId: subject.userId, outcome, repeated }).pipe(
+      Effect.map(
+        Option.match({
+          onNone: () => generic,
+          onSome: (refusal) => transactionRefusal({ db, subject, current, operation, refusal }),
+        })
+      )
+    );
+  };
+
+/** Record a metadata-only Transaction refusal under its child authority and render its own response. */
 export const transactionRefusal = ({
   db,
   subject,
@@ -354,57 +389,6 @@ export const countRows = (statement: D1PreparedStatement): Promise<number> =>
       if (Option.isNone(row)) throw new Error("Invalid capacity count projection");
       return row.value.total;
     });
-
-/** How many manual movements one User may create per UTC day before a capture child is blamed. */
-const manualDailyMovementBudget = 100;
-
-/**
- * The capture child a manual-movement budget abort blames: the child the replay finds over budget,
- * otherwise the first capture child the trigger can belong to, and None when the unit holds no
- * capture child. The count reads committed state because the unit rolled back, then replays the
- * children in order.
- */
-export const transactionMovementIndex = ({
-  db,
-  userId,
-  current,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  mutations: ReadonlyArray<{ readonly outcome: CanonicalMutationOutcome }>;
-}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> => {
-  const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
-  return Effect.tryPromise({
-    try: () =>
-      countRows(
-        db
-          .prepare(`SELECT count(*) AS total FROM transactions
-        WHERE user_id = ? AND created_at >= substr(?, 1, 10) || 'T00:00:00.000Z'
-        AND created_at < date(?, '+1 day') || 'T00:00:00.000Z'`)
-          .bind(userId, createdAt, createdAt)
-      ),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.map((existing) => {
-      let inserted = 0;
-      let firstOwned: Option.Option<number> = Option.none();
-      for (const [index, mutation] of mutations.entries()) {
-        if (
-          mutation.outcome._tag !== "Transaction" ||
-          mutation.outcome.operation !== "transactions.createTransaction"
-        ) {
-          continue;
-        }
-        if (Option.isNone(firstOwned)) firstOwned = Option.some(index);
-        if (existing + inserted >= manualDailyMovementBudget) return Option.some(index);
-        inserted += 1;
-      }
-      return firstOwned;
-    })
-  );
-};
 
 /** The refusal a capture child reports when the daily manual-movement budget aborts its unit. */
 export const transactionMovementRefusal = (): TransactionRefusal => ({

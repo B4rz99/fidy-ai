@@ -14,6 +14,8 @@ import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
+import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
+import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import { hostedDeliveryReceipt } from "../agent/hosted-turn";
 import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
@@ -194,6 +196,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0017_forwarded_email",
           "0017_statement_dispatch",
           "0018_batch_envelope_audit",
+          "0019_canonical_child_guards",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -3493,7 +3496,7 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
     })
   ));
 
-it("records one rejected audit when an atomic capture hits its resource limit", () =>
+it("leaves an unindexed atomic resource abort unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -3512,11 +3515,11 @@ it("records one rejected audit when an atomic capture hits its resource limit", 
       const response = yield* fromTestPromise(() =>
         sendPublicRequest(limitedDb, postTransaction(0, input()))
       );
-      expect(response.status).toBe(429);
+      expect(response.status).toBe(503);
       const audit = yield* fromTestPromise(() =>
         db.prepare("SELECT outcome FROM transaction_audit WHERE user_id = ?").bind(users[0]).all()
       );
-      expect(audit.results).toEqual([{ outcome: "resource_limit" }]);
+      expect(audit.results).toEqual([]);
       const transactions = yield* fromTestPromise(() =>
         db.prepare("SELECT COUNT(*) AS count FROM transactions").first<{ count: number }>()
       );
@@ -3745,7 +3748,7 @@ it("aborts the D1 unit and attributes the child when a guarded correction change
     })
   ));
 
-it("rolls back earlier children and every success Audit when a child audit is silently refused", () =>
+it("attributes a silently skipped child Audit without exposing D1 details", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -3756,7 +3759,8 @@ it("rolls back earlier children and every success Audit when a child audit is si
       yield* fromTestPromise(() =>
         db
           .prepare(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON transaction_audit
-            WHEN NEW.operation = 'transactions.updateTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+            WHEN NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
+            BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
       const response = yield* fromTestPromise(() =>
@@ -3771,7 +3775,14 @@ it("rolls back earlier children and every success Audit when a child audit is si
           ])
         )
       );
-      expect(response.status).toBe(503);
+      expect(response.status).toBe(400);
+      const body = yield* fromTestPromise(() => response.text());
+      const rejection = yield* Schema.decodeEffect(Schema.fromJsonString(BatchRejection))(
+        body
+      ).pipe(Effect.orDie);
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("transactions.updateTransaction");
+      expect(body).not.toMatch(/SQL|INSERT|transaction_audit|guard_assertion/iu);
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -3790,6 +3801,133 @@ it("rolls back earlier children and every success Audit when a child audit is si
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_corrections")
         )
+      ).toBe(0);
+      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+        { operation: "transactions.updateTransaction", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("names the capture child when its success Audit is skipped and preserves the daily budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON transaction_audit
+          WHEN NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
+          BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.failedCallIndex).toBe(0);
+      expect(rejection.error.operation).toBe("transactions.createTransaction");
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+        { operation: "transactions.createTransaction", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("records a skipped keyword-rule guard as that child's refusal without committing earlier work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON category_audit
+          WHEN NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
+          BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [transactionCall(1, input()), keywordRuleCall(2, "Panadería", category)])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.failedCallIndex).toBe(1);
+      expect(rejection.error.operation).toBe("categories.createKeywordRule");
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM keyword_rules"))
+      ).toBe(0);
+      const audits = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT operation,outcome FROM category_audit")
+          .all<{ operation: string; outcome: string }>()
+      );
+      expect(audits.results).toEqual([
+        { operation: "categories.createKeywordRule", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("does not infer a duplicate from a rule deleted by an earlier rolled-back child", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seeded = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [keywordRuleCall(1, "Panadería", category)]))
+      );
+      expect(seeded.status).toBe(200);
+      const rule = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT id FROM keyword_rules WHERE user_id = ?")
+          .bind(users[0])
+          .first<{ id: string }>()
+      );
+      const deletedId = yield* Schema.decodeUnknownEffect(KeywordRuleId)(rule?.id);
+      const failure = yield* keywordRuleGuardFailure({
+        db,
+        userId: users[0] ?? "",
+        outcome: {
+          _tag: "KeywordRule",
+          operation: "categories.createKeywordRule",
+          ruleId: yield* Schema.decodeEffect(KeywordRuleId)("40000000-0000-4000-8000-000000000001"),
+          keyword: yield* Schema.decodeEffect(CategoryKeyword)("Panadería"),
+          categoryId: yield* Schema.decodeEffect(CategoryId)(category),
+        },
+        earlier: [
+          { _tag: "KeywordRule", operation: "categories.deleteKeywordRule", ruleId: deletedId },
+        ],
+      });
+      expect(Option.isNone(failure)).toBe(true);
+    })
+  ));
+
+it("does not assign a child to a forged guard marker from an unrelated write", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER fake_guard BEFORE INSERT ON transactions
+          BEGIN SELECT RAISE(ABORT, 'CHECK constraint failed: canonical_child_guard_0: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)'); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [transactionCall(1, input())]))
+      );
+      expect(response.status).toBe(503);
+      const body = yield* fromTestPromise(() => response.text());
+      expect(body).not.toMatch(/failedCallIndex|canonical_child_guard|INSERT|transactions/iu);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
@@ -4365,6 +4503,44 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
     })
   ));
 
+it("attributes a duplicate keyword in one batch with the owner's declared conflict and refusal Audit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            transactionCall(1, input()),
+            keywordRuleCall(2, "Panadería", category),
+            keywordRuleCall(3, "panaderia", category),
+          ])
+        )
+      );
+      expect(response.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.failedCallIndex).toBe(2);
+      expect(rejection.error.operation).toBe("categories.createKeywordRule");
+      expect(rejection.error.message).toMatch(/equivalent keyword rule/u);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM keyword_rules"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT operation,outcome FROM category_audit WHERE user_id = ?")
+            .bind(users[0] ?? "")
+            .all()
+        )).results
+      ).toEqual([{ operation: "categories.createKeywordRule", outcome: "validation_failed" }]);
+    })
+  ));
+
 it("rolls back every owner when a later mixed-owner keyword-rule child exceeds capacity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -4430,7 +4606,7 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       ).toBe(0);
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM category_audit"))
-      ).toBe(0);
+      ).toBe(1);
     })
   ));
 
@@ -4990,7 +5166,58 @@ it("serializes concurrent batches and individual mutations through one User coor
     })
   ));
 
-it("attributes the movement budget but leaves an ambiguous audit budget abort unattributed", () =>
+it("attributes keyword capacity after a deletion and earlier creates without recount guessing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 98)
+      INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id, created_at, updated_at)
+      SELECT printf('40000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, 'seed ' || n, ?,
+      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+          .bind(users[0], category)
+          .run()
+      );
+      const refused = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            deleteKeywordRuleCall(1, "40000000-0000-4000-8000-000000000000"),
+            keywordRuleCall(2, "one new", category),
+            keywordRuleCall(3, "two new", category),
+            keywordRuleCall(4, "three new", category),
+          ])
+        )
+      );
+      expect(refused.status).toBe(400);
+      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => refused.json())
+      ).pipe(Effect.orDie);
+      expect(rejection.error.failedCallIndex).toBe(3);
+      expect(rejection.error.operation).toBe("categories.createKeywordRule");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(99);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM category_audit WHERE user_id = ? AND outcome = 'validation_failed'",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it("attributes movement and shared Audit budgets to the exact child without consuming the aborted unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const movementDb = yield* fromTestPromise(() => setup());
@@ -5043,9 +5270,13 @@ it("attributes the movement budget but leaves an ambiguous audit budget abort un
           batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
         )
       );
-      // Another unit can commit an audit row between the aborted batch and any recount, so
-      // neither of the two children can safely be named as the refused audit writer.
-      expect(exhausted.status).toBe(503);
+      expect(exhausted.status).toBe(400);
+      const auditRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+        yield* fromTestPromise(() => exhausted.json())
+      ).pipe(Effect.orDie);
+      expect(auditRejection.error.code).toBe("rate_limited");
+      expect(auditRejection.error.failedCallIndex).toBe(1);
+      expect(auditRejection.error.operation).toBe("transactions.createTransaction");
       expect(
         yield* fromTestPromise(() =>
           countRows(auditDb, "SELECT COUNT(*) AS count FROM transactions")
@@ -5814,6 +6045,48 @@ it("attributes a repeated observed revision to the later correction without part
       expect(refusedAudits).toEqual([
         { operation: "transactions.updateTransaction", outcome: "validation_failed" },
       ]);
+    })
+  ));
+
+it("does not misattribute an unrelated earlier abort to a repeated-revision correction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const seededId = "30000000-0000-4000-8000-000000000009";
+      yield* fromTestPromise(() =>
+        seedTransaction({
+          db,
+          userId: users[0] ?? "",
+          id: seededId,
+          categoryId: category,
+        })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER unrelated_correction_abort
+        BEFORE UPDATE ON transactions WHEN NEW.notes = 'first'
+        BEGIN SELECT RAISE(ABORT, 'unrelated failure'); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            correctionCall(1, seededId, { expectedRevision: 0, changes: { notes: "first" } }),
+            correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "second" } }),
+          ])
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT notes,revision FROM transactions WHERE user_id = ? AND id = ?")
+            .bind(users[0], seededId)
+            .all()
+        )
+      ).toMatchObject({ results: [{ notes: "seed", revision: 0 }] });
+      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([]);
     })
   ));
 

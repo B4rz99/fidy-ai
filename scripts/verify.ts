@@ -4,7 +4,15 @@ import { Option } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
-const verifyGroups = ["static", "builds", "unit", "browser", "mutation"] as const;
+const verifyGroups = [
+  "static",
+  "builds",
+  "unit",
+  "cloudflare-adapters",
+  "cloudflare-infra",
+  "browser",
+  "mutation",
+] as const;
 type VerifyGroup = (typeof verifyGroups)[number];
 
 type Check = {
@@ -102,6 +110,10 @@ const checks: Array<Check> = [
   rootCheck("static", "Effect dependency family", ["bun", "run", "check:effect-family"]),
   rootCheck("static", "Dependency policy", ["bun", "run", "lint:dependencies"]),
   rootCheck("static", "Credential path evidence", ["bun", "run", "check:credential-evidence"]),
+  rootCheck("static", "Reviewed Cloudflare security policy", [
+    "bun",
+    "infra/cloudflare/verify-edge-policy.ts",
+  ]),
   {
     ...rootCheck("builds", "Production web build", [
       "bun",
@@ -118,12 +130,22 @@ const checks: Array<Check> = [
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
   },
-  rootCheck("unit", "Cloudflare adapter tests", [
+  rootCheck("cloudflare-adapters", "Cloudflare adapter tests", [
     "bun",
     "run",
     "--cwd",
     "apps/server",
     "test:cloudflare",
+    ...(Bun.env.CLOUDFLARE_TEST_SHARD !== undefined
+      ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`]
+      : []),
+  ]),
+  rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "infra/cloudflare",
+    "test",
   ]),
   rootCheck("unit", "Notification-email interpretation tests", [
     "bun",

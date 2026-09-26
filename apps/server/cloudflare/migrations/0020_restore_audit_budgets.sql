@@ -1,60 +1,14 @@
--- #794: Pre-admission batch refusals are accountability evidence, not canonical child work.
--- Rebuild the session audit vocabulary while retaining historical rows and append-only guards.
+-- The forwarding-address migration can be applied after the batch/review migrations on
+-- databases that already recorded those filenames. It rebuilds statement_submission_audit
+-- and reinstalls older budget guards. Restore the complete six-source, batch-aware policy
+-- after every historical migration, regardless of their prior application order.
 DROP TRIGGER statement_audit_daily_budget;
 DROP TRIGGER transaction_audit_daily_budget;
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
 DROP TRIGGER memory_canonical_daily_budget;
 DROP TRIGGER IF EXISTS statement_review_audit_daily_budget;
-DROP TRIGGER transaction_audit_no_update;
-DROP TRIGGER transaction_audit_no_delete;
--- 0017's obsolete shared projection references this table; dispatch replaced its consumers
--- with guards that include statement review. Drop it before rebuilding the table.
-DROP VIEW canonical_audit_usage;
-CREATE TABLE transaction_audit_next (
-  id TEXT PRIMARY KEY NOT NULL,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  session_id TEXT NOT NULL REFERENCES web_sessions(id),
-  operation TEXT NOT NULL CHECK (operation IN ('transactions.createTransaction', 'transactions.listTransactions',
-    'transactions.getTransaction', 'transactions.updateTransaction', 'transactions.searchTransactions',
-    'transactions.linkTransactions', 'transactions.unlinkTransactions', 'operations.executeAtomicBatch')),
-  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'not_found', 'validation_failed', 'resource_limit')),
-  occurred_at_ms INTEGER NOT NULL
-) STRICT;
-INSERT INTO transaction_audit_next SELECT id, user_id, session_id, operation, outcome, occurred_at_ms FROM transaction_audit;
-DROP TABLE transaction_audit;
-ALTER TABLE transaction_audit_next RENAME TO transaction_audit;
-CREATE INDEX transaction_audit_by_user_day ON transaction_audit(user_id, occurred_at_ms);
-CREATE TRIGGER transaction_audit_no_update BEFORE UPDATE ON transaction_audit
-BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
-CREATE TRIGGER transaction_audit_no_delete BEFORE DELETE ON transaction_audit
-BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
--- The five canonical-work triggers count only child work. Envelope refusals cannot spend a
--- User's daily 256 entries by naming no work; their writes remain append-only and metadata-only.
--- A separate per-User UTC-day envelope cap prevents unlimited storage writes from malformed
--- requests. Both credential classes share it, and D1 evaluates it atomically on each insert.
-CREATE TRIGGER session_batch_envelope_daily_budget BEFORE INSERT ON transaction_audit
-WHEN NEW.operation = 'operations.executeAtomicBatch'
- AND (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id
-      AND operation = 'operations.executeAtomicBatch'
-      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
-      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000)
-   + (SELECT COUNT(*) FROM pat_audit WHERE user_id = NEW.user_id
-      AND operation = 'operations.executeAtomicBatch'
-      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
-      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
-BEGIN SELECT RAISE(ABORT, 'batch_envelope_limit'); END;
-CREATE TRIGGER pat_batch_envelope_daily_budget BEFORE INSERT ON pat_audit
-WHEN NEW.operation = 'operations.executeAtomicBatch'
- AND (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id
-      AND operation = 'operations.executeAtomicBatch'
-      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
-      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000)
-   + (SELECT COUNT(*) FROM pat_audit WHERE user_id = NEW.user_id
-      AND operation = 'operations.executeAtomicBatch'
-      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
-      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
-BEGIN SELECT RAISE(ABORT, 'batch_envelope_limit'); END;
+DROP VIEW IF EXISTS canonical_audit_usage;
 CREATE TRIGGER statement_audit_daily_budget BEFORE INSERT ON statement_submission_audit
 WHEN (
   (SELECT count(*) FROM statement_submission_audit WHERE user_id = NEW.user_id

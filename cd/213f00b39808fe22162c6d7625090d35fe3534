@@ -1,0 +1,19 @@
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_966f707575be21::t_8dd71d41385cc4 1182-1184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cd213f00b39808fe22162c6d7625090d35fe3534",
+  "prompts": {},
+  "sessions": {
+    "s_966f707575be21": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-5611-7314-a4e5-96a59292842e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

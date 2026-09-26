@@ -10,6 +10,7 @@ docs/adr/0029-atomic-batch-accountability-boundaries.md
 apps/server/cloudflare/mutations/canonical-mutation-unit.ts
   s_966f707575be21::t_0d5cfac3cb9838 611-613
   s_966f707575be21::t_6fe4c4777639c9 587-598
+  s_966f707575be21::t_7ea5c635a82f6f 599-610
 ---
 {
   "schema_version": "authorship/3.0.0",

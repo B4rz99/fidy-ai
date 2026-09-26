@@ -1,114 +1,62 @@
 # Architecture
 
----
+## System ownership
 
-## 1. System shape
+This private Bun workspace owns the lockfile, CI, and repository-wide checks. Its packages have
+separate responsibilities:
 
-The repository root is a private Bun workspace. It owns the lockfile, CI, compiler policy, quality
-policy, and stable orchestration commands. Root commands delegate application work to the owning
-workspace package.
+- [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operations and
+  schemas, provider-neutral contracts, and Cloudflare Worker adapters.
+- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and static artifact.
+- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack, resource wiring, and edge
+  policy, but no domain model or Worker implementation.
 
-The workspace contains two application packages and one infrastructure package:
+Cloudflare is the sole Production runtime authority. D1, Durable Objects, Queues, Workflows, R2,
+Workers AI, and Email Workers serve distinct adapter seams; an unimplemented seam returns a typed
+unavailable result rather than falling back to process-local state or a different provider. Railway,
+PostgreSQL, and the Bun process runtime were superseded by
+[ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 
-- [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operation
-  declarations, schemas, provider-neutral shell contracts, and Cloudflare runtime adapters. It is not a process runtime.
-- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and the static
-  Cloudflare artifact.
-- [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the single Alchemy deployment stack,
-  Cloudflare resource wiring, and edge policy. It owns no product domain model or Worker runtime implementation.
+## Cross-application contract
 
-Cloudflare is the production authority. The intended runtime adapters use Worker entrypoints with D1,
-Durable Objects, Queues, Workflows, R2, Workers AI, and Email Workers as appropriate. Until an adapter
-is present, its published server seam is unavailable rather than backed by a local process, an
-in-memory substitute, or a removed infrastructure authority.
-
-## 2. Cross-application contract
-
-The server declares the canonical operation surface and owns its OpenAPI and complete reflected
-operation-policy artifacts under `apps/server/contracts/`. Those artifacts are deterministic review
-evidence, never another declaration. The web application derives its typed client from the
-server-owned declaration and never owns a copied contract or imports server implementations.
-
-The root TypeScript project-reference build expresses the server-before-web declaration dependency.
-The mandatory root gate checks artifact freshness and compares the server-owned artifacts with the
-pull-request base. A policy break requires an acknowledgement bound to the exact base digest,
-candidate digest, finding set, and coordinated rollout issue. See
+The server declares canonical operations once for HTTP, typed clients, MCP, and the hosted agent.
+The web derives its typed client from the browser-safe server declaration, without importing server
+implementations or copying the contract. The server generates OpenAPI and operation-policy artifacts
+as review evidence, not competing declarations. The project-reference build orders server before
+web; the root gate checks generated artifact freshness and compatibility with the pull-request base. See
 [Contract compatibility](docs/contract-compatibility.md).
 
-Every stable-User domain API and agent surface derives from the server's canonical operation
-definition. Two narrow exceptions are named rather than silent. A proof-bearing credential-bootstrap
-API with no stable User joins canonical authority only after proof exchange establishes a stable
-User. A bounded byte-staging transport may accept one User's hostile statement bytes before a
-canonical submission cites them: it is User-authenticated, creates no domain state, returns no
-readable content and no authority, and any unpublished material expires unless a canonical mutation
-publishes it ([ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The
-proof-bearing bootstrap's separately generated OpenAPI artifact is freshness-checked and compared
-against the base when present. It has no canonical operation policy, so the policy-break
-acknowledgement for the stable-User artifact pair does not apply: breaking changes to this direct
-bootstrap contract are rejected until a coordinated add/use/remove rollout makes the comparison
-nonbreaking.
+Two transports sit outside the stable-User canonical operation surface: proof-bearing credential
+bootstrap before a stable User exists, and bounded, User-authenticated statement-byte staging before
+a canonical mutation publishes the bytes. The bootstrap establishes authority only after proof
+exchange; staging returns no readable content, grants no authority, and expires if unpublished. The
+bootstrap's direct-client contract is checked separately;
+staging's limits and publication boundary are specified in
+[ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
 
-## 3. Production topology
+## Production boundary
 
-`infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. Server Worker entrypoints,
-Cloudflare adapters, D1 migrations, and their tests live in `apps/server/cloudflare/`; the stack wires
-those entrypoints and migrations into the declared binding graph. Its one stack declares
-an assets-only web Worker at `app.fidyapp.com`, the `fidyapp.com` redirect, an ingress Worker at
-`api.fidyapp.com`, and a Core Worker reachable only through the ingress service binding. The ingress
-has no D1 binding. The artifact contains the browser shell, hashed assets, headers, and deployment
-metadata, and never contains server source, source maps, or secrets. The Wrangler configuration is
-restricted to isolated static pull-request previews and owns no Production route.
+[`infra/cloudflare/alchemy.run.ts`](infra/cloudflare/alchemy.run.ts) is the sole Production topology
+authority. One stack deploys an assets-only web Worker at `app.fidyapp.com`, redirects `fidyapp.com`
+there, and exposes an ingress Worker at `api.fidyapp.com`. The Core Worker is private behind the
+ingress service binding and alone owns the D1 binding; the ingress has no direct database access.
+The static artifact contains no server implementation or Secrets. Local development uses the same
+entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
+creation.
 
-Public `/health` and canonical Categories requests cross the ingress-to-Core binding. Core returns a
-closed projection of health, Git revision, and contract digest, and is the sole owner of the D1
-binding used to load the stable Category taxonomy. The server Cloudflare runtime also owns
-the reusable admission primitive that later Core adapters install with Worker-owned policy.
-Admission atomically composes security, spend, and outstanding-work claims with proof or outbox
-statements; it is not commercial allowance accounting. Binding objects, environment values, topology, SQL,
-exception text, and Secrets never enter either response. `alchemy dev` executes those same
-entrypoints, D1 migrations, and binding graph locally. Local and Production are the only complete topology modes; the stack rejects every
-other remote stage before resource creation, so there is no persistent staging environment.
+GitHub Actions rechecks trunk immediately before deploying an exact source revision, then verifies
+the redirect, static artifact, and bound health response. Workstation and provider-controlled source deployments
+are not release paths. See the [Production runbook](docs/operations/production-releases.md).
 
-GitHub Actions is the release coordinator. A trunk release checks out one exact source revision,
-builds and validates its static artifact, plans the Alchemy stack, rechecks the current trunk
-revision, and deploys only while that revision remains current. It then verifies the apex redirect,
-static metadata, and bound health response against that exact release. Provider-controlled source
-deployments and workstation deployments are not used.
+## Identity and verification
 
-Railway, PostgreSQL, and a Bun process are superseded Production architecture under
-[ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md); they are not fallback
-authorities. The server package does not start a local production listener. Cloudflare API, storage, asynchronous
-execution, email-ingress, and hosted-inference adapters are separate seams; an unimplemented seam
-returns its typed unavailable result. No deployment step may reintroduce a process-local database,
-queue, lock, workflow, or hosted-model fallback.
+Browser login retains a private verifier in the browser. WhatsApp approval, verified email, or
+support recovery can approve a pairing for the same stable User, but cannot establish a session
+without that verifier. One approved pairing bootstraps one web session. The server verifies proof
+and owns session authority; the web keeps private material out of URLs, public references, and
+unrelated application state.
 
-## 4. Browser-to-server authentication boundary
-
-Browser login begins with a browser-held private verifier. WhatsApp approval, verified email, or
-support recovery may approve a pairing for the same stable User, but none can establish a session
-without that verifier. One approved pairing bootstraps one stable-User web session. The server-owned
-contract defines proof verification and session authority; the web owns keeping browser-private
-material out of URLs, public references, and unrelated application state.
-
-The web consumes only canonical API paths. The static Cloudflare host never exposes server source,
-OpenAPI implementation, or an unowned API fallback. Browser tests use explicit HTTP fixtures at the
-adapter boundary and do not imply that a removed local server is a production authority.
-
-## 5. Cross-application acceptance
-
-The browser acceptance builds the production web mode and checks the checked-in Cloudflare header
-policy on a loopback HTTPS origin. It probes shell fallbacks, hashed assets, cache and security
-headers, and browser proof-handling behavior. Most API responses are explicit test fixtures and do not stand in for Worker integration. Categories
-is the first exception: its Cloudflare integration gate exercises public ingress, the private service
-binding, and local D1. Resource-admission integration exercises local D1 directly to prove atomic
-concurrency and restart behavior without inventing a public route. Statement staging and acceptance
-exercise local D1 and R2 directly to prove actual bytes, digests, User ownership, interruption,
-replay, admission bounds, and bounded retention, including issue through public ingress, the private
-Core Worker's staging binding, and its scheduled sweep
-([ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The Workers AI
-release gate exercises the approved model through the real AI binding without a gateway or
-external-model fallback. DO/Queue/Workflow integration gates remain future work.
-
-Application-local test seams belong to the owning application architecture. Portable core, schema,
-security, contract, browser, provider-boundary, and isolation evidence remains authoritative. Tests
-whose only owner was a removed process runtime are deleted rather than replaced with local fakes.
+The root gate combines contract checks, portable behavior tests, built-browser tests, and Cloudflare
+adapter tests. Browser API scenarios currently use explicit HTTP fixtures; they do not by themselves
+prove a browser-to-real-Worker flow. Cloudflare integration tests exercise the relevant Worker and
+platform boundaries locally; live Workers AI behavior has a separate release gate. Application-specific test seams belong in the application architecture documents.

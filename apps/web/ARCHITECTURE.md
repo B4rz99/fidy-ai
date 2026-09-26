@@ -11,7 +11,7 @@ production topology, and browser-to-server ownership.
 `apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
 It owns browser routing, providers, styles, and public policy copy. Its only server import is the
 browser-safe `@fidy/server/client` declaration seam; it never imports server implementations. The API
-process never serves web routes or static assets.
+Workers do not serve web routes or static assets.
 
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
@@ -29,10 +29,10 @@ or onboarding, remain separate features.
 Presentation shapes derive from the canonical server declaration or from web-owned view state. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
 is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
-Wompi. The direct enrollment client is one explicitly disposable resource per authentication
-lifetime; replacing or unmounting that lifetime revokes the client and disposes its ManagedRuntime
-without waiting for the Atom registry's delayed cleanup. The web submits through the server-owned
-payment boundary and observes only browser-safe `BillingAttempt` state through a canonical query;
+Wompi. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting
+that lifetime revokes and disposes the client immediately, without waiting for Atom registry cleanup.
+The web submits through the server-owned payment boundary and observes only browser-safe
+`BillingAttempt` state through a canonical query;
 provider references are not part of web application state.
 
 ## 3. Browser authentication
@@ -70,6 +70,7 @@ Web tests exercise behavior through rendered application and browser boundaries 
 implementations. Production-policy tests validate the generated static artifact, SPA fallbacks,
 security headers, cache behavior, and browser bundle boundary.
 
-The repository's cross-application browser acceptance remains owned by root architecture. It runs the
-production web mode against the real API on separate HTTPS origins and proves the public contract
-between the independently deployed applications.
+The repository's cross-application browser acceptance remains owned by root architecture. It runs
+the built production web mode on loopback HTTPS with explicit HTTP fixtures for browser-level API
+behavior; it does not yet prove a browser-to-real-Worker flow. Cloudflare integration gates separately
+exercise the public ingress, private service binding, and local D1.

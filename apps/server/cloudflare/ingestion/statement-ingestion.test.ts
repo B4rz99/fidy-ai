@@ -75,6 +75,7 @@ const migrationNames = [
   "0014_memory",
   "0015_statement_submission",
   "0016_async_health",
+  "0016_hosted_turn",
   "0016_statement_processing",
   "0016_subscription_standing",
   "0016_budgets",

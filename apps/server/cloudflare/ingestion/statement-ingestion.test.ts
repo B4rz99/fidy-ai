@@ -79,6 +79,7 @@ const migrationNames = [
   "0016_statement_processing",
   "0016_subscription_standing",
   "0016_budgets",
+  "0017_hosted_compaction",
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",

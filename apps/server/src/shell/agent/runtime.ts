@@ -2,6 +2,14 @@
 export { AgentReply, InboundMessage } from "./message";
 export { assembleWorkingContext } from "./working-context";
 export type { SessionTranscriptEntry } from "./working-context";
+export { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
+export {
+  compactionEntryTrigger,
+  defaultCompactionMaximumTokens,
+  defaultCompactionTriggerTokens,
+  shouldCompactConversation,
+  terminalPrefixCursor,
+} from "~/core/transcript/compaction-policy";
 export { decideHostedAdmission } from "~/core/transcript/turn-admission";
 export type {
   HostedAdmissionRequest,

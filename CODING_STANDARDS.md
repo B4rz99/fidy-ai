@@ -251,6 +251,35 @@ What review looks for:
   error class is part of the contract, compare the whole `Exit` with `assert.deepStrictEqual` so a
   structurally identical instance of the wrong class cannot pass.
 
+### Worked example: contract, not plumbing
+
+For `Money`, test the exported schema against the Currency's declared precision:
+
+```ts
+const decoded = Schema.decodeUnknownResult(Money)({ amount: "12.345", currency: "COP" });
+expect(Result.isFailure(decoded)).toBe(true);
+```
+
+This proves COP rejects more than two fractional digits. Spying on an internal decoder and asserting
+that it received `"12.345"` would prove only a call path, not the `Money` contract.
+
+### Review red flags
+
+Treat these as prompts to check a test's seam and purpose, not blanket bans:
+
+- It asserts call counts or order for first-party collaborators instead of caller-visible behaviour.
+- It proves ordinary operation behaviour by reading D1 or R2 behind the owning interface. Direct
+  platform assertions belong in adapter/integration tests whose contract is persistence, atomicity,
+  durability, or resource behaviour.
+- It tests thin delegation or trivial mapping without a distinct caller-visible contract.
+- It breaks on an internal refactor even though observable behaviour is unchanged.
+
+### Test-first workflow
+
+When using TDD, work in vertical slices: write one behaviour test, implement only enough to make it
+pass, then write the next test informed by what you learned. Avoid writing a whole suite against
+imagined behaviour before exercising the first slice.
+
 ---
 
 ## React

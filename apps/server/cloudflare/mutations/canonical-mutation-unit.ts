@@ -113,6 +113,21 @@ const rejectRecorded = ({
     })
   );
 
+const budgetTriggerRefusal = (kind: TriggerKind): Option.Option<CanonicalMutationRefusal> =>
+  kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none();
+
+const nonTransactionAuditLimitRefusal = (
+  source: "ForwardingAddress" | "StatementSubmission"
+): CanonicalMutationRefusal => ({
+  code: "rate_limited",
+  message:
+    source === "ForwardingAddress"
+      ? "Daily canonical work budget exhausted."
+      : "Too many statement calls today; retry after the daily budget resets.",
+  record: () => Effect.succeed("rate_limited" as const),
+  respond: () => Effect.succeed(transactionUnavailable()),
+});
+
 /**
  * The refusal one prepared child explains for a commit-time trigger, or None when the trigger
  * class does not belong to that child's owner. The refusal records its own evidence under the exact
@@ -134,7 +149,7 @@ const triggerRefusal = ({
   const scoped = childCaller(subject, mutation.requiredScope);
   switch (mutation.outcome._tag) {
     case "Budget":
-      return kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none();
+      return budgetTriggerRefusal(kind);
     case "Transaction":
       return transactionTriggerRefusal({
         db,
@@ -154,22 +169,9 @@ const triggerRefusal = ({
         kind,
       });
     case "ForwardingAddress":
-      return kind === "audit"
-        ? Option.some({
-            code: "rate_limited",
-            message: "Daily canonical work budget exhausted.",
-            record: () => Effect.succeed("rate_limited" as const),
-            respond: () => Effect.succeed(transactionUnavailable()),
-          })
-        : Option.none();
     case "StatementSubmission":
       return kind === "audit"
-        ? Option.some({
-            code: "rate_limited",
-            message: "Too many statement calls today; retry after the daily budget resets.",
-            record: () => Effect.succeed("rate_limited" as const),
-            respond: () => Effect.succeed(transactionUnavailable()),
-          })
+        ? Option.some(nonTransactionAuditLimitRefusal(mutation.outcome._tag))
         : Option.none();
   }
 };

@@ -35,6 +35,18 @@ const destructiveWrite = operationPolicy({
   kind: "mutation",
 });
 
+/** Canonical call shape decoded for an individual or atomic-batch Budget creation. */
+export const CreateBudgetCanonicalInput = Schema.Struct({ payload: CreateBudgetInput });
+/** Canonical call shape decoded for an individual or atomic-batch Budget revision. */
+export const UpdateBudgetCanonicalInput = Schema.Struct({
+  params: Schema.Struct({ id: BudgetId }),
+  payload: UpdateBudgetInput,
+});
+/** Canonical call shape decoded for an individual or atomic-batch Budget deletion. */
+export const DeleteBudgetCanonicalInput = Schema.Struct({
+  params: Schema.Struct({ id: BudgetId }),
+});
+
 const BudgetStatusQueryParameters = Schema.Struct({
   categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
@@ -83,7 +95,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Replace a Budget's Category and positive cap. Its Currency is immutable; changing Category resets current-month alert marks."
+        "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched."
       )
       .annotateMerge(destructiveWrite)
   )

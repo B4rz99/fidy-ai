@@ -6,6 +6,7 @@ import type {
   KeywordRuleId,
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
+import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -86,7 +87,15 @@ export type TransactionOutcome = Readonly<{
  * how that read presents. A new owner adds one variant, so the unit's exhaustive switches fail to
  * build until its readback, refusal, and abort attribution are answered.
  */
+/** The Budget whose guarded write the unit commits or whose deletion it proves. */
+export type BudgetOutcome = Readonly<{
+  _tag: "Budget";
+  operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget";
+  budgetId: BudgetId;
+}>;
+
 export type CanonicalMutationOutcome =
+  | BudgetOutcome
   | TransactionOutcome
   | KeywordRuleOutcome
   | MemoryOutcome
@@ -120,6 +129,8 @@ export type PreparedCanonicalMutation = Readonly<{
 
 /** One canonical success value an owner read back after the unit committed. */
 export type CommittedMutationValue =
+  | Readonly<{ _tag: "Budget"; budget: Budget }>
+  | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
   | Readonly<{ _tag: "Transaction"; transaction: StoredTransaction }>
   | Readonly<{ _tag: "EffectiveTransaction"; transaction: TransactionPresentation }>
   | Readonly<{ _tag: "RestoredPair"; pair: RestoredTransactionPair }>

@@ -1,9 +1,12 @@
 import { Effect, Option, Schema } from "effect";
 import {
   CanonicalOperationId,
+  CreateBudgetCanonicalInput,
   CreateTransactionCanonicalInput,
+  DeleteBudgetCanonicalInput,
   LinkTransactionsCanonicalInput,
   UnlinkTransactionsCanonicalInput,
+  UpdateBudgetCanonicalInput,
   UpdateTransactionCanonicalInput,
   getAtomicBatchChildIds,
 } from "@fidy/server/canonical-runtime";
@@ -22,6 +25,8 @@ import {
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import { statementMutationAdapter } from "./statement-mutation";
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
+import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
+import { budgetRefusal } from "../budgets/budget-outcome";
 import { transactionRefusal } from "./transaction-outcome";
 import { memoryRefusal } from "./memory-outcome";
 import {
@@ -162,6 +167,68 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [
+    CanonicalOperationId.make("budgets.createBudget"),
+    {
+      prepare: decodeAndPrepare(CreateBudgetCanonicalInput, ({ payload }, work) =>
+        prepareCreateBudget({ db: work.db, subject: work.subject, payload, current: work.current })
+      ),
+      present: present(HTTP_CREATED),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.createBudget",
+          code: "validation_failed",
+        }),
+    },
+  ],
+  [
+    CanonicalOperationId.make("budgets.updateBudget"),
+    {
+      prepare: decodeAndPrepare(UpdateBudgetCanonicalInput, ({ params, payload }, work) =>
+        prepareUpdateBudget({
+          db: work.db,
+          subject: work.subject,
+          id: params.id,
+          payload,
+          current: work.current,
+        })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.updateBudget",
+          code: "validation_failed",
+        }),
+    },
+  ],
+  [
+    CanonicalOperationId.make("budgets.deleteBudget"),
+    {
+      prepare: decodeAndPrepare(DeleteBudgetCanonicalInput, ({ params }, work) =>
+        prepareDeleteBudget({
+          db: work.db,
+          subject: work.subject,
+          id: params.id,
+          current: work.current,
+        })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.deleteBudget",
+          code: "not_found",
+        }),
+    },
+  ],
   [CanonicalOperationId.make("ingestion.submitForExtraction"), statementMutationAdapter],
   [CanonicalOperationId.make("ingestion.enableEmailForwarding"), forwardingAddressMutationAdapter],
   [

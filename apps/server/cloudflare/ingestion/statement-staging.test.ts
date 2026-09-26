@@ -46,8 +46,12 @@ const migrationNames = [
   "0011_transaction_corrections",
   "0012_statement_staging",
   "0012_billing_collection",
+  "0012_transaction_search",
+  "0013_category_keyword_rules",
+  "0013_transaction_reconciliation",
   "0014_memory",
   "0015_statement_submission",
+  "0016_budgets",
   "0016_statement_processing",
   "0017_statement_dispatch",
 ] as const;

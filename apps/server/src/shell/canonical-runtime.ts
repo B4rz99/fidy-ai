@@ -25,3 +25,8 @@ export {
   UpdateTransactionCanonicalInput,
 } from "~/shell/transactions/operations";
 export { SubmitForExtractionCanonicalInput } from "~/shell/ingestion/operations";
+export {
+  CreateBudgetCanonicalInput,
+  UpdateBudgetCanonicalInput,
+  DeleteBudgetCanonicalInput,
+} from "~/shell/budgets/operations";

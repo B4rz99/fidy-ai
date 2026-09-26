@@ -338,7 +338,7 @@ const coreRequest = (
       headers.set("x-pat-source", yield* pairingSource(request, environment));
     }
     return new Request(
-      `https://core.internal${path}${transactionPath(path) ? new URL(request.url).search : ""}`,
+      `https://core.internal${path}${transactionPath(path) || canonicalRoute(path) ? new URL(request.url).search : ""}`,
       {
         headers,
         method: request.method,

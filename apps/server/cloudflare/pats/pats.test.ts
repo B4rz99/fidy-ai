@@ -131,6 +131,7 @@ const setup = (
         "0013_transaction_reconciliation",
         "0014_memory",
         "0015_statement_submission",
+        "0016_budgets",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
@@ -2488,7 +2489,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             bearer: reader.bearer,
           })
         )).status
-      ).toBe(503);
+      ).toBe(200);
       expect(
         (yield* awaitPromise(
           send({
@@ -2508,7 +2509,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             payload: {},
           })
         )).status
-      ).toBe(503);
+      ).toBe(400);
       expect(
         (yield* awaitPromise(
           send({
@@ -2620,7 +2621,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             )
             .first()
         ))?.total
-      ).toBe(0);
+      ).toBe(1);
       const stillLive = yield* issue("read", 4);
       const grantId = "e0000000-0000-4000-8000-000000000001";
       yield* awaitPromise(
@@ -2913,8 +2914,9 @@ it("fails closed with declared unavailable for an authenticated WebSession whose
       const { send, sessions } = yield* awaitPromise(setup());
       const authenticated = yield* awaitPromise(
         send({
-          path: "/budgets",
-          method: "GET",
+          path: "/dashboard/edits",
+          method: "POST",
+          payload: {},
           session: sessions[0],
         })
       );

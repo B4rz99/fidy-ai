@@ -10782,7 +10782,7 @@
         "x-fidy-required-tier": "free"
       },
       "put": {
-        "description": "Replace a Budget's Category and positive cap. Its Currency is immutable; changing Category resets current-month alert marks.",
+        "description": "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched.",
         "operationId": "budgets.updateBudget",
         "parameters": [
           {

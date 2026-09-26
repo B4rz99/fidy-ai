@@ -92,18 +92,6 @@ export const MemoryGroup = HttpApiGroup.make("memory")
 /** Every canonical Memory operation id, derived from the endpoints this group declares. */
 export type MemoryOperationId = `memory.${keyof typeof MemoryGroup.endpoints}`;
 
-/** The canonical operation input of `memory.remember`, owned beside its endpoint. */
-export const RememberCanonicalInput = Schema.Struct({ payload: RememberInput });
-
-/** The canonical operation input of `memory.revise`, owned beside its endpoint. */
-export const ReviseCanonicalInput = Schema.Struct({
-  params: retainedMemoryParams(),
-  payload: ReviseInput,
-});
-
-/** The canonical operation input of `memory.forget`, owned beside its endpoint. */
-export const ForgetCanonicalInput = Schema.Struct({ params: retainedMemoryParams() });
-
 /** Adapter dispatch list; an alignment test proves it covers exactly the declared group. */
 export const memoryOperationIds = [
   "memory.remember",

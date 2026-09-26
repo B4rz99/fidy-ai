@@ -34,20 +34,6 @@ export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
 const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
   Schema.Struct({ id: KeywordRuleId });
 
-/** The canonical operation input of `categories.createKeywordRule`, owned beside its endpoint. */
-export const CreateKeywordRuleCanonicalInput = Schema.Struct({ payload: CreateKeywordRuleInput });
-
-/** The canonical operation input of `categories.updateKeywordRule`, owned beside its endpoint. */
-export const UpdateKeywordRuleCanonicalInput = Schema.Struct({
-  params: retainedKeywordRuleParams(),
-  payload: UpdateKeywordRuleInput,
-});
-
-/** The canonical operation input of `categories.deleteKeywordRule`, owned beside its endpoint. */
-export const DeleteKeywordRuleCanonicalInput = Schema.Struct({
-  params: retainedKeywordRuleParams(),
-});
-
 const read = operationPolicy({
   access: patScoped("read"),
   requiredTier: "free",

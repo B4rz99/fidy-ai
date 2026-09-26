@@ -15,13 +15,7 @@ import {
   sumBudgetContributions,
 } from "~/core/budgets/rules";
 import { BudgetId } from "~/core/budgets/reference";
-import {
-  CreateBudgetCanonicalInput,
-  DeleteBudgetCanonicalInput,
-  UpdateBudgetCanonicalInput,
-} from "./operations";
-
-/** The Budget owner's decoded public and canonical mutation contracts. */
+/** The Budget owner's decoded public contracts and pure decisions. */
 export {
   Budget,
   BudgetMonthLatch,
@@ -36,7 +30,4 @@ export {
   BudgetStatusQueryValues,
   CreateBudgetInput,
   UpdateBudgetInput,
-  CreateBudgetCanonicalInput,
-  UpdateBudgetCanonicalInput,
-  DeleteBudgetCanonicalInput,
 };

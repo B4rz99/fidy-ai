@@ -1,4 +1,4 @@
-import { SubmitForExtractionCanonicalInput } from "@fidy/server/canonical-runtime";
+import { getCanonicalOperationInput } from "@fidy/server/canonical-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
@@ -26,7 +26,7 @@ import {
 } from "./mutation-types";
 import type { CanonicalMutationAdapter } from "./canonical-mutation-registry";
 
-const StatementInput = Schema.toType(SubmitForExtractionCanonicalInput);
+const StatementInput = Schema.toType(getCanonicalOperationInput("ingestion.submitForExtraction"));
 const dailyBudgetMessage = "Too many statement calls today; retry after the daily budget resets.";
 const dailyBudgetResponse = (): Response =>
   Response.json(

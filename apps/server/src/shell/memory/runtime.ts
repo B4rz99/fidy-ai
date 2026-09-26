@@ -21,13 +21,7 @@ export {
 } from "./memory-policy";
 export { MemoryCapacityExceededApi, mapMemoryFailure } from "./errors";
 export { Unavailable } from "~/shell/public-http/contract";
-export {
-  ForgetCanonicalInput,
-  MemoryGroup,
-  memoryOperationIds,
-  RememberCanonicalInput,
-  ReviseCanonicalInput,
-} from "./operations";
+export { MemoryGroup, memoryOperationIds } from "./operations";
 export type { MemoryOperationId } from "./operations";
 export { memoriesFromRows, memoryRowQuery, memoryRowsQuery } from "./query";
 export { memoryCompletion, recordBrowserMemoryWork } from "./canonical-work";

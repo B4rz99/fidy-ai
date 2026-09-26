@@ -1,9 +1,7 @@
 import { DateTime, Function, Option } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import { type MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
-import type { Category } from "~/core/categories/model";
 import type { CategoryId } from "~/core/categories/reference";
-import type { Transaction } from "~/core/transactions/model";
 import { dashboardMoneyGroupsFromSums } from "./calculation";
 import type { AppliedDashboardPeriod, SpendingGroupBy, Widget } from "./model";
 
@@ -45,9 +43,16 @@ export const includesDashboardTransaction: {
   return text.toLocaleLowerCase("es-CO").includes(criteria.search.value.toLocaleLowerCase("es-CO"));
 });
 
+type PresentationTransaction = Readonly<{
+  categoryId: CategoryId;
+  occurredAt: DateTime.Utc;
+  counterparty: Option.Option<string>;
+  notes: Option.Option<string>;
+}>;
+
 /** Selects the effective Transaction facts needed by a Widget and its applied period. */
 export const selectDashboardFacts: {
-  <Fact extends Readonly<{ transaction: Transaction }>>(
+  <Fact extends Readonly<{ transaction: PresentationTransaction }>>(
     facts: ReadonlyArray<Fact>,
     widget: Widget,
     period: Option.Option<AppliedDashboardPeriod>
@@ -55,12 +60,12 @@ export const selectDashboardFacts: {
   (
     widget: Widget,
     period: Option.Option<AppliedDashboardPeriod>
-  ): <Fact extends Readonly<{ transaction: Transaction }>>(
+  ): <Fact extends Readonly<{ transaction: PresentationTransaction }>>(
     facts: ReadonlyArray<Fact>
   ) => ReadonlyArray<Fact>;
 } = Function.dual(
   3,
-  <Fact extends Readonly<{ transaction: Transaction }>>(
+  <Fact extends Readonly<{ transaction: PresentationTransaction }>>(
     facts: ReadonlyArray<Fact>,
     widget: Widget,
     period: Option.Option<AppliedDashboardPeriod>
@@ -89,21 +94,23 @@ export const selectDashboardFacts: {
   }
 );
 
+type CategoryFact = Readonly<{ id: CategoryId; label: string }>;
+
 /** One spending-chart bucket key, resolved in the User's time zone for calendar dimensions. */
-export type DashboardBucket =
+export type DashboardBucket<Category extends CategoryFact> =
   | Readonly<{ kind: "category"; category: Category }>
   | Readonly<{ kind: "day"; date: string }>
   | Readonly<{ kind: "month"; month: string }>;
 
 /** Assigns a selected Transaction to its canonical Category or local calendar bucket. */
-export const dashboardBucket = (
+export const dashboardBucket = <Category extends CategoryFact>(
   input: Readonly<{
     groupBy: SpendingGroupBy;
     category: Category;
     occurredAt: number;
     timeZone: IanaTimeZone;
   }>
-): Readonly<{ id: string; key: DashboardBucket }> => {
+): Readonly<{ id: string; key: DashboardBucket<Category> }> => {
   if (input.groupBy === "category") {
     return { id: input.category.id, key: { kind: "category", category: input.category } };
   }
@@ -117,7 +124,7 @@ export const dashboardBucket = (
   return { id: month, key: { kind: "month", month } };
 };
 
-type ChartFact = Readonly<{
+type ChartFact<Category extends CategoryFact> = Readonly<{
   category: Category;
   occurredAt: number;
   direction: "inflow" | "outflow";
@@ -125,16 +132,32 @@ type ChartFact = Readonly<{
 }>;
 
 type ChartPlan = Readonly<{ groupBy: SpendingGroupBy; timeZone: IanaTimeZone }>;
-type ChartGroup = Readonly<{ key: DashboardBucket; moneyGroups: MoneyGroups }>;
+type ChartGroup<Category extends CategoryFact> = Readonly<{
+  key: DashboardBucket<Category>;
+  moneyGroups: MoneyGroups;
+}>;
 
 /** Groups selected canonical Money facts by local chart dimension, then by Currency and direction. */
 export const groupDashboardChart: {
-  (facts: ReadonlyArray<ChartFact>, plan: ChartPlan): ReadonlyArray<ChartGroup>;
-  (plan: ChartPlan): (facts: ReadonlyArray<ChartFact>) => ReadonlyArray<ChartGroup>;
+  <Category extends CategoryFact>(
+    facts: ReadonlyArray<ChartFact<Category>>,
+    plan: ChartPlan
+  ): ReadonlyArray<ChartGroup<Category>>;
+  (
+    plan: ChartPlan
+  ): <Category extends CategoryFact>(
+    facts: ReadonlyArray<ChartFact<Category>>
+  ) => ReadonlyArray<ChartGroup<Category>>;
 } = Function.dual(
   2,
-  (facts: ReadonlyArray<ChartFact>, plan: ChartPlan): ReadonlyArray<ChartGroup> => {
-    const buckets = new Map<string, { key: DashboardBucket; facts: Array<ChartFact> }>();
+  <Category extends CategoryFact>(
+    facts: ReadonlyArray<ChartFact<Category>>,
+    plan: ChartPlan
+  ): ReadonlyArray<ChartGroup<Category>> => {
+    const buckets = new Map<
+      string,
+      { key: DashboardBucket<Category>; facts: Array<ChartFact<Category>> }
+    >();
     for (const fact of facts) {
       const { id, key } = dashboardBucket({
         groupBy: plan.groupBy,

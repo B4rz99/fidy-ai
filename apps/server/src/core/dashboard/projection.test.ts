@@ -2,9 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { BigDecimal, DateTime, Option, Schema } from "effect";
 import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { Category } from "~/core/categories/model";
 import { CategoryId } from "~/core/categories/reference";
-import { Transaction } from "~/core/transactions/model";
 import { type AppliedDashboardPeriod, Widget } from "./model";
 import {
   dashboardBucket,
@@ -14,7 +12,7 @@ import {
 } from "./projection";
 
 const categoryId = CategoryId.make("10000000-0000-4000-8000-000000000001");
-const category = Schema.decodeSync(Category)({ id: categoryId, label: "Restaurantes" });
+const category = { id: categoryId, label: "Restaurantes" };
 const zone = Schema.decodeSync(IanaTimeZone)("America/New_York");
 
 it("keeps a Transaction only when category, half-open period, and normalized notes all match", () => {
@@ -45,16 +43,12 @@ it("keeps a Transaction only when category, half-open period, and normalized not
 });
 
 it("selects effective facts according to a Widget's Category, search, and period", () => {
-  const transaction = Schema.decodeSync(Schema.toCodecJson(Transaction))({
-    id: "20000000-0000-4000-8000-000000000001",
-    money: { amount: "1.23", currency: "COP" },
-    direction: "outflow",
+  const transaction = {
     categoryId,
-    occurredAt: "2026-03-09T04:00:00.000Z",
-    createdAt: "2026-03-09T04:00:00.000Z",
-    revision: 1,
-    notes: "Café de mañana",
-  });
+    occurredAt: DateTime.makeUnsafe(Date.parse("2026-03-09T04:00:00.000Z")),
+    counterparty: Option.none<string>(),
+    notes: Option.some("Café de mañana"),
+  };
   const facts = [{ transaction, category }];
   const list = Schema.decodeSync(Widget)({
     id: "30000000-0000-4000-8000-000000000001",

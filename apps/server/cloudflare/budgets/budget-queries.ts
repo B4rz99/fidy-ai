@@ -9,7 +9,7 @@ import {
 } from "@fidy/server/budgets-runtime";
 import { Currency, Money } from "@fidy/server/transactions-runtime";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 import {
@@ -27,8 +27,9 @@ import {
 import { budgetFromRow } from "./budget-row";
 
 const maximumBudgetCount = 128;
-const maximumMonthlyMovements = 5000;
+const movementPageSize = 512;
 const MovementRow = Schema.Struct({
+  id: Schema.String,
   amount: Schema.String,
   currency: Currency,
   category_id: Budget.fields.categoryId,
@@ -131,38 +132,89 @@ export const listOwnedBudgets = ({
     return Option.some(budgets);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-const monthlyMovements = ({
+const movementPage = ({
   db,
   userId,
-  from,
-  to,
+  budget,
+  period,
+  cursorAt,
+  cursorId,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  from: string;
-  to: string;
+  budget: Budget;
+  period: BudgetStatusReport["period"];
+  cursorAt: string;
+  cursorId: string;
 }>): Effect.Effect<Option.Option<ReadonlyArray<typeof MovementRow.Type>>> =>
   Effect.gen(function* () {
     const relation = effectiveTransactionRelation(userId);
     const result = yield* Effect.tryPromise(() =>
       db
         .prepare(`WITH ${relation.sql}
-      SELECT amount, currency, category_id, direction, occurred_at FROM effective_transaction
-      WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ? AND direction = 'outflow'
-      LIMIT ${maximumMonthlyMovements + 1}`)
-        .bind(...relation.bindings, userId, from, to)
+      SELECT id, amount, currency, category_id, direction, occurred_at FROM effective_transaction
+      WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?
+        AND category_id = ? AND currency = ? AND direction = 'outflow'
+        AND (occurred_at > ? OR (occurred_at = ? AND id > ?))
+      ORDER BY occurred_at, id LIMIT ${movementPageSize}`)
+        .bind(
+          ...relation.bindings,
+          userId,
+          DateTime.formatIso(period.from),
+          DateTime.formatIso(period.to),
+          budget.categoryId,
+          budget.cap.currency,
+          cursorAt,
+          cursorAt,
+          cursorId
+        )
         .all()
     );
-    if (result.results.length > maximumMonthlyMovements) {
-      return Option.none<ReadonlyArray<typeof MovementRow.Type>>();
-    }
-    const movements: Array<typeof MovementRow.Type> = [];
+    const rows: Array<typeof MovementRow.Type> = [];
     for (const raw of result.results) {
       const decoded = Schema.decodeUnknownOption(MovementRow)(raw);
       if (Option.isNone(decoded)) return Option.none<ReadonlyArray<typeof MovementRow.Type>>();
-      movements.push(decoded.value);
+      rows.push(decoded.value);
     }
-    return Option.some(movements);
+    return Option.some(rows);
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const monthlySpent = ({
+  db,
+  userId,
+  budget,
+  period,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  budget: Budget;
+  period: BudgetStatusReport["period"];
+}>): Effect.Effect<Option.Option<Money>> =>
+  Effect.gen(function* () {
+    let cursorAt = DateTime.formatIso(period.from);
+    let cursorId = "";
+    let amount = BigDecimal.make(0n, 0);
+    // Keyset paging bounds each D1 result and the in-memory page without truncating valid totals.
+    let hasMore = true;
+    while (hasMore) {
+      const page = yield* movementPage({ db, userId, budget, period, cursorAt, cursorId });
+      if (Option.isNone(page)) return Option.none<Money>();
+      const rows = page.value;
+      const movements = decodeMovements(rows);
+      if (Option.isNone(movements)) return Option.none<Money>();
+      amount = BigDecimal.sum(
+        amount,
+        sumBudgetContributions({ budget, period, movements: movements.value }).amount
+      );
+      hasMore = rows.length === movementPageSize;
+      if (hasMore) {
+        const last = rows.at(-1);
+        if (last === undefined) return Option.none<Money>();
+        cursorAt = last.occurred_at;
+        cursorId = last.id;
+      }
+    }
+    return Option.some(Money.make({ amount, currency: budget.cap.currency }));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 type BudgetMovement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
@@ -212,19 +264,11 @@ export const currentBudgetReport = ({
         (query.currency === undefined || budget.cap.currency === query.currency)
     );
     if (selected.length === 0) return Option.some({ period, statuses: [] });
-    const movements = yield* monthlyMovements({
-      db,
-      userId,
-      from: DateTime.formatIso(period.from),
-      to: DateTime.formatIso(period.to),
-    });
-    if (Option.isNone(movements)) return Option.none<BudgetStatusReport>();
-    const decoded = decodeMovements(movements.value);
-    if (Option.isNone(decoded)) return Option.none<BudgetStatusReport>();
     const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
     for (const budget of selected) {
-      const spent = sumBudgetContributions({ budget, period, movements: decoded.value });
-      statuses.push(yield* calculateBudgetStatus({ budget, spent, period }));
+      const spent = yield* monthlySpent({ db, userId, budget, period });
+      if (Option.isNone(spent)) return Option.none<BudgetStatusReport>();
+      statuses.push(yield* calculateBudgetStatus({ budget, spent: spent.value, period }));
     }
     return Option.some({ period, statuses });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

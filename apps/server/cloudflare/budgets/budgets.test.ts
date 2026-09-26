@@ -239,6 +239,21 @@ const seedPAT = async (
     )
     .run();
 };
+// @effect-diagnostics-next-line asyncFunction:off
+const seedMonthlyMovements = async (
+  db: D1Database,
+  input: Readonly<{ categoryId: string; currency: string; occurredAt: string }>
+): Promise<void> => {
+  await db
+    .prepare(`INSERT INTO transactions
+    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 5001)
+    SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, ?,
+      strftime('%Y-%m-%dT%H:%M:%fZ', date('2024-01-01', '+' || (n / 99) || ' days'))
+    FROM seq`)
+    .bind(users[0], input.currency, input.categoryId, input.occurredAt)
+    .run();
+};
 const patRequest = (
   token: string,
   path: string,
@@ -412,6 +427,61 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
   expect(other.status).toBe(200);
   expect(Schema.decodeUnknownSync(Report)(await other.json()).data.statuses).toEqual([]);
 });
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("ignores more than five thousand unrelated outflows without blocking a Budget mutation", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  await seedMonthlyMovements(db, {
+    categoryId: "10000000-0000-4000-8000-000000000001",
+    currency: "COP",
+    occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+  });
+  const report = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
+  expect(report.status).toBe(200);
+  const [status] = Schema.decodeUnknownSync(Report)(await report.json()).data.statuses;
+  expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe("0");
+  const capture = await send(
+    db,
+    request(0, "/transactions", "POST", {
+      money: { amount: "1", currency: "COP" },
+      categoryId: category,
+      direction: "outflow",
+      occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+    })
+  );
+  expect(capture.status).toBe(201);
+}, 90000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("pages past five thousand qualifying outflows without losing exact totals or blocking mutations", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  await seedMonthlyMovements(db, {
+    categoryId: category,
+    currency: "COP",
+    occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+  });
+  const report = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
+  expect(report.status).toBe(200);
+  const [status] = Schema.decodeUnknownSync(Report)(await report.json()).data.statuses;
+  expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe("50.01");
+  expect((await send(db, request(0, "/budgets"))).status).toBe(200);
+  const capture = await send(
+    db,
+    request(0, "/transactions", "POST", {
+      money: { amount: "30", currency: "COP" },
+      categoryId: category,
+      direction: "outflow",
+      occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+    })
+  );
+  expect(capture.status).toBe(201);
+  const updated = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
+  expect(updated.status).toBe(200);
+  const [next] = Schema.decodeUnknownSync(Report)(await updated.json()).data.statuses;
+  expect(next === undefined ? undefined : encodeMoneyAmount(next.spent.amount)).toBe("80.01");
+}, 90000);
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("latches 80% and 100% only once across concurrent capture and correction", async () => {

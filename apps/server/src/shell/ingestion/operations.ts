@@ -38,6 +38,11 @@ const confirmedWrite = operationPolicy({
   kind: "mutation",
 });
 
+/** The canonical operation input of `ingestion.submitForExtraction`, owned beside its endpoint. */
+export const SubmitForExtractionCanonicalInput = Schema.Struct({
+  payload: SubmitForExtractionInput,
+});
+
 /** Canonical durable statement, forwarded-email, and visible review capabilities. */
 export const IngestionGroup = HttpApiGroup.make("ingestion")
   .add(

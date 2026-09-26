@@ -36,6 +36,7 @@ export {
   livePATCredential,
   recordLivePATUse,
   recordAuditedPATUse,
+  recordAuditedPATUseFromAuthority,
   revokeOnePAT,
   revokeEveryPAT,
   revokeEveryPairing,
@@ -63,7 +64,10 @@ export {
   recordOnePATRevocation,
   recordAllPATRevocations,
   recordCanonicalPATWork,
+  recordCanonicalPATWorkFromAuthority,
+  recordRejectedPATWork,
 } from "./pat-audit";
+export type { AuditedPATMutation } from "./pat-write";
 export {
   patAtomicAssertion,
   patExpiryCompletion,

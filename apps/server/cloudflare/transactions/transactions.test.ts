@@ -90,6 +90,7 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
 type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
 const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
   DB: db,
+  STATEMENT_STAGING_BUCKET: Option.none(),
   AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
   HOSTED_AI_MODEL: approvedWorkersAiModel,
 });
@@ -2817,6 +2818,7 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
         { id: { name: session.value.userId } },
         {
           DB: db,
+          STATEMENT_STAGING_BUCKET: Option.none(),
           AI: {
             run: (): Promise<Response> =>
               Promise.reject(new Error("the model check must fail first")),
@@ -4375,7 +4377,7 @@ it("serializes concurrent batches and individual mutations through one User coor
     })
   ));
 
-it("attributes a per-day budget guard abort to the capture child that met it", () =>
+it("attributes the movement budget but leaves an ambiguous audit budget abort unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const movementDb = yield* fromTestPromise(() => setup());
@@ -4428,12 +4430,9 @@ it("attributes a per-day budget guard abort to the capture child that met it", (
           batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
         )
       );
-      expect(exhausted.status).toBe(400);
-      const exhaustedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => exhausted.json())
-      ).pipe(Effect.orDie);
-      expect(exhaustedRejection.error.code).toBe("rate_limited");
-      expect(exhaustedRejection.error.failedCallIndex).toBe(1);
+      // Another unit can commit an audit row between the aborted batch and any recount, so
+      // neither of the two children can safely be named as the refused audit writer.
+      expect(exhausted.status).toBe(503);
       expect(
         yield* fromTestPromise(() =>
           countRows(auditDb, "SELECT COUNT(*) AS count FROM transactions")

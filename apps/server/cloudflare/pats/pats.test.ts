@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "@fidy/server/categories";
-import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -210,6 +210,7 @@ const setup = (
                 },
                 {
                   DB: db,
+                  STATEMENT_STAGING_BUCKET: Option.none(),
                   AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                   HOSTED_AI_MODEL: approvedWorkersAiModel,
                 }

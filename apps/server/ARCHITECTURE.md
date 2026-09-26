@@ -108,6 +108,13 @@ staging rows and objects; a retained submission reclaims its own staged object w
 expires, leaving the staging row as durable evidence that the locator's bytes are gone. Failure,
 interruption, replay, and abandonment leave no authoritative submission referring to missing or
 mismatched bytes.
+Statement publication is one child of the shared atomic mutation unit, so an individual submission
+and a batch submission run the same owner-prepared publication under one User coordination turn: the
+authoritative submission, its staging promotion, the Free-backfill reservation, the metadata-only
+success AuditLogEntry, the bounded extraction outbox identity, and the caller's own credential
+accountability either all commit or none do. A batch admits at most one statement child, and a
+child's refusal is the same closed refusal an individual call answers
+([ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md)).
 
 ## 6. Testing seams
 

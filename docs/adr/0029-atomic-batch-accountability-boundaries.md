@@ -20,7 +20,9 @@ contract and record nothing: a body that fails the published request envelope (a
 oversized `calls`), a child that names no canonical operation, a child whose operation has no batch
 adapter, a child below the required tier, a child outside the caller's credential scope (the same
 `scope_missing` decision the individual ingress makes, reported through the batch failure
-contract), and a repeated `callId`. None of these names work
+contract), a child whose encoded input outgrows the per-child body bound an individual call of that
+operation accepts, a second staged statement child (one batch publishes at most one file, so
+staging admission cannot be multiplied), and a repeated `callId`. None of these names work
 the caller was allowed to do, and auditing them would let garbage requests consume the caller's own
 daily audit budget.
 

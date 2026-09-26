@@ -6,6 +6,11 @@ import type {
   KeywordRuleId,
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
+import type { StatementSubmission } from "@fidy/server/statement-staging";
+import type {
+  PreparedStatementPublication,
+  StatementStagingConfig,
+} from "../ingestion/statement-staging";
 import type { TransactionPair } from "@fidy/server/transaction-reconciliation";
 import type {
   RestoredTransactionPair,
@@ -80,7 +85,15 @@ export type TransactionOutcome = Readonly<{
  * how that read presents. A new owner adds one variant, so the unit's exhaustive switches fail to
  * build until its readback, refusal, and abort attribution are answered.
  */
-export type CanonicalMutationOutcome = TransactionOutcome | KeywordRuleOutcome | MemoryOutcome;
+export type CanonicalMutationOutcome =
+  | TransactionOutcome
+  | KeywordRuleOutcome
+  | MemoryOutcome
+  | Readonly<{
+      _tag: "StatementSubmission";
+      publication: PreparedStatementPublication;
+      config: StatementStagingConfig;
+    }>;
 
 /**
  * One owner-prepared canonical mutation, ready to join a caller-owned D1 unit.
@@ -111,7 +124,8 @@ export type CommittedMutationValue =
   | Readonly<{ _tag: "KeywordRule"; rule: KeywordRule }>
   | Readonly<{ _tag: "RemovedKeywordRule"; id: KeywordRuleId }>
   | Readonly<{ _tag: "Memory"; memory: Memory }>
-  | Readonly<{ _tag: "RemovedMemory"; id: MemoryId }>;
+  | Readonly<{ _tag: "RemovedMemory"; id: MemoryId }>
+  | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>;
 
 /**
  * One canonical refusal an owner decided. `code` and `message` are what a batch child reports;

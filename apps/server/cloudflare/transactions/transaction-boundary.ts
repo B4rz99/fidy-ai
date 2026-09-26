@@ -2,11 +2,13 @@ import { Clock, Data, Effect, Option, Schema } from "effect";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
+  type AuditedPATMutation,
   type PATAuthority,
   livePATAuthority,
   livePATCredential,
-  recordAuditedPATUse,
+  recordAuditedPATUseFromAuthority,
   recordCanonicalPATWork,
+  recordCanonicalPATWorkFromAuthority,
 } from "@fidy/server/tokens-runtime";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -90,9 +92,45 @@ export type TransactionRefusal = Readonly<{
 
 /**
  * One accepted canonical PAT AuditLogEntry and the PAT use it accounts for, in the guard-chained
- * order the unit requires: the AuditLogEntry immediately follows the owner write it attests, and
- * the PAT use immediately follows the AuditLogEntry that accounts for it.
+ * order the unit requires: the AuditLogEntry immediately follows the owner write it attests
+ * (`afterOwnerWrite`), and the PAT use immediately follows the AuditLogEntry that accounts for it.
+ * One minted audit identity binds the pair. This is the one place the pairing is decided, so every
+ * canonical unit that commits a PAT call — a Transaction batch child or a statement publication —
+ * orders and accounts for it the same way.
  */
+export const acceptedPATAccountability = ({
+  afterOwnerWrite,
+  authority,
+  current,
+  database,
+  operation,
+}: Readonly<{
+  afterOwnerWrite: boolean;
+  authority: PATAuthority;
+  current: number;
+  database: D1Database;
+  operation: AuditedPATMutation;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const auditId = newId();
+  return [
+    prepareOwnedStatement({
+      db: database,
+      statement: recordCanonicalPATWorkFromAuthority({
+        authority,
+        input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
+      }),
+    }),
+    prepareOwnedStatement({
+      db: database,
+      statement: recordAuditedPATUseFromAuthority({
+        authority,
+        input: { auditId, current, operation },
+      }),
+    }),
+  ];
+};
+
+/** The same accepted pair for a caller admitted as a subject rather than as a held authority. */
 export const acceptedPATStatements = ({
   db,
   subject,
@@ -103,28 +141,14 @@ export const acceptedPATStatements = ({
   subject: AuthorizedPAT;
   operation: TransactionMutationOperation;
   current: number;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const auditId = transactionId();
-  return [
-    prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        subject,
-        input: {
-          id: auditId,
-          current,
-          operation,
-          outcome: "accepted",
-          afterOwnerWrite: true,
-        },
-      }),
-    }),
-    prepareOwnedStatement({
-      db,
-      statement: recordAuditedPATUse({ subject, input: { auditId, current, operation } }),
-    }),
-  ];
-};
+}>): ReadonlyArray<D1PreparedStatement> =>
+  acceptedPATAccountability({
+    afterOwnerWrite: true,
+    authority: livePATAuthority({ subject, current }),
+    current,
+    database: db,
+    operation,
+  });
 
 const refusalStatement = ({
   db,
@@ -198,59 +222,6 @@ export const recordTransactionRefusal = ({
     .then((audit) => (audit.meta.changes === 1 ? "recorded" : "credential_refused"))
     .catch((error: unknown) => (refusedByAuditBudget(error) ? "rate_limited" : "unavailable"));
 
-const utcDayMilliseconds = 86_400_000;
-/** Matches the 256-entry stable-User triggers in 0015_statement_submission.sql; the triggers stay the authority. */
-export const dailyAuditBudget = 256;
-/** The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, category, Memory, statement submission. */
-const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
-      AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM category_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM memory_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM statement_submission_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?`;
-/** How many canonical audit rows one User has committed in the UTC day containing `current`. */
-export const dailyAuditCount = ({
-  db,
-  userId,
-  current,
-}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<number> => {
-  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
-  return db
-    .prepare(`SELECT count(*) AS total FROM (${auditDayRows})`)
-    .bind(
-      userId,
-      start,
-      start + utcDayMilliseconds,
-      userId,
-      start,
-      start + utcDayMilliseconds,
-      userId,
-      start,
-      start + utcDayMilliseconds,
-      userId,
-      start,
-      start + utcDayMilliseconds,
-      userId,
-      start,
-      start + utcDayMilliseconds
-    )
-    .first<{ total: number }>()
-    .then((row) => row?.total ?? 0);
-};
-export const transactionAuditExhausted = ({
-  db,
-  userId,
-  current,
-}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<boolean> =>
-  dailyAuditCount({ db, userId, current }).then((count) => count >= dailyAuditBudget);
 export const transactionUnavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: 503, headers: transactionNoStore });
 
@@ -435,6 +406,9 @@ export const refusedCredentialResponse = ({
 
 /** One live-authority gate over a credential table: its table, predicate, and bindings. */
 export type TransactionAuthority = PATAuthority | WebSessionAuthority;
+/** Narrow a live authority to its PAT credential for statement accountability. */
+export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
+  authority.table === "pats";
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
 export const callerAuthority = ({
   subject,

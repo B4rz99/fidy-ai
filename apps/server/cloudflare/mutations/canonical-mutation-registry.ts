@@ -20,6 +20,7 @@ import {
   ReviseCanonicalInput,
 } from "@fidy/server/memory-runtime";
 import { type HostedInference } from "@fidy/server/hosted-inference";
+import { statementMutationAdapter } from "./statement-mutation";
 import { transactionRefusal } from "./transaction-outcome";
 import { memoryRefusal } from "./memory-outcome";
 import {
@@ -50,6 +51,7 @@ type CanonicalMutationWork = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
+  bucket: Option.Option<R2Bucket>;
   /**
    * The attempted input the catalog call schema already validated, which `prepare` decodes once
    * more through the owner's own codec only to recover that codec's typed payload: a failure
@@ -159,6 +161,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [CanonicalOperationId.make("ingestion.submitForExtraction"), statementMutationAdapter],
   [
     CanonicalOperationId.make("transactions.createTransaction"),
     {

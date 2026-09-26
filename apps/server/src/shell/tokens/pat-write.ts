@@ -181,15 +181,25 @@ type AuditedUseInput = Readonly<{
 export const recordAuditedPATUse = ({
   subject,
   input,
-}: Readonly<{ subject: PATSubject; input: AuditedUseInput }>): OwnedStatement => {
-  const authority = livePATAuthority({ subject, current: input.current });
-  return {
-    sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
-      AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
-      AND pat_id = pats.id AND operation = ? AND outcome = 'accepted')`,
-    params: [input.current, ...authority.bindings, input.auditId, input.operation],
-  };
-};
+}: Readonly<{ subject: PATSubject; input: AuditedUseInput }>): OwnedStatement =>
+  recordAuditedPATUseFromAuthority({
+    authority: livePATAuthority({ subject, current: input.current }),
+    input,
+  });
+
+/**
+ * The same activity advance built from the exact live-authority gate a consumer already holds, so a
+ * caller that is not the subject can still gate PAT activity on its own committed canonical audit.
+ */
+export const recordAuditedPATUseFromAuthority = ({
+  authority,
+  input,
+}: Readonly<{ authority: PATAuthority; input: AuditedUseInput }>): OwnedStatement => ({
+  sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
+    AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
+    AND pat_id = pats.id AND operation = ? AND outcome = 'accepted')`,
+  params: [input.current, ...authority.bindings, input.auditId, input.operation],
+});
 
 type RevokeOneInput = Readonly<{ shortId: string; current: number }>;
 /** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */

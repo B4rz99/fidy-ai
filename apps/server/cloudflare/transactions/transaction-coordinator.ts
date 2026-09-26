@@ -9,9 +9,13 @@ import { memoryOperationIds } from "@fidy/server/memory-runtime";
 import { Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
 import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
+import { unavailableStatement } from "../ingestion/statement-ingestion";
 import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
-import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
-import { refusedPreparation } from "../mutations/mutation-types";
+import {
+  type CanonicalMutationAdapter,
+  canonicalMutationAdapter,
+} from "../mutations/canonical-mutation-registry";
+import { type CanonicalMutationPreparation, refusedPreparation } from "../mutations/mutation-types";
 import {
   type TransactionCaller,
   transactionNow,
@@ -19,6 +23,7 @@ import {
 } from "./transaction-boundary";
 
 const digestBytes = 32;
+const httpServiceUnavailable = 503;
 const Credentials = {
   userId: Schema.String.check(Schema.isUUID()),
   digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
@@ -108,22 +113,34 @@ const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller 
         digest: new Uint8Array(admission.digest),
       };
 
-/** Execute one admitted piece of work through the owner adapter and the shared mutation unit. */
-const executeWork = ({
+type WorkInput = Readonly<{
+  db: D1Database;
+  bucket: Option.Option<R2Bucket>;
+  work: CanonicalWork;
+  subject: TransactionCaller;
+  current: number;
+}>;
+
+/** Reprepare only the statement whose identical material won a concurrent publication race. */
+const retryStatementPreparation = (
+  adapter: CanonicalMutationAdapter,
+  input: Parameters<CanonicalMutationAdapter["prepare"]>[0]
+): Effect.Effect<CanonicalMutationPreparation> =>
+  adapter.prepare(input).pipe(Effect.provideService(HostedInference, unreachableHostedInference));
+
+/** Execute one catalog call through its owner adapter and the shared mutation unit. */
+const executeCall = ({
   db,
   work,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  work: CanonicalWork;
-  subject: TransactionCaller;
-  current: number;
-}>): Effect.Effect<Response, never, HostedInference> =>
+  bucket,
+}: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>): Effect.Effect<
+  Response,
+  never,
+  HostedInference
+> =>
   Effect.gen(function* () {
-    if (work._tag === "Batch") {
-      return yield* executeCanonicalBatch({ db, subject, calls: work.calls, current });
-    }
     const adapter = canonicalMutationAdapter(work.operation);
     if (Option.isNone(adapter)) return transactionUnavailable();
     const catalogOperation = operationCatalog.byId.get(work.operation);
@@ -137,25 +154,44 @@ const executeWork = ({
         subject,
         current,
         preparation: refusedPreparation(
-          adapter.value.invalidRefusal({ db, subject, current, input: work.input })
+          adapter.value.invalidRefusal({ db, subject, current, input: work.input, bucket })
         ),
         present: adapter.value.present,
+        retryStatement: Option.none(),
       });
     }
-    const preparation = yield* adapter.value.prepare({
-      db,
-      subject,
-      current,
-      input: input.value,
-    });
-    return yield* executeSingleCanonicalMutation({
+    const ownerWork = { db, subject, current, input: input.value, bucket };
+    const preparation = yield* adapter.value.prepare(ownerWork);
+    const retryStatement = (): Effect.Effect<CanonicalMutationPreparation> =>
+      retryStatementPreparation(adapter.value, ownerWork);
+    const response = yield* executeSingleCanonicalMutation({
       db,
       subject,
       current,
       preparation,
       present: adapter.value.present,
+      retryStatement:
+        work.operation === "ingestion.submitForExtraction"
+          ? Option.some(retryStatement)
+          : Option.none(),
     });
+    return work.operation === "ingestion.submitForExtraction" &&
+      response.status === httpServiceUnavailable
+      ? unavailableStatement()
+      : response;
   });
+
+/** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
+const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
+  input.work._tag === "Batch"
+    ? executeCanonicalBatch({
+        db: input.db,
+        subject: input.subject,
+        calls: input.work.calls,
+        current: input.current,
+        bucket: input.bucket,
+      })
+    : executeCall({ ...input, work: input.work });
 
 /** True for an operation id the Memory group declares, so a new one needs no second derivation. */
 const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
@@ -180,6 +216,7 @@ const requiresHostedInference = (work: CanonicalWork): boolean => {
  */
 type CoordinatorEnvironment = Readonly<{
   DB: D1Database;
+  STATEMENT_STAGING_BUCKET: Option.Option<R2Bucket>;
 }> &
   WorkersAiEnvironment;
 
@@ -245,6 +282,7 @@ export class UserTransactionCoordinator {
               work,
               subject: admissionSubject(admission.value),
               current: transactionNow(),
+              bucket: environment.STATEMENT_STAGING_BUCKET,
             });
             if (!requiresHostedInference(work)) {
               // Non-Memory work never consumes hosted inference, so its binding is never built and

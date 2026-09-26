@@ -11,6 +11,8 @@ import {
   patScopeCapability,
 } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
+import { submissionInputBytes } from "../ingestion/statement-ingestion";
+import { lostStatementReplay } from "../ingestion/statement-staging";
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import {
   type CanonicalRefusalDisposition,
@@ -19,6 +21,7 @@ import {
   isPATCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
+  maximumTransactionInputBytes,
   refusedCredentialResponse,
   rejectInvalidBatchInput,
   transactionNoStore,
@@ -81,6 +84,15 @@ const repeatedCallIdMessage =
   "Each child call needs its own callId; a repeated identity cannot commit twice.";
 const repeatedTargetMessage =
   "Each child must address its own retained rule or Memory; one retained row cannot commit twice.";
+export const oversizedChildMessage =
+  "This child's input exceeds the size an individual call of this operation accepts.";
+const maximumChildInputBytes = Math.min(maximumTransactionInputBytes, submissionInputBytes);
+const childInputBytes = (call: unknown): number => {
+  const decoded = Schema.decodeUnknownOption(Schema.Struct({ input: Schema.Unknown }))(call);
+  return new TextEncoder().encode(
+    JSON.stringify(Option.isNone(decoded) ? call : decoded.value.input)
+  ).length;
+};
 
 const batchRejection = ({
   code,
@@ -210,6 +222,7 @@ const rejectInvalidChild = ({
   db,
   subject,
   current,
+  bucket,
   adapter,
   index,
   operation,
@@ -219,6 +232,7 @@ const rejectInvalidChild = ({
   subject: TransactionCaller;
   current: number;
   adapter: CanonicalMutationAdapter;
+  bucket: Option.Option<R2Bucket>;
   index: number;
   operation: CanonicalOperationId;
   input: unknown;
@@ -228,7 +242,7 @@ const rejectInvalidChild = ({
     subject,
     index,
     operation,
-    refusal: adapter.invalidRefusal({ db, subject, current, input }),
+    refusal: adapter.invalidRefusal({ db, subject, current, input, bucket }),
   }).pipe(Effect.map((response) => ({ _tag: "Response" as const, response })));
 
 /** The canonical input one malformed child attempted; an unshaped envelope remains raw input. */
@@ -390,25 +404,50 @@ const preparationStep = ({
   }
 };
 
+const oversizedChild = (
+  call: CanonicalBatchCall,
+  index: number,
+  operation: CanonicalOperationId
+): Option.Option<Extract<CallStep, { _tag: "Response" }>> =>
+  childInputBytes(call) > maximumChildInputBytes
+    ? Option.some({
+        _tag: "Response",
+        response: batchRejection({
+          code: "validation_failed",
+          message: oversizedChildMessage,
+          index,
+          operation,
+        }),
+      })
+    : Option.none();
+
+const decodedDecision = (call: CanonicalBatchCall, index: number): CatalogDecision => {
+  const operation = rawOperation(call);
+  if (Option.isNone(operation)) return { _tag: "Response", response: rejectInvalidBatchInput() };
+  const decision = catalogDecision(operation.value, index);
+  if (decision._tag === "Response") return decision;
+  const oversized = oversizedChild(call, index, decision.operation.id);
+  return Option.isSome(oversized)
+    ? { _tag: "Response", response: oversized.value.response }
+    : decision;
+};
+
 const prepareCall = ({
   db,
   subject,
   call,
   index,
   current,
+  bucket,
 }: Readonly<{
   db: D1Database;
+  bucket: Option.Option<R2Bucket>;
   subject: TransactionCaller;
   call: CanonicalBatchCall;
   index: number;
   current: number;
 }>): Effect.Effect<CallStep, never, HostedInference> => {
-  const operation = rawOperation(call);
-  if (Option.isNone(operation)) {
-    // Structurally absent children are answered as the request-level validation failure they are.
-    return Effect.succeed({ _tag: "Response", response: rejectInvalidBatchInput() });
-  }
-  const decision = catalogDecision(operation.value, index);
+  const decision = decodedDecision(call, index);
   if (decision._tag === "Response") return Effect.succeed(decision);
   const catalogOperation = decision.operation;
   return Effect.gen(function* () {
@@ -425,6 +464,7 @@ const prepareCall = ({
         subject: scopedSubject,
         current,
         adapter: decision.adapter,
+        bucket,
         index,
         operation: decision.operation.id,
         input: rawChildInput(call),
@@ -435,6 +475,7 @@ const prepareCall = ({
       subject: scopedSubject,
       current,
       input: decodedCall.value.input,
+      bucket,
     });
     return yield* preparationStep({
       db,
@@ -482,6 +523,7 @@ const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string>
   const outcome = mutation.outcome;
   if (outcome._tag === "KeywordRule") return Option.some(`keyword-rule:${outcome.ruleId}`);
   if (outcome._tag === "Memory") return Option.some(`memory:${outcome.memoryId}`);
+  if (outcome._tag === "StatementSubmission") return Option.some("statement-publication");
   return Option.none();
 };
 
@@ -490,8 +532,10 @@ const prepareBatch = ({
   subject,
   calls,
   current,
+  bucket,
 }: Readonly<{
   db: D1Database;
+  bucket: Option.Option<R2Bucket>;
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
@@ -500,7 +544,7 @@ const prepareBatch = ({
     const children: Array<PreparedCall> = [];
     const targets = new Set<string>();
     for (const [index, call] of calls.entries()) {
-      const step = yield* prepareCall({ db, subject, call, index, current });
+      const step = yield* prepareCall({ db, subject, call, index, current, bucket });
       if (step._tag === "Response") return { _tag: "Response", response: step.response };
       if (step._tag === "CredentialRefused") {
         return { _tag: "Response", response: yield* refusedCredentialResponse({ db, subject }) };
@@ -592,6 +636,7 @@ const executionResponse = ({
     case "CredentialRefused":
       return refusedCredentialResponse({ db, subject });
     case "Unavailable":
+    case "Aborted":
       return Effect.succeed(transactionUnavailable());
     case "Rejected":
       return rejectedBatchResponse({ db, subject, children, execution });
@@ -609,8 +654,10 @@ export const executeCanonicalBatch = ({
   subject,
   calls,
   current,
+  bucket,
 }: Readonly<{
   db: D1Database;
+  bucket: Option.Option<R2Bucket>;
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
@@ -618,7 +665,7 @@ export const executeCanonicalBatch = ({
   Effect.gen(function* () {
     const duplicate = duplicateCallIndex(calls);
     if (Option.isSome(duplicate)) return duplicateRejection(calls, duplicate.value);
-    const batch = yield* prepareBatch({ db, subject, calls, current });
+    const batch = yield* prepareBatch({ db, subject, calls, current, bucket });
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({
       db,
@@ -626,5 +673,32 @@ export const executeCanonicalBatch = ({
       current,
       mutations: batch.children.map((child) => child.mutation),
     });
+    if (execution._tag === "Aborted") {
+      const statement = batch.children.find(
+        (child) => child.mutation.outcome._tag === "StatementSubmission"
+      );
+      if (
+        statement?.mutation.outcome._tag === "StatementSubmission" &&
+        (yield* lostStatementReplay(
+          statement.mutation.outcome.config,
+          statement.mutation.outcome.publication
+        ))
+      ) {
+        const replay = yield* prepareBatch({ db, subject, calls, current, bucket });
+        if (replay._tag === "Response") return replay.response;
+        const retried = yield* executeCanonicalMutationUnit({
+          db,
+          subject,
+          current,
+          mutations: replay.children.map((child) => child.mutation),
+        });
+        return yield* executionResponse({
+          db,
+          subject,
+          children: replay.children,
+          execution: retried,
+        });
+      }
+    }
     return yield* executionResponse({ db, subject, children: batch.children, execution });
   });

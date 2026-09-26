@@ -346,7 +346,8 @@ const inferredInsightRefusal = ({
           code: Option.isNone(event) ? "not_found" : "validation_failed",
         })
       )
-    )
+    ),
+    Effect.orElseSucceed(() => Option.none())
   );
 
 /**
@@ -594,7 +595,7 @@ const findCommittedInsight = ({
         deliveryAttempt,
       })
     );
-  });
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /** Read one committed child's canonical success value, or None when the readback is incomplete. */
 const findCommittedValue = ({
@@ -737,7 +738,7 @@ const encodeOtherRemovedValue = (
     ? Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id)
     : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
 
-const encodeNotificationValue = (
+const encodeInsightSubmissionOrMemory = (
   value: Extract<
     CommittedMutationValue,
     { _tag: "Insight" | "DeliveredInsight" | "StatementSubmission" | "Memory" }
@@ -795,7 +796,7 @@ const encodeExistingValue = (
   if ("id" in value) return encodeRemovedValue(value);
   if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
   if ("insight" in value || "submission" in value || "memory" in value) {
-    return encodeNotificationValue(value);
+    return encodeInsightSubmissionOrMemory(value);
   }
   return encodeEntityValue(value);
 };

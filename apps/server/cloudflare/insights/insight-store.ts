@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   type DeliveryEvidenceInput,
   InsightDeliveryAttempt,
@@ -79,7 +79,7 @@ export const findInsight = (
   db: D1Database,
   userId: string,
   id: InsightEventId
-): Effect.Effect<Option.Option<InsightEvent>> =>
+): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
@@ -87,10 +87,7 @@ export const findInsight = (
     WHERE user_id = ? AND id = ?`)
       .bind(userId, id)
       .first()
-  ).pipe(
-    Effect.map(decodeEvent),
-    Effect.orElseSucceed(() => Option.none())
-  );
+  ).pipe(Effect.map(decodeEvent));
 
 /** Insert one immutable scheduled occurrence; replay returns the original, never rewrites context. */
 export const generateInsight = ({
@@ -101,7 +98,7 @@ export const generateInsight = ({
   db: D1Database;
   userId: string;
   input: InsightGenerationInput;
-}>): Effect.Effect<Option.Option<InsightEvent>> =>
+}>): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const groups = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(InsightEvent.fields.moneyGroups))
@@ -139,7 +136,7 @@ export const generateInsight = ({
     return Option.isSome(identity)
       ? yield* findInsight(db, userId, identity.value.id)
       : Option.none();
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
+  });
 
 /** Global due lookup reveals only bounded identities; the User coordinator must re-read the event. */
 // @effect-diagnostics-next-line missingPipeableSignature:off
@@ -241,13 +238,82 @@ export const recordInsightCall = ({
   );
 };
 
+const pendingCursor = (url: URL): Option.Option<Readonly<{ scheduledAt: string; id: string }>> => {
+  const raw = url.searchParams.get("cursor");
+  if (raw === null) return Option.some({ scheduledAt: "", id: "" });
+  const [scheduledAt, id] = raw.split("|");
+  if (
+    raw.split("|").length !== 2 ||
+    Option.isNone(
+      Schema.decodeUnknownOption(Schema.toCodecJson(InsightEvent.fields.scheduledAt))(scheduledAt)
+    ) ||
+    Option.isNone(Schema.decodeUnknownOption(InsightEventId)(id))
+  ) {
+    return Option.none();
+  }
+  return Option.some({ scheduledAt: scheduledAt ?? "", id: id ?? "" });
+};
+
+const pendingPage = (
+  db: D1Database,
+  userId: string,
+  cursor: Readonly<{ scheduledAt: string; id: string }>
+): Effect.Effect<
+  Option.Option<Readonly<{ events: ReadonlyArray<InsightEvent>; hasMore: boolean }>>,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT id, kind, schedule_id, schedule_version,
+    service_market, locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
+    FROM insight_events WHERE user_id = ? AND lifecycle_state = 'pending'
+    AND scheduled_at <= ? AND (scheduled_at, id) > (?, ?)
+    ORDER BY scheduled_at, id LIMIT ${maximumPendingInsights + 1}`)
+        .bind(userId, DateTime.formatIso(DateTime.nowUnsafe()), cursor.scheduledAt, cursor.id)
+        .all()
+    );
+    const events: Array<InsightEvent> = [];
+    for (const row of rows.results.slice(0, maximumPendingInsights)) {
+      const event = decodeEvent(row);
+      if (Option.isNone(event)) return Option.none();
+      events.push(event.value);
+    }
+    return Option.some({ events, hasMore: rows.results.length > maximumPendingInsights });
+  });
+
+const pendingPageResponse = (
+  url: URL,
+  page: Readonly<{ events: ReadonlyArray<InsightEvent>; hasMore: boolean }>
+): Effect.Effect<Response, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const data = yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(InsightEvent)))(
+      page.events
+    );
+    const last = page.events.at(-1);
+    if (page.hasMore && last !== undefined) {
+      url.searchParams.set("cursor", `${DateTime.formatIso(last.scheduledAt)}|${last.id}`);
+    }
+    return Response.json(
+      { data, next: [] },
+      {
+        headers: {
+          "cache-control": "no-store",
+          ...(page.hasMore ? { link: `<${url.toString()}>; rel="next"` } : {}),
+        },
+      }
+    );
+  });
+
 /** One bounded canonical query over the same authoritative events delivery reads. */
 export const listPendingInsights = ({
   db,
   subject,
+  request,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
+  request: Request;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (
@@ -261,24 +327,18 @@ export const listPendingInsights = ({
     ) {
       return transactionUnavailable();
     }
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT id, kind, schedule_id, schedule_version,
-    service_market, locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
-    FROM insight_events WHERE user_id = ? AND lifecycle_state = 'pending'
-    ORDER BY scheduled_at, id LIMIT ${maximumPendingInsights + 1}`)
-        .bind(subject.userId)
-        .all()
-    );
-    if (rows.results.length > maximumPendingInsights) return transactionUnavailable();
-    const events: Array<InsightEvent> = [];
-    for (const row of rows.results) {
-      const event = decodeEvent(row);
-      if (Option.isNone(event)) return transactionUnavailable();
-      events.push(event.value);
+    const url = new URL(request.url);
+    const cursor = pendingCursor(url);
+    if (Option.isNone(cursor)) {
+      return transactionFailure({
+        code: "validation_failed",
+        status: HTTP_BAD_REQUEST,
+        message: "Invalid InsightEvent cursor.",
+      });
     }
-    const data = yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(InsightEvent)))(events);
-    return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
+    const page = yield* pendingPage(db, subject.userId, cursor.value);
+    if (Option.isNone(page)) return transactionUnavailable();
+    return yield* pendingPageResponse(url, page.value);
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 const targetOf = (operation: MutationOperation): InsightLifecycleState => {

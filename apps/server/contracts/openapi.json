@@ -7162,6 +7162,29 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "query": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cursor": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
               "hint": {
                 "maxLength": 140,
                 "minLength": 1,
@@ -12779,9 +12802,25 @@
     },
     "/insights/pending": {
       "get": {
-        "description": "List the caller's pending InsightEvents, oldest scheduled occurrence first. Reach for this when you want proactive financial facts fidy has generated but the user has not yet consumed or dismissed. An empty stream is a successful answer.",
+        "description": "List the caller's pending InsightEvents, oldest scheduled occurrence first. Reach for this when you want proactive financial facts fidy has generated but the user has not yet consumed or dismissed. An empty stream is a successful answer. Results are bounded to 64 per page; follow the Link rel=next response header with its cursor to continue without skipping pending occurrences.",
         "operationId": "insights.listPendingInsights",
-        "parameters": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

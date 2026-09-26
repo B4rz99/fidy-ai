@@ -27,13 +27,16 @@ export const DeliveredInsight = Schema.Struct({
 export const InsightsGroup = HttpApiGroup.make("insights")
   .add(
     HttpApiEndpoint.get("listPendingInsights", "/insights/pending", {
+      query: Schema.Struct({ cursor: Schema.optional(Schema.String) }),
       success: OperationResponse(Schema.Array(InsightEvent)),
     })
       .annotate(
         OpenApi.Description,
         "List the caller's pending InsightEvents, oldest scheduled occurrence first. Reach for " +
           "this when you want proactive financial facts fidy has generated but the user has not " +
-          "yet consumed or dismissed. An empty stream is a successful answer."
+          "yet consumed or dismissed. An empty stream is a successful answer. Results are " +
+          "bounded to 64 per page; follow the Link rel=next response header with its cursor " +
+          "to continue without skipping pending occurrences."
       )
       .annotateMerge(
         operationPolicy({

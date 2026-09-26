@@ -1443,7 +1443,9 @@ const insightResponse = (
   const { request, environment, operation, subject } = input;
   if (operation.id === "insights.listPendingInsights") {
     return Option.some(
-      listPendingInsights({ db: environment.DB, subject }).pipe(Effect.withSpan(operation.id))
+      listPendingInsights({ db: environment.DB, subject, request }).pipe(
+        Effect.withSpan(operation.id)
+      )
     );
   }
   if (

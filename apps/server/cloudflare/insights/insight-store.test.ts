@@ -103,10 +103,13 @@ const setup = async (): Promise<D1Database> => {
   const db = await mf.getD1Database("DB");
   const migrations = [
     "0001_categories",
+    "0002_resource_admission",
     "0003_pending_consent",
     "0004_onboarding_email",
     "0005_verified_onboarding",
     "0006_browser_login",
+    "0007_browser_pairing_email",
+    "0008_support_recovery",
     "0009_transactions",
     "0010_pat_lifecycle",
     "0011_transaction_corrections",
@@ -159,10 +162,11 @@ const subject = (index: number): Readonly<{ id: string; userId: string; digest: 
 const generated = (db: D1Database, index = 0): Promise<Option.Option<InsightEvent>> =>
   Effect.runPromise(generateInsight({ db, userId: users[index] ?? "", input }));
 const send = (
-  input: Readonly<{ db: D1Database; index: number; path: string }> &
+  input: Readonly<{ db: D1Database; path: string }> &
+    (Readonly<{ index: number }> | Readonly<{ pat: string }>) &
     (Readonly<{ method: "GET" }> | Readonly<{ method: "POST"; body: Option.Option<object> }>)
 ): Promise<Response> => {
-  const { db, index, path, method } = input;
+  const { db, path, method } = input;
   const body = method === "POST" ? input.body : Option.none<object>();
   const coordinators = new Map<string, UserTransactionCoordinator>();
   return publicWorker.fetch(
@@ -170,7 +174,9 @@ const send = (
       method,
       headers: {
         origin: "https://app.fidyapp.com",
-        cookie: `__Host-fidy_session=${String(index + 1).repeat(43)}`,
+        ...("pat" in input
+          ? { authorization: `Bearer ${input.pat}` }
+          : { cookie: `__Host-fidy_session=${String(input.index + 1).repeat(43)}` }),
         ...(Option.isNone(body) ? {} : { "content-type": "application/json" }),
       },
       ...(Option.isNone(body) ? {} : { body: JSON.stringify(body.value) }),
@@ -313,9 +319,17 @@ it("commits one delivery with immutable evidence, then rejects replay and stale 
   );
   if (read._tag !== "Prepared") throw new Error("read should be prepared");
   await db.batch([...read.mutation.statements, read.mutation.completion]);
-  expect((await Effect.runPromise(listPendingInsights({ db, subject: subject(0) }))).status).toBe(
-    200
-  );
+  expect(
+    (
+      await Effect.runPromise(
+        listPendingInsights({
+          db,
+          subject: subject(0),
+          request: new Request("https://api.fidyapp.com/insights/pending"),
+        })
+      )
+    ).status
+  ).toBe(200);
   expect(
     Option.getOrThrow(await Effect.runPromise(findInsight(db, users[0] ?? "", event.id)))
       .lifecycleState
@@ -380,6 +394,133 @@ it("a stale read prepared before dismissal cannot regress the dismissed event", 
     .bind(users[0])
     .first<{ count: number }>();
   expect(audits?.count).toBe(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("pages pending InsightEvents past the per-request bound without hiding older occurrences", async () => {
+  const db = await setup();
+  await authorizeBrowser(db);
+  await Array.from({ length: 65 }, (_, index) => index).reduce<Promise<void>>(
+    (prior, index) =>
+      prior.then(() =>
+        Effect.runPromise(
+          generateInsight({
+            db,
+            userId: users[0] ?? "",
+            input: { ...input, scheduledAt: DateTime.add(input.scheduledAt, { seconds: index }) },
+          })
+        ).then(() => undefined)
+      ),
+    Promise.resolve()
+  );
+  const first = await send({ db, index: 0, path: "/insights/pending", method: "GET" });
+  expect(first.status).toBe(200);
+  const firstIds = Schema.decodeUnknownSync(
+    Schema.Struct({ data: Schema.Array(Schema.Struct({ id: InsightEventId })) })
+  )(await first.json()).data.map((item) => item.id);
+  expect(firstIds).toHaveLength(64);
+  const link = first.headers.get("link") ?? "";
+  expect(link).toContain('rel="next"');
+  const path =
+    new URL(link.slice(1, link.indexOf(">"))).pathname +
+    new URL(link.slice(1, link.indexOf(">"))).search;
+  const second = await send({ db, index: 0, path, method: "GET" });
+  expect(second.status).toBe(200);
+  const lastIds = Schema.decodeUnknownSync(
+    Schema.Struct({ data: Schema.Array(Schema.Struct({ id: InsightEventId })) })
+  )(await second.json()).data.map((item) => item.id);
+  expect(lastIds).toHaveLength(1);
+  expect(firstIds).not.toContain(lastIds[0]);
+  expect(second.headers.get("link")).toBeNull();
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects an under-scoped or revoked PAT before an InsightEvent write", async () => {
+  const db = await setup();
+  await authorizeBrowser(db);
+  const event = Option.getOrThrow(await generated(db));
+  const issue = await send({
+    db,
+    index: 0,
+    path: "/pats",
+    method: "POST",
+    body: Option.some({
+      requestId: "20000000-0000-4000-8000-000000000081",
+      grant: {
+        recipientLabel: "Agent",
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewExpiresAt: DateTime.formatIso(DateTime.add(DateTime.nowUnsafe(), { days: 7 })),
+      },
+    }),
+  });
+  expect(issue.status, await issue.clone().text()).toBe(200);
+  const { data } = Schema.decodeUnknownSync(
+    Schema.Struct({
+      data: Schema.Struct({
+        bearer: Schema.String,
+        pat: Schema.Struct({ shortId: Schema.String }),
+      }),
+    })
+  )(await issue.json());
+  const denied = await send({
+    db,
+    pat: data.bearer,
+    path: `/insights/${event.id}/read`,
+    method: "POST",
+    body: Option.none(),
+  });
+  expect(denied.status).toBe(403);
+  await db
+    .prepare(
+      'UPDATE pats SET scopes_json = \'["read","write"]\', revoked_at_ms = ? WHERE short_id = ?'
+    )
+    .bind(DateTime.nowUnsafe().epochMilliseconds, data.pat.shortId)
+    .run();
+  const revoked = await send({
+    db,
+    pat: data.bearer,
+    path: `/insights/${event.id}/delivered`,
+    method: "POST",
+    body: Option.some({
+      sentAt: "2026-08-09T23:00:08Z",
+      channel: "whatsapp",
+      provider: "kapso",
+      providerMessageId: "wamid.1",
+    }),
+  });
+  expect(revoked.status).toBe(401);
+  expect(
+    Option.getOrThrow(await Effect.runPromise(findInsight(db, users[0] ?? "", event.id)))
+      .lifecycleState
+  ).toBe("pending");
+  expect(
+    (
+      await db
+        .prepare("SELECT COUNT(*) AS count FROM insight_delivery_attempts")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect(
+    (await db.prepare("SELECT COUNT(*) AS count FROM insight_audit").first<{ count: number }>())
+      ?.count
+  ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("returns unavailable rather than not_found when an owned InsightEvent cannot be read", async () => {
+  const db = await setup();
+  await authorizeBrowser(db);
+  const event = Option.getOrThrow(await generated(db));
+  await db.prepare("DROP TABLE insight_events").run();
+  const response = await send({
+    db,
+    index: 0,
+    path: `/insights/${event.id}/read`,
+    method: "POST",
+    body: Option.none(),
+  });
+  expect(response.status).toBe(503);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

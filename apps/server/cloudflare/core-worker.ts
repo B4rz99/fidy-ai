@@ -1710,7 +1710,11 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
     if (environment.EMAIL_BUCKET === undefined) {
       return Promise.reject(new Error("Email evidence unavailable"));
     }
-    return receiveForwardedEmailWork(batch.messages, environment.USER_TRANSACTION_COORDINATOR);
+    return Effect.tryPromise({
+      try: () =>
+        receiveForwardedEmailWork(batch.messages, environment.USER_TRANSACTION_COORDINATOR),
+      catch: () => new ForwardedEmailDeliveryUnavailable(),
+    }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
   }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
@@ -1738,6 +1742,11 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
     batch,
   }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
 };
+
+/** Queue redelivery exposes no receipt, User, or provider details on failure. */
+class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
+  "ForwardedEmailDeliveryUnavailable"
+) {}
 
 /** A failed schedule reports only a closed classification, never database or provider details. */
 class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}

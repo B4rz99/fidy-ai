@@ -161,9 +161,10 @@ Transaction with its SourceAttestation, and uncertain, revoked, or interrupted w
 User-owned review read. Raw R2 bytes expire independently of the structural tag histogram,
 which is retained only for successfully interpreted mail under a versioned allowlist approval policy.
 Per-User and global rolling retention budgets supplement outstanding-work limits. Institution
-Connection-state admission is not installed: this codebase has no institution Connection authority
-or sender-to-institution mapping yet. Do not enable an Email Routing rule until that policy can
-be enforced. The full hosted-Turn path still requires its own adapter and platform evidence.
+Connection-state admission and authenticated institutional sender proof are not installed: this
+codebase has no institution Connection authority, sender-to-institution mapping, or verified sender
+result at the Email Worker. No Email Routing rule is provisioned; enable inbound delivery only
+when both policies can be enforced before retention and automatic Transaction finalization. The full hosted-Turn path still requires its own adapter and platform evidence.
 
 ## 6. Testing seams
 

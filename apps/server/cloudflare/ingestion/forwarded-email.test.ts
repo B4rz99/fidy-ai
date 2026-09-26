@@ -807,6 +807,33 @@ it("deletes expired private email while keeping a replay tombstone", () =>
     })
   ));
 
+it("clears near-expiry email before the bounded sweep can exceed its retention deadline", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      const deadline = (yield* Clock.currentTimeMillis) + 3_600_000;
+      yield* wait(() =>
+        db
+          .prepare("UPDATE forwarded_email_receipts SET expires_at_ms = ? WHERE user_id = ?")
+          .bind(deadline, userA)
+          .run()
+      );
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      const review = yield* wait(() =>
+        db
+          .prepare(
+            "SELECT reason, evidence_expires_at_ms FROM forwarded_email_needs_review WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ reason: string; evidence_expires_at_ms: number }>()
+      );
+      expect(review?.reason).toBe("processing-interrupted");
+      expect(review?.evidence_expires_at_ms).toBeLessThan(deadline);
+    })
+  ));
+
 it("records interrupted reservations visibly before expiring their private bytes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -841,6 +868,34 @@ it("records interrupted reservations visibly before expiring their private bytes
     })
   ));
 
+it("makes an interrupted reservation visible after its bounded write window", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const id = "00000000-0000-4000-8000-000000000913";
+      const key = `email/v1/${id}`;
+      const current = yield* Clock.currentTimeMillis;
+      yield* wait(() =>
+        db
+          .prepare(`INSERT INTO forwarded_email_receipts
+        (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms)
+        VALUES (?, ?, ?, ?, 1, 'storing', ?, ?)`)
+          .bind(id, userA, "8".repeat(64), key, current - 900_001, current + 60_000_000)
+          .run()
+      );
+      yield* wait(() => bucket.put(key, new Uint8Array([1])));
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE receipt_id = ?")
+          .bind(id)
+          .first<{ reason: string }>()
+      );
+      expect(review?.reason).toBe("processing-interrupted");
+    })
+  ));
+
 it("does not sweep an interrupted R2 write before the hard retention deadline", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -858,7 +913,7 @@ it("does not sweep an interrupted R2 write before the hard retention deadline", 
             "9".repeat(64),
             key,
             now - 60_000,
-            now + 60_000
+            now + 60_000_000
           )
           .run()
       );
@@ -873,6 +928,56 @@ it("does not sweep an interrupted R2 write before the hard retention deadline", 
             .first<{ state: string }>()
         ))?.state
       ).toBe("storing");
+    })
+  ));
+
+it("keeps retention failure visible and retries private deletion without duplicating review", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() =>
+        db
+          .prepare(
+            "UPDATE forwarded_email_receipts SET received_at_ms = 0, expires_at_ms = 1 WHERE user_id = ?"
+          )
+          .bind(userA)
+          .run()
+      );
+      const unavailableBucket = {
+        ...bucket,
+        put: (
+          key: string,
+          bytes: Uint8Array,
+          options: { customMetadata: { purpose: string } }
+        ): Promise<unknown> => bucket.put(key, bytes, options),
+        delete: (_key: string): Promise<never> => Promise.reject(new Error("R2 unavailable")),
+      };
+      yield* Effect.exit(
+        Effect.tryPromise(() =>
+          emailWorker.scheduled(undefined, {
+            ...env,
+            EMAIL_BUCKET: unavailableBucket,
+          })
+        )
+      );
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .bind(userA)
+          .first<{ reason: string }>()
+      );
+      expect(review?.reason).toBe("processing-interrupted");
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      const reviews = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_needs_review WHERE user_id = ?")
+          .bind(userA)
+          .all()
+      );
+      expect(reviews.results).toHaveLength(1);
     })
   ));
 

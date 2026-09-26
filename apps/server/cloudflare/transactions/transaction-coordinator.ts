@@ -49,6 +49,7 @@ const HTTP_ACCEPTED = 202;
 class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUnavailable")<{
   cause: unknown;
 }> {}
+class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
 const httpServiceUnavailable = 503;
 const Credentials = {
   userId: Schema.String.check(Schema.isUUID()),
@@ -383,8 +384,8 @@ const executeForwardedEmailActivity = (
             userId,
             receiptId: work.value.receiptId,
           }),
-        catch: () => new StatementActivityUnavailable({ cause: "email_unavailable" }),
-      })
+        catch: () => new EmailActivityUnavailable(),
+      }).pipe(Effect.withSpan("ingestion.forwarded-email.process"))
     );
     return Exit.isFailure(completed)
       ? transactionUnavailable()

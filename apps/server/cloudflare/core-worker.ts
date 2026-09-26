@@ -13,7 +13,8 @@ import {
 } from "@fidy/server/memory-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
+
 import { correctionInput } from "./transactions/transaction-corrections";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
@@ -121,12 +122,26 @@ import {
 } from "./ingestion/statement-ingestion";
 import { StatementStaging } from "./ingestion/statement-staging";
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
+import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
+import { listStatementNeedsReviewItems } from "./ingestion/statement-review";
+import {
+  StatementExtractionWorkflowV1,
+  dispatchStatementExtraction,
+  isStatementExtractionWork,
+  receiveStatementExtraction,
+  reconcileStatementExtraction,
+} from "./ingestion/statement-delivery";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
 export { BillingCollectionWorkflowV1 } from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
+export { StatementExtractionWorkflowV1 };
+
+class StatementReviewSweepUnavailable extends Data.TaggedError(
+  "StatementReviewSweepUnavailable"
+)<{}> {}
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -155,7 +170,13 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
   /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
-  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>> &
+  Partial<
+    Readonly<{
+      STATEMENT_STAGING_BUCKET: R2Bucket;
+      STATEMENT_EXTRACTION_QUEUE: Queue;
+      STATEMENT_EXTRACTION_WORKFLOW: Workflow;
+    }>
+  > &
   Partial<
     Pick<
       BillingCollectionEnvironment,
@@ -923,16 +944,19 @@ const directPathResponse = (
   return Option.none();
 };
 
-/** Ingestion canonical work: the one adapter whose response is a staged-material projection. */
-const ingestionCanonicalResponse = (
-  input: Readonly<{
-    operation: CatalogOperation;
-    request: Request;
-    environment: CoreEnvironment;
-    subject: TransactionCaller;
-  }>
-): Option.Option<Effect.Effect<Response>> => {
-  const { operation, request, environment, subject } = input;
+type IngestionResponseInput = Readonly<{
+  operation: CatalogOperation;
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+}>;
+
+/** Canonical forwarding operations retain their own admission and read audit. */
+const forwardingCanonicalResponse = ({
+  operation,
+  environment,
+  subject,
+}: IngestionResponseInput): Option.Option<Effect.Effect<Response>> => {
   if (operation.id === "ingestion.enableEmailForwarding") {
     return Option.some(
       sendToCoordinator({
@@ -951,6 +975,16 @@ const ingestionCanonicalResponse = (
       }).pipe(Effect.withSpan(operation.id))
     );
   }
+  return Option.none();
+};
+
+/** Ingestion canonical work: route forwarding and supported statement projections. */
+const ingestionCanonicalResponse = (
+  input: IngestionResponseInput
+): Option.Option<Effect.Effect<Response>> => {
+  const forwarding = forwardingCanonicalResponse(input);
+  if (Option.isSome(forwarding)) return forwarding;
+  const { operation, request, environment, subject } = input;
   if (operation.id === "ingestion.submitForExtraction") {
     return Option.some(
       Effect.gen(function* () {
@@ -973,6 +1007,16 @@ const ingestionCanonicalResponse = (
         Effect.orElseSucceed(unavailable),
         Effect.withSpan("ingestion.getStatementSubmission")
       )
+    );
+  }
+  if (operation.id === "ingestion.listNeedsReviewItems") {
+    return Option.some(
+      listStatementNeedsReviewItems({
+        database: environment.DB,
+        environment,
+        subject,
+        url: new URL(request.url),
+      }).pipe(Effect.withSpan("ingestion.listNeedsReviewItems"))
     );
   }
   return Option.none();
@@ -1237,6 +1281,18 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
 };
 
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
+    if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
+      return Promise.reject(new Error("Statement extraction unavailable"));
+    }
+    return receiveStatementExtraction({
+      environment: {
+        DB: environment.DB,
+        STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
+      },
+      messages: batch.messages,
+    }).pipe(Effect.runPromise);
+  }
   if (!batch.messages.some((message) => isBillingCollectionWork(message.body))) {
     return receiveEmailQueue(batch, environment);
   }
@@ -1298,7 +1354,29 @@ const statementIngestionScheduled = (environment: CoreEnvironment): Effect.Effec
       Effect.withSpan("ingestion.stagingSweep"),
       Effect.ignore
     );
+    yield* Effect.tryPromise({
+      try: () => expireStatementReviewEvidence({ DB: environment.DB }),
+      catch: () => new StatementReviewSweepUnavailable(),
+    }).pipe(Effect.withSpan("ingestion.reviewEvidenceExpiry"), Effect.ignore);
   });
+
+/** Reconcile terminal Workflow failures, then offer any still-unpublished statement intents. */
+const statementDeliveryScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if (environment.STATEMENT_EXTRACTION_WORKFLOW !== undefined) {
+      yield* reconcileStatementExtraction({
+        DB: environment.DB,
+        STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
+        USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
+      });
+    }
+    if (environment.STATEMENT_EXTRACTION_QUEUE !== undefined) {
+      yield* dispatchStatementExtraction({
+        DB: environment.DB,
+        STATEMENT_EXTRACTION_QUEUE: environment.STATEMENT_EXTRACTION_QUEUE,
+      });
+    }
+  }).pipe(Effect.orDie);
 
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
@@ -1349,6 +1427,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       yield* statementIngestionScheduled(environment).pipe(
         Effect.withSpan("ingestion.statementSweep")
       );
+      yield* statementDeliveryScheduled(environment);
       if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
     }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
   queue: receiveWorkQueue,

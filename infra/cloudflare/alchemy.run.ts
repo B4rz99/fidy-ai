@@ -183,6 +183,10 @@ export default Alchemy.Stack(
       name: "Fidy forwarded email",
       actions: [{ type: "worker", value: [emailWorker.workerName] }],
     });
+    const statementExtractionQueue = yield* Cloudflare.Queues.Queue("StatementExtractionQueue");
+    const statementExtractionWorkflow = Cloudflare.Workflow("StatementExtractionWorkflowV1", {
+      className: "StatementExtractionWorkflowV1",
+    });
 
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
@@ -214,6 +218,8 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
+        STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
+        STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),
@@ -251,6 +257,12 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {
+      queueId: statementExtractionQueue.queueId,
+      scriptName: core.workerName,
+      settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("BillingCollectionConsumer", {

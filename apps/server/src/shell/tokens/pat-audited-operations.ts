@@ -13,6 +13,7 @@ export type AuditedPATOperation =
   | "ingestion.enableEmailForwarding"
   | "ingestion.getEmailForwarding"
   | "ingestion.getStatementSubmission"
+  | "ingestion.listNeedsReviewItems"
   | "ingestion.submitForExtraction"
   | "memory.forget"
   | "memory.recall"

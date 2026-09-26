@@ -48,6 +48,8 @@ const migrationNames = [
   "0012_billing_collection",
   "0014_memory",
   "0015_statement_submission",
+  "0016_statement_processing",
+  "0017_statement_dispatch",
 ] as const;
 const workerScript = "export default { fetch() { return new Response('ok') } }";
 const stagingWorkerName = "statement-staging-test-worker";

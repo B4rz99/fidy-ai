@@ -1,5 +1,5 @@
-import { inflateRawSync } from "node:zlib";
 import { Data, Effect, Option, Schema } from "effect";
+import { Inflate } from "fflate";
 import { parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -16,14 +16,16 @@ const bytesPerKibibyte = 1024;
 const maximumExpandedMebibytes = 25;
 const maximumCsvRecordKibibytes = 256;
 const maximumExpandedBytes = maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte;
+const inflateInputChunkBytes = bytesPerKibibyte;
 
 /** Compressed-input and in-parser expanded-content ceilings for one statement parse. */
 export const statementParserLimits = {
   maximumDecodedBytes: maximumStatementBytes,
   maximumExpandedBytes,
+  maximumRows: 20_000,
 } as const;
 const maximumZipEntries = 1_000;
-const maximumRows = 20_000;
+const maximumRows = statementParserLimits.maximumRows;
 const maximumColumns = 200;
 const maximumCells = 250_000;
 const maximumCsvRecordBytes = maximumCsvRecordKibibytes * bytesPerKibibyte;
@@ -141,6 +143,29 @@ const parseCsv = (bytes: Uint8Array): ParsedStatement => {
   };
 };
 
+const boundedZipInflate = (compressed: Uint8Array, remaining: number): number => {
+  let expanded = 0;
+  // Workerd cannot bundle node:zlib. Small input chunks bound transient inflater output
+  // before the callback can enforce the aggregate expanded-byte ceiling.
+  const inflater = new Inflate((chunk) => {
+    expanded += chunk.length;
+    if (expanded > remaining) throw new StatementParseFailed({ safeReason: "resource-limit" });
+  });
+  for (let start = 0; start < compressed.length; start += inflateInputChunkBytes) {
+    const end = Math.min(start + inflateInputChunkBytes, compressed.length);
+    inflater.push(compressed.subarray(start, end), end === compressed.length);
+  }
+  if (compressed.length === 0) inflater.push(compressed, true);
+  return expanded;
+};
+
+const boundedStoredZipSize = (compressed: Uint8Array, remaining: number): number => {
+  if (compressed.length > remaining) {
+    throw new StatementParseFailed({ safeReason: "resource-limit" });
+  }
+  return compressed.length;
+};
+
 const expandedZipEntrySize = (input: {
   readonly bytes: Uint8Array;
   readonly view: DataView;
@@ -163,9 +188,10 @@ const expandedZipEntrySize = (input: {
     throw new StatementParseFailed({ safeReason: "malformed-file" });
   }
   let actualExpandedSize: number;
-  if (compressionMethod === zipStoredMethod) actualExpandedSize = compressed.length;
-  else if (compressionMethod === zipDeflatedMethod) {
-    actualExpandedSize = inflateRawSync(compressed, { maxOutputLength: remaining }).length;
+  if (compressionMethod === zipStoredMethod) {
+    actualExpandedSize = boundedStoredZipSize(compressed, remaining);
+  } else if (compressionMethod === zipDeflatedMethod) {
+    actualExpandedSize = boundedZipInflate(compressed, remaining);
   } else throw new StatementParseFailed({ safeReason: "malformed-file" });
   if (actualExpandedSize !== declaredExpandedSize) {
     throw new StatementParseFailed({ safeReason: "malformed-file" });

@@ -18,6 +18,7 @@ export {
 } from "~/core/categories/errors";
 export {
   canCreateKeywordRule,
+  fallbackCaptureCategory,
   findKeywordCategory,
   findKnownCaptureCategory,
   hasKeywordRule,

@@ -931,6 +931,17 @@ const failedProjection = (
     ...base,
     completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
     failureReason: stored.failureReason.value,
+    ...(Option.isSome(stored.inputRows) &&
+    Option.isSome(stored.acceptedRows) &&
+    Option.isSome(stored.needsReviewRows)
+      ? {
+          accounting: {
+            inputRows: stored.inputRows.value,
+            acceptedRows: stored.acceptedRows.value,
+            needsReviewRows: stored.needsReviewRows.value,
+          },
+        }
+      : {}),
     startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
     status: "failed",
   });

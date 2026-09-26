@@ -355,18 +355,27 @@ const readStatements = (
     database: D1Database;
     subject: TransactionCaller;
     submissionId: string;
+    operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
   }>
 ): ReadonlyArray<D1PreparedStatement> => {
-  const { current, database, subject, submissionId } = input;
+  const { current, database, subject, submissionId, operation } = input;
   if (!isPATCaller(subject)) {
+    const authority = callerAuthority({ subject, current });
     return [
-      statementSubmissionReadAudit({
-        authority: callerAuthority({ subject, current }),
-        current,
-        database,
-        id: newIngestionId(),
-        submissionId,
-      }),
+      operation === "ingestion.listNeedsReviewItems"
+        ? database
+            .prepare(`INSERT INTO statement_review_audit
+          (id, user_id, operation, outcome, occurred_at_ms)
+          SELECT ?, ${authority.table}.user_id, 'ingestion.listNeedsReviewItems', 'success', ?
+          FROM ${authority.table} WHERE ${authority.predicate}`)
+            .bind(newIngestionId(), current, ...authority.bindings)
+        : statementSubmissionReadAudit({
+            authority,
+            current,
+            database,
+            id: newIngestionId(),
+            submissionId,
+          }),
     ];
   }
   return [
@@ -378,7 +387,7 @@ const readStatements = (
           afterOwnerWrite: false,
           current,
           id: newIngestionId(),
-          operation: "ingestion.getStatementSubmission",
+          operation,
           outcome: "accepted",
         },
         subject,
@@ -389,10 +398,14 @@ const readStatements = (
 
 /** Commits one read's attribution unit: `None` when it stands, or the refusal a dead authority
  * proves. A dead credential writes nothing, so a refused read leaves no audit row. */
-const commitReadAudit = (
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const commitReadAudit = (
   environment: StatementIngestionEnvironment,
   subject: TransactionCaller,
-  submissionId: string
+  read: Readonly<{
+    submissionId: string;
+    operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
+  }>
 ): Effect.Effect<Option.Option<Response>> =>
   Effect.gen(function* () {
     const isPAT = isPATCaller(subject);
@@ -404,7 +417,8 @@ const commitReadAudit = (
               current: currentMillis(),
               database: environment.DB,
               subject,
-              submissionId,
+              submissionId: read.submissionId,
+              operation: read.operation,
             }),
           ]),
         catch: (cause) => new IngestionAuditFailed({ cause }),
@@ -445,11 +459,10 @@ export const readStatementSubmission = ({
       }
       const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
       const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
-      const refused = yield* commitReadAudit(
-        environment,
-        subject,
-        Option.getOrElse(submissionId, () => "")
-      );
+      const refused = yield* commitReadAudit(environment, subject, {
+        submissionId: Option.getOrElse(submissionId, () => ""),
+        operation: "ingestion.getStatementSubmission",
+      });
       if (Option.isSome(refused)) return refused.value;
       if (Option.isNone(submissionId)) return submissionNotFound();
       // This owned projection adds no authority: the audit above already committed under the caller.

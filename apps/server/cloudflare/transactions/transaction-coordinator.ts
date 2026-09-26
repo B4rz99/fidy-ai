@@ -6,10 +6,15 @@ import {
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
-import { Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Context, Data, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
 import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
 import { unavailableStatement } from "../ingestion/statement-ingestion";
+import {
+  failStatementSubmission,
+  processStatementSubmission,
+} from "../ingestion/statement-processing";
+import { StatementCoordinatorActivity } from "../ingestion/statement-work";
 import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
 import {
   type CanonicalMutationAdapter,
@@ -23,6 +28,11 @@ import {
 } from "./transaction-boundary";
 
 const digestBytes = 32;
+const HTTP_OK = 200;
+const HTTP_ACCEPTED = 202;
+class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUnavailable")<{
+  cause: unknown;
+}> {}
 const httpServiceUnavailable = 503;
 const Credentials = {
   userId: Schema.String.check(Schema.isUUID()),
@@ -249,6 +259,72 @@ const unreachableHostedInference = HostedInference.of({
   prepareStructured: () => Effect.die("Hosted inference reached without Memory work"),
 });
 
+const executeStatementActivity = (
+  activity: typeof StatementCoordinatorActivity.Type,
+  environment: CoordinatorEnvironment,
+  userId: string
+): Effect.Effect<Response> => {
+  const { submissionId } = activity;
+  const request =
+    activity._tag === "StatementFailed"
+      ? (): Promise<number> =>
+          failStatementSubmission({
+            DB: environment.DB,
+            userId,
+            submissionId,
+            // The Workflow's bounded retry budget is exhausted; preserve partial outcomes.
+            reason: "resource-limit",
+          }).then(() => HTTP_OK)
+      : (): Promise<number> => {
+          const bucket = environment.STATEMENT_STAGING_BUCKET;
+          if (bucket === undefined) return Promise.resolve(httpServiceUnavailable);
+          return processStatementSubmission({
+            DB: environment.DB,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId,
+            submissionId,
+          }).then((progress) => (progress === "continue" ? HTTP_ACCEPTED : HTTP_OK));
+        };
+  return Effect.tryPromise({
+    try: request,
+    catch: (cause) => new StatementActivityUnavailable({ cause }),
+  }).pipe(
+    Effect.map((status) => new Response(null, { status })),
+    Effect.orElseSucceed(transactionUnavailable)
+  );
+};
+
+const authorizedStatementActivity = (
+  candidate: unknown,
+  userId: string
+): Option.Option<typeof StatementCoordinatorActivity.Type> =>
+  Schema.decodeUnknownOption(StatementCoordinatorActivity)(candidate).pipe(
+    Option.filter((activity) => activity.userId === userId)
+  );
+
+const executeCanonicalAdmission = (
+  admission: CanonicalWorkAdmission,
+  environment: CoordinatorEnvironment
+): Effect.Effect<Response, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const work = admission.work;
+    const execution = executeWork({
+      db: environment.DB,
+      work,
+      subject: admissionSubject(admission),
+      current: transactionNow(),
+      bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+    });
+    if (!requiresHostedInference(work)) {
+      return yield* execution.pipe(
+        Effect.provideService(HostedInference, unreachableHostedInference)
+      );
+    }
+    const inference = yield* hostedInferenceFor(environment);
+    if (Option.isNone(inference)) return transactionUnavailable();
+    return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
+  });
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
@@ -260,7 +336,6 @@ export class UserTransactionCoordinator {
   }
 
   fetch(request: Request): Promise<Response> {
-    const db = this.env.DB;
     const environment = this.env;
     const userId = this.state.id.name;
     const settledResponse = this.pending.then(() =>
@@ -269,6 +344,13 @@ export class UserTransactionCoordinator {
           Effect.gen(function* () {
             const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
             if (Option.isNone(candidate)) return transactionUnavailable();
+            if (request.method === "POST" && new URL(request.url).pathname === "/statement-work") {
+              const activity = authorizedStatementActivity(candidate.value, userId);
+              if (Option.isNone(activity)) {
+                return transactionUnavailable();
+              }
+              return yield* executeStatementActivity(activity.value, environment, userId);
+            }
             const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
             if (
               Option.isNone(admission) ||
@@ -277,24 +359,7 @@ export class UserTransactionCoordinator {
             ) {
               return transactionUnavailable();
             }
-            const work = admission.value.work;
-            const execution = executeWork({
-              db,
-              work,
-              subject: admissionSubject(admission.value),
-              current: transactionNow(),
-              bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
-            });
-            if (!requiresHostedInference(work)) {
-              // Non-Memory work never consumes hosted inference, so its binding is never built and
-              // a missing or invalid one cannot deny it; any unexpected use still fails closed.
-              return yield* execution.pipe(
-                Effect.provideService(HostedInference, unreachableHostedInference)
-              );
-            }
-            const inference = yield* hostedInferenceFor(environment);
-            if (Option.isNone(inference)) return transactionUnavailable();
-            return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
+            return yield* executeCanonicalAdmission(admission.value, environment);
           })
         )
       )

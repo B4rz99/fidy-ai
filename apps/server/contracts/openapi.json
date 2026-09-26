@@ -5904,6 +5904,9 @@
           {
             "additionalProperties": false,
             "properties": {
+              "accounting": {
+                "$ref": "#/components/schemas/StatementAccounting"
+              },
               "completedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
               },

@@ -9,5 +9,7 @@ export type {
   HostedInitialTextContext,
   HostedStructuredRequest,
   HostedTextRequest,
+  HostedTextResult,
+  PreparedHostedText,
 } from "./contract";
 export { HostedInference } from "./operations";

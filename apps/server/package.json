@@ -134,6 +134,11 @@
       "import": "./src/shell/observability/runtime.ts",
       "default": "./src/shell/observability/runtime.ts"
     },
+    "./agent-runtime": {
+      "types": "./src/shell/agent/runtime.ts",
+      "import": "./src/shell/agent/runtime.ts",
+      "default": "./src/shell/agent/runtime.ts"
+    },
     "./hosted-inference": {
       "types": "./src/shell/hosted-inference/runtime.ts",
       "import": "./src/shell/hosted-inference/runtime.ts",

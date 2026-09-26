@@ -17,7 +17,7 @@ const session = {
   userId: UserId.make("f1d1a000-0000-4000-8000-000000000282"),
   consentBasis: consent,
   startedAtMs: 1_000_000,
-  lastTerminalAtMs: Option.some(1_000_020),
+  lastActivityAtMs: Option.some(1_000_020),
   status: "active" as const,
 };
 const admission = (): HostedAdmissionRequest => ({

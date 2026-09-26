@@ -11,7 +11,7 @@ export type HostedAdmissionState = Readonly<{
       userId: UserId;
       consentBasis: HostedAgentSessionConsentBasis;
       startedAtMs: number;
-      lastTerminalAtMs: Option.Option<number>;
+      lastActivityAtMs: Option.Option<number>;
       status: "active" | "idle-ended" | "revoked";
     }>
   >;
@@ -48,7 +48,7 @@ const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean
   return (
     session.userId !== userId ||
     session.startedAtMs > nowMs ||
-    invalidInstant(session.lastTerminalAtMs) ||
+    invalidInstant(session.lastActivityAtMs) ||
     invalidInstant(state.pendingStartedAtMs)
   );
 };
@@ -66,7 +66,7 @@ export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAd
   if (Option.isSome(request.state.pendingStartedAtMs)) return { _tag: "RecoverPending" };
   if (Option.isSome(request.state.session)) {
     const session = request.state.session.value;
-    const lastActivity = Option.getOrElse(session.lastTerminalAtMs, () => session.startedAtMs);
+    const lastActivity = Option.getOrElse(session.lastActivityAtMs, () => session.startedAtMs);
     if (session.status === "active" && request.nowMs - lastActivity < idleMilliseconds) {
       return { _tag: "ContinueSession", sessionId: session.id };
     }

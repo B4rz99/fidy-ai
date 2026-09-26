@@ -1,5 +1,6 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
+import { it as effectIt } from "@effect/vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
@@ -12,6 +13,8 @@ import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
+import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { transactionInput, transactionSession } from "./transactions";
@@ -180,6 +183,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0014_memory",
           "0015_statement_submission",
           "0016_budgets",
+          "0016_hosted_turn",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -739,6 +743,70 @@ const sendPublicRequest = (
         }),
     },
   });
+effectIt.effect(
+  "routes a browser Turn through public ingress, Core and the per-User coordinator to Workers AI",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const now = yield* Clock.currentTimeMillis;
+      const disclosure = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+      )(currentDisclosureFor());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO onboarding_consent_records
+      (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+      VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+          .bind("10000000-0000-4000-8000-000000000091", users[0], disclosure, now, now)
+          .run()
+      );
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: users[0] ?? "" } },
+        {
+          ...coordinatorEnvironment(db),
+          AI: {
+            run: (): Promise<Response> =>
+              Promise.resolve(
+                Response.json({
+                  choices: [
+                    {
+                      message: { role: "assistant", content: "Respuesta visible" },
+                      finish_reason: "stop",
+                    },
+                  ],
+                  usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+                })
+              ),
+          },
+        }
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/web/hosted-turns", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: '{"text":"Hola"}',
+          }),
+          {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: (request) => coordinator.fetch(new Request(request)),
+            }),
+          }
+        )
+      );
+      expect(response.status).toBe(200);
+      expect(yield* fromTestPromise(() => response.json())).toEqual({ text: "Respuesta visible" });
+      const rows = yield* fromTestPromise(() =>
+        db.prepare(`SELECT status FROM hosted_turns WHERE user_id = ?`).bind(users[0]).all()
+      );
+      expect(rows.results).toEqual([{ status: "completed" }]);
+    })
+);
 /** One manual capture submitted through the public ingress exactly as a client sends it. */
 const postTransaction = (index: number, body: object): Request =>
   new Request("https://api.fidyapp.com/transactions", {

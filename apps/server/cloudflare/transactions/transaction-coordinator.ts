@@ -1,13 +1,27 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
 import {
+  HostedTurnAdmission,
+  browserHostedDelivery,
+  completeHostedTurn,
+} from "../agent/hosted-turn";
+import {
   CanonicalCapability,
   CanonicalOperationId,
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
+<<<<<<< HEAD
 import { Context, Data, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
+=======
+import { Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import {
+  type WorkersAiEnvironment,
+  cloudflareHostedInferenceLive,
+  makeCloudflareHostedInference,
+} from "../ai/workers-ai";
+>>>>>>> 8a6ea92b (feat(agent): #704 complete one hosted Turn on Workers AI)
 import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
 import { unavailableStatement } from "../ingestion/statement-ingestion";
 import {
@@ -362,35 +376,62 @@ export class UserTransactionCoordinator {
     const environment = this.env;
     const userId = this.state.id.name;
     const settledResponse = this.pending.then(() =>
-      Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
-            if (Option.isNone(candidate)) return transactionUnavailable();
-            if (request.method === "POST" && new URL(request.url).pathname === "/statement-work") {
-              const activity = authorizedStatementActivity(candidate.value, userId);
-              if (Option.isNone(activity)) {
-                return transactionUnavailable();
-              }
-              return yield* executeStatementActivity(activity.value, environment, userId);
-            }
-            const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
-            if (
-              Option.isNone(admission) ||
-              admission.value.digest.length !== digestBytes ||
-              admission.value.userId !== userId
-            ) {
-              return transactionUnavailable();
-            }
-            return yield* executeCanonicalAdmission(admission.value, environment);
-          })
-        )
-      )
+      new URL(request.url).pathname === "/hosted-turn"
+        ? this.runHostedTurn(request, userId)
+        : Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
+                if (Option.isNone(candidate)) return transactionUnavailable();
+                if (request.method === "POST" && new URL(request.url).pathname === "/statement-work") {
+                  const activity = authorizedStatementActivity(candidate.value, userId);
+                  if (Option.isNone(activity)) return transactionUnavailable();
+                  return yield* executeStatementActivity(activity.value, environment, userId);
+                }
+                const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
+                if (
+                  Option.isNone(admission) ||
+                  admission.value.digest.length !== digestBytes ||
+                  admission.value.userId !== userId
+                ) {
+                  return transactionUnavailable();
+                }
+                return yield* executeCanonicalAdmission(admission.value, environment);
+              })
+            )
+          )
     );
     this.pending = settledResponse.then(
       () => undefined,
       () => undefined
     );
     return settledResponse;
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async runHostedTurn(request: Request, userId: string): Promise<Response> {
+    const candidate = await request.json().catch(() => undefined);
+    const admission = Schema.decodeUnknownOption(HostedTurnAdmission)(candidate);
+    if (
+      Option.isNone(admission) ||
+      admission.value.userId !== userId ||
+      admission.value.digest.length !== digestBytes
+    ) {
+      return transactionUnavailable();
+    }
+    const inference = await Effect.runPromiseExit(makeCloudflareHostedInference(this.env));
+    if (Exit.isFailure(inference)) return transactionUnavailable();
+    return completeHostedTurn({
+      db: this.env.DB,
+      subject: {
+        userId: admission.value.userId,
+        id: admission.value.sessionId,
+        digest: new Uint8Array(admission.value.digest),
+      },
+      text: admission.value.text,
+      inference: inference.value,
+      deliver: browserHostedDelivery,
+      signal: request.signal,
+    }).catch(() => transactionUnavailable());
   }
 }

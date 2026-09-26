@@ -112,6 +112,7 @@ export type OwnerOutcome = Readonly<{
   _tag: "Owner";
   operation: string;
   collisionKey: Option.Option<string>;
+  capacityKey: Option.Option<string>;
   read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
   inferAbort: (work: OwnerWork) => Effect.Effect<Option.Option<CanonicalMutationRefusal>>;
   triggerRefusal: (

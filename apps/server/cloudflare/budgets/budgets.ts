@@ -26,7 +26,7 @@ import {
   failedPreparation,
   refusedPreparation,
 } from "../mutations/mutation-types";
-import { budgetRefusal, findOwnedBudget } from "./budget-outcome";
+import { budgetOutcome, budgetRefusal, findOwnedBudget } from "./budget-outcome";
 import { dailyBudgetAuditLimit } from "./budget-audit";
 import { utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 
@@ -165,7 +165,7 @@ const statements = ({
   _tag: "Prepared",
   mutation: {
     requiredScope: callerScope(subject),
-    outcome,
+    outcome: budgetOutcome(outcome),
     auditBudget: isPATCaller(subject) ? "shared" : "owner",
     commitGuards: Option.some(({ db, userId, current, index }) =>
       budgetCommitGuards({

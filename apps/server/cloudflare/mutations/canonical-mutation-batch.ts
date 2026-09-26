@@ -571,7 +571,6 @@ const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Opt
 const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string> => {
   const outcome = mutation.outcome;
   if (outcome._tag === "Owner") return outcome.collisionKey;
-  if (outcome._tag === "KeywordRule") return Option.some(`keyword-rule:${outcome.ruleId}`);
   if (outcome._tag === "Memory") return Option.some(`memory:${outcome.memoryId}`);
   return Option.none();
 };

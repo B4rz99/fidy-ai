@@ -6,7 +6,8 @@ import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type CategoryFailure,
   CategoryNotFound,
-  type KeywordRule,
+  KeywordRule,
+  KeywordRuleId,
   KeywordRuleAlreadyExists,
   KeywordRuleLimitReached,
   NotFound,
@@ -31,6 +32,7 @@ import type {
   CommittedMutationValue,
   GuardRefusalWork,
   KeywordRuleOutcome,
+  OwnerOutcome,
 } from "./mutation-types";
 import {
   type TransactionCaller,
@@ -363,10 +365,86 @@ export const findKeywordRuleValue = ({
   outcome: KeywordRuleOutcome;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   outcome.operation === "categories.deleteKeywordRule"
-    ? Effect.succeedSome({ _tag: "RemovedKeywordRule" as const, id: outcome.ruleId })
+    ? Effect.succeedSome({
+        _tag: "Owner" as const,
+        payload: outcome.ruleId,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(outcome.ruleId),
+      })
     : Effect.tryPromise(() => findOwnedRule({ db, userId, id: outcome.ruleId })).pipe(
-        Effect.map((rule) =>
-          Option.map(rule, (value) => ({ _tag: "KeywordRule" as const, rule: value }))
+        Effect.map(
+          Option.map((rule) => ({
+            _tag: "Owner" as const,
+            payload: rule,
+            encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(rule),
+          }))
         ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
+
+/** The rule owner supplies readback, conflict replay, and its own trigger refusals. */
+export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome => ({
+  _tag: "Owner",
+  operation: outcome.operation,
+  collisionKey: Option.some(`keyword-rule:${outcome.ruleId}`),
+  capacityKey:
+    outcome.operation === "categories.createKeywordRule"
+      ? Option.some("keyword-rule-create")
+      : Option.none(),
+  read: (db, userId) => findKeywordRuleValue({ db, userId, outcome }),
+  inferAbort: ({ db, subject }) =>
+    keywordRuleAbortFailure({ db, userId: subject.userId, outcome }).pipe(
+      Effect.map(Option.map((failure) => keywordRuleRefusal({ failure, subject })))
+    ),
+  triggerRefusal: ({ subject }, kind) => {
+    if (kind === "capacity") {
+      return Option.some(
+        keywordRuleRefusal({
+          failure: new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
+          subject,
+        })
+      );
+    }
+    return kind === "audit" ? Option.some(keywordRuleBudgetRefusal()) : Option.none();
+  },
+});
+
+/**
+ * The create child an exhausted keyword-rule capacity blames: the child the replay finds over
+ * budget, otherwise the first create child the trigger can belong to, and None when the unit
+ * holds no create child. The retained count reads committed state, then earlier creates are
+ * replayed.
+ */
+export const keywordRuleCapacityIndex = ({
+  db,
+  userId,
+  mutations,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  mutations: ReadonlyArray<{ readonly outcome: CanonicalMutationOutcome }>;
+}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> =>
+  Effect.tryPromise({
+    try: () =>
+      countRows(
+        db.prepare("SELECT count(*) AS total FROM keyword_rules WHERE user_id = ?").bind(userId)
+      ),
+    catch: boundaryFailure,
+  }).pipe(
+    Effect.map((existing) => {
+      const remaining = maximumKeywordRulesPerUser - existing;
+      let createdIndex = -1;
+      let firstOwned: Option.Option<number> = Option.none();
+      for (const [index, mutation] of mutations.entries()) {
+        if (
+          mutation.outcome._tag !== "Owner" ||
+          !Option.contains(mutation.outcome.capacityKey, "keyword-rule-create")
+        ) {
+          continue;
+        }
+        if (Option.isNone(firstOwned)) firstOwned = Option.some(index);
+        createdIndex += 1;
+        if (createdIndex >= remaining) return Option.some(index);
+      }
+      return firstOwned;
+    })
+  );

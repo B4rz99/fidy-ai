@@ -1,5 +1,5 @@
-import { type Budget, type BudgetId } from "@fidy/server/budgets-runtime";
-import { Effect, Option } from "effect";
+import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import { Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,
   transactionFailure,
@@ -11,6 +11,7 @@ import type {
   BudgetOutcome,
   CanonicalMutationRefusal,
   CommittedMutationValue,
+  OwnerOutcome,
 } from "../mutations/mutation-types";
 
 /** One retained Budget by id and stable User; a foreign id resolves to absence. */
@@ -83,11 +84,33 @@ export const findBudgetValue = ({
   outcome: BudgetOutcome;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   outcome.operation === "budgets.deleteBudget"
-    ? Effect.succeedSome({ _tag: "RemovedBudget" as const, id: outcome.budgetId })
+    ? Effect.succeedSome({
+        _tag: "Owner" as const,
+        payload: outcome.budgetId,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(BudgetId))(outcome.budgetId),
+      })
     : Effect.tryPromise(() => findOwnedBudget({ db, userId, id: outcome.budgetId })).pipe(
-        Effect.map(Option.map((budget) => ({ _tag: "Budget" as const, budget }))),
+        Effect.map(
+          Option.map((budget) => ({
+            _tag: "Owner" as const,
+            payload: budget,
+            encode: () => Schema.encodeEffect(Schema.toCodecJson(Budget))(budget),
+          }))
+        ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
+
+/** Commit-time Budget decisions stay with the owner; only a proved audit trigger is attributed. */
+export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
+  _tag: "Owner",
+  operation: outcome.operation,
+  collisionKey: Option.none(),
+  capacityKey: Option.none(),
+  read: (db, userId) => findBudgetValue({ db, userId, outcome }),
+  inferAbort: () => Effect.succeedNone,
+  triggerRefusal: (_work, kind) =>
+    kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none(),
+});
 
 /** A Budget owner whose D1 authority cannot decide must fail closed. */
 export const unavailableBudget = transactionUnavailable;

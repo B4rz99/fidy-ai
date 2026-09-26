@@ -50,6 +50,7 @@ import {
 } from "../mutations/mutation-types";
 import {
   keywordRuleGuardFor,
+  keywordRuleOutcome,
   keywordRuleRefusal,
   keywordRuleUnavailable,
 } from "../mutations/keyword-rule-outcome";
@@ -185,7 +186,7 @@ const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
   mutation: {
     requiredScope: callerScope(write.subject),
     guardRefusal: keywordRuleGuardFor(write.outcome),
-    outcome: write.outcome,
+    outcome: keywordRuleOutcome(write.outcome),
     auditBudget: "shared",
     commitGuards:
       write.outcome.operation === "categories.createKeywordRule"

@@ -3,7 +3,7 @@ import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { PriceId } from "./reference";
-import { TrialPeriod } from "~/core/identity/model";
+import { TrialPeriod } from "~/core/identity/contract";
 import { AccessTier } from "~/core/access-tier/contract";
 
 export { PriceId } from "./reference";

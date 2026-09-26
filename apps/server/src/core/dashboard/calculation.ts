@@ -1,4 +1,4 @@
-import { BigDecimal, DateTime } from "effect";
+import { BigDecimal, DateTime, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import {
   type Currency,
@@ -151,3 +151,81 @@ export const dashboardMoneyGroupsFromMetrics = (
   dashboardMoneyGroupsFromSums(
     facts.map((fact) => ({ direction: fact.direction, money: metricMoney(fact) }))
   );
+
+/** Aggregate canonical Transaction facts by Currency and direction before finalizing a metric. */
+export const projectDashboardMetric: {
+  (
+    facts: ReadonlyArray<DashboardDirectionalAmountFact>,
+    aggregation: DashboardMetricFact["aggregation"]
+  ): MoneyGroups;
+  (
+    aggregation: DashboardMetricFact["aggregation"]
+  ): (facts: ReadonlyArray<DashboardDirectionalAmountFact>) => MoneyGroups;
+} = Function.dual(
+  2,
+  (
+    facts: ReadonlyArray<DashboardDirectionalAmountFact>,
+    aggregation: DashboardMetricFact["aggregation"]
+  ): MoneyGroups => {
+    const groups = new Map<
+      string,
+      Readonly<{
+        direction: DashboardDirectionalAmountFact["direction"];
+        currency: Currency;
+        sum: ReadonlyMoney["amount"];
+        maximum: ReadonlyMoney["amount"];
+        count: bigint;
+      }>
+    >();
+    for (const fact of facts) {
+      const key = `${fact.money.currency}:${fact.direction}`;
+      const previous = groups.get(key);
+      groups.set(key, {
+        direction: fact.direction,
+        currency: fact.money.currency,
+        sum: BigDecimal.sum(previous?.sum ?? zero, fact.money.amount),
+        maximum:
+          previous === undefined
+            ? fact.money.amount
+            : BigDecimal.max(previous.maximum, fact.money.amount),
+        count: (previous?.count ?? 0n) + 1n,
+      });
+    }
+    return dashboardMoneyGroupsFromMetrics(
+      [...groups.values()].map((group): DashboardMetricFact => {
+        if (aggregation === "average") {
+          return {
+            aggregation,
+            direction: group.direction,
+            sum: money(group.currency, group.sum),
+            count: group.count,
+          };
+        }
+        return {
+          aggregation,
+          direction: group.direction,
+          money: money(group.currency, aggregation === "maximum" ? group.maximum : group.sum),
+        };
+      })
+    );
+  }
+);
+
+/** Exact outflow spend for the selected Budget Currency, never netted with income. */
+export const dashboardBudgetSpent: {
+  (facts: ReadonlyArray<DashboardDirectionalAmountFact>, currency: Currency): Money;
+  (currency: Currency): (facts: ReadonlyArray<DashboardDirectionalAmountFact>) => Money;
+} = Function.dual(
+  2,
+  (facts: ReadonlyArray<DashboardDirectionalAmountFact>, currency: Currency): Money =>
+    money(
+      currency,
+      facts.reduce(
+        (total: Readonly<ReadonlyMoney["amount"]>, fact) =>
+          fact.direction === "outflow" && fact.money.currency === currency
+            ? BigDecimal.sum(total, fact.money.amount)
+            : total,
+        zero
+      )
+    )
+);

@@ -19,6 +19,7 @@ import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/bud
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
 import { listPendingInsights } from "./insights/insight-store";
+import { browseDashboard } from "./dashboard/dashboard";
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
 import { budgetRefusal } from "./budgets/budget-outcome";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
@@ -1493,6 +1494,31 @@ const insightResponse = (
   );
 };
 
+const DashboardOperation = Schema.Literals([
+  "dashboard.getDashboard",
+  "dashboard.getDashboardView",
+  "dashboard.listDashboardCatalog",
+  "dashboard.applyDashboardEdit",
+]);
+
+/** Select Dashboard work from the canonical catalog without an independent route declaration. */
+const dashboardResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response>> =>
+  Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) =>
+    browseDashboard({
+      db: input.environment.DB,
+      subject: input.subject,
+      operation,
+      request: input.request,
+    })
+  );
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1522,8 +1548,10 @@ const executeCanonicalWork = (
     }).pipe(Effect.orElseSucceed(unavailable));
   }
   const ownerResponse = Option.orElse(insightResponse(input), () =>
-    Option.orElse(budgetResponse(input), () =>
-      Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
+    Option.orElse(dashboardResponse(input), () =>
+      Option.orElse(budgetResponse(input), () =>
+        Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
+      )
     )
   );
   if (Option.isSome(ownerResponse)) return ownerResponse.value;

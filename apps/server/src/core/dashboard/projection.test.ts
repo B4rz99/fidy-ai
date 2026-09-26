@@ -1,10 +1,17 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Option, Schema } from "effect";
 import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Category } from "~/core/categories/model";
 import { CategoryId } from "~/core/categories/reference";
-import { dashboardBucket, groupDashboardChart, includesDashboardTransaction } from "./projection";
+import { Transaction } from "~/core/transactions/model";
+import { type AppliedDashboardPeriod, Widget } from "./model";
+import {
+  dashboardBucket,
+  groupDashboardChart,
+  includesDashboardTransaction,
+  selectDashboardFacts,
+} from "./projection";
 
 const categoryId = CategoryId.make("10000000-0000-4000-8000-000000000001");
 const category = Schema.decodeSync(Category)({ id: categoryId, label: "Restaurantes" });
@@ -35,6 +42,47 @@ it("keeps a Transaction only when category, half-open period, and normalized not
   expect(
     includesDashboardTransaction(transaction, { ...criteria, search: Option.some("otro") })
   ).toBe(false);
+});
+
+it("selects effective facts according to a Widget's Category, search, and period", () => {
+  const transaction = Schema.decodeSync(Schema.toCodecJson(Transaction))({
+    id: "20000000-0000-4000-8000-000000000001",
+    money: { amount: "1.23", currency: "COP" },
+    direction: "outflow",
+    categoryId,
+    occurredAt: "2026-03-09T04:00:00.000Z",
+    createdAt: "2026-03-09T04:00:00.000Z",
+    revision: 1,
+    notes: "Café de mañana",
+  });
+  const facts = [{ transaction, category }];
+  const list = Schema.decodeSync(Widget)({
+    id: "30000000-0000-4000-8000-000000000001",
+    type: "transaction-list",
+    limit: 5,
+    search: "CAFÉ",
+  });
+  if (list.type !== "transaction-list") throw new Error("Expected Transaction list");
+  const period: AppliedDashboardPeriod = {
+    requested: "this-week",
+    from: DateTime.makeUnsafe(Date.parse("2026-03-08T05:00:00.000Z")),
+    toExclusive: DateTime.makeUnsafe(Date.parse("2026-03-10T04:00:00.000Z")),
+    timeZone: zone,
+  };
+  expect(selectDashboardFacts(facts, list, Option.some(period))).toHaveLength(1);
+  expect(
+    selectDashboardFacts(
+      facts,
+      list,
+      Option.some({
+        ...period,
+        toExclusive: transaction.occurredAt,
+      })
+    )
+  ).toHaveLength(0);
+  expect(selectDashboardFacts(facts, { ...list, search: "unrelated" }, Option.none())).toHaveLength(
+    0
+  );
 });
 
 it("assigns a UTC instant to the User's local day and month across the DST boundary", () => {

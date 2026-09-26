@@ -18,7 +18,7 @@ import {
 import { Transaction } from "../../src/core/transactions/model";
 import {
   groupDashboardChart,
-  includesDashboardTransaction,
+  selectDashboardFacts as selected,
 } from "../../src/core/dashboard/projection";
 import { type DashboardView, type DashboardWidgetView } from "../../src/shell/dashboard/operations";
 import { budgetFromRow } from "../budgets/budget-row";
@@ -149,34 +149,6 @@ export const loadDashboardFacts = (
     return decodeFacts({ userResult, categories, budgets, movements });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-const selected = (
-  movements: ReadonlyArray<DashboardTransactionFact>,
-  widget: Widget,
-  period: Option.Option<ReturnType<typeof resolveDashboardPeriod>> = Option.none()
-): ReadonlyArray<DashboardTransactionFact> => {
-  const categories =
-    widget.type === "budget-bar"
-      ? Option.some([widget.categoryId])
-      : Option.fromUndefinedOr(widget.categories);
-  const search =
-    widget.type === "transaction-list" ? Option.fromUndefinedOr(widget.search) : Option.none();
-  const interval = Option.map(period, ({ from, toExclusive }) => ({
-    from: from.epochMilliseconds,
-    toExclusive: toExclusive.epochMilliseconds,
-  }));
-  return movements.filter(({ transaction }) =>
-    includesDashboardTransaction(
-      {
-        categoryId: transaction.categoryId,
-        occurredAt: transaction.occurredAt.epochMilliseconds,
-        counterparty: transaction.counterparty,
-        notes: transaction.notes,
-      },
-      { categories, period: interval, search }
-    )
-  );
-};
-
 type ChartWidget = Extract<Widget, { type: "spending-chart" }>;
 
 const renderChart = (
@@ -210,7 +182,7 @@ const renderList = (
   widget: Extract<Widget, { type: "transaction-list" }>,
   facts: Loaded
 ): DashboardWidgetView => {
-  const rows = selected(facts.movements, widget).slice(0, widget.limit);
+  const rows = selected(facts.movements, widget, Option.none()).slice(0, widget.limit);
   return {
     widget,
     result: {

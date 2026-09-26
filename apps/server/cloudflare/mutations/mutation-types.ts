@@ -26,7 +26,7 @@ import type {
   RestoredTransactionPair,
   TransactionPresentation,
 } from "@fidy/server/transactions-runtime";
-import type { Effect, Option } from "effect";
+import type { Effect, Option, Schema } from "effect";
 import type {
   CanonicalRefusalDisposition,
   TransactionCaller,
@@ -103,8 +103,26 @@ export type BudgetOutcome = Readonly<{
   budgetId: BudgetId;
 }>;
 
+export type MutationTriggerKind = "movement" | "capacity" | "audit";
+
+type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
+
+/** Owner behavior at the shared commit, audit, and readback boundary. */
+export type OwnerOutcome = Readonly<{
+  _tag: "Owner";
+  operation: string;
+  collisionKey: Option.Option<string>;
+  read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
+  inferAbort: (work: OwnerWork) => Effect.Effect<Option.Option<CanonicalMutationRefusal>>;
+  triggerRefusal: (
+    work: OwnerWork,
+    kind: MutationTriggerKind
+  ) => Option.Option<CanonicalMutationRefusal>;
+}>;
+
 export type CanonicalMutationOutcome =
   | BudgetOutcome
+  | OwnerOutcome
   | Readonly<{
       _tag: "Insight";
       operation:
@@ -181,6 +199,11 @@ export type PreparedCanonicalMutation = Readonly<{
 
 /** One canonical success value an owner read back after the unit committed. */
 export type CommittedMutationValue =
+  | Readonly<{
+      _tag: "Owner";
+      payload: unknown;
+      encode: () => Effect.Effect<unknown, Schema.SchemaError>;
+    }>
   | Readonly<{ _tag: "Insight"; insight: InsightEvent }>
   | Readonly<{
       _tag: "DeliveredInsight";

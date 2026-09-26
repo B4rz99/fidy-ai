@@ -190,6 +190,8 @@ const triggerRefusal = ({
     case "Insight":
     case "Dashboard":
       return auditOnly(budgetAuditLimitRefusal());
+    case "Owner":
+      return mutation.outcome.triggerRefusal({ db, subject: scoped, current }, kind);
     case "Transaction":
       return transactionTriggerRefusal({
         db,
@@ -474,6 +476,8 @@ const findCommittedValue = ({
       return findCommittedInsight({ db, userId, outcome: mutation.outcome });
     case "Dashboard":
       return findDashboardValue({ db, userId, operation: mutation.outcome.operation });
+    case "Owner":
+      return mutation.outcome.read(db, userId);
     case "Transaction":
       return findTransactionValue({ db, userId, outcome: mutation.outcome });
     case "KeywordRule":
@@ -622,6 +626,7 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
   if (value._tag === "Budget") return value.budget;
   if (value._tag === "Dashboard") return value.document;
   if (value._tag === "DashboardView") return value.view;
+  if (value._tag === "Owner") return value.payload;
   if (value._tag === "Insight") return value.insight;
   if (value._tag === "DeliveredInsight") {
     return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
@@ -693,7 +698,8 @@ const encodeEntityValue = (
         | "Insight"
         | "DeliveredInsight"
         | "Dashboard"
-        | "DashboardView";
+        | "DashboardView"
+        | "Owner";
     }
   >
 ): Effect.Effect<unknown, Schema.SchemaError> => {
@@ -712,6 +718,7 @@ const encodeEntityValue = (
 const encodeExistingValue = (
   value: ExistingCommittedValue
 ): Effect.Effect<unknown, Schema.SchemaError> => {
+  if (value._tag === "Owner") return value.encode();
   if (value._tag === "Dashboard") {
     return Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(value.document);
   }

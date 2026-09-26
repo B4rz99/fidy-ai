@@ -129,9 +129,7 @@ export const browseDashboard = ({
       current,
       preparation,
       present: (value) =>
-        value._tag === "Dashboard" || value._tag === "DashboardView"
-          ? presentDashboard(value)
-          : Effect.succeed(transactionUnavailable()),
+        value._tag === "Owner" ? presentDashboard(value) : Effect.succeed(transactionUnavailable()),
       retryStatement: Option.none(),
     });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));

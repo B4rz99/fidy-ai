@@ -26,6 +26,8 @@ import {
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
+  type CommittedMutationValue,
+  type OwnerOutcome,
   credentialRefusedPreparation,
   failedPreparation,
   refusedPreparation,
@@ -280,8 +282,7 @@ const preparedDashboard = ({
       ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
       audit(work, operation, "accepted"),
     ],
-    completion: work.db.prepare(dashboardCompletion),
-    outcome: { _tag: "Dashboard", operation, expectedRevision: revision },
+    outcome: dashboardOutcome(operation, revision),
   },
 });
 
@@ -343,6 +344,40 @@ export const prepareDashboard = ({
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
+/** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
+const dashboardOutcome = (
+  operation: DashboardMutationOperation,
+  expectedRevision: number
+): OwnerOutcome => ({
+  _tag: "Owner",
+  operation,
+  collisionKey: Option.some("dashboard-document"),
+  read: (db, userId) => findDashboardValue({ db, userId, operation }),
+  inferAbort: ({ db, subject, current }) =>
+    findDashboardDocument({ db, userId: subject.userId }).pipe(
+      Effect.map((found) =>
+        Option.isSome(found) && expectedRevision > 0 && found.value.revision !== expectedRevision
+          ? Option.some(
+              dashboardRefusal({
+                work: { db, subject, current },
+                operation,
+                code: "validation_failed",
+              })
+            )
+          : Option.none()
+      )
+    ),
+  triggerRefusal: (_work, kind) =>
+    kind === "audit"
+      ? Option.some({
+          code: "rate_limited",
+          message: "Daily audit budget exhausted.",
+          record: () => Effect.succeed("rate_limited" as const),
+          respond: () => Effect.succeed(transactionUnavailable()),
+        })
+      : Option.none(),
+});
+
 /** Read the committed document or ephemeral view from the same User after the unit commits. */
 export const findDashboardValue = ({
   db,
@@ -352,19 +387,17 @@ export const findDashboardValue = ({
   db: D1Database;
   userId: string;
   operation: DashboardMutationOperation;
-}>): Effect.Effect<
-  Option.Option<
-    Readonly<
-      | { _tag: "Dashboard"; document: DashboardDocument }
-      | { _tag: "DashboardView"; view: DashboardView }
-    >
-  >
-> =>
+}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     const found = yield* findDashboardDocument({ db, userId });
     if (Option.isNone(found)) return Option.none();
     if (operation !== "dashboard.getDashboardView") {
-      return Option.some({ _tag: "Dashboard" as const, document: found.value.document });
+      const document = found.value.document;
+      return Option.some({
+        _tag: "Owner" as const,
+        payload: document,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
+      });
     }
     const facts = yield* loadDashboardFacts(db, userId);
     if (Option.isNone(facts)) return Option.none();
@@ -373,20 +406,18 @@ export const findDashboardValue = ({
       facts.value,
       DateTime.nowUnsafe()
     );
-    return Option.some({ _tag: "DashboardView" as const, view });
+    return Option.some({
+      _tag: "Owner" as const,
+      payload: view,
+      encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardView))(view),
+    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /** The Dashboard owner presents exactly the same value for individual and batch callers. */
 export const presentDashboard = (
-  value: Readonly<
-    | { _tag: "Dashboard"; document: DashboardDocument }
-    | { _tag: "DashboardView"; view: DashboardView }
-  >
+  value: Extract<CommittedMutationValue, { _tag: "Owner" }>
 ): Effect.Effect<Response> =>
-  (value._tag === "Dashboard"
-    ? Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(value.document)
-    : Schema.encodeEffect(Schema.toCodecJson(DashboardView))(value.view)
-  ).pipe(
+  value.encode().pipe(
     Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })),
     Effect.orElseSucceed(transactionUnavailable)
   );

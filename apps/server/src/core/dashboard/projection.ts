@@ -3,8 +3,9 @@ import type { IanaTimeZone } from "~/core/_shared/context";
 import { type MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import type { Category } from "~/core/categories/model";
 import type { CategoryId } from "~/core/categories/reference";
+import type { Transaction } from "~/core/transactions/model";
 import { dashboardMoneyGroupsFromSums } from "./calculation";
-import type { SpendingGroupBy } from "./model";
+import type { AppliedDashboardPeriod, SpendingGroupBy, Widget } from "./model";
 
 const monthCharacters = 7;
 
@@ -43,6 +44,50 @@ export const includesDashboardTransaction: {
   const text = `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`;
   return text.toLocaleLowerCase("es-CO").includes(criteria.search.value.toLocaleLowerCase("es-CO"));
 });
+
+/** Selects the effective Transaction facts needed by a Widget and its applied period. */
+export const selectDashboardFacts: {
+  <Fact extends Readonly<{ transaction: Transaction }>>(
+    facts: ReadonlyArray<Fact>,
+    widget: Widget,
+    period: Option.Option<AppliedDashboardPeriod>
+  ): ReadonlyArray<Fact>;
+  (
+    widget: Widget,
+    period: Option.Option<AppliedDashboardPeriod>
+  ): <Fact extends Readonly<{ transaction: Transaction }>>(
+    facts: ReadonlyArray<Fact>
+  ) => ReadonlyArray<Fact>;
+} = Function.dual(
+  3,
+  <Fact extends Readonly<{ transaction: Transaction }>>(
+    facts: ReadonlyArray<Fact>,
+    widget: Widget,
+    period: Option.Option<AppliedDashboardPeriod>
+  ): ReadonlyArray<Fact> => {
+    const categories =
+      widget.type === "budget-bar"
+        ? Option.some([widget.categoryId])
+        : Option.fromUndefinedOr(widget.categories);
+    const search =
+      widget.type === "transaction-list" ? Option.fromUndefinedOr(widget.search) : Option.none();
+    const interval = Option.map(period, ({ from, toExclusive }) => ({
+      from: from.epochMilliseconds,
+      toExclusive: toExclusive.epochMilliseconds,
+    }));
+    return facts.filter(({ transaction }) =>
+      includesDashboardTransaction(
+        {
+          categoryId: transaction.categoryId,
+          occurredAt: transaction.occurredAt.epochMilliseconds,
+          counterparty: transaction.counterparty,
+          notes: transaction.notes,
+        },
+        { categories, period: interval, search }
+      )
+    );
+  }
+);
 
 /** One spending-chart bucket key, resolved in the User's time zone for calendar dimensions. */
 export type DashboardBucket =

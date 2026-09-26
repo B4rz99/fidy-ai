@@ -221,7 +221,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         {
           prepare,
           present: (value: CommittedMutationValue) =>
-            value._tag === "Dashboard" || value._tag === "DashboardView"
+            value._tag === "Owner"
               ? presentDashboard(value)
               : Effect.succeed(transactionUnavailable()),
           invalidRefusal: (work: CanonicalMutationWork) =>

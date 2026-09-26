@@ -157,6 +157,8 @@ const wompiBillingEventPath = "/providers/wompi/billing-events";
 const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
+const hostedTurnPath = "/web/hosted-turns";
+const hostedReceiptPath = "/web/hosted-turns/delivery";
 const enrollmentPreparePath = "/web/subscription/card-enrollments/prepare";
 const enrollmentSubmitPath = "/web/subscription/card-enrollments/submit";
 const enrollmentStatusPath =
@@ -187,6 +189,8 @@ const postPaths = new Set<string>([
   enrollmentPreparePath,
   enrollmentSubmitPath,
   statementStagingPath,
+  hostedTurnPath,
+  hostedReceiptPath,
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
@@ -194,6 +198,8 @@ const browserMutationPaths = new Set<string>([
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
+  hostedTurnPath,
+  hostedReceiptPath,
 ]);
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
@@ -232,6 +238,8 @@ const cookieForwardPaths = new Set<string>([
   "/web/session/logout",
   rotateRecoveryPath,
   statementStagingPath,
+  hostedTurnPath,
+  hostedReceiptPath,
 ]);
 
 const browserHeaders = (request: Request, path: string): Headers => {
@@ -253,6 +261,8 @@ const supportHeaders = (request: Request): Headers =>
   });
 const forwardsSession = (request: Request, path: string): boolean =>
   path === userPath ||
+  path === hostedTurnPath ||
+  path === hostedReceiptPath ||
   transactionPath(path) ||
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
@@ -343,6 +353,7 @@ const coreRequest = (
         headers,
         method: request.method,
         body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        signal: request.signal,
       }
     );
   });

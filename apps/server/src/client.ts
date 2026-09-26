@@ -8,6 +8,13 @@ export {
   TokenAuthorizationClientAnonymousLive,
 } from "~/shell/_shared/authz";
 export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
+export {
+  HostedTurnApi,
+  HostedTurnRequest,
+  HostedTurnReceipt,
+  HostedTurnProposal,
+  type HostedTurnApiGroups,
+} from "~/shell/agent/hosted-turn-api";
 export { isHttpOrigin } from "~/shell/public-http/contract";
 export {
   ActivePATList,

@@ -22,11 +22,11 @@ PostgreSQL, and a Bun process are superseded Production architecture under ADR 0
 Core Worker in `apps/server/cloudflare` owns the D1-backed Categories adapter path, the direct
 Workers AI binding boundary, the service-binding boundary, and the bounded health projection. It
 declares that binding without building it: the User coordinator Durable Object builds the
-hosted-inference layer, and only for the Memory work that consumes it. The server's Cloudflare
-runtime owns resource admission, User-coordinated canonical mutations, statement staging, and the
-Queue/Workflow adapters for onboarding email, browser-pairing email, email replacement, and billing
-collection. Operations without an installed adapter fail closed; declaring an operation or binding
-is not evidence that its full execution path is available.
+hosted-inference layer only for Memory work and admitted hosted Turns that consume it. The server's
+Cloudflare runtime owns resource admission, User-coordinated canonical mutations, statement staging,
+and the Queue/Workflow adapters for onboarding email, browser-pairing email, email replacement, and
+billing collection. Operations without an installed adapter fail closed; declaring an operation or
+binding is not evidence that its full execution path is available.
 
 ## 2. Slices and ownership
 
@@ -66,8 +66,8 @@ destinations, credential handling, redirects, byte limits, status projection, an
 Provider adapters cannot import raw transport or private implementation modules.
 
 Hosted inference exposes a provider-neutral contract backed only by the direct Workers AI binding
-the User coordinator Durable Object builds for Memory work, which the Core Worker declares without
-building. A closed approved-model schema and live provider-conformance gate protect canonical tool,
+the User coordinator Durable Object builds for Memory work and hosted Turns, which the Core Worker
+only declares without building. A closed approved-model schema and live provider-conformance gate protect canonical tool,
 continuation, structured-output, and `es-CO` behavior. Unsupported or absent configuration fails
 with typed unavailability, and there is no gateway, direct OpenAI, or external-model fallback.
 
@@ -85,7 +85,20 @@ taxonomy and User-owned keyword rules. Subscription queries derive AccessTier fr
 TrialPeriod and settled paid period at the decision instant, return a bounded User-owned standing
 projection and published Prices, and audit each protected read in its D1 unit. Verified Wompi
 settlement creates immutable paid periods in the same atomic unit as BillingAttempt success; no
-independent AccessTier owner is stored. The canonical Categories implementation runs the bounded
+independent AccessTier owner is stored. Hosted Turns are serialized by the per-User coordinator;
+D1 retains their User entry and Pending status atomically. A generated reply is an immutable
+short-lived delivery proposal, not Transcript evidence. The authenticated browser receives the
+proposal, renders it, and sends a one-use receipt through the same coordinator. Only that receipt
+atomically writes the exact assistant entry and Completed status; delivery failure becomes Failed,
+while an unacknowledged proposal becomes Interrupted after its delivery window via a per-User
+Durable Object alarm, even without another request. The private Core scheduled sweep independently
+recovers missing alarms, including admission-to-alarm failures, without a User request. Expired
+receipts fail closed and recover the
+pending Turn. The same per-User alarm removes exact terminal Transcript content after thirty days
+while retaining metadata-only Turn status; D1 rejects premature or Pending-evidence deletion.
+The browser conversation/receipt contract is server-owned and deliberately separate
+from canonical tool-callable operations (see root architecture §2). The User's daily
+hosted-Turn allowance is read before model preflight and guarded again at insertion. The canonical Categories implementation runs the bounded
 ordered query, decodes every row through the published Category schema, and is shared by the
 operation registry and the private Core Worker adapter. Keyword rules are scoped to one User and
 reference stable CategoryIds; capture reads them for future Transactions and no rule change

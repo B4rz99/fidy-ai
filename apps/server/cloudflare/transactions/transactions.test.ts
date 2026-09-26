@@ -1,5 +1,6 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
+import { it as effectIt } from "@effect/vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
@@ -12,6 +13,13 @@ import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
+import { currentDisclosureFor } from "@fidy/server/consent-ingress";
+import { hostedDeliveryReceipt } from "../agent/hosted-turn";
+import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
+import { pendingExecutionRecoveryMs } from "../agent/turn-store";
+import { newId } from "../pats/pat-shared";
+import { transactionNow } from "./transaction-boundary";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { transactionInput, transactionSession } from "./transactions";
@@ -180,6 +188,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0014_memory",
           "0015_statement_submission",
           "0016_budgets",
+          "0016_hosted_turn",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -726,9 +735,10 @@ const sendPublicRequest = (
           USER_TRANSACTION_COORDINATOR: coordinator ?? {
             getByName: (name) => ({
               fetch: (command) =>
-                new UserTransactionCoordinator({ id: { name } }, coordinatorEnvironment(db)).fetch(
-                  new Request(command)
-                ),
+                new UserTransactionCoordinator(
+                  { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+                  coordinatorEnvironment(db)
+                ).fetch(new Request(command)),
             }),
           },
           KAPSO_API_KEY: "",
@@ -739,6 +749,596 @@ const sendPublicRequest = (
         }),
     },
   });
+effectIt.effect(
+  "routes a browser Turn through public ingress, Core and the per-User coordinator to Workers AI",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const now = yield* Clock.currentTimeMillis;
+      const disclosure = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+      )(currentDisclosureFor());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO onboarding_consent_records
+      (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+      VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+          .bind("10000000-0000-4000-8000-000000000091", users[0], disclosure, now, now)
+          .run()
+      );
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        {
+          ...coordinatorEnvironment(db),
+          AI: {
+            run: (): Promise<Response> =>
+              Promise.resolve(
+                Response.json({
+                  choices: [
+                    {
+                      message: { role: "assistant", content: "Respuesta visible" },
+                      finish_reason: "stop",
+                    },
+                  ],
+                  usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+                })
+              ),
+          },
+        }
+      );
+      const hostedCoordinator = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request) => coordinator.fetch(new Request(request)),
+        }),
+      };
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/web/hosted-turns", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: '{"text":"Hola"}',
+          }),
+          hostedCoordinator
+        )
+      );
+      expect(response.status).toBe(202);
+      const visible = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          text: Schema.String,
+          ...hostedDeliveryReceipt.fields,
+        })
+      )(yield* fromTestPromise(() => response.json()));
+      expect(visible.text).toBe("Respuesta visible");
+      const before = yield* fromTestPromise(() =>
+        db.prepare(`SELECT status FROM hosted_turns WHERE user_id = ?`).bind(users[0]).all()
+      );
+      expect(before.results).toEqual([{ status: "pending" }]);
+      const receiptBody = yield* Schema.encodeEffect(Schema.fromJsonString(hostedDeliveryReceipt))({
+        turnId: visible.turnId,
+        receipt: visible.receipt,
+      });
+      const badReceipt = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          hostedReceiptBrowserRequest(0, receiptBody.replace(visible.receipt, "0".repeat(64))),
+          hostedCoordinator
+        )
+      );
+      expect(badReceipt.status).toBe(401);
+      const confirmation = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedReceiptBrowserRequest(0, receiptBody), hostedCoordinator)
+      );
+      expect(confirmation.status).toBe(200);
+      const replay = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedReceiptBrowserRequest(0, receiptBody), hostedCoordinator)
+      );
+      expect(replay.status).toBe(401);
+      const rows = yield* fromTestPromise(() =>
+        db.prepare(`SELECT status FROM hosted_turns WHERE user_id = ?`).bind(users[0]).all()
+      );
+      expect(rows.results).toEqual([{ status: "completed" }]);
+    })
+);
+const hostedReceiptBrowserRequest = (index: number, body: string): Request =>
+  new Request("https://api.fidyapp.com/web/hosted-turns/delivery", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body,
+  });
+const hostedBrowserRequest = (index: number, text: string): Request =>
+  new Request("https://api.fidyapp.com/web/hosted-turns", {
+    method: "POST",
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ text }),
+  });
+const grantHostedConsent = ({
+  db,
+  user,
+  grant,
+  time,
+}: Readonly<{
+  db: D1Database;
+  user: string;
+  grant: string;
+  time: number;
+}>): Promise<D1Response> => {
+  const disclosure = Schema.encodeSync(
+    Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+  )(currentDisclosureFor());
+  return db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+    VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+    .bind(grant, user, disclosure, time, time)
+    .run();
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const hostedNegativeFixture = async (
+  run: () => Promise<Response>
+): Promise<
+  Readonly<{
+    db: D1Database;
+    coordinator: Readonly<{ getByName: () => Pick<Fetcher, "fetch"> }>;
+  }>
+> => {
+  const db = await setup();
+  await grantHostedConsent({
+    db,
+    user: users[0] ?? "",
+    grant: "10000000-0000-4000-8000-000000000091",
+    time: transactionNow(),
+  });
+  const instance = new UserTransactionCoordinator(
+    { id: { name: users[0] ?? "" }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    { ...coordinatorEnvironment(db), AI: { run } }
+  );
+  return {
+    db,
+    coordinator: {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+      }),
+    },
+  };
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects malformed model output at public ingress without retaining assistant evidence", async () => {
+  const { db, coordinator } = await hostedNegativeFixture(() =>
+    Promise.resolve(
+      Response.json({
+        choices: [{ message: { role: "assistant", content: "" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+      })
+    )
+  );
+  const response = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator);
+  expect(response.status).toBe(503);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "failed" },
+  ]);
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
+      .results
+  ).toEqual([{ kind: "user" }, { kind: "failed" }]);
+  expect(
+    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
+  ).toHaveLength(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("recovers a committed Pending Turn by independent Core cron when its DO alarm fails", async () => {
+  const db = await setup();
+  await grantHostedConsent({
+    db,
+    user: users[0] ?? "",
+    grant: "10000000-0000-4000-8000-000000000091",
+    time: transactionNow(),
+  });
+  const instance = new UserTransactionCoordinator(
+    {
+      id: { name: users[0] ?? "" },
+      storage: { setAlarm: (): Promise<void> => Promise.reject(new Error("alarm unavailable")) },
+    },
+    {
+      ...coordinatorEnvironment(db),
+      AI: { run: (): Promise<never> => Promise.reject(new Error("must not run")) },
+    }
+  );
+  const binding = {
+    getByName: (): Pick<Fetcher, "fetch"> => ({
+      fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+    }),
+  };
+  const response = await sendPublicRequest(db, hostedBrowserRequest(0, "Private text"), binding);
+  expect(response.status).toBe(503);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "pending" },
+  ]);
+  await sweepHostedTurns(db, transactionNow() + pendingExecutionRecoveryMs + 1);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "interrupted" },
+  ]);
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
+      .results
+  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+  expect(
+    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
+  ).toHaveLength(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("interrupts an aborted public Turn without retaining a proposed assistant reply", async () => {
+  const controller = new AbortController();
+  const { db, coordinator } = await hostedNegativeFixture(() => {
+    controller.abort();
+    return Promise.resolve(
+      Response.json({
+        choices: [
+          { message: { role: "assistant", content: "Must not persist" }, finish_reason: "stop" },
+        ],
+        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+      })
+    );
+  });
+  const request = new Request(hostedBrowserRequest(0, "Hola"), { signal: controller.signal });
+  const response = await sendPublicRequest(db, request, coordinator);
+  expect(response.status).not.toBe(200);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "interrupted" },
+  ]);
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
+      .results
+  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+  expect(
+    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
+  ).toHaveLength(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects a receipt when its WebSession is revoked between lookup and atomic completion", async () => {
+  const db = await setup();
+  await grantHostedConsent({
+    db,
+    user: users[0] ?? "",
+    grant: "10000000-0000-4000-8000-000000000091",
+    time: transactionNow(),
+  });
+  let revokeBeforeBatch = false;
+  const controlledDb = new Proxy(db, {
+    get(target, property): unknown {
+      if (property === "batch") {
+        return (
+          statements: Parameters<D1Database["batch"]>[0]
+        ): ReturnType<D1Database["batch"]> => {
+          if (!revokeBeforeBatch) {
+            return target.batch(statements);
+          }
+          revokeBeforeBatch = false;
+          return target
+            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+            .bind(transactionNow(), users[0])
+            .run()
+            .then(() => target.batch(statements));
+        };
+      }
+      const method: unknown = Reflect.get(target, property);
+      return typeof method === "function" ? method.bind(target) : method;
+    },
+  });
+  const instance = new UserTransactionCoordinator(
+    { id: { name: users[0] ?? "" }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    {
+      ...coordinatorEnvironment(controlledDb),
+      AI: {
+        run: (): Promise<Response> =>
+          Promise.resolve(
+            Response.json({
+              choices: [
+                { message: { role: "assistant", content: "Proposal" }, finish_reason: "stop" },
+              ],
+              usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+            })
+          ),
+      },
+    }
+  );
+  const binding = {
+    getByName: (): Pick<Fetcher, "fetch"> => ({
+      fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+    }),
+  };
+  const proposed = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), binding);
+  expect(proposed.status).toBe(202);
+  const reply = Schema.decodeUnknownSync(Schema.Struct({ ...hostedDeliveryReceipt.fields }))(
+    await proposed.json()
+  );
+  revokeBeforeBatch = true;
+  const receipt = await sendPublicRequest(
+    db,
+    hostedReceiptBrowserRequest(
+      0,
+      JSON.stringify({ turnId: reply.turnId, receipt: reply.receipt })
+    ),
+    binding
+  );
+  expect(receipt.status).toBe(401);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "pending" },
+  ]);
+  expect((await db.prepare("SELECT kind FROM transcript_entries").all()).results).toEqual([
+    { kind: "user" },
+  ]);
+  expect(
+    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
+  ).toHaveLength(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects an expired visible receipt and interrupts the Turn at public ingress", async () => {
+  const { db, coordinator } = await hostedNegativeFixture(() =>
+    Promise.resolve(
+      Response.json({
+        choices: [{ message: { role: "assistant", content: "Reply" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+      })
+    )
+  );
+  const reply = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator);
+  expect(reply.status).toBe(202);
+  const proposal = Schema.decodeUnknownSync(
+    Schema.Struct({
+      text: Schema.String,
+      ...hostedDeliveryReceipt.fields,
+    })
+  )(await reply.json());
+  const stored = await db
+    .prepare("SELECT receipt_digest FROM hosted_delivery_proposals WHERE turn_id = ?")
+    .bind(proposal.turnId)
+    .first<{ receipt_digest: ArrayBuffer }>();
+  if (stored === null) throw Error("missing proposal");
+  await db
+    .prepare("DELETE FROM hosted_delivery_proposals WHERE turn_id = ?")
+    .bind(proposal.turnId)
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
+    )
+    .bind(
+      proposal.turnId,
+      users[0],
+      stored.receipt_digest,
+      transactionNow() - 121_000,
+      proposal.text
+    )
+    .run();
+  const receipt = await sendPublicRequest(
+    db,
+    hostedReceiptBrowserRequest(
+      0,
+      JSON.stringify({ turnId: proposal.turnId, receipt: proposal.receipt })
+    ),
+    coordinator
+  );
+  expect(receipt.status).toBe(401);
+  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
+    { status: "interrupted" },
+  ]);
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
+      .results
+  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+  expect(
+    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
+  ).toHaveLength(0);
+});
+
+effectIt.effect("refuses repeated public over-allowance Turns before buying model context", () =>
+  Effect.gen(function* () {
+    const db = yield* fromTestPromise(() => setup());
+    const user = users[0] ?? "";
+    yield* fromTestPromise(() =>
+      grantHostedConsent({
+        db,
+        user,
+        grant: "10000000-0000-4000-8000-000000000091",
+        time: transactionNow(),
+      })
+    );
+    let calls = 0;
+    const coordinator = new UserTransactionCoordinator(
+      { id: { name: user }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      {
+        ...coordinatorEnvironment(db),
+        AI: {
+          run: (): Promise<Response> => {
+            calls++;
+            return Promise.resolve(
+              Response.json({
+                choices: [
+                  { message: { role: "assistant", content: "Listo" }, finish_reason: "stop" },
+                ],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+              })
+            );
+          },
+        },
+      }
+    );
+    const binding = {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: (request) => coordinator.fetch(new Request(request)),
+      }),
+    };
+    const first = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "First"), binding)
+    );
+    expect(first.status).toBe(202);
+    const visible = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ text: Schema.String, ...hostedDeliveryReceipt.fields })
+    )(yield* fromTestPromise(() => first.json()));
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(hostedDeliveryReceipt))({
+      turnId: visible.turnId,
+      receipt: visible.receipt,
+    });
+    const confirmed = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedReceiptBrowserRequest(0, body), binding)
+    );
+    expect(confirmed.status).toBe(200);
+    const session = yield* fromTestPromise(() =>
+      db
+        .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+        .bind(user)
+        .first<{ hosted_session_id: string }>()
+    );
+    if (session === null) throw Error("missing Hosted Agent Session");
+    const time = transactionNow();
+    const seed = (): Promise<unknown> => {
+      const turn = newId();
+      return db.batch([
+        db
+          .prepare(
+            "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+          )
+          .bind(turn, user, session.hosted_session_id, time),
+        db
+          .prepare(
+            "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Budget')"
+          )
+          .bind(newId(), user, session.hosted_session_id, turn, time),
+        db
+          .prepare(
+            "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+          )
+          .bind(newId(), user, session.hosted_session_id, turn, time),
+        db
+          .prepare(
+            "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+          )
+          .bind(time, turn),
+      ]);
+    };
+    yield* fromTestPromise(() =>
+      Array.from({ length: 49 }, () => undefined).reduce<Promise<unknown>>(
+        (previous) => previous.then(seed),
+        Promise.resolve()
+      )
+    );
+    const denied = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "Over quota"), binding)
+    );
+    const repeated = yield* fromTestPromise(() =>
+      sendPublicRequest(db, hostedBrowserRequest(0, "Again"), binding)
+    );
+    expect([denied.status, repeated.status]).toEqual([429, 429]);
+    expect(calls).toBe(1);
+    const rows = yield* fromTestPromise(() =>
+      db.prepare("SELECT id FROM transcript_entries WHERE user_id = ?").bind(user).all()
+    );
+    expect(rows.results).toHaveLength(100);
+  })
+);
+
+effectIt.effect(
+  "rejects revoked, cross-User and stale public Turns without provider work or evidence",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const now = transactionNow();
+      const grant = "10000000-0000-4000-8000-000000000091";
+      yield* fromTestPromise(() =>
+        grantHostedConsent({ db, user: users[0] ?? "", grant, time: now })
+      );
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: users[1] ?? "",
+          grant: "10000000-0000-4000-8000-000000000092",
+          time: now,
+        })
+      );
+      let calls = 0;
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        {
+          ...coordinatorEnvironment(db),
+          AI: {
+            run: (): Promise<Response> => {
+              calls++;
+              return Promise.resolve(
+                Response.json({
+                  choices: [
+                    { message: { role: "assistant", content: "Unsafe" }, finish_reason: "stop" },
+                  ],
+                  usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                })
+              );
+            },
+          },
+        }
+      );
+      const binding = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request) => coordinator.fetch(new Request(request)),
+        }),
+      };
+      const crossUser = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(1, "Other User"), binding)
+      );
+      expect(crossUser.status).toBe(503);
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO consent_user_revocations
+      (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .bind("10000000-0000-4000-8000-000000000093", users[0], grant, sessions[0], now)
+          .run()
+      );
+      const revoked = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Revoked"), binding)
+      );
+      expect(revoked.status).toBe(401);
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET idle_expires_at_ms = ? WHERE id = ?")
+          .bind(now, sessions[1])
+          .run()
+      );
+      const stale = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(1, "Expired"), binding)
+      );
+      expect(stale.status).toBe(401);
+      expect(calls).toBe(0);
+      const turns = yield* fromTestPromise(() => db.prepare("SELECT id FROM hosted_turns").all());
+      const entries = yield* fromTestPromise(() =>
+        db.prepare("SELECT id FROM transcript_entries").all()
+      );
+      expect(turns.results).toHaveLength(0);
+      expect(entries.results).toHaveLength(0);
+    })
+);
 /** One manual capture submitted through the public ingress exactly as a client sends it. */
 const postTransaction = (index: number, body: object): Request =>
   new Request("https://api.fidyapp.com/transactions", {
@@ -2732,11 +3332,17 @@ it("serializes concurrent mutations for one User without mixing another User's r
         throw new Error("fixture invalid");
       }
       const coordinatorA = new UserTransactionCoordinator(
-        { id: { name: first.value.userId } },
+        {
+          id: { name: first.value.userId },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
         coordinatorEnvironment(db)
       );
       const coordinatorB = new UserTransactionCoordinator(
-        { id: { name: second.value.userId } },
+        {
+          id: { name: second.value.userId },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
         coordinatorEnvironment(db)
       );
       const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CreateTransactionInput))(
@@ -2815,7 +3421,10 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
       if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
       // The hosted-inference configuration cannot build a service; only Memory work may miss it.
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: session.value.userId } },
+        {
+          id: { name: session.value.userId },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
         {
           DB: db,
           AI: {

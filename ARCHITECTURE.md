@@ -26,13 +26,22 @@ as review evidence, not competing declarations. The project-reference build orde
 web; the root gate checks generated artifact freshness and compatibility with the pull-request base. See
 [Contract compatibility](docs/contract-compatibility.md).
 
-Two transports sit outside the stable-User canonical operation surface: proof-bearing credential
-bootstrap before a stable User exists, and bounded, User-authenticated statement-byte staging before
-a canonical mutation publishes the bytes. The bootstrap establishes authority only after proof
-exchange; staging returns no readable content, grants no authority, and expires if unpublished. The
-bootstrap's direct-client contract is checked separately;
-staging's limits and publication boundary are specified in
+Three transports sit outside the stable-User canonical operation surface: proof-bearing credential
+bootstrap before a stable User exists, bounded User-authenticated statement-byte staging before a
+canonical mutation publishes the bytes, and the browser-only hosted Turn conversation channel.
+The bootstrap establishes authority only after proof exchange; staging returns no readable content,
+grants no authority, and expires if unpublished. The bootstrap's direct-client contract is checked
+separately; staging's limits and publication boundary are specified in
 [ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
+
+The hosted Turn channel (`/web/hosted-turns` and `/web/hosted-turns/delivery`) accepts one User message
+and a separate visible-delivery receipt. Neither endpoint is a tool-callable operation or belongs in
+an atomic batch. Its browser-safe typed API is server-declared in
+`apps/server/src/shell/agent/hosted-turn-api.ts`; public and Core Worker adapters enforce cookie,
+origin, CSRF, D1, and per-User Durable Object policy. Completion requires an exact authenticated
+receipt after visible rendering. A Durable Object alarm interrupts abandoned proposals, with an
+independent private Core cron sweep for missing alarms and bounded retention. This channel never
+bypasses canonical operation policy for tools.
 
 ## Production boundary
 
@@ -68,4 +77,5 @@ unrelated application state.
 The root gate combines contract checks, portable behavior tests, built-browser tests, and Cloudflare
 adapter tests. Browser API scenarios currently use explicit HTTP fixtures; they do not by themselves
 prove a browser-to-real-Worker flow. Cloudflare integration tests exercise the relevant Worker and
-platform boundaries locally; live Workers AI behavior has a separate release gate. Application-specific test seams belong in the application architecture documents.
+platform boundaries locally; live Workers AI behavior has a separate release gate. Application-specific
+test seams belong in the application architecture documents.

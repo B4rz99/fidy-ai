@@ -1,4 +1,13 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
+import { UserId } from "@fidy/server/agent-runtime";
+import { expireHostedPending } from "../agent/turn-store";
+import {
+  HostedDeliveryAdmission,
+  HostedTurnAdmission,
+  acknowledgeBrowserTurn,
+  browserHostedDelivery,
+  completeHostedTurn,
+} from "../agent/hosted-turn";
 import {
   CanonicalCapability,
   CanonicalOperationId,
@@ -7,7 +16,11 @@ import {
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
 import { Context, Data, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
-import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
+import {
+  type WorkersAiEnvironment,
+  cloudflareHostedInferenceLive,
+  makeCloudflareHostedInference,
+} from "../ai/workers-ai";
 import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
 import { unavailableStatement } from "../ingestion/statement-ingestion";
 import {
@@ -351,9 +364,18 @@ const executeCanonicalAdmission = (
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
-  private readonly state: Readonly<{ id: Readonly<{ name: string }> }>;
+  private readonly state: Readonly<{
+    id: Readonly<{ name: string }>;
+    storage: Pick<DurableObjectStorage, "setAlarm">;
+  }>;
   private readonly env: CoordinatorEnvironment;
-  constructor(state: Readonly<{ id: Readonly<{ name: string }> }>, env: CoordinatorEnvironment) {
+  constructor(
+    state: Readonly<{
+      id: Readonly<{ name: string }>;
+      storage: Pick<DurableObjectStorage, "setAlarm">;
+    }>,
+    env: CoordinatorEnvironment
+  ) {
     this.state = state;
     this.env = env;
   }
@@ -361,17 +383,18 @@ export class UserTransactionCoordinator {
   fetch(request: Request): Promise<Response> {
     const environment = this.env;
     const userId = this.state.id.name;
-    const settledResponse = this.pending.then(() =>
-      Effect.runPromise(
+    const settledResponse = this.pending.then(() => {
+      const path = new URL(request.url).pathname;
+      if (path === "/hosted-turn") return this.runHostedTurn(request, userId);
+      if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
+      return Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
             if (Option.isNone(candidate)) return transactionUnavailable();
-            if (request.method === "POST" && new URL(request.url).pathname === "/statement-work") {
+            if (request.method === "POST" && path === "/statement-work") {
               const activity = authorizedStatementActivity(candidate.value, userId);
-              if (Option.isNone(activity)) {
-                return transactionUnavailable();
-              }
+              if (Option.isNone(activity)) return transactionUnavailable();
               return yield* executeStatementActivity(activity.value, environment, userId);
             }
             const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
@@ -385,12 +408,86 @@ export class UserTransactionCoordinator {
             return yield* executeCanonicalAdmission(admission.value, environment);
           })
         )
-      )
-    );
+      );
+    });
     this.pending = settledResponse.then(
       () => undefined,
       () => undefined
     );
     return settledResponse;
+  }
+
+  /** Durable alarm recovers abandoned work even when its User never submits another Turn. */
+  alarm(): Promise<void> {
+    const action = this.pending.then(() => this.recoverAbandonedWork());
+    this.pending = action.then(
+      () => undefined,
+      () => undefined
+    );
+    return action;
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async recoverAbandonedWork(): Promise<void> {
+    const next = await expireHostedPending({
+      db: this.env.DB,
+      userId: UserId.make(this.state.id.name),
+      now: transactionNow(),
+    });
+    if (Option.isSome(next)) {
+      await this.state.storage.setAlarm(next.value);
+    }
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async runHostedReceipt(request: Request, userId: string): Promise<Response> {
+    const admission = Schema.decodeUnknownOption(HostedDeliveryAdmission)(
+      await request.json().catch(() => undefined)
+    );
+    if (
+      Option.isNone(admission) ||
+      admission.value.userId !== userId ||
+      admission.value.digest.length !== digestBytes
+    ) {
+      return transactionUnavailable();
+    }
+    return acknowledgeBrowserTurn({
+      db: this.env.DB,
+      subject: {
+        userId,
+        id: admission.value.sessionId,
+        digest: new Uint8Array(admission.value.digest),
+      },
+      turnId: admission.value.turnId,
+      receipt: admission.value.receipt,
+    }).catch(() => transactionUnavailable());
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async runHostedTurn(request: Request, userId: string): Promise<Response> {
+    const candidate = await request.json().catch(() => undefined);
+    const admission = Schema.decodeUnknownOption(HostedTurnAdmission)(candidate);
+    if (
+      Option.isNone(admission) ||
+      admission.value.userId !== userId ||
+      admission.value.digest.length !== digestBytes
+    ) {
+      return transactionUnavailable();
+    }
+    const inference = await Effect.runPromiseExit(makeCloudflareHostedInference(this.env));
+    if (Exit.isFailure(inference)) return transactionUnavailable();
+    return completeHostedTurn({
+      db: this.env.DB,
+      subject: {
+        userId: admission.value.userId,
+        id: admission.value.sessionId,
+        digest: new Uint8Array(admission.value.digest),
+      },
+      text: admission.value.text,
+      inference: inference.value,
+      deliver: browserHostedDelivery,
+      signal: request.signal,
+      scheduleRecovery: (dueAtMs) => this.state.storage.setAlarm(dueAtMs),
+    }).catch(() => transactionUnavailable());
   }
 }

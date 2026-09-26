@@ -132,6 +132,7 @@ const setup = (
         "0014_memory",
         "0015_statement_submission",
         "0016_budgets",
+        "0016_hosted_turn",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
@@ -208,6 +209,7 @@ const setup = (
                   id: {
                     name,
                   },
+                  storage: { setAlarm: (): Promise<void> => Promise.resolve() },
                 },
                 {
                   DB: db,

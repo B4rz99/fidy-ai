@@ -251,6 +251,7 @@ export default {
         path: "^src/shell/",
         pathNot: [
           "^src/shell/api\\.ts$",
+          "^src/shell/agent/hosted-turn-api\\.ts$",
           "^src/shell/_shared/authz\\.ts$",
           "^src/shell/_shared/canonical-input\\.ts$",
           "^src/shell/_shared/canonical-success\\.ts$",

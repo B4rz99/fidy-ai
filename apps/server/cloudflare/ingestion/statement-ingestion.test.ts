@@ -75,6 +75,7 @@ const migrationNames = [
   "0014_memory",
   "0015_statement_submission",
   "0016_async_health",
+  "0016_hosted_turn",
   "0016_statement_processing",
   "0016_subscription_standing",
   "0016_budgets",
@@ -305,7 +306,7 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
     getByName: (name: string): Pick<Fetcher, "fetch"> => ({
       fetch: (command: Request): Promise<Response> =>
         new UserTransactionCoordinator(
-          { id: { name } },
+          { id: { name }, storage: { setAlarm: () => Promise.resolve() } },
           {
             DB: runtime.db,
             STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1350,7 +1351,7 @@ it("shows committed review rows only to their User through the canonical read", 
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1590,7 +1591,7 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1648,7 +1649,7 @@ it("settles an errored Workflow when its final failure-report activity also exha
           .run()
       );
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,

@@ -10,8 +10,10 @@ import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollmen
 import {
   BackupRecoveryCode,
   type FidyClient,
+  type HostedTurnClient,
   type WebAuthClient,
   makeFidyClient,
+  makeHostedTurnClient,
   makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
 } from "@/transport/client";
@@ -64,6 +66,7 @@ const renderRoute = async (
   const router = createWebRouter({
     apiClient,
     webAuthClient,
+    hostedTurnClient: makeHostedTurnClient("https://api.test.fidyapp.com"),
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
   render(
@@ -77,6 +80,21 @@ const renderRoute = async (
   );
   await router.load();
   return router;
+};
+
+const renderHostedRoute = async (hostedTurnClient: HostedTurnClient): Promise<void> => {
+  const router = createWebRouter({
+    apiClient: makeFidyClient("https://api.test.fidyapp.com"),
+    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com"),
+    hostedTurnClient,
+    history: Option.some(createMemoryHistory({ initialEntries: ["/app/agent"] })),
+  });
+  render(
+    <SessionRegistryProvider>
+      <RouterProvider router={router} />
+    </SessionRegistryProvider>
+  );
+  await router.load();
 };
 
 const resetApplicationTest = (): void => {
@@ -466,6 +484,81 @@ describe("verified-email replacement malformed proof", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
     expect(await screen.findByText("El código no es válido")).toBeVisible();
     expect(requests).toEqual(["/email/replacement"]);
+  });
+});
+
+const hostedReceiptLength = 64;
+const proposedStatus = 202;
+const acknowledgedStatus = 200;
+const rejectedStatus = 401;
+
+describe("hosted Agent reply delivery", () => {
+  afterEach(resetApplicationTest);
+
+  it("requires a visibly rendered reply and explicit receipt before showing Completed", async () => {
+    const paths: Array<string> = [];
+    const httpClient = makeHttpClient((request) => {
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+      return Effect.succeed(
+        responseJson(
+          request,
+          path.endsWith("/delivery")
+            ? { status: "completed" }
+            : {
+                text: "Respuesta exacta",
+                turnId: "10000000-0000-4000-8000-000000000097",
+                receipt: "a".repeat(hostedReceiptLength),
+              },
+          path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
+        )
+      );
+    });
+    const channel = makeHostedTurnClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    await renderHostedRoute(channel);
+    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "Hola" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    expect(await screen.findByText("Respuesta exacta")).toBeVisible();
+    expect(paths).toEqual(["/web/hosted-turns"]);
+    expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }));
+    expect(await screen.findByText("Respuesta entregada.")).toBeVisible();
+    expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
+  });
+});
+
+describe("rejected hosted Agent receipt", () => {
+  afterEach(resetApplicationTest);
+
+  it("does not label a rejected receipt Completed", async () => {
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(
+        responseJson(
+          request,
+          request.url.endsWith("/delivery")
+            ? { status: "unauthenticated" }
+            : {
+                text: "Respuesta sin confirmar",
+                turnId: "10000000-0000-4000-8000-000000000097",
+                receipt: "a".repeat(hostedReceiptLength),
+              },
+          request.url.endsWith("/delivery") ? rejectedStatus : proposedStatus
+        )
+      )
+    );
+    const channel = makeHostedTurnClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    await renderHostedRoute(channel);
+    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "Hola" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar recepción" }));
+    expect(await screen.findByText(/La entrega no se pudo confirmar/u)).toBeVisible();
+    expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
   });
 });
 

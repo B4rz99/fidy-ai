@@ -26,7 +26,12 @@ audience, company, and legal pages form one public website surface because they 
 and lifecycle. Publicly accessible flows with independent product behavior, such as login, pairing,
 or onboarding, remain separate features.
 
-Presentation shapes derive from the canonical server declaration or from web-owned view state. The
+Presentation shapes derive from the canonical server declaration, the dedicated server-declared
+hosted Turn browser API, or web-owned view state. `/app/agent` renders a proposed reply before the
+User explicitly confirms receipt; until the receipt succeeds it never labels the Turn Completed.
+The reply and one-use receipt stay in mounted component state, not browser storage or a URL. This
+channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
+redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
 is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
 Wompi. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting

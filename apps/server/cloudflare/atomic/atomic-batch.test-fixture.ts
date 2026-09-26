@@ -92,6 +92,26 @@ export const concurrentCorrection = ({
         .run()
     );
 
+/**
+ * A D1 binding that runs one competing write immediately before the first unit batch, so a premise
+ * the caller observed can move after preparation and only the unit's own guard or the post-rollback
+ * re-check can see it. Later batches pass through untouched.
+ */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const competingWriteDb = (db: D1Database, before: () => Promise<unknown>): D1Database => {
+  let fired = false;
+  return new Proxy(db, {
+    get: (target, property): unknown =>
+      property === "batch"
+        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
+            if (fired) return target.batch(...args);
+            fired = true;
+            return before().then(() => target.batch(...args));
+          }
+        : Reflect.get(target, property, target),
+  });
+};
+
 /** A D1 binding whose unit batch always fails, so a defect can never leave partial state. */
 export const defectiveBatchDb = (db: D1Database): D1Database =>
   new Proxy(db, {

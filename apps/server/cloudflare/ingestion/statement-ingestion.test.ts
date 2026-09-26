@@ -12,6 +12,7 @@ import { afterEach, expect, it } from "vitest";
 import {
   BatchEnvelope,
   batchCallId,
+  competingWriteDb,
   concurrentCorrection,
   correctionCall,
   defectiveBatchDb,
@@ -406,21 +407,6 @@ const batchWithBearer = (
     })
   );
 
-/** Runs one competing write before the first unit batch, moving a premise after preparation. */
-const beforeBatchDb = (db: D1Database, before: () => Promise<unknown>): D1Database => {
-  let fired = false;
-  return new Proxy(db, {
-    get: (target, property): unknown =>
-      property === "batch"
-        ? (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
-            if (fired) return target.batch(...args);
-            fired = true;
-            return before().then(() => target.batch(...args));
-          }
-        : Reflect.get(target, property, target),
-  });
-};
-
 /**
  * A D1 binding whose first row read after the unit batch fails once, then recovers: the committed
  * readback must retry a transient read defect instead of reporting an unreadable published unit.
@@ -598,9 +584,11 @@ const stagedWithBody = (body: string): StagedBody => ({
 });
 
 /**
- * Every table a composed turn writes: both children's domain state, the Free-backfill reservation,
- * the bounded outbox identity, and both audit trails. A turn that published nothing left every one
- * of them at zero, which is what the two assertions below state from this one list.
+ * The rows a composed turn publishes: both children's domain state, the submission, the
+ * Free-backfill reservation, the bounded outbox identity, and both audit trails. A turn that
+ * published nothing left every one of them at zero, which is what the two assertions below state
+ * from this one list. A staging row and a PAT row are not here: both pre-exist and a turn moves or
+ * extends them, so their unchanged state is asserted where it is read.
  */
 const canonicalStateTables = [
   "transactions",
@@ -1567,7 +1555,7 @@ it(
         // The winner commits after the losing call has read "no submission for this key" and before
         // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
         // call remains one refusal: the unit's recorded refusal is answered without a second write.
-        const database = beforeBatchDb(runtime.db, () =>
+        const database = competingWriteDb(runtime.db, () =>
           executeStatementSubmission({
             current,
             environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },
@@ -1712,7 +1700,7 @@ it(
         // The staged material expires after its child was admitted but before the unit commits.
         const raced = {
           ...runtime,
-          db: beforeBatchDb(runtime.db, () =>
+          db: competingWriteDb(runtime.db, () =>
             runtime.db
               .prepare("UPDATE statement_staging_objects SET expires_at_ms = ? WHERE id = ?")
               .bind(current - 1, staged.stagingId)
@@ -1789,7 +1777,7 @@ it(
         // The correction's observed revision moves after it was admitted but before the unit.
         const raced = {
           ...runtime,
-          db: beforeBatchDb(runtime.db, () =>
+          db: competingWriteDb(runtime.db, () =>
             concurrentCorrection({
               correctedAt: "2026-08-01T12:00:00.000Z",
               db: runtime.db,
@@ -2139,7 +2127,7 @@ it(
         );
         // The session is live for dispatch and every preparation read; it dies only when the
         // publication unit is about to run, so only the unit's own live-authority guard can see it.
-        const database = beforeBatchDb(runtime.db, () =>
+        const database = competingWriteDb(runtime.db, () =>
           runtime.db
             .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
             .bind(current, userA)
@@ -2191,7 +2179,7 @@ it(
         // Both children were admitted under a live session; it is revoked only before the unit.
         const raced = {
           ...runtime,
-          db: beforeBatchDb(runtime.db, () =>
+          db: competingWriteDb(runtime.db, () =>
             runtime.db
               .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
               .bind(current, userA)
@@ -2420,7 +2408,7 @@ it(
         // only the unit's own entitlement guard plus the post-rollback premise re-check can see it.
         const raced = {
           ...runtime,
-          db: beforeBatchDb(runtime.db, () =>
+          db: competingWriteDb(runtime.db, () =>
             runtime.db
               .prepare(
                 "INSERT INTO statement_backfill_entitlements (user_id, consumed_at_ms) VALUES (?, ?)"
@@ -2481,7 +2469,7 @@ it(
         // outstanding guard is the one that refuses this child.
         const raced = {
           ...runtime,
-          db: beforeBatchDb(runtime.db, () =>
+          db: competingWriteDb(runtime.db, () =>
             seedSubmissions(runtime, {
               first: 1,
               last: 5,

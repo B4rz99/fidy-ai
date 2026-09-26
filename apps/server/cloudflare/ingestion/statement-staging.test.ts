@@ -19,6 +19,7 @@ import {
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
+  stagedMaterialMessage,
   statementConflictMessage,
 } from "./statement-staging";
 
@@ -405,7 +406,7 @@ const expectsStagedMaterialRefusal = (result: StagingResult<StatementPublication
   expect(refusalOf(result)).toEqual({
     auditOutcome: "validation_failed",
     code: "validation_failed",
-    message: "The staged statement material is unavailable; upload the file again.",
+    message: stagedMaterialMessage,
   });
 };
 

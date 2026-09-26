@@ -4,7 +4,7 @@ import type { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context
 import { type Money } from "~/core/_shared/money";
 import type { Category } from "~/core/categories/model";
 import type { Budget } from "~/core/budgets/model";
-import { calculateBudgetStatus } from "~/core/budgets/rules";
+import { calculateBudgetStatus } from "@fidy/server/budgets-runtime";
 import {
   dashboardBudgetSpent,
   projectDashboardMetric,

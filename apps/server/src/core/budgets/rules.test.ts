@@ -4,7 +4,12 @@ import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { BudgetId } from "./reference";
 import type { Budget } from "./model";
-import { calculateBudgetStatus, deriveCurrentBudgetMonth } from "./rules";
+import {
+  advanceBudgetLatch,
+  calculateBudgetStatus,
+  deriveCurrentBudgetMonth,
+  sumBudgetContributions,
+} from "./rules";
 import { CategoryId } from "~/core/categories/reference";
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
@@ -21,6 +26,13 @@ const budget: Budget = {
 const period = deriveCurrentBudgetMonth({
   now: DateTime.makeUnsafe("2026-07-15T12:00:00Z"),
   timeZone: IanaTimeZone.make("America/Bogota"),
+});
+
+const initialLatch = (): Parameters<typeof advanceBudgetLatch>[0]["latch"] => ({
+  budgetId: budget.id,
+  period,
+  reached80: false,
+  reached100: false,
 });
 
 it("calculates the half-open calendar month in the explicitly applied IANA time zone", () => {
@@ -48,6 +60,71 @@ it("returns exact under, reached, and over variants in the Budget Currency", () 
   expect(over.type === "over" && Equal.equals(over.overBy.amount, money("250.75").amount)).toBe(
     true
   );
+});
+
+it("sums only same-Category, same-Currency outflows inside the half-open zoned month", () => {
+  type Movement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
+  const makeMovement = (changes: Partial<Movement> = {}): Movement => ({
+    money: money("100"),
+    categoryId: budget.categoryId,
+    direction: "outflow",
+    occurredAt: DateTime.makeUnsafe("2026-07-15T12:00:00Z"),
+    ...changes,
+  });
+  const otherCategory = CategoryId.make("10000000-0000-4000-8000-000000000002");
+  const movements = [
+    makeMovement({ money: money("10.25"), occurredAt: period.from }),
+    makeMovement({ money: money("7.50"), occurredAt: DateTime.makeUnsafe("2026-08-01T04:59:59Z") }),
+    makeMovement({ money: money("100", Currency.make("USD")) }),
+    makeMovement({ categoryId: otherCategory }),
+    makeMovement({ direction: "inflow" }),
+    makeMovement({ occurredAt: DateTime.makeUnsafe("2026-07-01T04:59:59Z") }),
+    makeMovement({ occurredAt: period.to }),
+  ];
+
+  const total = sumBudgetContributions({ budget, period, movements });
+  expect(Equal.equals(total.amount, money("17.75").amount)).toBe(true);
+  expect(total.currency).toBe("COP");
+});
+
+it("latches each crossed threshold once, including a jump across both thresholds", () => {
+  const crossed = Effect.runSync(
+    advanceBudgetLatch({ budget, spent: money("1000"), latch: initialLatch() })
+  );
+  expect(crossed.newlyReached).toEqual([80, 100]);
+  expect(
+    Effect.runSync(advanceBudgetLatch({ budget, spent: money("1200"), latch: crossed.latch }))
+      .newlyReached
+  ).toEqual([]);
+  expect(
+    Effect.runSync(advanceBudgetLatch({ budget, spent: money("500"), latch: crossed.latch })).latch
+  ).toEqual(crossed.latch);
+});
+
+it("uses exact Money at the 80% boundary without rounding or reopening a mark", () => {
+  const decimalBudget = { ...budget, cap: money("100.01") };
+  const below = Effect.runSync(
+    advanceBudgetLatch({ budget: decimalBudget, spent: money("80"), latch: initialLatch() })
+  );
+  expect(below.newlyReached).toEqual([]);
+  const above = Effect.runSync(
+    advanceBudgetLatch({ budget: decimalBudget, spent: money("80.01"), latch: below.latch })
+  );
+  expect(above.newlyReached).toEqual([80]);
+  expect(above.latch.reached100).toBe(false);
+});
+
+it("does not compare a threshold with spending in another Currency", () => {
+  const result = Effect.runSync(
+    Effect.result(
+      advanceBudgetLatch({
+        budget,
+        spent: money("100", Currency.make("USD")),
+        latch: initialLatch(),
+      })
+    )
+  );
+  expect(Result.isFailure(result) ? result.failure._tag : undefined).toBe("CurrencyMismatch");
 });
 
 it("refuses to calculate status from spending in another Currency", () => {

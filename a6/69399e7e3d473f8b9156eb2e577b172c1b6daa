@@ -1,0 +1,32 @@
+apps/web/package.json
+  s_fc3693cd6bcd2c::t_1b032512feab45 30
+dependency-policy.json
+  s_fc3693cd6bcd2c::t_4729b15cb081d2 22-23,25-26
+  s_4ac9a803d469ea::t_50571362b2913f 21
+bun.lock
+  s_fc3693cd6bcd2c::t_d9f5d330652100 60,424
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a669399e7e3d473f8b9156eb2e577b172c1b6daa",
+  "prompts": {},
+  "sessions": {
+    "s_4ac9a803d469ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db0c-329a-7691-8f21-b8bcf3fd5c0e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fc3693cd6bcd2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db10-a653-7399-bd96-d88433aa22ef",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

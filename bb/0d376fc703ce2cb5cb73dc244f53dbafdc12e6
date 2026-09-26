@@ -1,0 +1,18 @@
+apps/server/cloudflare/atomic/atomic-batch.test-fixture.ts
+  h_c6d49c804e0ad2 95-114
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 15,587-591,1558,1703,1780,2130,2182,2411,2472
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 22,409
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb0d376fc703ce2cb5cb73dc244f53dbafdc12e6",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 19,21,25,600-604,611,629-631,2557
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 22,419
+apps/server/cloudflare/ingestion/statement-staging.ts
+  h_c6d49c804e0ad2 882-885,905
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  h_c6d49c804e0ad2 176,180
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "40da0b8f86909c8b3172a4dde3fef36f6f24e5ba",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

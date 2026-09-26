@@ -7,7 +7,7 @@ import {
 } from "@fidy/server/categories";
 import { Memory, MemoryId, type MemoryOperationId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
-import { budgetRefusal, findBudgetValue } from "../budgets/budget-outcome";
+import { budgetAuditLimitRefusal, findBudgetValue } from "../budgets/budget-outcome";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { readForwardingAddress } from "../ingestion/forwarding-address";
@@ -134,7 +134,7 @@ const triggerRefusal = ({
   const scoped = childCaller(subject, mutation.requiredScope);
   switch (mutation.outcome._tag) {
     case "Budget":
-      return kind === "audit" ? Option.some(budgetRefusal("validation_failed")) : Option.none();
+      return kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none();
     case "Transaction":
       return transactionTriggerRefusal({
         db,

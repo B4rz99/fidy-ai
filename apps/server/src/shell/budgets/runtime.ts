@@ -12,6 +12,7 @@ import {
   advanceBudgetLatch,
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
+  sumBudgetContributions,
 } from "~/core/budgets/rules";
 import { BudgetId } from "~/core/budgets/reference";
 import {
@@ -29,6 +30,7 @@ export {
   advanceBudgetLatch,
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
+  sumBudgetContributions,
   BudgetId,
   BudgetStatusReport,
   BudgetStatusQueryValues,

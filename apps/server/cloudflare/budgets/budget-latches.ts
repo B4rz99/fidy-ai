@@ -4,6 +4,7 @@ import {
   type BudgetStatus,
   IanaTimeZone,
   advanceBudgetLatch,
+  deriveCurrentBudgetMonth,
 } from "@fidy/server/budgets-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
@@ -15,6 +16,8 @@ const Marks = Schema.Struct({
 });
 const eighty = 80;
 const hundred = 100;
+const maximumPendingWork = 64;
+const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
 
 const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLatch => {
   const budgetId = BudgetId.make(status.budget.id);
@@ -85,9 +88,30 @@ const reconcileStatus = ({
     return true;
   }).pipe(Effect.orElseSucceed(() => false));
 
+const reconcilePendingPeriod = ({
+  db,
+  userId,
+  timeZone,
+  now,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  timeZone: IanaTimeZone;
+  now: DateTime.Utc;
+}>): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const report = yield* currentBudgetReport({ db, userId, query: { timeZone }, now });
+    if (Option.isNone(report)) return false;
+    for (const status of report.value.statuses) {
+      if (!(yield* reconcileStatus({ db, userId, timeZone, status }))) return false;
+    }
+    return true;
+  });
+
 /**
- * Reconcile one User's current applied month after canonical work commits. The D1 unique key
- * prevents duplicate alerts even across independent coordinators; corrections never reopen marks.
+ * Consume durable work written atomically by D1 movement/Budget triggers. Work for a backdated
+ * correction uses its own zoned month, not the request's current month. The versioned removal
+ * leaves a concurrent writer's work pending even if it arrives during an earlier drain.
  */
 export const reconcileBudgetLatches = ({
   db,
@@ -103,10 +127,35 @@ export const reconcileBudgetLatches = ({
     const context = Schema.decodeUnknownOption(UserZone)(raw);
     if (Option.isNone(context)) return false;
     const timeZone = context.value.time_zone;
-    const report = yield* currentBudgetReport({ db, userId, query: { timeZone } });
-    if (Option.isNone(report)) return false;
-    for (const status of report.value.statuses) {
-      if (!(yield* reconcileStatus({ db, userId, timeZone, status }))) return false;
+    const pending = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT occurred_at, version
+    FROM budget_reconciliation_work WHERE user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
+        .bind(userId)
+        .all()
+    );
+    const periods = new Map<number, DateTime.Utc>();
+    const work: Array<typeof PendingWork.Type> = [];
+    for (const row of pending.results) {
+      const item = Schema.decodeUnknownOption(PendingWork)(row);
+      if (Option.isNone(item)) return false;
+      const instant = DateTime.make(item.value.occurred_at);
+      if (Option.isNone(instant)) return false;
+      const period = deriveCurrentBudgetMonth({ now: instant.value, timeZone });
+      periods.set(period.from.epochMilliseconds, instant.value);
+      work.push(item.value);
+    }
+    for (const now of periods.values()) {
+      if (!(yield* reconcilePendingPeriod({ db, userId, timeZone, now }))) return false;
+    }
+    for (const item of work) {
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`DELETE FROM budget_reconciliation_work
+      WHERE user_id = ? AND occurred_at = ? AND version = ?`)
+          .bind(userId, item.occurred_at, item.version)
+          .run()
+      );
     }
     return true;
   }).pipe(Effect.orElseSucceed(() => false));

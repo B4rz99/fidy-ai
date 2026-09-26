@@ -174,7 +174,14 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         prepareCreateBudget({ db: work.db, subject: work.subject, payload, current: work.current })
       ),
       present: present(HTTP_CREATED),
-      invalidRefusal: () => budgetRefusal("validation_failed"),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.createBudget",
+          code: "validation_failed",
+        }),
     },
   ],
   [
@@ -190,7 +197,14 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         })
       ),
       present: present(HTTP_OK),
-      invalidRefusal: () => budgetRefusal("validation_failed"),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.updateBudget",
+          code: "validation_failed",
+        }),
     },
   ],
   [
@@ -205,7 +219,14 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         })
       ),
       present: present(HTTP_OK),
-      invalidRefusal: () => budgetRefusal("not_found"),
+      invalidRefusal: (work) =>
+        budgetRefusal({
+          db: work.db,
+          subject: work.subject,
+          current: work.current,
+          operation: "budgets.deleteBudget",
+          code: "not_found",
+        }),
     },
   ],
   [CanonicalOperationId.make("ingestion.submitForExtraction"), statementMutationAdapter],

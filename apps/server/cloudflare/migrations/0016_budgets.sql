@@ -11,6 +11,43 @@ CREATE TABLE budgets (
   UNIQUE(user_id, id)
 ) STRICT;
 CREATE INDEX budgets_by_user ON budgets(user_id, currency, category_id);
+-- Required reconciliation intent commits with each movement, correction, or Budget change.
+-- Versioned work prevents an overlapping writer from disappearing behind a completed drain.
+CREATE TABLE budget_reconciliation_work (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  occurred_at TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY(user_id, occurred_at)
+) STRICT;
+CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  VALUES (NEW.user_id, NEW.occurred_at)
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  VALUES (NEW.user_id, NEW.occurred_at)
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1;
+  INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  VALUES (OLD.user_id, OLD.occurred_at)
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_link_work AFTER INSERT ON transaction_reconciliation_decisions
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  SELECT NEW.user_id, occurred_at FROM transactions
+  WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_unlink_work AFTER UPDATE ON transaction_reconciliation_decisions
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  SELECT NEW.user_id, occurred_at FROM transactions
+  WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_created_work AFTER INSERT ON budgets
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  VALUES (NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_revised_work AFTER UPDATE ON budgets
+BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
+  VALUES (NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
 CREATE TRIGGER budget_capacity BEFORE INSERT ON budgets
 WHEN (SELECT COUNT(*) FROM budgets WHERE user_id = NEW.user_id) >= 128
 BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END;
@@ -43,6 +80,7 @@ CREATE TABLE budget_audit (
   session_id TEXT NOT NULL REFERENCES web_sessions(id),
   operation TEXT NOT NULL CHECK(operation IN ('budgets.createBudget', 'budgets.updateBudget',
     'budgets.deleteBudget', 'budgets.listBudgets', 'budgets.getBudget', 'budgets.getBudgetStatus')),
+  outcome TEXT NOT NULL DEFAULT 'accepted' CHECK(outcome IN ('accepted', 'rejected')),
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX budget_audit_by_user_day ON budget_audit(user_id, occurred_at_ms);

@@ -135,6 +135,21 @@ const authorityReady = ({
     catch: boundaryFailure,
   });
 
+const refuseBudget = ({
+  db,
+  subject,
+  current,
+  operation,
+  code,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  operation: BudgetOutcome["operation"];
+  code: "not_found" | "validation_failed";
+}>): CanonicalMutationPreparation =>
+  refusedPreparation(budgetRefusal({ db, subject, current, operation, code }));
+
 const checkedBudgetWrite = ({
   db,
   subject,
@@ -143,6 +158,7 @@ const checkedBudgetWrite = ({
   currency,
   exceptId,
   owned,
+  operation,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -151,19 +167,26 @@ const checkedBudgetWrite = ({
   currency: string;
   exceptId: string;
   owned: boolean;
+  operation: BudgetOutcome["operation"];
 }>): Effect.Effect<Option.Option<CanonicalMutationPreparation>, TransactionBoundaryFailure> =>
   Effect.gen(function* () {
     if (!(yield* authorityReady({ db, subject, current }))) {
       return Option.some(credentialRefusedPreparation());
     }
-    if (!owned) return Option.some(refusedPreparation(budgetRefusal("not_found")));
+    if (!owned) {
+      return Option.some(
+        refusedPreparation(budgetRefusal({ db, subject, operation, current, code: "not_found" }))
+      );
+    }
     if (
       !(yield* Effect.tryPromise({
         try: () => categoryExists(db, categoryId),
         catch: boundaryFailure,
       }))
     ) {
-      return Option.some(refusedPreparation(budgetRefusal("not_found")));
+      return Option.some(
+        refusedPreparation(budgetRefusal({ db, subject, operation, current, code: "not_found" }))
+      );
     }
     if (
       yield* Effect.tryPromise({
@@ -171,7 +194,11 @@ const checkedBudgetWrite = ({
         catch: boundaryFailure,
       })
     ) {
-      return Option.some(refusedPreparation(budgetRefusal("validation_failed")));
+      return Option.some(
+        refusedPreparation(
+          budgetRefusal({ db, subject, operation, current, code: "validation_failed" })
+        )
+      );
     }
     return Option.none();
   });
@@ -198,6 +225,7 @@ export const prepareCreateBudget = ({
       currency: payload.cap.currency,
       exceptId: id,
       owned: true,
+      operation: "budgets.createBudget",
     });
     if (Option.isSome(rejected)) return rejected.value;
     const authority = callerAuthority({ subject, current });
@@ -224,6 +252,38 @@ export const prepareCreateBudget = ({
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
+const updateBudgetStatement = ({
+  db,
+  subject,
+  id,
+  payload,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  id: BudgetId;
+  payload: UpdateBudgetInput;
+  current: number;
+}>): D1PreparedStatement => {
+  const authority = callerAuthority({ subject, current });
+  const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
+  return db
+    .prepare(`UPDATE budgets SET category_id = ?, cap = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND currency = ?
+    AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
+    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
+    .bind(
+      payload.categoryId,
+      encodeMoneyAmount(payload.cap.amount),
+      instant,
+      id,
+      subject.userId,
+      payload.cap.currency,
+      payload.categoryId,
+      ...authority.bindings
+    );
+};
+
 /** Prepare a replacement without allowing a Budget's Currency or owner to change. */
 export const prepareUpdateBudget = ({
   db,
@@ -242,9 +302,23 @@ export const prepareUpdateBudget = ({
     const existing = yield* Effect.tryPromise(() =>
       findOwnedBudget({ db, userId: subject.userId, id })
     );
-    if (Option.isNone(existing)) return refusedPreparation(budgetRefusal("not_found"));
+    if (Option.isNone(existing)) {
+      return refuseBudget({
+        db,
+        subject,
+        current,
+        operation: "budgets.updateBudget",
+        code: "not_found",
+      });
+    }
     if (existing.value.cap.currency !== payload.cap.currency) {
-      return refusedPreparation(budgetRefusal("validation_failed"));
+      return refuseBudget({
+        db,
+        subject,
+        current,
+        operation: "budgets.updateBudget",
+        code: "validation_failed",
+      });
     }
     const rejected = yield* checkedBudgetWrite({
       db,
@@ -254,30 +328,15 @@ export const prepareUpdateBudget = ({
       currency: payload.cap.currency,
       exceptId: id,
       owned: true,
+      operation: "budgets.updateBudget",
     });
     if (Option.isSome(rejected)) return rejected.value;
-    const authority = callerAuthority({ subject, current });
-    const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
     return statements({
       db,
       subject,
       current,
       outcome: { _tag: "Budget", operation: "budgets.updateBudget", budgetId: id },
-      write: db
-        .prepare(`UPDATE budgets SET category_id = ?, cap = ?, updated_at = ?
-        WHERE id = ? AND user_id = ? AND currency = ?
-        AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
-        AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-        .bind(
-          payload.categoryId,
-          encodeMoneyAmount(payload.cap.amount),
-          instant,
-          id,
-          subject.userId,
-          payload.cap.currency,
-          payload.categoryId,
-          ...authority.bindings
-        ),
+      write: updateBudgetStatement({ db, subject, current, id, payload }),
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
@@ -298,7 +357,17 @@ export const prepareDeleteBudget = ({
     const existing = yield* Effect.tryPromise(() =>
       findOwnedBudget({ db, userId: subject.userId, id })
     );
-    if (Option.isNone(existing)) return refusedPreparation(budgetRefusal("not_found"));
+    if (Option.isNone(existing)) {
+      return refusedPreparation(
+        budgetRefusal({
+          db,
+          subject,
+          current,
+          operation: "budgets.deleteBudget",
+          code: "not_found",
+        })
+      );
+    }
     const authority = callerAuthority({ subject, current });
     return statements({
       db,

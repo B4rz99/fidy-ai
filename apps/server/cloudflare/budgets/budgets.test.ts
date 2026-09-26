@@ -255,6 +255,15 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
   const foreign = await send(db, request(1, `/budgets/${id}`, "PUT", payload("200")));
   expect(foreign.status).toBe(404);
   expect((await send(db, request(1, `/budgets/${id}`, "DELETE"))).status).toBe(404);
+  const refused = await db
+    .prepare("SELECT operation, outcome FROM budget_audit WHERE user_id = ? ORDER BY operation")
+    .bind(users[1])
+    .all<{ operation: string; outcome: string }>();
+  expect(refused.results).toEqual([
+    { operation: "budgets.deleteBudget", outcome: "rejected" },
+    { operation: "budgets.updateBudget", outcome: "rejected" },
+  ]);
+  expect((await send(db, request(0, `/budgets/${id}`))).status).toBe(200);
   const wrongCurrency = await send(
     db,
     request(0, `/budgets/${id}`, "PUT", {
@@ -364,4 +373,44 @@ it("latches 80% and 100% only once across concurrent capture and correction", as
     .bind(users[0])
     .all<{ threshold: number }>();
   expect(after.results.map((row) => row.threshold)).toEqual([80, 100]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("latches a backdated month and does not reopen it after a correction", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  const previous = DateTime.makeUnsafe(DateTime.nowUnsafe().epochMilliseconds - 40 * 86400000);
+  const priorPeriod = deriveCurrentBudgetMonth({
+    now: previous,
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  });
+  const captured = await send(
+    db,
+    request(0, "/transactions", "POST", {
+      money: { amount: "100", currency: "COP" },
+      direction: "outflow",
+      categoryId: category,
+      occurredAt: DateTime.formatIso(priorPeriod.from),
+    })
+  );
+  expect(captured.status).toBe(201);
+  const first = Schema.decodeUnknownSync(Captured)(await captured.json());
+  const alerts = (): Promise<D1Result<{ threshold: number }>> =>
+    db
+      .prepare("SELECT threshold FROM budget_threshold_alerts WHERE user_id = ? ORDER BY threshold")
+      .bind(users[0])
+      .all<{ threshold: number }>();
+  expect((await alerts()).results.map((row) => row.threshold)).toEqual([80, 100]);
+  expect(
+    (
+      await send(
+        db,
+        request(0, `/transactions/${first.data.id}`, "PUT", {
+          expectedRevision: 0,
+          changes: { money: { amount: "1", currency: "COP" } },
+        })
+      )
+    ).status
+  ).toBe(200);
+  expect((await alerts()).results.map((row) => row.threshold)).toEqual([80, 100]);
 });

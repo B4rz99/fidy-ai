@@ -198,6 +198,17 @@ const affectsBudget = (operation: CanonicalOperationId): boolean =>
 
 const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
+    const budgetWork =
+      input.work._tag === "Call"
+        ? affectsBudget(input.work.operation)
+        : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget));
+    // Drain committed work before a later correction can lower spending below a reached mark.
+    if (
+      budgetWork &&
+      !(yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId }))
+    ) {
+      return transactionUnavailable();
+    }
     const result =
       input.work._tag === "Batch"
         ? yield* executeCanonicalBatch({
@@ -208,14 +219,8 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
             bucket: input.bucket,
           })
         : yield* executeCall({ ...input, work: input.work });
-    if (
-      result.ok &&
-      (input.work._tag === "Call"
-        ? affectsBudget(input.work.operation)
-        : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget)))
-    ) {
-      // The D1 latch and occurrence keys are idempotent. Reconciliation runs inside this User
-      // coordinator after committed work; an interrupted run is caught up on later successful work.
+    if (result.ok && budgetWork) {
+      // Atomic D1 triggers retain versioned work even when this best-effort drain is interrupted.
       yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId });
     }
     return result;

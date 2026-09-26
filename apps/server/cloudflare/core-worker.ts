@@ -18,6 +18,7 @@ import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
+import { reconcileBudgetLatches } from "./budgets/budget-latches";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
@@ -980,7 +981,13 @@ const budgetResponse = ({
     case "budgets.getBudgetStatus":
       return Option.some(
         Effect.tryPromise(() =>
-          browseBudgets({ db: environment.DB, request, subject, operation: selectedId })
+          browseBudgets({
+            db: environment.DB,
+            request,
+            subject,
+            operation: selectedId,
+            reconcile: () => reconcileBudgetLatches({ db: environment.DB, userId: subject.userId }),
+          })
         ).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
       );
     default:

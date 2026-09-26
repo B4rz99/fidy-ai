@@ -5,10 +5,11 @@ import {
   BudgetStatusReport,
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
+  sumBudgetContributions,
 } from "@fidy/server/budgets-runtime";
 import { Currency, Money } from "@fidy/server/transactions-runtime";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 import {
@@ -162,25 +163,26 @@ const monthlyMovements = ({
     return Option.some(movements);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-const totalByCategoryAndCurrency = (
-  movements: ReadonlyArray<typeof MovementRow.Type>
-): Option.Option<ReadonlyMap<string, BigDecimal.BigDecimal>> => {
-  const totals = new Map<string, BigDecimal.BigDecimal>();
-  for (const movement of movements) {
-    const decoded = Schema.decodeOption(Schema.toCodecJson(Money))({
-      amount: movement.amount,
-      currency: movement.currency,
+type BudgetMovement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
+const decodeMovements = (
+  rows: ReadonlyArray<typeof MovementRow.Type>
+): Option.Option<ReadonlyArray<BudgetMovement>> => {
+  const movements: Array<BudgetMovement> = [];
+  for (const row of rows) {
+    const money = Schema.decodeOption(Schema.toCodecJson(Money))({
+      amount: row.amount,
+      currency: row.currency,
     });
-    if (Option.isNone(decoded) || Option.isNone(DateTime.make(movement.occurred_at))) {
-      return Option.none();
-    }
-    const key = `${movement.category_id}:${movement.currency}`;
-    totals.set(
-      key,
-      BigDecimal.sum(totals.get(key) ?? BigDecimal.make(0n, 0), decoded.value.amount)
-    );
+    const occurredAt = DateTime.make(row.occurred_at);
+    if (Option.isNone(money) || Option.isNone(occurredAt)) return Option.none();
+    movements.push({
+      money: money.value,
+      occurredAt: occurredAt.value,
+      categoryId: row.category_id,
+      direction: row.direction,
+    });
   }
-  return Option.some(totals);
+  return Option.some(movements);
 };
 
 /** The same exact effective-Transaction totals every caller and latch decision uses. */
@@ -188,14 +190,16 @@ export const currentBudgetReport = ({
   db,
   userId,
   query,
+  now,
 }: Readonly<{
   db: D1Database;
   userId: string;
   query: typeof Query.Type;
+  now: DateTime.Utc;
 }>): Effect.Effect<Option.Option<BudgetStatusReport>> =>
   Effect.gen(function* () {
     const period = deriveCurrentBudgetMonth({
-      now: DateTime.nowUnsafe(),
+      now,
       timeZone: query.timeZone,
     });
     const budgets = yield* listOwnedBudgets({ db, userId });
@@ -213,15 +217,11 @@ export const currentBudgetReport = ({
       to: DateTime.formatIso(period.to),
     });
     if (Option.isNone(movements)) return Option.none<BudgetStatusReport>();
-    const totals = totalByCategoryAndCurrency(movements.value);
-    if (Option.isNone(totals)) return Option.none<BudgetStatusReport>();
+    const decoded = decodeMovements(movements.value);
+    if (Option.isNone(decoded)) return Option.none<BudgetStatusReport>();
     const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
     for (const budget of selected) {
-      const spent = Money.make({
-        currency: budget.cap.currency,
-        amount:
-          totals.value.get(`${budget.categoryId}:${budget.cap.currency}`) ?? BigDecimal.make(0n, 0),
-      });
+      const spent = sumBudgetContributions({ budget, period, movements: decoded.value });
       statuses.push(yield* calculateBudgetStatus({ budget, spent, period }));
     }
     return Option.some({ period, statuses });
@@ -296,6 +296,7 @@ const readAuthorizedBudget = ({
       db,
       userId: subject.userId,
       query: Option.getOrThrow(query),
+      now: DateTime.nowUnsafe(),
     });
     return Option.isSome(report)
       ? respond(Schema.toCodecJson(BudgetStatusReport), report.value)
@@ -308,17 +309,20 @@ export const browseBudgets = ({
   subject,
   request,
   operation,
+  reconcile,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   request: Request;
   operation: BudgetQueryOperation;
+  reconcile: () => Effect.Effect<boolean>;
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const parsed = budgetParameters(operation, new URL(request.url));
       if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
       if (!(yield* authorizeRead({ db, subject, operation }))) return transactionUnavailable();
+      if (!(yield* reconcile())) return transactionUnavailable();
       return yield* readAuthorizedBudget({ db, subject, operation, ...parsed.value });
     }).pipe(Effect.orElseSucceed(transactionUnavailable))
   );

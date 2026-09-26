@@ -2449,11 +2449,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "enum": [
-                  "provider-retrieval-failed",
-                  "processing-interrupted"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/Union_10"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2539,16 +2535,21 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "enum": [
-                  "canonical-validation-failed",
-                  "unsupported-content",
-                  "unknown-format",
-                  "ambiguous-format",
-                  "invalid-format",
-                  "provider-retrieval-failed",
-                  "processing-interrupted"
-                ],
-                "type": "string"
+                "anyOf": [
+                  {
+                    "enum": [
+                      "canonical-validation-failed",
+                      "unsupported-content",
+                      "unknown-format",
+                      "ambiguous-format",
+                      "invalid-format"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Union_10"
+                  }
+                ]
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -8066,6 +8067,14 @@
         ]
       },
       "Union_10": {
+        "enum": [
+          "provider-retrieval-failed",
+          "processing-interrupted",
+          "consent-revoked"
+        ],
+        "type": "string"
+      },
+      "Union_11": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -9014,7 +9023,7 @@
           }
         ]
       },
-      "Union_11": {
+      "Union_12": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13412,13 +13421,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_10"
+                      "$ref": "#/components/schemas/Union_11"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_10"
+                        "$ref": "#/components/schemas/Union_11"
                       }
                     ],
                     "type": "array"
@@ -13445,13 +13454,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_11"
+                            "$ref": "#/components/schemas/Union_12"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_11"
+                              "$ref": "#/components/schemas/Union_12"
                             }
                           ],
                           "type": "array"

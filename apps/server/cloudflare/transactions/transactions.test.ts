@@ -8,15 +8,6 @@ import {
   TransactionPresentation,
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
-import {
-  BatchEnvelope,
-  batchCallId,
-  concurrentCorrection,
-  correctionCall,
-  defectiveBatchDb,
-  seedTransaction,
-} from "../atomic/atomic-batch.test-fixture";
-
 import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
@@ -99,6 +90,7 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
 type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
 const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
   DB: db,
+  STATEMENT_STAGING_BUCKET: Option.none(),
   AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
   HOSTED_AI_MODEL: approvedWorkersAiModel,
 });
@@ -2826,6 +2818,7 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
         { id: { name: session.value.userId } },
         {
           DB: db,
+          STATEMENT_STAGING_BUCKET: Option.none(),
           AI: {
             run: (): Promise<Response> =>
               Promise.reject(new Error("the model check must fail first")),

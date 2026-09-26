@@ -6,19 +6,23 @@ import {
   maximumKeywordRulesPerUser,
 } from "@fidy/server/categories";
 import { Memory, MemoryId, type MemoryOperationId } from "@fidy/server/memory-runtime";
+import { StatementSubmission } from "@fidy/server/statement-staging";
 import {
   RestoredTransactionPair,
   TransactionPresentation,
 } from "@fidy/server/transactions-runtime";
 import { canonicalTriggerNames, canonicalTriggerOf } from "../audit/audit-triggers";
 import {
+  lostStatementReplay,
+  readOwnedStatementSubmission,
+  statementAbortRefusal,
+  submissionProjection,
+} from "../ingestion/statement-staging";
+import { canonicalStatementRefusal } from "./statement-mutation";
+import {
   type CanonicalRefusalDisposition,
-  type TransactionBoundaryFailure,
   type TransactionCaller,
-  boundaryFailure,
   childCaller,
-  dailyAuditBudget,
-  dailyAuditCount,
   liveTransactionAuthority,
   liveTransactionCredential,
   refusedCredentialResponse,
@@ -71,37 +75,19 @@ export type CanonicalMutationUnitExecution =
       disposition: CanonicalRefusalDisposition;
     }>
   | Readonly<{ _tag: "CredentialRefused" }>
-  | Readonly<{ _tag: "Unavailable" }>;
+  | Readonly<{ _tag: "Unavailable" }>
+  | Readonly<{ _tag: "Aborted" }>;
 
 /** The commit-time trigger classes one aborted unit can name by its own D1 constraint message. */
 type TriggerKind = "movement" | "capacity" | "audit";
 
 /**
- * The child whose position exhausts the daily Audit budget: the replayed position when it names
- * one, otherwise the first child — the budget is User-global, so this unit's replay has no better
- * candidate — and None only when the unit holds no child at all.
+ * A shared Audit budget trigger identifies its owner only in a single-child unit. A recount after
+ * rollback can include unrelated commits and cannot safely select a child of a mixed batch.
  */
-const auditBudgetIndex = ({
-  db,
-  userId,
-  current,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  mutations: ReadonlyArray<PreparedCanonicalMutation>;
-}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () => dailyAuditCount({ db, userId, current }),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.map((count) => {
-      const remaining = dailyAuditBudget - count;
-      if (remaining >= 0 && remaining < mutations.length) return Option.some(remaining);
-      return mutations.length === 0 ? Option.none() : Option.some(0);
-    })
-  );
+const auditBudgetIndex = (
+  mutations: ReadonlyArray<PreparedCanonicalMutation>
+): Option.Option<number> => (mutations.length === 1 ? Option.some(0) : Option.none());
 
 /**
  * Record one already-decided child refusal and report how the unit's caller must answer it.
@@ -161,6 +147,15 @@ const triggerRefusal = ({
         operation: mutation.outcome.operation,
         kind,
       });
+    case "StatementSubmission":
+      return kind === "audit"
+        ? Option.some({
+            code: "rate_limited",
+            message: "Too many statement calls today; retry after the daily budget resets.",
+            record: () => Effect.succeed("rate_limited" as const),
+            respond: () => Effect.succeed(transactionUnavailable()),
+          })
+        : Option.none();
   }
 };
 
@@ -340,6 +335,19 @@ const inferredAbortRefusal = ({
       );
     case "Memory":
       return memoryInferredRefusal({ db, subject: scoped, current, outcome });
+    case "StatementSubmission":
+      return statementAbortRefusal(outcome.config, outcome.publication).pipe(
+        Effect.map(
+          Option.map((refusal) =>
+            canonicalStatementRefusal({
+              config: outcome.config,
+              subject: scoped,
+              current,
+              refusal,
+            })
+          )
+        )
+      );
   }
 };
 
@@ -421,9 +429,7 @@ const triggerAttribution = ({
         return Option.map(index, (value) => ({ index: value, kind: "capacity" as const }));
       }
       case canonicalTriggerNames.auditLimit: {
-        const index = yield* attributedIndex(
-          auditBudgetIndex({ db, userId: subject.userId, current, mutations })
-        );
+        const index = auditBudgetIndex(mutations);
         return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
       }
     }
@@ -502,7 +508,7 @@ const classifyAbortedUnit = ({
         refusal: inferred.value.refusal,
       });
     }
-    return { _tag: "Unavailable" } as const;
+    return { _tag: "Aborted" } as const;
   });
 
 /** Read one committed child's canonical success value, or None when the readback is incomplete. */
@@ -522,6 +528,26 @@ const findCommittedValue = ({
       return findKeywordRuleValue({ db, userId, outcome: mutation.outcome });
     case "Memory":
       return findMemoryValue({ db, userId, outcome: mutation.outcome });
+    case "StatementSubmission": {
+      const statement = mutation.outcome;
+      return Effect.gen(function* () {
+        const read = readOwnedStatementSubmission(statement.config, {
+          userId,
+          submissionId: statement.publication.submissionId,
+        });
+        let result = yield* Effect.exit(read);
+        for (let attempt = 1; attempt < 3 && Exit.isFailure(result); attempt += 1) {
+          result = yield* Effect.exit(read);
+        }
+        if (Exit.isFailure(result)) return Option.none();
+        return Option.flatMap(result.value, (row) =>
+          Option.map(submissionProjection(row), (submission) => ({
+            _tag: "StatementSubmission" as const,
+            submission,
+          }))
+        );
+      });
+    }
   }
 };
 
@@ -556,7 +582,11 @@ export const executeCanonicalMutationUnit = ({
     }
     const values: Array<CommittedMutationValue> = [];
     for (const mutation of mutations) {
-      const value = yield* findCommittedValue({ db, userId: subject.userId, mutation });
+      const read = findCommittedValue({ db, userId: subject.userId, mutation });
+      let value = yield* read;
+      for (let attempt = 1; attempt < 3 && Option.isNone(value); attempt += 1) {
+        value = yield* read;
+      }
       if (Option.isNone(value)) return { _tag: "Unavailable" } as const;
       values.push(value.value);
     }
@@ -565,27 +595,25 @@ export const executeCanonicalMutationUnit = ({
 
 /** The JSON payload one committed canonical value carries as its operation's success data. */
 export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
-  switch (value._tag) {
-    case "Transaction":
-      return value.transaction;
-    case "EffectiveTransaction":
-      return value.transaction;
-    case "RestoredPair":
-      return value.pair;
-    case "KeywordRule":
-      return value.rule;
-    case "RemovedKeywordRule":
-      return value.id;
-    case "Memory":
-      return value.memory;
-    case "RemovedMemory":
-      return value.id;
-  }
+  if ("transaction" in value) return value.transaction;
+  if ("submission" in value) return value.submission;
+  if ("pair" in value) return value.pair;
+  if ("rule" in value) return value.rule;
+  if ("memory" in value) return value.memory;
+  return value.id;
 };
+
+const encodeRemovedValue = (
+  value: Extract<CommittedMutationValue, { _tag: "RemovedKeywordRule" | "RemovedMemory" }>
+): Effect.Effect<unknown, Schema.SchemaError> =>
+  value._tag === "RemovedKeywordRule"
+    ? Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(value.id)
+    : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
 
 const encodeCommittedValue = (
   value: CommittedMutationValue
 ): Effect.Effect<unknown, Schema.SchemaError> => {
+  if ("id" in value) return encodeRemovedValue(value);
   switch (value._tag) {
     case "Transaction":
       return Schema.encodeEffect(TransactionOutput)(value.transaction);
@@ -595,12 +623,10 @@ const encodeCommittedValue = (
       return Schema.encodeEffect(Schema.toCodecJson(RestoredTransactionPair))(value.pair);
     case "KeywordRule":
       return Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(value.rule);
-    case "RemovedKeywordRule":
-      return Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(value.id);
     case "Memory":
       return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
-    case "RemovedMemory":
-      return Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
+    case "StatementSubmission":
+      return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }
 };
 
@@ -657,9 +683,62 @@ const singleResponse = ({
     case "CredentialRefused":
       return refusedCredentialResponse({ db, subject });
     case "Unavailable":
+    case "Aborted":
       return Effect.succeed(transactionUnavailable());
   }
 };
+
+type SingleWork = Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  preparation: CanonicalMutationPreparation;
+  present: (value: CommittedMutationValue) => Effect.Effect<Response>;
+  retryStatement: Option.Option<() => Effect.Effect<CanonicalMutationPreparation>>;
+}>;
+
+/** Commit a prepared single mutation, retrying only a proven same-material statement race. */
+const executePreparedSingle = ({
+  db,
+  subject,
+  current,
+  preparation,
+  present,
+  retryStatement,
+}: SingleWork &
+  Readonly<{
+    preparation: Extract<CanonicalMutationPreparation, { _tag: "Prepared" }>;
+  }>): Effect.Effect<Response> =>
+  executeCanonicalMutationUnit({ db, subject, current, mutations: [preparation.mutation] }).pipe(
+    Effect.flatMap((execution) => {
+      const outcome = preparation.mutation.outcome;
+      if (
+        execution._tag !== "Aborted" ||
+        outcome._tag !== "StatementSubmission" ||
+        Option.isNone(retryStatement)
+      ) {
+        return singleResponse({ db, subject, execution, present });
+      }
+      return lostStatementReplay(outcome.config, outcome.publication).pipe(
+        Effect.flatMap((sameMaterial) =>
+          sameMaterial
+            ? retryStatement.value().pipe(
+                Effect.flatMap((next) =>
+                  executeSingleCanonicalMutation({
+                    db,
+                    subject,
+                    current,
+                    preparation: next,
+                    present,
+                    retryStatement: Option.none(),
+                  })
+                )
+              )
+            : Effect.succeed(transactionUnavailable())
+        )
+      );
+    })
+  );
 
 /**
  * Execute one owner-prepared canonical mutation as its own caller-owned unit and map every outcome
@@ -673,13 +752,8 @@ export const executeSingleCanonicalMutation = ({
   current,
   preparation,
   present,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  preparation: CanonicalMutationPreparation;
-  present: (value: CommittedMutationValue) => Effect.Effect<Response>;
-}>): Effect.Effect<Response> => {
+  retryStatement,
+}: SingleWork): Effect.Effect<Response> => {
   switch (preparation._tag) {
     case "Refused":
       // `record` and `respond` never fail by contract; see `rejectChild` for the same guarantee.
@@ -691,11 +765,6 @@ export const executeSingleCanonicalMutation = ({
     case "Failed":
       return failedPreparationResponse({ db, subject, current });
     case "Prepared":
-      return executeCanonicalMutationUnit({
-        db,
-        subject,
-        current,
-        mutations: [preparation.mutation],
-      }).pipe(Effect.flatMap((execution) => singleResponse({ db, subject, execution, present })));
+      return executePreparedSingle({ db, subject, current, preparation, present, retryStatement });
   }
 };

@@ -1404,6 +1404,21 @@ export const lostStatementReplay = (
         Effect.orElseSucceed(() => false)
       );
 
+/** A changed publication premise that the durable state proves caused an aborted unit. */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const statementAbortRefusal = (
+  config: StatementStagingConfig,
+  publication: PreparedStatementPublication
+): Effect.Effect<Option.Option<AtomicMutationRefusal>> =>
+  publication.replayed
+    ? Effect.succeedNone
+    : classifyLostPublication(config, { attempt: publication.attempt }).pipe(
+        Effect.map((lost) =>
+          lost._tag === "Refused" ? Option.some(statementRefusal(lost.reason)) : Option.none()
+        ),
+        Effect.orElseSucceed(() => Option.none())
+      );
+
 /** The attribution one aborted unit's statement child is classified with, or none when it cannot be proven. */
 export const statementAbortAttributors = ({
   config,
@@ -1607,7 +1622,8 @@ const publishStagedStatementSubmission = (
       publication: preparation.publication,
     });
   });
-const readOwnedStatementSubmission = (
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const readOwnedStatementSubmission = (
   config: StatementStagingConfig,
   input: Readonly<{ userId: string; submissionId: string }>
 ): ReturnType<StatementStagingService["readOwnedStatementSubmission"]> =>

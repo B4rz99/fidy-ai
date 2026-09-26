@@ -63,6 +63,8 @@ const budgetSpent = (
 export type StatementIngestionEnvironment = Readonly<{ readonly DB: D1Database }> &
   Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>>;
 
+const unavailable = (): Response => unavailableStatement();
+
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_ACCEPTED = 202;
@@ -152,7 +154,7 @@ const StatementSubmissionOutput = Schema.toCodecJson(StatementSubmission);
 const json = (body: unknown, status: number): Response =>
   Response.json(body, { headers: noStore, status });
 
-const unavailable = (): Response =>
+export const unavailableStatement = (): Response =>
   json(
     {
       error: { code: "unavailable", message: "Canonical operation is temporarily unavailable." },
@@ -216,7 +218,7 @@ const refusalStatus = (code: AtomicMutationRefusal["code"]): number => {
  * The one bounded HTTP answer for a closed canonical publication refusal. The refusal's own code,
  * message, and status are what every individual caller receives; a refusal never echoes bytes.
  */
-const statementRefusalResponse = (refusal: AtomicMutationRefusal): Response =>
+export const statementRefusalResponse = (refusal: AtomicMutationRefusal): Response =>
   json(
     {
       error: {
@@ -243,7 +245,8 @@ const stagingService = (
   );
 
 /** Encodes one stored submission into the canonical response body, or `None` for a broken row. */
-const submissionResponse = (
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const submissionResponse = (
   stored: StoredStatementSubmission,
   status: number
 ): Effect.Effect<Option.Option<Response>> =>

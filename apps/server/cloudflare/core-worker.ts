@@ -114,8 +114,9 @@ import type { WorkersAiEnvironment } from "./ai/workers-ai";
 import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   readStatementSubmission,
-  submitStagedStatement,
+  submitForExtractionInput,
   uploadStagedStatement,
+  validationFailed,
 } from "./ingestion/statement-ingestion";
 import { StatementStaging } from "./ingestion/statement-staging";
 
@@ -932,9 +933,14 @@ const ingestionCanonicalResponse = (
   const { operation, request, environment, subject } = input;
   if (operation.id === "ingestion.submitForExtraction") {
     return Option.some(
-      Effect.tryPromise({
-        try: () => submitStagedStatement({ environment, request, subject }),
-        catch: () => undefined,
+      Effect.gen(function* () {
+        const input = yield* Effect.tryPromise(() => submitForExtractionInput(request));
+        if (Option.isNone(input)) return validationFailed("Invalid statement submission input.");
+        return yield* sendToCoordinator({
+          environment,
+          subject,
+          work: canonicalCall(operation.id, { payload: input.value }),
+        });
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("ingestion.submitForExtraction"))
     );
   }

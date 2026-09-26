@@ -459,6 +459,9 @@ export const refusedCredentialResponse = ({
 
 /** One live-authority gate over a credential table: its table, predicate, and bindings. */
 export type TransactionAuthority = PATAuthority | WebSessionAuthority;
+/** Narrow a live authority to its PAT credential for statement accountability. */
+export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
+  authority.table === "pats";
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
 export const callerAuthority = ({
   subject,

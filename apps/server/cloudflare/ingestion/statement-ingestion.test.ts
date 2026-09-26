@@ -18,7 +18,7 @@ import {
   defectiveBatchDb,
   seedTransaction,
 } from "../atomic/atomic-batch.test-fixture";
-import { oversizedChildMessage } from "../atomic/canonical-batch";
+import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { transactionSession } from "../transactions/transactions";
 import { executeStatementSubmission } from "./statement-ingestion";
@@ -225,7 +225,12 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
       fetch: (command: Request): Promise<Response> =>
         new UserTransactionCoordinator(
           { id: { name } },
-          { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket }
+          {
+            DB: runtime.db,
+            STATEMENT_STAGING_BUCKET: Option.some(runtime.bucket),
+            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+            HOSTED_AI_MODEL: approvedWorkersAiModel,
+          }
         ).fetch(new Request(command)),
     }),
   },

@@ -8,6 +8,8 @@ apps/server/cloudflare/ingestion/statement-ingestion.test.ts
   s_966f707575be21::t_1b91ddc3db8430 3482,3522
   s_966f707575be21::t_edca2e33c177a4 3483-3521,3523-3540
   s_966f707575be21::t_2ba67e90526e6d 3481
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_966f707575be21::t_570e146c5cbfdd 263-264
 ---
 {
   "schema_version": "authorship/3.0.0",

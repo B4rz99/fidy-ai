@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 
 /**
- * The atomic-batch fixtures the Transactions and statement-ingestion suites share: one committed
+ * Fixtures for statement-ingestion's mixed canonical batches: one committed
  * batch envelope, the child identities and builders, the direct seeds a premise race needs, and the
- * D1 defect seam. Each suite keeps its own runtime, credentials, and call vocabulary.
+ * D1 defect seam. This suite owns its runtime, credentials, and call vocabulary.
  */
 
 /** One committed batch envelope before any child output is decoded against its own schema. */

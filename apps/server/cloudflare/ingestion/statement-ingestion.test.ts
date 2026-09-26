@@ -17,7 +17,7 @@ import {
   correctionCall,
   defectiveBatchDb,
   seedTransaction,
-} from "../atomic/atomic-batch.test-fixture";
+} from "./statement-batch.test-fixture";
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { transactionSession } from "../transactions/transactions";

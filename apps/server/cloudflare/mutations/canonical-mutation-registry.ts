@@ -1,6 +1,9 @@
 import { Effect, Option, Schema } from "effect";
 import {
+  ApplyDashboardEditCanonicalInput,
   CanonicalOperationId,
+  GetDashboardCanonicalInput,
+  GetDashboardViewCanonicalInput,
   getAtomicBatchChildIds,
   getCanonicalOperationInput,
 } from "@fidy/server/canonical-runtime";
@@ -10,6 +13,11 @@ import { type HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { insightRefusal, prepareInsightTransition } from "../insights/insight-store";
 import { statementMutationAdapter } from "./statement-mutation";
+import {
+  dashboardRefusal,
+  prepareDashboard,
+  presentDashboard,
+} from "../dashboard/dashboard-mutation";
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
 import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
 import { budgetRefusal } from "../budgets/budget-outcome";
@@ -19,6 +27,7 @@ import {
   type TransactionCaller,
   type TransactionMutationOperation,
   missingTransactionMessage,
+  transactionUnavailable,
 } from "../transactions/transaction-boundary";
 import { prepareCapture } from "../transactions/transactions";
 import { prepareCorrection } from "../transactions/transaction-corrections";
@@ -180,6 +189,46 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  ...(
+    [
+      [
+        "dashboard.getDashboard",
+        decodeAndPrepare(GetDashboardCanonicalInput, (_input, work) =>
+          prepareDashboard({ work, operation: "dashboard.getDashboard", edit: Option.none() })
+        ),
+      ],
+      [
+        "dashboard.getDashboardView",
+        decodeAndPrepare(GetDashboardViewCanonicalInput, (_input, work) =>
+          prepareDashboard({ work, operation: "dashboard.getDashboardView", edit: Option.none() })
+        ),
+      ],
+      [
+        "dashboard.applyDashboardEdit",
+        decodeAndPrepare(ApplyDashboardEditCanonicalInput, ({ payload }, work) =>
+          prepareDashboard({
+            work,
+            operation: "dashboard.applyDashboardEdit",
+            edit: Option.some(payload),
+          })
+        ),
+      ],
+    ] as const
+  ).map(
+    ([operation, prepare]) =>
+      [
+        CanonicalOperationId.make(operation),
+        {
+          prepare,
+          present: (value: CommittedMutationValue) =>
+            value._tag === "Dashboard" || value._tag === "DashboardView"
+              ? presentDashboard(value)
+              : Effect.succeed(transactionUnavailable()),
+          invalidRefusal: (work: CanonicalMutationWork) =>
+            dashboardRefusal({ work, operation, code: "validation_failed" }),
+        },
+      ] as const
+  ),
   [
     CanonicalOperationId.make("insights.markInsightDelivered"),
     {

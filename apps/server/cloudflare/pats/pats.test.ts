@@ -2921,7 +2921,7 @@ it("fails closed with declared unavailable for an authenticated WebSession whose
       const { send, sessions } = yield* awaitPromise(setup());
       const authenticated = yield* awaitPromise(
         send({
-          path: "/dashboard/edits",
+          path: "/insights/30000000-0000-4000-8000-000000000001/read",
           method: "POST",
           payload: {},
           session: sessions[0],

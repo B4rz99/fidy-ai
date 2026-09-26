@@ -146,7 +146,7 @@ afterEach(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())));
 // @effect-diagnostics-next-line asyncFunction:off
 const seedPAT = async (
   db: D1Database,
-  input: Readonly<{ token: string; scope: "read" | "write"; id: string }>
+  input: Readonly<{ token: string; scope: "read" | "write" | "dashboard"; id: string }>
 ): Promise<void> => {
   const { token, scope, id } = input;
   const current = DateTime.nowUnsafe().epochMilliseconds;
@@ -238,6 +238,250 @@ const send = (
       },
     }
   );
+
+const BatchFailure = Schema.Struct({
+  error: Schema.Struct({
+    operation: Schema.String,
+    failedCallIndex: Schema.Finite,
+    code: Schema.String,
+  }),
+});
+const BatchDashboard = Schema.Struct({
+  data: Schema.Struct({
+    results: Schema.Array(
+      Schema.Struct({
+        output: Schema.Struct({ data: Schema.Struct({ title: Schema.String }) }),
+      })
+    ),
+  }),
+});
+const DocumentReply = Schema.Struct({ data: Schema.Struct({ title: Schema.String }) });
+const batchCall = (operation: string, input: object, index: number): object => ({
+  callId: `30000000-0000-4000-8000-00000000000${index}`,
+  operation,
+  input,
+});
+const batch = (db: D1Database, calls: ReadonlyArray<object>): Promise<Response> =>
+  send(db, 0, { path: "/operations/atomic-batch", method: "POST", body: { calls } });
+const count = (db: D1Database, table: "dashboard_documents" | "dashboard_audit"): Promise<number> =>
+  db
+    .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id = ?`)
+    .bind(users[0])
+    .first<{ count: number }>()
+    .then((row) => row?.count ?? -1);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("a first invalid or missing Dashboard edit records only its refusal and never persists a document", async () => {
+  const db = await setup();
+  const invalid = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: { op: "set-title", title: "" },
+  });
+  expect(invalid.status).toBe(400);
+  const missing = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: {
+      op: "remove-widget",
+      widgetId: "30000000-0000-4000-8000-000000000099",
+    },
+  });
+  expect(missing.status).toBe(404);
+  expect(await count(db, "dashboard_documents")).toBe(0);
+  const rows = await db
+    .prepare("SELECT operation, outcome FROM dashboard_audit WHERE user_id = ? ORDER BY rowid")
+    .bind(users[0])
+    .all();
+  expect(rows.results).toEqual([
+    { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
+    { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
+  ]);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("persists one Dashboard child through the public atomic batch and rolls back a failed sibling", async () => {
+  const db = await setup();
+  const rejected = await batch(db, [
+    batchCall("dashboard.getDashboard", {}, 1),
+    batchCall(
+      "dashboard.applyDashboardEdit",
+      {
+        payload: {
+          op: "remove-widget",
+          widgetId: "30000000-0000-4000-8000-000000000099",
+        },
+      },
+      2
+    ),
+  ]);
+  expect(rejected.status).toBe(400);
+  expect(Schema.decodeUnknownSync(BatchFailure)(await rejected.json()).error).toMatchObject({
+    operation: "dashboard.applyDashboardEdit",
+    failedCallIndex: 1,
+    code: "not_found",
+  });
+  expect(await count(db, "dashboard_documents")).toBe(0);
+  expect(await count(db, "dashboard_audit")).toBe(1);
+  const accepted = await batch(db, [batchCall("dashboard.getDashboardView", {}, 3)]);
+  expect(accepted.status).toBe(200);
+  expect(
+    Schema.decodeUnknownSync(BatchDashboard)(await accepted.json()).data.results[0]?.output.data
+      .title
+  ).toBe("Tablero");
+  expect(await count(db, "dashboard_documents")).toBe(1);
+  const repeated = await batch(db, [
+    batchCall("dashboard.getDashboard", {}, 4),
+    batchCall("dashboard.getDashboardView", {}, 5),
+  ]);
+  expect(repeated.status).toBe(400);
+  expect(Schema.decodeUnknownSync(BatchFailure)(await repeated.json()).error).toMatchObject({
+    failedCallIndex: 1,
+    code: "validation_failed",
+  });
+  expect(await count(db, "dashboard_audit")).toBe(2);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("keeps Dashboard read and edit scopes distinct inside atomic batches", async () => {
+  const db = await setup();
+  const token = `fin_${"r".repeat(8)}_${"c".repeat(43)}`;
+  await seedPAT(db, { token, scope: "read", id: "30000000-0000-4000-8000-000000000071" });
+  const denied = await send(db, token, {
+    path: "/operations/atomic-batch",
+    method: "POST",
+    body: {
+      calls: [
+        batchCall(
+          "dashboard.applyDashboardEdit",
+          { payload: { op: "set-title", title: "Not allowed" } },
+          1
+        ),
+      ],
+    },
+  });
+  expect(denied.status).toBe(400);
+  expect(Schema.decodeUnknownSync(BatchFailure)(await denied.json()).error.code).toBe(
+    "scope_missing"
+  );
+  expect(await count(db, "dashboard_documents")).toBe(0);
+  expect(await count(db, "dashboard_audit")).toBe(0);
+  const allowed = await send(db, token, {
+    path: "/operations/atomic-batch",
+    method: "POST",
+    body: {
+      calls: [batchCall("dashboard.getDashboard", {}, 2)],
+    },
+  });
+  expect(allowed.status).toBe(200);
+  expect(await count(db, "dashboard_documents")).toBe(1);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("does not report a skipped Dashboard revision as a successful edit", async () => {
+  const db = await setup();
+  const created = await send(db, 0, "/dashboard");
+  expect(created.status).toBe(200);
+  await db
+    .prepare(`CREATE TRIGGER ignore_dashboard_update BEFORE UPDATE ON dashboard_documents
+    BEGIN SELECT RAISE(IGNORE); END`)
+    .run();
+  const response = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: {
+      op: "set-title",
+      title: "Not written",
+    },
+  });
+  expect(response.status).not.toBe(200);
+  expect(
+    Schema.decodeUnknownSync(DocumentReply)(await (await send(db, 0, "/dashboard")).json()).data
+      .title
+  ).toBe("Tablero");
+  expect(await count(db, "dashboard_audit")).toBe(2);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rolls back a Dashboard child when a later owner's guarded audit aborts the D1 batch", async () => {
+  const db = await setup();
+  await db
+    .prepare(`CREATE TRIGGER reject_budget_success BEFORE INSERT ON budget_audit
+    WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_budget_unavailable'); END`)
+    .run();
+  const reply = await batch(db, [
+    batchCall("dashboard.getDashboard", {}, 8),
+    batchCall(
+      "budgets.createBudget",
+      {
+        payload: {
+          categoryId: "10000000-0000-4000-8000-000000000001",
+          cap: { amount: "50000", currency: "COP" },
+        },
+      },
+      9
+    ),
+  ]);
+  expect(reply.status).toBe(503);
+  expect(await count(db, "dashboard_documents")).toBe(0);
+  expect(await count(db, "dashboard_audit")).toBe(0);
+  const budget = await db
+    .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ count: number }>();
+  expect(budget?.count).toBe(0);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rolls back first-use Dashboard persistence when its success Audit cannot commit", async () => {
+  const db = await setup();
+  await db
+    .prepare(`CREATE TRIGGER reject_dashboard_success BEFORE INSERT ON dashboard_audit
+    WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_audit_unavailable'); END`)
+    .run();
+  const reply = await batch(db, [batchCall("dashboard.getDashboard", {}, 6)]);
+  expect(reply.status).toBe(503);
+  expect(await count(db, "dashboard_documents")).toBe(0);
+  expect(await count(db, "dashboard_audit")).toBe(0);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("a first valid edit commits the default and edit in the same unit for individual and batch callers", async () => {
+  const db = await setup();
+  const edited = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: {
+      op: "set-title",
+      title: "Individual",
+    },
+  });
+  expect(edited.status).toBe(200);
+  expect(Schema.decodeUnknownSync(DocumentReply)(await edited.json()).data.title).toBe(
+    "Individual"
+  );
+  const second = await batch(db, [
+    batchCall(
+      "dashboard.applyDashboardEdit",
+      {
+        payload: {
+          op: "set-title",
+          title: "Batch",
+        },
+      },
+      7
+    ),
+  ]);
+  expect(second.status).toBe(200);
+  expect(
+    Schema.decodeUnknownSync(BatchDashboard)(await second.json()).data.results[0]?.output.data.title
+  ).toBe("Batch");
+  expect(
+    Schema.decodeUnknownSync(DocumentReply)(await (await send(db, 0, "/dashboard")).json()).data
+      .title
+  ).toBe("Batch");
+  expect(await count(db, "dashboard_documents")).toBe(1);
+}, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("creates a valid DashboardDocument for each User without sharing later edits", async () => {

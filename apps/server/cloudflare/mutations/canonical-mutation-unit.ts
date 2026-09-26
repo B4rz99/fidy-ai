@@ -8,6 +8,9 @@ import {
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
 import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import { DashboardDocument } from "../../src/core/dashboard/model";
+import { DashboardView } from "../../src/shell/dashboard/operations";
+import { findDashboardValue } from "../dashboard/dashboard-mutation";
 import { InsightDeliveryAttempt, InsightEvent } from "@fidy/server/insights-runtime";
 import { findInsight, findInsightAttempt } from "../insights/insight-store";
 import { budgetAuditLimitRefusal, findBudgetValue } from "../budgets/budget-outcome";
@@ -185,6 +188,7 @@ const triggerRefusal = ({
   switch (mutation.outcome._tag) {
     case "Budget":
     case "Insight":
+    case "Dashboard":
       return auditOnly(budgetAuditLimitRefusal());
     case "Transaction":
       return transactionTriggerRefusal({
@@ -468,6 +472,8 @@ const findCommittedValue = ({
       return findBudgetValue({ db, userId, outcome: mutation.outcome });
     case "Insight":
       return findCommittedInsight({ db, userId, outcome: mutation.outcome });
+    case "Dashboard":
+      return findDashboardValue({ db, userId, operation: mutation.outcome.operation });
     case "Transaction":
       return findTransactionValue({ db, userId, outcome: mutation.outcome });
     case "KeywordRule":
@@ -614,6 +620,8 @@ const retainedMutationPayload = (
 export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
   if (value._tag === "ForwardingAddress") return value.address;
   if (value._tag === "Budget") return value.budget;
+  if (value._tag === "Dashboard") return value.document;
+  if (value._tag === "DashboardView") return value.view;
   if (value._tag === "Insight") return value.insight;
   if (value._tag === "DeliveredInsight") {
     return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
@@ -683,7 +691,9 @@ const encodeEntityValue = (
         | "Memory"
         | "StatementSubmission"
         | "Insight"
-        | "DeliveredInsight";
+        | "DeliveredInsight"
+        | "Dashboard"
+        | "DashboardView";
     }
   >
 ): Effect.Effect<unknown, Schema.SchemaError> => {
@@ -702,6 +712,12 @@ const encodeEntityValue = (
 const encodeExistingValue = (
   value: ExistingCommittedValue
 ): Effect.Effect<unknown, Schema.SchemaError> => {
+  if (value._tag === "Dashboard") {
+    return Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(value.document);
+  }
+  if (value._tag === "DashboardView") {
+    return Schema.encodeEffect(Schema.toCodecJson(DashboardView))(value.view);
+  }
   if ("id" in value) return encodeRemovedValue(value);
   if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
   if ("insight" in value || "submission" in value || "memory" in value) {

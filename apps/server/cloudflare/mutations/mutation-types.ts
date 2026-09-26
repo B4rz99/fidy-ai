@@ -13,6 +13,8 @@ import type {
   InsightEvent,
   InsightEventId,
 } from "@fidy/server/insights-runtime";
+import type { DashboardDocument } from "../../src/core/dashboard/model";
+import type { DashboardView } from "../../src/shell/dashboard/operations";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -112,6 +114,14 @@ export type CanonicalMutationOutcome =
       insightEventId: InsightEventId;
       attemptId: Option.Option<DeliveryAttemptId>;
     }>
+  | Readonly<{
+      _tag: "Dashboard";
+      operation:
+        | "dashboard.getDashboard"
+        | "dashboard.getDashboardView"
+        | "dashboard.applyDashboardEdit";
+      expectedRevision: number;
+    }>
   | TransactionOutcome
   | KeywordRuleOutcome
   | MemoryOutcome
@@ -177,6 +187,8 @@ export type CommittedMutationValue =
       insight: InsightEvent;
       deliveryAttempt: InsightDeliveryAttempt;
     }>
+  | Readonly<{ _tag: "Dashboard"; document: DashboardDocument }>
+  | Readonly<{ _tag: "DashboardView"; view: DashboardView }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
   | Readonly<{ _tag: "Transaction"; transaction: StoredTransaction }>

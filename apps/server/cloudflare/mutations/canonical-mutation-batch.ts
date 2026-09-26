@@ -84,7 +84,7 @@ const scopeMessage = "The caller's credential does not grant this child mutation
 const repeatedCallIdMessage =
   "Each child call needs its own callId; a repeated identity cannot commit twice.";
 const repeatedTargetMessage =
-  "Each child must address its own retained rule or Memory; one retained row cannot commit twice.";
+  "Each child must address its own retained document, rule, or Memory; one retained row cannot commit twice.";
 const repeatedStatementMessage = "An atomic batch can publish at most one statement.";
 export const oversizedChildMessage =
   "This child's input exceeds the size an individual call of this operation accepts.";
@@ -571,6 +571,7 @@ const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Opt
  */
 const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string> => {
   const outcome = mutation.outcome;
+  if (outcome._tag === "Dashboard") return Option.some("dashboard-document");
   if (outcome._tag === "KeywordRule") return Option.some(`keyword-rule:${outcome.ruleId}`);
   if (outcome._tag === "Memory") return Option.some(`memory:${outcome.memoryId}`);
   return Option.none();

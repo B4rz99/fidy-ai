@@ -107,7 +107,7 @@ The infrastructure admission primitive atomically charges Stable-User, source, o
 outstanding-work, and spend policies with caller-owned proof, replay, or outbox statements. Its
 resource refusal and authority-unavailable failures are separate from commercial allowance results.
 The shared canonical mutation unit in `cloudflare/mutations` composes the Reconciliation, Category
-keyword-rule, Memory, and statement-publication owners into one User-scoped D1 commit, derived from
+keyword-rule, Memory, Dashboard document, and statement-publication owners into one User-scoped D1 commit, derived from
 the operation catalog so a new canonical mutation joins it without editing the unit. If an adapter is absent, canonical mutation execution returns the closed
 unavailable failure. It must not use an in-memory map, local queue, process lock, or best-effort
 continuation as a substitute.
@@ -121,6 +121,11 @@ missing or mismatched bytes. Unpublished material expires; published bytes follo
 retention while their staging row records their eventual removal. See
 [ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md) for the
 staging and publication protocol.
+
+Dashboard first-use document creation, edits, and view preparation use the same canonical mutation
+unit for individual and atomic-batch calls. Batch preparation does not read earlier children's
+writes; a batch refuses a second Dashboard document child rather than claiming an intermediate
+view. Invalid first edits leave no document or accepted AuditLogEntry.
 
 Individual and atomic-batch statement submissions share one User-scoped publication unit: the
 submission, staging promotion, Free-backfill reservation, credential accountability, metadata-only

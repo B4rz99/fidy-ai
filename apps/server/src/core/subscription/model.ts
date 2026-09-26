@@ -3,14 +3,10 @@ import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { PriceId } from "./reference";
+import { TrialPeriod } from "~/core/identity/model";
+import { AccessTier } from "~/core/access-tier/contract";
 
 export { PriceId } from "./reference";
-
-/** Subscription-owned private fact recording whether paid Pro access is active. */
-export const SubscriptionStanding = Schema.Struct({
-  paidProActive: Schema.Boolean,
-}).annotate({ identifier: "SubscriptionStanding" });
-export type SubscriptionStanding = typeof SubscriptionStanding.Type;
 
 /** The canonical public web destination where a User can start a Pro Subscription. */
 export const UpgradeDestination = Schema.Struct({
@@ -203,3 +199,28 @@ export const BillingAttempt = Schema.Union([
   SucceededBillingAttempt,
 ]).annotate({ identifier: "BillingAttempt" });
 export type BillingAttempt = typeof BillingAttempt.Type;
+
+/** Current paid period, retaining the exact Price snapshot that was charged. */
+export const PaidSubscription = Schema.Struct({
+  priceId: PriceId,
+  money: Money,
+  billingPeriod: BillingPeriod,
+  serviceMarket: ServiceMarket,
+  taxTreatment: TaxTreatment,
+  startsAt: UtcTimestamp,
+  endsAt: UtcTimestamp,
+  renewalAnchor: UtcTimestamp,
+}).annotate({ identifier: "PaidSubscription" });
+
+const maximumRecentBillingAttempts = 10;
+
+/** Standing at one decision instant, including expired evidence without hiding existing data. */
+export const SubscriptionStatus = Schema.Struct({
+  accessTier: AccessTier,
+  trialPeriod: TrialPeriod,
+  paidSubscription: Schema.OptionFromNullOr(PaidSubscription),
+  recentAttempts: Schema.Array(BillingAttempt).check(
+    Schema.isMaxLength(maximumRecentBillingAttempts)
+  ),
+}).annotate({ identifier: "SubscriptionStatus" });
+export type SubscriptionStatus = typeof SubscriptionStatus.Type;

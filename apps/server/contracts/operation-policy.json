@@ -590,6 +590,21 @@
       }
     },
     {
+      "id": "subscription.getSubscriptionStatus",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "subscription.getUpgradeUrl",
       "policy": {
         "access": {

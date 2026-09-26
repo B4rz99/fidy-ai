@@ -19,6 +19,7 @@ import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
+import { formatMoney } from "@/ui/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type PriceId,
@@ -986,6 +987,79 @@ export const SubscriptionOffersView = ({
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
+const subscriptionStatusQuery = Atom.family((client: FidyClient) =>
+  client.query("subscription", "getSubscriptionStatus", {})
+);
+
+const billingAttemptLabel = (status: "pending" | "succeeded" | "failed"): string => {
+  switch (status) {
+    case "pending":
+      return "pendiente";
+    case "succeeded":
+      return "aprobado";
+    case "failed":
+      return "fallido";
+  }
+};
+
+const SubscriptionStanding = (): JSX.Element => {
+  const router = useRouter();
+  const query = subscriptionStatusQuery(router.options.context.apiClient);
+  const status = useAtomValue(query);
+  const refresh = useAtomRefresh(query);
+  const view = presentCanonicalQuery(status);
+  if (view._tag === "Initial") return <Skeleton className="h-24 w-full" />;
+  if (view._tag === "Failure") {
+    return (
+      <Alert>
+        <AlertTitle>Estado no disponible</AlertTitle>
+        <AlertDescription>
+          No pudimos consultar tu suscripción. Tus datos siguen disponibles.
+        </AlertDescription>
+        <Button type="button" variant="outline" onClick={refresh}>
+          Reintentar
+        </Button>
+      </Alert>
+    );
+  }
+  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = view.value.data;
+  const lastAttempt = recentAttempts[0];
+  const periodEnd = Option.isSome(paidSubscription)
+    ? paidSubscription.value.endsAt.epochMilliseconds
+    : trialPeriod.endsAt.epochMilliseconds;
+  const periodLabel = new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "long",
+    timeZone: "America/Bogota",
+  }).format(periodEnd);
+  return (
+    <Card aria-label="Estado de la suscripción">
+      <CardHeader>
+        <CardTitle>Tu acceso: {accessTier === "pro" ? "Pro" : "Gratis"}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <p>
+          {Option.isSome(paidSubscription) ? "Último período pagado" : "Período de prueba"}: hasta
+          el {periodLabel}.
+        </p>
+        {Option.isSome(paidSubscription) && (
+          <p>
+            Precio cobrado: {formatMoney({ locale: "es-CO", money: paidSubscription.value.money })}.
+          </p>
+        )}
+        {lastAttempt !== undefined && (
+          <p>Último intento de cobro: {billingAttemptLabel(lastAttempt.status)}.</p>
+        )}
+        <p className="text-muted-foreground">
+          Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
+          bloqueo de suscripción.
+        </p>
+        <Button type="button" variant="outline" onClick={refresh}>
+          Actualizar estado
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
 
 const readyOffersState = ({
   offers,
@@ -1040,15 +1114,18 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
       );
     case "Ready":
       return (
-        <SubscriptionOffersView
-          gateway={Option.some(gateway)}
-          state={readyOffersState({
-            offers: queryState.value.data,
-            refreshFailure: Option.isSome(queryState.refreshFailure),
-            refreshing: queryState.waiting,
-            onRetry: refresh,
-          })}
-        />
+        <>
+          <SubscriptionStanding />
+          <SubscriptionOffersView
+            gateway={Option.some(gateway)}
+            state={readyOffersState({
+              offers: queryState.value.data,
+              refreshFailure: Option.isSome(queryState.refreshFailure),
+              refreshing: queryState.waiting,
+              onRetry: refresh,
+            })}
+          />
+        </>
       );
   }
 };

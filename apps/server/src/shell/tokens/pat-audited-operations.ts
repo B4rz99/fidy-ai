@@ -16,6 +16,8 @@ export type AuditedPATOperation =
   | "memory.recall"
   | "memory.remember"
   | "memory.revise"
+  | "subscription.getSubscriptionStatus"
+  | "subscription.listSubscriptionOffers"
   | "transactions.createTransaction"
   | "transactions.getTransaction"
   | "transactions.linkTransactions"

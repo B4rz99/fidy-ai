@@ -5,25 +5,24 @@ export const dailyAuditBudget = 256;
 
 /**
  * The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, category, Memory,
- * statement submission. Batch-envelope refusals are excluded; every audit trigger counts the
+ * statement submission, statement review. Batch-envelope refusals are excluded; every audit trigger counts the
  * same union, so this read and the triggers agree about what the budget covers.
  */
-const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ?
-      AND operation != 'operations.executeAtomicBatch' AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
-      AND operation != 'operations.executeAtomicBatch'
-      AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM category_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM memory_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?
-      UNION ALL
-      SELECT occurred_at_ms FROM statement_submission_audit WHERE user_id = ?
-      AND occurred_at_ms >= ? AND occurred_at_ms < ?`;
+const auditDayCount = `SELECT
+      (SELECT count(*) FROM transaction_audit WHERE user_id = ?
+        AND operation != 'operations.executeAtomicBatch' AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM pat_audit WHERE user_id = ?
+        AND operation != 'operations.executeAtomicBatch'
+        AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM category_audit WHERE user_id = ?
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM memory_audit WHERE user_id = ?
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM statement_submission_audit WHERE user_id = ?
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM statement_review_audit WHERE user_id = ?
+        AND occurred_at_ms >= ? AND occurred_at_ms < ?) AS total`;
 
 /** How many canonical audit rows one User has committed in the UTC day containing `current`. */
 export const dailyAuditCount = ({
@@ -33,8 +32,11 @@ export const dailyAuditCount = ({
 }: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<number> => {
   const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
   return db
-    .prepare(`SELECT count(*) AS total FROM (${auditDayRows})`)
+    .prepare(auditDayCount)
     .bind(
+      userId,
+      start,
+      start + utcDayMilliseconds,
       userId,
       start,
       start + utcDayMilliseconds,

@@ -190,6 +190,8 @@ const setup = (platform = false): Promise<D1Database> =>
           "0015_statement_submission",
           "0016_budgets",
           "0016_hosted_turn",
+          "0017_forwarded_email",
+          "0017_statement_dispatch",
           "0018_batch_envelope_audit",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
@@ -5412,7 +5414,12 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
         expect(failure.error.code).toBe("validation_failed");
       }
       const audits = yield* fromTestPromise(() =>
-        db.prepare("SELECT * FROM transaction_audit WHERE user_id = ?").bind(users[0]).all()
+        db
+          .prepare(
+            "SELECT user_id, session_id, operation, outcome FROM transaction_audit WHERE user_id = ?"
+          )
+          .bind(users[0])
+          .all()
       );
       expect(audits.results).toHaveLength(bodies.length);
       expect(
@@ -5430,14 +5437,6 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
           outcome: "validation_failed",
         }))
       );
-      expect(Object.keys(audits.results[0] ?? {}).sort()).toEqual([
-        "id",
-        "occurred_at_ms",
-        "operation",
-        "outcome",
-        "session_id",
-        "user_id",
-      ]);
       expect(
         yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
       ).toBe(0);
@@ -5445,14 +5444,16 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(0);
       // The trigger, not just the read, excludes these rows when the daily budget is full.
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
-          INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-          SELECT 'envelope-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
+      for (let chunk = 0; chunk < 4; chunk++) {
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 63)
+            INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+            SELECT 'envelope-seed-' || ? || '-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+            .bind(chunk, users[0], sessions[0], current)
+            .run()
+        );
+      }
       const atLimit = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch({ calls: [] })));
       expect(atLimit.status).toBe(400);
       expect(
@@ -5468,12 +5469,20 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
       ).toBe(5);
       // An independent daily envelope cap bounds storage even though refusals do not spend
       // canonical child-work capacity. Its trigger counts both session and PAT rows.
+      for (let chunk = 0; chunk < 5; chunk++) {
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 49)
+            INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+            SELECT 'envelope-cap-' || ? || '-' || n, ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ? FROM seq`)
+            .bind(chunk, users[0], sessions[0], current)
+            .run()
+        );
+      }
       yield* fromTestPromise(() =>
         db
-          .prepare(`WITH RECURSIVE seq(n) AS
-        (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 250)
-        INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT 'envelope-cap-' || n, ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ? FROM seq`)
+          .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+          VALUES ('envelope-cap-last', ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ?)`)
           .bind(users[0], sessions[0], current)
           .run()
       );

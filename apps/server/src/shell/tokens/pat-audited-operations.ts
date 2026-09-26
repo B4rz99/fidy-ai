@@ -10,6 +10,8 @@ export type AuditedPATOperation =
   | "categories.listCategories"
   | "categories.listKeywordRules"
   | "categories.updateKeywordRule"
+  | "ingestion.enableEmailForwarding"
+  | "ingestion.getEmailForwarding"
   | "ingestion.getStatementSubmission"
   | "ingestion.submitForExtraction"
   | "memory.forget"

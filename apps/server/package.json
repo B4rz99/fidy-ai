@@ -166,6 +166,7 @@
     "jose": "6.2.12",
     "mupdf": "1.28.1",
     "parse5": "8.0.1",
+    "postal-mime": "2.7.6",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

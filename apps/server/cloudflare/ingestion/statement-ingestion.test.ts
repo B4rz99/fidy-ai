@@ -65,6 +65,8 @@ const migrationNames = [
   "0013_category_keyword_rules",
   "0014_memory",
   "0015_statement_submission",
+  "0016_subscription_standing",
+  "0017_forwarded_email",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -336,6 +338,59 @@ const sessionHeaders = (index: number): Record<string, string> => ({
   cookie: `__Host-fidy_session=${bearer(index)}`,
   origin: browserOrigin,
 });
+
+it(
+  "enables forwarding through the public canonical mutation and reads its User-owned address",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        for (const [index, userId] of [userA, userB].entries()) {
+          yield* fromTestPromise(() =>
+            runtime.db
+              .prepare(
+                `INSERT INTO onboarding_consent_records
+           (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+            decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'fixture', 'fixture', 1, 1)`
+              )
+              .bind(`30000000-0000-4000-8000-00000000010${index}`, userId)
+              .run()
+          );
+        }
+        const request = (index: number, method: string): Request =>
+          new Request("https://api.fidyapp.com/ingestion/email-forwarding", {
+            method,
+            headers: sessionHeaders(index),
+          });
+        const enabled = yield* fromTestPromise(() => send(runtime, request(0, "POST")));
+        expect(enabled.status).toBe(200);
+        const parsed = Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({ address: Schema.String }),
+          })
+        );
+        const address = (yield* parsed(yield* fromTestPromise(() => enabled.json()))).data.address;
+        expect(address).toMatch(/^[a-f0-9]{48}@fidyapp\.com$/u);
+        const read = yield* fromTestPromise(() => send(runtime, request(0, "GET")));
+        expect(read.status).toBe(200);
+        const own = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({ address: Schema.Struct({ address: Schema.String }) }),
+          })
+        )(yield* fromTestPromise(() => read.json()));
+        expect(own.data.address.address).toBe(address);
+        const other = yield* fromTestPromise(() => send(runtime, request(1, "GET")));
+        expect(other.status).toBe(200);
+        const otherAddress = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({ address: Schema.Struct({ address: Schema.String }) }),
+          })
+        )(yield* fromTestPromise(() => other.json()));
+        expect(otherAddress.data.address.address).not.toBe(address);
+      })
+    ),
+  30_000
+);
 
 const upload = (
   runtime: Runtime,

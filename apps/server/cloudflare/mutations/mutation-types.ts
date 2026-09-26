@@ -7,6 +7,7 @@ import type {
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
+import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
   PreparedStatementPublication,
   StatementStagingConfig,
@@ -89,6 +90,7 @@ export type CanonicalMutationOutcome =
   | TransactionOutcome
   | KeywordRuleOutcome
   | MemoryOutcome
+  | Readonly<{ _tag: "ForwardingAddress"; current: number }>
   | Readonly<{
       _tag: "StatementSubmission";
       publication: PreparedStatementPublication;
@@ -125,7 +127,8 @@ export type CommittedMutationValue =
   | Readonly<{ _tag: "RemovedKeywordRule"; id: KeywordRuleId }>
   | Readonly<{ _tag: "Memory"; memory: Memory }>
   | Readonly<{ _tag: "RemovedMemory"; id: MemoryId }>
-  | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>;
+  | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>
+  | Readonly<{ _tag: "ForwardingAddress"; address: EmailForwardingAddress }>;
 
 /**
  * One canonical refusal an owner decided. `code` and `message` are what a batch child reports;

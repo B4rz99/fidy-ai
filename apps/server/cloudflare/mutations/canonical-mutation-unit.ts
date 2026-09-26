@@ -7,6 +7,8 @@ import {
 } from "@fidy/server/categories";
 import { Memory, MemoryId, type MemoryOperationId } from "@fidy/server/memory-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";
+import { EmailForwardingAddress } from "../../src/core/ingestion/model";
+import { readForwardingAddress } from "../ingestion/forwarding-address";
 import {
   RestoredTransactionPair,
   TransactionPresentation,
@@ -147,6 +149,15 @@ const triggerRefusal = ({
         operation: mutation.outcome.operation,
         kind,
       });
+    case "ForwardingAddress":
+      return kind === "audit"
+        ? Option.some({
+            code: "rate_limited",
+            message: "Daily canonical work budget exhausted.",
+            record: () => Effect.succeed("rate_limited" as const),
+            respond: () => Effect.succeed(transactionUnavailable()),
+          })
+        : Option.none();
     case "StatementSubmission":
       return kind === "audit"
         ? Option.some({
@@ -335,6 +346,8 @@ const inferredAbortRefusal = ({
       );
     case "Memory":
       return memoryInferredRefusal({ db, subject: scoped, current, outcome });
+    case "ForwardingAddress":
+      return Effect.succeedNone;
     case "StatementSubmission":
       return statementAbortRefusal(outcome.config, outcome.publication).pipe(
         Effect.map(
@@ -528,6 +541,10 @@ const findCommittedValue = ({
       return findKeywordRuleValue({ db, userId, outcome: mutation.outcome });
     case "Memory":
       return findMemoryValue({ db, userId, outcome: mutation.outcome });
+    case "ForwardingAddress":
+      return readForwardingAddress(db, userId, mutation.outcome.current).pipe(
+        Effect.map(Option.map((address) => ({ _tag: "ForwardingAddress" as const, address })))
+      );
     case "StatementSubmission": {
       const statement = mutation.outcome;
       return Effect.gen(function* () {
@@ -601,8 +618,9 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-/** The JSON payload one committed canonical value carries as its operation's success data. */
-export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
+type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
+
+const existingMutationPayload = (value: ExistingCommittedValue): unknown => {
   if ("transaction" in value) return value.transaction;
   if ("submission" in value) return value.submission;
   if ("pair" in value) return value.pair;
@@ -611,6 +629,10 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
   return value.id;
 };
 
+/** The JSON payload one committed canonical value carries as its operation's success data. */
+export const committedMutationPayload = (value: CommittedMutationValue): unknown =>
+  value._tag === "ForwardingAddress" ? value.address : existingMutationPayload(value);
+
 const encodeRemovedValue = (
   value: Extract<CommittedMutationValue, { _tag: "RemovedKeywordRule" | "RemovedMemory" }>
 ): Effect.Effect<unknown, Schema.SchemaError> =>
@@ -618,8 +640,8 @@ const encodeRemovedValue = (
     ? Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(value.id)
     : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
 
-const encodeCommittedValue = (
-  value: CommittedMutationValue
+const encodeExistingValue = (
+  value: ExistingCommittedValue
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   if ("id" in value) return encodeRemovedValue(value);
   switch (value._tag) {
@@ -637,6 +659,13 @@ const encodeCommittedValue = (
       return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }
 };
+
+const encodeCommittedValue = (
+  value: CommittedMutationValue
+): Effect.Effect<unknown, Schema.SchemaError> =>
+  value._tag === "ForwardingAddress"
+    ? Schema.encodeEffect(Schema.toCodecJson(EmailForwardingAddress))(value.address)
+    : encodeExistingValue(value);
 
 /** Encode one committed value as its canonical individual success response. */
 export const committedJsonResponse = ({

@@ -87,6 +87,7 @@ export const toApiFailure = ({
           candidates: [
             suggestOperation({
               tool: "insights.listPendingInsights",
+              args: Option.none(),
               hint: "List pending insights to find an occurrence you can act on.",
             }),
           ],

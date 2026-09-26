@@ -7,6 +7,8 @@ import {
 import { TransactionId } from "@fidy/server/transactions-runtime";
 import { type MemoryOperationId } from "@fidy/server/memory-runtime";
 import { type HostedInference } from "@fidy/server/hosted-inference";
+import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
+import { insightRefusal, prepareInsightTransition } from "../insights/insight-store";
 import { statementMutationAdapter } from "./statement-mutation";
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
 import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
@@ -147,10 +149,66 @@ const decodeAndPrepare =
       onSome: (decoded) => decide(decoded, work),
     });
 
+const InsightParams = Schema.Struct({ id: InsightEventId });
+const ReadInsight = Schema.Struct({ params: InsightParams });
+const DeliverInsight = Schema.Struct({ params: InsightParams, payload: DeliveryEvidenceInput });
+const insightAdapter = (
+  operation: "insights.markInsightRead" | "insights.dismissInsight"
+): CanonicalMutationAdapter => ({
+  prepare: decodeAndPrepare(ReadInsight, ({ params }, work) =>
+    prepareInsightTransition({
+      db: work.db,
+      subject: work.subject,
+      operation,
+      id: params.id,
+      evidence: Option.none(),
+      current: work.current,
+    })
+  ),
+  present: present(HTTP_OK),
+  invalidRefusal: (work) =>
+    insightRefusal({
+      db: work.db,
+      subject: work.subject,
+      operation,
+      current: work.current,
+      code: "not_found",
+    }),
+});
+
 const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = new Map<
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [
+    CanonicalOperationId.make("insights.markInsightDelivered"),
+    {
+      prepare: decodeAndPrepare(DeliverInsight, ({ params, payload }, work) =>
+        prepareInsightTransition({
+          db: work.db,
+          subject: work.subject,
+          operation: "insights.markInsightDelivered",
+          id: params.id,
+          evidence: Option.some(payload),
+          current: work.current,
+        })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: (work) =>
+        insightRefusal({
+          db: work.db,
+          subject: work.subject,
+          operation: "insights.markInsightDelivered",
+          current: work.current,
+          code: "validation_failed",
+        }),
+    },
+  ],
+  [
+    CanonicalOperationId.make("insights.markInsightRead"),
+    insightAdapter("insights.markInsightRead"),
+  ],
+  [CanonicalOperationId.make("insights.dismissInsight"), insightAdapter("insights.dismissInsight")],
   [
     CanonicalOperationId.make("budgets.createBudget"),
     {

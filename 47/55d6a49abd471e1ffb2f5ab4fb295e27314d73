@@ -1,0 +1,33 @@
+.agents/skills/implement-spec/SKILL.md
+  s_2eaebfed3f2872::t_ff7cbc11cafaa0 1-28,30-47
+  s_2eaebfed3f2872::t_933bb96df266eb 29
+.agents/skills/diagnosing-bugs/SKILL.md
+  s_2eaebfed3f2872::t_9094118a1e55a4 130
+  s_2eaebfed3f2872::t_ed854b6015642e 120
+.agents/skills/retro/SKILL.md
+  s_2eaebfed3f2872::t_ca809b856869fe 1-41
+.agents/skills/ask-matt/SKILL.md
+  s_2eaebfed3f2872::t_f5423237e12201 50
+  s_2eaebfed3f2872::t_2dea42793a479b 23,26-30,34
+  s_2eaebfed3f2872::t_3990d89aabf925 46
+.agents/skills/implement-spec/agents/openai.yaml
+  s_2eaebfed3f2872::t_8cbe424c422417 1-5
+.agents/skills/retro/agents/openai.yaml
+  s_2eaebfed3f2872::t_f0b52dad3c122d 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4755d6a49abd471e1ffb2f5ab4fb295e27314d73",
+  "prompts": {},
+  "sessions": {
+    "s_2eaebfed3f2872": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db39-7b93-7691-8f21-b8c70423e4f0",
+        "model": "gpt-6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

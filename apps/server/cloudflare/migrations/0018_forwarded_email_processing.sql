@@ -1,3 +1,5 @@
+ALTER TABLE forwarded_email_receipts ADD COLUMN time_zone TEXT NOT NULL DEFAULT 'America/Bogota';
+
 -- One terminal result per delivered email. The receipt and its opaque object stay private until
 -- retention; no Queue identity or R2 key is ever sufficient to authorize a different User.
 CREATE TABLE forwarded_email_outcomes (
@@ -17,13 +19,20 @@ CREATE TABLE forwarded_email_assertion (
   accepted INTEGER NOT NULL CHECK (accepted = 1)
 ) STRICT;
 CREATE TRIGGER forwarded_email_outcome_consent BEFORE INSERT ON forwarded_email_outcomes
-WHEN NOT EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = NEW.user_id)
-  OR EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = NEW.user_id)
+WHEN (NEW.outcome <> 'needs-review' OR NOT EXISTS
+    (SELECT 1 FROM forwarded_email_needs_review e WHERE e.id = NEW.review_id
+      AND e.reason = 'consent-revoked')) AND (
+  NOT EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = NEW.user_id)
+  OR EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = NEW.user_id))
+  OR (EXISTS (SELECT 1 FROM forwarded_email_needs_review e
+    WHERE e.id = NEW.review_id AND e.reason = 'consent-revoked')
+    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = NEW.user_id))
   OR NOT EXISTS (SELECT 1 FROM forwarded_email_receipts
-    WHERE id = NEW.receipt_id AND user_id = NEW.user_id AND state = 'queued'
+    WHERE id = NEW.receipt_id AND user_id = NEW.user_id
+      AND (state = 'queued' OR (state = 'storing' AND NEW.outcome = 'needs-review'))
       AND (expires_at_ms > NEW.completed_at_ms OR (NEW.outcome = 'needs-review'
         AND EXISTS (SELECT 1 FROM forwarded_email_needs_review e
-          WHERE e.id = NEW.review_id AND e.reason = 'processing-interrupted'))))
+          WHERE e.id = NEW.review_id AND e.reason IN ('processing-interrupted', 'consent-revoked')))))
 BEGIN SELECT RAISE(ABORT, 'forwarded_email_authority'); END;
 CREATE TRIGGER forwarded_email_outcome_no_update BEFORE UPDATE ON forwarded_email_outcomes
 BEGIN SELECT RAISE(ABORT, 'email_outcome_append_only'); END;
@@ -36,7 +45,7 @@ CREATE TABLE forwarded_email_needs_review (
   user_id TEXT NOT NULL REFERENCES users(id),
   reason TEXT NOT NULL CHECK (reason IN ('unsupported-content', 'unknown-format',
     'ambiguous-format', 'invalid-format', 'canonical-validation-failed',
-    'processing-interrupted')),
+    'processing-interrupted', 'consent-revoked')),
   created_at_ms INTEGER NOT NULL,
   evidence_expires_at_ms INTEGER NOT NULL,
   FOREIGN KEY (user_id, receipt_id) REFERENCES forwarded_email_receipts(user_id, id)
@@ -109,7 +118,7 @@ CREATE TABLE anonymized_email_samples (
   parser_revision TEXT NOT NULL CHECK (parser_revision = 'cloudflare-mime-v1'),
   anonymization_revision TEXT NOT NULL CHECK (anonymization_revision = 'structural-tags-v1'),
   structure TEXT NOT NULL CHECK (length(structure) BETWEEN 2 AND 256),
-  approved_at_ms INTEGER NOT NULL,
+  policy_approved_at_ms INTEGER NOT NULL,
   retained_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE TRIGGER anonymized_email_sample_no_update BEFORE UPDATE ON anonymized_email_samples
@@ -126,4 +135,8 @@ WHEN (SELECT count(*) FROM forwarded_email_receipts r WHERE r.state IN ('storing
   OR (SELECT count(*) FROM forwarded_email_receipts r WHERE r.state IN ('storing', 'queued')
   AND r.user_id = NEW.user_id AND r.expires_at_ms > NEW.received_at_ms AND NOT EXISTS
   (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) >= 100
+  OR (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = NEW.user_id
+    AND r.received_at_ms > NEW.received_at_ms - 7776000000) >= 1000
+  OR (SELECT count(*) FROM forwarded_email_receipts r
+    WHERE r.received_at_ms > NEW.received_at_ms - 7776000000) >= 10000
 BEGIN SELECT RAISE(ABORT, 'forwarded_email_capacity'); END;

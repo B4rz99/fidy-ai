@@ -13,6 +13,7 @@ import {
 } from "../../src/shell/ingestion/email-interpretation/interpret";
 import { emailCrypto } from "./forwarded-email";
 
+const maximumTimeZoneCharacters = 128;
 const Receipt = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   object_key: Schema.String.check(Schema.isPattern(/^email\/v1\/[a-f0-9-]{36}$/u)),
@@ -20,6 +21,7 @@ const Receipt = Schema.Struct({
   byte_length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_048_576 })),
   received_at_ms: Schema.Int,
   expires_at_ms: Schema.Int,
+  time_zone: Schema.String.check(Schema.isLengthBetween(1, maximumTimeZoneCharacters)),
 });
 type Receipt = typeof Receipt.Type;
 type Input = Readonly<{
@@ -91,7 +93,7 @@ const anonymizeStructure = (html: string): string => {
 const findOwnedReceipt = async (input: Input): Promise<Option.Option<Receipt>> => {
   const current = await Effect.runPromise(Clock.currentTimeMillis);
   const raw = await input.DB.prepare(`SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
-    r.received_at_ms, r.expires_at_ms FROM forwarded_email_receipts r
+    r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
     WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
       AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
       AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
@@ -138,7 +140,7 @@ const decideEmail = async (
       context: Schema.decodeSync(CapturedInterpretationContext)({
         serviceMarket: "CO",
         locale: "es-CO",
-        timeZone: "America/Bogota",
+        timeZone: receipt.time_zone,
       }),
     })
   );
@@ -204,11 +206,12 @@ const acceptedStatements = async (
       (id, user_id, transaction_id, kind, service_market, locale, time_zone,
        interpretation_revision, created_at, received_email_id, message_content_sha256,
        source_format, message_evidence, deterministic_interpretation, extractor_revision)
-      SELECT ?, ?, ?, 'notification-email', 'CO', 'es-CO', 'America/Bogota', ?, ?, ?, ?,
+      SELECT ?, ?, ?, 'notification-email', 'CO', 'es-CO', ?, ?, ?, ?, ?,
         'notification-email', ?, ?, ? WHERE ${active}`).bind(
       await Effect.runPromise(emailCrypto.randomUUIDv4),
       input.userId,
       id,
+      settlement.receipt.time_zone,
       interpreted.revision,
       when,
       input.receiptId,
@@ -254,12 +257,14 @@ const settle = async (input: Input, receipt: Receipt, material: Material): Promi
     material.interpretation._tag === "Interpreted"
       ? [...(await acceptedStatements(settlement))]
       : [reviewStatement(settlement)];
-  if (Option.isSome(material.html)) {
+  // The deterministic, versioned, allowlisted structural transform is the approval policy.
+  // Do not retain uncertain/unrecognized email structure indefinitely.
+  if (Option.isSome(material.html) && material.interpretation._tag === "Interpreted") {
     const sampleId = await Effect.runPromise(emailCrypto.randomUUIDv4);
     statements.push(
       input.DB.prepare(`INSERT INTO anonymized_email_samples
       (id, service_market, source_format, source_provider, parser_revision,
-       anonymization_revision, structure, approved_at_ms, retained_at_ms)
+       anonymization_revision, structure, policy_approved_at_ms, retained_at_ms)
       SELECT ?, 'CO', 'notification-email', 'cloudflare-email', 'cloudflare-mime-v1',
         'structural-tags-v1', ?, ?, ? WHERE ${active}`).bind(
         sampleId,

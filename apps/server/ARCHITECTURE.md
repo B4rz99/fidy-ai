@@ -155,11 +155,15 @@ reads, and expiry are installed. The statement Workflow executes bounded chunks 
 coordinator and settles supported material into Transactions or visible NeedsReviewItems. Its cron
 reconciliation and dispatch run independently of the other activities, and its Workflow status and
 dead letters are included in operational inspection. Financial content stays out of Queue payloads
-and Workflow history. Forwarded-email ingress, private retention, and deterministic processing are installed. Its
-identity-only Queue redelivers under the User coordinator; a bounded known format commits one
-Transaction with its SourceAttestation, and uncertain or interrupted work enters the User-owned
-review read. Raw R2 bytes expire independently of the approved structural tag histogram. The full
-hosted-Turn path still requires its own adapter and platform evidence.
+and Workflow history. Forwarded-email ingress, private retention, and deterministic processing are installed.
+Its identity-only Queue redelivers under the User coordinator; a bounded known format commits one
+Transaction with its SourceAttestation, and uncertain, revoked, or interrupted work enters the
+User-owned review read. Raw R2 bytes expire independently of the structural tag histogram,
+which is retained only for successfully interpreted mail under a versioned allowlist approval policy.
+Per-User and global rolling retention budgets supplement outstanding-work limits. Institution
+Connection-state admission is not installed: this codebase has no institution Connection authority
+or sender-to-institution mapping yet. Do not enable an Email Routing rule until that policy can
+be enforced. The full hosted-Turn path still requires its own adapter and platform evidence.
 
 ## 6. Testing seams
 

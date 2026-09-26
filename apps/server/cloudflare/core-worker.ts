@@ -134,7 +134,7 @@ import {
   receiveForwardedEmailWork,
 } from "./ingestion/forwarded-email-delivery";
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
-import { listStatementNeedsReviewItems } from "./ingestion/statement-review";
+import { listNeedsReviewItems } from "./ingestion/statement-review";
 import {
   StatementExtractionWorkflowV1,
   dispatchStatementExtraction,
@@ -1362,7 +1362,7 @@ const ingestionCanonicalResponse = (
   }
   if (operation.id === "ingestion.listNeedsReviewItems") {
     return Option.some(
-      listStatementNeedsReviewItems({
+      listNeedsReviewItems({
         database: environment.DB,
         environment,
         subject,

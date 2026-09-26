@@ -35,6 +35,8 @@ const retentionDays = 90;
 const retentionMs = retentionDays * millisecondsPerDay;
 const maximumOutstandingUser = 100;
 const maximumOutstandingGlobal = 1000;
+const maximumRetainedUser = 1000;
+const maximumRetainedGlobal = 10000;
 const recipientPattern = /^[a-z0-9_-]{24,64}@fidyapp\.com$/u;
 const maximumSweep = 25;
 const dispatchCooldownMs = 60_000;
@@ -45,8 +47,17 @@ const hexBase = 16;
 
 const uuid = Schema.String.check(Schema.isUUID());
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const ApprovedRecipient = Schema.Struct({ user_id: UserId });
-const Capacity = Schema.Struct({ global_count: count, user_count: count });
+const maximumTimeZoneCharacters = 128;
+const ApprovedRecipient = Schema.Struct({
+  user_id: UserId,
+  time_zone: Schema.String.check(Schema.isLengthBetween(1, maximumTimeZoneCharacters)),
+});
+const Capacity = Schema.Struct({
+  global_count: count,
+  user_count: count,
+  retained_user_count: count,
+  retained_global_count: count,
+});
 const Receipt = Schema.Struct({
   id: uuid,
   state: Schema.Literals(["storing", "queued", "expired"]),
@@ -138,7 +149,8 @@ export const receiveForwardedEmail = Effect.fn(function* (
   const localPart = message.to.slice(0, message.to.indexOf("@"));
   const candidate = yield* io(() =>
     environment.DB.prepare(
-      `SELECT a.user_id FROM email_forwarding_addresses a
+      `SELECT a.user_id, u.time_zone FROM email_forwarding_addresses a
+     JOIN users u ON u.id = a.user_id
      JOIN onboarding_consent_records c ON c.user_id = a.user_id
      WHERE a.local_part = ? AND NOT EXISTS (
        SELECT 1 FROM consent_user_revocations r WHERE r.user_id = a.user_id)`
@@ -160,16 +172,20 @@ export const receiveForwardedEmail = Effect.fn(function* (
       (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
        AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS global_count,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
-       AND user_id = ? AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS user_count`
+       AND user_id = ? AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS user_count,
+      (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = ? AND r.received_at_ms > ?) AS retained_user_count,
+      (SELECT count(*) FROM forwarded_email_receipts r WHERE r.received_at_ms > ?) AS retained_global_count`
     )
-      .bind(now, approved.user_id, now)
+      .bind(now, approved.user_id, now, approved.user_id, now - retentionMs, now - retentionMs)
       .first()
   );
   const available = Schema.decodeUnknownOption(Capacity)(capacity);
   if (Option.isNone(available)) return yield* authorityUnavailable();
   if (
     available.value.global_count >= maximumOutstandingGlobal ||
-    available.value.user_count >= maximumOutstandingUser
+    available.value.user_count >= maximumOutstandingUser ||
+    available.value.retained_user_count >= maximumRetainedUser ||
+    available.value.retained_global_count >= maximumRetainedGlobal
   ) {
     reject(message);
     return;
@@ -236,10 +252,19 @@ export const receiveForwardedEmail = Effect.fn(function* (
     io(() =>
       environment.DB.prepare(
         `INSERT INTO forwarded_email_receipts
-     (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms)
-     VALUES (?, ?, ?, ?, ?, 'storing', ?, ?)`
+     (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms, time_zone)
+     VALUES (?, ?, ?, ?, ?, 'storing', ?, ?, ?)`
       )
-        .bind(id, approved.user_id, digest, objectKey, bytes.byteLength, now, now + retentionMs)
+        .bind(
+          id,
+          approved.user_id,
+          digest,
+          objectKey,
+          bytes.byteLength,
+          now,
+          now + retentionMs,
+          approved.time_zone
+        )
         .run()
     )
   );
@@ -364,17 +389,17 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
   const expired = Schema.decodeUnknownOption(Schema.Array(ExpiredReceipt))(rows.results);
   if (Option.isNone(expired)) return yield* authorityUnavailable();
   for (const row of expired.value) {
-    if (row.state === "queued") {
+    {
       const reviewId = yield* emailCrypto.randomUUIDv4;
       yield* io(() =>
         environment.DB.batch([
           environment.DB.prepare(`INSERT INTO forwarded_email_needs_review
           (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
-          SELECT ?, id, user_id, 'processing-interrupted', ?, expires_at_ms
+          SELECT ?, id, user_id,
+          CASE WHEN EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
+            THEN 'consent-revoked' ELSE 'processing-interrupted' END, ?, expires_at_ms
           FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
-          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)`).bind(
+          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`).bind(
             reviewId,
             now,
             row.id,
@@ -396,23 +421,12 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
       );
     }
     yield* io(() => environment.EMAIL_BUCKET.delete(row.object_key));
-    if (row.state === "storing") {
-      // No publication exists: a later SMTP retry may claim this delivery afresh.
-      yield* io(() =>
-        environment.DB.prepare(
-          "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
-        )
-          .bind(row.id, row.user_id)
-          .run()
-      );
-    } else {
-      yield* io(() =>
-        environment.DB.prepare(
-          "UPDATE forwarded_email_receipts SET state = 'expired' WHERE id = ? AND user_id = ? AND state = 'queued'"
-        )
-          .bind(row.id, row.user_id)
-          .run()
-      );
-    }
+    yield* io(() =>
+      environment.DB.prepare(
+        "UPDATE forwarded_email_receipts SET state = 'expired' WHERE id = ? AND user_id = ? AND state IN ('storing', 'queued')"
+      )
+        .bind(row.id, row.user_id)
+        .run()
+    );
   }
 });

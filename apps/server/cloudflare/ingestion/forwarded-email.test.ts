@@ -3,7 +3,8 @@ import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import emailWorker from "./email-worker";
 import { processForwardedEmail } from "./forwarded-email-processing";
-import { listStatementNeedsReviewItems } from "./statement-review";
+import { receiveForwardedEmailWork } from "./forwarded-email-delivery";
+import { listNeedsReviewItems } from "./statement-review";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
@@ -44,7 +45,7 @@ const setup = Effect.fn(function* () {
   const db = yield* wait(() => miniflare.getD1Database("DB"));
   const bucket = yield* wait(() => miniflare.getR2Bucket("EMAIL_BUCKET"));
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY);
+    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota');
     CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
     CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
@@ -209,6 +210,9 @@ it("settles a bounded known email into one Transaction and one immutable attesta
           )
         ).text()
       );
+      yield* wait(() =>
+        db.prepare("UPDATE users SET time_zone = 'America/Lima' WHERE id = ?").bind(userA).run()
+      );
       const bytes = new TextEncoder().encode(
         `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
       );
@@ -243,10 +247,13 @@ it("settles a bounded known email into one Transaction and one immutable attesta
       expect(transactions.results).toHaveLength(1);
       expect(transactions.results[0]).toMatchObject({ amount: "12500" });
       const attestations = yield* wait(() =>
-        db.prepare("SELECT kind FROM source_attestations WHERE user_id = ?").bind(userA).all()
+        db
+          .prepare("SELECT kind, time_zone FROM source_attestations WHERE user_id = ?")
+          .bind(userA)
+          .all()
       );
       expect(attestations.results).toEqual([
-        expect.objectContaining({ kind: "notification-email" }),
+        expect.objectContaining({ kind: "notification-email", time_zone: "America/Lima" }),
       ]);
       const sample = yield* wait(() =>
         db.prepare("SELECT structure FROM anonymized_email_samples").first<{ structure: string }>()
@@ -254,6 +261,79 @@ it("settles a bounded known email into one Transaction and one immutable attesta
       expect(sample).not.toBeNull();
       expect(sample?.structure).not.toContain("12500");
       expect(sample?.structure).not.toContain("bank@example.test");
+    })
+  ));
+
+it("offers only decoded User and receipt identities to private coordination", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, jobs } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      const seen: string[] = [];
+      let acked = false;
+      yield* wait(() =>
+        receiveForwardedEmailWork(
+          [
+            {
+              body: jobs[0],
+              ack: (): void => {
+                acked = true;
+              },
+            },
+          ],
+          {
+            getByName: (name) => ({
+              fetch: (request): Promise<Response> => {
+                seen.push(name, new URL(new Request(request).url).pathname);
+                return Promise.resolve(new Response(null, { status: 200 }));
+              },
+            }),
+          }
+        )
+      );
+      expect(acked).toBe(true);
+      expect(seen).toEqual([userA, "/forwarded-email-work"]);
+      let retryAcked = false;
+      yield* Effect.exit(
+        Effect.tryPromise(() =>
+          receiveForwardedEmailWork(
+            [
+              {
+                body: jobs[0],
+                ack: (): void => {
+                  retryAcked = true;
+                },
+              },
+            ],
+            {
+              getByName: () => ({
+                fetch: (): Promise<Response> =>
+                  Promise.resolve(new Response(null, { status: 503 })),
+              }),
+            }
+          )
+        )
+      );
+      expect(retryAcked).toBe(false);
+      yield* wait(() =>
+        receiveForwardedEmailWork(
+          [
+            {
+              body: jobs[0],
+              ack: (): void => {
+                retryAcked = true;
+              },
+            },
+          ],
+          {
+            getByName: () => ({
+              fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 200 })),
+            }),
+          }
+        )
+      );
+      expect(retryAcked).toBe(true);
     })
   ));
 
@@ -326,7 +406,7 @@ it("shows only the owner's pending forwarded email in the canonical review page"
         );
       }
       const page = (id: string, userId: string): Effect.Effect<Response> =>
-        listStatementNeedsReviewItems({
+        listNeedsReviewItems({
           database: db,
           environment: { DB: db },
           subject: { id, userId, digest },
@@ -376,6 +456,17 @@ it("refuses finalization after Consent revocation without partial financial writ
       ).toHaveLength(0);
       yield* wait(() => emailWorker.scheduled(undefined, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .bind(userA)
+          .first<{ reason: string }>()
+      );
+      expect(review?.reason).toBe("consent-revoked");
+      expect(
+        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
+          .results
+      ).toHaveLength(1);
     })
   ));
 
@@ -551,7 +642,7 @@ it("enforces the global outstanding cap atomically across Users", () =>
       const now = yield* Clock.currentTimeMillis;
       for (let index = 1; index < 10; index++) {
         yield* wait(() =>
-          db.prepare("INSERT INTO users VALUES (?)").bind(`fidy-test-${index}`).run()
+          db.prepare("INSERT INTO users (id) VALUES (?)").bind(`fidy-test-${index}`).run()
         );
         yield* wait(() =>
           db
@@ -583,6 +674,30 @@ it("enforces the global outstanding cap atomically across Users", () =>
           .first<{ count: number }>()
       );
       expect(total?.count).toBe(1000);
+    })
+  ));
+
+it("bounds retained email arrivals even after processing frees outstanding capacity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const now = yield* Clock.currentTimeMillis;
+      yield* wait(() =>
+        db
+          .prepare(`WITH RECURSIVE numbers(n) AS
+        (SELECT 0 UNION ALL SELECT n + 1 FROM numbers WHERE n < 999)
+        INSERT INTO forwarded_email_receipts
+        (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms)
+        SELECT printf('00000000-0000-4000-8000-%012d', n), ?,
+          printf('%064d', n), printf('email/v1/%036d', n), 1, 'expired', ?, ?
+        FROM numbers`)
+          .bind(userA, now, now + 60_000)
+          .run()
+      );
+      const input = delivery();
+      yield* wait(() => emailWorker.email(input.message, env));
+      expect(input.rejected).toHaveLength(1);
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
     })
   ));
 
@@ -645,6 +760,40 @@ it("deletes expired private email while keeping a replay tombstone", () =>
       expect(review?.reason).toBe("processing-interrupted");
       yield* wait(() => emailWorker.email(delivery().message, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+    })
+  ));
+
+it("records interrupted reservations visibly before expiring their private bytes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const id = "00000000-0000-4000-8000-000000000912";
+      const key = `email/v1/${id}`;
+      yield* wait(() =>
+        db
+          .prepare(`INSERT INTO forwarded_email_receipts
+        (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms)
+        VALUES (?, ?, ?, ?, 1, 'storing', 0, 1)`)
+          .bind(id, userA, "9".repeat(64), key)
+          .run()
+      );
+      yield* wait(() => bucket.put(key, new Uint8Array([1])));
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE receipt_id = ?")
+          .bind(id)
+          .first<{ reason: string }>()
+      );
+      expect(review?.reason).toBe("processing-interrupted");
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT state FROM forwarded_email_receipts WHERE id = ?")
+          .bind(id)
+          .first<{ state: string }>()
+      );
+      expect(receipt?.state).toBe("expired");
     })
   ));
 

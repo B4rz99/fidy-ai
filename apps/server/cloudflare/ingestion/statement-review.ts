@@ -45,6 +45,7 @@ const emailReviewRow = Schema.Struct({
   reason: Schema.String,
   created_at_ms: Schema.Int,
   evidence_expires_at_ms: Schema.Int,
+  time_zone: Schema.String,
 });
 type EmailReviewRow = typeof emailReviewRow.Type;
 
@@ -87,7 +88,7 @@ const projectEmailRow = (
     reason: row.reason,
     serviceMarket: "CO",
     locale: "es-CO",
-    timeZone: "America/Bogota",
+    timeZone: row.time_zone,
     sourceFormat: "notification-email",
     sourceChannel: "forwarded-email",
     sourceProvider: "cloudflare-email",
@@ -142,7 +143,8 @@ const loadEmailItems = async (
 ): Promise<Option.Option<ReadonlyArray<NeedsReviewItem>>> => {
   const rows = await database
     .prepare(`SELECT e.id, e.receipt_id, e.reason,
-    e.created_at_ms, e.evidence_expires_at_ms FROM forwarded_email_needs_review e
+    e.created_at_ms, e.evidence_expires_at_ms, r.time_zone FROM forwarded_email_needs_review e
+    JOIN forwarded_email_receipts r ON r.id = e.receipt_id AND r.user_id = e.user_id
     WHERE e.user_id = ? ORDER BY e.created_at_ms DESC, e.id DESC LIMIT ?`)
     .bind(userId, maximumOffset + pageSize)
     .all();
@@ -161,7 +163,7 @@ const reviewPageOffset = (url: URL): Option.Option<number> =>
   Schema.decodeOption(ReviewPageOffset)(url.searchParams.get("offset") ?? "0");
 
 /** A canonical User-scoped read of persisted, independently expiring review outcomes. */
-export const listStatementNeedsReviewItems = (
+export const listNeedsReviewItems = (
   input: Readonly<{
     database: D1Database;
     environment: Parameters<typeof commitReadAudit>[0];

@@ -4,7 +4,15 @@ import { Option } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
-const verifyGroups = ["static", "builds", "unit", "browser", "mutation"] as const;
+const verifyGroups = [
+  "static",
+  "builds",
+  "unit",
+  "cloudflare-adapters",
+  "cloudflare-infra",
+  "browser",
+  "mutation",
+] as const;
 type VerifyGroup = (typeof verifyGroups)[number];
 
 type Check = {
@@ -122,14 +130,15 @@ const checks: Array<Check> = [
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
   },
-  rootCheck("unit", "Cloudflare adapter tests", [
+  rootCheck("cloudflare-adapters", "Cloudflare adapter tests", [
     "bun",
     "run",
     "--cwd",
     "apps/server",
     "test:cloudflare",
+    ...(Bun.env.CLOUDFLARE_TEST_SHARD ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`] : []),
   ]),
-  rootCheck("unit", "Cloudflare infrastructure tests", [
+  rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
     "bun",
     "run",
     "--cwd",

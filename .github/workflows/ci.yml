@@ -78,6 +78,30 @@ jobs:
           retention-days: 7
           overwrite: true
 
+  cloudflare-adapters:
+    name: Cloudflare adapters (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Cloudflare adapter validation
+        env:
+          CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
+        run: bun run verify -- --group cloudflare-adapters
+
+  cloudflare-infra:
+    name: Cloudflare infrastructure tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Cloudflare infrastructure validation
+        run: bun run verify -- --group cloudflare-infra
+
   browser:
     name: Web browser and accessibility checks
     runs-on: ubuntu-latest
@@ -149,6 +173,8 @@ jobs:
       - static
       - builds
       - unit
+      - cloudflare-adapters
+      - cloudflare-infra
       - browser
       - security-secrets
       - security-sast

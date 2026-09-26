@@ -169,6 +169,15 @@
         "complexity": "off"
       }
     },
+    // SMTP admission is one ordered trust boundary: splitting its receipt-before-R2,
+    // publication, and ambiguity cleanup steps would obscure their required sequence.
+    {
+      "files": ["apps/server/cloudflare/ingestion/forwarded-email.ts"],
+      "rules": {
+        "complexity": "off",
+        "max-lines-per-function": "off"
+      }
+    },
     // These two tools reflect raw OpenAPI JSON, whose wire shape necessarily includes null.
     {
       "files": ["apps/server/tools/contracts/check.ts", "apps/server/tools/contracts/generate.ts"],
@@ -211,6 +220,7 @@
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
+        "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/documents/document-extraction-worker.ts",
         "apps/server/cloudflare/documents/document-parsing-worker.ts",
         "apps/server/cloudflare/documents/protected-document-worker.ts",

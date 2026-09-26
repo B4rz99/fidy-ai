@@ -21,6 +21,7 @@ import {
 } from "@fidy/server/memory-runtime";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import { statementMutationAdapter } from "./statement-mutation";
+import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
 import { transactionRefusal } from "./transaction-outcome";
 import { memoryRefusal } from "./memory-outcome";
 import {
@@ -162,6 +163,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalMutationAdapter
 >([
   [CanonicalOperationId.make("ingestion.submitForExtraction"), statementMutationAdapter],
+  [CanonicalOperationId.make("ingestion.enableEmailForwarding"), forwardingAddressMutationAdapter],
   [
     CanonicalOperationId.make("transactions.createTransaction"),
     {

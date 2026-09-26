@@ -120,6 +120,7 @@ import {
   validationFailed,
 } from "./ingestion/statement-ingestion";
 import { StatementStaging } from "./ingestion/statement-staging";
+import { forwardingAddressResponse } from "./ingestion/forwarding-address";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
@@ -932,6 +933,24 @@ const ingestionCanonicalResponse = (
   }>
 ): Option.Option<Effect.Effect<Response>> => {
   const { operation, request, environment, subject } = input;
+  if (operation.id === "ingestion.enableEmailForwarding") {
+    return Option.some(
+      sendToCoordinator({
+        environment,
+        subject,
+        work: canonicalCall(operation.id, {}),
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
+    );
+  }
+  if (operation.id === "ingestion.getEmailForwarding") {
+    return Option.some(
+      forwardingAddressResponse({
+        db: environment.DB,
+        subject,
+        operation: "ingestion.getEmailForwarding",
+      }).pipe(Effect.withSpan(operation.id))
+    );
+  }
   if (operation.id === "ingestion.submitForExtraction") {
     return Option.some(
       Effect.gen(function* () {

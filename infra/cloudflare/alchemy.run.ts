@@ -164,6 +164,25 @@ export default Alchemy.Stack(
     // Private statement byte staging. The ingress never receives this binding; only the Core Worker
     // writes, verifies, and reclaims staged material through its authorized paths (#788, ADR 0028).
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
+    const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
+    const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
+    const emailWorker = yield* Cloudflare.Worker("ForwardedEmail", {
+      main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
+      compatibility: { date: "2026-09-08" },
+      crons: ["*/5 * * * *"],
+      env: { DB: database, EMAIL_BUCKET: emailBucket, EMAIL_QUEUE: emailQueue },
+      workersDev: false,
+    });
+    // The catch-all delivers to a private Email Worker. Only an issued token at this domain
+    // passes the Worker's envelope and D1 approval checks; unknown mail is rejected.
+    yield* Cloudflare.Email.Routing("ForwardedEmailRouting", {
+      zone: "fidyapp.com",
+    });
+    yield* Cloudflare.Email.CatchAll("ForwardedEmailCatchAll", {
+      zone: "fidyapp.com",
+      name: "Fidy forwarded email",
+      actions: [{ type: "worker", value: [emailWorker.workerName] }],
+    });
 
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {

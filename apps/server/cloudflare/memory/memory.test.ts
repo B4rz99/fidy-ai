@@ -203,7 +203,6 @@ const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.f
           { id: { name } },
           {
             DB: db,
-            STATEMENT_STAGING_BUCKET: Option.none(),
             AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
             HOSTED_AI_MODEL: approvedWorkersAiModel,
           }

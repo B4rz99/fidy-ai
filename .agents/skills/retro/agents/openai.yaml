@@ -1,0 +1,5 @@
+interface:
+  display_name: "Retro"
+  short_description: "Find agent-environment improvements from a session"
+policy:
+  allow_implicit_invocation: false

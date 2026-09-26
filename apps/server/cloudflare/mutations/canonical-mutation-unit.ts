@@ -24,6 +24,7 @@ import {
   readOwnedStatementSubmission,
   submissionProjection,
 } from "../ingestion/statement-staging";
+import { canonicalStatementRefusal, statementDailyBudgetRefusal } from "./statement-mutation";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
@@ -153,14 +154,9 @@ const rejectRecorded = ({
     })
   );
 
-const nonTransactionAuditLimitRefusal = (
-  source: "ForwardingAddress" | "StatementSubmission"
-): CanonicalMutationRefusal => ({
+const forwardingAuditLimitRefusal = (): CanonicalMutationRefusal => ({
   code: "rate_limited",
-  message:
-    source === "ForwardingAddress"
-      ? "Daily canonical work budget exhausted."
-      : "Too many statement calls today; retry after the daily budget resets.",
+  message: "Daily canonical work budget exhausted.",
   record: () => Effect.succeed("rate_limited" as const),
   respond: () => Effect.succeed(transactionUnavailable()),
 });
@@ -203,8 +199,9 @@ const triggerRefusal = ({
     case "Memory":
       return auditOnly(memoryBudgetRefusal());
     case "ForwardingAddress":
+      return auditOnly(forwardingAuditLimitRefusal());
     case "StatementSubmission":
-      return auditOnly(nonTransactionAuditLimitRefusal(mutation.outcome._tag));
+      return auditOnly(statementDailyBudgetRefusal("trigger"));
   }
 };
 

@@ -28,6 +28,8 @@ import {
   processStatementSubmission,
 } from "../ingestion/statement-processing";
 import { StatementCoordinatorActivity } from "../ingestion/statement-work";
+import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
+import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
 import {
@@ -47,6 +49,7 @@ const HTTP_ACCEPTED = 202;
 class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUnavailable")<{
   cause: unknown;
 }> {}
+class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
 const httpServiceUnavailable = 503;
 const Credentials = {
   userId: Schema.String.check(Schema.isUUID()),
@@ -264,7 +267,7 @@ type CoordinatorEnvironment = Readonly<{
   DB: D1Database;
 }> &
   /** Native optional binding, normalized to Option when work enters the application. */
-  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>> &
+  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; EMAIL_BUCKET: R2Bucket }>> &
   WorkersAiEnvironment;
 
 /**
@@ -361,6 +364,59 @@ const executeCanonicalAdmission = (
     return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
   });
 
+const executeForwardedEmailActivity = (
+  candidate: unknown,
+  environment: CoordinatorEnvironment,
+  userId: string
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const work = Schema.decodeUnknownOption(ForwardedEmailWork)(candidate);
+    const bucket = environment.EMAIL_BUCKET;
+    if (Option.isNone(work) || work.value.userId !== userId || bucket === undefined) {
+      return transactionUnavailable();
+    }
+    const completed = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () =>
+          processForwardedEmail({
+            DB: environment.DB,
+            EMAIL_BUCKET: { get: (key) => bucket.get(key).then(Option.fromNullishOr) },
+            userId,
+            receiptId: work.value.receiptId,
+          }),
+        catch: () => new EmailActivityUnavailable(),
+      }).pipe(Effect.withSpan("ingestion.forwarded-email.process"))
+    );
+    return Exit.isFailure(completed)
+      ? transactionUnavailable()
+      : new Response(null, { status: HTTP_OK });
+  });
+
+const privateIngestionActivity = ({
+  request,
+  candidate,
+  environment,
+  userId,
+}: Readonly<{
+  request: Request;
+  candidate: unknown;
+  environment: CoordinatorEnvironment;
+  userId: string;
+}>): Option.Option<Effect.Effect<Response>> => {
+  if (request.method !== "POST") return Option.none();
+  const path = new URL(request.url).pathname;
+  if (path === "/forwarded-email-work") {
+    return Option.some(executeForwardedEmailActivity(candidate, environment, userId));
+  }
+  if (path !== "/statement-work") return Option.none();
+  const activity = authorizedStatementActivity(candidate, userId);
+  return Option.some(
+    Option.isNone(activity)
+      ? Effect.succeed(transactionUnavailable())
+      : executeStatementActivity(activity.value, environment, userId)
+  );
+};
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
@@ -392,11 +448,13 @@ export class UserTransactionCoordinator {
           Effect.gen(function* () {
             const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
             if (Option.isNone(candidate)) return transactionUnavailable();
-            if (request.method === "POST" && path === "/statement-work") {
-              const activity = authorizedStatementActivity(candidate.value, userId);
-              if (Option.isNone(activity)) return transactionUnavailable();
-              return yield* executeStatementActivity(activity.value, environment, userId);
-            }
+            const ingestion = privateIngestionActivity({
+              request,
+              candidate: candidate.value,
+              environment,
+              userId,
+            });
+            if (Option.isSome(ingestion)) return yield* ingestion.value;
             const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
             if (
               Option.isNone(admission) ||

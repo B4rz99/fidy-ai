@@ -129,8 +129,12 @@ import {
 import { observeOperationalHealth } from "./runtime/operational-health";
 import { StatementStaging } from "./ingestion/statement-staging";
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
+import {
+  isForwardedEmailWork,
+  receiveForwardedEmailWork,
+} from "./ingestion/forwarded-email-delivery";
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
-import { listStatementNeedsReviewItems } from "./ingestion/statement-review";
+import { listNeedsReviewItems } from "./ingestion/statement-review";
 import {
   StatementExtractionWorkflowV1,
   dispatchStatementExtraction,
@@ -186,6 +190,7 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
   Partial<
     Readonly<{
+      EMAIL_BUCKET: R2Bucket;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: Queue;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
@@ -1357,7 +1362,7 @@ const ingestionCanonicalResponse = (
   }
   if (operation.id === "ingestion.listNeedsReviewItems") {
     return Option.some(
-      listStatementNeedsReviewItems({
+      listNeedsReviewItems({
         database: environment.DB,
         environment,
         subject,
@@ -1701,6 +1706,16 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
 };
 
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
+    if (environment.EMAIL_BUCKET === undefined) {
+      return Promise.reject(new Error("Email evidence unavailable"));
+    }
+    return Effect.tryPromise({
+      try: () =>
+        receiveForwardedEmailWork(batch.messages, environment.USER_TRANSACTION_COORDINATOR),
+      catch: () => new ForwardedEmailDeliveryUnavailable(),
+    }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
+  }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
       return Promise.reject(new Error("Statement extraction unavailable"));
@@ -1727,6 +1742,11 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
     batch,
   }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
 };
+
+/** Queue redelivery exposes no receipt, User, or provider details on failure. */
+class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
+  "ForwardedEmailDeliveryUnavailable"
+) {}
 
 /** A failed schedule reports only a closed classification, never database or provider details. */
 class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}

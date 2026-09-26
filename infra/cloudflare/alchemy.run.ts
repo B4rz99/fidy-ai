@@ -166,23 +166,16 @@ export default Alchemy.Stack(
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
-    const emailWorker = yield* Cloudflare.Worker("ForwardedEmail", {
+    yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
       compatibility: { date: "2026-09-08" },
       crons: ["*/5 * * * *"],
       env: { DB: database, EMAIL_BUCKET: emailBucket, EMAIL_QUEUE: emailQueue },
       workersDev: false,
     });
-    // The catch-all delivers to a private Email Worker. Only an issued token at this domain
-    // passes the Worker's envelope and D1 approval checks; unknown mail is rejected.
-    yield* Cloudflare.Email.Routing("ForwardedEmailRouting", {
-      zone: "fidyapp.com",
-    });
-    yield* Cloudflare.Email.CatchAll("ForwardedEmailCatchAll", {
-      zone: "fidyapp.com",
-      name: "Fidy forwarded email",
-      actions: [{ type: "worker", value: [emailWorker.workerName] }],
-    });
+    // Do not route inbound mail until institution Connection state and authenticated sender
+    // provenance are authoritative. The Worker remains private for local seam tests and cron.
+
     const statementExtractionQueue = yield* Cloudflare.Queues.Queue("StatementExtractionQueue");
     const statementExtractionWorkflow = Cloudflare.Workflow("StatementExtractionWorkflowV1", {
       className: "StatementExtractionWorkflowV1",
@@ -218,6 +211,7 @@ export default Alchemy.Stack(
         AI: Cloudflare.Workers.AI(),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
+        EMAIL_BUCKET: emailBucket,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
@@ -260,6 +254,13 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("ForwardedEmailConsumer", {
+      queueId: emailQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {

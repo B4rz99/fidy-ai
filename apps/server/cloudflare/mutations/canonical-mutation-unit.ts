@@ -8,9 +8,6 @@ import {
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
 import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
-import { InsightDeliveryAttempt, InsightEvent } from "@fidy/server/insights-runtime";
-import { findInsight, findInsightAttempt } from "../insights/insight-store";
-import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { readForwardingAddress } from "../ingestion/forwarding-address";
@@ -182,8 +179,6 @@ const triggerRefusal = ({
   const auditOnly = (refusal: CanonicalMutationRefusal): Option.Option<CanonicalMutationRefusal> =>
     kind === "audit" ? Option.some(refusal) : Option.none();
   switch (mutation.outcome._tag) {
-    case "Insight":
-      return auditOnly(budgetAuditLimitRefusal());
     case "Owner":
       return mutation.outcome.triggerRefusal({ db, subject: scoped, current }, kind);
     case "Transaction":
@@ -422,35 +417,6 @@ const classifyAbortedUnit = ({
     return { _tag: "Aborted" } as const;
   });
 
-const findCommittedInsight = ({
-  db,
-  userId,
-  outcome,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  outcome: Extract<PreparedCanonicalMutation["outcome"], { _tag: "Insight" }>;
-}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
-  Effect.gen(function* () {
-    const event = yield* findInsight(db, userId, outcome.insightEventId);
-    if (Option.isNone(event)) return Option.none<CommittedMutationValue>();
-    if (Option.isNone(outcome.attemptId)) {
-      return Option.some({ _tag: "Insight" as const, insight: event.value });
-    }
-    const attempt = yield* findInsightAttempt(db, userId, outcome.insightEventId);
-    return Option.map(
-      Option.filter(
-        attempt,
-        (found) => Option.isSome(outcome.attemptId) && found.id === outcome.attemptId.value
-      ),
-      (deliveryAttempt) => ({
-        _tag: "DeliveredInsight" as const,
-        insight: event.value,
-        deliveryAttempt,
-      })
-    );
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
-
 /** Read one committed child's canonical success value, or None when the readback is incomplete. */
 const findCommittedValue = ({
   db,
@@ -462,8 +428,6 @@ const findCommittedValue = ({
   mutation: PreparedCanonicalMutation;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> => {
   switch (mutation.outcome._tag) {
-    case "Insight":
-      return findCommittedInsight({ db, userId, outcome: mutation.outcome });
     case "Owner":
       return mutation.outcome.read(db, userId);
     case "Transaction":
@@ -611,10 +575,6 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
   if (value._tag === "ForwardingAddress") return value.address;
   if (value._tag === "Budget") return value.budget;
   if (value._tag === "Owner") return value.payload;
-  if (value._tag === "Insight") return value.insight;
-  if (value._tag === "DeliveredInsight") {
-    return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
-  }
   if (
     value._tag === "RemovedKeywordRule" ||
     value._tag === "RemovedMemory" ||
@@ -644,28 +604,13 @@ const encodeOtherRemovedValue = (
     ? Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id)
     : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
 
-const encodeInsightSubmissionOrMemory = (
-  value: Extract<
-    CommittedMutationValue,
-    { _tag: "Insight" | "DeliveredInsight" | "StatementSubmission" | "Memory" }
-  >
+const encodeSubmissionOrMemory = (
+  value: Extract<CommittedMutationValue, { _tag: "StatementSubmission" | "Memory" }>
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   if (value._tag === "StatementSubmission") {
     return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }
-  if (value._tag === "Memory") {
-    return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
-  }
-  return value._tag === "Insight"
-    ? Schema.encodeEffect(Schema.toCodecJson(InsightEvent))(value.insight)
-    : Schema.encodeEffect(
-        Schema.toCodecJson(
-          Schema.Struct({
-            insight: InsightEvent,
-            deliveryAttempt: InsightDeliveryAttempt,
-          })
-        )
-      )(value);
+  return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
 };
 
 const encodeEntityValue = (
@@ -679,8 +624,6 @@ const encodeEntityValue = (
         | "Budget"
         | "Memory"
         | "StatementSubmission"
-        | "Insight"
-        | "DeliveredInsight"
         | "Owner";
     }
   >
@@ -703,8 +646,8 @@ const encodeExistingValue = (
   if (value._tag === "Owner") return value.encode();
   if ("id" in value) return encodeRemovedValue(value);
   if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
-  if ("insight" in value || "submission" in value || "memory" in value) {
-    return encodeInsightSubmissionOrMemory(value);
+  if ("submission" in value || "memory" in value) {
+    return encodeSubmissionOrMemory(value);
   }
   return encodeEntityValue(value);
 };

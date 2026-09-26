@@ -7,12 +7,6 @@ import type {
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
-import type {
-  DeliveryAttemptId,
-  InsightDeliveryAttempt,
-  InsightEvent,
-  InsightEventId,
-} from "@fidy/server/insights-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -121,15 +115,6 @@ export type OwnerOutcome = Readonly<{
 
 export type CanonicalMutationOutcome =
   | OwnerOutcome
-  | Readonly<{
-      _tag: "Insight";
-      operation:
-        | "insights.markInsightDelivered"
-        | "insights.markInsightRead"
-        | "insights.dismissInsight";
-      insightEventId: InsightEventId;
-      attemptId: Option.Option<DeliveryAttemptId>;
-    }>
   | TransactionOutcome
   | MemoryOutcome
   | Readonly<{
@@ -192,12 +177,6 @@ export type CommittedMutationValue =
       _tag: "Owner";
       payload: unknown;
       encode: () => Effect.Effect<unknown, Schema.SchemaError>;
-    }>
-  | Readonly<{ _tag: "Insight"; insight: InsightEvent }>
-  | Readonly<{
-      _tag: "DeliveredInsight";
-      insight: InsightEvent;
-      deliveryAttempt: InsightDeliveryAttempt;
     }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>

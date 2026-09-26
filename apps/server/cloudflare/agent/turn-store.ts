@@ -139,12 +139,16 @@ export const readHostedSnapshot = async (
     .prepare(`SELECT COUNT(*) AS used FROM hosted_turns
     WHERE user_id = ? AND started_at_ms >= ? AND started_at_ms < ?`)
     .bind(subject.userId, day, day + millisecondsPerDay)
-    .first<{ used: number }>();
+    .first();
+  const budgetRow = Option.flatMap(
+    Option.fromNullishOr(budget),
+    Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
+  );
   return Option.some({
     user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
     consentBasis: decodeConsent(user),
     revoked: user.revoked === 1,
-    capacityAvailable: (budget?.used ?? maximumDailyTurns) < maximumDailyTurns,
+    capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
     session: Option.fromNullishOr(sessionRaw).pipe(
       Option.map(Schema.decodeUnknownSync(SessionRow))
     ),
@@ -652,9 +656,12 @@ const sweepHostedTranscript = async (
       (SELECT 1 FROM transcript_entries AS e WHERE e.turn_id = t.id AND e.user_id = t.user_id)
       ORDER BY terminal_at_ms LIMIT 1`)
     .bind(userId)
-    .first<{ terminal_at_ms: number }>();
+    .first();
   const transcriptDue = Option.map(
-    Option.fromNullishOr(oldest),
+    Option.map(
+      Option.fromNullishOr(oldest),
+      Schema.decodeUnknownSync(Schema.Struct({ terminal_at_ms: Schema.Int }))
+    ),
     (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
   );
   const compactDue = Option.map(

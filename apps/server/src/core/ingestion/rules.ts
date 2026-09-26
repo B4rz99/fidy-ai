@@ -12,7 +12,7 @@ import {
   type NeedsReviewStatementRow,
   type ParsedStatementRow,
   type StatementAccounting,
-  type StatementColumnMapping,
+  StatementColumnMapping,
 } from "./model";
 
 const bogotaTimeZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
@@ -126,6 +126,42 @@ export const redactEmailCandidate = (content: string): string =>
     .replaceAll(redactionMoney, "[MONEY]")
     .replaceAll(redactionDigits, "[DIGITS]")
     .replaceAll(redactionText, "[TEXT]");
+
+// Only this exact structural declaration is sufficient for mechanical capture. A regional
+// default never supplies a Currency or an uncertain column mapping.
+const mechanicallyMappedHeaders = ["fecha", "valor", "moneda", "contraparte"];
+const mechanicalStatementMapping = Schema.decodeSync(StatementColumnMapping)({
+  dateColumn: 0,
+  amountColumn: 1,
+  currencyColumn: 2,
+  counterpartyColumn: 3,
+  inflowMarkers: [],
+  outflowMarkers: [],
+  positiveDirection: "inflow",
+  dateFormat: "yyyy-MM-dd",
+  decimalSeparator: ".",
+});
+
+/** The sole format that can be captured without inferring facts from an unknown bank layout. */
+export const mechanicalMappingFor = (
+  headers: ReadonlyArray<string>
+): Option.Option<StatementColumnMapping> =>
+  headers.length === mechanicallyMappedHeaders.length &&
+  headers.every(
+    (header, index) => header.trim().toLocaleLowerCase("es-CO") === mechanicallyMappedHeaders[index]
+  )
+    ? Option.some(mechanicalStatementMapping)
+    : Option.none();
+
+/** Retain the original row for review rather than fabricating its mapping or Currency. */
+export const unmappedStatementRow = (row: ParsedStatementRow): NeedsReviewStatementRow => ({
+  outcome: "needs-review",
+  recordNumber: row.recordNumber,
+  evidence: row.evidence,
+  reason: "mapping-unavailable",
+  knownMoney: Option.none(),
+  issues: [{ path: "", message: "Statement mapping is unavailable." }],
+});
 
 type StatementDirection = "inflow" | "outflow";
 type ExtractionDecoder<Extraction> = (

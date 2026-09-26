@@ -1,7 +1,7 @@
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
   type CategoryId,
-  categoryIds,
+  fallbackCaptureCategory,
   findKeywordCategory,
   findKnownCaptureCategory,
   keywordRulesFromRows,
@@ -181,13 +181,6 @@ const captureUserContext = (
         .first(),
     catch: boundaryFailure,
   }).pipe(Effect.map(Schema.decodeUnknownOption(UserContext)));
-
-/**
- * The Category a capture falls back to when neither an explicit choice nor a User keyword rule
- * decided it. It reads no User state, so it stays the last step of the precedence.
- */
-const fallbackCaptureCategory = (direction: typeof Input.Type.direction): CategoryId =>
-  direction === "inflow" ? categoryIds.ingresos : categoryIds.otros;
 
 const findRuleCategory = ({
   db,

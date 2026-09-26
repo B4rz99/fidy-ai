@@ -20,6 +20,13 @@ import {
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { statementConflictMessage } from "./statement-staging";
+import { applyStatementTestMigration as applyMigration } from "./statement-migrations.test-fixture";
+import {
+  dispatchStatementExtraction,
+  receiveStatementExtraction,
+  reconcileStatementExtraction,
+  runStatementExtractionWorkflow,
+} from "./statement-delivery";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
@@ -65,8 +72,10 @@ const migrationNames = [
   "0013_category_keyword_rules",
   "0014_memory",
   "0015_statement_submission",
+  "0016_statement_processing",
   "0016_subscription_standing",
   "0017_forwarded_email",
+  "0017_statement_dispatch",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -74,20 +83,6 @@ const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
 const bearer = (index: number): string => String(index + 1).repeat(43);
-const applyMigration = (db: D1Database, name: string): Promise<void> =>
-  Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<void>>(
-          (last, statement) => last.then(() => db.prepare(statement).run()).then(() => undefined),
-          Promise.resolve()
-        )
-    );
-
 type Coordinator = Parameters<typeof coreWorker.fetch>[1]["USER_TRANSACTION_COORDINATOR"];
 type Runtime = Readonly<{
   db: D1Database;
@@ -479,6 +474,19 @@ const getSubmissionWithBearer = (runtime: Runtime, id: string, token: string): P
       method: "GET",
     })
   );
+
+const ReviewListResponse = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      submissionId: Schema.String,
+      recordNumber: Schema.Int,
+      reason: Schema.String,
+      status: Schema.Literals(["pending", "expired", "resolved"]),
+      originalEvidence: Schema.optional(Schema.Unknown),
+    })
+  ),
+});
 
 const batchCategory = "10000000-0000-4000-8000-000000000016";
 
@@ -1064,6 +1072,594 @@ it(
 );
 
 it(
+  "offers a queued submission with only its owned identity and starts one deterministic Workflow on redelivery",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000990",
+            index: 0,
+            reference: staged.staged,
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const offered: Array<unknown> = [];
+        yield* dispatchStatementExtraction({
+          DB: runtime.db,
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body) => {
+              offered.push(body);
+              return Promise.resolve();
+            },
+          },
+        });
+        expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
+        const created: Array<unknown> = [];
+        const work = offered[0];
+        yield* receiveStatementExtraction({
+          environment: {
+            DB: runtime.db,
+            STATEMENT_EXTRACTION_WORKFLOW: {
+              create: (options) => {
+                created.push(options);
+                return Promise.resolve();
+              },
+              get: (): Promise<void> => Promise.resolve(),
+            },
+          },
+          messages: [
+            { body: work, ack: (): void => undefined },
+            { body: work, ack: (): void => undefined },
+          ],
+        });
+        expect(created).toEqual([
+          {
+            id: submission.id,
+            params: work,
+            retention: { successRetention: "3 days", errorRetention: "3 days" },
+          },
+          {
+            id: submission.id,
+            params: work,
+            retention: { successRetention: "3 days", errorRetention: "3 days" },
+          },
+        ]);
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+      })
+    ),
+  30_000
+);
+
+it(
+  "publishes an accepted statement through the Core scheduled dispatcher without exposing its bytes",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000993",
+            index: 0,
+            reference: staged.staged,
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const offered: Array<unknown> = [];
+        yield* fromTestPromise(() =>
+          coreWorker.scheduled(
+            { cron: "* * * * *", noRetry: () => undefined, scheduledTime: 0 },
+            {
+              ...coreEnvironment(runtime),
+              STATEMENT_EXTRACTION_QUEUE: {
+                metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
+                send: (body: unknown) => {
+                  offered.push(body);
+                  return Promise.resolve({
+                    metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+                  });
+                },
+                sendBatch: () =>
+                  Promise.resolve({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } }),
+              },
+            }
+          )
+        );
+        expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "retains an outbox intent when Queue publication fails and offers it again after the cooldown",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000992",
+            index: 0,
+            reference: staged.staged,
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const failed = yield* Effect.exit(
+          dispatchStatementExtraction({
+            DB: runtime.db,
+            STATEMENT_EXTRACTION_QUEUE: { send: () => Promise.reject(new Error("Queue down")) },
+          })
+        );
+        expect(failed._tag).toBe("Failure");
+        const visible = yield* fromTestPromise(() => getSubmission(runtime, 0, submission.id));
+        expect((yield* fromTestPromise(() => submissionOf(visible))).status).toBe("queued");
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "UPDATE statement_ingestion_outbox SET last_attempt_at_ms = 0 WHERE submission_id = ?"
+            )
+            .bind(submission.id)
+            .run()
+        );
+        const offered: Array<unknown> = [];
+        yield* dispatchStatementExtraction({
+          DB: runtime.db,
+          STATEMENT_EXTRACTION_QUEUE: {
+            send: (body) => {
+              offered.push(body);
+              return Promise.resolve();
+            },
+          },
+        });
+        expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses forged and cross-User Queue work before Workflow creation",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        const submitted = yield* fromTestPromise(() =>
+          submit(runtime, {
+            idempotencyKey: "20000000-0000-4000-8000-000000000991",
+            index: 0,
+            reference: staged.staged,
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        const created: Array<unknown> = [];
+        yield* receiveStatementExtraction({
+          environment: {
+            DB: runtime.db,
+            STATEMENT_EXTRACTION_WORKFLOW: {
+              create: (options) => {
+                created.push(options);
+                return Promise.resolve();
+              },
+              get: (): Promise<void> => Promise.resolve(),
+            },
+          },
+          messages: [
+            {
+              body: { version: 1, userId: userB, submissionId: submission.id },
+              ack: (): void => undefined,
+            },
+            {
+              body: { version: 99, userId: userA, submissionId: submission.id },
+              ack: (): void => undefined,
+            },
+          ],
+        });
+        expect(created).toEqual([]);
+        const visible = yield* fromTestPromise(() => getSubmission(runtime, 0, submission.id));
+        expect((yield* fromTestPromise(() => submissionOf(visible))).status).toBe("queued");
+      })
+    ),
+  30_000
+);
+
+it("carries only an identity through Workflow history and delegates to the User coordinator", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests: Array<Readonly<{ name: string; body: unknown }>> = [];
+      const coordinator = {
+        getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+          fetch: (request: Request): Promise<Response> =>
+            request.json().then((body) => {
+              requests.push({ name, body });
+              return new Response(null, { status: 200 });
+            }),
+        }),
+      };
+      const names: Array<string> = [];
+      yield* fromTestPromise(() =>
+        runStatementExtractionWorkflow({
+          coordinator,
+          payload: {
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+          activity: (name, _options, run) => {
+            names.push(name);
+            return run();
+          },
+        })
+      );
+      expect(names).toEqual(["finalize-statement-chunk-v1-0"]);
+      expect(requests).toEqual([
+        {
+          name: userA,
+          body: {
+            _tag: "StatementWork",
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+        },
+      ]);
+    })
+  ));
+
+it("shows committed review rows only to their User through the canonical read", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const { staged } = yield* fromTestPromise(() =>
+        stageOne(runtime, 0, statementBytes("fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n"))
+      );
+      const accepted = yield* fromTestPromise(() =>
+        submit(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000699",
+          reference: staged,
+        })
+      );
+      expect(accepted.status).toBe(202);
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userA } },
+        {
+          DB: runtime.db,
+          STATEMENT_STAGING_BUCKET: runtime.bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      const work = yield* fromTestPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/statement-work", {
+            method: "POST",
+            body: JSON.stringify({
+              _tag: "StatementWork",
+              version: 1,
+              userId: userA,
+              submissionId: submission.id,
+            }),
+          })
+        )
+      );
+      expect(work.status).toBe(200);
+      const path = "https://api.fidyapp.com/ingestion/needs-review";
+      const own = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(path, {
+            method: "GET",
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(own.status).toBe(200);
+      const ownBody = yield* Schema.decodeUnknownEffect(ReviewListResponse)(
+        yield* fromTestPromise(() => own.json())
+      );
+      expect(ownBody.data).toHaveLength(1);
+      expect(ownBody.data[0]).toMatchObject({
+        submissionId: submission.id,
+        reason: "mapping-unavailable",
+      });
+      expect(ownBody.data[0]?.originalEvidence).toBeDefined();
+      // The cron can be delayed; a read must still suppress overdue raw evidence without
+      // relying on a successful storage sweep. Clone the valid row with an expired deadline.
+      const overdueDeadline = (yield* Clock.currentTimeMillis) - 1_000;
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`INSERT INTO statement_needs_review
+          (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,
+           status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,
+           source_format,parser_revision,extractor_revision)
+          SELECT ?,user_id,submission_id,999,reason,original_evidence,known_money,issues,
+           'pending',?,created_at_ms,service_market,locale,time_zone,
+           source_format,parser_revision,extractor_revision
+          FROM statement_needs_review WHERE id = ?`)
+          .bind("40000000-0000-4000-8000-000000000699", overdueDeadline, ownBody.data[0]?.id)
+          .run()
+      );
+      const overdue = yield* fromTestPromise(() =>
+        send(runtime, new Request(path, { method: "GET", headers: sessionHeaders(0) }))
+      );
+      const overdueBody = yield* Schema.decodeUnknownEffect(ReviewListResponse)(
+        yield* fromTestPromise(() => overdue.json())
+      );
+      const overdueItem = overdueBody.data.find((item) => item.recordNumber === 999);
+      expect(overdueItem?.status).toBe("expired");
+      expect(overdueItem?.originalEvidence).toBeUndefined();
+      const stillRaw = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("SELECT original_evidence FROM statement_needs_review WHERE record_number = 999")
+          .first<{ original_evidence: string }>()
+      );
+      expect(stillRaw?.original_evidence).not.toBeNull();
+      const foreign = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(path, {
+            method: "GET",
+            headers: sessionHeaders(1),
+          })
+        )
+      );
+      expect(foreign.status).toBe(200);
+      const foreignBody = yield* Schema.decodeUnknownEffect(ReviewListResponse)(
+        yield* fromTestPromise(() => foreign.json())
+      );
+      expect(foreignBody.data).toEqual([]);
+
+      const token = agentToken("s");
+      const current = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        issuePat({
+          current,
+          db: runtime.db,
+          label: "No review read",
+          scopes: '["write"]',
+          seed: 55,
+          token,
+        })
+      );
+      const auditBefore = yield* fromTestPromise(() => count(runtime.db, "statement_review_audit"));
+      const underScoped = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(path, {
+            method: "GET",
+            headers: { authorization: `Bearer ${token}`, origin: browserOrigin },
+          })
+        )
+      );
+      expect(underScoped.status).toBe(403);
+      expect(yield* fromTestPromise(() => underScoped.text())).not.toContain("-45000");
+      expect(yield* fromTestPromise(() => count(runtime.db, "statement_review_audit"))).toBe(
+        auditBefore
+      );
+    })
+  ));
+
+it("continues a bounded statement across distinct durable Workflow steps", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const steps: Array<string> = [];
+      let progress = 0;
+      yield* fromTestPromise(() =>
+        runStatementExtractionWorkflow({
+          coordinator: {
+            getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
+              fetch: (): Promise<Response> => {
+                progress += 1;
+                return Promise.resolve(new Response(null, { status: progress === 1 ? 202 : 200 }));
+              },
+            }),
+          },
+          payload: {
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+          activity: (name, _options, run) => {
+            steps.push(name);
+            return run();
+          },
+        })
+      );
+      expect(steps).toEqual(["finalize-statement-chunk-v1-0", "finalize-statement-chunk-v1-1"]);
+    })
+  ));
+
+it("continues a supported 97-row statement through four durable Workflow activities", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const steps: Array<string> = [];
+      yield* fromTestPromise(() =>
+        runStatementExtractionWorkflow({
+          coordinator: {
+            getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
+              fetch: (): Promise<Response> =>
+                Promise.resolve(
+                  new Response(null, {
+                    status: steps.length < 4 ? 202 : 200,
+                  })
+                ),
+            }),
+          },
+          payload: {
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+          activity: (name, _options, run) => {
+            steps.push(name);
+            return run();
+          },
+        })
+      );
+      expect(steps).toEqual(
+        Array.from({ length: 4 }, (_, index) => `finalize-statement-chunk-v1-${index}`)
+      );
+    })
+  ));
+
+it("reports exhausted statement work to the same User coordinator without copying content into Workflow history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests: Array<unknown> = [];
+      yield* fromTestPromise(() =>
+        runStatementExtractionWorkflow({
+          coordinator: {
+            getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
+              fetch: (request: Request): Promise<Response> =>
+                request.json().then((body) => {
+                  requests.push(body);
+                  return Promise.resolve(
+                    new Response(null, { status: requests.length === 1 ? 503 : 200 })
+                  );
+                }),
+            }),
+          },
+          payload: {
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+          activity: (_name, _options, run) => run(),
+        })
+      );
+      expect(requests).toEqual([
+        {
+          _tag: "StatementWork",
+          version: 1,
+          userId: userA,
+          submissionId: "50000000-0000-4000-8000-000000000001",
+        },
+        {
+          _tag: "StatementFailed",
+          version: 1,
+          userId: userA,
+          submissionId: "50000000-0000-4000-8000-000000000001",
+        },
+      ]);
+    })
+  ));
+
+it("marks an accepted unsupported XLSX payload terminal without inventing Transactions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const { staged } = yield* fromTestPromise(() =>
+        stageOne(runtime, 0, new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]))
+      );
+      const accepted = yield* fromTestPromise(() =>
+        submit(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000682",
+          reference: staged,
+        })
+      );
+      expect(accepted.status).toBe(202);
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userA } },
+        {
+          DB: runtime.db,
+          STATEMENT_STAGING_BUCKET: runtime.bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      const response = yield* fromTestPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/statement-work", {
+            method: "POST",
+            body: JSON.stringify({
+              _tag: "StatementWork",
+              version: 1,
+              userId: userA,
+              submissionId: submission.id,
+            }),
+          })
+        )
+      );
+      expect(response.status).toBe(200);
+      const state = yield* fromTestPromise(() =>
+        firstRow(
+          runtime.db,
+          submissionStateRow,
+          "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          submission.id
+        )
+      );
+      expect(state.status).toBe("failed");
+      expect(Option.isSome(state.failure_reason)).toBe(true);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+    })
+  ));
+
+it("settles an errored Workflow when its final failure-report activity also exhausted", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const staged = yield* fromTestPromise(() => stageOne(runtime));
+      const accepted = yield* fromTestPromise(() =>
+        submit(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000681",
+          reference: staged.staged,
+        })
+      );
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const now = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`UPDATE statement_ingestion_outbox
+        SET published_at_ms = ? WHERE submission_id = ?`)
+          .bind(now, submission.id)
+          .run()
+      );
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userA } },
+        {
+          DB: runtime.db,
+          STATEMENT_STAGING_BUCKET: runtime.bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      yield* reconcileStatementExtraction({
+        DB: runtime.db,
+        STATEMENT_EXTRACTION_WORKFLOW: {
+          get: () => Promise.resolve({ status: () => Promise.resolve({ status: "errored" }) }),
+        },
+        USER_TRANSACTION_COORDINATOR: {
+          getByName: (_name): Pick<Fetcher, "fetch"> => ({
+            fetch: (request) =>
+              coordinator.fetch(request instanceof Request ? request : new Request(request)),
+          }),
+        },
+      });
+      const state = yield* fromTestPromise(() =>
+        firstRow(
+          runtime.db,
+          submissionStateRow,
+          "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          submission.id
+        )
+      );
+      expect(state.status).toBe("failed");
+      expect(state.failure_reason).toEqual(Option.some("resource-limit"));
+    })
+  ));
+
+it(
   "refuses oversized, unsupported, and empty uploads before any durable work",
   () =>
     Effect.runPromise(
@@ -1086,6 +1682,17 @@ it(
         const unsupported = yield* fromTestPromise(() => upload(runtime, { body: pdf, index: 0 }));
         expect(unsupported.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(unsupported))).toBe("validation_failed");
+
+        // Password-protected Office files are OLE containers, not supported XLSX ZIPs. Refuse
+        // them before staging: this path never accepts or persists a decryption password.
+        const protectedOffice = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+        const protectedResult = yield* fromTestPromise(() =>
+          upload(runtime, { body: protectedOffice, index: 0 })
+        );
+        expect(protectedResult.status).toBe(400);
+        expect(yield* fromTestPromise(() => failureCode(protectedResult))).toBe(
+          "validation_failed"
+        );
 
         const empty = yield* fromTestPromise(() =>
           upload(runtime, { body: new Uint8Array(), index: 0 })

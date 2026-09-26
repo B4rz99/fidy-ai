@@ -203,7 +203,8 @@ const conservedStatementRows = Schema.makeFilter<typeof StatementAccountingField
     : { path: ["inputRows"], issue: "Expected acceptedRows plus needsReviewRows" }
 );
 
-/** Conserved final counts for every parsed statement row. */
+/** Conserved finalized-row counts. For a failed submission with partial progress, inputRows is
+ * the processed subset, not the total number of rows in the staged file. */
 export const StatementAccounting = StatementAccountingFields.check(conservedStatementRows).annotate(
   { identifier: "StatementAccounting" }
 );
@@ -253,6 +254,7 @@ export const StatementSubmission = Schema.Union([
     startedAt: UtcTimestamp,
     completedAt: UtcTimestamp,
     failureReason: StatementFailureReason,
+    accounting: Schema.optionalKey(StatementAccounting),
   }),
 ]).annotate({ identifier: "StatementSubmission" });
 export type StatementSubmission = typeof StatementSubmission.Type;

@@ -9,7 +9,7 @@ import {
 } from "effect/unstable/http";
 
 /** Browser API boundary whose transport budget follows the sensitivity and response shape it owns. */
-export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth";
+export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth" | "hosted-turn";
 
 type BrowserHttpPolicy = Readonly<{
   deadline: Duration.Input;
@@ -32,6 +32,10 @@ const browserHttpPolicies: Readonly<Record<BrowserHttpBoundary, BrowserHttpPolic
   enrollment: {
     deadline: "20 seconds",
     maximumResponseBytes: enrollmentResponseKibibytes * bytesPerKibibyte,
+  },
+  "hosted-turn": {
+    deadline: "135 seconds",
+    maximumResponseBytes: canonicalResponseKibibytes * bytesPerKibibyte,
   },
 };
 

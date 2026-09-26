@@ -1,4 +1,6 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
+import { UserId } from "@fidy/server/agent-runtime";
+import { expireHostedPending } from "../agent/turn-store";
 import {
   HostedDeliveryAdmission,
   HostedTurnAdmission,
@@ -367,9 +369,18 @@ const executeCanonicalAdmission = (
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
-  private readonly state: Readonly<{ id: Readonly<{ name: string }> }>;
+  private readonly state: Readonly<{
+    id: Readonly<{ name: string }>;
+    storage: Pick<DurableObjectStorage, "setAlarm">;
+  }>;
   private readonly env: CoordinatorEnvironment;
-  constructor(state: Readonly<{ id: Readonly<{ name: string }> }>, env: CoordinatorEnvironment) {
+  constructor(
+    state: Readonly<{
+      id: Readonly<{ name: string }>;
+      storage: Pick<DurableObjectStorage, "setAlarm">;
+    }>,
+    env: CoordinatorEnvironment
+  ) {
     this.state = state;
     this.env = env;
   }
@@ -409,6 +420,28 @@ export class UserTransactionCoordinator {
       () => undefined
     );
     return settledResponse;
+  }
+
+  /** Durable alarm recovers abandoned work even when its User never submits another Turn. */
+  alarm(): Promise<void> {
+    const action = this.pending.then(() => this.recoverAbandonedWork());
+    this.pending = action.then(
+      () => undefined,
+      () => undefined
+    );
+    return action;
+  }
+
+  // @effect-diagnostics-next-line asyncFunction:off
+  private async recoverAbandonedWork(): Promise<void> {
+    const next = await expireHostedPending({
+      db: this.env.DB,
+      userId: UserId.make(this.state.id.name),
+      now: transactionNow(),
+    });
+    if (Option.isSome(next)) {
+      await this.state.storage.setAlarm(next.value);
+    }
   }
 
   // @effect-diagnostics-next-line asyncFunction:off
@@ -459,6 +492,7 @@ export class UserTransactionCoordinator {
       inference: inference.value,
       deliver: browserHostedDelivery,
       signal: request.signal,
+      scheduleRecovery: (dueAtMs) => this.state.storage.setAlarm(dueAtMs),
     }).catch(() => transactionUnavailable());
   }
 }

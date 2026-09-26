@@ -353,6 +353,7 @@ const coreRequest = (
         headers,
         method: request.method,
         body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        signal: request.signal,
       }
     );
   });

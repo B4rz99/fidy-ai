@@ -202,7 +202,7 @@ const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.f
       let coordinator = coordinators.get(name);
       if (coordinator === undefined) {
         coordinator = new UserTransactionCoordinator(
-          { id: { name } },
+          { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
           {
             DB: db,
             AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },

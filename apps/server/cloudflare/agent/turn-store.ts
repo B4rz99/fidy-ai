@@ -31,6 +31,8 @@ const millisecondsPerDay = 86_400_000;
 const maximumDailyTurns = 50;
 const receiptBytes = 32;
 const hexRadix = 16;
+export const deliveryAcknowledgmentWindowMs = 120_000;
+export const pendingExecutionRecoveryMs = 135_000;
 const SessionRow = Schema.Struct({
   id: HostedAgentSessionId,
   user_id: UserId,
@@ -398,6 +400,7 @@ export const stageHostedDelivery = async ({
 const ProposalRow = Schema.Struct({
   text: TranscriptText,
   started_at_ms: Schema.Int,
+  proposed_at_ms: Schema.Int,
 });
 /** Acknowledgment promotes only an exact staged provider reply with a fresh User-owned WebSession. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
@@ -415,7 +418,7 @@ export const acknowledgeHostedDelivery = async ({
   const current = transactionNow();
   const digest = await receiptHash(receipt);
   const raw = await db
-    .prepare(`SELECT p.text, t.started_at_ms FROM hosted_delivery_proposals AS p
+    .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM hosted_delivery_proposals AS p
     JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
     JOIN web_sessions AS w ON w.user_id = p.user_id
     WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
@@ -427,15 +430,93 @@ export const acknowledgeHostedDelivery = async ({
     return Option.none();
   }
   const proposal = Schema.decodeUnknownSync(ProposalRow)(raw);
+  if (current - proposal.proposed_at_ms >= deliveryAcknowledgmentWindowMs) {
+    const recovered = await recoverHostedTurn({
+      db,
+      userId: UserId.make(subject.userId),
+      turn: {
+        id: turnId,
+        started_at_ms: proposal.started_at_ms,
+        proposed_at_ms: proposal.proposed_at_ms,
+      },
+      now: current,
+    });
+    if (!recovered) {
+      throw new Error("Hosted receipt recovery was not committed");
+    }
+    return Option.none();
+  }
   const saved = await finishHostedTurn({
     db,
     userId: UserId.make(subject.userId),
     turnId,
     startedAtMs: proposal.started_at_ms,
     result: { _tag: "Completed", text: proposal.text },
+    subject,
     now: current,
   });
   return saved ? Option.some(proposal.text) : Option.none();
+};
+
+/** Retain exact Transcript content for at most thirty days after its terminal Turn. */
+export const hostedTranscriptRetentionMs = 2_592_000_000;
+
+// @effect-diagnostics-next-line asyncFunction:off
+const sweepHostedTranscript = async (
+  db: D1Database,
+  userId: UserId,
+  now: number
+): Promise<Option.Option<number>> => {
+  const cutoff = now - hostedTranscriptRetentionMs;
+  await db
+    .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND turn_id IN
+    (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
+      AND terminal_at_ms < ?)`)
+    .bind(userId, userId, cutoff)
+    .run();
+  const oldest = await db
+    .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
+      AND status <> 'pending' AND EXISTS
+      (SELECT 1 FROM transcript_entries AS e WHERE e.turn_id = t.id AND e.user_id = t.user_id)
+      ORDER BY terminal_at_ms LIMIT 1`)
+    .bind(userId)
+    .first<{ terminal_at_ms: number }>();
+  return Option.map(
+    Option.fromNullishOr(oldest),
+    (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
+  );
+};
+
+/** DO alarm sweep: recover abandoned work and delete expired terminal content for this User. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const expireHostedPending = async ({
+  db,
+  userId,
+  now,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  now: number;
+}>): Promise<Option.Option<number>> => {
+  const nextRetention = await sweepHostedTranscript(db, userId, now);
+  const raw = await db
+    .prepare(`SELECT id, started_at_ms,
+    (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id) AS proposed_at_ms
+    FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
+    .bind(userId)
+    .first();
+  if (raw === null) return nextRetention;
+  const pending = Schema.decodeUnknownSync(TurnRow)(raw);
+  const due =
+    pending.proposed_at_ms === null
+      ? pending.started_at_ms + pendingExecutionRecoveryMs
+      : pending.proposed_at_ms + deliveryAcknowledgmentWindowMs;
+  if (due > now) {
+    return Option.some(Option.isSome(nextRetention) ? Math.min(due, nextRetention.value) : due);
+  }
+  const recovered = await recoverHostedTurn({ db, userId, turn: pending, now });
+  if (!recovered) throw new Error("Hosted Turn alarm recovery was not committed");
+  return Option.some(Option.getOrElse(nextRetention, () => now + hostedTranscriptRetentionMs));
 };
 
 /** Terminal outcome whose evidence must be stored in the same D1 batch. */
@@ -443,47 +524,73 @@ export type HostedTurnOutcome =
   | Readonly<{ _tag: "Completed"; text: TranscriptText }>
   | Readonly<{ _tag: "Failed"; reason: TurnFailureReason }>
   | Readonly<{ _tag: "Interrupted" }>;
-/** One terminal transition, with exact visible text or fixed metadata-only marker in the same batch. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const finishHostedTurn = async ({
-  db,
-  userId,
-  turnId,
-  startedAtMs,
-  result,
-  now,
-}: Readonly<{
+type HostedFinishInput = Readonly<{
   db: D1Database;
   userId: UserId;
   turnId: TranscriptTurnId;
   startedAtMs: number;
   result: HostedTurnOutcome;
+  subject: TransactionSubject;
   now: number;
-}>): Promise<boolean> => {
+}>;
+
+const hostedFinishStatements = ({
+  db,
+  userId,
+  turnId,
+  startedAtMs,
+  result,
+  subject,
+  now,
+}: HostedFinishInput): Array<D1PreparedStatement> => {
   const time = Math.max(startedAtMs, now);
   const status = result._tag.toLowerCase();
   const reason = result._tag === "Failed" ? result.reason : null;
   const text = result._tag === "Completed" ? result.text : null;
   const kind = result._tag === "Completed" ? "assistant" : status;
   const entryId = TranscriptEntryId.make(newId());
-  const results = await db.batch([
+  const sessionGuard = `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM web_sessions AS w
+    WHERE w.id = ? AND w.user_id = hosted_turns.user_id AND w.token_digest = ?
+    AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?))`;
+  return [
     db
       .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
       SELECT ?, user_id, hosted_session_id, id, ?, ?, ?, ? FROM hosted_turns
-      WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(entryId, kind, time, text, reason, turnId, userId),
+      WHERE id = ? AND user_id = ? AND status = 'pending' ${sessionGuard}`)
+      .bind(
+        entryId,
+        kind,
+        time,
+        text,
+        reason,
+        turnId,
+        userId,
+        status,
+        subject.id,
+        subject.digest,
+        time,
+        time
+      ),
     db
       .prepare(`UPDATE hosted_turns SET status = ?, terminal_at_ms = ?, failure_reason = ?
-      WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(status, time, reason, turnId, userId),
+      WHERE id = ? AND user_id = ? AND status = 'pending' ${sessionGuard}`)
+      .bind(status, time, reason, turnId, userId, status, subject.id, subject.digest, time, time),
     db
-      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
-      .bind(turnId, userId),
+      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?
+      AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`)
+      .bind(turnId, userId, turnId, userId),
     db
       .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
-      AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?)`)
+      AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?
+        AND status <> 'pending')`)
       .bind(result._tag === "Interrupted" ? startedAtMs : time, userId, turnId, userId),
-  ]);
+  ];
+};
+
+/** One terminal transition, with exact visible text or fixed metadata-only marker in the same batch. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const finishHostedTurn = async (input: HostedFinishInput): Promise<boolean> => {
+  const results = await input.db.batch(hostedFinishStatements(input));
   return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;
 };

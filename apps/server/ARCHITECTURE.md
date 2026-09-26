@@ -90,7 +90,14 @@ D1 retains their User entry and Pending status atomically. A generated reply is 
 short-lived delivery proposal, not Transcript evidence. The authenticated browser receives the
 proposal, renders it, and sends a one-use receipt through the same coordinator. Only that receipt
 atomically writes the exact assistant entry and Completed status; delivery failure becomes Failed,
-while an unacknowledged proposal becomes Interrupted after its delivery window. The User's daily
+while an unacknowledged proposal becomes Interrupted after its delivery window via a per-User
+Durable Object alarm, even without another request. The private Core scheduled sweep independently
+recovers missing alarms, including admission-to-alarm failures, without a User request. Expired
+receipts fail closed and recover the
+pending Turn. The same per-User alarm removes exact terminal Transcript content after thirty days
+while retaining metadata-only Turn status; D1 rejects premature or Pending-evidence deletion.
+The browser conversation/receipt contract is server-owned and deliberately separate
+from canonical tool-callable operations (see root architecture §2). The User's daily
 hosted-Turn allowance is read before model preflight and guarded again at insertion. The canonical Categories implementation runs the bounded
 ordered query, decodes every row through the published Category schema, and is shared by the
 operation registry and the private Core Worker adapter. Keyword rules are scoped to one User and

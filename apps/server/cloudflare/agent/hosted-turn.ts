@@ -10,6 +10,7 @@ import type {
   PreparedHostedText,
 } from "@fidy/server/hosted-inference";
 import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { HostedTurnReceipt, HostedTurnRequest } from "../../src/shell/agent/hosted-turn-api";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
@@ -18,7 +19,9 @@ import {
   type HostedTurnSnapshot,
   acknowledgeHostedDelivery,
   admitHostedTurn,
+  deliveryAcknowledgmentWindowMs,
   finishHostedTurn,
+  pendingExecutionRecoveryMs,
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
@@ -58,6 +61,7 @@ type HostedTurnInput = Readonly<{
   inference: HostedInferenceService;
   deliver: HostedDelivery;
   signal: AbortSignal;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
 
 /**
@@ -73,6 +77,7 @@ export const completeHostedTurn = async ({
   inference,
   deliver,
   signal,
+  scheduleRecovery,
 }: HostedTurnInput): Promise<Response> => {
   const userId = UserId.make(subject.userId);
   const snapshot = await readAdmissibleSnapshot({ db, subject, userId });
@@ -102,14 +107,17 @@ export const completeHostedTurn = async ({
     id: activeTurnId,
   });
   if (Option.isNone(turn)) return unauthenticated();
+  await scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs);
   return executeAdmittedTurn({
     db,
     userId,
     turnId: turn.value,
+    subject,
     startedAtMs,
     prepared: prepared.value,
     deliver,
     signal,
+    scheduleRecovery,
   });
 };
 
@@ -185,6 +193,8 @@ const prepareHostedWork = async ({
     user: snapshot.user,
     startedAt: DateTime.makeUnsafe(startedAtMs),
     memories: continuity.memories,
+    // This no-tool Turn does not compact or persist a CompactedConversation. All current-session
+    // entries are retained uncompacted and loaded above; no earlier history is substituted.
     compactedConversation: Option.none(),
     transcript: continuity.transcript,
     activeRequest: text,
@@ -200,7 +210,6 @@ const prepareHostedWork = async ({
   return Exit.isFailure(prepared) || signal.aborted ? Option.none() : Option.some(prepared.value);
 };
 
-const deliveryAcknowledgmentWindowMs = 120_000;
 const recoverPending = ({
   db,
   userId,
@@ -227,11 +236,13 @@ const recoverPending = ({
 type AdmittedWork = Readonly<{
   db: D1Database;
   userId: UserId;
+  subject: TransactionSubject;
   turnId: TranscriptTurnId;
   startedAtMs: number;
   prepared: PreparedHostedText;
   deliver: HostedDelivery;
   signal: AbortSignal;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
 
 /** The only path allowed to terminalize a Pending Turn. */
@@ -240,13 +251,15 @@ const executeAdmittedTurn = async ({
   db,
   userId,
   turnId,
+  subject,
   startedAtMs,
   prepared,
   deliver,
   signal,
+  scheduleRecovery,
 }: AdmittedWork): Promise<Response> => {
   const finish = (result: HostedTurnOutcome): Promise<boolean> =>
-    finishHostedTurn({ db, userId, turnId, startedAtMs, result, now: transactionNow() });
+    finishHostedTurn({ db, userId, turnId, startedAtMs, result, subject, now: transactionNow() });
   const generated = await Effect.runPromiseExit(
     prepared.execute.pipe(Effect.timeout("120 seconds")),
     { signal }
@@ -267,7 +280,15 @@ const executeAdmittedTurn = async ({
     await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
     return unavailable();
   }
-  return proposeDelivery({ db, userId, turnId, answer: answer.value, deliver, finish });
+  return proposeDelivery({
+    db,
+    userId,
+    turnId,
+    answer: answer.value,
+    deliver,
+    finish,
+    scheduleRecovery,
+  });
 };
 
 const approvedAnswer = (result: HostedTextResult): Option.Option<TranscriptText> =>
@@ -283,6 +304,7 @@ const proposeDelivery = async ({
   answer,
   deliver,
   finish,
+  scheduleRecovery,
 }: Readonly<{
   db: D1Database;
   userId: UserId;
@@ -290,8 +312,10 @@ const proposeDelivery = async ({
   answer: TranscriptText;
   deliver: HostedDelivery;
   finish: (outcome: HostedTurnOutcome) => Promise<boolean>;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>): Promise<Response> => {
   const receipt = await stageHostedDelivery({ db, userId, turnId, text: answer });
+  await scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs);
   try {
     const response = await deliver({ text: answer, turnId, receipt });
     if (response.ok) return response;
@@ -322,7 +346,7 @@ export const acknowledgeBrowserTurn = async ({
 };
 
 /** Decode a bounded User request; the authenticated channel owns its credential separately. */
-export const hostedTurnInput = Schema.Struct({ text: TranscriptText });
+export const hostedTurnInput = HostedTurnRequest;
 /** Bounded Core-to-DO admission with explicit User identity and ephemeral credential proof. */
 export const HostedTurnAdmission = Schema.Struct({
   userId: UserId,
@@ -331,10 +355,7 @@ export const HostedTurnAdmission = Schema.Struct({
   text: TranscriptText,
 });
 /** The browser sends this receipt only after it has visibly rendered the exact reply. */
-export const hostedDeliveryReceipt = Schema.Struct({
-  turnId: TranscriptTurnId,
-  receipt: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
-});
+export const hostedDeliveryReceipt = HostedTurnReceipt;
 /** Receipt forwarded by Core with a fresh WebSession proof, never from public input. */
 export const HostedDeliveryAdmission = Schema.Struct({
   userId: UserId,

@@ -26,6 +26,9 @@ const SignedInNavigation = ({ onLogout }: { readonly onLogout: () => void }): JS
     <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
       Tablero
     </Button>
+    <Button className="justify-start" render={<Link to="/app/agent" />} variant="ghost">
+      Agente
+    </Button>
     <Button className="justify-start" render={<Link to="/app/transactions" />} variant="ghost">
       Transacciones
     </Button>

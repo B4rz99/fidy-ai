@@ -8,8 +8,19 @@ import type { HostedInferenceService } from "@fidy/server/hosted-inference";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { newId } from "../pats/pat-shared";
-import { acknowledgeBrowserTurn, browserHostedDelivery, completeHostedTurn } from "./hosted-turn";
+import { hostedTranscriptRetentionMs } from "./turn-store";
+import { sweepHostedTurns } from "./hosted-turn-sweep";
+import {
+  acknowledgeBrowserTurn,
+  browserHostedDelivery,
+  completeHostedTurn as completeHostedTurnWithAlarm,
+} from "./hosted-turn";
 import type { HostedDelivery } from "./hosted-turn";
+
+const completeHostedTurn = (
+  input: Omit<Parameters<typeof completeHostedTurnWithAlarm>[0], "scheduleRecovery">
+): Promise<Response> =>
+  completeHostedTurnWithAlarm({ ...input, scheduleRecovery: () => Promise.resolve() });
 
 const users = [
   "10000000-0000-4000-8000-000000000071",
@@ -386,6 +397,209 @@ it("recovers abandoned Pending once, then refuses new work after Consent withdra
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("recovers an abandoned staged reply by durable alarm without another User request", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("First"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const existing = await db
+    .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ hosted_session_id: string }>();
+  if (existing === null) throw Error("missing session");
+  const id = "10000000-0000-4000-8000-000000000195";
+  const timestamp = now();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+      )
+      .bind(id, users[0], existing.hosted_session_id, timestamp),
+    db
+      .prepare(
+        "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Never acknowledged')"
+      )
+      .bind(
+        "10000000-0000-4000-8000-000000000196",
+        users[0],
+        existing.hosted_session_id,
+        id,
+        timestamp
+      ),
+    db
+      .prepare(
+        "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(id, users[0], new Uint8Array(32), timestamp - 121_000, "Undelivered"),
+  ]);
+  const scheduled: Array<number | Date> = [];
+  const coordinator = new UserTransactionCoordinator(
+    {
+      id: { name: users[0] },
+      storage: {
+        setAlarm: (due): Promise<void> => {
+          scheduled.push(due);
+          return Promise.resolve();
+        },
+      },
+    },
+    {
+      DB: db,
+      STATEMENT_STAGING_BUCKET: Option.none(),
+      HOSTED_AI_MODEL: approvedWorkersAiModel,
+      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+    }
+  );
+  await coordinator.alarm();
+  expect(scheduled).toHaveLength(1);
+  expect((await retained(db, users[0])).results.slice(-2)).toMatchObject([
+    { kind: "user", status: "interrupted" },
+    { kind: "interrupted", status: "interrupted" },
+  ]);
+  expect(
+    (
+      await db
+        .prepare("SELECT turn_id FROM hosted_delivery_proposals WHERE turn_id = ?")
+        .bind(id)
+        .all()
+    ).results
+  ).toHaveLength(0);
+  await coordinator.alarm();
+  expect((await retained(db, users[0])).results).toHaveLength(4);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("allows only the timed User-scoped retention sweep to remove old terminal evidence", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Recent"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const session = await db
+    .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ hosted_session_id: string }>();
+  if (session === null) throw Error("missing session");
+  const id = "10000000-0000-4000-8000-000000000197";
+  const old = now() - hostedTranscriptRetentionMs - 10_000;
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+      )
+      .bind(id, users[0], session.hosted_session_id, old),
+    db
+      .prepare(
+        "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Old private text')"
+      )
+      .bind("10000000-0000-4000-8000-000000000198", users[0], session.hosted_session_id, id, old),
+    db
+      .prepare(
+        "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+      )
+      .bind(
+        "10000000-0000-4000-8000-000000000199",
+        users[0],
+        session.hosted_session_id,
+        id,
+        old + 1
+      ),
+    db
+      .prepare(
+        "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+      )
+      .bind(old + 1, id),
+  ]);
+  await expect(
+    db.prepare("DELETE FROM transcript_entries WHERE user_id = ?").bind(users[0]).run()
+  ).rejects.toThrow();
+  await sweepHostedTurns(db, now());
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries WHERE turn_id = ?").bind(id).all())
+      .results
+  ).toHaveLength(0);
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries WHERE user_id = ?").bind(users[0]).all())
+      .results
+  ).toHaveLength(2);
+  expect(await db.prepare("SELECT status FROM hosted_turns WHERE id = ?").bind(id).first()).toEqual(
+    { status: "failed" }
+  );
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("retains the complete Turn until thirty days after its terminal marker", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Current"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const session = await db
+    .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ hosted_session_id: string }>();
+  if (session === null) throw Error("missing session");
+  const id = "10000000-0000-4000-8000-000000000193";
+  const old = now() - hostedTranscriptRetentionMs - 10_000;
+  const recent = now();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+      )
+      .bind(id, users[0], session.hosted_session_id, old),
+    db
+      .prepare(
+        "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Old User content')"
+      )
+      .bind("10000000-0000-4000-8000-000000000194", users[0], session.hosted_session_id, id, old),
+    db
+      .prepare(
+        "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+      )
+      .bind(
+        "10000000-0000-4000-8000-000000000195",
+        users[0],
+        session.hosted_session_id,
+        id,
+        recent
+      ),
+    db
+      .prepare(
+        "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+      )
+      .bind(recent, id),
+  ]);
+  await sweepHostedTurns(db, now());
+  expect(
+    (await db.prepare("SELECT kind FROM transcript_entries WHERE turn_id = ?").bind(id).all())
+      .results
+  ).toHaveLength(2);
+  await expect(
+    db
+      .prepare("DELETE FROM transcript_entries WHERE id = ?")
+      .bind("10000000-0000-4000-8000-000000000194")
+      .run()
+  ).rejects.toThrow();
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("serializes concurrent requests at the per-User coordinator and admits two distinct Turns", async () => {
   const db = await setup();
   let release: () => void = () => undefined;
@@ -414,7 +628,10 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
       },
     },
   };
-  const coordinator = new UserTransactionCoordinator({ id: { name: users[0] } }, environment);
+  const coordinator = new UserTransactionCoordinator(
+    { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    environment
+  );
   const credentials = await subject(0);
   const send = (text: string): Promise<Response> =>
     coordinator.fetch(

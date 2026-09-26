@@ -1,6 +1,11 @@
 import {
   FidyApi,
   type FidyApiGroups,
+  HostedTurnApi,
+  type HostedTurnApiGroups,
+  HostedTurnProposal,
+  HostedTurnReceipt,
+  HostedTurnRequest,
   SubscriptionEnrollmentApi,
   type SubscriptionEnrollmentApiGroups,
   TokenAuthorizationClientAnonymousLive,
@@ -101,6 +106,25 @@ const observeAuthenticationExpiration =
         ? Effect.sync(observer.onAuthenticationExpired)
         : Effect.void
     );
+
+export { HostedTurnRequest, HostedTurnReceipt, HostedTurnProposal };
+
+/** Dedicated browser-only reply-and-receipt channel; never a canonical tool operation. */
+export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<
+  never,
+  "@fidy/web/HostedTurnClient",
+  HostedTurnApiGroups
+>;
+
+export const makeHostedTurnClient = (
+  apiOrigin: string,
+  httpClient: FidyClientLayer = FetchHttpClient.layer
+): HostedTurnClient =>
+  AtomHttpApi.Service<never>()("@fidy/web/HostedTurnClient", {
+    api: HostedTurnApi,
+    baseUrl: apiOrigin,
+    httpClient: httpClient.pipe(browserHttpClientLayer("hosted-turn", apiOrigin)),
+  });
 
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
   never,

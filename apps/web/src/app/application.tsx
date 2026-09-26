@@ -7,6 +7,7 @@ import { useSession } from "@/session/session-context";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   makeFidyClient,
+  makeHostedTurnClient,
   makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
 } from "@/transport/client";
@@ -21,6 +22,7 @@ const AuthenticationRouter = ({ apiOrigin }: Readonly<{ apiOrigin: string }>): J
         onAuthenticationExpired: expireAuthentication,
       }),
       webAuthClient: makeWebAuthClient(apiOrigin),
+      hostedTurnClient: makeHostedTurnClient(apiOrigin),
       history: Option.none(),
     })
   );

@@ -12,7 +12,7 @@ const entrypoint = "src/client.ts";
 
 /**
  * The browser seam is intentionally an allowlist of source and dependency modules. Slice operation
- * definitions and the dedicated enrollment declaration may grow without editing this check; every
+ * definitions and the dedicated enrollment or hosted Turn declaration may grow without editing this check; every
  * other input must be admitted deliberately so a server implementation cannot enter the client
  * graph under a new filename or package.
  */
@@ -21,6 +21,7 @@ const safeSource = [
   /^src\/shell\/(?:public-http|schema-codecs)\/contract\.ts$/u,
   /^src\/web-auth-api\.ts$/u,
   /^src\/subscription-enrollment-api\.ts$/u,
+  /^src\/shell\/agent\/hosted-turn-api\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/[^/]+\/operations\.ts$/u,

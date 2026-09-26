@@ -76,8 +76,12 @@ WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND use
 BEGIN SELECT RAISE(ABORT, 'hosted_turn_terminal_evidence_required'); END;
 CREATE TRIGGER transcript_no_update BEFORE UPDATE ON transcript_entries
 BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;
-CREATE TRIGGER transcript_no_delete BEFORE DELETE ON transcript_entries
-BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;
+-- Exact evidence is immutable during its active purpose. A bounded retention sweep may remove
+-- whole terminal Turns after 30 days; the Turn status and Consent basis remain as metadata.
+CREATE TRIGGER transcript_retention_guard BEFORE DELETE ON transcript_entries
+WHEN NOT EXISTS (SELECT 1 FROM hosted_turns WHERE id = OLD.turn_id AND user_id = OLD.user_id
+  AND status <> 'pending' AND terminal_at_ms < (unixepoch('now') * 1000 - 2592000000))
+BEGIN SELECT RAISE(ABORT, 'transcript_retention_not_due'); END;
 -- A concurrent Consent withdrawal cannot admit a Turn, even if preflight saw a grant.
 -- At most fifty paid inference attempts per User and UTC day, even across new Sessions.
 CREATE INDEX hosted_turns_by_user_day ON hosted_turns(user_id, started_at_ms);

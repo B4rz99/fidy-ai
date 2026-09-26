@@ -10,6 +10,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
+import { HostedAgentFeature } from "@/features/agent/feature";
 import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
@@ -18,11 +19,12 @@ import { BackupRecoveryFeature } from "@/features/recovery/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
-import type { FidyClient, WebAuthClient } from "@/transport/client";
+import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
 
 type WebRouterContext = Readonly<{
   apiClient: FidyClient;
   webAuthClient: WebAuthClient;
+  hostedTurnClient: HostedTurnClient;
 }>;
 type WebRouterOptions = WebRouterContext &
   Readonly<{
@@ -74,6 +76,11 @@ const dashboardRoute = createRoute({
   path: "/dashboard",
   component: DashboardRoute,
 });
+const agentRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/agent",
+  component: HostedAgentFeature,
+});
 const transactionsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/transactions",
@@ -115,7 +122,7 @@ const routeTree = rootRoute.addChildren([
   subscriptionOffersRoute,
   emailOnboardingRoute,
   authenticatedRoute.addChildren([
-    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
+    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
     patManagementRoute,
     emailReplacementRoute,
     backupRecoveryRoute,
@@ -129,6 +136,7 @@ export const createWebRouter = (options: WebRouterOptions) =>
     context: {
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
+      hostedTurnClient: options.hostedTurnClient,
     },
     history: Option.getOrUndefined(options.history),
   });

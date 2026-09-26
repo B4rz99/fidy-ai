@@ -208,6 +208,7 @@ const setup = (
                   id: {
                     name,
                   },
+                  storage: { setAlarm: (): Promise<void> => Promise.resolve() },
                 },
                 {
                   DB: db,

@@ -305,7 +305,7 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
     getByName: (name: string): Pick<Fetcher, "fetch"> => ({
       fetch: (command: Request): Promise<Response> =>
         new UserTransactionCoordinator(
-          { id: { name } },
+          { id: { name }, storage: { setAlarm: () => Promise.resolve() } },
           {
             DB: runtime.db,
             STATEMENT_STAGING_BUCKET: runtime.bucket,

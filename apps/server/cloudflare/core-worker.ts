@@ -143,6 +143,7 @@ import {
   hostedTurnInput,
 } from "./agent/hosted-turn";
 import { UserId } from "@fidy/server/agent-runtime";
+import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
@@ -1752,6 +1753,10 @@ const scheduledActivities = (
             BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
           }).pipe(Effect.mapError(() => undefined)),
     "consent.sweep": sweepExpiredConsent(environment.DB)(),
+    "hostedTurn.sweep": Effect.tryPromise({
+      try: () => sweepHostedTurns(environment.DB, current),
+      catch: () => undefined,
+    }),
     "patPairing.sweep": Effect.tryPromise({
       try: () => sweepExpiredPATPairings(environment.DB),
       catch: () => undefined,

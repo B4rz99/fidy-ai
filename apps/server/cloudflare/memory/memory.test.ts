@@ -122,6 +122,7 @@ const setup = (): Promise<D1Database> =>
           "0015_statement_submission",
           "0016_budgets",
           "0016_hosted_turn",
+          "0017_hosted_compaction",
           "0017_forwarded_email",
           "0017_statement_dispatch",
           "0018_batch_envelope_audit",

@@ -1,5 +1,6 @@
 import {
   AssistantTranscriptEntry,
+  type CompactedConversationOutput,
   DisclosureSnapshot,
   FailedTurnTranscriptEntry,
   type HostedAdmissionState,
@@ -19,6 +20,7 @@ import {
   decideHostedAdmission,
   memoriesFromRows,
   memoryRowsQuery,
+  terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
 import { DateTime, Option, Schema } from "effect";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
@@ -54,8 +56,14 @@ const ConsentUserRow = Schema.Struct({
   disclosure_json: Schema.String,
   revoked: Schema.Int,
 });
+const CompactRow = Schema.Struct({
+  text: Schema.String.check(Schema.isMinLength(1)),
+  through_sequence: Schema.Int,
+  revision: Schema.Int,
+});
 const EntryRow = Schema.Struct({
   sequence: Schema.Int,
+  status: Schema.Literals(["pending", "completed", "failed", "interrupted"]),
   id: TranscriptEntryId,
   turn_id: TranscriptTurnId,
   occurred_at_ms: Schema.Int,
@@ -220,7 +228,7 @@ export const selectHostedSession = (
   return { id: HostedAgentSessionId.make(newId()), create: true, basis: decision.consentBasis };
 };
 
-/** Read current Memories and exact retained entries only for the selected User and session. */
+/** Read current Memories, CompactedConversation, and exact retained entries for one User and session. */
 // @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
 export const readHostedContinuity = async ({
   db,
@@ -235,7 +243,17 @@ export const readHostedContinuity = async ({
 }>): Promise<
   Readonly<{
     memories: ReadonlyArray<Readonly<{ text: string }>>;
+    compactedConversation: Option.Option<
+      Readonly<{
+        userId: UserId;
+        sessionId: HostedAgentSessionId;
+        text: string;
+        throughSequence: number;
+        revision: number;
+      }>
+    >;
     transcript: ReadonlyArray<SessionTranscriptEntry>;
+    terminalThroughSequence: Option.Option<number>;
   }>
 > => {
   const authority = callerAuthority({ subject, current: now });
@@ -246,9 +264,20 @@ export const readHostedContinuity = async ({
     .all();
   const memories = Option.getOrThrow(memoriesFromRows(memoryRows.results));
   if (memories.length > maximumCurrentMemories) throw new Error("Hosted Memory capacity exceeded");
+  const compactRaw = await db
+    .prepare(`SELECT text, through_sequence, revision FROM hosted_compacted_conversations
+    WHERE user_id = ? AND hosted_session_id = ? AND updated_at_ms >= ?`)
+    .bind(subject.userId, sessionId, now - hostedTranscriptRetentionMs)
+    .first();
+  const compactedConversation = Option.map(
+    Option.fromNullishOr(compactRaw),
+    Schema.decodeUnknownSync(CompactRow)
+  );
   const raw = await db
-    .prepare(`SELECT sequence, id, turn_id, occurred_at_ms, kind, text, failure_reason
-    FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
+    .prepare(`SELECT e.sequence, e.id, e.turn_id, e.occurred_at_ms, e.kind, e.text,
+      e.failure_reason, t.status FROM transcript_entries AS e
+    JOIN hosted_turns AS t ON t.id = e.turn_id AND t.user_id = e.user_id
+    WHERE e.user_id = ? AND e.hosted_session_id = ?
     ORDER BY sequence LIMIT ?`)
     .bind(subject.userId, sessionId, maximumRetainedEntries + 1)
     .all();
@@ -258,6 +287,17 @@ export const readHostedContinuity = async ({
   const entries = Schema.decodeUnknownSync(Schema.Array(EntryRow))(raw.results);
   return {
     memories: memories.map(({ text }) => ({ text })),
+    compactedConversation: Option.map(
+      compactedConversation,
+      ({ text, through_sequence, revision }) => ({
+        userId: UserId.make(subject.userId),
+        sessionId,
+        text,
+        throughSequence: through_sequence,
+        revision,
+      })
+    ),
+    terminalThroughSequence: terminalPrefixCursor(entries),
     transcript: entries.map((row) => ({
       userId: UserId.make(subject.userId),
       sessionId,
@@ -265,6 +305,121 @@ export const readHostedContinuity = async ({
       entry: decodeEntry(row),
     })),
   };
+};
+
+export type HostedContinuity = Awaited<ReturnType<typeof readHostedContinuity>>;
+
+/** Charge one User-scoped pre-admission model attempt, including abandoned work. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const reserveHostedCompaction = async ({
+  db,
+  subject,
+  sessionId,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  sessionId: HostedAgentSessionId;
+}>): Promise<boolean> => {
+  const current = transactionNow();
+  const authority = callerAuthority({ subject, current });
+  const day = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
+  const reserved = await db
+    .prepare(`INSERT INTO hosted_compaction_attempts (user_id, day_ms, used)
+    SELECT ?, ?, 1 WHERE EXISTS
+      (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
+    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+    ON CONFLICT(user_id, day_ms) DO UPDATE SET used = used + 1
+    WHERE hosted_compaction_attempts.used < 3`)
+    .bind(subject.userId, day, subject.userId, sessionId, ...authority.bindings)
+    .run();
+  return reserved.meta.changes === 1;
+};
+
+/** Replace continuity only if the exact selected terminal prefix and prior revision still exist. */
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const commitHostedCompaction = async ({
+  db,
+  subject,
+  sessionId,
+  continuity,
+  throughSequence,
+  text,
+  signal,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  sessionId: HostedAgentSessionId;
+  continuity: HostedContinuity;
+  throughSequence: number;
+  text: CompactedConversationOutput["compactedConversation"];
+  signal: AbortSignal;
+}>): Promise<boolean> => {
+  const userId = UserId.make(subject.userId);
+  const current = transactionNow();
+  const authority = callerAuthority({ subject, current });
+  const selected = continuity.transcript.filter(
+    (entry) => entry.sequence <= BigInt(throughSequence)
+  );
+  if (
+    selected.length === 0 ||
+    !Option.exists(continuity.terminalThroughSequence, (cursor) => cursor === throughSequence)
+  ) {
+    return false;
+  }
+  const prior = Option.match(continuity.compactedConversation, {
+    onNone: () => ({ throughSequence: 0, revision: 0 }),
+    onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
+  });
+  const nonce = newId();
+  const nextRevision = prior.revision + 1;
+  // There is no suspension between this check and dispatching the atomic batch. Once dispatched,
+  // the replacement has entered its non-interruptible commit point; an abort cannot undo success.
+  if (signal.aborted) return false;
+  const results = await db.batch([
+    db
+      .prepare(`INSERT INTO hosted_compacted_conversations
+      (user_id, hosted_session_id, text, through_sequence, revision, nonce, updated_at_ms)
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS
+        (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
+      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+      AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
+        AND sequence <= ?) = ?
+      AND NOT EXISTS (SELECT 1 FROM transcript_entries AS e JOIN hosted_turns AS t
+        ON t.id = e.turn_id AND t.user_id = e.user_id WHERE e.user_id = ?
+        AND e.hosted_session_id = ? AND e.sequence <= ? AND t.status = 'pending')
+      ON CONFLICT(user_id, hosted_session_id) DO UPDATE SET
+        text = excluded.text, through_sequence = excluded.through_sequence,
+        revision = excluded.revision, nonce = excluded.nonce, updated_at_ms = excluded.updated_at_ms
+      WHERE hosted_compacted_conversations.revision = ?
+        AND hosted_compacted_conversations.through_sequence = ?`)
+      .bind(
+        userId,
+        sessionId,
+        text,
+        throughSequence,
+        nextRevision,
+        nonce,
+        current,
+        userId,
+        sessionId,
+        ...authority.bindings,
+        userId,
+        sessionId,
+        throughSequence,
+        selected.length,
+        userId,
+        sessionId,
+        throughSequence,
+        prior.revision,
+        prior.throughSequence
+      ),
+    db
+      .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
+      AND sequence <= ? AND EXISTS (SELECT 1 FROM hosted_compacted_conversations
+        WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)`)
+      .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
+  ]);
+  return results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length;
 };
 
 const decodeEntry = (row: EntryRow): TranscriptEntry => {
@@ -474,6 +629,23 @@ const sweepHostedTranscript = async (
       AND terminal_at_ms < ?)`)
     .bind(userId, userId, cutoff)
     .run();
+  await db
+    .prepare(`DELETE FROM hosted_compacted_conversations
+    WHERE user_id = ? AND updated_at_ms < ?`)
+    .bind(userId, cutoff)
+    .run();
+  await db
+    .prepare(`DELETE FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?`)
+    .bind(userId, cutoff)
+    .run();
+  const compacted = await db
+    .prepare(`SELECT MIN(updated_at_ms) AS oldest
+    FROM hosted_compacted_conversations WHERE user_id = ?`)
+    .bind(userId)
+    .first();
+  const compactedAge = Schema.decodeUnknownSync(
+    Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
+  )(compacted);
   const oldest = await db
     .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
       AND status <> 'pending' AND EXISTS
@@ -481,9 +653,19 @@ const sweepHostedTranscript = async (
       ORDER BY terminal_at_ms LIMIT 1`)
     .bind(userId)
     .first<{ terminal_at_ms: number }>();
-  return Option.map(
+  const transcriptDue = Option.map(
     Option.fromNullishOr(oldest),
     (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
+  );
+  const compactDue = Option.map(
+    Option.fromNullishOr(compactedAge.oldest),
+    (updated) => updated + hostedTranscriptRetentionMs + 1
+  );
+  return Option.orElse(
+    Option.map(compactDue, (due) =>
+      Option.isSome(transcriptDue) ? Math.min(due, transcriptDue.value) : due
+    ),
+    () => transcriptDue
   );
 };
 

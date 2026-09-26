@@ -1,14 +1,23 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
-import { DisclosureSnapshot, TranscriptText, TranscriptTurnId } from "@fidy/server/agent-runtime";
+import {
+  DisclosureSnapshot,
+  HostedAgentSessionId,
+  TranscriptText,
+  TranscriptTurnId,
+} from "@fidy/server/agent-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { HostedInferenceService } from "@fidy/server/hosted-inference";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { newId } from "../pats/pat-shared";
-import { hostedTranscriptRetentionMs } from "./turn-store";
+import {
+  commitHostedCompaction,
+  hostedTranscriptRetentionMs,
+  readHostedContinuity,
+} from "./turn-store";
 import { sweepHostedTurns } from "./hosted-turn-sweep";
 import {
   acknowledgeBrowserTurn,
@@ -76,6 +85,7 @@ const migrationNames = [
   "0014_memory",
   "0015_statement_submission",
   "0016_hosted_turn",
+  "0017_hosted_compaction",
 ] as const;
 // @effect-diagnostics-next-line asyncFunction:off
 const setup = async (): Promise<D1Database> => {
@@ -248,6 +258,455 @@ it("delivers a no-tool Workers AI reply and retains exact User and assistant evi
     { status: "completed", kind: "user", text: "Hola" },
     { status: "completed", kind: "assistant", text: "Respuesta exacta" },
   ]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("replaces only a terminal prefix and preserves exact Failed evidence when a stale attempt loses", async () => {
+  const db = await setup();
+  const model = await inference(() => Promise.resolve(reply()));
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Exact User words"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const failed = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Failed User words"),
+    inference: await inference(() => Promise.resolve(reply(""))),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  expect(failed.status).toBe(503);
+  const session = await db
+    .prepare("SELECT id FROM hosted_agent_sessions WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ id: string }>();
+  if (session === null) throw Error("missing session");
+  const credential = await subject(0);
+  const initial = await readHostedContinuity({
+    db,
+    subject: credential,
+    sessionId: Schema.decodeSync(HostedAgentSessionId)(session.id),
+    now: now(),
+  });
+  expect(initial.transcript.map(({ entry }) => entry._tag)).toEqual([
+    "UserTranscriptEntry",
+    "AssistantTranscriptEntry",
+    "UserTranscriptEntry",
+    "FailedTurnTranscriptEntry",
+  ]);
+  const cursor = initial.terminalThroughSequence;
+  if (Option.isNone(cursor)) throw Error("missing terminal prefix");
+  const input = {
+    db,
+    subject: credential,
+    sessionId: Schema.decodeSync(HostedAgentSessionId)(session.id),
+    continuity: initial,
+    throughSequence: cursor.value,
+    signal: new AbortController().signal,
+  };
+  const aborted = new AbortController();
+  aborted.abort();
+  expect(
+    await commitHostedCompaction({ ...input, signal: aborted.signal, text: "Interrupted" })
+  ).toBe(false);
+  expect((await retained(db, users[0])).results).toHaveLength(4);
+  const firstEntry = initial.transcript[0];
+  if (firstEntry === undefined) throw Error("missing first entry");
+  expect(
+    await commitHostedCompaction({
+      ...input,
+      throughSequence: Number(firstEntry.sequence),
+      text: "Partial",
+    })
+  ).toBe(false);
+  expect((await retained(db, users[0])).results).toHaveLength(4);
+  expect(await commitHostedCompaction({ ...input, text: "Fiel" })).toBe(true);
+  expect(await commitHostedCompaction({ ...input, text: "Stale" })).toBe(false);
+  const after = await readHostedContinuity({
+    db,
+    subject: credential,
+    sessionId: input.sessionId,
+    now: now(),
+  });
+  expect(after.transcript).toHaveLength(0);
+  expect(Option.map(after.compactedConversation, ({ text }) => text)).toEqual(Option.some("Fiel"));
+  const next = await completeHostedTurn({
+    db,
+    subject: credential,
+    text: TranscriptText.make("Next"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, next);
+  expect((await retained(db, users[0])).results).toMatchObject([
+    { kind: "user", text: "Next" },
+    { kind: "assistant", text: "Listo" },
+  ]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("uses a bounded replacement in the next WorkingContext while retaining newer exact Turns", async () => {
+  const db = await setup();
+  const firstModel = await inference(() => Promise.resolve(reply("Primera")));
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Uno"),
+    inference: firstModel,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  let calls = 0;
+  const compacting = await inference(() =>
+    Promise.resolve(
+      reply(++calls === 1 ? '{"compactedConversation":"Continuidad fiel"}' : "Segunda")
+    )
+  );
+  const model: HostedInferenceService = {
+    ...compacting,
+    countTranscript: () => Effect.succeed(100_001),
+  };
+  const second = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Dos"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, second);
+  expect((await retained(db, users[0])).results).toMatchObject([
+    { kind: "user", text: "Dos" },
+    { kind: "assistant", text: "Segunda" },
+  ]);
+  const nextRequests: Array<unknown> = [];
+  const nextModel = await inference((request) => {
+    nextRequests.push(request);
+    return Promise.resolve(reply("Tercera"));
+  });
+  const third = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Tres"),
+    inference: nextModel,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, third);
+  const context = JSON.stringify(nextRequests);
+  expect(context).toContain("Continuidad fiel");
+  expect(context).toContain("Dos");
+  expect(context).not.toContain("Uno");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("rejects malformed Compaction output without removing exact evidence or prior continuity", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("First exact"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const session = await db
+    .prepare("SELECT id FROM hosted_agent_sessions WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ id: string }>();
+  if (session === null) throw Error("missing session");
+  const credential = await subject(0);
+  const sessionId = Schema.decodeSync(HostedAgentSessionId)(session.id);
+  const firstEvidence = await readHostedContinuity({
+    db,
+    subject: credential,
+    sessionId,
+    now: now(),
+  });
+  const firstCursor = firstEvidence.terminalThroughSequence;
+  if (Option.isNone(firstCursor)) throw Error("missing prefix");
+  expect(
+    await commitHostedCompaction({
+      db,
+      subject: credential,
+      sessionId,
+      continuity: firstEvidence,
+      throughSequence: firstCursor.value,
+      text: "Prior continuity",
+      signal: new AbortController().signal,
+    })
+  ).toBe(true);
+  const second = await completeHostedTurn({
+    db,
+    subject: credential,
+    text: TranscriptText.make("Second exact"),
+    inference: await inference(() => Promise.resolve(reply("Second answer"))),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, second);
+  let calls = 0;
+  const provider = await inference(() =>
+    Promise.resolve(reply(++calls === 1 ? '{"compactedConversation":""}' : "Third answer"))
+  );
+  const model: HostedInferenceService = {
+    ...provider,
+    countTranscript: () => Effect.succeed(100_001),
+  };
+  const third = await completeHostedTurn({
+    db,
+    subject: credential,
+    text: TranscriptText.make("Third exact"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  expect(await acknowledgeVisibleReply(db, 0, third)).toBe("Third answer");
+  const after = await readHostedContinuity({ db, subject: credential, sessionId, now: now() });
+  expect(Option.map(after.compactedConversation, ({ text }) => text)).toEqual(
+    Option.some("Prior continuity")
+  );
+  expect(after.transcript.map(({ entry }) => entry._tag)).toEqual([
+    "UserTranscriptEntry",
+    "AssistantTranscriptEntry",
+    "UserTranscriptEntry",
+    "AssistantTranscriptEntry",
+  ]);
+  expect((await retained(db, users[0])).results).toMatchObject([
+    { kind: "user", text: "Second exact" },
+    { kind: "assistant", text: "Second answer" },
+    { kind: "user", text: "Third exact" },
+    { kind: "assistant", text: "Third answer" },
+  ]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("does not replace continuity when Consent is revoked during Compaction generation", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Private exact words"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const before = (await retained(db, users[0])).results;
+  const provider = await inference(() =>
+    db
+      .prepare(`INSERT INTO consent_user_revocations
+    (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+      .bind(newId(), users[0], grants[0], sessions[0], now())
+      .run()
+      .then(() => reply('{"compactedConversation":"Forbidden"}'))
+  );
+  const model: HostedInferenceService = {
+    ...provider,
+    countTranscript: () => Effect.succeed(100_001),
+  };
+  const refused = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Denied"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  expect(refused.status).toBeGreaterThanOrEqual(400);
+  expect((await retained(db, users[0])).results).toEqual(before);
+  const compacted = await db
+    .prepare("SELECT text FROM hosted_compacted_conversations WHERE user_id = ?")
+    .bind(users[0])
+    .all();
+  expect(compacted.results).toHaveLength(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("charges aborted pre-admission Compaction attempts against one User's daily capacity", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Retain me"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  let providerCalls = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const controller = new AbortController();
+    const abortedAttempt = attempt < 3;
+    const provider = await inference(() => {
+      providerCalls++;
+      if (abortedAttempt) controller.abort();
+      return Promise.resolve(
+        reply(abortedAttempt ? '{"compactedConversation":"Unused"}' : "Available")
+      );
+    });
+    const model: HostedInferenceService = {
+      ...provider,
+      countTranscript: () => Effect.succeed(100_001),
+    };
+    const result = await completeHostedTurn({
+      db,
+      subject: await subject(0),
+      text: TranscriptText.make(`Attempt ${attempt}`),
+      inference: model,
+      deliver: browserHostedDelivery,
+      signal: controller.signal,
+    });
+    if (abortedAttempt) {
+      expect(result.status).toBe(503);
+    } else {
+      expect(await acknowledgeVisibleReply(db, 0, result)).toBe("Available");
+    }
+  }
+  expect(providerCalls).toBe(4);
+  expect((await retained(db, users[0])).results).toMatchObject([
+    { kind: "user", text: "Retain me" },
+    { kind: "assistant", text: "Listo" },
+    { kind: "user", text: "Attempt 3" },
+    { kind: "assistant", text: "Available" },
+  ]);
+  const attempts = await db
+    .prepare("SELECT used FROM hosted_compaction_attempts WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ used: number }>();
+  expect(attempts?.used).toBe(3);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("compacts a long session of short Turns before its exact-entry capacity is reached", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Start"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const session = await db
+    .prepare("SELECT id FROM hosted_agent_sessions WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ id: string }>();
+  if (session === null) throw Error("missing session");
+  for (let index = 0; index < 39; index++) {
+    const turnId = newId();
+    const timestamp = now();
+    await db.batch([
+      db
+        .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
+        VALUES (?, ?, ?, ?, 'pending')`)
+        .bind(turnId, users[0], session.id, timestamp),
+      db
+        .prepare(`INSERT INTO transcript_entries
+        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
+        VALUES (?, ?, ?, ?, 'user', ?, 'Short')`)
+        .bind(newId(), users[0], session.id, turnId, timestamp),
+      db
+        .prepare(`INSERT INTO transcript_entries
+        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason)
+        VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')`)
+        .bind(newId(), users[0], session.id, turnId, timestamp),
+      db
+        .prepare(`UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?,
+        failure_reason = 'HostedInferenceFailed' WHERE id = ?`)
+        .bind(timestamp, turnId),
+    ]);
+  }
+  let calls = 0;
+  const provider = await inference(() =>
+    Promise.resolve(reply(++calls === 1 ? '{"compactedConversation":"Short history"}' : "Ready"))
+  );
+  const response = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Continue"),
+    inference: provider,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  expect(await acknowledgeVisibleReply(db, 0, response)).toBe("Ready");
+  expect((await retained(db, users[0])).results).toMatchObject([
+    { kind: "user", text: "Continue" },
+    { kind: "assistant", text: "Ready" },
+  ]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("expires old CompactedConversation content without exposing it in a later WorkingContext", async () => {
+  const db = await setup();
+  const first = await completeHostedTurn({
+    db,
+    subject: await subject(0),
+    text: TranscriptText.make("Private old words"),
+    inference: await inference(() => Promise.resolve(reply())),
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, first);
+  const session = await db
+    .prepare("SELECT id FROM hosted_agent_sessions WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ id: string }>();
+  if (session === null) throw Error("missing session");
+  const credential = await subject(0);
+  const sessionId = Schema.decodeSync(HostedAgentSessionId)(session.id);
+  const initial = await readHostedContinuity({ db, subject: credential, sessionId, now: now() });
+  const cursor = initial.terminalThroughSequence;
+  if (Option.isNone(cursor)) throw Error("missing prefix");
+  expect(
+    await commitHostedCompaction({
+      db,
+      subject: credential,
+      sessionId,
+      continuity: initial,
+      throughSequence: cursor.value,
+      text: "Old private continuity",
+      signal: new AbortController().signal,
+    })
+  ).toBe(true);
+  await db
+    .prepare(`UPDATE hosted_compacted_conversations SET updated_at_ms = ?
+    WHERE user_id = ? AND hosted_session_id = ?`)
+    .bind(now() - hostedTranscriptRetentionMs - 10_000, users[0], sessionId)
+    .run();
+  const before = await readHostedContinuity({ db, subject: credential, sessionId, now: now() });
+  expect(Option.isNone(before.compactedConversation)).toBe(true);
+  await sweepHostedTurns(db, now());
+  const after = await db
+    .prepare("SELECT text FROM hosted_compacted_conversations WHERE user_id = ?")
+    .bind(users[0])
+    .all();
+  expect(after.results).toHaveLength(0);
+  const requests: Array<unknown> = [];
+  const model = await inference((request) => {
+    requests.push(request);
+    return Promise.resolve(reply());
+  });
+  const next = await completeHostedTurn({
+    db,
+    subject: credential,
+    text: TranscriptText.make("New"),
+    inference: model,
+    deliver: browserHostedDelivery,
+    signal: new AbortController().signal,
+  });
+  await acknowledgeVisibleReply(db, 0, next);
+  expect(JSON.stringify(requests)).not.toContain("Old private continuity");
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

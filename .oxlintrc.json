@@ -139,6 +139,28 @@
     "yoda": "error"
   },
   "overrides": [
+    // Hosted Turn integration scenarios must finish each Turn or abort before starting the next.
+    {
+      "files": ["apps/server/cloudflare/agent/hosted-turn.test.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    // Compaction is one ordered preflight with failure checks at each provider stage.
+    {
+      "files": ["apps/server/cloudflare/agent/hosted-turn.ts"],
+      "rules": {
+        "complexity": "off",
+        "max-lines-per-function": "off"
+      }
+    },
+    // D1 continuity reads and the guarded atomic replacement are cohesive storage boundaries.
+    {
+      "files": ["apps/server/cloudflare/agent/turn-store.ts"],
+      "rules": {
+        "max-lines-per-function": "off"
+      }
+    },
     // These sequential probes and dependency guards must await each step before advancing.
     {
       "files": [

@@ -21,8 +21,20 @@ export const sweepHostedTurns = async (db: D1Database, now: number): Promise<voi
       WHERE t.status <> 'pending' AND t.terminal_at_ms < ?
         AND EXISTS (SELECT 1 FROM transcript_entries AS e
           WHERE e.turn_id = t.id AND e.user_id = t.user_id)
+    UNION ALL
+    SELECT user_id, updated_at_ms AS due_ms FROM hosted_compacted_conversations
+      WHERE updated_at_ms < ?
+    UNION ALL
+    SELECT user_id, day_ms AS due_ms FROM hosted_compaction_attempts
+      WHERE day_ms < ?
     ) GROUP BY user_id ORDER BY MIN(due_ms) LIMIT ?`)
-    .bind(now - pendingExecutionRecoveryMs, now - hostedTranscriptRetentionMs, maximumUsersPerSweep)
+    .bind(
+      now - pendingExecutionRecoveryMs,
+      now - hostedTranscriptRetentionMs,
+      now - hostedTranscriptRetentionMs,
+      now - hostedTranscriptRetentionMs,
+      maximumUsersPerSweep
+    )
     .all<{ user_id: string }>();
   await Promise.all(
     due.results.map((row) => expireHostedPending({ db, userId: UserId.make(row.user_id), now }))

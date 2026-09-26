@@ -1,8 +1,12 @@
 import {
+  CompactedConversationOutput,
   TranscriptText,
   TranscriptTurnId,
   UserId,
   assembleWorkingContext,
+  compactionEntryTrigger,
+  defaultCompactionMaximumTokens,
+  shouldCompactConversation,
 } from "@fidy/server/agent-runtime";
 import type {
   HostedInferenceService,
@@ -19,12 +23,14 @@ import {
   type HostedTurnSnapshot,
   acknowledgeHostedDelivery,
   admitHostedTurn,
+  commitHostedCompaction,
   deliveryAcknowledgmentWindowMs,
   finishHostedTurn,
   pendingExecutionRecoveryMs,
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
+  reserveHostedCompaction,
   selectHostedSession,
   stageHostedDelivery,
 } from "./turn-store";
@@ -180,11 +186,20 @@ const prepareHostedWork = async ({
   inference,
   signal,
 }: WorkPreflight): Promise<Option.Option<PreparedHostedText>> => {
-  const continuity = await readHostedContinuity({
+  const initial = await readHostedContinuity({
     db,
     subject,
     sessionId: selection.id,
     now: startedAtMs,
+  });
+  const continuity = await compactHostedContinuity({
+    db,
+    subject,
+    sessionId: selection.id,
+    now: startedAtMs,
+    inference,
+    initial,
+    signal,
   });
   const context = assembleWorkingContext({
     sessionId: selection.id,
@@ -193,9 +208,7 @@ const prepareHostedWork = async ({
     user: snapshot.user,
     startedAt: DateTime.makeUnsafe(startedAtMs),
     memories: continuity.memories,
-    // This no-tool Turn does not compact or persist a CompactedConversation. All current-session
-    // entries are retained uncompacted and loaded above; no earlier history is substituted.
-    compactedConversation: Option.none(),
+    compactedConversation: continuity.compactedConversation,
     transcript: continuity.transcript,
     activeRequest: text,
   });
@@ -208,6 +221,104 @@ const prepareHostedWork = async ({
     { signal }
   );
   return Exit.isFailure(prepared) || signal.aborted ? Option.none() : Option.some(prepared.value);
+};
+
+type HostedContinuity = Awaited<ReturnType<typeof readHostedContinuity>>;
+
+/** Best-effort replacement: failure cannot delete evidence or invalidate existing continuity. */
+// No new telemetry: this optional preflight shares the Turn's bounded provider work; existing
+// provider telemetry observes its execution. Failures are contained without reporting User content.
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+const compactHostedContinuity = async ({
+  db,
+  subject,
+  sessionId,
+  now,
+  inference,
+  initial,
+  signal,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  sessionId: ReturnType<typeof selectHostedSession>["id"];
+  now: number;
+  inference: HostedInferenceService;
+  initial: HostedContinuity;
+  signal: AbortSignal;
+}>): Promise<HostedContinuity> => {
+  const wasAborted = (): boolean => signal.aborted;
+  const prefix = initial.transcript.filter((entry) =>
+    Option.exists(initial.terminalThroughSequence, (cursor) => entry.sequence <= BigInt(cursor))
+  );
+  if (prefix.length === 0 || wasAborted()) {
+    return initial;
+  }
+  const nearEntryCapacity = initial.transcript.length >= compactionEntryTrigger;
+  const counted = nearEntryCapacity
+    ? Option.none()
+    : Option.some(
+        await Effect.runPromiseExit(
+          inference.countTranscript(initial.transcript.map(({ entry }) => entry)),
+          { signal }
+        )
+      );
+  if (
+    (!nearEntryCapacity &&
+      !Option.exists(
+        counted,
+        (result) =>
+          Exit.isSuccess(result) &&
+          shouldCompactConversation({
+            entryCount: initial.transcript.length,
+            tokenCount: result.value,
+          })
+      )) ||
+    wasAborted()
+  ) {
+    return initial;
+  }
+  if (!(await reserveHostedCompaction({ db, subject, sessionId }))) {
+    return initial;
+  }
+  const prepared = await Effect.runPromiseExit(
+    inference.prepareStructured({
+      purpose: "conversation-compaction",
+      context: {
+        prior: Option.map(initial.compactedConversation, ({ text }) => text),
+        entries: prefix.map(({ entry }) => entry),
+      },
+      outputSchema: CompactedConversationOutput,
+    }),
+    { signal }
+  );
+  if (Exit.isFailure(prepared) || wasAborted()) {
+    return initial;
+  }
+  const generated = await Effect.runPromiseExit(prepared.value.execute, { signal });
+  if (Exit.isFailure(generated) || wasAborted()) {
+    return initial;
+  }
+  const tokens = await Effect.runPromiseExit(
+    inference.countText(generated.value.compactedConversation),
+    { signal }
+  );
+  if (Exit.isFailure(tokens) || tokens.value > defaultCompactionMaximumTokens || wasAborted()) {
+    return initial;
+  }
+  const last = prefix.at(-1);
+  if (last === undefined) {
+    return initial;
+  }
+  const saved = await commitHostedCompaction({
+    db,
+    subject,
+    sessionId,
+    continuity: initial,
+    throughSequence: Number(last.sequence),
+    text: generated.value.compactedConversation,
+    signal,
+  });
+  return saved ? readHostedContinuity({ db, subject, sessionId, now }) : initial;
 };
 
 const recoverPending = ({

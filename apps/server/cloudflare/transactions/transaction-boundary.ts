@@ -2,11 +2,13 @@ import { Clock, Data, Effect, Option, Schema } from "effect";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
+  type AuditedPATMutation,
   type PATAuthority,
   livePATAuthority,
   livePATCredential,
-  recordAuditedPATUse,
+  recordAuditedPATUseFromAuthority,
   recordCanonicalPATWork,
+  recordCanonicalPATWorkFromAuthority,
 } from "@fidy/server/tokens-runtime";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -90,9 +92,45 @@ export type TransactionRefusal = Readonly<{
 
 /**
  * One accepted canonical PAT AuditLogEntry and the PAT use it accounts for, in the guard-chained
- * order the unit requires: the AuditLogEntry immediately follows the owner write it attests, and
- * the PAT use immediately follows the AuditLogEntry that accounts for it.
+ * order the unit requires: the AuditLogEntry immediately follows the owner write it attests
+ * (`afterOwnerWrite`), and the PAT use immediately follows the AuditLogEntry that accounts for it.
+ * One minted audit identity binds the pair. This is the one place the pairing is decided, so every
+ * canonical unit that commits a PAT call — a Transaction batch child or a statement publication —
+ * orders and accounts for it the same way.
  */
+export const acceptedPATAccountability = ({
+  afterOwnerWrite,
+  authority,
+  current,
+  database,
+  operation,
+}: Readonly<{
+  afterOwnerWrite: boolean;
+  authority: PATAuthority;
+  current: number;
+  database: D1Database;
+  operation: AuditedPATMutation;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const auditId = newId();
+  return [
+    prepareOwnedStatement({
+      db: database,
+      statement: recordCanonicalPATWorkFromAuthority({
+        authority,
+        input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
+      }),
+    }),
+    prepareOwnedStatement({
+      db: database,
+      statement: recordAuditedPATUseFromAuthority({
+        authority,
+        input: { auditId, current, operation },
+      }),
+    }),
+  ];
+};
+
+/** The same accepted pair for a caller admitted as a subject rather than as a held authority. */
 export const acceptedPATStatements = ({
   db,
   subject,
@@ -103,28 +141,14 @@ export const acceptedPATStatements = ({
   subject: AuthorizedPAT;
   operation: TransactionMutationOperation;
   current: number;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const auditId = transactionId();
-  return [
-    prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        subject,
-        input: {
-          id: auditId,
-          current,
-          operation,
-          outcome: "accepted",
-          afterOwnerWrite: true,
-        },
-      }),
-    }),
-    prepareOwnedStatement({
-      db,
-      statement: recordAuditedPATUse({ subject, input: { auditId, current, operation } }),
-    }),
-  ];
-};
+}>): ReadonlyArray<D1PreparedStatement> =>
+  acceptedPATAccountability({
+    afterOwnerWrite: true,
+    authority: livePATAuthority({ subject, current }),
+    current,
+    database: db,
+    operation,
+  });
 
 const refusalStatement = ({
   db,

@@ -101,8 +101,10 @@ export type AtomicUnitExecution<Committed> =
   | Readonly<{ _tag: "Unavailable" }>;
 
 /**
- * The one message a batch child reports for the exhausted shared day. Individual callers answer
- * with their own bounded budget refusals, so this is the batch contract's sentence alone.
+ * The one message a unit reports when the shared day is exhausted at the write that the budget
+ * refused: a batch child on its failure contract, and an individual statement caller whose own
+ * audit write the budget stopped. A caller's own pre-check answers with its own bounded sentence
+ * instead, so this is the sentence the unit's trigger path settles with.
  */
 export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";
 

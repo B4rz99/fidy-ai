@@ -21,11 +21,7 @@ import {
   statementSourceFormat,
 } from "@fidy/server/statement-format";
 import { CanonicalOperationId } from "@fidy/server/canonical-runtime";
-import {
-  recordAuditedPATUseFromAuthority,
-  recordCanonicalPATWorkFromAuthority,
-  recordRejectedPATWork,
-} from "@fidy/server/tokens-runtime";
+import { recordRejectedPATWork } from "@fidy/server/tokens-runtime";
 import {
   Context,
   Crypto,
@@ -56,7 +52,11 @@ import {
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
 import { prepareOwnedStatement } from "../pats/pat-unit";
-import { type TransactionAuthority, isPATAuthority } from "../transactions/transaction-boundary";
+import {
+  type TransactionAuthority,
+  acceptedPATAccountability,
+  isPATAuthority,
+} from "../transactions/transaction-boundary";
 
 /** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";
@@ -1035,47 +1035,6 @@ export type StatementPublicationPreparation =
   | Readonly<{ _tag: "Unavailable" }>;
 
 /**
- * The accepted PAT accountability pair one statement unit commits: the canonical AuditLogEntry and
- * the activity update it gates. `afterOwnerWrite` chains the audit after the publication's own
- * outbox identity, or leaves a replay's attribution unanchored because it changes no owner row.
- */
-const statementPATAccountability = ({
-  afterOwnerWrite,
-  authority,
-  current,
-  database,
-}: Readonly<{
-  afterOwnerWrite: boolean;
-  authority: Extract<TransactionAuthority, { readonly table: "pats" }>;
-  current: number;
-  database: D1Database;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const auditId = newId();
-  return [
-    prepareOwnedStatement({
-      db: database,
-      statement: recordCanonicalPATWorkFromAuthority({
-        authority,
-        input: {
-          afterOwnerWrite,
-          current,
-          id: auditId,
-          operation: "ingestion.submitForExtraction",
-          outcome: "accepted",
-        },
-      }),
-    }),
-    prepareOwnedStatement({
-      db: database,
-      statement: recordAuditedPATUseFromAuthority({
-        authority,
-        input: { auditId, current, operation: "ingestion.submitForExtraction" },
-      }),
-    }),
-  ];
-};
-
-/**
  * Credential-specific accountability that must commit inside one published statement unit: a PAT's
  * accepted AuditLogEntry and activity update, chained after the publication's own outbox identity.
  * A session publication writes its own success audit in the unit, so its list is empty.
@@ -1090,7 +1049,13 @@ const statementPublicationAccountability = ({
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> =>
   isPATAuthority(authority)
-    ? statementPATAccountability({ afterOwnerWrite: true, authority, current, database })
+    ? acceptedPATAccountability({
+        afterOwnerWrite: true,
+        authority,
+        current,
+        database,
+        operation: "ingestion.submitForExtraction",
+      })
     : [];
 
 /**
@@ -1109,7 +1074,13 @@ const statementReplayAccountability = ({
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> =>
   isPATAuthority(authority)
-    ? statementPATAccountability({ afterOwnerWrite: false, authority, current, database })
+    ? acceptedPATAccountability({
+        afterOwnerWrite: false,
+        authority,
+        current,
+        database,
+        operation: "ingestion.submitForExtraction",
+      })
     : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
 
 /**

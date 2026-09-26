@@ -343,18 +343,22 @@ const getSubmissionWithBearer = (runtime: Runtime, id: string, token: string): P
 
 const batchCategory = "10000000-0000-4000-8000-000000000016";
 
+/** The capture payload every manual-capture child in this file starts from. */
+const capturePayload = (
+  extra: Readonly<Record<string, unknown>> = {}
+): Readonly<Record<string, unknown>> => ({
+  categoryId: batchCategory,
+  direction: "outflow",
+  money: { amount: "45000.00", currency: "COP" },
+  occurredAt: "2026-08-01T12:00:00.000Z",
+  ...extra,
+});
+
 /** One canonical manual capture child, exactly as an atomic batch call carries it. */
 const captureCall = (suffix: number): object => ({
   callId: batchCallId(suffix),
   operation: "transactions.createTransaction",
-  input: {
-    payload: {
-      categoryId: batchCategory,
-      direction: "outflow",
-      money: { amount: "45000.00", currency: "COP" },
-      occurredAt: "2026-08-01T12:00:00.000Z",
-    },
-  },
+  input: { payload: capturePayload() },
 });
 
 /** One canonical statement child citing an already-staged reference, never raw bytes. */
@@ -1920,15 +1924,7 @@ it(
         const calls = Array.from({ length: 12 }, (_, index) => ({
           callId: batchCallId(index + 1),
           operation: "transactions.createTransaction",
-          input: {
-            payload: {
-              categoryId: batchCategory,
-              direction: "outflow",
-              money: { amount: "45000.00", currency: "COP" },
-              occurredAt: "2026-08-01T12:00:00.000Z",
-              padding,
-            },
-          },
+          input: { payload: capturePayload({ padding }) },
         }));
         const refused = yield* fromTestPromise(() => batch(runtime, 0, calls));
         expect(refused.status).toBe(400);
@@ -2220,15 +2216,7 @@ it(
         const oversized = {
           callId: batchCallId(1),
           operation: "transactions.createTransaction",
-          input: {
-            payload: {
-              categoryId: batchCategory,
-              direction: "outflow",
-              money: { amount: "45000.00", currency: "COP" },
-              occurredAt: "2026-08-01T12:00:00.000Z",
-              notes: "x".repeat(5_000),
-            },
-          },
+          input: { payload: capturePayload({ notes: "x".repeat(5_000) }) },
         };
         const refused = yield* fromTestPromise(() =>
           batch(runtime, 0, [oversized, captureCall(2)])

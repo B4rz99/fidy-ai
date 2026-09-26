@@ -67,6 +67,7 @@ export {
   recordCanonicalPATWorkFromAuthority,
   recordRejectedPATWork,
 } from "./pat-audit";
+export type { AuditedPATMutation } from "./pat-write";
 export {
   patAtomicAssertion,
   patExpiryCompletion,

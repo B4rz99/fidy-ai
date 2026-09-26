@@ -31,10 +31,12 @@ CREATE TRIGGER budget_work_version_update AFTER UPDATE ON budget_reconciliation_
 BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (NEW.user_id, 1)
   ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1; END;
 CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
+WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   VALUES (NEW.user_id, NEW.occurred_at)
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
 CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
+WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   VALUES (NEW.user_id, NEW.occurred_at)
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1;
@@ -42,11 +44,13 @@ BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   VALUES (OLD.user_id, OLD.occurred_at)
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
 CREATE TRIGGER budget_link_work AFTER INSERT ON transaction_reconciliation_decisions
+WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   SELECT NEW.user_id, occurred_at FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
 CREATE TRIGGER budget_unlink_work AFTER UPDATE ON transaction_reconciliation_decisions
+WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   SELECT NEW.user_id, occurred_at FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
@@ -61,7 +65,9 @@ BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
 CREATE TRIGGER budget_removed_version AFTER DELETE ON budgets
 BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (OLD.user_id, 1)
-  ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1; END;
+  ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1;
+  DELETE FROM budget_reconciliation_work WHERE user_id = OLD.user_id
+    AND NOT EXISTS (SELECT 1 FROM budgets WHERE user_id = OLD.user_id); END;
 -- One bounded cursor per Budget/month at the exact financial-fact revision it summarized.
 CREATE TABLE budget_report_progress (
   user_id TEXT NOT NULL,

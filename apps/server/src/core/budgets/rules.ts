@@ -7,7 +7,6 @@ import {
   type BudgetMonthLatch,
   type BudgetStatus,
 } from "./model";
-import { type Transaction } from "~/core/transactions/model";
 
 /** Derives one calendar month's half-open UTC bounds from an explicit instant and IANA zone. */
 export const deriveCurrentBudgetMonth = ({
@@ -44,9 +43,9 @@ type BudgetStatusInput = Readonly<{
 
 type BudgetMovement = Readonly<{
   money: ReadonlyMoney;
-  categoryId: Transaction["categoryId"];
-  direction: Transaction["direction"];
-  occurredAt: Transaction["occurredAt"];
+  categoryId: Budget["categoryId"];
+  direction: "inflow" | "outflow";
+  occurredAt: DateTime.Utc;
 }>;
 
 /**

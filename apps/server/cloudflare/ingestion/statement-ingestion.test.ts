@@ -70,10 +70,12 @@ const migrationNames = [
   "0012_statement_staging",
   "0012_transaction_search",
   "0013_category_keyword_rules",
+  "0013_transaction_reconciliation",
   "0014_memory",
   "0015_statement_submission",
   "0016_statement_processing",
   "0016_subscription_standing",
+  "0016_budgets",
   "0017_forwarded_email",
   "0017_statement_dispatch",
 ] as const;

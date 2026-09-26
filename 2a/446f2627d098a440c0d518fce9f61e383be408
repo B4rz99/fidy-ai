@@ -1,0 +1,40 @@
+apps/server/cloudflare/categories/canonical-keyword-rules.ts
+  s_4ac9a803d469ea::t_b6444254120c79 233-235
+  s_4ac9a803d469ea::t_aa204e08e591cc 32,228-232
+  s_4ac9a803d469ea::t_7b2218856dff9a 175,189,209,215-216,283,324,349
+apps/server/cloudflare/core-worker.ts
+  s_4ac9a803d469ea::t_7777537e88b0e5 639,649,673,711-715
+  s_4ac9a803d469ea::t_5f93dea5700052 706-710
+apps/server/cloudflare/categories/keyword-rule-conflict.ts
+  s_4ac9a803d469ea::t_2a7ea188154258 44-47
+  s_4ac9a803d469ea::t_f6336d26856dc6 1-18,26-43,48-51
+  s_4ac9a803d469ea::t_a21ade12a59229 19-25
+apps/server/cloudflare/mutations/transaction-outcome.ts
+  s_4ac9a803d469ea::t_5b5c60856130db 348,353-356
+apps/server/cloudflare/mutations/canonical-mutation-batch.ts
+  s_4ac9a803d469ea::t_fc6507488945fe 234,241
+apps/server/cloudflare/mutations/keyword-rule-outcome.ts
+  s_4ac9a803d469ea::t_f25b1deb1a67cf 21
+  s_4ac9a803d469ea::t_8b51586e20e133 156
+apps/server/cloudflare/mutations/memory-outcome.ts
+  s_4ac9a803d469ea::t_9ded6712dd0bb9 298-299,301-302
+  s_4ac9a803d469ea::t_68abf8f23d6553 300
+apps/server/cloudflare/mutations/canonical-mutation-registry.ts
+  s_4ac9a803d469ea::t_6dea10d99e24a3 322-323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a446f2627d098a440c0d518fce9f61e383be408",
+  "prompts": {},
+  "sessions": {
+    "s_4ac9a803d469ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db0c-329a-7691-8f21-b8bcf3fd5c0e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

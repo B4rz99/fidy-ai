@@ -1351,7 +1351,7 @@ it("shows committed review rows only to their User through the canonical read", 
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1591,7 +1591,7 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1649,7 +1649,7 @@ it("settles an errored Workflow when its final failure-report activity also exha
           .run()
       );
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA } },
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,

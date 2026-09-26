@@ -15,17 +15,12 @@ import {
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
-<<<<<<< HEAD
 import { Context, Data, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
-import { type WorkersAiEnvironment, cloudflareHostedInferenceLive } from "../ai/workers-ai";
-=======
-import { Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import {
   type WorkersAiEnvironment,
   cloudflareHostedInferenceLive,
   makeCloudflareHostedInference,
 } from "../ai/workers-ai";
->>>>>>> 8a6ea92b (feat(agent): #704 complete one hosted Turn on Workers AI)
 import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
 import { unavailableStatement } from "../ingestion/statement-ingestion";
 import {

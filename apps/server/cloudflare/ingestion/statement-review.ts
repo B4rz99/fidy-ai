@@ -102,7 +102,7 @@ const projectEmailRow = (
     issues: [],
     createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.created_at_ms)),
     status: expired ? "expired" : "pending",
-    ...(expired || row.reason === "processing-interrupted"
+    ...(expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
       ? {}
       : { ingestSampleId: row.receipt_id }),
   });

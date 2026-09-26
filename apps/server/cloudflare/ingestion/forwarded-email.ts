@@ -372,7 +372,7 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
   }
 });
 
-/** Delete private bytes only at their hard retention deadline; keep replay tombstones. */
+/** Delete private bytes on revocation or expiry; retain replay and review tombstones. */
 export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEmailEnvironment) {
   const now = yield* Clock.currentTimeMillis;
   const rows = yield* io(() =>

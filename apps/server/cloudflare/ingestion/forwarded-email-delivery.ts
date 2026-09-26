@@ -41,6 +41,6 @@ export const receiveForwardedEmailWork =
     );
   };
 
-/** Query dispatch without guessing whether a Queue accepted an ambiguous prior send. */
+/** Recognize a versioned identity-only Queue message before routing to User coordination. */
 export const isForwardedEmailWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(ForwardedEmailWork)(body));

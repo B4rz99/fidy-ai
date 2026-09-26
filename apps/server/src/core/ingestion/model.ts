@@ -327,6 +327,7 @@ export type EmailRawSampleReviewReason = typeof EmailRawSampleReviewReason.Type;
 export const EmailNoSampleReviewReason = Schema.Literals([
   "provider-retrieval-failed",
   "processing-interrupted",
+  "consent-revoked",
 ]);
 export type EmailNoSampleReviewReason = typeof EmailNoSampleReviewReason.Type;
 

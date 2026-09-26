@@ -1,9 +1,11 @@
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Clock, Data, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import emailWorker from "./email-worker";
 import { processForwardedEmail } from "./forwarded-email-processing";
 import { receiveForwardedEmailWork } from "./forwarded-email-delivery";
+import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { listNeedsReviewItems } from "./statement-review";
 
 const userA = "10000000-0000-4000-8000-000000000101";
@@ -42,8 +44,10 @@ const setup = Effect.fn(function* () {
   });
   instances.push(miniflare);
   yield* wait(() => miniflare.ready);
-  const db = yield* wait(() => miniflare.getD1Database("DB"));
-  const bucket = yield* wait(() => miniflare.getR2Bucket("EMAIL_BUCKET"));
+  const bindings = yield* wait(() =>
+    miniflare.getBindings<{ DB: D1Database; EMAIL_BUCKET: R2Bucket }>("forwarded-email-test-worker")
+  );
+  const { DB: db, EMAIL_BUCKET: bucket } = bindings;
   yield* wait(() =>
     db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota');
     CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
@@ -142,6 +146,21 @@ const setup = Effect.fn(function* () {
   return { env, db, bucket, jobs };
 });
 
+const coordinatorFor = (
+  db: D1Database,
+  bucket: R2Bucket,
+  userId: string
+): UserTransactionCoordinator =>
+  new UserTransactionCoordinator(
+    { id: { name: userId } },
+    {
+      DB: db,
+      EMAIL_BUCKET: bucket,
+      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+      HOSTED_AI_MODEL: approvedWorkersAiModel,
+    }
+  );
+
 const delivery = (
   to = `${localA}@fidyapp.com`,
   bytes = raw
@@ -201,7 +220,7 @@ it("rejects an unapproved envelope even when MIME names a known User, without re
 it("settles a bounded known email into one Transaction and one immutable attestation on replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { env, db, bucket } = yield* setup();
+      const { env, db, bucket, jobs } = yield* setup();
       const html = yield* wait(() =>
         Bun.file(
           new URL(
@@ -225,22 +244,19 @@ it("settles a bounded known email into one Transaction and one immutable attesta
       );
       expect(receipt).not.toBeNull();
       if (receipt === null) return;
-      yield* wait(() =>
-        processForwardedEmail({
-          DB: db,
-          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
-          userId: userA,
-          receiptId: receipt.id,
-        })
-      );
-      yield* wait(() =>
-        processForwardedEmail({
-          DB: db,
-          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
-          userId: userA,
-          receiptId: receipt.id,
-        })
-      );
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      const coordinator = coordinatorFor(db, bucket, userA);
+      let acknowledgements = 0;
+      const work = {
+        body: jobs[0],
+        ack: (): void => {
+          acknowledgements += 1;
+        },
+      };
+      const owner = { getByName: (_name: string): Pick<Fetcher, "fetch"> => coordinator };
+      yield* wait(() => receiveForwardedEmailWork([work], owner));
+      yield* wait(() => receiveForwardedEmailWork([work], owner));
+      expect(acknowledgements).toBe(2);
       const transactions = yield* wait(() =>
         db.prepare("SELECT id, amount FROM transactions WHERE user_id = ?").bind(userA).all()
       );
@@ -467,6 +483,26 @@ it("refuses finalization after Consent revocation without partial financial writ
         (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
           .results
       ).toHaveLength(1);
+      const current = yield* Clock.currentTimeMillis;
+      const session = "10000000-0000-4000-8000-000000000203";
+      const digest = new Uint8Array(32);
+      yield* wait(() =>
+        db
+          .prepare(`INSERT INTO web_sessions
+        (id, user_id, token_digest, idle_expires_at_ms, hard_expires_at_ms)
+        VALUES (?, ?, ?, ?, ?)`)
+          .bind(session, userA, digest, current + 60_000, current + 60_000)
+          .run()
+      );
+      const page = yield* listNeedsReviewItems({
+        database: db,
+        environment: { DB: db },
+        subject: { id: session, userId: userA, digest },
+        url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
+      });
+      // Ordinary canonical work remains blocked after revocation; the review is durably
+      // recorded for a future authenticated re-consent/data-rights read.
+      expect(page.status).toBe(401);
     })
   ));
 
@@ -482,14 +518,22 @@ it("does not let another User's receipt identity authorize reading or finalizing
           .first<{ id: string }>()
       );
       if (receipt === null) throw new Error("Expected receipt");
+      const coordinator = coordinatorFor(db, bucket, userB);
+      let acked = false;
       yield* wait(() =>
-        processForwardedEmail({
-          DB: db,
-          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
-          userId: userB,
-          receiptId: receipt.id,
-        })
+        receiveForwardedEmailWork(
+          [
+            {
+              body: { receiptId: receipt.id, userId: userB },
+              ack: (): void => {
+                acked = true;
+              },
+            },
+          ],
+          { getByName: (): Pick<Fetcher, "fetch"> => coordinator }
+        )
       );
+      expect(acked).toBe(true);
       expect(
         (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
           .results

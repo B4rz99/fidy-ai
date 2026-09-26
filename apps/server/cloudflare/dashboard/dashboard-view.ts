@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Data, type DateTime, Effect, Option, Schema } from "effect";
 
 import { Money } from "../../src/core/_shared/money";
 import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
@@ -17,6 +17,7 @@ import {
   type Widget,
 } from "../../src/core/dashboard/model";
 import { Transaction } from "../../src/core/transactions/model";
+import { dashboardBucket, includesDashboardTransaction } from "../../src/core/dashboard/projection";
 import { type DashboardView, type DashboardWidgetView } from "../../src/shell/dashboard/operations";
 import { budgetFromRow } from "../budgets/budget-row";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
@@ -24,7 +25,6 @@ import { effectiveTransactionRelation } from "../transactions/effective-transact
 class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 const maximumBudgets = 128;
 const maximumProjectionFacts = 8192;
-const monthCharacters = 7;
 const TransactionRow = Schema.Struct({
   id: Transaction.fields.id,
   amount: Schema.String,
@@ -149,24 +149,31 @@ export const loadDashboardFacts = (
 
 const selected = (
   movements: ReadonlyArray<DashboardTransactionFact>,
-  widget: Widget
-): ReadonlyArray<DashboardTransactionFact> =>
-  movements.filter(
-    ({ transaction }) =>
-      !("categories" in widget) ||
-      widget.categories === undefined ||
-      widget.categories.includes(transaction.categoryId)
+  widget: Widget,
+  period: Option.Option<ReturnType<typeof resolveDashboardPeriod>> = Option.none()
+): ReadonlyArray<DashboardTransactionFact> => {
+  const categories =
+    widget.type === "budget-bar"
+      ? Option.some([widget.categoryId])
+      : Option.fromUndefinedOr(widget.categories);
+  const search =
+    widget.type === "transaction-list" ? Option.fromUndefinedOr(widget.search) : Option.none();
+  const interval = Option.map(period, ({ from, toExclusive }) => ({
+    from: from.epochMilliseconds,
+    toExclusive: toExclusive.epochMilliseconds,
+  }));
+  return movements.filter(({ transaction }) =>
+    includesDashboardTransaction(
+      {
+        categoryId: transaction.categoryId,
+        occurredAt: transaction.occurredAt.epochMilliseconds,
+        counterparty: transaction.counterparty,
+        notes: transaction.notes,
+      },
+      { categories, period: interval, search }
+    )
   );
-
-const periodTransactions = (
-  movements: ReadonlyArray<DashboardTransactionFact>,
-  period: ReturnType<typeof resolveDashboardPeriod>
-): ReadonlyArray<DashboardTransactionFact> =>
-  movements.filter(
-    ({ transaction }) =>
-      transaction.occurredAt.epochMilliseconds >= period.from.epochMilliseconds &&
-      transaction.occurredAt.epochMilliseconds < period.toExclusive.epochMilliseconds
-  );
+};
 
 const groups = (
   movements: ReadonlyArray<DashboardTransactionFact>
@@ -187,20 +194,14 @@ type ChartBucketKey = Extract<
 const chartBucketKey = (
   widget: ChartWidget,
   movement: DashboardTransactionFact,
-  zone: string
-): Readonly<{ id: string; key: ChartBucketKey }> => {
-  if (widget.groupBy === "category") {
-    return { id: movement.category.id, key: { kind: "category", category: movement.category } };
-  }
-  const local = DateTime.setZone(
-    movement.transaction.occurredAt,
-    DateTime.zoneMakeNamedUnsafe(zone)
-  );
-  const day = DateTime.formatIsoDate(local);
-  if (widget.groupBy === "day") return { id: day, key: { kind: "day", date: day } };
-  const month = day.slice(0, monthCharacters);
-  return { id: month, key: { kind: "month", month } };
-};
+  zone: (typeof UserContextRow.Type)["time_zone"]
+): Readonly<{ id: string; key: ChartBucketKey }> =>
+  dashboardBucket({
+    groupBy: widget.groupBy,
+    category: movement.category,
+    occurredAt: movement.transaction.occurredAt.epochMilliseconds,
+    timeZone: zone,
+  });
 
 const renderChart = (
   widget: ChartWidget,
@@ -216,7 +217,7 @@ const renderChart = (
     string,
     { key: ChartBucketKey; movements: Array<DashboardTransactionFact> }
   >();
-  for (const movement of periodTransactions(selected(facts.movements, widget), period)) {
+  for (const movement of selected(facts.movements, widget, Option.some(period))) {
     const { id, key } = chartBucketKey(widget, movement, facts.context.time_zone);
     const bucket = buckets.get(id);
     if (bucket === undefined) buckets.set(id, { key, movements: [movement] });
@@ -237,15 +238,7 @@ const renderList = (
   widget: Extract<Widget, { type: "transaction-list" }>,
   facts: Loaded
 ): DashboardWidgetView => {
-  const rows = selected(facts.movements, widget)
-    .filter(
-      ({ transaction }) =>
-        widget.search === undefined ||
-        `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`
-          .toLocaleLowerCase("es-CO")
-          .includes(widget.search.toLocaleLowerCase("es-CO"))
-    )
-    .slice(0, widget.limit);
+  const rows = selected(facts.movements, widget).slice(0, widget.limit);
   return {
     widget,
     result: {
@@ -276,7 +269,7 @@ const renderMetric = (
     result: {
       appliedPeriod: period,
       moneyGroups: projectDashboardMetric(
-        periodTransactions(selected(facts.movements, widget), period).map(({ transaction }) => ({
+        selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
           direction: transaction.direction,
           money: transaction.money,
         })),
@@ -292,9 +285,10 @@ const budgetSpent = (
   period: ReturnType<typeof resolveDashboardPeriod>
 ): Money =>
   dashboardBudgetSpent(
-    periodTransactions(facts.movements, period)
-      .filter(({ transaction }) => transaction.categoryId === widget.categoryId)
-      .map(({ transaction }) => ({ direction: transaction.direction, money: transaction.money })),
+    selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
+      direction: transaction.direction,
+      money: transaction.money,
+    })),
     widget.currency
   );
 

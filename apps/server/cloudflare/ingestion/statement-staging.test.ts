@@ -54,6 +54,7 @@ const migrationNames = [
   "0016_budgets",
   "0016_statement_processing",
   "0017_statement_dispatch",
+  "0018_batch_envelope_audit",
 ] as const;
 const workerScript = "export default { fetch() { return new Response('ok') } }";
 const stagingWorkerName = "statement-staging-test-worker";

@@ -24,6 +24,7 @@ import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { transactionInput, transactionSession } from "./transactions";
 import { browseTransactions } from "./transaction-history";
+import { dailyAuditCount } from "../atomic/daily-canonical-budget";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -189,6 +190,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0015_statement_submission",
           "0016_budgets",
           "0016_hosted_turn",
+          "0018_batch_envelope_audit",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
@@ -5364,7 +5366,165 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
-      ).toBe(1);
+      ).toBe(2);
+      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+        { operation: "transactions.createTransaction", outcome: "validation_failed" },
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
+      ]);
+    })
+  ));
+
+it("records exactly one metadata-only batch refusal for each unadmitted envelope without spending child budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const rawBatch = (body: object): Request =>
+        new Request("https://api.fidyapp.com/operations/atomic-batch", {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: `__Host-fidy_session=${bearer(0)}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+      const bodies = [
+        {},
+        { calls: [] },
+        { calls: Array.from({ length: 13 }, (_, index) => transactionCall(index + 1, input())) },
+        {
+          calls: [
+            {
+              callId: batchCallId(1),
+              operation: "not.canonical",
+              input: { secret: "never-persist" },
+            },
+          ],
+        },
+      ];
+      for (const body of bodies) {
+        const response = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch(body)));
+        expect(response.status, `envelope ${bodies.indexOf(body)}`).toBe(400);
+        const failure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+          yield* fromTestPromise(() => response.json())
+        ).pipe(Effect.orDie);
+        expect(failure.error.code).toBe("validation_failed");
+      }
+      const audits = yield* fromTestPromise(() =>
+        db.prepare("SELECT * FROM transaction_audit WHERE user_id = ?").bind(users[0]).all()
+      );
+      expect(audits.results).toHaveLength(bodies.length);
+      expect(
+        audits.results.map((row) => ({
+          user_id: row.user_id,
+          session_id: row.session_id,
+          operation: row.operation,
+          outcome: row.outcome,
+        }))
+      ).toEqual(
+        Array.from({ length: bodies.length }, () => ({
+          user_id: users[0],
+          session_id: sessions[0],
+          operation: "operations.executeAtomicBatch",
+          outcome: "validation_failed",
+        }))
+      );
+      expect(Object.keys(audits.results[0] ?? {}).sort()).toEqual([
+        "id",
+        "occurred_at_ms",
+        "operation",
+        "outcome",
+        "session_id",
+        "user_id",
+      ]);
+      expect(
+        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+      // The trigger, not just the read, excludes these rows when the daily budget is full.
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
+          INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+          SELECT 'envelope-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+          .bind(users[0], sessions[0], current)
+          .run()
+      );
+      const atLimit = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch({ calls: [] })));
+      expect(atLimit.status).toBe(400);
+      expect(
+        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+      ).toBe(256);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'operations.executeAtomicBatch'"
+          )
+        )
+      ).toBe(5);
+    })
+  ));
+
+it("records a batch envelope for a PAT without the child's scope, but never for dead credentials", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const token = `fin_${"q".repeat(8)}_${"z".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read"], current });
+      const envelope = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(0, token, []))
+      );
+      expect(envelope.status).toBe(400);
+      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toEqual([
+        { operation: "operations.executeAtomicBatch", outcome: "rejected" },
+      ]);
+      expect(
+        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+      ).toBe(0);
+      const child = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
+      );
+      expect(child.status).toBe(400);
+      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
+        1
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE short_id = ?")
+          .bind(current, token.slice(4, 12))
+          .run()
+      );
+      expect(
+        (yield* fromTestPromise(() => sendPublicRequest(db, bearerRequest(0, token, [])))).status
+      ).toBe(401);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request("https://api.fidyapp.com/operations/atomic-batch", {
+              method: "POST",
+              headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+              body: JSON.stringify({ calls: [] }),
+            })
+          )
+        )).status
+      ).toBe(401);
+      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
+        1
+      );
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
     })
   ));
 

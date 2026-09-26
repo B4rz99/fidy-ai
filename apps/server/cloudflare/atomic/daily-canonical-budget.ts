@@ -1,16 +1,18 @@
 const utcDayMilliseconds = 86_400_000;
 
-/** Matches the 256-entry stable-User triggers in 0015_statement_submission.sql; the triggers stay the authority. */
+/** Matches the 256-entry stable-User triggers rebuilt in 0018_batch_envelope_audit.sql. */
 export const dailyAuditBudget = 256;
 
 /**
  * The canonical AuditLogEntry rows one User's UTC day counts: transaction, PAT, category, Memory,
- * statement submission. Every audit table's own trigger counts this same union, so this read and
- * the trigger that refuses an insert can never disagree about what the budget covers.
+ * statement submission. Batch-envelope refusals are excluded; every audit trigger counts the
+ * same union, so this read and the triggers agree about what the budget covers.
  */
-const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?
+const auditDayRows = `SELECT occurred_at_ms FROM transaction_audit WHERE user_id = ?
+      AND operation != 'operations.executeAtomicBatch' AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL
       SELECT occurred_at_ms FROM pat_audit WHERE user_id = ?
+      AND operation != 'operations.executeAtomicBatch'
       AND ((pat_id IS NOT NULL AND operation NOT LIKE 'pats.%') OR operation = 'pats.listPATs')
       AND occurred_at_ms >= ? AND occurred_at_ms < ?
       UNION ALL

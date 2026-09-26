@@ -32,7 +32,7 @@ import {
   type TransactionCaller,
   isPATCaller,
   maximumTransactionInputBytes,
-  rejectInvalidBatchInput,
+  rejectBatchEnvelope,
   rejectInvalidTransactionInput,
   transactionNow,
 } from "./transactions/transaction-boundary";
@@ -462,7 +462,11 @@ const dispatchCanonicalBatch = (
       const parsed = yield* Effect.tryPromise(() =>
         boundedJsonBody(request, batchPolicy, BatchInput)
       );
-      if (Option.isNone(parsed)) return rejectInvalidBatchInput();
+      if (Option.isNone(parsed)) {
+        return yield* Effect.tryPromise(() =>
+          rejectBatchEnvelope({ db: environment.DB, subject, current: transactionNow() })
+        );
+      }
       return yield* sendToCoordinator({
         environment,
         subject,

@@ -81,6 +81,7 @@ const migrationNames = [
   "0016_budgets",
   "0017_forwarded_email",
   "0017_statement_dispatch",
+  "0018_batch_envelope_audit",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -2789,14 +2790,20 @@ it(
         const failure = yield* fromTestPromise(() => failureOf(refused));
         expect(failure.error.code).toBe("validation_failed");
         // The aggregate bound is a request-shape refusal, not a child failure contract: it names no
-        // child, so no failedCallIndex is fabricated and nothing is admitted or audited.
+        // child, so no failedCallIndex is fabricated and no child is admitted.
         expect(failure.error.message).toBe("Invalid atomic batch input.");
         yield* Effect.promise(() => expect(batchRejectionOf(refused)).rejects.toThrow());
         yield* expectCanonicalState(runtime.db, {
           transactions: 0,
-          transaction_audit: 0,
+          transaction_audit: 1,
           statement_submission_audit: 0,
         });
+        const audit = yield* fromTestPromise(() =>
+          runtime.db.prepare("SELECT operation, outcome FROM transaction_audit").all()
+        );
+        expect(audit.results).toEqual([
+          { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
+        ]);
       })
     ),
   30_000

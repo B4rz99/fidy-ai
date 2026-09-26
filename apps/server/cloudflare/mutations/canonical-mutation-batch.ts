@@ -664,12 +664,14 @@ const executionResponse = ({
   }
 };
 
-const needsEnvelopeAudit = (calls: ReadonlyArray<CanonicalBatchCall>): boolean =>
-  calls.some(unattributedOperation) &&
-  !calls.some((call) => {
+const needsEnvelopeAudit = (calls: ReadonlyArray<CanonicalBatchCall>): boolean => {
+  const firstUnattributed = calls.findIndex(unattributedOperation);
+  if (firstUnattributed < 0) return false;
+  return !calls.slice(0, firstUnattributed).some((call) => {
     const named = rawOperation(call);
     return Option.isSome(named) && Option.isSome(canonicalMutationAdapter(named.value));
   });
+};
 
 const preAdmissionResponse = ({
   db,

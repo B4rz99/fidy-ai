@@ -5555,6 +5555,39 @@ it("does not misattribute a repeated callId with a malformed later operation to 
     })
   ));
 
+it("records an envelope when a non-canonical first child prevents a later child from being admitted", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              calls: [
+                { callId: batchCallId(1), operation: "not.canonical", input: {} },
+                transactionCall(2, input()),
+              ],
+            }),
+          })
+        )
+      );
+      expect(response.status).toBe(400);
+      expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+        { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
+      ]);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
+    })
+  ));
+
 it("records a batch envelope for a PAT without the child's scope, but never for dead credentials", () =>
   Effect.runPromise(
     Effect.gen(function* () {

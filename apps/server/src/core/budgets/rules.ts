@@ -105,9 +105,10 @@ const newlyReachedThresholds = (
 
 /**
  * Advance the two monotone threshold marks for one Budget and applied month. The caller must
- * supply the latch belonging to this Budget and period, then persist both marks atomically
- * with the Transaction change to prevent duplicate alerts under concurrency. Spending in another
- * Currency fails without comparison or conversion; a correction never reopens a mark.
+ * supply the latch belonging to this Budget and period. The adapter must commit durable,
+ * versioned evaluation intent with the Transaction change, drain it before any later correction,
+ * and persist marks with unique per-threshold occurrences; a correction never reopens a mark.
+ * Spending in another Currency fails without comparison or conversion.
  */
 export const advanceBudgetLatch = ({
   budget,

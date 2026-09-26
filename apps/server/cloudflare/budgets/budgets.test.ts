@@ -264,6 +264,29 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
     { operation: "budgets.updateBudget", outcome: "rejected" },
   ]);
   expect((await send(db, request(0, `/budgets/${id}`))).status).toBe(200);
+  expect((await send(db, request(0, "/budgets/not-a-budget", "DELETE"))).status).toBe(404);
+  expect(
+    (
+      await send(
+        db,
+        request(0, "/budgets", "POST", {
+          categoryId: category,
+          cap: { amount: "-1", currency: "COP" },
+        })
+      )
+    ).status
+  ).toBe(400);
+  expect((await send(db, request(0, "/budget-status?timeZone=not-a-zone"))).status).toBe(400);
+  const invalidAudits = await db
+    .prepare(`SELECT operation FROM budget_audit
+    WHERE user_id = ? AND outcome = 'rejected' ORDER BY operation`)
+    .bind(users[0])
+    .all<{ operation: string }>();
+  expect(invalidAudits.results.map((row) => row.operation)).toEqual([
+    "budgets.createBudget",
+    "budgets.deleteBudget",
+    "budgets.getBudgetStatus",
+  ]);
   const wrongCurrency = await send(
     db,
     request(0, `/budgets/${id}`, "PUT", {
@@ -414,3 +437,52 @@ it("latches a backdated month and does not reopen it after a correction", async 
   ).toBe(200);
   expect((await alerts()).results.map((row) => row.threshold)).toEqual([80, 100]);
 });
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("blocks a correcting mutation until its versioned work backlog has drained", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  const instant = DateTime.nowUnsafe();
+  const created = await send(
+    db,
+    request(0, "/transactions", "POST", {
+      money: { amount: "100", currency: "COP" },
+      direction: "outflow",
+      categoryId: category,
+      occurredAt: DateTime.formatIso(instant),
+    })
+  );
+  expect(created.status).toBe(201);
+  const transaction = Schema.decodeUnknownSync(Captured)(await created.json());
+  const earlier = DateTime.makeUnsafe(instant.epochMilliseconds - 40 * 86400000);
+  const work = Array.from({ length: 65 }, (_, index) =>
+    db
+      .prepare(`INSERT INTO budget_reconciliation_work
+    (user_id, occurred_at) VALUES (?, ?)`)
+      .bind(
+        users[0],
+        DateTime.formatIso(DateTime.makeUnsafe(earlier.epochMilliseconds + index * 1000))
+      )
+  );
+  await db.batch(work);
+  const correction = (): Promise<Response> =>
+    send(
+      db,
+      request(0, `/transactions/${transaction.data.id}`, "PUT", {
+        expectedRevision: 0,
+        changes: { money: { amount: "1", currency: "COP" } },
+      })
+    );
+  expect((await correction()).status).toBe(503);
+  const pending = await db
+    .prepare("SELECT COUNT(*) AS count FROM budget_reconciliation_work WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ count: number }>();
+  expect(pending?.count).toBe(1);
+  expect((await correction()).status).toBe(200);
+  const alerts = await db
+    .prepare("SELECT threshold FROM budget_threshold_alerts WHERE user_id = ? ORDER BY threshold")
+    .bind(users[0])
+    .all<{ threshold: number }>();
+  expect(alerts.results.map((row) => row.threshold)).toEqual([80, 100]);
+}, 30000);

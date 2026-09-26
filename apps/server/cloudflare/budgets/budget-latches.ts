@@ -157,5 +157,12 @@ export const reconcileBudgetLatches = ({
           .run()
       );
     }
-    return true;
+    // A partially drained backlog must not allow a later correction to erase an unobserved peak.
+    const remaining = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT 1 FROM budget_reconciliation_work WHERE user_id = ? LIMIT 1")
+        .bind(userId)
+        .first()
+    );
+    return remaining === null;
   }).pipe(Effect.orElseSucceed(() => false));

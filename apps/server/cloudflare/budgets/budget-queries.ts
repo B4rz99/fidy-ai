@@ -56,10 +56,12 @@ const authorizeRead = ({
   db,
   subject,
   operation,
+  outcome,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   operation: BudgetQueryOperation;
+  outcome: "accepted" | "rejected";
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const current = transactionNow();
@@ -81,7 +83,7 @@ const authorizeRead = ({
                   id: transactionId(),
                   current,
                   operation,
-                  outcome: "accepted",
+                  outcome,
                   afterOwnerWrite: false,
                 },
               }),
@@ -95,9 +97,9 @@ const authorizeRead = ({
     const audit = yield* Effect.tryPromise({
       try: () =>
         db
-          .prepare(`INSERT INTO budget_audit (id, user_id, session_id, operation, occurred_at_ms)
-      SELECT ?, user_id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(transactionId(), subject.id, operation, current, ...authority.bindings)
+          .prepare(`INSERT INTO budget_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
+          .bind(transactionId(), subject.id, operation, outcome, current, ...authority.bindings)
           .run(),
       catch: boundaryFailure,
     });
@@ -320,8 +322,11 @@ export const browseBudgets = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const parsed = budgetParameters(operation, new URL(request.url));
+      const outcome = Option.isSome(parsed) ? "accepted" : "rejected";
+      if (!(yield* authorizeRead({ db, subject, operation, outcome }))) {
+        return transactionUnavailable();
+      }
       if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
-      if (!(yield* authorizeRead({ db, subject, operation }))) return transactionUnavailable();
       if (!(yield* reconcile())) return transactionUnavailable();
       return yield* readAuthorizedBudget({ db, subject, operation, ...parsed.value });
     }).pipe(Effect.orElseSucceed(transactionUnavailable))

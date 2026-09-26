@@ -19,6 +19,7 @@ import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
+import { budgetRefusal } from "./budgets/budget-outcome";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
@@ -34,7 +35,7 @@ import {
   maximumTransactionInputBytes,
   rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
-  transactionFailure,
+  transactionNow,
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
@@ -880,6 +881,9 @@ const budgetBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
+const invalidBudgetInput = (id: Option.Option<BudgetId>): unknown =>
+  Option.isSome(id) ? { params: { id: id.value }, payload: {} } : { payload: {} };
+
 const budgetCanonicalInput = (
   operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget",
   id: Option.Option<BudgetId>,
@@ -913,7 +917,15 @@ const budgetMutationResponse = ({
         ? Option.none<BudgetId>()
         : pathId({ schema: BudgetId, request });
     if (operation !== "budgets.createBudget" && Option.isNone(id)) {
-      return transactionFailure({ code: "not_found", status: 404, message: "Budget unavailable." });
+      const refusal = budgetRefusal({
+        db: environment.DB,
+        subject,
+        operation,
+        current: transactionNow(),
+        code: "not_found",
+      });
+      const disposition = yield* refusal.record();
+      return disposition === "recorded" ? yield* refusal.respond(disposition) : unavailable();
     }
     const payload =
       operation === "budgets.deleteBudget"
@@ -928,10 +940,10 @@ const budgetMutationResponse = ({
             )
           ).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
     if (operation !== "budgets.deleteBudget" && Option.isNone(payload)) {
-      return transactionFailure({
-        code: "validation_failed",
-        status: 400,
-        message: "Invalid Budget input.",
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: ownerCall(CanonicalOperationId.make(operation), invalidBudgetInput(id)),
       });
     }
     return yield* sendToCoordinator({

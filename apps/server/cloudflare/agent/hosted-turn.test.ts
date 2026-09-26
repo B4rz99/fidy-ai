@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import { DisclosureSnapshot, TranscriptText, TranscriptTurnId } from "@fidy/server/agent-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -451,7 +451,7 @@ it("recovers an abandoned staged reply by durable alarm without another User req
     },
     {
       DB: db,
-      STATEMENT_STAGING_BUCKET: Option.none(),
+      STATEMENT_STAGING_BUCKET: undefined,
       HOSTED_AI_MODEL: approvedWorkersAiModel,
       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
     }
@@ -615,7 +615,7 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
   let count = 0;
   const environment: ConstructorParameters<typeof UserTransactionCoordinator>[1] = {
     DB: db,
-    STATEMENT_STAGING_BUCKET: Option.none(),
+    STATEMENT_STAGING_BUCKET: undefined,
     HOSTED_AI_MODEL: approvedWorkersAiModel,
     AI: {
       run: () => {

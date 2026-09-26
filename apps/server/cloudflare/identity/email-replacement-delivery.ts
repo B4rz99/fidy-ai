@@ -48,17 +48,26 @@ export type EmailReplacementEnvironment = {
 
 /** Publish bounded durable work identities; no mailbox or proof leaves D1 in the Queue. */
 export const dispatchEmailReplacement = (
-  environment: Pick<EmailReplacementEnvironment, "DB" | "EMAIL_REPLACEMENT_QUEUE">
+  environment: Pick<EmailReplacementEnvironment, "DB" | "EMAIL_REPLACEMENT_QUEUE"> & {
+    readonly identity: Option.Option<string>;
+  }
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
+    const identity = environment.identity;
     const current = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.id FROM email_replacement_outbox AS o
       JOIN email_replacements AS r ON r.work_id = o.id
       WHERE r.state = 'awaiting_delivery' AND r.expires_at_ms > ?
         AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+        AND (? IS NULL OR o.id = ?)
       ORDER BY o.created_at_ms LIMIT 32`)
-        .bind(current, current - dispatchCooldownMilliseconds)
+        .bind(
+          current,
+          current - dispatchCooldownMilliseconds,
+          Option.getOrNull(identity),
+          Option.getOrNull(identity)
+        )
         .all()
     );
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(Outbox))(rows.results).pipe(

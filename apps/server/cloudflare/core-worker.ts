@@ -14,7 +14,6 @@ import {
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
-
 import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
@@ -125,6 +124,7 @@ import {
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/statement-ingestion";
+import { observeOperationalHealth } from "./runtime/operational-health";
 import { StatementStaging } from "./ingestion/statement-staging";
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
@@ -143,10 +143,6 @@ export { BillingCollectionWorkflowV1 } from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 export { StatementExtractionWorkflowV1 };
-
-class StatementReviewSweepUnavailable extends Data.TaggedError(
-  "StatementReviewSweepUnavailable"
-)<{}> {}
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -171,7 +167,10 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_PUBLIC_KEY: string;
     readonly WOMPI_PRIVATE_KEY: string;
     readonly WOMPI_INTEGRITY_SECRET: string;
-  } & Partial<Omit<OnboardingEmailEnvironment, "DB">> &
+  } & Partial<
+    Readonly<{ ASYNC_HEALTH_ENABLED: "enabled"; ASYNC_DEAD_LETTERS: Pick<Queue, "metrics"> }>
+  > &
+  Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
   /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
@@ -190,10 +189,88 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   >;
 
 type CoreWorker = Readonly<{
-  fetch: (request: Request, environment: CoreEnvironment) => Promise<Response>;
+  fetch: (
+    request: Request,
+    environment: CoreEnvironment,
+    context?: Pick<ExecutionContext, "waitUntil">
+  ) => Promise<Response>;
   scheduled: (controller: ScheduledController, environment: CoreEnvironment) => Promise<void>;
   queue: (batch: MessageBatch<unknown>, environment: CoreEnvironment) => Promise<void>;
 }>;
+
+type PublicationKind = "onboarding" | "browserPairing" | "emailReplacement" | "billing";
+type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
+
+const publicationActivities = (
+  environment: CoreEnvironment,
+  identity: Option.Option<string>
+): Record<PublicationKind, () => Effect.Effect<void, void>> => {
+  const publishers: Record<PublicationKind, () => Effect.Effect<void, void>> = {
+    onboarding: () =>
+      environment.ONBOARDING_EMAIL_QUEUE === undefined
+        ? Effect.void
+        : dispatchOnboardingEmail({
+            DB: environment.DB,
+            ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
+            identity,
+          }),
+    browserPairing: () =>
+      environment.BROWSER_PAIRING_EMAIL_QUEUE === undefined
+        ? Effect.void
+        : dispatchBrowserPairingEmail({
+            DB: environment.DB,
+            BROWSER_PAIRING_EMAIL_QUEUE: environment.BROWSER_PAIRING_EMAIL_QUEUE,
+            identity,
+          }),
+    emailReplacement: () =>
+      environment.EMAIL_REPLACEMENT_QUEUE === undefined
+        ? Effect.void
+        : dispatchEmailReplacement({
+            DB: environment.DB,
+            EMAIL_REPLACEMENT_QUEUE: environment.EMAIL_REPLACEMENT_QUEUE,
+            identity,
+          }),
+    billing: () =>
+      environment.BILLING_COLLECTION_QUEUE === undefined
+        ? Effect.void
+        : dispatchBillingCollection({
+            DB: environment.DB,
+            BILLING_COLLECTION_QUEUE: environment.BILLING_COLLECTION_QUEUE,
+            identity,
+          }).pipe(Effect.mapError(() => undefined)),
+  };
+  return publishers;
+};
+
+/** Publication is an acceleration only; committed D1 intent remains recoverable by cron. */
+const acceptedWorkPublisher =
+  (
+    environment: CoreEnvironment,
+    context: Option.Option<Pick<ExecutionContext, "waitUntil">>
+  ): PublishAcceptedWork =>
+  (kind, id) => {
+    if (Option.isNone(context)) return;
+    const identity = Option.some(id);
+    const publishers = publicationActivities(environment, identity);
+    // Neither Queue failure nor a missing execution lifetime can change an already committed answer.
+    Effect.runSync(
+      Effect.try(() =>
+        context.value.waitUntil(
+          Effect.suspend(publishers[kind]).pipe(
+            Effect.timeout("2 seconds"),
+            Effect.catchCause(() =>
+              Effect.logWarning({
+                component: "outbox-publication",
+                operation: kind,
+                outcome: "failed",
+              })
+            ),
+            Effect.runPromise
+          )
+        )
+      ).pipe(Effect.ignore)
+    );
+  };
 
 const jsonHeaders = {
   "cache-control": "no-store",
@@ -228,17 +305,24 @@ const categoriesResponse = (
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("categories.listCategories"));
 
-const callbackEffect = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> =>
+const callbackEffect = (
+  request: Request,
+  environment: CoreEnvironment,
+  publish: PublishAcceptedWork
+): Effect.Effect<Response> =>
   request.method === "POST"
-    ? receiveConsentWebhook(environment)(request)
+    ? receiveConsentWebhook({ ...environment, onAccepted: (id) => publish("onboarding", id) })(
+        request
+      )
     : Effect.succeed(methodNotAllowed());
 
 const providerCallbackEffect = (
   request: Request,
   environment: CoreEnvironment,
-  path: string
+  publish: PublishAcceptedWork
 ): Effect.Effect<Response> => {
-  if (path === "/providers/kapso/callback") return callbackEffect(request, environment);
+  const path = new URL(request.url).pathname;
+  if (path === "/providers/kapso/callback") return callbackEffect(request, environment, publish);
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   if (environment.WOMPI_EVENT_SECRET === undefined) return Effect.succeed(unavailable());
   return receiveWompiBillingEvent({
@@ -535,16 +619,12 @@ const supportRecoveryResponse = (
   );
 };
 
-const browserResponse = (
-  request: Request,
-  environment: CoreEnvironment,
-  telemetry: TelemetryService
-): Effect.Effect<Response> => {
+type BrowserHandlers = Readonly<
+  Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
+>;
+
+const browserHandlers = ({ request, environment, publish }: RequestExecution): BrowserHandlers => {
   const db = environment.DB;
-  const path = new URL(request.url).pathname;
-  if (path === "/internal/support-recovery") {
-    return supportRecoveryResponse(request, environment, telemetry);
-  }
   const routes: Readonly<
     Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
   > = {
@@ -563,7 +643,12 @@ const browserResponse = (
     },
     "/web/email/authentication/start": {
       method: "POST",
-      handle: () => startBrowserPairingEmail({ request, db }),
+      handle: () =>
+        startBrowserPairingEmail({
+          request,
+          db,
+          onAccepted: (id) => publish("browserPairing", id),
+        }),
     },
     "/web/email/authentication/complete": {
       method: "POST",
@@ -571,7 +656,12 @@ const browserResponse = (
     },
     [emailReplacementOperations.request.path]: {
       method: emailReplacementOperations.request.method,
-      handle: () => requestEmailReplacement({ request, db }),
+      handle: () =>
+        requestEmailReplacement({
+          request,
+          db,
+          onAccepted: (id) => publish("emailReplacement", id),
+        }),
     },
     [emailReplacementOperations.complete.path]: {
       method: emailReplacementOperations.complete.method,
@@ -579,6 +669,20 @@ const browserResponse = (
     },
     "/user": { method: "GET", handle: () => currentUser({ request, db }) },
   };
+  return routes;
+};
+
+const browserResponse = ({
+  request,
+  environment,
+  telemetry,
+  publish,
+}: RequestExecution): Effect.Effect<Response> => {
+  const path = new URL(request.url).pathname;
+  if (path === "/internal/support-recovery") {
+    return supportRecoveryResponse(request, environment, telemetry);
+  }
+  const routes = browserHandlers({ request, environment, telemetry, publish });
   const route = routes[path];
   if (route === undefined || request.method !== route.method) {
     return Effect.succeed(methodNotAllowed());
@@ -1335,21 +1439,33 @@ const canonicalOrHealthResponse = (
   return Effect.succeed(healthResponse(environment));
 };
 
-const fetchEffect = (
-  request: Request,
-  environment: CoreEnvironment,
-  telemetry: TelemetryService
-): Effect.Effect<Response> => {
+type RequestExecution = Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  telemetry: TelemetryService;
+  publish: PublishAcceptedWork;
+}>;
+
+const fetchEffect = ({
+  request,
+  environment,
+  telemetry,
+  publish,
+}: RequestExecution): Effect.Effect<Response> => {
   const url = new URL(request.url);
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
-    return providerCallbackEffect(request, environment, url.pathname);
+    return providerCallbackEffect(request, environment, publish);
   }
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
-      try: () => handleCardEnrollment({ request, environment }),
+      try: () =>
+        handleCardEnrollment({
+          request,
+          environment: { ...environment, onAccepted: (id) => publish("billing", id) },
+        }),
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
   }
@@ -1381,7 +1497,7 @@ const fetchEffect = (
       "/user",
     ].includes(url.pathname)
   ) {
-    return browserResponse(request, environment, telemetry);
+    return browserResponse({ request, environment, telemetry, publish });
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
@@ -1446,82 +1562,140 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
   }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
 };
 
-const billingScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    if (
-      environment.BILLING_COLLECTION_QUEUE === undefined ||
+/** A failed schedule reports only a closed classification, never database or provider details. */
+class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
+
+const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void> =>
+  environment.ASYNC_HEALTH_ENABLED !== "enabled"
+    ? Effect.void
+    : observeOperationalHealth({
+        DB: environment.DB,
+        deadLetters: Option.fromUndefinedOr(environment.ASYNC_DEAD_LETTERS),
+        workflows: {
+          ...(environment.STATEMENT_EXTRACTION_WORKFLOW === undefined
+            ? {}
+            : { statement: environment.STATEMENT_EXTRACTION_WORKFLOW }),
+          ...(environment.ONBOARDING_EMAIL_WORKFLOW === undefined
+            ? {}
+            : { onboarding: environment.ONBOARDING_EMAIL_WORKFLOW }),
+          ...(environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined
+            ? {}
+            : { browserPairing: environment.BROWSER_PAIRING_EMAIL_WORKFLOW }),
+          ...(environment.EMAIL_REPLACEMENT_WORKFLOW === undefined
+            ? {}
+            : { emailReplacement: environment.EMAIL_REPLACEMENT_WORKFLOW }),
+          ...(environment.BILLING_COLLECTION_WORKFLOW === undefined
+            ? {}
+            : { billing: environment.BILLING_COLLECTION_WORKFLOW }),
+        },
+      }).pipe(
+        Effect.flatMap((signals) =>
+          Effect.forEach(
+            signals,
+            (signal) =>
+              signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal),
+            { discard: true }
+          )
+        )
+      );
+
+const statementActivities = (
+  environment: CoreEnvironment
+): Record<string, Effect.Effect<unknown, void>> => ({
+  "ingestion.reviewEvidenceExpiry":
+    environment.STATEMENT_STAGING_BUCKET === undefined
+      ? Effect.void
+      : Effect.tryPromise({
+          try: () => expireStatementReviewEvidence({ DB: environment.DB }),
+          catch: () => undefined,
+        }),
+  "ingestion.statementReconcile":
+    environment.STATEMENT_EXTRACTION_WORKFLOW === undefined
+      ? Effect.void
+      : reconcileStatementExtraction({
+          DB: environment.DB,
+          STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
+          USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
+        }).pipe(Effect.mapError(() => undefined)),
+  "ingestion.statementDispatch":
+    environment.STATEMENT_EXTRACTION_QUEUE === undefined
+      ? Effect.void
+      : dispatchStatementExtraction({
+          DB: environment.DB,
+          STATEMENT_EXTRACTION_QUEUE: environment.STATEMENT_EXTRACTION_QUEUE,
+        }).pipe(Effect.mapError(() => undefined)),
+});
+
+const scheduledActivities = (
+  environment: CoreEnvironment,
+  current: number
+): Record<string, Effect.Effect<unknown, void>> => {
+  const bucket = environment.STATEMENT_STAGING_BUCKET;
+  const staging =
+    bucket === undefined
+      ? undefined
+      : StatementStaging.make({
+          bucket,
+          database: environment.DB,
+          nowEpochMs: () => current,
+        });
+  const publishers = publicationActivities(environment, Option.none());
+  return {
+    "async.health": scheduledHealth(environment),
+    "onboarding.email.dispatch": publishers.onboarding(),
+    "onboarding.email.reconcile": reconcileOnboardingEmail(environment.DB),
+    "browserPairing.email.dispatch": publishers.browserPairing(),
+    "browserPairing.email.reconcile": reconcileBrowserPairingEmail(environment.DB),
+    "emailReplacement.dispatch": publishers.emailReplacement(),
+    "emailReplacement.reconcile": reconcileEmailReplacement(environment.DB),
+    "billing.collection.dispatch": publishers.billing(),
+    "billing.collection.reconcile":
       environment.BILLING_COLLECTION_WORKFLOW === undefined
-    ) {
-      return;
-    }
-    const workflow = environment.BILLING_COLLECTION_WORKFLOW;
-    const dispatched = yield* Effect.exit(
-      dispatchBillingCollection({
-        DB: environment.DB,
-        BILLING_COLLECTION_QUEUE: environment.BILLING_COLLECTION_QUEUE,
-      }).pipe(Effect.withSpan("billing.collection.dispatch"))
-    );
-    yield* reconcileBillingCandidates({
-      DB: environment.DB,
-      BILLING_COLLECTION_WORKFLOW: workflow,
-    });
-    if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
-  }).pipe(Effect.orDie);
+        ? Effect.void
+        : reconcileBillingCandidates({
+            DB: environment.DB,
+            BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
+          }).pipe(Effect.mapError(() => undefined)),
+    "consent.sweep": sweepExpiredConsent(environment.DB)(),
+    "patPairing.sweep": Effect.tryPromise({
+      try: () => sweepExpiredPATPairings(environment.DB),
+      catch: () => undefined,
+    }),
+    "ingestion.submissionRetention":
+      staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+    "ingestion.stagingSweep":
+      staging?.sweepExpiredStatementStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+    ...statementActivities(environment),
+  };
+};
 
-/**
- * Reclaims expired staged material and fails submissions past their retention bound. Both steps are
- * bounded, idempotent, and re-selectable from durable `deleting`/retention state, so a transient D1
- * or R2 failure is deliberately swallowed and retried by the next scheduled run instead of failing
- * the whole schedule; each step keeps its own span so that retry is visible.
- */
-const statementIngestionScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
+/** Independent activities all run, including retention, before the schedule reports any failure. */
+const scheduledWork = (environment: CoreEnvironment): Effect.Effect<void, ScheduledWorkFailed> =>
   Effect.gen(function* () {
-    const bucket = environment.STATEMENT_STAGING_BUCKET;
-    if (bucket === undefined) return;
-    const nowEpochMs = yield* Clock.currentTimeMillis;
-    const staging = StatementStaging.make({
-      bucket,
-      database: environment.DB,
-      nowEpochMs: () => nowEpochMs,
-    });
-    yield* staging.expireStatementSubmissions.pipe(
-      Effect.withSpan("ingestion.submissionRetention"),
-      Effect.ignore
-    );
-    yield* staging.sweepExpiredStatementStaging.pipe(
-      Effect.withSpan("ingestion.stagingSweep"),
-      Effect.ignore
-    );
-    yield* Effect.tryPromise({
-      try: () => expireStatementReviewEvidence({ DB: environment.DB }),
-      catch: () => new StatementReviewSweepUnavailable(),
-    }).pipe(Effect.withSpan("ingestion.reviewEvidenceExpiry"), Effect.ignore);
+    const current = yield* Clock.currentTimeMillis;
+    const activities = scheduledActivities(environment, current);
+    let failed = false;
+    for (const [operation, work] of Object.entries(activities)) {
+      const result = yield* Effect.exit(work.pipe(Effect.withSpan(operation)));
+      if (Exit.isFailure(result)) {
+        failed = true;
+        yield* Effect.logWarning({ component: "scheduled-work", operation, outcome: "failed" });
+      }
+    }
+    if (failed) return yield* new ScheduledWorkFailed();
   });
-
-/** Reconcile terminal Workflow failures, then offer any still-unpublished statement intents. */
-const statementDeliveryScheduled = (environment: CoreEnvironment): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    if (environment.STATEMENT_EXTRACTION_WORKFLOW !== undefined) {
-      yield* reconcileStatementExtraction({
-        DB: environment.DB,
-        STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
-        USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
-      });
-    }
-    if (environment.STATEMENT_EXTRACTION_QUEUE !== undefined) {
-      yield* dispatchStatementExtraction({
-        DB: environment.DB,
-        STATEMENT_EXTRACTION_QUEUE: environment.STATEMENT_EXTRACTION_QUEUE,
-      });
-    }
-  }).pipe(Effect.orDie);
 
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
-  fetch: (request, environment) =>
+  fetch: (request, environment, context) =>
     // The Core Worker runs no hosted inference: only the coordinator's Memory work builds the
     // binding, so a missing or unusable one cannot deny any route here.
-    fetchEffect(request, environment, telemetry).pipe(
+    fetchEffect({
+      request,
+      environment,
+      telemetry,
+      publish: acceptedWorkPublisher(environment, Option.fromUndefinedOr(context)),
+    }).pipe(
       observeWorkerRequest({
         environment,
         telemetry,
@@ -1529,45 +1703,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       }),
       Effect.runPromise
     ),
-  scheduled: (_controller, environment) =>
-    Effect.gen(function* () {
-      const dispatched = yield* Effect.exit(
-        environment.ONBOARDING_EMAIL_QUEUE !== undefined
-          ? dispatchOnboardingEmail({
-              DB: environment.DB,
-              ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
-            })
-          : Effect.void
-      );
-      yield* reconcileOnboardingEmail(environment.DB);
-      if (environment.BROWSER_PAIRING_EMAIL_QUEUE !== undefined) {
-        yield* dispatchBrowserPairingEmail({
-          DB: environment.DB,
-          BROWSER_PAIRING_EMAIL_QUEUE: environment.BROWSER_PAIRING_EMAIL_QUEUE,
-        });
-      }
-      yield* reconcileBrowserPairingEmail(environment.DB);
-      if (environment.EMAIL_REPLACEMENT_QUEUE !== undefined) {
-        yield* dispatchEmailReplacement({
-          DB: environment.DB,
-          EMAIL_REPLACEMENT_QUEUE: environment.EMAIL_REPLACEMENT_QUEUE,
-        }).pipe(Effect.withSpan("emailReplacement.dispatch"));
-      }
-      yield* reconcileEmailReplacement(environment.DB).pipe(
-        Effect.withSpan("emailReplacement.reconcile")
-      );
-      yield* billingScheduled(environment);
-      yield* sweepExpiredConsent(environment.DB)();
-      yield* Effect.tryPromise({
-        try: () => sweepExpiredPATPairings(environment.DB),
-        catch: () => undefined,
-      });
-      yield* statementIngestionScheduled(environment).pipe(
-        Effect.withSpan("ingestion.statementSweep")
-      );
-      yield* statementDeliveryScheduled(environment);
-      if (Exit.isFailure(dispatched)) return yield* Effect.fail(undefined);
-    }).pipe(Effect.withSpan("onboarding.email.dispatch"), Effect.runPromise),
+  scheduled: (_controller, environment) => scheduledWork(environment).pipe(Effect.runPromise),
   queue: receiveWorkQueue,
 });
 

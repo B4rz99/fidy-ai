@@ -52,24 +52,40 @@ export type OnboardingEmailEnvironment = Readonly<{
   RESEND_API_KEY: string;
 }>;
 
+const pendingOutbox = (
+  db: D1Database,
+  now: number,
+  identity: Option.Option<string>
+): Effect.Effect<D1Result, void> =>
+  attempt(() =>
+    db
+      .prepare(`SELECT o.id, o.version
+      FROM onboarding_email_outbox AS o JOIN pending_email_enrollments AS e ON e.id = o.id
+      WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
+        AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+        AND (? IS NULL OR o.id = ?)
+      ORDER BY (o.last_attempt_at_ms IS NOT NULL), o.last_attempt_at_ms, o.created_at_ms LIMIT ?`)
+      .bind(
+        now,
+        now - publicationRetryMs,
+        Option.getOrNull(identity),
+        Option.getOrNull(identity),
+        maximumDispatchEntries
+      )
+      .all()
+  );
+
 /** Reoffer at most 32 secret-free identities per tick, including unsettled publications. */
 export const dispatchOnboardingEmail = (
   environment: Readonly<{
     DB: D1Database;
     ONBOARDING_EMAIL_QUEUE: { send: (work: typeof Work.Type) => Promise<unknown> };
-  }>
+  }> & { readonly identity: Option.Option<string> }
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
+    const identity = environment.identity;
     const now = yield* Clock.currentTimeMillis;
-    const result = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.id, o.version
-      FROM onboarding_email_outbox AS o JOIN pending_email_enrollments AS e ON e.id = o.id
-      WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
-        AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-      ORDER BY (o.last_attempt_at_ms IS NOT NULL), o.last_attempt_at_ms, o.created_at_ms LIMIT ?`)
-        .bind(now, now - publicationRetryMs, maximumDispatchEntries)
-        .all()
-    );
+    const result = yield* pendingOutbox(environment.DB, now, identity);
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(Outbox))(result.results).pipe(
       Effect.mapError(() => undefined)
     );

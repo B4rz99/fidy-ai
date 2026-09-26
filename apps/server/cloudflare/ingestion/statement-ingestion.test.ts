@@ -28,6 +28,7 @@ import {
   runStatementExtractionWorkflow,
 } from "./statement-delivery";
 import coreWorker from "../core-worker";
+import { observeOperationalHealth } from "../runtime/operational-health";
 import publicWorker from "../public-worker";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{
@@ -73,6 +74,7 @@ const migrationNames = [
   "0013_transaction_reconciliation",
   "0014_memory",
   "0015_statement_submission",
+  "0016_async_health",
   "0016_statement_processing",
   "0016_subscription_standing",
   "0016_budgets",
@@ -1135,9 +1137,9 @@ it(
   30_000
 );
 
-it(
-  "publishes an accepted statement through the Core scheduled dispatcher without exposing its bytes",
-  () =>
+it.each([false, true])(
+  "publishes an accepted statement through the Core scheduled dispatcher despite independent review-expiry failure (%s)",
+  (failReviewExpiry) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
@@ -1151,25 +1153,43 @@ it(
         );
         const submission = yield* fromTestPromise(() => submissionOf(submitted));
         const offered: Array<unknown> = [];
-        yield* fromTestPromise(() =>
-          coreWorker.scheduled(
-            { cron: "* * * * *", noRetry: () => undefined, scheduledTime: 0 },
-            {
-              ...coreEnvironment(runtime),
-              STATEMENT_EXTRACTION_QUEUE: {
-                metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
-                send: (body: unknown) => {
-                  offered.push(body);
-                  return Promise.resolve({
-                    metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
-                  });
-                },
-                sendBatch: () =>
-                  Promise.resolve({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } }),
-              },
+        const database: D1Database = {
+          prepare: (query) => {
+            if (failReviewExpiry && query.includes("UPDATE statement_needs_review")) {
+              throw new Error("private sweep failure");
             }
+            return runtime.db.prepare(query);
+          },
+          batch: (statements) => runtime.db.batch(statements),
+          exec: (query) => runtime.db.exec(query),
+          dump: () => runtime.db.dump(),
+          withSession: (bookmark) => runtime.db.withSession(bookmark),
+        };
+        const result = yield* Effect.exit(
+          fromTestPromise(() =>
+            coreWorker.scheduled(
+              { cron: "* * * * *", noRetry: () => undefined, scheduledTime: 0 },
+              {
+                ...coreEnvironment(runtime),
+                DB: database,
+                STATEMENT_EXTRACTION_QUEUE: {
+                  metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
+                  send: (body: unknown) => {
+                    offered.push(body);
+                    return Promise.resolve({
+                      metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+                    });
+                  },
+                  sendBatch: () =>
+                    Promise.resolve({
+                      metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+                    }),
+                },
+              }
+            )
           )
         );
+        expect(result._tag).toBe(failReviewExpiry ? "Failure" : "Success");
         expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
       })
     ),
@@ -3434,6 +3454,130 @@ it(
           transactions: 0,
           transaction_audit: 0,
         });
+      })
+    ),
+  30_000
+);
+
+it("reclaims expired statement material even when an unrelated email dispatcher fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() => stageOne(runtime));
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("UPDATE statement_staging_objects SET created_at_ms = 0, expires_at_ms = 1")
+          .run()
+      );
+      const failedEmailDatabase: D1Database = {
+        prepare: (query) => {
+          if (query.includes("browser_pairing_email_outbox")) {
+            throw new Error("private database failure detail");
+          }
+          return runtime.db.prepare(query);
+        },
+        batch: (statements) => runtime.db.batch(statements),
+        exec: (query) => runtime.db.exec(query),
+        dump: () => runtime.db.dump(),
+        withSession: (bookmark) => runtime.db.withSession(bookmark),
+      };
+      const result = yield* fromTestPromise(() =>
+        coreWorker
+          .scheduled(
+            { cron: "* * * * *", noRetry: () => undefined, scheduledTime: 0 },
+            {
+              ...coreEnvironment(runtime),
+              DB: failedEmailDatabase,
+              BROWSER_PAIRING_EMAIL_QUEUE: {
+                send: () => Promise.reject(new Error("unused queue")),
+                sendBatch: () => Promise.reject(new Error("unused queue")),
+                metrics: () => Promise.reject(new Error("unused queue")),
+              },
+            }
+          )
+          .then(
+            () => "succeeded",
+            () => "failed"
+          )
+      );
+      expect(result).toBe("failed");
+      expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(0);
+    })
+  ));
+
+it(
+  "reports stalled work and dead letters without exporting identities or Workflow error bodies",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const staged = yield* fromTestPromise(() => stageOne(runtime));
+        yield* fromTestPromise(() =>
+          submit(runtime, {
+            index: 0,
+            idempotencyKey: "20000000-0000-4000-8000-000000000998",
+            reference: staged.staged,
+          })
+        );
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "UPDATE statement_submissions SET submitted_at_ms = 0, retention_expires_at_ms = 1"
+            )
+            .run()
+        );
+        const signals = yield* observeOperationalHealth({
+          DB: runtime.db,
+          workflows: {
+            statement: {
+              get: () =>
+                Promise.resolve({
+                  status: () =>
+                    Promise.resolve({
+                      status: "errored",
+                      error: { message: secretSentinel },
+                      output: { userId: userA },
+                    }),
+                }),
+            },
+          },
+          deadLetters: Option.some({
+            metrics: () => Promise.resolve({ backlogCount: 3, backlogBytes: 300 }),
+          }),
+        });
+        expect(signals.find((signal) => signal.operation === "statement")).toMatchObject({
+          state: "attention",
+          sampledPending: 1,
+          expiredUndelivered: 1,
+          failedWorkflows: 1,
+        });
+        expect(signals.find((signal) => signal.operation === "deadLetters")).toMatchObject({
+          state: "attention",
+          backlogCount: 3,
+        });
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(signals)
+        ).not.toContain(secretSentinel);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(signals)
+        ).not.toContain(userA);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(signals)
+        ).not.toContain(staged.staged.stagingId);
+        const unavailableSignals = yield* observeOperationalHealth({
+          DB: runtime.db,
+          workflows: { statement: { get: () => Promise.reject(new Error(secretSentinel)) } },
+          deadLetters: Option.some({ metrics: () => Promise.reject(new Error(secretSentinel)) }),
+        });
+        expect(unavailableSignals.find((signal) => signal.operation === "statement")).toMatchObject(
+          { state: "attention", unavailableWorkflows: 1 }
+        );
+        expect(
+          unavailableSignals.find((signal) => signal.operation === "deadLetters")
+        ).toMatchObject({ state: "unavailable" });
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(unavailableSignals)
+        ).not.toContain(secretSentinel);
       })
     ),
   30_000

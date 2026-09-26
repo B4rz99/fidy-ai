@@ -149,24 +149,24 @@ const checkPairing = (
 export const startBrowserPairingEmail = (input: {
   request: Request;
   db: D1Database;
+  onAccepted: (id: string) => void;
 }): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { request, db } = input;
       const proof = yield* attempt(() => readProof(request, Start));
       if (Option.isNone(proof)) return invalid();
-      {
-        const expiresAt = yield* attempt(() =>
-          checkPairing(db, proof.value.pairingId, proof.value.privateVerifier)
-        );
-        if (Option.isNone(expiresAt)) return invalid();
-        const current = yield* Clock.currentTimeMillis;
-        const workId = newId();
-        // The proof generation and outbox identity commit together; an unknown mailbox has no effect.
-        yield* attempt(() =>
-          db.batch([
-            db
-              .prepare(`INSERT INTO browser_pairing_email_proofs
+      const expiresAt = yield* attempt(() =>
+        checkPairing(db, proof.value.pairingId, proof.value.privateVerifier)
+      );
+      if (Option.isNone(expiresAt)) return invalid();
+      const current = yield* Clock.currentTimeMillis;
+      const workId = newId();
+      // The proof generation and outbox identity commit together; an unknown mailbox has no effect.
+      yield* attempt(() =>
+        db.batch([
+          db
+            .prepare(`INSERT INTO browser_pairing_email_proofs
         (pairing_id, work_id, user_id, email_address, credential_verified_at_ms,
          state, expires_at_ms, generation, last_requested_at_ms)
         SELECT p.id, ?, v.user_id, v.email_address, v.verified_at_ms,
@@ -185,24 +185,24 @@ export const startBrowserPairingEmail = (input: {
         WHERE browser_pairing_email_proofs.state NOT IN ('approved', 'sending')
           AND browser_pairing_email_proofs.generation < 5
           AND browser_pairing_email_proofs.last_requested_at_ms <= ?`)
-              .bind(
-                workId,
-                current,
-                proof.value.email,
-                proof.value.pairingId,
-                current,
-                expiresAt.value,
-                current - emailCooldownMilliseconds
-              ),
-            db
-              .prepare(`INSERT INTO browser_pairing_email_outbox (id, created_at_ms)
+            .bind(
+              workId,
+              current,
+              proof.value.email,
+              proof.value.pairingId,
+              current,
+              expiresAt.value,
+              current - emailCooldownMilliseconds
+            ),
+          db
+            .prepare(`INSERT INTO browser_pairing_email_outbox (id, created_at_ms)
         SELECT work_id, ? FROM browser_pairing_email_proofs
         WHERE work_id = ? AND state = 'awaiting_delivery'`)
-              .bind(current, workId),
-          ])
-        );
-        return pending();
-      }
+            .bind(current, workId),
+        ])
+      );
+      input.onAccepted(workId);
+      return pending();
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );
 

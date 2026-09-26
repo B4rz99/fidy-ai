@@ -94,9 +94,11 @@ const readProof = <A, Encoded>(
 export const requestEmailReplacement = ({
   request,
   db,
+  onAccepted,
 }: {
   request: globalThis.Request;
   db: D1Database;
+  onAccepted: (id: string) => void;
 }): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -112,7 +114,7 @@ export const requestEmailReplacement = ({
           .pipe(
             Effect.provideService(
               EmailReplacementMutation,
-              replacementAdapter(db, session.value, current)
+              replacementAdapter({ db, session: session.value, current, onAccepted })
             )
           );
         return json(result, HTTP_OK);
@@ -240,7 +242,12 @@ export const completeEmailReplacement = ({
           .pipe(
             Effect.provideService(
               EmailReplacementMutation,
-              replacementAdapter(db, session.value, current)
+              replacementAdapter({
+                db,
+                session: session.value,
+                current,
+                onAccepted: () => undefined,
+              })
             ),
             Effect.match({ onSuccess: (result) => json(result, HTTP_OK), onFailure: invalid })
           );
@@ -315,18 +322,27 @@ class ReplacementDatabaseUnavailable extends Data.TaggedError("ReplacementDataba
   readonly operation: "request" | "complete";
 }> {}
 
-const replacementAdapter = (
-  db: D1Database,
-  session: SessionSubject,
-  current: number
-): EmailReplacementMutationService => ({
+const replacementAdapter = ({
+  db,
+  session,
+  current,
+  onAccepted,
+}: {
+  db: D1Database;
+  session: SessionSubject;
+  current: number;
+  onAccepted: (id: string) => void;
+}): EmailReplacementMutationService => ({
   request: (subject, candidateEmail) => {
     if (subject !== session.user_id) return Effect.die("Email replacement subject mismatch");
     const workId = newId();
     return Effect.tryPromise({
       try: () => startProof(db, { session, candidateEmail, workId, current }),
       catch: () => new ReplacementDatabaseUnavailable({ operation: "request" }),
-    }).pipe(Effect.orDie);
+    }).pipe(
+      Effect.tap(() => Effect.sync(() => onAccepted(workId))),
+      Effect.orDie
+    );
   },
   complete: (subject, combinedCode) =>
     subject === session.user_id

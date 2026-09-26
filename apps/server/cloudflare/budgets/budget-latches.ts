@@ -15,7 +15,8 @@ const Marks = Schema.Struct({
 });
 const eighty = 80;
 const hundred = 100;
-const maximumPendingWork = 8;
+// One period per request keeps the aggregate report and latch work independent of backlog size.
+const maximumPendingWork = 1;
 const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
 
 const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLatch => {

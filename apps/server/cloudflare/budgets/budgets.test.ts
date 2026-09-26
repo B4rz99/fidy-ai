@@ -242,16 +242,29 @@ const seedPAT = async (
 // @effect-diagnostics-next-line asyncFunction:off
 const seedMonthlyMovements = async (
   db: D1Database,
-  input: Readonly<{ categoryId: string; currency: string; occurredAt: string; count: number }>
+  input: Readonly<{
+    categoryId: string;
+    currency: string;
+    occurredAt: string;
+    count: number;
+    offset: number;
+  }>
 ): Promise<void> => {
   await db
     .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
+    WITH RECURSIVE seq(n) AS (SELECT ? + 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
     SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, ?,
       strftime('%Y-%m-%dT%H:%M:%fZ', date('2024-01-01', '+' || (n / 99) || ' days'))
     FROM seq`)
-    .bind(input.count, users[0], input.currency, input.categoryId, input.occurredAt)
+    .bind(
+      input.offset,
+      input.offset + input.count,
+      users[0],
+      input.currency,
+      input.categoryId,
+      input.occurredAt
+    )
     .run();
 };
 const patRequest = (
@@ -435,6 +448,7 @@ it("ignores more than five thousand unrelated outflows without blocking a Budget
   await seedMonthlyMovements(db, {
     categoryId: "10000000-0000-4000-8000-000000000001",
     count: 5001,
+    offset: 0,
     currency: "COP",
     occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
   });
@@ -462,6 +476,7 @@ it("pages past five thousand qualifying outflows without losing exact totals or 
     categoryId: category,
     currency: "COP",
     count: 5001,
+    offset: 0,
     occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
   });
   expect((await send(db, request(0, "/budget-status?timeZone=America%2FBogota"))).status).toBe(503);
@@ -487,6 +502,50 @@ it("pages past five thousand qualifying outflows without losing exact totals or 
 }, 90000);
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("shares a bounded page quota across Budgets rather than applying it per Budget", async () => {
+  const db = await setup();
+  const otherCategory = "10000000-0000-4000-8000-000000000001";
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  expect(
+    (
+      await send(
+        db,
+        request(0, "/budgets", "POST", {
+          categoryId: otherCategory,
+          cap: { amount: "100", currency: "COP" },
+        })
+      )
+    ).status
+  ).toBe(201);
+  const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+  await seedMonthlyMovements(db, {
+    categoryId: category,
+    currency: "COP",
+    count: 2500,
+    offset: 0,
+    occurredAt,
+  });
+  await seedMonthlyMovements(db, {
+    categoryId: otherCategory,
+    currency: "COP",
+    count: 2500,
+    offset: 2500,
+    occurredAt,
+  });
+  expect((await send(db, request(0, "/budget-status?timeZone=America%2FBogota"))).status).toBe(503);
+  const checkpoint = await db
+    .prepare(`SELECT COUNT(*) AS count FROM budget_report_progress
+    WHERE user_id = ? AND complete = 0`)
+    .bind(users[0])
+    .first<{ count: number }>();
+  expect(checkpoint?.count).toBe(1);
+  const report = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
+  expect(report.status).toBe(200);
+  const statuses = Schema.decodeUnknownSync(Report)(await report.json()).data.statuses;
+  expect(statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual(["25", "25"]);
+}, 90000);
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("refuses an expensive capture without partial effects, then resumes the month on retry", async () => {
   const db = await setup();
   expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
@@ -494,6 +553,7 @@ it("refuses an expensive capture without partial effects, then resumes the month
     categoryId: category,
     currency: "COP",
     count: 5001,
+    offset: 0,
     occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
   });
   const capture = (): Promise<Response> =>
@@ -531,6 +591,7 @@ it("does not publish a total if a Transaction moves across a paging cursor", asy
     categoryId: category,
     currency: "COP",
     count: 513,
+    offset: 0,
     occurredAt: DateTime.formatIso(period.from),
   });
   let moved = false;
@@ -575,6 +636,7 @@ it("does not publish a total if a Transaction moves across a paging cursor", asy
     (await send(racingDb, request(0, "/budget-status?timeZone=America%2FBogota"))).status
   ).toBe(503);
   expect(moved).toBe(true);
+  expect((await send(db, request(0, "/budget-status?timeZone=America%2FBogota"))).status).toBe(503);
   const report = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
   expect(report.status).toBe(200);
   const [status] = Schema.decodeUnknownSync(Report)(await report.json()).data.statuses;
@@ -680,7 +742,7 @@ it("blocks a correcting mutation until its versioned work backlog has drained", 
   expect(created.status).toBe(201);
   const transaction = Schema.decodeUnknownSync(Captured)(await created.json());
   const earlier = DateTime.makeUnsafe(instant.epochMilliseconds - 40 * 86400000);
-  const work = Array.from({ length: 65 }, (_, index) =>
+  const work = Array.from({ length: 9 }, (_, index) =>
     db
       .prepare(`INSERT INTO budget_reconciliation_work
     (user_id, occurred_at) VALUES (?, ?)`)
@@ -703,7 +765,7 @@ it("blocks a correcting mutation until its versioned work backlog has drained", 
     .prepare("SELECT COUNT(*) AS count FROM budget_reconciliation_work WHERE user_id = ?")
     .bind(users[0])
     .first<{ count: number }>();
-  expect(pending?.count).toBe(57);
+  expect(pending?.count).toBe(8);
   const retryCount = 7;
   const refusals = await Promise.all(Array.from({ length: retryCount }, correction));
   expect(refusals.map((response) => response.status)).toEqual(Array(retryCount).fill(503));

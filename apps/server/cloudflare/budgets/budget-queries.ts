@@ -8,7 +8,7 @@ import {
   sumBudgetContributions,
 } from "@fidy/server/budgets-runtime";
 import { Currency, Money } from "@fidy/server/transactions-runtime";
-import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 import {
   type TransactionCaller,
@@ -131,11 +131,13 @@ const monthlySpent = ({
   userId,
   budget,
   period,
+  pageQuota,
 }: Readonly<{
   db: D1Database;
   userId: string;
   budget: Budget;
   period: BudgetStatusReport["period"];
+  pageQuota: Ref.Ref<number>;
 }>): Effect.Effect<Option.Option<Money>> =>
   Effect.gen(function* () {
     const key = { db, userId, budget, period };
@@ -153,16 +155,15 @@ const monthlySpent = ({
       })
     );
     // Persist each bounded page; later calls resume rather than replaying an oversized month.
-    for (
-      let pageNumber = 0;
-      pageNumber < maximumReportPages && !progress.complete;
-      pageNumber += 1
-    ) {
+    while (!progress.complete) {
+      const available = yield* Ref.getAndUpdate(pageQuota, (remaining) =>
+        Math.max(0, remaining - 1)
+      );
+      if (available === 0) return Option.none<Money>();
       const next = yield* advanceMonthlyPage({ key, progress });
       if (Option.isNone(next)) return Option.none<Money>();
       progress = next.value;
     }
-    if (!progress.complete) return Option.none<Money>();
     const current = yield* findBudgetRevision(key);
     return Option.isSome(current) && current.value === revision.value
       ? Option.some(progress.spent)
@@ -252,9 +253,10 @@ export const currentBudgetReport = ({
         (query.currency === undefined || budget.cap.currency === query.currency)
     );
     if (selected.length === 0) return Option.some({ period, statuses: [] });
+    const pageQuota = yield* Ref.make(maximumReportPages);
     const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
     for (const budget of selected) {
-      const spent = yield* monthlySpent({ db, userId, budget, period });
+      const spent = yield* monthlySpent({ db, userId, budget, period, pageQuota });
       if (Option.isNone(spent)) return Option.none<BudgetStatusReport>();
       statuses.push(yield* calculateBudgetStatus({ budget, spent: spent.value, period }));
     }

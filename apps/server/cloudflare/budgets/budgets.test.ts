@@ -1,0 +1,367 @@
+import { Miniflare } from "miniflare";
+import { afterEach, expect, it } from "vitest";
+import { DateTime, Option, Schema } from "effect";
+import {
+  Budget,
+  BudgetStatusReport,
+  IanaTimeZone,
+  deriveCurrentBudgetMonth,
+} from "@fidy/server/budgets-runtime";
+import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import coreWorker from "../core-worker";
+import publicWorker from "../public-worker";
+
+const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
+const category = "10000000-0000-4000-8000-000000000016";
+const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
+let sequence = 0;
+const instances: Array<Miniflare> = [];
+const bearer = (index: number): string => String(index + 1).repeat(43);
+const digest = (text: string): Promise<Uint8Array> =>
+  crypto.subtle
+    .digest("SHA-256", new TextEncoder().encode(text))
+    .then((value) => new Uint8Array(value));
+// The Miniflare fixture owns foreign Promise APIs, not application workflow.
+// @effect-diagnostics-next-line asyncFunction:off
+const migrate = async (db: D1Database, name: string): Promise<void> => {
+  const sql = await Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text();
+  const statements = sql
+    .replace(/^--.*$/gmu, "")
+    .trim()
+    .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u);
+  await statements.reduce<Promise<void>>(
+    (previous, statement) =>
+      previous.then(() =>
+        db
+          .prepare(statement)
+          .run()
+          .then(() => undefined)
+      ),
+    Promise.resolve()
+  );
+};
+// @effect-diagnostics-next-line asyncFunction:off
+const seedUser = async (
+  db: D1Database,
+  input: Readonly<{ user: string; index: number; current: number }>
+): Promise<void> => {
+  const { user, index, current } = input;
+  await db
+    .prepare(
+      "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+    )
+    .bind(user, current)
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
+    )
+    .bind(
+      `10000000-0000-4000-8000-00000000007${index}`,
+      `ABCD-123${index}`,
+      await digest(`verifier${index}`),
+      user,
+      current,
+      current + 600000
+    )
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      sessions[index],
+      `10000000-0000-4000-8000-00000000007${index}`,
+      user,
+      await digest(bearer(index)),
+      current,
+      current + 600000,
+      current + 3600000,
+      current + 7776000000
+    )
+    .run();
+};
+// @effect-diagnostics-next-line asyncFunction:off
+const setup = async (): Promise<D1Database> => {
+  const id = `budgets-${++sequence}`;
+  const mf = new Miniflare({
+    workers: [
+      {
+        config: {
+          compatibilityDate: "2026-09-08",
+          env: { DB: { id, type: "d1" } },
+          manifest: {
+            mainModule: "index.mjs",
+            modules: {
+              "index.mjs": {
+                contents: "export default {fetch() {return new Response('ok')}}",
+                type: "esm",
+              },
+            },
+          },
+          name: id,
+          type: "worker",
+        },
+      },
+    ],
+  });
+  instances.push(mf);
+  await mf.ready;
+  const db = await mf.getD1Database("DB");
+  const migrations = [
+    "0001_categories",
+    "0003_pending_consent",
+    "0004_onboarding_email",
+    "0005_verified_onboarding",
+    "0006_browser_login",
+    "0009_transactions",
+    "0010_pat_lifecycle",
+    "0011_transaction_corrections",
+    "0012_statement_staging",
+    "0012_transaction_search",
+    "0013_category_keyword_rules",
+    "0013_transaction_reconciliation",
+    "0014_memory",
+    "0015_statement_submission",
+    "0016_budgets",
+  ];
+  await migrations.reduce<Promise<void>>(
+    (previous, name) => previous.then(() => migrate(db, name)),
+    Promise.resolve()
+  );
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  await users.reduce<Promise<void>>(
+    (previous, user, index) => previous.then(() => seedUser(db, { user, index, current })),
+    Promise.resolve()
+  );
+  return db;
+};
+afterEach(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())));
+const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
+const send = (db: D1Database, request: Request): Promise<Response> => {
+  const coordinators =
+    coordinatorByDatabase.get(db) ?? new Map<string, UserTransactionCoordinator>();
+  coordinatorByDatabase.set(db, coordinators);
+  return publicWorker.fetch(request, {
+    BROWSER_ORIGIN: "https://app.fidyapp.com",
+    LOCAL_CANONICAL_READ_BEARER: "",
+    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+    CORE: {
+      fetch: (internal) =>
+        coreWorker.fetch(new Request(internal), {
+          DB: db,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          CONTRACT_DIGEST: "a".repeat(64),
+          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          BROWSER_ORIGIN: "https://app.fidyapp.com",
+          WOMPI_ENVIRONMENT: "",
+          WOMPI_PUBLIC_KEY: "",
+          WOMPI_PRIVATE_KEY: "",
+          WOMPI_INTEGRITY_SECRET: "",
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (name) => ({
+              fetch: (command) => {
+                let coordinator = coordinators.get(name);
+                if (coordinator === undefined) {
+                  coordinator = new UserTransactionCoordinator(
+                    { id: { name } },
+                    {
+                      DB: db,
+                      STATEMENT_STAGING_BUCKET: Option.none(),
+                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                    }
+                  );
+                  coordinators.set(name, coordinator);
+                }
+                return coordinator.fetch(new Request(command));
+              },
+            }),
+          },
+          KAPSO_API_KEY: "",
+          KAPSO_WEBHOOK_SECRET: "",
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+          CLOUDFLARE_ACCESS_ISSUER: "",
+          CLOUDFLARE_ACCESS_AUDIENCE: "",
+        }),
+    },
+  });
+};
+const request = (
+  index: number,
+  path: string,
+  ...args: [method?: string, body?: object]
+): Request => {
+  const [method = "GET", body] = args;
+  const init: RequestInit = {
+    method,
+    headers: {
+      origin: "https://app.fidyapp.com",
+      cookie: `__Host-fidy_session=${bearer(index)}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+  };
+  return new Request(
+    `https://api.fidyapp.com${path}`,
+    body === undefined
+      ? init
+      : {
+          ...init,
+          body: JSON.stringify(body),
+        }
+  );
+};
+const payload = (cap = "100"): object => ({
+  categoryId: category,
+  cap: { amount: cap, currency: "COP" },
+});
+const Created = Schema.Struct({
+  data: Schema.toCodecJson(Budget),
+  next: Schema.Array(Schema.Unknown),
+});
+const Report = Schema.Struct({
+  data: Schema.toCodecJson(BudgetStatusReport),
+  next: Schema.Array(Schema.Unknown),
+});
+const Captured = Schema.Struct({
+  data: Schema.toCodecJson(Transaction),
+  next: Schema.Array(Schema.Unknown),
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("creates a positive User-owned Budget and never reveals it to another User", async () => {
+  const db = await setup();
+  const created = await send(db, request(0, "/budgets", "POST", payload()));
+  expect(created.status).toBe(201);
+  const body = Schema.decodeUnknownSync(Created)(await created.json());
+  expect(encodeMoneyAmount(body.data.cap.amount)).toBe("100");
+  const foreign = await send(db, request(1, `/budgets/${body.data.id}`));
+  expect(foreign.status).toBe(404);
+  const own = await send(db, request(0, `/budgets/${body.data.id}`));
+  expect(own.status).toBe(200);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("revises a Budget without changing Currency and deletes only its owner's Budget", async () => {
+  const db = await setup();
+  const created = Schema.decodeUnknownSync(Created)(
+    await (await send(db, request(0, "/budgets", "POST", payload()))).json()
+  );
+  const id = created.data.id;
+  const foreign = await send(db, request(1, `/budgets/${id}`, "PUT", payload("200")));
+  expect(foreign.status).toBe(404);
+  expect((await send(db, request(1, `/budgets/${id}`, "DELETE"))).status).toBe(404);
+  const wrongCurrency = await send(
+    db,
+    request(0, `/budgets/${id}`, "PUT", {
+      categoryId: category,
+      cap: { amount: "200", currency: "USD" },
+    })
+  );
+  expect(wrongCurrency.status).toBe(400);
+  const duplicate = await send(db, request(0, "/budgets", "POST", payload("300")));
+  expect(duplicate.status).toBe(400);
+  const updated = await send(db, request(0, `/budgets/${id}`, "PUT", payload("250.25")));
+  expect(updated.status).toBe(200);
+  const changed = Schema.decodeUnknownSync(Created)(await updated.json());
+  expect(encodeMoneyAmount(changed.data.cap.amount)).toBe("250.25");
+  expect((await send(db, request(0, `/budgets/${id}`, "DELETE"))).status).toBe(200);
+  expect((await send(db, request(0, `/budgets/${id}`))).status).toBe(404);
+  expect((await send(db, request(1, "/budgets", "POST", payload()))).status).toBe(201);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("reports only this User's exact same-Currency outflows in the applied half-open month", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  const period = deriveCurrentBudgetMonth({
+    now: DateTime.nowUnsafe(),
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  });
+  const capture = (
+    index: number,
+    amount: string,
+    ...args: [currency: string, direction: string, occurredAt: string]
+  ): Promise<Response> => {
+    const [currency, direction, occurredAt] = args;
+    return send(
+      db,
+      request(index, "/transactions", "POST", {
+        money: { amount, currency },
+        categoryId: category,
+        direction,
+        occurredAt,
+      })
+    );
+  };
+  expect(
+    (await capture(0, "80.01", "COP", "outflow", DateTime.formatIso(period.from))).status
+  ).toBe(201);
+  expect((await capture(0, "5", "USD", "outflow", DateTime.formatIso(period.from))).status).toBe(
+    201
+  );
+  expect((await capture(0, "5", "COP", "inflow", DateTime.formatIso(period.from))).status).toBe(
+    201
+  );
+  expect((await capture(1, "5", "COP", "outflow", DateTime.formatIso(period.from))).status).toBe(
+    201
+  );
+  const before = DateTime.makeUnsafe(period.from.epochMilliseconds - 1);
+  expect((await capture(0, "5", "COP", "outflow", DateTime.formatIso(before))).status).toBe(201);
+  const response = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
+  expect(response.status).toBe(200);
+  const report = Schema.decodeUnknownSync(Report)(await response.json());
+  expect(report.data.statuses).toHaveLength(1);
+  const [first] = report.data.statuses;
+  if (first === undefined) throw new Error("Budget status missing");
+  expect(encodeMoneyAmount(first.spent.amount)).toBe("80.01");
+  const other = await send(db, request(1, "/budget-status?timeZone=America%2FBogota"));
+  expect(other.status).toBe(200);
+  expect(Schema.decodeUnknownSync(Report)(await other.json()).data.statuses).toEqual([]);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("latches 80% and 100% only once across concurrent capture and correction", async () => {
+  const db = await setup();
+  expect((await send(db, request(0, "/budgets", "POST", payload()))).status).toBe(201);
+  const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+  const capture = (): Promise<Response> =>
+    send(
+      db,
+      request(0, "/transactions", "POST", {
+        money: { amount: "50", currency: "COP" },
+        direction: "outflow",
+        categoryId: category,
+        occurredAt,
+      })
+    );
+  const [one, two] = await Promise.all([capture(), capture()]);
+  expect([one.status, two.status]).toEqual([201, 201]);
+  const first = Schema.decodeUnknownSync(Captured)(await one.json());
+  const recorded = await db
+    .prepare("SELECT threshold FROM budget_threshold_alerts WHERE user_id = ? ORDER BY threshold")
+    .bind(users[0])
+    .all<{ threshold: number }>();
+  expect(recorded.results.map((row) => row.threshold)).toEqual([80, 100]);
+  expect(
+    (
+      await send(
+        db,
+        request(0, `/transactions/${first.data.id}`, "PUT", {
+          expectedRevision: 0,
+          changes: { money: { amount: "10", currency: "COP" } },
+        })
+      )
+    ).status
+  ).toBe(200);
+  expect((await capture()).status).toBe(201);
+  const after = await db
+    .prepare("SELECT threshold FROM budget_threshold_alerts WHERE user_id = ? ORDER BY threshold")
+    .bind(users[0])
+    .all<{ threshold: number }>();
+  expect(after.results.map((row) => row.threshold)).toEqual([80, 100]);
+});

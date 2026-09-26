@@ -15,6 +15,7 @@ import {
   processStatementSubmission,
 } from "../ingestion/statement-processing";
 import { StatementCoordinatorActivity } from "../ingestion/statement-work";
+import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
 import {
   type CanonicalMutationAdapter,
@@ -192,16 +193,33 @@ const executeCall = ({
   });
 
 /** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
+const affectsBudget = (operation: CanonicalOperationId): boolean =>
+  operation.startsWith("budgets.") || operation.startsWith("transactions.");
+
 const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
-  input.work._tag === "Batch"
-    ? executeCanonicalBatch({
-        db: input.db,
-        subject: input.subject,
-        calls: input.work.calls,
-        current: input.current,
-        bucket: input.bucket,
-      })
-    : executeCall({ ...input, work: input.work });
+  Effect.gen(function* () {
+    const result =
+      input.work._tag === "Batch"
+        ? yield* executeCanonicalBatch({
+            db: input.db,
+            subject: input.subject,
+            calls: input.work.calls,
+            current: input.current,
+            bucket: input.bucket,
+          })
+        : yield* executeCall({ ...input, work: input.work });
+    if (
+      result.ok &&
+      (input.work._tag === "Call"
+        ? affectsBudget(input.work.operation)
+        : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget)))
+    ) {
+      // The D1 latch and occurrence keys are idempotent. Reconciliation runs inside this User
+      // coordinator after committed work; an interrupted run is caught up on later successful work.
+      yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId });
+    }
+    return result;
+  });
 
 /** True for an operation id the Memory group declares, so a new one needs no second derivation. */
 const isMemoryOperation = (operation: CanonicalOperationId): boolean =>

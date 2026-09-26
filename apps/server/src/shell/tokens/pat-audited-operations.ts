@@ -5,6 +5,12 @@
  * modules one.
  */
 export type AuditedPATOperation =
+  | "budgets.createBudget"
+  | "budgets.updateBudget"
+  | "budgets.deleteBudget"
+  | "budgets.listBudgets"
+  | "budgets.getBudget"
+  | "budgets.getBudgetStatus"
   | "categories.createKeywordRule"
   | "categories.deleteKeywordRule"
   | "categories.listCategories"

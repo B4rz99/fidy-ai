@@ -16,6 +16,8 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 
 import { correctionInput } from "./transactions/transaction-corrections";
+import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
+import { browseBudgets } from "./budgets/budget-queries";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
@@ -31,6 +33,7 @@ import {
   maximumTransactionInputBytes,
   rejectInvalidBatchInput,
   rejectInvalidTransactionInput,
+  transactionFailure,
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
@@ -871,6 +874,120 @@ const memoryMutationResponse = (
   return forgetMemoryResponse({ request, environment, subject });
 };
 
+const budgetBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 2000,
+});
+
+const budgetCanonicalInput = (
+  operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget",
+  id: Option.Option<BudgetId>,
+  payload: Option.Option<CreateBudgetInput>
+): unknown => {
+  switch (operation) {
+    case "budgets.createBudget":
+      return { payload: Option.getOrThrow(payload) };
+    case "budgets.deleteBudget":
+      return { params: { id: Option.getOrThrow(id) } };
+    case "budgets.updateBudget":
+      return { params: { id: Option.getOrThrow(id) }, payload: Option.getOrThrow(payload) };
+  }
+};
+
+/** Route a decoded Budget mutation to the same User-coordinated canonical D1 unit as batches. */
+const budgetMutationResponse = ({
+  request,
+  environment,
+  subject,
+  operation,
+}: Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+  operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget";
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const id =
+      operation === "budgets.createBudget"
+        ? Option.none<BudgetId>()
+        : pathId({ schema: BudgetId, request });
+    if (operation !== "budgets.createBudget" && Option.isNone(id)) {
+      return transactionFailure({ code: "not_found", status: 404, message: "Budget unavailable." });
+    }
+    const payload =
+      operation === "budgets.deleteBudget"
+        ? Option.none<CreateBudgetInput>()
+        : yield* Effect.tryPromise(() =>
+            boundedJsonBody(
+              request,
+              budgetBodyPolicy,
+              operation === "budgets.createBudget"
+                ? Schema.toCodecJson(CreateBudgetInput)
+                : Schema.toCodecJson(UpdateBudgetInput)
+            )
+          ).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
+    if (operation !== "budgets.deleteBudget" && Option.isNone(payload)) {
+      return transactionFailure({
+        code: "validation_failed",
+        status: 400,
+        message: "Invalid Budget input.",
+      });
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: ownerCall(
+        CanonicalOperationId.make(operation),
+        budgetCanonicalInput(operation, id, payload)
+      ),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+/** The Budget owner's canonical query or mutation, never a parallel path declaration. */
+const BudgetOperation = Schema.Literals([
+  "budgets.createBudget",
+  "budgets.updateBudget",
+  "budgets.deleteBudget",
+  "budgets.listBudgets",
+  "budgets.getBudget",
+  "budgets.getBudgetStatus",
+]);
+const budgetResponse = ({
+  request,
+  environment,
+  subject,
+  operation,
+}: Readonly<{
+  request: Request;
+  environment: CoreEnvironment;
+  subject: TransactionCaller;
+  operation: CatalogOperation;
+}>): Option.Option<Effect.Effect<Response>> => {
+  const selected = Schema.decodeUnknownOption(BudgetOperation)(operation.id);
+  if (Option.isNone(selected)) return Option.none();
+  const selectedId = selected.value;
+  switch (selectedId) {
+    case "budgets.createBudget":
+    case "budgets.updateBudget":
+    case "budgets.deleteBudget":
+      return Option.some(
+        budgetMutationResponse({ request, environment, subject, operation: selectedId }).pipe(
+          Effect.withSpan(operation.id)
+        )
+      );
+    case "budgets.listBudgets":
+    case "budgets.getBudget":
+    case "budgets.getBudgetStatus":
+      return Option.some(
+        Effect.tryPromise(() =>
+          browseBudgets({ db: environment.DB, request, subject, operation: selectedId })
+        ).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
+      );
+    default:
+      return Option.none();
+  }
+};
+
 const memoryBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
@@ -1112,7 +1229,9 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const ownerResponse = Option.orElse(keywordRuleResponse(input), () => memoryResponse(input));
+  const ownerResponse = Option.orElse(budgetResponse(input), () =>
+    Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
+  );
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
   const transaction = transactionResponse(input);
   if (Option.isSome(transaction)) return transaction.value;

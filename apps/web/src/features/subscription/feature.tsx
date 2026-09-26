@@ -1002,6 +1002,11 @@ const billingAttemptLabel = (status: "pending" | "succeeded" | "failed"): string
   }
 };
 
+const standingDateFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "long",
+  timeZone: "America/Bogota",
+});
+
 const SubscriptionStanding = (): JSX.Element => {
   const router = useRouter();
   const query = subscriptionStatusQuery(router.options.context.apiClient);
@@ -1027,10 +1032,7 @@ const SubscriptionStanding = (): JSX.Element => {
   const periodEnd = Option.isSome(paidSubscription)
     ? paidSubscription.value.endsAt.epochMilliseconds
     : trialPeriod.endsAt.epochMilliseconds;
-  const periodLabel = new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "long",
-    timeZone: "America/Bogota",
-  }).format(periodEnd);
+  const periodLabel = standingDateFormatter.format(periodEnd);
   return (
     <Card aria-label="Estado de la suscripción">
       <CardHeader>

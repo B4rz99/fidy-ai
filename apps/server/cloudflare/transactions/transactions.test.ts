@@ -5544,6 +5544,26 @@ it("does not misattribute a repeated callId with a malformed later operation to 
         )
       );
       expect(later.status).toBe(400);
+      const unsupportedFirst = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              calls: [
+                { callId: batchCallId(3), operation: "transactions.listTransactions", input: {} },
+                { callId: batchCallId(4), operation: "not.canonical", input: {} },
+              ],
+            }),
+          })
+        )
+      );
+      expect(unsupportedFirst.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")

@@ -566,7 +566,15 @@ const prepareBatch = ({
     const targets = new Set<string>();
     for (const [index, call] of calls.entries()) {
       const step = yield* prepareCall({ db, subject, call, index, current, bucket });
-      if (step._tag === "Response") return { _tag: "Response", response: step.response };
+      if (step._tag === "Response") {
+        return {
+          _tag: "Response",
+          response:
+            children.length === 0 && unattributedOperation(call)
+              ? yield* rejectUnattributed({ db, subject, current })
+              : step.response,
+        };
+      }
       if (step._tag === "CredentialRefused") {
         return { _tag: "Response", response: yield* refusedCredentialResponse({ db, subject }) };
       }
@@ -664,32 +672,12 @@ const executionResponse = ({
   }
 };
 
-const needsEnvelopeAudit = (calls: ReadonlyArray<CanonicalBatchCall>): boolean => {
-  const firstUnattributed = calls.findIndex(unattributedOperation);
-  if (firstUnattributed < 0) return false;
-  return !calls.slice(0, firstUnattributed).some((call) => {
-    const named = rawOperation(call);
-    return Option.isSome(named) && Option.isSome(canonicalMutationAdapter(named.value));
-  });
-};
-
-const preAdmissionResponse = ({
-  db,
-  subject,
-  calls,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  calls: ReadonlyArray<CanonicalBatchCall>;
-  current: number;
-}>): Option.Option<Effect.Effect<Response>> => {
+const duplicateBatchResponse = (
+  calls: ReadonlyArray<CanonicalBatchCall>
+): Option.Option<Response> => {
   const duplicate = duplicateCallIndex(calls);
-  if (Option.isSome(duplicate)) {
-    return Option.some(Effect.succeed(duplicateRejection(calls, duplicate.value)));
-  }
-  return needsEnvelopeAudit(calls)
-    ? Option.some(rejectUnattributed({ db, subject, current }))
+  return Option.isSome(duplicate)
+    ? Option.some(duplicateRejection(calls, duplicate.value))
     : Option.none();
 };
 
@@ -713,8 +701,8 @@ export const executeCanonicalBatch = ({
   current: number;
 }>): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
-    const preAdmission = preAdmissionResponse({ db, subject, calls, current });
-    if (Option.isSome(preAdmission)) return yield* preAdmission.value;
+    const duplicate = duplicateBatchResponse(calls);
+    if (Option.isSome(duplicate)) return duplicate.value;
     const batch = yield* prepareBatch({ db, subject, calls, current, bucket });
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({

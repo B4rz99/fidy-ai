@@ -231,14 +231,14 @@ const rejectInvalidChild = ({
     refusal: adapter.invalidRefusal({ db, subject, current, input }),
   }).pipe(Effect.map((response) => ({ _tag: "Response" as const, response })));
 
-/** The canonical input one malformed child attempted, or undefined when even the envelope is unshaped. */
+/** The canonical input one malformed child attempted; an unshaped envelope remains raw input. */
 const rawChildInput = (call: CanonicalBatchCall): unknown =>
   Option.getOrElse(
     Option.map(
       Schema.decodeUnknownOption(Schema.Struct({ input: Schema.Unknown }))(call),
       (envelope) => envelope.input
     ),
-    () => undefined
+    () => call
   );
 
 /** Decide one named canonical operation against the batch's own executable-child policy. */

@@ -45,7 +45,6 @@ export {
   categoryMutationCompletion,
   insertKeywordRule,
   keywordRuleFromRows,
-  keywordRuleOperationIds,
   keywordRuleQuery,
   keywordRulesFromRows,
   keywordRulesQuery,

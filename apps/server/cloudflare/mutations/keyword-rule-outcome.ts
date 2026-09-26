@@ -3,14 +3,9 @@ import {
   type CategoryFailure,
   CategoryNotFound,
   type KeywordRule,
-  KeywordRuleAlreadyExists,
-  KeywordRuleLimitReached,
-  KeywordRuleNotFound,
   NotFound,
   type SuggestedOperationCaller,
   ValidationFailed,
-  canCreateKeywordRule,
-  hasKeywordRule,
   keywordRuleFromRows,
   keywordRuleQuery,
   maximumKeywordRulesPerUser,
@@ -23,6 +18,7 @@ import {
   findOwnedKeywordRules,
   keywordRuleJsonHeaders,
 } from "../categories/keyword-rule-shared";
+import { decideKeywordRuleConflict } from "../categories/keyword-rule-conflict";
 import type {
   CanonicalMutationOutcome,
   CanonicalMutationRefusal,
@@ -137,54 +133,6 @@ const missingCategoryFailure = ({
       : Option.some(new CategoryNotFound({ categoryId }));
   });
 
-/** The failure for a rule the rolled-back state no longer retains, or None. */
-const missingRuleFailure = (
-  rules: ReadonlyArray<KeywordRule>,
-  outcome: KeywordRuleOutcome
-): Option.Option<CategoryFailure> =>
-  outcome.operation === "categories.createKeywordRule" ||
-  rules.some((rule) => rule.id === outcome.ruleId)
-    ? Option.none()
-    : Option.some(new KeywordRuleNotFound({ keywordRuleId: outcome.ruleId }));
-
-/** The failure for a keyword that conflicts with a retained rule, or None. */
-const conflictingKeywordFailure = ({
-  outcome,
-  rules,
-}: Readonly<{
-  outcome: KeywordRuleOutcome;
-  rules: ReadonlyArray<KeywordRule>;
-}>): Effect.Effect<Option.Option<CategoryFailure>> =>
-  Effect.gen(function* () {
-    if (outcome.operation === "categories.deleteKeywordRule") return Option.none<CategoryFailure>();
-    const excluding =
-      outcome.operation === "categories.updateKeywordRule"
-        ? Option.some(outcome.ruleId)
-        : Option.none();
-    const duplicate = yield* hasKeywordRule({ keyword: outcome.keyword, rules, excluding });
-    return duplicate
-      ? Option.some(new KeywordRuleAlreadyExists({ keyword: outcome.keyword }))
-      : Option.none();
-  });
-
-/** The failure for an exhausted retained-rule set, or None. */
-const exhaustedCapacityFailure = ({
-  outcome,
-  rules,
-}: Readonly<{
-  outcome: KeywordRuleOutcome;
-  rules: ReadonlyArray<KeywordRule>;
-}>): Effect.Effect<Option.Option<CategoryFailure>> =>
-  Effect.gen(function* () {
-    if (outcome.operation !== "categories.createKeywordRule") {
-      return Option.none<CategoryFailure>();
-    }
-    const canCreate = yield* canCreateKeywordRule(rules);
-    return canCreate
-      ? Option.none()
-      : Option.some(new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }));
-  });
-
 /**
  * The failure one aborted keyword-rule child explains, or None when the rolled-back state cannot
  * name it: a missing Category, a vanished rule, a duplicate keyword, or an exhausted rule set.
@@ -205,11 +153,7 @@ export const keywordRuleAbortFailure = ({
       Effect.orElseSucceed(() => Option.none<ReadonlyArray<KeywordRule>>())
     );
     if (Option.isNone(rules)) return Option.none<CategoryFailure>();
-    const missingRule = missingRuleFailure(rules.value, outcome);
-    if (Option.isSome(missingRule)) return missingRule;
-    const conflict = yield* conflictingKeywordFailure({ outcome, rules: rules.value });
-    if (Option.isSome(conflict)) return conflict;
-    return yield* exhaustedCapacityFailure({ outcome, rules: rules.value });
+    return yield* decideKeywordRuleConflict({ rules: rules.value, outcome });
   });
 
 /**

@@ -1,24 +1,15 @@
 import {
-  type CategoryFailure,
-  type CategoryId,
-  type CategoryKeyword,
   CategoryNotFound,
   CreateKeywordRuleInput,
-  KeywordRuleAlreadyExists,
   KeywordRuleId,
-  KeywordRuleLimitReached,
-  KeywordRuleNotFound,
   type KeywordRuleOperation,
   ListKeywordRulesResponse,
   NotFound,
   UpdateKeywordRuleInput,
   ValidationFailed,
-  canCreateKeywordRule,
   categoryMutationCompletion,
-  hasKeywordRule,
   insertKeywordRule,
   keywordRulesFromRows,
-  maximumKeywordRulesPerUser,
   normalizeCategoryKeyword,
   protectedKeywordRulesQuery,
   recordBrowserKeywordRuleRead,
@@ -38,6 +29,7 @@ import {
   findOwnedKeywordRules,
   keywordRuleJsonHeaders,
 } from "./keyword-rule-shared";
+import { decideKeywordRuleConflict } from "./keyword-rule-conflict";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -137,51 +129,6 @@ export const keywordRuleIdFromPath = (request: Request): Option.Option<KeywordRu
 /** One keyword-rule dependency failure the owner's prepare seams classify as unavailable. */
 class KeywordRuleBoundaryFailure extends Data.TaggedError("KeywordRuleBoundaryFailure")<{}> {}
 
-/** The facts a prepared rule write contributes to its own conflict and refusal classification. */
-type RefusalFacts = Readonly<{
-  db: D1Database;
-  subject: Subject;
-  current: number;
-  ruleId: Option.Option<KeywordRuleId>;
-  keyword: Option.Option<CategoryKeyword>;
-  categoryId: Option.Option<CategoryId>;
-  capacity: boolean;
-}>;
-
-/** The conflict one change collided with inside the caller's own retained rules. */
-const ruleConflict = ({
-  db,
-  subject,
-  facts,
-}: Readonly<{ db: D1Database; subject: Subject; facts: RefusalFacts }>): Effect.Effect<
-  Option.Option<CategoryFailure>,
-  KeywordRuleBoundaryFailure
-> =>
-  Effect.gen(function* () {
-    const stored = yield* Effect.tryPromise({
-      try: () => findOwnedKeywordRules({ db, userId: subject.userId }),
-      catch: () => new KeywordRuleBoundaryFailure(),
-    });
-    if (Option.isNone(stored)) return yield* new KeywordRuleBoundaryFailure();
-    const rules = stored.value;
-    const { keyword, ruleId } = facts;
-    if (Option.isSome(ruleId) && !rules.some((rule) => rule.id === ruleId.value)) {
-      return Option.some(new KeywordRuleNotFound({ keywordRuleId: ruleId.value }));
-    }
-    if (Option.isSome(keyword)) {
-      const duplicate = yield* hasKeywordRule({
-        keyword: keyword.value,
-        rules,
-        excluding: ruleId,
-      });
-      if (duplicate) return Option.some(new KeywordRuleAlreadyExists({ keyword: keyword.value }));
-    }
-    if (facts.capacity && !(yield* canCreateKeywordRule(rules))) {
-      return Option.some(new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }));
-    }
-    return Option.none<CategoryFailure>();
-  });
-
 /** The guarded rule change and its live-authority validation Audit, in the unit's own order. */
 const writeStatements = ({
   db,
@@ -225,7 +172,7 @@ type RuleWrite = Readonly<{
   subject: Subject;
   outcome: KeywordRuleOutcome;
   statement: D1PreparedStatement;
-  facts: RefusalFacts;
+  current: number;
 }>;
 
 /** The guarded rule change and its live-authority audit as one prepared canonical mutation. */
@@ -239,7 +186,7 @@ const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
       subject: write.subject,
       operation: write.outcome.operation,
       statement: write.statement,
-      current: write.facts.current,
+      current: write.current,
     }),
     completion: write.db.prepare(categoryMutationCompletion),
   },
@@ -259,14 +206,14 @@ const prepareRuleWrite = (
         liveTransactionAuthority({
           db: write.db,
           subject: write.subject,
-          current: write.facts.current,
+          current: write.current,
         })
       )
     );
     if (Option.isNone(live)) return unavailablePreparation();
     if (!live.value) return credentialRefusedPreparation();
-    if (Option.isSome(write.facts.categoryId)) {
-      const categoryId = write.facts.categoryId.value;
+    if (write.outcome.operation !== "categories.deleteKeywordRule") {
+      const categoryId = write.outcome.categoryId;
       const exists = yield* findExistingCategory({ db: write.db, categoryId });
       if (Option.isNone(exists)) return unavailablePreparation();
       if (!exists.value) {
@@ -278,10 +225,14 @@ const prepareRuleWrite = (
         );
       }
     }
-    const conflict = yield* ruleConflict({
-      db: write.db,
-      subject: write.subject,
-      facts: write.facts,
+    const stored = yield* Effect.tryPromise({
+      try: () => findOwnedKeywordRules({ db: write.db, userId: write.subject.userId }),
+      catch: () => new KeywordRuleBoundaryFailure(),
+    });
+    if (Option.isNone(stored)) return yield* new KeywordRuleBoundaryFailure();
+    const conflict = yield* decideKeywordRuleConflict({
+      rules: stored.value,
+      outcome: write.outcome,
     });
     if (Option.isSome(conflict)) {
       return refusedPreparation(
@@ -329,15 +280,7 @@ export const prepareCreateKeywordRule = ({
         authority,
       }),
     }),
-    facts: {
-      db,
-      subject,
-      current,
-      ruleId: Option.none(),
-      keyword: Option.some(payload.keyword),
-      categoryId: Option.some(payload.categoryId),
-      capacity: true,
-    },
+    current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 
@@ -378,15 +321,7 @@ export const prepareUpdateKeywordRule = ({
         authority,
       }),
     }),
-    facts: {
-      db,
-      subject,
-      current,
-      ruleId: Option.some(ruleId),
-      keyword: Option.some(payload.keyword),
-      categoryId: Option.some(payload.categoryId),
-      capacity: false,
-    },
+    current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 
@@ -411,15 +346,7 @@ export const prepareDeleteKeywordRule = ({
       db,
       statement: removeKeywordRule({ id: ruleId, userId: subject.userId, authority }),
     }),
-    facts: {
-      db,
-      subject,
-      current,
-      ruleId: Option.some(ruleId),
-      keyword: Option.none(),
-      categoryId: Option.none(),
-      capacity: false,
-    },
+    current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
 

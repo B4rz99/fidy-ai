@@ -18,13 +18,6 @@ export type KeywordRuleOperation = Extract<
   "categories.createKeywordRule" | "categories.updateKeywordRule" | "categories.deleteKeywordRule"
 >;
 
-/** The keyword-rule mutation ids the Core dispatch owns, for owner dispatch without a cascade. */
-export const keywordRuleOperationIds = [
-  "categories.createKeywordRule",
-  "categories.updateKeywordRule",
-  "categories.deleteKeywordRule",
-] as const satisfies ReadonlyArray<KeywordRuleOperation>;
-
 /** A live credential re-evaluated inside the same D1 unit as the rule write. */
 type Authority = Readonly<{
   table: "pats" | "web_sessions";

@@ -295,8 +295,11 @@ export const memoryCapacityIndex = ({
           .all(),
       catch: boundaryFailure,
     });
-    const stored = Option.getOrElse(memoriesFromRows(rows.results), () => []);
-    let aggregate = [...stored];
+    const stored = memoriesFromRows(rows.results);
+    if (Option.isNone(stored)) {
+      return yield* boundaryFailure(new Error("Invalid Memory capacity projection"));
+    }
+    let aggregate = [...stored.value];
     let firstOwned: Option.Option<number> = Option.none();
     for (const [index, mutation] of mutations.entries()) {
       if (mutation.outcome._tag !== "Memory" || mutation.outcome.operation === "memory.forget") {

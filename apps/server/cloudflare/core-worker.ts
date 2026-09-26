@@ -1,9 +1,7 @@
 import {
-  type KeywordRuleOperation,
   ScopeMissing,
   UserActionRequired,
   categoryUnavailable,
-  keywordRuleOperationIds,
   listCategoriesPath,
 } from "@fidy/server/categories";
 import {
@@ -638,7 +636,7 @@ const dispatchCanonicalHistory = (
 
 /** One canonical call for an admitted owner operation, without restating its published id. */
 const ownerCall = (
-  operation: KeywordRuleOperation | MemoryMutationId,
+  operation: CanonicalOperationId | MemoryMutationId,
   input: unknown
 ): CanonicalWork => canonicalCall(CanonicalOperationId.make(operation), input);
 
@@ -648,7 +646,7 @@ const keywordRuleMutationResponse = (
     request: Request;
     environment: CoreEnvironment;
     subject: TransactionCaller;
-    operation: KeywordRuleOperation;
+    operation: CanonicalOperationId;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, subject, operation } = input;
@@ -672,6 +670,7 @@ const keywordRuleMutationResponse = (
         work: ownerCall(operation, { params: { id: id.value } }),
       });
     }
+    if (operation !== "categories.updateKeywordRule") return unavailable();
     const payload = yield* Effect.tryPromise(() => keywordRuleInput(request, true));
     return Option.isNone(payload)
       ? keywordRuleInvalidInput()
@@ -685,10 +684,6 @@ const keywordRuleMutationResponse = (
         });
   }).pipe(Effect.orElseSucceed(unavailable));
 };
-
-/** The keyword-rule mutation ids, and None for any other canonical operation. */
-const keywordRuleOperation = (id: string): Option.Option<KeywordRuleOperation> =>
-  Option.fromUndefinedOr(keywordRuleOperationIds.find((operation) => operation === id));
 
 /** The keyword-rule work this dispatch owns, or None when another slice owns the operation. */
 const keywordRuleResponse = (
@@ -708,9 +703,16 @@ const keywordRuleResponse = (
       }).pipe(Effect.orElseSucceed(unavailable))
     );
   }
-  return Option.map(keywordRuleOperation(operation.id), (owned) =>
-    keywordRuleMutationResponse({ request, environment, subject, operation: owned }).pipe(
-      Effect.withSpan(owned)
+  if (
+    operation.id !== "categories.createKeywordRule" &&
+    operation.id !== "categories.updateKeywordRule" &&
+    operation.id !== "categories.deleteKeywordRule"
+  ) {
+    return Option.none();
+  }
+  return Option.some(
+    keywordRuleMutationResponse({ request, environment, subject, operation: operation.id }).pipe(
+      Effect.withSpan(operation.id)
     )
   );
 };

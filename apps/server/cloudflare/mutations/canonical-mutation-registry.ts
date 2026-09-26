@@ -5,9 +5,7 @@ import {
   LinkTransactionsCanonicalInput,
   UnlinkTransactionsCanonicalInput,
   UpdateTransactionCanonicalInput,
-  atomicBatchChildOperations,
   getAtomicBatchChildIds,
-  operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { TransactionId } from "@fidy/server/transactions-runtime";
 import {
@@ -321,42 +319,9 @@ export const canonicalMutationAdapter = (
   operation: CanonicalOperationId
 ): Option.Option<CanonicalMutationAdapter> => Option.fromUndefinedOr(adapters.get(operation));
 
-/**
- * The catalog-derived execution registry: every assembled composable canonical mutation maps to the
- * owner adapter that executes it, or to None so the caller fails closed. Queries, nested batches,
- * and ADR 0027 standalone account-security mutations are excluded by construction through the
- * reflected child set rather than by a readiness allowlist.
- */
-export const canonicalMutationAdapters = (): ReadonlyMap<
-  CanonicalOperationId,
-  Option.Option<CanonicalMutationAdapter>
-> => {
-  const registry = new Map<CanonicalOperationId, Option.Option<CanonicalMutationAdapter>>();
-  for (const operation of atomicBatchChildOperations(operationCatalog)) {
-    registry.set(operation.id, canonicalMutationAdapter(operation.id));
-  }
-  return registry;
-};
-
-/**
- * Proves the published child-call union, the adapter registry, and the catalog-derived child set
- * coincide: every union child resolves to an adapter (or an explicit fail-closed None), no adapter
- * sits unreachable, and the registry holds no child the union cannot name. A drift in either
- * derivation fails here instead of silently dropping work.
- */
-export const assertCanonicalMutationAdapters = (): void => {
+/** An installed owner adapter must name a published composable mutation. Missing adapters fail closed. */
+const assertCanonicalMutationAdapters = (): void => {
   const published = new Set(getAtomicBatchChildIds());
-  const registry = canonicalMutationAdapters();
-  for (const child of published) {
-    if (!registry.has(child)) {
-      throw new Error(`Canonical mutation execution registry is missing a child: ${child}`);
-    }
-  }
-  for (const child of registry.keys()) {
-    if (!published.has(child)) {
-      throw new Error(`Canonical mutation execution registry names an unpublished child: ${child}`);
-    }
-  }
   for (const operation of adapters.keys()) {
     if (!published.has(operation)) {
       throw new Error(`Canonical mutation adapter is not a composable child: ${operation}`);
@@ -364,6 +329,4 @@ export const assertCanonicalMutationAdapters = (): void => {
   }
 };
 
-// The live dispatch layer proves registry completeness at startup: importing this registry fails
-// closed when the catalog and the owner adapters have drifted, instead of silently dropping work.
 assertCanonicalMutationAdapters();

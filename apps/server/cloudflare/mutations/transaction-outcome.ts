@@ -345,12 +345,15 @@ export const transactionAbortRefusal = ({
 
 const TotalRow = Schema.Struct({ total: Schema.Int });
 
-/** How many rows one `count(*)` projection reports; zero when the projection returns no row. */
+/** Decode the count from one D1 aggregate; a missing or malformed row is unavailable. */
 export const countRows = (statement: D1PreparedStatement): Promise<number> =>
   statement
     .first()
     .then((row) => Schema.decodeUnknownOption(TotalRow)(row))
-    .then((row) => (Option.isSome(row) ? row.value.total : 0));
+    .then((row) => {
+      if (Option.isNone(row)) throw new Error("Invalid capacity count projection");
+      return row.value.total;
+    });
 
 /** How many manual movements one User may create per UTC day before a capture child is blamed. */
 const manualDailyMovementBudget = 100;

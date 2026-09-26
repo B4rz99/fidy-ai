@@ -41,8 +41,11 @@ that operation in both session and PAT audit tables.
 When the D1 unit aborts, the batch reports the first child it can prove responsible: a stale
 observed revision, a repeated observed revision of one Transaction (the later child's guard cannot
 be satisfied), or a budget trigger. The child's refusal AuditLogEntry is recorded whenever that
-entry can commit; an abort on the shared daily audit budget answers the canonical `rate_limited`
-refusal without a row, because the exhausted budget is what refused it.
+entry can commit. An attributable abort on the shared daily audit budget answers the canonical
+`rate_limited` refusal without a row, because the exhausted budget is what refused it. A mixed
+batch's audit-budget trigger does not name its child: another canonical call can commit an Audit
+row before a post-rollback recount, so assigning a child from that count could record false
+evidence. Until a guard supplies commit-time child identity, this abort answers `unavailable`.
 
 An abort that maps to no child answers the canonical `unavailable` failure. Because the unit rolled
 back, no child state and no child success AuditLogEntry exists to report; a misattributed refusal

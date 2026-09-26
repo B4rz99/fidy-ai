@@ -1,7 +1,7 @@
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
-import { sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
@@ -137,7 +137,7 @@ const auditCommitted = (results: D1Result[], subject: TransactionCaller): boolea
 };
 
 const batchFailure = (cause: unknown): Response =>
-  sharedAuditLimitRefusal(cause) ? rateLimited() : transactionUnavailable();
+  refusedByAuditBudget(cause) ? rateLimited() : transactionUnavailable();
 
 const rateLimited = (): Response =>
   Response.json(

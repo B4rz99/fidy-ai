@@ -7,7 +7,8 @@ import {
 } from "@fidy/server/statement-staging";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Option, Result, Schema } from "effect";
-import { dailyAuditExhausted, sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { currentMillis } from "../pats/pat-shared";
@@ -183,16 +184,12 @@ const rateLimited = (): Response =>
     HTTP_TOO_MANY_REQUESTS
   );
 
-/** The one bounded answer when a User's shared daily canonical budget is spent. */
-const dailyBudgetSpent = (): Response =>
+/** The statement owner's single message and answer for a spent shared daily canonical budget. */
+export const statementDailyBudgetMessage =
+  "Too many statement calls today; retry after the daily budget resets.";
+export const statementDailyBudgetResponse = (): Response =>
   json(
-    {
-      error: {
-        code: "rate_limited",
-        message: "Too many statement calls today; retry after the daily budget resets.",
-      },
-      next: [],
-    },
+    { error: { code: "rate_limited", message: statementDailyBudgetMessage }, next: [] },
     HTTP_TOO_MANY_REQUESTS
   );
 
@@ -426,7 +423,7 @@ export const commitReadAudit = (
     );
     if (Result.isFailure(outcome)) {
       return Option.some(
-        sharedAuditLimitRefusal(outcome.failure.cause) ? dailyBudgetSpent() : unavailable()
+        refusedByAuditBudget(outcome.failure.cause) ? statementDailyBudgetResponse() : unavailable()
       );
     }
     const results = outcome.success;
@@ -455,7 +452,7 @@ export const readStatementSubmission = ({
       const staging = stagingService(environment, current);
       if (Option.isNone(staging)) return unavailable();
       if (yield* budgetSpent(environment.DB, subject.userId, current)) {
-        return dailyBudgetSpent();
+        return statementDailyBudgetResponse();
       }
       const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
       const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);

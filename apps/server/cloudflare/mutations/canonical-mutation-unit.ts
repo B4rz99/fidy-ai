@@ -24,6 +24,7 @@ import {
   readOwnedStatementSubmission,
   submissionProjection,
 } from "../ingestion/statement-staging";
+import { statementDailyBudgetRefusal } from "./statement-mutation";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
@@ -153,14 +154,9 @@ const rejectRecorded = ({
     })
   );
 
-const nonTransactionAuditLimitRefusal = (
-  source: "ForwardingAddress" | "StatementSubmission"
-): CanonicalMutationRefusal => ({
+const forwardingAuditLimitRefusal = (): CanonicalMutationRefusal => ({
   code: "rate_limited",
-  message:
-    source === "ForwardingAddress"
-      ? "Daily canonical work budget exhausted."
-      : "Too many statement calls today; retry after the daily budget resets.",
+  message: "Daily canonical work budget exhausted.",
   record: () => Effect.succeed("rate_limited" as const),
   respond: () => Effect.succeed(transactionUnavailable()),
 });
@@ -203,8 +199,9 @@ const triggerRefusal = ({
     case "Memory":
       return auditOnly(memoryBudgetRefusal());
     case "ForwardingAddress":
+      return auditOnly(forwardingAuditLimitRefusal());
     case "StatementSubmission":
-      return auditOnly(nonTransactionAuditLimitRefusal(mutation.outcome._tag));
+      return auditOnly(statementDailyBudgetRefusal("trigger"));
   }
 };
 
@@ -263,7 +260,8 @@ const triggerAttribution = ({
     case canonicalTriggerNames.memoryCapacity:
       // A committed-state replay misses earlier forgets and concurrent writes; require indexed proof.
       return Option.none();
-    case canonicalTriggerNames.auditLimit: {
+    case canonicalTriggerNames.auditLimit:
+    case canonicalTriggerNames.statementAuditLimit: {
       const index = auditBudgetIndex(mutations);
       return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
     }
@@ -582,19 +580,34 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
-
-type LegacyPayloadValue = Exclude<
-  ExistingCommittedValue,
-  { _tag: "Budget" | "Insight" | "DeliveredInsight" }
->;
-const existingMutationPayload = (value: LegacyPayloadValue): unknown => {
-  if ("transaction" in value) return value.transaction;
-  if ("submission" in value) return value.submission;
-  if ("pair" in value) return value.pair;
-  if ("rule" in value) return value.rule;
-  if ("memory" in value) return value.memory;
-  return value.id;
+/** Select the published data from a retained Transaction, category, Memory, or statement value. */
+const retainedMutationPayload = (
+  value: Extract<
+    CommittedMutationValue,
+    {
+      _tag:
+        | "Transaction"
+        | "EffectiveTransaction"
+        | "RestoredPair"
+        | "KeywordRule"
+        | "Memory"
+        | "StatementSubmission";
+    }
+  >
+): unknown => {
+  switch (value._tag) {
+    case "Transaction":
+    case "EffectiveTransaction":
+      return value.transaction;
+    case "RestoredPair":
+      return value.pair;
+    case "KeywordRule":
+      return value.rule;
+    case "Memory":
+      return value.memory;
+    case "StatementSubmission":
+      return value.submission;
+  }
 };
 
 /** The JSON payload one committed canonical value carries as its operation's success data. */
@@ -605,8 +618,17 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
   if (value._tag === "DeliveredInsight") {
     return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
   }
-  return existingMutationPayload(value);
+  if (
+    value._tag === "RemovedKeywordRule" ||
+    value._tag === "RemovedMemory" ||
+    value._tag === "RemovedBudget"
+  ) {
+    return value.id;
+  }
+  return retainedMutationPayload(value);
 };
+
+type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
 
 const encodeRemovedValue = (
   value: Extract<

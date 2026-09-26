@@ -2926,7 +2926,9 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
-        const first = yield* fromTestPromise(() => stageOne(runtime));
+        // The first reference belongs to another User. Counting two statement children must
+        // refuse the envelope before preparing that first child or recording its refusal Audit.
+        const first = yield* fromTestPromise(() => stageOne(runtime, 1));
         const second = yield* fromTestPromise(() => stageOne(runtime));
         const refused = yield* fromTestPromise(() =>
           batch(runtime, 0, [
@@ -3471,6 +3473,66 @@ it(
             count(runtime.db, "statement_submission_audit WHERE outcome = 'validation_failed'")
           )
         ).toBe(2);
+      })
+    ),
+  30_000
+);
+
+it(
+  "attributes a statement audit-trigger abort to its sole batch child",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const current = yield* Clock.currentTimeMillis;
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              `WITH RECURSIVE budget(value) AS (
+                 SELECT 1 UNION ALL SELECT value + 1 FROM budget WHERE value < 255
+               )
+               INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
+               SELECT '92000000-0000-4000-8000-' || substr('000000000000' || value, -12),
+                      ?, 'ingestion.getStatementSubmission', 'success', ?
+               FROM budget`
+            )
+            .bind(userA, current)
+            .run()
+        );
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const competing = competingWriteDb(runtime.db, () =>
+          runtime.db
+            .prepare(
+              `INSERT INTO statement_submission_audit
+               (id, user_id, operation, outcome, occurred_at_ms)
+               VALUES ('92000000-0000-4000-8000-000000000256', ?,
+                       'ingestion.getStatementSubmission', 'success', ?)`
+            )
+            .bind(userA, current)
+            .run()
+        );
+        const refused = yield* fromTestPromise(() =>
+          batch({ ...runtime, db: competing }, 0, [
+            statementCall(1, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000958",
+              reference: staged,
+            }),
+          ])
+        );
+        expect(refused.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
+        expect(rejection.error).toMatchObject({
+          code: "rate_limited",
+          failedCallIndex: 0,
+          operation: "ingestion.submitForExtraction",
+        });
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 0,
+          statement_ingestion_outbox: 0,
+        });
+        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
+          256
+        );
       })
     ),
   30_000

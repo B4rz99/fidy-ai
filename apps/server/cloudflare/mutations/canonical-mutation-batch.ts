@@ -12,7 +12,7 @@ import {
 } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
 import { submissionInputBytes } from "../ingestion/statement-ingestion";
-import { lostStatementReplay } from "../ingestion/statement-staging";
+import { lostStatementReplay, submitForExtraction } from "../ingestion/statement-staging";
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import {
   type CanonicalRefusalDisposition,
@@ -85,6 +85,7 @@ const repeatedCallIdMessage =
   "Each child call needs its own callId; a repeated identity cannot commit twice.";
 const repeatedTargetMessage =
   "Each child must address its own retained rule or Memory; one retained row cannot commit twice.";
+const repeatedStatementMessage = "An atomic batch can publish at most one statement.";
 export const oversizedChildMessage =
   "This child's input exceeds the size an individual call of this operation accepts.";
 const maximumChildInputBytes = Math.min(maximumTransactionInputBytes, submissionInputBytes);
@@ -522,6 +523,19 @@ const duplicateCallIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Op
   return Option.none();
 };
 
+/** Count named statement children before admitting any child, including one with invalid material. */
+const secondStatementIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<number> => {
+  let seen = false;
+  for (const [index, call] of calls.entries()) {
+    if (!Option.exists(rawOperation(call), (operation) => operation === submitForExtraction)) {
+      continue;
+    }
+    if (seen) return Option.some(index);
+    seen = true;
+  }
+  return Option.none();
+};
+
 const duplicateRejection = (calls: ReadonlyArray<CanonicalBatchCall>, index: number): Response => {
   const operation = rawOperation(calls[index]);
   return Option.isSome(operation)
@@ -534,6 +548,21 @@ const duplicateRejection = (calls: ReadonlyArray<CanonicalBatchCall>, index: num
     : rejectInvalidBatchInput();
 };
 
+/** Refuse envelope-only conflicts before a child can incur work or a refusal Audit. */
+const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<Response> => {
+  const duplicate = duplicateCallIndex(calls);
+  if (Option.isSome(duplicate)) return Option.some(duplicateRejection(calls, duplicate.value));
+  const secondStatement = secondStatementIndex(calls);
+  return Option.map(secondStatement, (index) =>
+    batchRejection({
+      code: "validation_failed",
+      message: repeatedStatementMessage,
+      index,
+      operation: submitForExtraction,
+    })
+  );
+};
+
 /**
  * The retained row one prepared child addresses, when a second child must not address it again.
  * Transaction children carry their own revision and pair guards, so only keyword-rule and Memory
@@ -544,7 +573,6 @@ const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string>
   const outcome = mutation.outcome;
   if (outcome._tag === "KeywordRule") return Option.some(`keyword-rule:${outcome.ruleId}`);
   if (outcome._tag === "Memory") return Option.some(`memory:${outcome.memoryId}`);
-  if (outcome._tag === "StatementSubmission") return Option.some("statement-publication");
   return Option.none();
 };
 
@@ -672,15 +700,6 @@ const executionResponse = ({
   }
 };
 
-const duplicateBatchResponse = (
-  calls: ReadonlyArray<CanonicalBatchCall>
-): Option.Option<Response> => {
-  const duplicate = duplicateCallIndex(calls);
-  return Option.isSome(duplicate)
-    ? Option.some(duplicateRejection(calls, duplicate.value))
-    : Option.none();
-};
-
 /**
  * Execute one decoded canonical atomic batch under live caller authority. Every child keeps the
  * individual operation's validation, authorization, domain, and metadata-only Audit decisions;
@@ -701,8 +720,8 @@ export const executeCanonicalBatch = ({
   current: number;
 }>): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
-    const duplicate = duplicateBatchResponse(calls);
-    if (Option.isSome(duplicate)) return duplicate.value;
+    const invalidShape = batchShapeRefusal(calls);
+    if (Option.isSome(invalidShape)) return invalidShape.value;
     const batch = yield* prepareBatch({ db, subject, calls, current, bucket });
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({

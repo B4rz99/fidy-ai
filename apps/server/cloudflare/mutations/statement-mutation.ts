@@ -3,7 +3,11 @@ import { StatementSubmission } from "@fidy/server/statement-staging";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "../ingestion/statement-staging";
-import { statementRefusalResponse } from "../ingestion/statement-ingestion";
+import {
+  statementDailyBudgetMessage,
+  statementDailyBudgetResponse,
+  statementRefusalResponse,
+} from "../ingestion/statement-ingestion";
 import {
   type PreparedStatementPublication,
   type StatementStagingConfig,
@@ -29,17 +33,17 @@ import {
 import type { CanonicalMutationAdapter } from "./canonical-mutation-registry";
 
 const StatementInput = Schema.toType(getCanonicalOperationInput("ingestion.submitForExtraction"));
-const dailyBudgetMessage = "Too many statement calls today; retry after the daily budget resets.";
-const dailyBudgetResponse = (): Response =>
-  Response.json(
-    { error: { code: "rate_limited", message: dailyBudgetMessage }, next: [] },
-    { status: 429, headers: transactionNoStore }
-  );
-const dailyBudgetRefusal = (): CanonicalMutationRefusal => ({
+/** One statement-owned budget policy; a trigger abort cannot promise an individual HTTP refusal. */
+export const statementDailyBudgetRefusal = (
+  phase: "preflight" | "trigger"
+): CanonicalMutationRefusal => ({
   code: "rate_limited",
-  message: dailyBudgetMessage,
+  message: statementDailyBudgetMessage,
   record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(dailyBudgetResponse()),
+  respond: () =>
+    Effect.succeed(
+      phase === "preflight" ? statementDailyBudgetResponse() : transactionUnavailable()
+    ),
 });
 
 /** Preserve the statement owner's metadata-only refusal audit and individual response. */
@@ -67,7 +71,7 @@ export const canonicalStatementRefusal = ({
     ).pipe(Effect.orElseSucceed(() => "unavailable" as const)),
   respond: (disposition) => {
     if (disposition === "recorded") return Effect.succeed(statementRefusalResponse(refusal));
-    if (disposition === "rate_limited") return Effect.succeed(dailyBudgetResponse());
+    if (disposition === "rate_limited") return Effect.succeed(statementDailyBudgetResponse());
     return Effect.succeed(transactionUnavailable());
   },
 });
@@ -112,7 +116,7 @@ export const statementMutationAdapter: CanonicalMutationAdapter = {
       ).pipe(Effect.option);
       if (Option.isNone(spent)) return failedPreparation();
       if (spent.value) {
-        return refusedPreparation(dailyBudgetRefusal());
+        return refusedPreparation(statementDailyBudgetRefusal("preflight"));
       }
       const prepared = yield* prepareStagedStatementPublication(config, {
         authority: callerAuthority({ subject: work.subject, current: work.current }),

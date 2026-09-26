@@ -34,7 +34,7 @@ import {
   Schema,
 } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
-import { sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
@@ -1190,8 +1190,9 @@ const publicationPremise = (
  * Resolve one owner-held staged reference into a non-committing publication preparation a caller
  * composes into its own D1 unit, or a closed refusal. It verifies ownership, the reference's actual
  * size and digest, availability, expiry, format, idempotency, submission pressure, the Free
- * backfill, and the stored object's own size and checksum, so nothing that reaches a unit can cite
- * missing or mismatched material.
+ * backfill, and the stored object's own size and checksum before a new submission can publish.
+ * A same-material idempotent replay returns the existing submission without rechecking its
+ * retained R2 object; replay creates no new submission or outbox identity.
  */
 // @effect-diagnostics-next-line missingPipeableSignature:off
 export const prepareStagedStatementPublication = (
@@ -1281,7 +1282,7 @@ export const recordStatementRefusal = (
       results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
     )
     .catch((cause: unknown) =>
-      sharedAuditLimitRefusal(cause) ? ("rate_limited" as const) : ("unavailable" as const)
+      refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
     );
 
 type LostPublication =

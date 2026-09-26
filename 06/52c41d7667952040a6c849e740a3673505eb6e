@@ -1,0 +1,38 @@
+apps/web/ARCHITECTURE.md
+  s_b50ca57ee1b0b6::t_8796a05422b762 14
+  s_b50ca57ee1b0b6::t_70a74b57ed6186 73-76
+  s_b50ca57ee1b0b6::t_f0a571ce7a1bbd 32-35
+ARCHITECTURE.md
+  s_b50ca57ee1b0b6::t_fc0e7623a45b0f 3-14,19-21,29-30,36-43,49-54,59-60
+  s_b50ca57ee1b0b6::t_7d4fb17402b781 16-18,25-26,32-33,44-46,55-57
+  s_b50ca57ee1b0b6::t_cb3653b98d811d 61-62
+  s_b50ca57ee1b0b6::t_a2a7af0f8fc446 15,22-24
+  s_b50ca57ee1b0b6::t_20dbc652c1db27 31,34-35
+  s_b50ca57ee1b0b6::t_f934c6533760d4 47-48
+  s_b50ca57ee1b0b6::t_b42e41054ac759 58
+AGENTS.md
+  s_b50ca57ee1b0b6::t_6e514cbd1f5853 21-22
+  s_b50ca57ee1b0b6::t_63613f8d86f089 31,33-35
+apps/server/ARCHITECTURE.md
+  s_b50ca57ee1b0b6::t_6bd14ef751fe8f 98-103,105,107-112
+  s_b50ca57ee1b0b6::t_41def30a056e7c 97,104,106
+.patterns/INDEX.md
+  s_b50ca57ee1b0b6::t_1ea0477639a878 7-26
+  s_b50ca57ee1b0b6::t_f2bef3de0185ac 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0652c41d7667952040a6c849e740a3673505eb6e",
+  "prompts": {},
+  "sessions": {
+    "s_b50ca57ee1b0b6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db7d-71d4-75af-9383-84e0bb0c51dd",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

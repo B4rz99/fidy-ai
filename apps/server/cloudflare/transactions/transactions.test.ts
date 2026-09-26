@@ -4384,7 +4384,7 @@ it("serializes concurrent batches and individual mutations through one User coor
     })
   ));
 
-it("attributes a per-day budget guard abort to the capture child that met it", () =>
+it("attributes the movement budget but leaves an ambiguous audit budget abort unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const movementDb = yield* fromTestPromise(() => setup());
@@ -4437,12 +4437,9 @@ it("attributes a per-day budget guard abort to the capture child that met it", (
           batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
         )
       );
-      expect(exhausted.status).toBe(400);
-      const exhaustedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => exhausted.json())
-      ).pipe(Effect.orDie);
-      expect(exhaustedRejection.error.code).toBe("rate_limited");
-      expect(exhaustedRejection.error.failedCallIndex).toBe(1);
+      // Another unit can commit an audit row between the aborted batch and any recount, so
+      // neither of the two children can safely be named as the refused audit writer.
+      expect(exhausted.status).toBe(503);
       expect(
         yield* fromTestPromise(() =>
           countRows(auditDb, "SELECT COUNT(*) AS count FROM transactions")

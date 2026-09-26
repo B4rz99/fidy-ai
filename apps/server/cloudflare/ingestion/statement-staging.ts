@@ -1314,15 +1314,6 @@ export const recordStatementRefusal = (
       sharedAuditLimitRefusal(cause) ? ("rate_limited" as const) : ("unavailable" as const)
     );
 
-/** How many rows one prepared publication contributes to the shared daily canonical-work budget. */
-const publicationAuditRows = (
-  publication: PreparedStatementPublication,
-  authority: TransactionAuthority
-): number => {
-  if (publication.replayed) return 1;
-  return isPATAuthority(authority) ? 2 : 1;
-};
-
 /**
  * One prepared statement publication as a child of the shared atomic unit. The child's assertion is
  * the statement submission completion, so a silently skipped guard rolls back the whole unit; its
@@ -1343,7 +1334,6 @@ export const preparedStatementChild = ({
   publication: PreparedStatementPublication;
 }>): AtomicUnitChild<StatementSubmission> => ({
   assertion: config.database.prepare(statementSubmissionCompletion),
-  auditRows: publicationAuditRows(publication, authority),
   operation: publication.operation,
   readCommitted: readOwnedStatementSubmission(config, {
     submissionId: publication.submissionId,
@@ -1401,6 +1391,19 @@ export type IndexedStatementPublication = Readonly<{
   publication: PreparedStatementPublication;
 }>;
 
+/** Whether an aborted, previously fresh publication now has the exact same-key material committed. */
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const lostStatementReplay = (
+  config: StatementStagingConfig,
+  publication: PreparedStatementPublication
+): Effect.Effect<boolean> =>
+  publication.replayed
+    ? Effect.succeed(false)
+    : classifyLostPublication(config, { attempt: publication.attempt }).pipe(
+        Effect.map((lost) => lost._tag === "Replay"),
+        Effect.orElseSucceed(() => false)
+      );
+
 /** The attribution one aborted unit's statement child is classified with, or none when it cannot be proven. */
 export const statementAbortAttributors = ({
   config,
@@ -1443,7 +1446,9 @@ const settleStatementUnit = (
     if (input.execution._tag === "CredentialRefused") {
       return yield* new StatementStagingRefused({ reason: "authority" });
     }
-    if (input.execution._tag === "Unavailable") return yield* unavailable();
+    if (input.execution._tag === "Unavailable" || input.execution._tag === "Aborted") {
+      return yield* unavailable();
+    }
     const settled = yield* settleAtomicRefusal({
       callIndex: input.execution.callIndex,
       child: Option.some(input.child),
@@ -1512,7 +1517,7 @@ const settleStatementExecution = (
   StatementStagingRefused | StatementStagingUnavailable
 > =>
   Effect.gen(function* () {
-    if (input.execution._tag !== "Unavailable") {
+    if (input.execution._tag !== "Aborted") {
       return yield* settleStatementUnit({
         child: input.child,
         execution: input.execution,

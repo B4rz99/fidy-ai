@@ -18,7 +18,6 @@ import {
   defectiveBatchDb,
   seedTransaction,
 } from "../atomic/atomic-batch.test-fixture";
-import { dailyAuditMessage } from "../atomic/atomic-mutation-unit";
 import { oversizedChildMessage } from "../atomic/canonical-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { transactionSession } from "../transactions/transactions";
@@ -1694,6 +1693,55 @@ it(
 );
 
 it(
+  "retries a mixed batch as a replay when the same statement publishes during its unit",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const current = yield* Clock.currentTimeMillis;
+        const idempotencyKey = "20000000-0000-4000-8000-000000000958";
+        const subject = Option.getOrThrow(
+          yield* fromTestPromise(() =>
+            transactionSession({
+              db: runtime.db,
+              request: new Request("https://api.fidyapp.com/ingestion/statements", {
+                headers: sessionHeaders(0),
+              }),
+            })
+          )
+        );
+        const raced = {
+          ...runtime,
+          db: competingWriteDb(runtime.db, () =>
+            executeStatementSubmission({
+              current,
+              environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },
+              input: {
+                idempotencyKey: Schema.decodeSync(StatementIdempotencyKey)(idempotencyKey),
+                reference: staged,
+              },
+              subject,
+            }).then((response) => response.text())
+          ),
+        };
+        const committed = yield* fromTestPromise(() =>
+          batch(raced, 0, [captureCall(1), statementCall(2, { idempotencyKey, reference: staged })])
+        );
+        expect(committed.status, yield* fromTestPromise(() => committed.clone().text())).toBe(200);
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 1,
+          statement_ingestion_outbox: 1,
+          transactions: 1,
+          transaction_audit: 1,
+          statement_submission_audit: 2,
+        });
+      })
+    ),
+  30_000
+);
+
+it(
   "rolls back a mixed batch when the statement child refuses at commit time",
   () =>
     Effect.runPromise(
@@ -2571,14 +2619,14 @@ it(
 );
 
 it(
-  "attributes a spent shared daily budget to the statement child that meets it",
+  "leaves a shared daily budget abort unattributed when multiple children write audit rows",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
         const current = yield* Clock.currentTimeMillis;
-        // 255 audit rows leave the day's last slot for the capture child's audit row; the statement
-        // child's own success audit is the one the shared budget refuses.
+        // 255 audit rows leave one slot, but a concurrent write may consume it before the batch
+        // runs. A post-rollback recount cannot establish which child's audit write was refused.
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
@@ -2603,17 +2651,10 @@ it(
             }),
           ])
         );
-        expect(limited.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(limited));
-        expect(rejection.error).toMatchObject({
-          code: "rate_limited",
-          failedCallIndex: 1,
-          message: dailyAuditMessage,
-          operation: "ingestion.submitForExtraction",
-        });
+        expect(limited.status).toBe(503);
 
-        // The exhausted budget is what refused the unit, so no refusal row is attempted on top of
-        // it: the day's audit count is unchanged and neither child's state survives the rollback.
+        // The abort has no provable child, so no refusal row is attempted: the day's audit count
+        // is unchanged and neither child's state survives the rollback.
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
           255
         );

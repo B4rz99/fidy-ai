@@ -1,10 +1,6 @@
 import type { CanonicalOperationId, ErrorCode } from "@fidy/server/canonical-runtime";
 import { Data, Effect, Exit, Option } from "effect";
-import {
-  dailyAuditBudget,
-  dailyAuditCount,
-  sharedAuditLimitRefusal,
-} from "./daily-canonical-budget";
+import { sharedAuditLimitRefusal } from "./daily-canonical-budget";
 
 /**
  * The metadata-only refusal outcome one child's own audit table records. It is deliberately
@@ -40,9 +36,9 @@ export type AtomicUnitRefusal = AtomicMutationRefusal | SharedAuditLimitRefusal;
 export type RefusalRecord = "recorded" | "credential_refused" | "rate_limited" | "unavailable";
 
 /**
- * One committed-record readback that failed instead of reporting an absent row. The unit retries it
- * with rollback already finished, so its cause only ever distinguishes a transient read defect from
- * a row the unit can no longer prove; it is never answered directly.
+ * One post-commit readback that failed instead of reporting an absent row. The unit retries it
+ * after the commit, so its cause only ever distinguishes a transient read defect from a row the
+ * unit can no longer prove; it is never answered directly.
  */
 export class AtomicReadbackFailed extends Data.TaggedError("AtomicReadbackFailed")<{
   readonly cause: unknown;
@@ -62,15 +58,13 @@ export type AtomicUnitAuthority = Readonly<{
 /**
  * One owner-prepared canonical mutation child, ready to join a caller-owned D1 unit. `statements`
  * are guard-chained writes that must all commit; the unit appends `assertion` after them, so a
- * silently skipped guard rolls the whole unit back instead of being noticed after commit.
- * `auditRows` is how many rows this child contributes to the shared daily canonical-work budget, so
- * a budget abort can name the child that met the trigger.
+ * silently skipped guard rolls the whole unit back instead of being noticed after commit. Every
+ * prepared child writes a success AuditLogEntry inside its guarded statements.
  */
 export type AtomicUnitChild<Committed> = Readonly<{
   readonly operation: CanonicalOperationId;
   readonly statements: ReadonlyArray<D1PreparedStatement>;
   readonly assertion: D1PreparedStatement;
-  readonly auditRows: number;
   /**
    * Reads this child's committed records back after the unit commits; `None` when unprovable. A
    * failed read is a defect the unit itself bounds with retries, never a silent `None`.
@@ -98,6 +92,7 @@ export type AtomicUnitExecution<Committed> =
   | Readonly<{ _tag: "Committed"; results: ReadonlyArray<Committed> }>
   | Readonly<{ _tag: "Attributed"; callIndex: number; refusal: AtomicUnitRefusal }>
   | Readonly<{ _tag: "CredentialRefused" }>
+  | Readonly<{ _tag: "Aborted" }>
   | Readonly<{ _tag: "Unavailable" }>;
 
 /**
@@ -143,42 +138,6 @@ export const soleIndex = (candidates: ReadonlyArray<number>): Option.Option<numb
 };
 
 /**
- * The first child whose audit row insert would meet the spent shared budget, or none when the
- * recount proves no child met it. Every audit table trigger counts the same five tables and aborts
- * once the day already holds the budget, so the child whose cumulative audit rows would exceed the
- * remaining allowance is the one that met it. The exhausted budget is what refused the unit, so a
- * provable answer is the canonical `rate_limited` refusal and no refusal AuditLogEntry commits (the
- * trigger refused that row too). A failed or inconsistent recount names no child *unless* exactly
- * one child writes audit rows at all: then the marker and the child's own statements prove the
- * attribution. Otherwise the abort stays unattributed — ADR 0029 requires the first child the unit
- * can *prove* responsible, and a misattributed refusal row would be worse evidence than none.
- */
-const auditBudgetIndex = ({
-  db,
-  userId,
-  current,
-  children,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  children: ReadonlyArray<AtomicUnitChild<unknown>>;
-}>): Effect.Effect<Option.Option<number>> => {
-  const auditWriters = children.flatMap((child, index) => (child.auditRows > 0 ? [index] : []));
-  const sole = soleIndex(auditWriters);
-  return Effect.tryPromise(() => dailyAuditCount({ db, userId, current })).pipe(
-    Effect.map((count): Option.Option<number> => {
-      let remaining = dailyAuditBudget - count;
-      for (const [index, child] of children.entries()) {
-        if (child.auditRows > 0 && remaining < child.auditRows) return Option.some(index);
-        remaining -= child.auditRows;
-      }
-      return sole;
-    }),
-    Effect.orElseSucceed(() => sole)
-  );
-};
-
 /**
  * The attribution every abort attributor can jointly prove, resolved to the *first* child any of
  * them can name: ADR 0029 reports the lowest child index the unit can prove responsible, whichever
@@ -234,7 +193,9 @@ const classifyAborted = <Committed>({
   Effect.gen(function* () {
     if (!(yield* authorityExists(db, authority))) return { _tag: "CredentialRefused" } as const;
     if (sharedAuditLimitRefusal(cause)) {
-      const callIndex = yield* auditBudgetIndex({ children, current, db, userId });
+      // Every child writes an audit row. A post-rollback count can race another unit, so only a
+      // single-child unit can prove which child met this trigger (ADR 0029).
+      const callIndex = children.length === 1 ? Option.some(0) : Option.none();
       if (Option.isSome(callIndex)) {
         return {
           _tag: "Attributed",
@@ -244,7 +205,7 @@ const classifyAborted = <Committed>({
       }
       // The trigger refused the write but the recount cannot name the child that met it, so the
       // abort stays unattributed: ADR 0029 prefers no refusal row to a misattributed one.
-      return { _tag: "Unavailable" } as const;
+      return { _tag: "Aborted" } as const;
     }
     // Every attributor runs, resolved to the first child any of them can prove (ADR 0029), so
     // kind-grouped attributor order can never reorder children.
@@ -256,7 +217,7 @@ const classifyAborted = <Committed>({
         refusal: proven.value.refusal,
       } as const;
     }
-    return { _tag: "Unavailable" } as const;
+    return { _tag: "Aborted" } as const;
   });
 /**
  * Record one attributed child refusal and classify how its own audit settled: a dead credential

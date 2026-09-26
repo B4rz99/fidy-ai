@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Schema } from "effect";
 import {
   Budget,
   BudgetStatusReport,
@@ -171,7 +171,6 @@ const send = (db: D1Database, request: Request): Promise<Response> => {
                     { id: { name } },
                     {
                       DB: db,
-                      STATEMENT_STAGING_BUCKET: Option.none(),
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
                       HOSTED_AI_MODEL: approvedWorkersAiModel,
                     }

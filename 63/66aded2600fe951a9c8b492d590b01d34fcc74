@@ -1,0 +1,22 @@
+apps/server/cloudflare/atomic/atomic-mutation-unit.ts
+  h_c6d49c804e0ad2 104-107
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 346-356,361,1927,2219
+apps/server/cloudflare/ingestion/statement-staging.ts
+  h_c6d49c804e0ad2 24,55-59,1052-1058,1077-1083
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  h_c6d49c804e0ad2 5,9,11,89-93,95-97,99-100,102-103,105-106,108,111-114,118-122,127-146
+apps/server/src/shell/tokens/runtime.ts
+  h_c6d49c804e0ad2 70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6366aded2600fe951a9c8b492d590b01d34fcc74",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

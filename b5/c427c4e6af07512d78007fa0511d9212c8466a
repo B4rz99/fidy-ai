@@ -1,0 +1,22 @@
+apps/server/cloudflare/atomic/atomic-batch.test-fixture.ts
+  h_c6d49c804e0ad2 95-114
+apps/server/cloudflare/atomic/canonical-batch.ts
+  h_c6d49c804e0ad2 87,260,849,877,927,976,987,1005,1026,1164
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 15,587-591,1558,1703,1780,2130,2182,2411,2472
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 22,409
+apps/server/cloudflare/transactions/transactions.test.ts
+  h_c6d49c804e0ad2 14,326,2862,3145,3183,3229,3287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b5c427c4e6af07512d78007fa0511d9212c8466a",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

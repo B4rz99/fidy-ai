@@ -1,0 +1,21 @@
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_f9aa3e90839713::t_884078ccf67f28 13,15,335,349,384-410,498,571,580-584,586,594-595,604,624-626,628,653-655,657,681-683,685,699,704,722,726-727,729,738-739,753,817-822,863,919-929,931,969-971,973,1002,1024,1062-1066,1151-1152
+apps/server/src/shell/ingestion/operations.ts
+  s_f9aa3e90839713::t_50e836cada2430 41-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1efbcb4375c170937646af1f664c2f2afb8fc3e1",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

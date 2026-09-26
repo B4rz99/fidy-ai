@@ -1,0 +1,26 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 1672-1678,1901-1907,2107,2287-2293,2577-2580
+apps/server/cloudflare/memory/memory.ts
+  h_c6d49c804e0ad2 22,189,385
+apps/server/cloudflare/pats/pat-management.ts
+  h_c6d49c804e0ad2 1,66
+apps/server/cloudflare/transactions/canonical-batch.ts
+  h_c6d49c804e0ad2 193-195,197
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  h_c6d49c804e0ad2 165,177,190-194,212-214
+apps/server/cloudflare/transactions/transaction-history.ts
+  h_c6d49c804e0ad2 15,88
+apps/server/cloudflare/transactions/transaction-unit.ts
+  h_c6d49c804e0ad2 133-134,140-141,392,412,604
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dabdea541bca4a2e84412c2ebc11d4cc466e2248",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

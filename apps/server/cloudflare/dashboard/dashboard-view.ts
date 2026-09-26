@@ -5,9 +5,17 @@ import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/cont
 import { Category } from "../../src/core/categories/model";
 import { Budget } from "../../src/core/budgets/model";
 import { Transaction } from "../../src/core/transactions/model";
+import {
+  type DashboardDocument,
+  type TransactionListWidget,
+  collectLayoutWidgets,
+} from "../../src/core/dashboard/model";
 import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
 import { budgetFromRow } from "../budgets/budget-row";
-import { effectiveTransactionRelation } from "../transactions/effective-transaction";
+import {
+  type EffectiveTransactionRelation,
+  effectiveTransactionRelation,
+} from "../transactions/effective-transaction";
 
 const maximumBudgets = 128;
 const maximumProjectionFacts = 8192;
@@ -63,6 +71,7 @@ const decodeFacts = (
     categories: D1Result<unknown>;
     budgets: D1Result<unknown>;
     movements: D1Result<unknown>;
+    lists: ReadonlyArray<Readonly<{ id: string; result: D1Result<unknown> }>>;
   }>
 ): Option.Option<DashboardFacts> => {
   const context = Schema.decodeUnknownOption(UserContextRow)(input.userResult.results[0]);
@@ -82,47 +91,131 @@ const decodeFacts = (
     )
   );
   const movements = Option.all(input.movements.results.map(decodeTransactionFact));
-  return Option.map(Option.all({ categories, budgets, movements }), (facts) => ({
+  const lists = Option.all(
+    input.lists.map(({ id, result }) =>
+      Option.map(
+        Option.all(result.results.map(decodeTransactionFact)),
+        (rows) => [id, rows] as const
+      )
+    )
+  );
+  return Option.map(Option.all({ categories, budgets, movements, lists }), (facts) => ({
     ...facts,
+    lists: new Map(facts.lists),
     categories: new Map(facts.categories.map((category) => [category.id, category])),
     context: context.value,
   }));
 };
 
-/** Fail closed when current facts exceed the per-request work budget; never truncate Currency totals. */
+const selectedColumns = `movement.id, movement.amount, movement.currency,
+  movement.direction, movement.counterparty, movement.notes, movement.category_id, category.label,
+  movement.occurred_at, movement.created_at, movement.revision`;
+const selectedFrom = `FROM effective_transaction movement
+  JOIN categories category ON category.id = movement.category_id`;
+
+const prepareTotals = ({
+  db,
+  relation,
+  userId,
+  needed,
+}: Readonly<{
+  db: D1Database;
+  relation: EffectiveTransactionRelation;
+  userId: string;
+  needed: boolean;
+}>): D1PreparedStatement =>
+  db
+    .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
+      WHERE movement.user_id = ? AND ? = 1
+      ORDER BY movement.occurred_at DESC, movement.created_at DESC, movement.id DESC
+      LIMIT ${maximumProjectionFacts + 1}`)
+    .bind(...relation.bindings, userId, needed ? 1 : 0);
+
+// SQLite's lower() is ASCII-only; fold Spanish capital accents explicitly for es-CO search.
+const listSearchText = [
+  ["Á", "á"],
+  ["É", "é"],
+  ["Í", "í"],
+  ["Ó", "ó"],
+  ["Ú", "ú"],
+  ["Ü", "ü"],
+  ["Ñ", "ñ"],
+].reduce(
+  (expression, [upper, lower]) => `replace(${expression}, '${upper}', '${lower}')`,
+  "coalesce(movement.counterparty, '') || ' ' || coalesce(movement.notes, '')"
+);
+
+const prepareList = ({
+  db,
+  relation,
+  userId,
+  widget,
+}: Readonly<{
+  db: D1Database;
+  relation: EffectiveTransactionRelation;
+  userId: string;
+  widget: TransactionListWidget;
+}>): D1PreparedStatement => {
+  const categories = widget.categories ?? [];
+  const filter =
+    categories.length > 0
+      ? `AND movement.category_id IN (${categories.map(() => "?").join(",")})`
+      : "";
+  const search = widget.search === undefined ? "" : `AND instr(lower(${listSearchText}), ?) > 0`;
+  return db
+    .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
+      WHERE movement.user_id = ? ${filter} ${search}
+      ORDER BY movement.occurred_at DESC, movement.created_at DESC, movement.id DESC
+      LIMIT ?`)
+    .bind(
+      ...relation.bindings,
+      userId,
+      ...categories,
+      ...(widget.search === undefined ? [] : [widget.search.toLocaleLowerCase("es-CO")]),
+      widget.limit
+    );
+};
+
+/** Fail closed when current aggregate facts exceed the interim work budget; lists always query a page. */
 // @effect-diagnostics-next-line missingPipeableSignature:off
 export const loadDashboardFacts = (
   db: D1Database,
-  userId: string
+  userId: string,
+  document: DashboardDocument
 ): Effect.Effect<Option.Option<DashboardFacts>> =>
   Effect.gen(function* () {
     const relation = effectiveTransactionRelation(userId);
-    const [userResult, categories, budgets, movements] = yield* Effect.tryPromise(() =>
-      db.batch([
-        db.prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?").bind(userId),
-        db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
-        db
-          .prepare(
-            "SELECT id, category_id, currency, cap, created_at, updated_at FROM budgets WHERE user_id = ? LIMIT 129"
-          )
-          .bind(userId),
-        db
-          .prepare(`WITH ${relation.sql} SELECT movement.id, movement.amount, movement.currency,
-        movement.direction, movement.counterparty, movement.notes, movement.category_id, category.label,
-        movement.occurred_at, movement.created_at, movement.revision
-        FROM effective_transaction movement JOIN categories category ON category.id = movement.category_id
-        WHERE movement.user_id = ? ORDER BY movement.occurred_at DESC, movement.created_at DESC, movement.id DESC
-        LIMIT ${maximumProjectionFacts + 1}`)
-          .bind(...relation.bindings, userId),
-      ])
+    const widgets = collectLayoutWidgets(document.layout);
+    const lists = widgets.filter((widget) => widget.type === "transaction-list");
+    const needsTotals = widgets.some((widget) => widget.type !== "transaction-list");
+    const [userResult, categories, budgets, movements, ...listResults] = yield* Effect.tryPromise(
+      () =>
+        db.batch([
+          db
+            .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
+            .bind(userId),
+          db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
+          db
+            .prepare(
+              "SELECT id, category_id, currency, cap, created_at, updated_at FROM budgets WHERE user_id = ? LIMIT 129"
+            )
+            .bind(userId),
+          prepareTotals({ db, relation, userId, needed: needsTotals }),
+          ...lists.map((widget) => prepareList({ db, relation, userId, widget })),
+        ])
     );
     if (
       userResult === undefined ||
       categories === undefined ||
       budgets === undefined ||
-      movements === undefined
+      movements === undefined ||
+      listResults.length !== lists.length
     ) {
       return Option.none();
     }
-    return decodeFacts({ userResult, categories, budgets, movements });
+    const listPairs = lists.flatMap((widget, index) => {
+      const result = listResults[index];
+      return result === undefined ? [] : [{ id: widget.id, result }];
+    });
+    return decodeFacts({ userResult, categories, budgets, movements, lists: listPairs });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

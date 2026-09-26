@@ -20,6 +20,10 @@ class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 /** Decoded User-owned facts supplied by the storage adapter for one Dashboard projection. */
 export type DashboardFacts = Readonly<{
   movements: ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>;
+  lists: ReadonlyMap<
+    string,
+    ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>
+  >;
   budgets: ReadonlyArray<Budget>;
   categories: ReadonlyMap<string, Category>;
   context: Readonly<{
@@ -61,22 +65,24 @@ const renderChart = (
 const renderList = (
   widget: Extract<Widget, { type: "transaction-list" }>,
   facts: DashboardFacts
-): DashboardWidgetView => {
-  const rows = selected(facts.movements, widget, Option.none()).slice(0, widget.limit);
-  return {
-    widget,
-    result: {
-      transactions: rows.map(({ transaction, category }) => ({
-        id: transaction.id,
-        money: transaction.money,
-        counterparty: transaction.counterparty,
-        direction: transaction.direction,
-        category,
-        occurredAt: transaction.occurredAt,
-      })),
-    },
-  };
-};
+): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
+  Effect.gen(function* () {
+    const rows = facts.lists.get(widget.id);
+    if (rows === undefined) return yield* new DashboardUnavailable();
+    return {
+      widget,
+      result: {
+        transactions: rows.map(({ transaction, category }) => ({
+          id: transaction.id,
+          money: transaction.money,
+          counterparty: transaction.counterparty,
+          direction: transaction.direction,
+          category,
+          occurredAt: transaction.occurredAt,
+        })),
+      },
+    };
+  });
 
 const renderMetric = (
   widget: Extract<Widget, { type: "custom-metric" }>,
@@ -175,7 +181,7 @@ const renderWidget = (
   Effect.gen(function* () {
     switch (widget.type) {
       case "transaction-list":
-        return renderList(widget, facts);
+        return yield* renderList(widget, facts);
       case "spending-chart":
         return renderChart(widget, facts, now);
       case "custom-metric":

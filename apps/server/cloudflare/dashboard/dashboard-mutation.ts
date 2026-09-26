@@ -396,7 +396,7 @@ export const findDashboardValue = ({
         encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
       });
     }
-    const facts = yield* loadDashboardFacts(db, userId);
+    const facts = yield* loadDashboardFacts(db, userId, found.value.document);
     if (Option.isNone(facts)) return Option.none();
     const view = yield* renderDashboardView(
       found.value.document,

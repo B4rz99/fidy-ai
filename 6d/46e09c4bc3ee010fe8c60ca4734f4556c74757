@@ -1,0 +1,30 @@
+apps/server/cloudflare/mutations/canonical-mutation-batch.ts
+  s_966f707575be21::t_f1064cbd4d0d80 15,87,505-508,511-516
+  s_966f707575be21::t_83a50288bfbeee 530-544,694
+  s_966f707575be21::t_1465c48836e70c 509
+  s_966f707575be21::t_7df83539226d0f 510,517,695
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_966f707575be21::t_0dbf8000c29def 2046-2048
+docs/adr/0029-atomic-batch-accountability-boundaries.md
+  s_966f707575be21::t_05e301ed7d926b 38-42
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_966f707575be21::t_092c3e7724c69f 625-626
+  s_966f707575be21::t_0d5cfac3cb9838 604-607,620-622
+  s_966f707575be21::t_6fe4c4777639c9 608-619
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6d46e09c4bc3ee010fe8c60ca4734f4556c74757",
+  "prompts": {},
+  "sessions": {
+    "s_966f707575be21": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-5611-7314-a4e5-96a59292842e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

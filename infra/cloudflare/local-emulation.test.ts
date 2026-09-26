@@ -46,9 +46,9 @@ layer(LocalEmulationServices, {
       Effect.gen(function* () {
         const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
           cwd: infrastructureRoot,
-          stderr: "ignore",
+          stderr: "inherit",
           stdin: "ignore",
-          stdout: "ignore",
+          stdout: "inherit",
         });
         yield* Effect.addFinalizer(() =>
           developmentProcess.kill({ killSignal: "SIGINT" }).pipe(Effect.ignore)

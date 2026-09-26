@@ -10,6 +10,7 @@ import { DeliveredInsight } from "../../src/shell/insights/operations";
 import {
   discoverDueInsights,
   findInsight,
+  findInsightAttempt,
   generateInsight,
   listPendingInsights,
   prepareInsightTransition,
@@ -505,6 +506,16 @@ it("rejects an under-scoped or revoked PAT before an InsightEvent write", async 
     (await db.prepare("SELECT COUNT(*) AS count FROM insight_audit").first<{ count: number }>())
       ?.count
   ).toBe(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("does not report absent delivery evidence when its authoritative table cannot be read", async () => {
+  const db = await setup();
+  const event = Option.getOrThrow(await generated(db));
+  await db.prepare("DROP TABLE insight_delivery_attempts").run();
+  await expect(
+    Effect.runPromiseExit(findInsightAttempt(db, users[0] ?? "", event.id))
+  ).resolves.toMatchObject({ _tag: "Failure" });
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

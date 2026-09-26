@@ -506,7 +506,7 @@ export const findInsightAttempt = (
   db: D1Database,
   userId: string,
   id: InsightEventId
-): Effect.Effect<Option.Option<InsightDeliveryAttempt>> =>
+): Effect.Effect<Option.Option<InsightDeliveryAttempt>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, insight_event_id, sent_at, channel, provider,
@@ -525,6 +525,5 @@ export const findInsightAttempt = (
           providerMessageId: row.provider_message_id,
         })
       )
-    ),
-    Effect.orElseSucceed(() => Option.none())
+    )
   );

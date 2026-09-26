@@ -46,9 +46,10 @@ layer(LocalEmulationServices, {
       Effect.gen(function* () {
         const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
           cwd: infrastructureRoot,
-          stderr: "inherit",
+          env: { ...Bun.env, CLOUDFLARE_ACCOUNT_ID: "00000000000000000000000000000000" },
+          stderr: "ignore",
           stdin: "ignore",
-          stdout: "inherit",
+          stdout: "ignore",
         });
         yield* Effect.addFinalizer(() =>
           developmentProcess.kill({ killSignal: "SIGINT" }).pipe(Effect.ignore)

@@ -391,12 +391,7 @@ export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome =>
   operation: outcome.operation,
   guardFacts: Option.some(outcome),
   collisionKey: Option.some(`keyword-rule:${outcome.ruleId}`),
-  capacityKey:
-    outcome.operation === "categories.createKeywordRule"
-      ? Option.some("keyword-rule-create")
-      : Option.none(),
   read: (db, userId) => findKeywordRuleValue({ db, userId, outcome }),
-  inferAbort: () => Effect.succeedNone,
   triggerRefusal: ({ subject }, kind) => {
     if (kind === "capacity") {
       return Option.some(

@@ -546,6 +546,31 @@ it("rejects a malformed layout edit without replacing the authenticated User's d
 }, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("does not treat a corrupt retained Dashboard as an absent document", async () => {
+  const db = await setup();
+  expect((await send(db, 0, "/dashboard")).status).toBe(200);
+  const before = await count(db, "dashboard_audit");
+  await db
+    .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
+    .bind("{}", users[0])
+    .run();
+  const edit = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: { op: "set-title", title: "Do not reset" },
+  });
+  expect(edit.status).toBe(503);
+  expect((await send(db, 0, "/dashboard")).status).toBe(503);
+  expect(await count(db, "dashboard_audit")).toBe(before);
+  expect(
+    await db
+      .prepare("SELECT document_json FROM dashboard_documents WHERE user_id = ?")
+      .bind(users[0])
+      .first<{ document_json: string }>()
+  ).toMatchObject({ document_json: "{}" });
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("cannot remove another User's Widget using a known WidgetId", async () => {
   const db = await setup();
   const owned = Schema.decodeUnknownSync(

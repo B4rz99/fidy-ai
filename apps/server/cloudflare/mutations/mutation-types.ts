@@ -110,11 +110,9 @@ export type OwnerOutcome = Readonly<{
   _tag: "Owner";
   operation: string;
   collisionKey: Option.Option<string>;
-  capacityKey: Option.Option<string>;
   /** Owner-specific facts retained for earlier-child guard replay inside one batch. */
   guardFacts: Option.Option<BudgetOutcome | KeywordRuleOutcome>;
   read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
-  inferAbort: (work: OwnerWork) => Effect.Effect<Option.Option<CanonicalMutationRefusal>>;
   triggerRefusal: (
     work: OwnerWork,
     kind: MutationTriggerKind

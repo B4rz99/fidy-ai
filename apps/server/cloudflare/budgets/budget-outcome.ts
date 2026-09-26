@@ -106,9 +106,7 @@ export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
   operation: outcome.operation,
   guardFacts: Option.some(outcome),
   collisionKey: Option.none(),
-  capacityKey: Option.none(),
   read: (db, userId) => findBudgetValue({ db, userId, outcome }),
-  inferAbort: () => Effect.succeedNone,
   triggerRefusal: (_work, kind) =>
     kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none(),
 });

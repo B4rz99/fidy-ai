@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
@@ -84,29 +84,37 @@ const credentialUse = (work: Work): ReadonlyArray<D1PreparedStatement> =>
       ]
     : [];
 
+class InvalidStoredDashboard extends Data.TaggedError("InvalidStoredDashboard") {}
+type StoredDashboard = Readonly<{ document: DashboardDocument; revision: number }>;
+
 /** Fetch a decoded owned document; an invalid retained row fails closed rather than resetting it. */
 export const findDashboardDocument = ({
   db,
   userId,
 }: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
-  Option.Option<Readonly<{ document: DashboardDocument; revision: number }>>
+  Option.Option<StoredDashboard>,
+  InvalidStoredDashboard
 > =>
-  Effect.tryPromise(() =>
-    db
-      .prepare("SELECT document_json, revision FROM dashboard_documents WHERE user_id = ?")
-      .bind(userId)
-      .first()
-  ).pipe(
-    Effect.map((raw) => {
-      if (raw === null) return Option.none();
-      return Option.flatMap(Schema.decodeUnknownOption(StoredDocument)(raw), (row) =>
+  Effect.tryPromise({
+    try: () =>
+      db
+        .prepare("SELECT document_json, revision FROM dashboard_documents WHERE user_id = ?")
+        .bind(userId)
+        .first(),
+    catch: () => new InvalidStoredDashboard(),
+  }).pipe(
+    Effect.flatMap((raw): Effect.Effect<Option.Option<StoredDashboard>, InvalidStoredDashboard> => {
+      if (raw === null) return Effect.succeedNone;
+      const decoded = Option.flatMap(Schema.decodeUnknownOption(StoredDocument)(raw), (row) =>
         Option.map(Schema.decodeOption(DocumentJson)(row.document_json), (document) => ({
           document,
           revision: row.revision,
         }))
       );
-    }),
-    Effect.orElseSucceed(() => Option.none())
+      return Option.isSome(decoded)
+        ? Effect.succeed(decoded)
+        : Effect.fail(new InvalidStoredDashboard());
+    })
   );
 
 const defaultDocument = (): DashboardDocument =>
@@ -250,13 +258,11 @@ const preparedDashboard = ({
   operation,
   initial,
   write,
-  revision,
 }: Readonly<{
   work: Work;
   operation: DashboardMutationOperation;
   initial: Option.Option<D1PreparedStatement>;
   write: ReadonlyArray<D1PreparedStatement>;
-  revision: number;
 }>): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
@@ -283,7 +289,7 @@ const preparedDashboard = ({
       ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
       audit(work, operation, "accepted"),
     ],
-    outcome: dashboardOutcome(operation, revision),
+    outcome: dashboardOutcome(operation),
   },
 });
 
@@ -341,42 +347,30 @@ export const prepareDashboard = ({
       operation,
       initial,
       write,
-      revision: Option.isSome(existing) ? existing.value.revision : 0,
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
-const dashboardOutcome = (
-  operation: DashboardMutationOperation,
-  expectedRevision: number
-): OwnerOutcome => ({
+const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOutcome => ({
   _tag: "Owner",
   operation,
   collisionKey: Option.some("dashboard-document"),
-  capacityKey: Option.none(),
   guardFacts: Option.none(),
   read: (db, userId) => findDashboardValue({ db, userId, operation }),
-  inferAbort: ({ db, subject, current }) =>
-    findDashboardDocument({ db, userId: subject.userId }).pipe(
-      Effect.map((found) =>
-        Option.isSome(found) && expectedRevision > 0 && found.value.revision !== expectedRevision
-          ? Option.some(
-              dashboardRefusal({
-                work: { db, subject, current },
-                operation,
-                code: "validation_failed",
-              })
-            )
-          : Option.none()
-      )
-    ),
   triggerRefusal: (_work, kind) =>
     kind === "audit"
       ? Option.some({
           code: "rate_limited",
           message: "Daily audit budget exhausted.",
           record: () => Effect.succeed("rate_limited" as const),
-          respond: () => Effect.succeed(transactionUnavailable()),
+          respond: () =>
+            Effect.succeed(
+              transactionFailure({
+                code: "rate_limited",
+                status: 429,
+                message: "Daily audit budget exhausted.",
+              })
+            ),
         })
       : Option.none(),
 });

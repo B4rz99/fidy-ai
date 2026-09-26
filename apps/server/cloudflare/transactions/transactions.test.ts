@@ -4761,6 +4761,69 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
     })
   ));
 
+it.each([
+  {
+    name: "malformed Transaction identity",
+    path: "/transactions/not-a-transaction-id",
+    payload: { expectedRevision: 0, changes: { notes: "correction" } },
+    call: correctionCall(1, "not-a-transaction-id", {
+      expectedRevision: 0,
+      changes: { notes: "correction" },
+    }),
+  },
+  {
+    name: "missing Transaction identity",
+    path: "/transactions/30000000-0000-4000-8000-000000000099",
+    payload: { expectedRevision: 0, changes: { notes: "correction" } },
+    call: correctionCall(1, "30000000-0000-4000-8000-000000000099", {
+      expectedRevision: 0,
+      changes: { notes: "correction" },
+    }),
+  },
+])(
+  "answers a $name with the same refusal and Audit in both public forms",
+  ({ path, payload, call }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const individual = yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(`https://api.fidyapp.com${path}`, {
+              method: "PUT",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            })
+          )
+        );
+        expect(individual.status).toBe(404);
+        const individualFailure = yield* Schema.decodeUnknownEffect(CallerFailure)(
+          yield* fromTestPromise(() => individual.json())
+        ).pipe(Effect.orDie);
+        expect(individualFailure.error.code).toBe("not_found");
+        const individualAudit = yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""));
+        expect(individualAudit).toEqual([{ operation: call.operation, outcome: "not_found" }]);
+
+        const batch = yield* fromTestPromise(() => sendPublicRequest(db, batchRequest(0, [call])));
+        expect(batch.status).toBe(400);
+        const refusal = yield* Schema.decodeUnknownEffect(BatchRejection)(
+          yield* fromTestPromise(() => batch.json())
+        ).pipe(Effect.orDie);
+        expect(refusal.error.code).toBe(individualFailure.error.code);
+        expect(refusal.error.failedCallIndex).toBe(0);
+        expect(refusal.error.operation).toBe(call.operation);
+        expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
+          ...individualAudit,
+          { operation: call.operation, outcome: individualFailure.error.code },
+        ]);
+      })
+    )
+);
+
 it("answers an unstable retained id the same in a batch child as on its individual route", () =>
   Effect.runPromise(
     Effect.gen(function* () {

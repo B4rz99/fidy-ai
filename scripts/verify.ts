@@ -118,6 +118,13 @@ const checks: Array<Check> = [
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
   },
+  rootCheck("unit", "Cloudflare adapter tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/server",
+    "test:cloudflare",
+  ]),
   rootCheck("unit", "Notification-email interpretation tests", [
     "bun",
     "run",

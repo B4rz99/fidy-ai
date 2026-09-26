@@ -1,0 +1,18 @@
+apps/web/package.json
+  h_c6d49c804e0ad2 30
+bun.lock
+  h_c6d49c804e0ad2 9-10,60,174,180,188,204,206,228,230,424,1812-1813,1850-1851,1854,2162-2163
+package.json
+  h_c6d49c804e0ad2 51-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0fed0b5f50d4af4d21f1d60c1b8c424c70f62283",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -7,6 +7,8 @@ import {
 } from "@fidy/server/categories";
 import { Memory, MemoryId, type MemoryOperationId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import { InsightDeliveryAttempt, InsightEvent } from "@fidy/server/insights-runtime";
+import { findInsight, findInsightAttempt, insightRefusal } from "../insights/insight-store";
 import { budgetAuditLimitRefusal, findBudgetValue } from "../budgets/budget-outcome";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
@@ -149,7 +151,10 @@ const triggerRefusal = ({
   const scoped = childCaller(subject, mutation.requiredScope);
   switch (mutation.outcome._tag) {
     case "Budget":
-      return budgetTriggerRefusal(kind);
+    case "Insight":
+    case "ForwardingAddress":
+    case "StatementSubmission":
+      return metadataTriggerRefusal(mutation.outcome._tag, kind);
     case "Transaction":
       return transactionTriggerRefusal({
         db,
@@ -168,12 +173,15 @@ const triggerRefusal = ({
         operation: mutation.outcome.operation,
         kind,
       });
-    case "ForwardingAddress":
-    case "StatementSubmission":
-      return kind === "audit"
-        ? Option.some(nonTransactionAuditLimitRefusal(mutation.outcome._tag))
-        : Option.none();
   }
+};
+
+const metadataTriggerRefusal = (
+  owner: "Budget" | "Insight" | "ForwardingAddress" | "StatementSubmission",
+  kind: TriggerKind
+): Option.Option<CanonicalMutationRefusal> => {
+  if (owner === "Budget" || owner === "Insight") return budgetTriggerRefusal(kind);
+  return kind === "audit" ? Option.some(nonTransactionAuditLimitRefusal(owner)) : Option.none();
 };
 
 /** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
@@ -316,6 +324,31 @@ const memoryInferredRefusal = ({
   );
 };
 
+const inferredInsightRefusal = ({
+  db,
+  subject,
+  current,
+  outcome,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  outcome: Extract<PreparedCanonicalMutation["outcome"], { _tag: "Insight" }>;
+}>): Effect.Effect<Option.Option<CanonicalMutationRefusal>> =>
+  findInsight(db, subject.userId, outcome.insightEventId).pipe(
+    Effect.map((event) =>
+      Option.some(
+        insightRefusal({
+          db,
+          subject,
+          current,
+          operation: outcome.operation,
+          code: Option.isNone(event) ? "not_found" : "validation_failed",
+        })
+      )
+    )
+  );
+
 /**
  * The refusal one prepared child explains after the unit rolled back, or None when the committed
  * state cannot prove it responsible. Transaction children replay their observed revision and pair
@@ -340,6 +373,8 @@ const inferredAbortRefusal = ({
   switch (outcome._tag) {
     case "Budget":
       return Effect.succeedNone;
+    case "Insight":
+      return inferredInsightRefusal({ db, subject: scoped, current, outcome });
     case "Transaction":
       return transactionInferredRefusal({
         db,
@@ -532,6 +567,35 @@ const classifyAbortedUnit = ({
     return { _tag: "Aborted" } as const;
   });
 
+const findCommittedInsight = ({
+  db,
+  userId,
+  outcome,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  outcome: Extract<PreparedCanonicalMutation["outcome"], { _tag: "Insight" }>;
+}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+  Effect.gen(function* () {
+    const event = yield* findInsight(db, userId, outcome.insightEventId);
+    if (Option.isNone(event)) return Option.none<CommittedMutationValue>();
+    if (Option.isNone(outcome.attemptId)) {
+      return Option.some({ _tag: "Insight" as const, insight: event.value });
+    }
+    const attempt = yield* findInsightAttempt(db, userId, outcome.insightEventId);
+    return Option.map(
+      Option.filter(
+        attempt,
+        (found) => Option.isSome(outcome.attemptId) && found.id === outcome.attemptId.value
+      ),
+      (deliveryAttempt) => ({
+        _tag: "DeliveredInsight" as const,
+        insight: event.value,
+        deliveryAttempt,
+      })
+    );
+  });
+
 /** Read one committed child's canonical success value, or None when the readback is incomplete. */
 const findCommittedValue = ({
   db,
@@ -545,6 +609,8 @@ const findCommittedValue = ({
   switch (mutation.outcome._tag) {
     case "Budget":
       return findBudgetValue({ db, userId, outcome: mutation.outcome });
+    case "Insight":
+      return findCommittedInsight({ db, userId, outcome: mutation.outcome });
     case "Transaction":
       return findTransactionValue({ db, userId, outcome: mutation.outcome });
     case "KeywordRule":
@@ -630,8 +696,11 @@ export const executeCanonicalMutationUnit = ({
 
 type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
 
-const existingMutationPayload = (value: ExistingCommittedValue): unknown => {
-  if ("budget" in value) return value.budget;
+type LegacyPayloadValue = Exclude<
+  ExistingCommittedValue,
+  { _tag: "Budget" | "Insight" | "DeliveredInsight" }
+>;
+const existingMutationPayload = (value: LegacyPayloadValue): unknown => {
   if ("transaction" in value) return value.transaction;
   if ("submission" in value) return value.submission;
   if ("pair" in value) return value.pair;
@@ -641,8 +710,15 @@ const existingMutationPayload = (value: ExistingCommittedValue): unknown => {
 };
 
 /** The JSON payload one committed canonical value carries as its operation's success data. */
-export const committedMutationPayload = (value: CommittedMutationValue): unknown =>
-  value._tag === "ForwardingAddress" ? value.address : existingMutationPayload(value);
+export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
+  if (value._tag === "ForwardingAddress") return value.address;
+  if (value._tag === "Budget") return value.budget;
+  if (value._tag === "Insight") return value.insight;
+  if (value._tag === "DeliveredInsight") {
+    return { insight: value.insight, deliveryAttempt: value.deliveryAttempt };
+  }
+  return existingMutationPayload(value);
+};
 
 const encodeRemovedValue = (
   value: Extract<
@@ -661,10 +737,44 @@ const encodeOtherRemovedValue = (
     ? Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id)
     : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
 
+const encodeNotificationValue = (
+  value: Extract<
+    CommittedMutationValue,
+    { _tag: "Insight" | "DeliveredInsight" | "StatementSubmission" | "Memory" }
+  >
+): Effect.Effect<unknown, Schema.SchemaError> => {
+  if (value._tag === "StatementSubmission") {
+    return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
+  }
+  if (value._tag === "Memory") {
+    return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
+  }
+  return value._tag === "Insight"
+    ? Schema.encodeEffect(Schema.toCodecJson(InsightEvent))(value.insight)
+    : Schema.encodeEffect(
+        Schema.toCodecJson(
+          Schema.Struct({
+            insight: InsightEvent,
+            deliveryAttempt: InsightDeliveryAttempt,
+          })
+        )
+      )(value);
+};
+
 const encodeEntityValue = (
   value: Exclude<
     ExistingCommittedValue,
-    { _tag: "RemovedBudget" | "RemovedKeywordRule" | "RemovedMemory" | "Budget" }
+    {
+      _tag:
+        | "RemovedBudget"
+        | "RemovedKeywordRule"
+        | "RemovedMemory"
+        | "Budget"
+        | "Memory"
+        | "StatementSubmission"
+        | "Insight"
+        | "DeliveredInsight";
+    }
   >
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   switch (value._tag) {
@@ -676,10 +786,6 @@ const encodeEntityValue = (
       return Schema.encodeEffect(Schema.toCodecJson(RestoredTransactionPair))(value.pair);
     case "KeywordRule":
       return Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(value.rule);
-    case "Memory":
-      return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
-    case "StatementSubmission":
-      return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }
 };
 
@@ -688,6 +794,9 @@ const encodeExistingValue = (
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   if ("id" in value) return encodeRemovedValue(value);
   if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
+  if ("insight" in value || "submission" in value || "memory" in value) {
+    return encodeNotificationValue(value);
+  }
   return encodeEntityValue(value);
 };
 

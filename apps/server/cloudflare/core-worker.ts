@@ -16,7 +16,9 @@ import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
+import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
+import { listPendingInsights } from "./insights/insight-store";
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
 import { budgetRefusal } from "./budgets/budget-outcome";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
@@ -994,6 +996,10 @@ const memoryMutationResponse = (
   return forgetMemoryResponse({ request, environment, subject });
 };
 
+const insightBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 2000,
+});
 const budgetBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2000,
@@ -1424,6 +1430,62 @@ const transactionResponse = (
   return Option.none();
 };
 
+const insightRoutePosition = -2;
+/** Canonical Insight reads and User-coordinated lifecycle calls share the same D1 owner. */
+const insightResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    subject: TransactionCaller;
+    operation: CatalogOperation;
+  }>
+): Option.Option<Effect.Effect<Response>> => {
+  const { request, environment, operation, subject } = input;
+  if (operation.id === "insights.listPendingInsights") {
+    return Option.some(
+      listPendingInsights({ db: environment.DB, subject }).pipe(Effect.withSpan(operation.id))
+    );
+  }
+  if (
+    operation.id !== "insights.markInsightDelivered" &&
+    operation.id !== "insights.markInsightRead" &&
+    operation.id !== "insights.dismissInsight"
+  ) {
+    return Option.none();
+  }
+  return Option.some(
+    Effect.gen(function* () {
+      const insightPathId = new URL(request.url).pathname.split("/").at(insightRoutePosition) ?? "";
+      const id = Schema.decodeOption(InsightEventId)(insightPathId);
+      if (Option.isNone(id)) {
+        return yield* sendToCoordinator({
+          environment,
+          subject,
+          work: ownerCall(operation.id, { params: { id: insightPathId } }),
+        });
+      }
+      if (operation.id === "insights.markInsightDelivered") {
+        const payload = yield* Effect.tryPromise(() =>
+          boundedJsonBody(request, insightBodyPolicy, Schema.toCodecJson(DeliveryEvidenceInput))
+        );
+        return yield* sendToCoordinator({
+          environment,
+          subject,
+          work: ownerCall(operation.id, {
+            params: { id: id.value },
+            payload: Option.getOrElse(payload, () => ({})),
+          }),
+        });
+      }
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: ownerCall(operation.id, { params: { id: id.value } }),
+      });
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
+  );
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1452,8 +1514,10 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const ownerResponse = Option.orElse(budgetResponse(input), () =>
-    Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
+  const ownerResponse = Option.orElse(insightResponse(input), () =>
+    Option.orElse(budgetResponse(input), () =>
+      Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
+    )
   );
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
   const transaction = transactionResponse(input);

@@ -59,6 +59,11 @@
       "import": "./src/shell/memory/cloudflare-routes.ts",
       "default": "./src/shell/memory/cloudflare-routes.ts"
     },
+    "./insights-runtime": {
+      "types": "./src/core/insights/model.ts",
+      "import": "./src/core/insights/model.ts",
+      "default": "./src/core/insights/model.ts"
+    },
     "./budgets-runtime": {
       "types": "./src/shell/budgets/runtime.ts",
       "import": "./src/shell/budgets/runtime.ts",

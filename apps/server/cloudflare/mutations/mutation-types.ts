@@ -7,6 +7,12 @@ import type {
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import type {
+  DeliveryAttemptId,
+  InsightDeliveryAttempt,
+  InsightEvent,
+  InsightEventId,
+} from "@fidy/server/insights-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -96,6 +102,15 @@ export type BudgetOutcome = Readonly<{
 
 export type CanonicalMutationOutcome =
   | BudgetOutcome
+  | Readonly<{
+      _tag: "Insight";
+      operation:
+        | "insights.markInsightDelivered"
+        | "insights.markInsightRead"
+        | "insights.dismissInsight";
+      insightEventId: InsightEventId;
+      attemptId: Option.Option<DeliveryAttemptId>;
+    }>
   | TransactionOutcome
   | KeywordRuleOutcome
   | MemoryOutcome
@@ -129,6 +144,12 @@ export type PreparedCanonicalMutation = Readonly<{
 
 /** One canonical success value an owner read back after the unit committed. */
 export type CommittedMutationValue =
+  | Readonly<{ _tag: "Insight"; insight: InsightEvent }>
+  | Readonly<{
+      _tag: "DeliveredInsight";
+      insight: InsightEvent;
+      deliveryAttempt: InsightDeliveryAttempt;
+    }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
   | Readonly<{ _tag: "Transaction"; transaction: StoredTransaction }>

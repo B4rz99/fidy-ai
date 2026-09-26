@@ -1,0 +1,19 @@
+CODING_STANDARDS.md
+  s_a9532f7c32d14b::t_0318c59483495d 254-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e1461016148aa2db4a5f4a7f8fb9bfde08376206",
+  "prompts": {},
+  "sessions": {
+    "s_a9532f7c32d14b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db50-95ce-775a-981e-d220c1f840c2",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

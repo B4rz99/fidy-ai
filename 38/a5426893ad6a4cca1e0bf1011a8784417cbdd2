@@ -1,0 +1,23 @@
+apps/server/cloudflare/ingestion/forwarding-address.ts
+  s_966f707575be21::t_96e4fda0eec35c 4,140
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_966f707575be21::t_db04a8e9854a04 27,583-597,613-628
+  s_966f707575be21::t_bd1c0292906fd1 631-632
+  s_966f707575be21::t_b79e123d112ad4 629-630
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "38a5426893ad6a4cca1e0bf1011a8784417cbdd2",
+  "prompts": {},
+  "sessions": {
+    "s_966f707575be21": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-5611-7314-a4e5-96a59292842e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

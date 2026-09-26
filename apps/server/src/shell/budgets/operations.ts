@@ -95,7 +95,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Replace a Budget's Category and positive cap. Its Currency is immutable; changing Category resets current-month alert marks."
+        "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched."
       )
       .annotateMerge(destructiveWrite)
   )

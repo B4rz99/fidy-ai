@@ -215,6 +215,47 @@ const request = (
         }
   );
 };
+// @effect-diagnostics-next-line asyncFunction:off
+const seedPAT = async (
+  db: D1Database,
+  input: Readonly<{ token: string; scope: "read" | "write"; id: string }>
+): Promise<void> => {
+  const { token, scope, id } = input;
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  await db
+    .prepare(`INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json, lifetime_days,
+    created_at_ms, issued_at_ms, expires_at_ms, request_id)
+    VALUES (?, ?, ?, ?, 'Budget security fixture', ?, 7, ?, ?, ?, ?)`)
+    .bind(
+      id,
+      users[0],
+      token.slice(4, 12),
+      await digest(token),
+      JSON.stringify([scope]),
+      current,
+      current,
+      current + 7 * 86400000,
+      id.replace("8000", "9000")
+    )
+    .run();
+};
+const patRequest = (
+  token: string,
+  path: string,
+  ...args: [method?: string, body?: object]
+): Request => {
+  const [method = "GET", body] = args;
+  return new Request(`https://api.fidyapp.com${path}`, {
+    method,
+    headers: {
+      origin: "https://app.fidyapp.com",
+      authorization: `Bearer ${token}`,
+      "x-provider-id": users[0] ?? "",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+};
 const payload = (cap = "100"): object => ({
   categoryId: category,
   cap: { amount: cap, currency: "COP" },
@@ -333,6 +374,9 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
   expect(
     (await capture(0, "80.01", "COP", "outflow", DateTime.formatIso(period.from))).status
   ).toBe(201);
+  expect(
+    (await capture(0, "19.98", "COP", "outflow", DateTime.formatIso(period.from))).status
+  ).toBe(201);
   expect((await capture(0, "5", "USD", "outflow", DateTime.formatIso(period.from))).status).toBe(
     201
   );
@@ -344,13 +388,26 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
   );
   const before = DateTime.makeUnsafe(period.from.epochMilliseconds - 1);
   expect((await capture(0, "5", "COP", "outflow", DateTime.formatIso(before))).status).toBe(201);
+  // Capture rejects future Transactions. Seed that boundary to exercise the canonical GET projection.
+  await db
+    .prepare(`INSERT INTO transactions
+    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    VALUES (?, ?, '900', 'COP', 'outflow', ?, ?, ?)`)
+    .bind(
+      "30000000-0000-4000-8000-000000000093",
+      users[0],
+      category,
+      DateTime.formatIso(period.to),
+      DateTime.formatIso(DateTime.nowUnsafe())
+    )
+    .run();
   const response = await send(db, request(0, "/budget-status?timeZone=America%2FBogota"));
   expect(response.status).toBe(200);
   const report = Schema.decodeUnknownSync(Report)(await response.json());
   expect(report.data.statuses).toHaveLength(1);
   const [first] = report.data.statuses;
   if (first === undefined) throw new Error("Budget status missing");
-  expect(encodeMoneyAmount(first.spent.amount)).toBe("80.01");
+  expect(encodeMoneyAmount(first.spent.amount)).toBe("99.99");
   const other = await send(db, request(1, "/budget-status?timeZone=America%2FBogota"));
   expect(other.status).toBe(200);
   expect(Schema.decodeUnknownSync(Report)(await other.json()).data.statuses).toEqual([]);
@@ -486,3 +543,38 @@ it("blocks a correcting mutation until its versioned work backlog has drained", 
     .all<{ threshold: number }>();
   expect(alerts.results.map((row) => row.threshold)).toEqual([80, 100]);
 }, 30000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure or mutation", async () => {
+  const db = await setup();
+  const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
+  const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
+  await seedPAT(db, {
+    token: readToken,
+    scope: "read",
+    id: "40000000-0000-4000-8000-000000000031",
+  });
+  await seedPAT(db, {
+    token: writeToken,
+    scope: "write",
+    id: "40000000-0000-4000-8000-000000000032",
+  });
+  expect((await send(db, patRequest(readToken, "/budgets", "POST", payload()))).status).toBe(403);
+  const created = await send(db, request(0, "/budgets", "POST", payload()));
+  expect(created.status).toBe(201);
+  const owner = Schema.decodeUnknownSync(Created)(await created.json()).data;
+  expect((await send(db, patRequest(readToken, `/budgets/${owner.id}`, "DELETE"))).status).toBe(
+    403
+  );
+  const denied = await send(db, patRequest(writeToken, `/budgets/${owner.id}`));
+  expect(denied.status).toBe(403);
+  expect(
+    (await send(db, patRequest(writeToken, "/budget-status?timeZone=America%2FBogota"))).status
+  ).toBe(403);
+  expect((await send(db, request(0, `/budgets/${owner.id}`))).status).toBe(200);
+  const count = await db
+    .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
+    .bind(users[0])
+    .first<{ count: number }>();
+  expect(count?.count).toBe(1);
+});

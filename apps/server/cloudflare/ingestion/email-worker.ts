@@ -1,4 +1,4 @@
-import { Crypto, Effect } from "effect";
+import { Crypto, Data, Effect, Exit } from "effect";
 import {
   type ForwardedEmailEnvironment,
   type ForwardedEmailMessage,
@@ -7,6 +7,8 @@ import {
   receiveForwardedEmail,
   sweepForwardedEmail,
 } from "./forwarded-email";
+
+class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
 
 /** Dedicated Email Routing target: no fetch handler and no public HTTP ingress. */
 export default {
@@ -20,10 +22,15 @@ export default {
   scheduled: (_controller: unknown, environment: ForwardedEmailEnvironment): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* sweepForwardedEmail(environment).pipe(Effect.withSpan("forwarded-email.sweep"));
-        yield* dispatchForwardedEmail(environment).pipe(
-          Effect.withSpan("forwarded-email.dispatch")
+        const sweep = yield* Effect.exit(
+          sweepForwardedEmail(environment).pipe(Effect.withSpan("forwarded-email.sweep"))
         );
+        const dispatch = yield* Effect.exit(
+          dispatchForwardedEmail(environment).pipe(Effect.withSpan("forwarded-email.dispatch"))
+        );
+        if (Exit.isFailure(sweep) || Exit.isFailure(dispatch)) {
+          return yield* new EmailScheduleUnavailable();
+        }
       })
     ),
 };

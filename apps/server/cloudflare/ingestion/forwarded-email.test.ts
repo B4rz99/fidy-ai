@@ -1,7 +1,9 @@
-import { Clock, Data, Effect } from "effect";
+import { Clock, Data, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import emailWorker from "./email-worker";
+import { processForwardedEmail } from "./forwarded-email-processing";
+import { listStatementNeedsReviewItems } from "./statement-review";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
@@ -45,13 +47,29 @@ const setup = Effect.fn(function* () {
     db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
     CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);
-    CREATE TABLE web_sessions (id TEXT PRIMARY KEY);
+    CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
     CREATE TABLE statement_submission_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE transaction_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);`)
+    CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE categories (id TEXT PRIMARY KEY);
+    INSERT INTO categories (id) VALUES ('10000000-0000-4000-8000-000000000016');
+    CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE(user_id, id));
+    CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT);
+    CREATE TABLE statement_submissions (id TEXT PRIMARY KEY);
+    CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
+    CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE statement_needs_review (id TEXT PRIMARY KEY, user_id TEXT, submission_id TEXT, record_number INTEGER, reason TEXT, original_evidence TEXT, issues TEXT, status TEXT, evidence_expires_at_ms INTEGER, created_at_ms INTEGER, service_market TEXT, locale TEXT, time_zone TEXT, source_format TEXT, parser_revision TEXT, extractor_revision TEXT);`)
   );
+  for (const action of ["UPDATE", "DELETE"]) {
+    yield* wait(() =>
+      db
+        .prepare(`CREATE TRIGGER source_attestation_no_${action.toLowerCase()}
+      BEFORE ${action} ON source_attestations BEGIN SELECT RAISE(ABORT, 'attestation_append_only'); END`)
+        .run()
+    );
+  }
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],
     ["statement_submission_audit_no_delete", "DELETE", "statement_submission_audit"],
@@ -77,6 +95,15 @@ const setup = Effect.fn(function* () {
     Bun.file(new URL("../migrations/0017_forwarded_email.sql", import.meta.url)).text()
   );
   for (const statement of migration
+    .replace(/^--.*$/gmu, "")
+    .trim()
+    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
+    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
+  }
+  const processing = yield* wait(() =>
+    Bun.file(new URL("../migrations/0018_forwarded_email_processing.sql", import.meta.url)).text()
+  );
+  for (const statement of processing
     .replace(/^--.*$/gmu, "")
     .trim()
     .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
@@ -167,6 +194,215 @@ it("rejects an unapproved envelope even when MIME names a known User, without re
       ).toHaveLength(0);
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       expect(jobs).toHaveLength(0);
+    })
+  ));
+
+it("settles a bounded known email into one Transaction and one immutable attestation on replay", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const html = yield* wait(() =>
+        Bun.file(
+          new URL(
+            "../../src/shell/ingestion/email-interpretation/formats/davibank-card/fixtures/positive.synthetic.html",
+            import.meta.url
+          )
+        ).text()
+      );
+      const bytes = new TextEncoder().encode(
+        `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
+      );
+      yield* wait(() => emailWorker.email(delivery(undefined, bytes).message, env));
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string }>()
+      );
+      expect(receipt).not.toBeNull();
+      if (receipt === null) return;
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userA,
+          receiptId: receipt.id,
+        })
+      );
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userA,
+          receiptId: receipt.id,
+        })
+      );
+      const transactions = yield* wait(() =>
+        db.prepare("SELECT id, amount FROM transactions WHERE user_id = ?").bind(userA).all()
+      );
+      expect(transactions.results).toHaveLength(1);
+      expect(transactions.results[0]).toMatchObject({ amount: "12500" });
+      const attestations = yield* wait(() =>
+        db.prepare("SELECT kind FROM source_attestations WHERE user_id = ?").bind(userA).all()
+      );
+      expect(attestations.results).toEqual([
+        expect.objectContaining({ kind: "notification-email" }),
+      ]);
+      const sample = yield* wait(() =>
+        db.prepare("SELECT structure FROM anonymized_email_samples").first<{ structure: string }>()
+      );
+      expect(sample).not.toBeNull();
+      expect(sample?.structure).not.toContain("12500");
+      expect(sample?.structure).not.toContain("bank@example.test");
+    })
+  ));
+
+it("keeps uncertain mail in visible review rather than creating a Transaction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string }>()
+      );
+      if (receipt === null) throw new Error("Expected receipt");
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userA,
+          receiptId: receipt.id,
+        })
+      );
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .bind(userA)
+          .all()
+      );
+      expect(review.results).toEqual([expect.objectContaining({ reason: "unsupported-content" })]);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM transactions").all())).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("shows only the owner's pending forwarded email in the canonical review page", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string }>()
+      );
+      if (receipt === null) throw new Error("Expected receipt");
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userA,
+          receiptId: receipt.id,
+        })
+      );
+      const digest = new Uint8Array(32);
+      const current = yield* Clock.currentTimeMillis;
+      for (const [userId, id] of [
+        [userA, "10000000-0000-4000-8000-000000000201"],
+        [userB, "10000000-0000-4000-8000-000000000202"],
+      ]) {
+        yield* wait(() =>
+          db
+            .prepare(`INSERT INTO web_sessions
+          (id, user_id, token_digest, idle_expires_at_ms, hard_expires_at_ms)
+          VALUES (?, ?, ?, ?, ?)`)
+            .bind(id, userId, digest, current + 60_000, current + 60_000)
+            .run()
+        );
+      }
+      const page = (id: string, userId: string): Effect.Effect<Response> =>
+        listStatementNeedsReviewItems({
+          database: db,
+          environment: { DB: db },
+          subject: { id, userId, digest },
+          url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
+        });
+      const own = yield* page("10000000-0000-4000-8000-000000000201", userA);
+      expect(own.status).toBe(200);
+      const ownBody: unknown = yield* wait(() => own.json());
+      expect(ownBody).toMatchObject({
+        data: [{ reason: "unsupported-content", sourceChannel: "forwarded-email" }],
+      });
+      const other = yield* page("10000000-0000-4000-8000-000000000202", userB);
+      const otherBody: unknown = yield* wait(() => other.json());
+      expect(otherBody).toMatchObject({ data: [] });
+    })
+  ));
+
+it("refuses finalization after Consent revocation without partial financial writes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string }>()
+      );
+      if (receipt === null) throw new Error("Expected receipt");
+      yield* wait(() =>
+        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+      );
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userA,
+          receiptId: receipt.id,
+        })
+      );
+      expect(
+        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
+          .results
+      ).toHaveLength(0);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_needs_review").all())).results
+      ).toHaveLength(0);
+      yield* wait(() => emailWorker.scheduled(undefined, env));
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+    })
+  ));
+
+it("does not let another User's receipt identity authorize reading or finalizing their mail", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      yield* wait(() => emailWorker.email(delivery().message, env));
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string }>()
+      );
+      if (receipt === null) throw new Error("Expected receipt");
+      yield* wait(() =>
+        processForwardedEmail({
+          DB: db,
+          EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+          userId: userB,
+          receiptId: receipt.id,
+        })
+      );
+      expect(
+        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
+          .results
+      ).toHaveLength(0);
     })
   ));
 
@@ -400,6 +636,13 @@ it("deletes expired private email while keeping a replay tombstone", () =>
         ))?.state
       ).toBe("expired");
       expect(jobs).toHaveLength(0);
+      const review = yield* wait(() =>
+        db
+          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .bind(userA)
+          .first<{ reason: string }>()
+      );
+      expect(review?.reason).toBe("processing-interrupted");
       yield* wait(() => emailWorker.email(delivery().message, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
     })

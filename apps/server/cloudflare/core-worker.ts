@@ -129,6 +129,10 @@ import {
 import { observeOperationalHealth } from "./runtime/operational-health";
 import { StatementStaging } from "./ingestion/statement-staging";
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
+import {
+  isForwardedEmailWork,
+  receiveForwardedEmailWork,
+} from "./ingestion/forwarded-email-delivery";
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
 import { listStatementNeedsReviewItems } from "./ingestion/statement-review";
 import {
@@ -186,6 +190,7 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
   Partial<
     Readonly<{
+      EMAIL_BUCKET: R2Bucket;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: Queue;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
@@ -1701,6 +1706,12 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
 };
 
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
+    if (environment.EMAIL_BUCKET === undefined) {
+      return Promise.reject(new Error("Email evidence unavailable"));
+    }
+    return receiveForwardedEmailWork(batch.messages, environment.USER_TRANSACTION_COORDINATOR);
+  }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
       return Promise.reject(new Error("Statement extraction unavailable"));

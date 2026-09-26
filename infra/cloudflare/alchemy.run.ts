@@ -218,6 +218,7 @@ export default Alchemy.Stack(
         AI: Cloudflare.Workers.AI(),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
+        EMAIL_BUCKET: emailBucket,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
@@ -260,6 +261,13 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("ForwardedEmailConsumer", {
+      queueId: emailQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {

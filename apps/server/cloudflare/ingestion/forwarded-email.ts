@@ -37,6 +37,7 @@ const maximumOutstandingUser = 100;
 const maximumOutstandingGlobal = 1000;
 const recipientPattern = /^[a-z0-9_-]{24,64}@fidyapp\.com$/u;
 const maximumSweep = 25;
+const dispatchCooldownMs = 60_000;
 const maximumHeadersSize = 16_384;
 const maximumMimeDepth = 8;
 const maximumNestedMessageDepth = 0;
@@ -156,10 +157,10 @@ export const receiveForwardedEmail = Effect.fn(function* (
   const capacity = yield* io(() =>
     environment.DB.prepare(
       `SELECT
-      (SELECT count(*) FROM forwarded_email_receipts WHERE state IN ('storing','queued')
-       AND expires_at_ms > ?) AS global_count,
-      (SELECT count(*) FROM forwarded_email_receipts WHERE state IN ('storing','queued')
-       AND user_id = ? AND expires_at_ms > ?) AS user_count`
+      (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
+       AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS global_count,
+      (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
+       AND user_id = ? AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS user_count`
     )
       .bind(now, approved.user_id, now)
       .first()
@@ -318,26 +319,30 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
     environment.DB.prepare(
       `SELECT o.receipt_id, o.user_id FROM forwarded_email_outbox o
      JOIN forwarded_email_receipts r ON r.id = o.receipt_id AND r.user_id = o.user_id
-     WHERE o.sent_at_ms IS NULL AND r.state = 'queued' AND r.expires_at_ms > ?
+     WHERE (o.sent_at_ms IS NULL OR o.sent_at_ms < ?)
+       AND r.state = 'queued' AND r.expires_at_ms > ?
+       AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes f WHERE f.receipt_id = r.id)
        AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = o.user_id)
        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = o.user_id)
      LIMIT 25`
     )
-      .bind(now)
+      .bind(now - dispatchCooldownMs, now)
       .all()
   );
   const jobs = Schema.decodeUnknownOption(Schema.Array(PendingJob))(rows.results);
   if (Option.isNone(jobs)) return yield* authorityUnavailable();
   for (const row of jobs.value) {
+    const claimed = yield* io(() =>
+      environment.DB.prepare(
+        `UPDATE forwarded_email_outbox SET sent_at_ms = ? WHERE receipt_id = ? AND user_id = ?
+       AND (sent_at_ms IS NULL OR sent_at_ms < ?)`
+      )
+        .bind(now, row.receipt_id, row.user_id, now - dispatchCooldownMs)
+        .run()
+    );
+    if (claimed.meta.changes !== 1) continue;
     yield* io(() =>
       environment.EMAIL_QUEUE.send({ receiptId: row.receipt_id, userId: row.user_id })
-    );
-    yield* io(() =>
-      environment.DB.prepare(
-        "UPDATE forwarded_email_outbox SET sent_at_ms = ? WHERE receipt_id = ? AND user_id = ? AND sent_at_ms IS NULL"
-      )
-        .bind(now, row.receipt_id, row.user_id)
-        .run()
     );
   }
 });
@@ -348,7 +353,9 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
   const rows = yield* io(() =>
     environment.DB.prepare(
       `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
-     WHERE state IN ('storing', 'queued') AND expires_at_ms <= ?
+     WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
+       OR (state = 'queued' AND EXISTS
+         (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = forwarded_email_receipts.user_id)))
      LIMIT ?`
     )
       .bind(now, maximumSweep)
@@ -357,6 +364,37 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
   const expired = Schema.decodeUnknownOption(Schema.Array(ExpiredReceipt))(rows.results);
   if (Option.isNone(expired)) return yield* authorityUnavailable();
   for (const row of expired.value) {
+    if (row.state === "queued") {
+      const reviewId = yield* emailCrypto.randomUUIDv4;
+      yield* io(() =>
+        environment.DB.batch([
+          environment.DB.prepare(`INSERT INTO forwarded_email_needs_review
+          (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
+          SELECT ?, id, user_id, 'processing-interrupted', ?, expires_at_ms
+          FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
+          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)
+          AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)`).bind(
+            reviewId,
+            now,
+            row.id,
+            row.user_id
+          ),
+          environment.DB.prepare(`INSERT INTO forwarded_email_outcomes
+          (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)
+          SELECT ?, ?, 'needs-review', NULL, ?, ?
+          WHERE EXISTS (SELECT 1 FROM forwarded_email_needs_review WHERE id = ?)
+          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes WHERE receipt_id = ?)`).bind(
+            row.id,
+            row.user_id,
+            reviewId,
+            now,
+            reviewId,
+            row.id
+          ),
+        ])
+      );
+    }
     yield* io(() => environment.EMAIL_BUCKET.delete(row.object_key));
     if (row.state === "storing") {
       // No publication exists: a later SMTP retry may claim this delivery afresh.

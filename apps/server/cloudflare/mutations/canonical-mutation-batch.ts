@@ -23,6 +23,7 @@ import {
   liveTransactionCredential,
   maximumTransactionInputBytes,
   refusedCredentialResponse,
+  rejectBatchEnvelope,
   rejectInvalidBatchInput,
   transactionNoStore,
   transactionUnavailable,
@@ -259,7 +260,7 @@ const rawChildInput = (call: CanonicalBatchCall): unknown =>
 const catalogDecision = (operation: CanonicalOperationId, index: number): CatalogDecision => {
   const catalogOperation = operationCatalog.byId.get(operation);
   if (catalogOperation === undefined) {
-    return { _tag: "Response", response: transactionUnavailable() };
+    return { _tag: "Response", response: rejectInvalidBatchInput() };
   }
   if (catalogOperation.policy.kind !== "mutation") {
     return {
@@ -432,6 +433,24 @@ const decodedDecision = (call: CanonicalBatchCall, index: number): CatalogDecisi
     : decision;
 };
 
+const unattributedOperation = (call: CanonicalBatchCall): boolean => {
+  const named = rawOperation(call);
+  return Option.isNone(named) || !operationCatalog.byId.has(named.value);
+};
+
+const rejectUnattributed = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+}>): Effect.Effect<Response> =>
+  Effect.tryPromise(() => rejectBatchEnvelope({ db, subject, current })).pipe(
+    Effect.orElseSucceed(transactionUnavailable)
+  );
+
 const prepareCall = ({
   db,
   subject,
@@ -448,7 +467,9 @@ const prepareCall = ({
   current: number;
 }>): Effect.Effect<CallStep, never, HostedInference> => {
   const decision = decodedDecision(call, index);
-  if (decision._tag === "Response") return Effect.succeed(decision);
+  if (decision._tag === "Response") {
+    return Effect.succeed(decision);
+  }
   const catalogOperation = decision.operation;
   return Effect.gen(function* () {
     const accessStep = yield* childAccessStep({ db, subject, current, catalogOperation, index });
@@ -545,7 +566,15 @@ const prepareBatch = ({
     const targets = new Set<string>();
     for (const [index, call] of calls.entries()) {
       const step = yield* prepareCall({ db, subject, call, index, current, bucket });
-      if (step._tag === "Response") return { _tag: "Response", response: step.response };
+      if (step._tag === "Response") {
+        return {
+          _tag: "Response",
+          response:
+            children.length === 0 && unattributedOperation(call)
+              ? yield* rejectUnattributed({ db, subject, current })
+              : step.response,
+        };
+      }
       if (step._tag === "CredentialRefused") {
         return { _tag: "Response", response: yield* refusedCredentialResponse({ db, subject }) };
       }
@@ -643,6 +672,15 @@ const executionResponse = ({
   }
 };
 
+const duplicateBatchResponse = (
+  calls: ReadonlyArray<CanonicalBatchCall>
+): Option.Option<Response> => {
+  const duplicate = duplicateCallIndex(calls);
+  return Option.isSome(duplicate)
+    ? Option.some(duplicateRejection(calls, duplicate.value))
+    : Option.none();
+};
+
 /**
  * Execute one decoded canonical atomic batch under live caller authority. Every child keeps the
  * individual operation's validation, authorization, domain, and metadata-only Audit decisions;
@@ -663,8 +701,8 @@ export const executeCanonicalBatch = ({
   current: number;
 }>): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
-    const duplicate = duplicateCallIndex(calls);
-    if (Option.isSome(duplicate)) return duplicateRejection(calls, duplicate.value);
+    const duplicate = duplicateBatchResponse(calls);
+    if (Option.isSome(duplicate)) return duplicate.value;
     const batch = yield* prepareBatch({ db, subject, calls, current, bucket });
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({

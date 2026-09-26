@@ -1,5 +1,9 @@
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
+import {
+  type CanonicalCapability,
+  type ErrorCode,
+  atomicBatchOperation,
+} from "@fidy/server/canonical-runtime";
 import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   type AuditedPATMutation,
@@ -340,10 +344,8 @@ export const rejectInvalidTransactionInput = ({
   });
 
 /**
- * Refuse an atomic batch whose body does not satisfy the published schemas. This is the declared
- * `ValidationFailed` failure every canonical operation exposes through the ValidationGate, not a
- * child failure: no child was named by a decodable call, so no refusal Audit is recorded and no
- * child index is fabricated.
+ * Return the batch's declared ValidationGate failure without a child index. The caller decides
+ * whether this refusal owes envelope Audit evidence before returning this response.
  */
 export const rejectInvalidBatchInput = (): Response =>
   transactionFailure({
@@ -351,6 +353,65 @@ export const rejectInvalidBatchInput = (): Response =>
     status: 400,
     message: "Invalid atomic batch input.",
   });
+
+/**
+ * Record one authenticated, pre-admission batch refusal without child attribution. This row is
+ * metadata-only and excluded from the daily canonical-work budget by the D1 audit triggers.
+ * A PAT needs a live credential and Consent, but no child scope: no child was admitted.
+ */
+const batchEnvelopeStatement = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+}>): D1PreparedStatement => {
+  if (isPATCaller(subject)) {
+    const authority = livePATCredential({ subject, current });
+    return db
+      .prepare(`INSERT INTO pat_audit (id, user_id, pat_id, operation, outcome, occurred_at_ms)
+        SELECT ?, user_id, id, ?, 'rejected', ? FROM ${authority.table} WHERE ${authority.predicate}`)
+      .bind(transactionId(), atomicBatchOperation, current, ...authority.bindings);
+  }
+  const authority = liveWebSessionAuthority({ subject, current });
+  return db
+    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, id, ?, 'validation_failed', ? FROM ${authority.table} WHERE ${authority.predicate}`)
+    .bind(transactionId(), atomicBatchOperation, current, ...authority.bindings);
+};
+
+/**
+ * Record one metadata-only envelope refusal for a live credential. Return the declared validation
+ * failure only after the row commits; otherwise answer credential refusal, the separate daily
+ * envelope rate limit, or unavailable without claiming evidence was recorded.
+ */
+export const rejectBatchEnvelope = (
+  input: Readonly<{
+    db: D1Database;
+    subject: TransactionCaller;
+    current: number;
+  }>
+): Promise<Response> => {
+  const { db, subject } = input;
+  return Promise.resolve()
+    .then(() => batchEnvelopeStatement(input).run())
+    .then((result) =>
+      result.meta.changes === 1
+        ? rejectInvalidBatchInput()
+        : refusedTransactionWork({ db, subject })
+    )
+    .catch((cause: unknown) =>
+      String(cause).includes("batch_envelope_limit")
+        ? transactionFailure({
+            code: "rate_limited",
+            status: 429,
+            message: "Atomic batch refusal budget exhausted.",
+          })
+        : transactionUnavailable()
+    );
+};
 
 /** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
 export const refusedPATWork = ({

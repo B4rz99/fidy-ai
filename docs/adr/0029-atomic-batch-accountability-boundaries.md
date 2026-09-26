@@ -15,9 +15,15 @@ is recorded as that child's metadata-only refusal AuditLogEntry under the exact 
 caller presented. A child that commits contributes its success AuditLogEntry inside the same D1
 unit.
 
-Refusals decided before admission are request or policy decisions answered on the declared failure
-contract and record nothing: a body that fails the published request envelope (absent, empty, or
-oversized `calls`), a child that names no canonical operation, a child whose operation has no batch
+A body that fails the published request envelope (absent, empty, or oversized `calls`), or a child
+that names no canonical operation, writes one metadata-only refusal AuditLogEntry naming the batch
+operation when the WebSession or PAT credential remains live. These pre-admission envelope rows
+are excluded from the stable-User daily canonical-work budget, so malformed probing cannot spend
+its 256 child-work slots. A separate atomic D1 trigger caps these envelope rows at 256 per
+stable User per UTC day across session and PAT callers; after that, requests answer `rate_limited`
+without another row. They carry no input or child success; the PAT envelope needs no child
+scope, only a live credential and Consent. A batch that already writes a child refusal never writes
+an envelope row. Other pre-admission refusals record nothing: a child whose operation has no batch
 adapter, a child below the required tier, a child outside the caller's credential scope (the same
 `scope_missing` decision the individual ingress makes, reported through the batch failure
 contract), a child whose encoded input outgrows the per-child body bound an individual call of that
@@ -26,9 +32,9 @@ staging admission cannot be multiplied), and a repeated `callId`. None of these 
 the caller was allowed to do, and auditing them would let garbage requests consume the caller's own
 daily audit budget.
 
-The batch operation itself does not write a second envelope AuditLogEntry. Its accountability is
-exactly the union of its children's; a batch-level row would duplicate evidence, require widening
-`transaction_audit`'s closed operation CHECK for a non-domain operation id, and add a budget lever.
+The batch operation writes no second row when a child refusal was recorded. The session audit
+vocabulary includes the batch id for the envelope-only case; the shared budget triggers exclude
+that operation in both session and PAT audit tables.
 
 ## Attribution stops at what the unit can observe
 
@@ -54,15 +60,16 @@ the envelope. `CatalogOperation.input` stays type-erased for generic catalog too
 Individual and batch execution owe each other the same decisions: authorization, AccessTier,
 confirmation before this seam, domain checks, refusal codes, and audit obligations. A new batch
 child cannot ship until its owner can execute it individually. The accepted residuals are explicit:
-no batch-envelope AuditLogEntry, an unattributable abort answering `unavailable`, AccessTier
+one envelope AuditLogEntry only for a refusal naming no admissible child, an unattributable abort answering `unavailable`, AccessTier
 resolved from catalog policy with a fail-closed `free` default until a Subscription adapter resolves
 tiers at this seam, and no intra-batch reads (children are prepared before the unit, so a child
 cannot correct a Transaction an earlier child creates).
 
 ## Rejected alternatives
 
-Auditing the batch envelope as its own canonical operation: redundant with per-child rows, a new
-budget lever, and a migration for an operation id no domain owner writes.
+Auditing every batch envelope in addition to its children: redundant with per-child rows and a
+budget lever. Issue #794 adopted the narrower deferred alternative A2: only a pre-admission
+refusal with no attributable child earns an envelope row, excluded from canonical-work counts.
 
 Deriving typed child inputs from the catalog: parameterizing `CatalogOperation.input` across the
 whole catalog to serve two consumers, instead of keeping the input codec beside the operation that

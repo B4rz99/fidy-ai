@@ -19,7 +19,9 @@ A body that fails the published request envelope (absent, empty, or oversized `c
 that names no canonical operation, writes one metadata-only refusal AuditLogEntry naming the batch
 operation when the WebSession or PAT credential remains live. These pre-admission envelope rows
 are excluded from the stable-User daily canonical-work budget, so malformed probing cannot spend
-its 256 child-work slots. They carry no input or child success; the PAT envelope needs no child
+its 256 child-work slots. A separate atomic D1 trigger caps these envelope rows at 256 per
+stable User per UTC day across session and PAT callers; after that, requests answer `rate_limited`
+without another row. They carry no input or child success; the PAT envelope needs no child
 scope, only a live credential and Consent. A batch that already writes a child refusal never writes
 an envelope row. Other pre-admission refusals record nothing: a child whose operation has no batch
 adapter, a child below the required tier, a child outside the caller's credential scope (the same

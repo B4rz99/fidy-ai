@@ -27,6 +27,30 @@ CREATE TRIGGER transaction_audit_no_delete BEFORE DELETE ON transaction_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 -- The five canonical-work triggers count only child work. Envelope refusals cannot spend a
 -- User's daily 256 entries by naming no work; their writes remain append-only and metadata-only.
+-- A separate per-User UTC-day envelope cap prevents unlimited storage writes from malformed
+-- requests. Both credential classes share it, and D1 evaluates it atomically on each insert.
+CREATE TRIGGER session_batch_envelope_daily_budget BEFORE INSERT ON transaction_audit
+WHEN NEW.operation = 'operations.executeAtomicBatch'
+ AND (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id
+      AND operation = 'operations.executeAtomicBatch'
+      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
+      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000)
+   + (SELECT COUNT(*) FROM pat_audit WHERE user_id = NEW.user_id
+      AND operation = 'operations.executeAtomicBatch'
+      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
+      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
+BEGIN SELECT RAISE(ABORT, 'batch_envelope_limit'); END;
+CREATE TRIGGER pat_batch_envelope_daily_budget BEFORE INSERT ON pat_audit
+WHEN NEW.operation = 'operations.executeAtomicBatch'
+ AND (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id
+      AND operation = 'operations.executeAtomicBatch'
+      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
+      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000)
+   + (SELECT COUNT(*) FROM pat_audit WHERE user_id = NEW.user_id
+      AND operation = 'operations.executeAtomicBatch'
+      AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
+      AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
+BEGIN SELECT RAISE(ABORT, 'batch_envelope_limit'); END;
 CREATE TRIGGER statement_audit_daily_budget BEFORE INSERT ON statement_submission_audit
 WHEN (SELECT COUNT(*) FROM statement_submission_audit WHERE user_id = NEW.user_id
       AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000

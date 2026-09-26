@@ -400,7 +400,15 @@ export const rejectBatchEnvelope = (
         ? rejectInvalidBatchInput()
         : refusedTransactionWork({ db, subject })
     )
-    .catch(() => transactionUnavailable());
+    .catch((cause: unknown) =>
+      String(cause).includes("batch_envelope_limit")
+        ? transactionFailure({
+            code: "rate_limited",
+            status: 429,
+            message: "Atomic batch refusal budget exhausted.",
+          })
+        : transactionUnavailable()
+    );
 };
 
 /** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */

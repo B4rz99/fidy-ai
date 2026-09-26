@@ -5466,6 +5466,92 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
           )
         )
       ).toBe(5);
+      // An independent daily envelope cap bounds storage even though refusals do not spend
+      // canonical child-work capacity. Its trigger counts both session and PAT rows.
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE seq(n) AS
+        (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 250)
+        INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+        SELECT 'envelope-cap-' || n, ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ? FROM seq`)
+          .bind(users[0], sessions[0], current)
+          .run()
+      );
+      const capped = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch({ calls: [] })));
+      expect(capped.status).toBe(429);
+      expect(
+        (yield* Schema.decodeUnknownEffect(CallerFailure)(
+          yield* fromTestPromise(() => capped.json())
+        ).pipe(Effect.orDie)).error.code
+      ).toBe("rate_limited");
+      expect(
+        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+      ).toBe(256);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'operations.executeAtomicBatch'"
+          )
+        )
+      ).toBe(256);
+      const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read"], current });
+      const cappedPAT = yield* fromTestPromise(() =>
+        sendPublicRequest(db, bearerRequest(0, token, []))
+      );
+      expect(cappedPAT.status).toBe(429);
+      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toEqual([]);
+    })
+  ));
+
+it("does not misattribute a repeated callId with a malformed later operation to the envelope", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const first = transactionCall(1, input());
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              calls: [first, { callId: first.callId, operation: "not.canonical", input: {} }],
+            }),
+          })
+        )
+      );
+      expect(response.status).toBe(400);
+      const later = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/operations/atomic-batch", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              calls: [first, { callId: batchCallId(2), operation: "not.canonical", input: {} }],
+            }),
+          })
+        )
+      );
+      expect(later.status).toBe(400);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+      ).toBe(0);
     })
   ));
 

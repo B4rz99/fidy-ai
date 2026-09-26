@@ -1,27 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import {
   CanonicalOperationId,
-  CreateBudgetCanonicalInput,
-  CreateTransactionCanonicalInput,
-  DeleteBudgetCanonicalInput,
-  LinkTransactionsCanonicalInput,
-  UnlinkTransactionsCanonicalInput,
-  UpdateBudgetCanonicalInput,
-  UpdateTransactionCanonicalInput,
   getAtomicBatchChildIds,
+  getCanonicalOperationInput,
 } from "@fidy/server/canonical-runtime";
 import { TransactionId } from "@fidy/server/transactions-runtime";
-import {
-  CreateKeywordRuleCanonicalInput,
-  DeleteKeywordRuleCanonicalInput,
-  UpdateKeywordRuleCanonicalInput,
-} from "@fidy/server/categories";
-import {
-  ForgetCanonicalInput,
-  type MemoryOperationId,
-  RememberCanonicalInput,
-  ReviseCanonicalInput,
-} from "@fidy/server/memory-runtime";
+import { type MemoryOperationId } from "@fidy/server/memory-runtime";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import { statementMutationAdapter } from "./statement-mutation";
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
@@ -170,8 +154,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("budgets.createBudget"),
     {
-      prepare: decodeAndPrepare(CreateBudgetCanonicalInput, ({ payload }, work) =>
-        prepareCreateBudget({ db: work.db, subject: work.subject, payload, current: work.current })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("budgets.createBudget"),
+        ({ payload }, work) =>
+          prepareCreateBudget({
+            db: work.db,
+            subject: work.subject,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_CREATED),
       invalidRefusal: (work) =>
@@ -187,14 +178,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("budgets.updateBudget"),
     {
-      prepare: decodeAndPrepare(UpdateBudgetCanonicalInput, ({ params, payload }, work) =>
-        prepareUpdateBudget({
-          db: work.db,
-          subject: work.subject,
-          id: params.id,
-          payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("budgets.updateBudget"),
+        ({ params, payload }, work) =>
+          prepareUpdateBudget({
+            db: work.db,
+            subject: work.subject,
+            id: params.id,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: (work) =>
@@ -210,13 +203,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("budgets.deleteBudget"),
     {
-      prepare: decodeAndPrepare(DeleteBudgetCanonicalInput, ({ params }, work) =>
-        prepareDeleteBudget({
-          db: work.db,
-          subject: work.subject,
-          id: params.id,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("budgets.deleteBudget"),
+        ({ params }, work) =>
+          prepareDeleteBudget({
+            db: work.db,
+            subject: work.subject,
+            id: params.id,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: (work) =>
@@ -234,13 +229,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("transactions.createTransaction"),
     {
-      prepare: decodeAndPrepare(CreateTransactionCanonicalInput, ({ payload }, work) =>
-        prepareCapture({
-          db: work.db,
-          subject: work.subject,
-          input: payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.createTransaction"),
+        ({ payload }, work) =>
+          prepareCapture({
+            db: work.db,
+            subject: work.subject,
+            input: payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_CREATED),
       invalidRefusal: transactionInvalidRefusal("transactions.createTransaction"),
@@ -249,14 +246,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("transactions.updateTransaction"),
     {
-      prepare: decodeAndPrepare(UpdateTransactionCanonicalInput, ({ params, payload }, work) =>
-        prepareCorrection({
-          db: work.db,
-          subject: work.subject,
-          id: params.id,
-          input: payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.updateTransaction"),
+        ({ params, payload }, work) =>
+          prepareCorrection({
+            db: work.db,
+            subject: work.subject,
+            id: params.id,
+            input: payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: correctionInvalidRefusal,
@@ -265,13 +264,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("transactions.linkTransactions"),
     {
-      prepare: decodeAndPrepare(LinkTransactionsCanonicalInput, ({ payload }, work) =>
-        prepareLink({
-          db: work.db,
-          subject: work.subject,
-          pair: payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.linkTransactions"),
+        ({ payload }, work) =>
+          prepareLink({
+            db: work.db,
+            subject: work.subject,
+            pair: payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: transactionInvalidRefusal("transactions.linkTransactions"),
@@ -280,13 +281,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("transactions.unlinkTransactions"),
     {
-      prepare: decodeAndPrepare(UnlinkTransactionsCanonicalInput, ({ payload }, work) =>
-        prepareUnlink({
-          db: work.db,
-          subject: work.subject,
-          pair: payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.unlinkTransactions"),
+        ({ payload }, work) =>
+          prepareUnlink({
+            db: work.db,
+            subject: work.subject,
+            pair: payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: transactionInvalidRefusal("transactions.unlinkTransactions"),
@@ -295,13 +298,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("categories.createKeywordRule"),
     {
-      prepare: decodeAndPrepare(CreateKeywordRuleCanonicalInput, ({ payload }, work) =>
-        prepareCreateKeywordRule({
-          db: work.db,
-          subject: work.subject,
-          payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("categories.createKeywordRule"),
+        ({ payload }, work) =>
+          prepareCreateKeywordRule({
+            db: work.db,
+            subject: work.subject,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_CREATED),
       invalidRefusal: keywordRuleInvalidRefusal,
@@ -310,14 +315,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("categories.updateKeywordRule"),
     {
-      prepare: decodeAndPrepare(UpdateKeywordRuleCanonicalInput, ({ params, payload }, work) =>
-        prepareUpdateKeywordRule({
-          db: work.db,
-          subject: work.subject,
-          ruleId: params.id,
-          payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("categories.updateKeywordRule"),
+        ({ params, payload }, work) =>
+          prepareUpdateKeywordRule({
+            db: work.db,
+            subject: work.subject,
+            ruleId: params.id,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: keywordRuleInvalidRefusal,
@@ -326,13 +333,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("categories.deleteKeywordRule"),
     {
-      prepare: decodeAndPrepare(DeleteKeywordRuleCanonicalInput, ({ params }, work) =>
-        prepareDeleteKeywordRule({
-          db: work.db,
-          subject: work.subject,
-          ruleId: params.id,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("categories.deleteKeywordRule"),
+        ({ params }, work) =>
+          prepareDeleteKeywordRule({
+            db: work.db,
+            subject: work.subject,
+            ruleId: params.id,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: keywordRuleInvalidRefusal,
@@ -341,13 +350,15 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("memory.remember"),
     {
-      prepare: decodeAndPrepare(RememberCanonicalInput, ({ payload }, work) =>
-        prepareRemember({
-          db: work.db,
-          subject: work.subject,
-          payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("memory.remember"),
+        ({ payload }, work) =>
+          prepareRemember({
+            db: work.db,
+            subject: work.subject,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_CREATED),
       invalidRefusal: memoryInvalidRefusal("memory.remember"),
@@ -356,14 +367,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("memory.revise"),
     {
-      prepare: decodeAndPrepare(ReviseCanonicalInput, ({ params, payload }, work) =>
-        prepareRevise({
-          db: work.db,
-          subject: work.subject,
-          id: params.id,
-          payload,
-          current: work.current,
-        })
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("memory.revise"),
+        ({ params, payload }, work) =>
+          prepareRevise({
+            db: work.db,
+            subject: work.subject,
+            id: params.id,
+            payload,
+            current: work.current,
+          })
       ),
       present: present(HTTP_OK),
       invalidRefusal: memoryInvalidRefusal("memory.revise"),
@@ -372,7 +385,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   [
     CanonicalOperationId.make("memory.forget"),
     {
-      prepare: decodeAndPrepare(ForgetCanonicalInput, ({ params }, work) =>
+      prepare: decodeAndPrepare(getCanonicalOperationInput("memory.forget"), ({ params }, work) =>
         prepareForget({
           db: work.db,
           subject: work.subject,

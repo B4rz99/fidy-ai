@@ -32,13 +32,10 @@ export {
 } from "./list-categories";
 export {
   CategoriesGroup,
-  CreateKeywordRuleCanonicalInput,
-  DeleteKeywordRuleCanonicalInput,
   KeywordRuleResponse,
   ListCategoriesResponse,
   ListKeywordRulesResponse,
   RemovedKeywordRuleResponse,
-  UpdateKeywordRuleCanonicalInput,
 } from "./operations";
 export { toApiFailure } from "./errors";
 export { categoryRowsQuery, categoryResponseFromRows } from "./query";

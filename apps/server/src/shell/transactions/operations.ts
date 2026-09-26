@@ -43,21 +43,6 @@ const destructiveWrite = operationPolicy({
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
 const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
 
-/** The canonical operation input of `transactions.createTransaction`, owned beside its endpoint. */
-export const CreateTransactionCanonicalInput = Schema.Struct({ payload: CreateTransactionInput });
-
-/** The canonical operation input of `transactions.updateTransaction`, owned beside its endpoint. */
-export const UpdateTransactionCanonicalInput = Schema.Struct({
-  params: UpdateTransactionParams,
-  payload: UpdateTransactionInput,
-});
-
-/** The canonical operation input of `transactions.linkTransactions`, owned beside its endpoint. */
-export const LinkTransactionsCanonicalInput = Schema.Struct({ payload: TransactionPairInput });
-
-/** The canonical operation input of `transactions.unlinkTransactions`, owned beside its endpoint. */
-export const UnlinkTransactionsCanonicalInput = Schema.Struct({ payload: TransactionPairInput });
-
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
 

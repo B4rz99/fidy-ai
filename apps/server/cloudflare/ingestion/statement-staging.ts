@@ -34,7 +34,7 @@ import {
   Schema,
 } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
-import { sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
@@ -1282,7 +1282,7 @@ export const recordStatementRefusal = (
       results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
     )
     .catch((cause: unknown) =>
-      sharedAuditLimitRefusal(cause) ? ("rate_limited" as const) : ("unavailable" as const)
+      refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
     );
 
 type LostPublication =

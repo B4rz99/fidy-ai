@@ -7,7 +7,8 @@ import {
 } from "@fidy/server/statement-staging";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Option, Result, Schema } from "effect";
-import { dailyAuditExhausted, sharedAuditLimitRefusal } from "../atomic/daily-canonical-budget";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { currentMillis } from "../pats/pat-shared";
@@ -422,9 +423,7 @@ export const commitReadAudit = (
     );
     if (Result.isFailure(outcome)) {
       return Option.some(
-        sharedAuditLimitRefusal(outcome.failure.cause)
-          ? statementDailyBudgetResponse()
-          : unavailable()
+        refusedByAuditBudget(outcome.failure.cause) ? statementDailyBudgetResponse() : unavailable()
       );
     }
     const results = outcome.success;

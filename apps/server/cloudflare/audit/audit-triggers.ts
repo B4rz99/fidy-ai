@@ -11,6 +11,7 @@ export const canonicalTriggerNames = {
   keywordRuleLimit: "keyword_rule_limit",
   memoryCapacity: "memory_capacity_exceeded",
   auditLimit: "transaction_audit_limit",
+  statementAuditLimit: "statement_audit_limit",
 } as const;
 
 /** One commit-time trigger name a D1 failure message can carry. */
@@ -27,5 +28,7 @@ export const canonicalTriggerOf = (cause: unknown): Option.Option<CanonicalTrigg
 export const refusedByAuditBudget = (cause: unknown): boolean =>
   Option.exists(
     canonicalTriggerOf(cause),
-    (trigger) => trigger === canonicalTriggerNames.auditLimit
+    (trigger) =>
+      trigger === canonicalTriggerNames.auditLimit ||
+      trigger === canonicalTriggerNames.statementAuditLimit
   );

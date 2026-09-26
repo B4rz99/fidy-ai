@@ -55,12 +55,3 @@ export const dailyAuditExhausted = ({
   current,
 }: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<boolean> =>
   dailyAuditCount({ db, userId, current }).then((count) => count >= dailyAuditBudget);
-
-/** Every stable SQLite abort marker an audit-table trigger raises for the shared daily budget. */
-const sharedAuditLimitMarkers = ["transaction_audit_limit", "statement_audit_limit"] as const;
-
-/** True when one D1 cause is the shared daily budget's own audit trigger refusing a write. */
-export const sharedAuditLimitRefusal = (cause: unknown): boolean => {
-  const detail = String(cause);
-  return sharedAuditLimitMarkers.some((marker) => detail.includes(marker));
-};

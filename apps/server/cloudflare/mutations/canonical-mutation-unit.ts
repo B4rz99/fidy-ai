@@ -260,7 +260,8 @@ const triggerAttribution = ({
     case canonicalTriggerNames.memoryCapacity:
       // A committed-state replay misses earlier forgets and concurrent writes; require indexed proof.
       return Option.none();
-    case canonicalTriggerNames.auditLimit: {
+    case canonicalTriggerNames.auditLimit:
+    case canonicalTriggerNames.statementAuditLimit: {
       const index = auditBudgetIndex(mutations);
       return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
     }

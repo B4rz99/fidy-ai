@@ -1,0 +1,97 @@
+apps/server/package.json
+  s_fc3693cd6bcd2c::t_a264152bdc943f 172
+apps/server/cloudflare/mutations/canonical-mutation-batch.ts
+  s_fc3693cd6bcd2c::t_d343e159f95fbb 14,24,87-91,95
+  s_fc3693cd6bcd2c::t_9919b9ad568d45 15,639,676,687-689,700-702
+  s_fc3693cd6bcd2c::t_61da8e5c6f0964 225,235,245,441,444,467,478,526,535,538,547,657,660,668
+  s_fc3693cd6bcd2c::t_5c4efb2cfc7881 92-94,677-686,690-699
+  s_fc3693cd6bcd2c::t_200b1b31933637 424-434,450
+  s_fc3693cd6bcd2c::t_fe8ddd3e89ad36 412,422-423
+  s_fc3693cd6bcd2c::t_dfcedc63542bb5 407-410,413-421
+  s_fc3693cd6bcd2c::t_78443db2c9ae49 411
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_fc3693cd6bcd2c::t_cc01825439ea94 204
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_fc3693cd6bcd2c::t_49eb2a90a0360e 93
+  s_fc3693cd6bcd2c::t_c40187f592ace0 2821
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_fc3693cd6bcd2c::t_4fa4042b0a77ae 462-464
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_fc3693cd6bcd2c::t_dfcedc63542bb5 1416-1418
+  s_fc3693cd6bcd2c::t_828fa3f609b43d 1625
+  s_fc3693cd6bcd2c::t_3038cd89d96ff3 1407-1415,1419-1421
+  s_fc3693cd6bcd2c::t_091baa84281d0f 1626
+apps/server/cloudflare/core-worker.ts
+  s_fc3693cd6bcd2c::t_12aeb0e0bbd5f3 117,936-943
+  s_fc3693cd6bcd2c::t_a1ebce7972491b 119
+apps/server/cloudflare/mutations/canonical-mutation-registry.ts
+  s_fc3693cd6bcd2c::t_ca2b087d7ccdfb 23,54,164
+infra/cloudflare/package.json
+  s_fc3693cd6bcd2c::t_9a375553f013a5 20
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_fc3693cd6bcd2c::t_42cdcf74faa934 66-67,157
+  s_fc3693cd6bcd2c::t_14e5802ca5885d 248
+  s_fc3693cd6bcd2c::t_60788b5e1cda16 221,249
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_fc3693cd6bcd2c::t_cd3ba140a63463 230
+  s_fc3693cd6bcd2c::t_2f66e5bc4ba7e2 21
+  s_fc3693cd6bcd2c::t_5c4efb2cfc7881 228-229,231-233
+apps/server/cloudflare/mutations/mutation-types.ts
+  s_fc3693cd6bcd2c::t_5c4efb2cfc7881 10-13,92-96
+  s_fc3693cd6bcd2c::t_1e9007668460a4 9,88-91,127-128
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_fc3693cd6bcd2c::t_5c4efb2cfc7881 15,17,19-20,88-90,151-158,544-547
+  s_fc3693cd6bcd2c::t_35a325776702e9 16,18,339
+  s_fc3693cd6bcd2c::t_449f3240b5461f 598-603,606-611,628-629
+  s_fc3693cd6bcd2c::t_741138bf1613fa 533,535,537-543,548-549
+  s_fc3693cd6bcd2c::t_f5f47de1c82a51 616
+  s_fc3693cd6bcd2c::t_56534ca3c8faa2 78-79,511,686,755
+  s_fc3693cd6bcd2c::t_20b804d09d81be 85-86,432
+  s_fc3693cd6bcd2c::t_dfcedc63542bb5 340-349,701-711,715-719,723-738
+  s_fc3693cd6bcd2c::t_e483452ff41bfa 585-589
+  s_fc3693cd6bcd2c::t_ce9f5a32cfb7c1 691-700,712-714,720-722,739-742,756,768
+  s_fc3693cd6bcd2c::t_faee4bcc26ae01 531-532,534,536,550
+  s_fc3693cd6bcd2c::t_d88d47f6aa5d91 9,21,150,338,350
+  s_fc3693cd6bcd2c::t_e9e0ef7cfd6701 612
+apps/server/cloudflare/mutations/statement-mutation.ts
+  s_fc3693cd6bcd2c::t_8a5b5ec5accb38 30-31,36-41,44,49-54,66-70,90,103,107-108,140-141,144-145
+  s_fc3693cd6bcd2c::t_5c4efb2cfc7881 15-20
+  s_fc3693cd6bcd2c::t_dfcedc63542bb5 32-35,45-48,104-106,142-143
+  s_fc3693cd6bcd2c::t_124be823a6134f 1-14,21-29,42-43,55-65,71-89,91-102,109-117,119-139,146-147
+  s_fc3693cd6bcd2c::t_365230aa57abf8 118
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_fc3693cd6bcd2c::t_8532d90e1fe655 18
+  s_fc3693cd6bcd2c::t_dc02a89ff82237 116,122-123,131,184-186,194
+  s_fc3693cd6bcd2c::t_36c2a82e75e42d 12,167,180-181
+  s_fc3693cd6bcd2c::t_950bceed1cb2e0 14-17
+  s_fc3693cd6bcd2c::t_dfcedc63542bb5 165,173-176,178-179
+  s_fc3693cd6bcd2c::t_98d39bdbb72085 26,219,285
+  s_fc3693cd6bcd2c::t_5d2bf4c9068501 118,157
+  s_fc3693cd6bcd2c::t_5684cb0f72a292 124-130
+  s_fc3693cd6bcd2c::t_f06b673b102110 132-142,187-193
+  s_fc3693cd6bcd2c::t_7310d2343d9e26 163-164,166
+  s_fc3693cd6bcd2c::t_79a68d32963700 160
+  s_fc3693cd6bcd2c::t_514dc3bbc65511 195
+apps/server/cloudflare/memory/memory.test.ts
+  s_fc3693cd6bcd2c::t_c6793fbc0ed262 206
+apps/server/cloudflare/pats/pats.test.ts
+  s_fc3693cd6bcd2c::t_4e26574e873397 4,213
+bun.lock
+  s_fc3693cd6bcd2c::t_43acbfd8c08b64 36,101,260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "633210c40c4a2571aa45e8d58abc500b779a99d6",
+  "prompts": {},
+  "sessions": {
+    "s_fc3693cd6bcd2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db10-a653-7399-bd96-d88433aa22ef",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

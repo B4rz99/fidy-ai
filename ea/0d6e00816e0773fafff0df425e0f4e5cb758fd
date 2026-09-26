@@ -1,0 +1,26 @@
+apps/server/cloudflare/atomic/atomic-mutation-unit.ts
+  h_c6d49c804e0ad2 89,103-106,197,199,207,253
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 12-21,361-364,467-482,484-504,544-546,599-625,1043-1046,1352,1355-1362,1728-1733,1767-1775,1780-1782,1784,1795,1808-1812,1840,1863,1914-1920,1936-1946,1978-1983,2032-2036,2055-2069,2071,2158-2162,2205,2241-2243,2247,2250-2254,2333,2387-2448,2463-2646
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  h_c6d49c804e0ad2 41,262,264,267,323-337,357-364,368,405,511
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 582-590,592-601
+apps/server/cloudflare/ingestion/statement-staging.ts
+  h_c6d49c804e0ad2 46,758-768,882-883,1333,1444
+apps/server/cloudflare/transactions/atomic-batch.test-fixture.ts
+  h_c6d49c804e0ad2 1-102
+docs/adr/0029-atomic-batch-accountability-boundaries.md
+  h_c6d49c804e0ad2 23-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ea0d6e00816e0773fafff0df425e0f4e5cb758fd",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

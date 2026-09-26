@@ -1,0 +1,51 @@
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_f9aa3e90839713::t_884078ccf67f28 13,15,335,349,384-410,498,571,580-584,586,594-595,604,624-626,628,653-655,657,681-683,685,699,704,722,726-727,729,738-739,753,817-822,863,919-929,931,969-971,973,1002,1024,1062-1066,1151-1152
+apps/server/src/shell/ingestion/operations.ts
+  s_f9aa3e90839713::t_50e836cada2430 41-45
+apps/server/cloudflare/atomic/daily-canonical-budget.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 1-71
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 8-11,40,42,57,162-163,197-217,221-223,227,231-232,235-240,257,290-291,319-321,326-330,332,334-336,339-346,349-350,352-363,366-369,371-372,374,377,379,384,390-391,396-408,411,425-429,500,505-511,530-531,533,537
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 15,409,589
+apps/server/src/shell/tokens/runtime.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 39,67-68
+apps/server/src/shell/canonical-runtime.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 27
+apps/server/ARCHITECTURE.md
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 111-117
+apps/server/src/shell/tokens/pat-write.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 184-202
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 3,12-14,213-218,332-465,490-512,542-557,585-602,1492-1568,1598-2076
+apps/server/src/shell/tokens/pat-audit.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 8,119-155
+apps/server/cloudflare/atomic/atomic-mutation-unit.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 1-249
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_fc3693cd6bcd2c::t_c9b8ac7b5b662e 9-10,23-28,42-51,56,104,106,109-126,128-137,139-140,191-192,200-201,850,864-1094,1097-1099,1101,1104-1131,1133-1190,1192-1193,1195-1196,1198,1200-1204,1208-1212,1214-1215,1218-1222,1224,1226-1239,1242-1247,1249-1259,1263-1266,1268,1270-1273,1275-1281,1283-1287,1289-1302,1304-1306,1308-1361,1364-1366,1368,1370-1371,1373-1381,1383-1395,1398-1421,1424-1426,1428-1431,1433-1450,1452,1455,1458-1459,1462,1464,1467-1476,1479-1487,1490-1497,1501-1548,1553-1563,1568-1574,1576,1578-1580,1582-1599
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "28c8d370a6d2a0d1b38b86d61906f552e4dc51ca",
+  "prompts": {},
+  "sessions": {
+    "s_f9aa3e90839713": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d88b-6076-7707-aa9d-8a0ae9b9ca28",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fc3693cd6bcd2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db10-a653-7399-bd96-d88433aa22ef",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

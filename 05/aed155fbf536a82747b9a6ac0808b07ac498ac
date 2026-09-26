@@ -1,0 +1,18 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  h_c6d49c804e0ad2 1503
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  h_c6d49c804e0ad2 721-722,728-734,745-751
+apps/server/cloudflare/ingestion/statement-staging.ts
+  h_c6d49c804e0ad2 756,780
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "05aed155fbf536a82747b9a6ac0808b07ac498ac",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

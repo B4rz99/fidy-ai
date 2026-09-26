@@ -1,0 +1,39 @@
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_fc3693cd6bcd2c::t_630748b85a0650 15,574-585,591-593
+  s_fc3693cd6bcd2c::t_d7f069e7f9335f 586-590
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_b1f36a18f8d65c::t_e95ce2fbd610ee 1912-1913,1920-1925
+  s_fc3693cd6bcd2c::t_3e7d0c2986a1f5 1530,1533,1553
+  s_fc3693cd6bcd2c::t_a605c0e358d304 1548-1550,1670-1672,2120-2123
+apps/server/cloudflare/atomic/guarded-mutation-commit.ts
+  s_fc3693cd6bcd2c::t_7f5068f08e1a40 18-20,23-27
+  s_fc3693cd6bcd2c::t_cb8907f6c4446c 17,21-22,28-32,54-56
+  s_fc3693cd6bcd2c::t_96c5b1eac75780 1-16,33-53,57-60
+apps/server/cloudflare/atomic/atomic-mutation-unit.ts
+  s_fc3693cd6bcd2c::t_85f71f7bb6fd1a 2,4,287-290,298,304-305
+  s_fc3693cd6bcd2c::t_d7f069e7f9335f 291-297,299-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5efadaa649c4d136066e9abc474db848225849d8",
+  "prompts": {},
+  "sessions": {
+    "s_b1f36a18f8d65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db4c-88a2-7691-8f21-b8c92b9b5275",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fc3693cd6bcd2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0db10-a653-7399-bd96-d88433aa22ef",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

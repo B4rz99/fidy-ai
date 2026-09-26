@@ -152,7 +152,7 @@ const coordinatorFor = (
   userId: string
 ): UserTransactionCoordinator =>
   new UserTransactionCoordinator(
-    { id: { name: userId } },
+    { id: { name: userId }, storage: { setAlarm: () => Promise.resolve() } },
     {
       DB: db,
       EMAIL_BUCKET: bucket,

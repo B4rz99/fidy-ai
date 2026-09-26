@@ -7,7 +7,6 @@ import { Budget } from "../../src/core/budgets/model";
 import { calculateBudgetStatus } from "../../src/core/budgets/rules";
 import {
   dashboardBudgetSpent,
-  dashboardMoneyGroupsFromSums,
   projectDashboardMetric,
   resolveDashboardPeriod,
 } from "../../src/core/dashboard/calculation";
@@ -17,7 +16,10 @@ import {
   type Widget,
 } from "../../src/core/dashboard/model";
 import { Transaction } from "../../src/core/transactions/model";
-import { dashboardBucket, includesDashboardTransaction } from "../../src/core/dashboard/projection";
+import {
+  groupDashboardChart,
+  includesDashboardTransaction,
+} from "../../src/core/dashboard/projection";
 import { type DashboardView, type DashboardWidgetView } from "../../src/shell/dashboard/operations";
 import { budgetFromRow } from "../budgets/budget-row";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
@@ -175,33 +177,7 @@ const selected = (
   );
 };
 
-const groups = (
-  movements: ReadonlyArray<DashboardTransactionFact>
-): ReturnType<typeof dashboardMoneyGroupsFromSums> =>
-  dashboardMoneyGroupsFromSums(
-    movements.map(({ transaction }) => ({
-      direction: transaction.direction,
-      money: transaction.money,
-    }))
-  );
-
 type ChartWidget = Extract<Widget, { type: "spending-chart" }>;
-type ChartBucketKey = Extract<
-  DashboardWidgetView,
-  { widget: ChartWidget }
->["result"]["buckets"][number]["key"];
-
-const chartBucketKey = (
-  widget: ChartWidget,
-  movement: DashboardTransactionFact,
-  zone: (typeof UserContextRow.Type)["time_zone"]
-): Readonly<{ id: string; key: ChartBucketKey }> =>
-  dashboardBucket({
-    groupBy: widget.groupBy,
-    category: movement.category,
-    occurredAt: movement.transaction.occurredAt.epochMilliseconds,
-    timeZone: zone,
-  });
 
 const renderChart = (
   widget: ChartWidget,
@@ -213,23 +189,19 @@ const renderChart = (
     period: widget.period,
     timeZone: facts.context.time_zone,
   });
-  const buckets = new Map<
-    string,
-    { key: ChartBucketKey; movements: Array<DashboardTransactionFact> }
-  >();
-  for (const movement of selected(facts.movements, widget, Option.some(period))) {
-    const { id, key } = chartBucketKey(widget, movement, facts.context.time_zone);
-    const bucket = buckets.get(id);
-    if (bucket === undefined) buckets.set(id, { key, movements: [movement] });
-    else bucket.movements.push(movement);
-  }
   return {
     widget,
     result: {
       appliedPeriod: period,
-      buckets: [...buckets.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, value]) => ({ key: value.key, moneyGroups: groups(value.movements) })),
+      buckets: groupDashboardChart(
+        selected(facts.movements, widget, Option.some(period)).map(({ transaction, category }) => ({
+          category,
+          occurredAt: transaction.occurredAt.epochMilliseconds,
+          direction: transaction.direction,
+          money: transaction.money,
+        })),
+        { groupBy: widget.groupBy, timeZone: facts.context.time_zone }
+      ),
     },
   };
 };

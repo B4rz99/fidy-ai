@@ -1,7 +1,9 @@
 import { DateTime, Function, Option } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
+import { type MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import type { Category } from "~/core/categories/model";
 import type { CategoryId } from "~/core/categories/reference";
+import { dashboardMoneyGroupsFromSums } from "./calculation";
 import type { SpendingGroupBy } from "./model";
 
 const monthCharacters = 7;
@@ -69,3 +71,40 @@ export const dashboardBucket = (
   const month = day.slice(0, monthCharacters);
   return { id: month, key: { kind: "month", month } };
 };
+
+type ChartFact = Readonly<{
+  category: Category;
+  occurredAt: number;
+  direction: "inflow" | "outflow";
+  money: ReadonlyMoney;
+}>;
+
+type ChartPlan = Readonly<{ groupBy: SpendingGroupBy; timeZone: IanaTimeZone }>;
+type ChartGroup = Readonly<{ key: DashboardBucket; moneyGroups: MoneyGroups }>;
+
+/** Groups selected canonical Money facts by local chart dimension, then by Currency and direction. */
+export const groupDashboardChart: {
+  (facts: ReadonlyArray<ChartFact>, plan: ChartPlan): ReadonlyArray<ChartGroup>;
+  (plan: ChartPlan): (facts: ReadonlyArray<ChartFact>) => ReadonlyArray<ChartGroup>;
+} = Function.dual(
+  2,
+  (facts: ReadonlyArray<ChartFact>, plan: ChartPlan): ReadonlyArray<ChartGroup> => {
+    const buckets = new Map<string, { key: DashboardBucket; facts: Array<ChartFact> }>();
+    for (const fact of facts) {
+      const { id, key } = dashboardBucket({
+        groupBy: plan.groupBy,
+        category: fact.category,
+        occurredAt: fact.occurredAt,
+        timeZone: plan.timeZone,
+      });
+      const bucket = buckets.get(id);
+      if (bucket === undefined) buckets.set(id, { key, facts: [fact] });
+      else bucket.facts.push(fact);
+    }
+    return [...buckets.keys()].sort().map((id) => {
+      const bucket = buckets.get(id);
+      if (bucket === undefined) throw new Error("A chart bucket vanished during projection");
+      return { key: bucket.key, moneyGroups: dashboardMoneyGroupsFromSums(bucket.facts) };
+    });
+  }
+);

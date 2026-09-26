@@ -582,7 +582,7 @@ it("renders an empty validated DashboardView with current User context", async (
 }, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
-it("searches the effective Transaction's corrected notes in a configured list Widget", async () => {
+it("finds a recent Transaction by its captured notes in a configured list Widget", async () => {
   const db = await setup();
   const document = Schema.decodeUnknownSync(
     Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
@@ -631,7 +631,7 @@ it("searches the effective Transaction's corrected notes in a configured list Wi
 }, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
-it("projects the current User's Budget and exact spend without another User's Budget", async () => {
+it("projects the current User's Budget with exact outflow spend and remaining Money", async () => {
   const db = await setup();
   const budget = await send(db, 0, {
     path: "/budgets",

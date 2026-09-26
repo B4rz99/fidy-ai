@@ -187,16 +187,25 @@ const publishBillingEntry = (
 
 /** Offer bounded, secret-free work identities. D1 intent remains authoritative on Queue failure. */
 export const dispatchBillingCollection = (
-  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }>
+  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }> & {
+    readonly identity: Option.Option<string>;
+  }
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
+    const identity = environment.identity;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.attempt_id, o.version
       FROM billing_collection_outbox AS o JOIN billing_collection_arms AS arm ON arm.attempt_id = o.attempt_id
       WHERE arm.state = 'armed' AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+        AND (? IS NULL OR o.attempt_id = ?)
       ORDER BY o.last_attempt_at_ms, o.attempt_id LIMIT ?`)
-        .bind(now - dispatchCooldownMs, pendingBatchSize)
+        .bind(
+          now - dispatchCooldownMs,
+          Option.getOrNull(identity),
+          Option.getOrNull(identity),
+          pendingBatchSize
+        )
         .all()
     );
     const entries = yield* decode(

@@ -151,14 +151,20 @@ const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A>
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
 
-type EnrollmentEnvironment = { readonly DB: D1Database } & Partial<{
+type EnrollmentEnvironment = {
+  readonly DB: D1Database;
+  readonly onAccepted: (id: string) => void;
+} & Partial<{
   readonly BROWSER_ORIGIN: string;
   readonly WOMPI_ENVIRONMENT: string;
   readonly WOMPI_PUBLIC_KEY: string;
   readonly WOMPI_PRIVATE_KEY: string;
   readonly WOMPI_INTEGRITY_SECRET: string;
 }>;
-type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & { readonly DB: D1Database };
+type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & {
+  readonly DB: D1Database;
+  readonly onAccepted: (id: string) => void;
+};
 
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
@@ -549,6 +555,7 @@ const finish = (
       const committed = yield* waitFor(() => environment.DB.batch(statements));
       // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
       if ((committed.at(-1)?.meta.changes ?? 0) === 0) return unavailable();
+      environment.onAccepted(attemptId);
       const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
       if (Option.isNone(attempt)) return unavailable();
       const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardPaymentSubmission))({

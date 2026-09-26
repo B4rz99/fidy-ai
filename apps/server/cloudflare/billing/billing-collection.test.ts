@@ -864,8 +864,16 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
     Effect.gen(function* () {
       const db = yield* Effect.promise(fixture);
       const send = vi.fn((_work: unknown) => Promise.resolve());
-      yield* dispatchBillingCollection({ DB: db, BILLING_COLLECTION_QUEUE: { send } });
-      yield* dispatchBillingCollection({ DB: db, BILLING_COLLECTION_QUEUE: { send } });
+      yield* dispatchBillingCollection({
+        identity: Option.none(),
+        DB: db,
+        BILLING_COLLECTION_QUEUE: { send },
+      });
+      yield* dispatchBillingCollection({
+        identity: Option.none(),
+        DB: db,
+        BILLING_COLLECTION_QUEUE: { send },
+      });
       expect(send).toHaveBeenCalledExactlyOnceWith({ version: 1, attemptId });
       let created = false;
       const create = vi.fn((_options: { id: string; params: unknown }): Promise<unknown> => {

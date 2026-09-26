@@ -17,7 +17,7 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient } from "@/transport/client";
+import { type FidyClient, type SubscriptionStatus } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { formatMoney } from "@/ui/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -1007,27 +1007,31 @@ const standingDateFormatter = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
 });
 
-const SubscriptionStanding = (): JSX.Element => {
-  const router = useRouter();
-  const query = subscriptionStatusQuery(router.options.context.apiClient);
-  const status = useAtomValue(query);
-  const refresh = useAtomRefresh(query);
-  const view = presentCanonicalQuery(status);
-  if (view._tag === "Initial") return <Skeleton className="h-24 w-full" />;
-  if (view._tag === "Failure") {
+type StandingViewState =
+  | Readonly<{ _tag: "Initial" }>
+  | Readonly<{ _tag: "Failure" }>
+  | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
+
+/** Render the closed Subscription standing projection independently of offer loading. */
+export const SubscriptionStandingView = ({
+  state,
+  onRetry,
+}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
+  if (state._tag === "Initial") return <Skeleton className="h-24 w-full" />;
+  if (state._tag === "Failure") {
     return (
       <Alert>
         <AlertTitle>Estado no disponible</AlertTitle>
         <AlertDescription>
           No pudimos consultar tu suscripción. Tus datos siguen disponibles.
         </AlertDescription>
-        <Button type="button" variant="outline" onClick={refresh}>
+        <Button type="button" variant="outline" onClick={onRetry}>
           Reintentar
         </Button>
       </Alert>
     );
   }
-  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = view.value.data;
+  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = state.standing;
   const lastAttempt = recentAttempts[0];
   const periodEnd = Option.isSome(paidSubscription)
     ? paidSubscription.value.endsAt.epochMilliseconds
@@ -1055,11 +1059,27 @@ const SubscriptionStanding = (): JSX.Element => {
           Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
           bloqueo de suscripción.
         </p>
-        <Button type="button" variant="outline" onClick={refresh}>
+        <Button type="button" variant="outline" onClick={onRetry}>
           Actualizar estado
         </Button>
       </CardContent>
     </Card>
+  );
+};
+
+const SubscriptionStanding = (): JSX.Element => {
+  const router = useRouter();
+  const query = subscriptionStatusQuery(router.options.context.apiClient);
+  const status = useAtomValue(query);
+  const refresh = useAtomRefresh(query);
+  const view = presentCanonicalQuery(status);
+  return (
+    <SubscriptionStandingView
+      state={
+        view._tag === "Ready" ? { _tag: "Ready", standing: view.value.data } : { _tag: view._tag }
+      }
+      onRetry={refresh}
+    />
   );
 };
 

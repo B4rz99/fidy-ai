@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BigDecimal, DateTime, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
-import { SubscriptionOffersView } from "./feature";
+import { SubscriptionOffersView, SubscriptionStandingView } from "./feature";
 import {
   isAwaitingPaymentStatus,
   paymentStatusRefreshDelay,
@@ -9,11 +9,14 @@ import {
 } from "./payment-status";
 import { type PaymentSubmission, makeEnrollmentGateway } from "./enrollment-gateway";
 import {
+  BillingAttemptId,
   BillingEmail,
   CardEnrollmentId,
   CardPaymentSubmission,
+  IanaTimeZone,
   PriceId,
   type SubscriptionEnrollmentClient,
+  type SubscriptionStatus,
 } from "@/transport/client";
 import type { SubscriptionOffers } from "./presentation";
 
@@ -133,6 +136,114 @@ afterEach(() => {
   sessionStorage.clear();
   vi.unstubAllGlobals();
 });
+
+const trialPeriod = {
+  startedAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
+  endsAt: DateTime.makeUnsafe("2026-09-08T12:00:00Z"),
+};
+const trialStanding: SubscriptionStatus = {
+  accessTier: "free",
+  trialPeriod,
+  paidSubscription: Option.none(),
+  recentAttempts: [],
+};
+const paidPeriod = {
+  priceId: offers[0].id,
+  money: offers[0].money,
+  billingPeriod: offers[0].billingPeriod,
+  serviceMarket: offers[0].serviceMarket,
+  taxTreatment: offers[0].taxTreatment,
+  startsAt: DateTime.makeUnsafe("2026-09-08T12:00:00Z"),
+  endsAt: DateTime.makeUnsafe("2026-09-15T12:00:00Z"),
+  renewalAnchor: DateTime.makeUnsafe("2026-09-15T12:00:00Z"),
+};
+
+it("renders Subscription standing loading, failure and retry without blocking existing data", () => {
+  const onRetry = vi.fn();
+  const { rerender } = render(
+    <SubscriptionStandingView state={{ _tag: "Initial" }} onRetry={onRetry} />
+  );
+  expect(
+    screen.queryByRole("region", { name: "Estado de la suscripción" })
+  ).not.toBeInTheDocument();
+  rerender(<SubscriptionStandingView state={{ _tag: "Failure" }} onRetry={onRetry} />);
+  expect(screen.getByText("Tus datos siguen disponibles.", { exact: false })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+});
+
+it("displays an expired original TrialPeriod without hiding history or mislabeling quotas", () => {
+  const onRetry = vi.fn();
+  render(
+    <SubscriptionStandingView
+      state={{ _tag: "Ready", standing: trialStanding }}
+      onRetry={onRetry}
+    />
+  );
+  expect(screen.getByText("Tu acceso: Gratis")).toBeVisible();
+  expect(screen.getByText(/Período de prueba.*8 de septiembre de 2026/)).toBeVisible();
+  expect(screen.getByText(/Tu historial permanece disponible/)).toBeVisible();
+  expect(screen.getByText(/Las cuotas no son un bloqueo/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Actualizar estado" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+});
+
+it.each(["pending", "failed", "succeeded"] as const)(
+  "shows paid Subscription standing and a %s BillingAttempt without provider references",
+  (status) => {
+    const attempt = {
+      id: BillingAttemptId.make("22700000-0000-4000-8000-000000000004"),
+      priceId: offers[0].id,
+      money: offers[0].money,
+      billingPeriod: offers[0].billingPeriod,
+      serviceMarket: offers[0].serviceMarket,
+      taxTreatment: offers[0].taxTreatment,
+      timeZone: IanaTimeZone.make("America/Bogota"),
+      createdAt: DateTime.makeUnsafe("2026-09-08T12:00:00Z"),
+    };
+    let recentAttempt: SubscriptionStatus["recentAttempts"][number];
+    switch (status) {
+      case "pending":
+        recentAttempt = { ...attempt, status };
+        break;
+      case "failed":
+        recentAttempt = {
+          ...attempt,
+          status,
+          failedAt: DateTime.makeUnsafe("2026-09-08T12:01:00Z"),
+        };
+        break;
+      case "succeeded":
+        recentAttempt = {
+          ...attempt,
+          status,
+          finalizedAt: DateTime.makeUnsafe("2026-09-08T12:01:00Z"),
+          paidPeriodEndsAt: paidPeriod.endsAt,
+          renewalAnchor: paidPeriod.renewalAnchor,
+        };
+        break;
+    }
+    render(
+      <SubscriptionStandingView
+        state={{
+          _tag: "Ready",
+          standing: {
+            ...trialStanding,
+            accessTier: "pro",
+            paidSubscription: Option.some(paidPeriod),
+            recentAttempts: [recentAttempt],
+          },
+        }}
+        onRetry={() => undefined}
+      />
+    );
+    expect(screen.getByText("Tu acceso: Pro")).toBeVisible();
+    expect(screen.getByText(/Último período pagado.*15 de septiembre de 2026/)).toBeVisible();
+    expect(screen.getByText(/Precio cobrado: COP 9.900,00/)).toBeVisible();
+    const label = { pending: "pendiente", failed: "fallido", succeeded: "aprobado" }[status];
+    expect(screen.getByText(`Último intento de cobro: ${label}.`)).toBeVisible();
+  }
+);
 
 it("gives an unauthenticated User a path to browser login", () => {
   render(

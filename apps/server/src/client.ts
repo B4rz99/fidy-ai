@@ -74,8 +74,10 @@ export {
   emailReplacementPath,
   emailReplacementCompletionPath,
 } from "~/shell/email-authentication/path";
-export { PaymentRequestId } from "~/core/subscription/model";
+export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
+export type { SubscriptionStatus } from "~/core/subscription/model";
 export { PriceId } from "~/core/subscription/reference";
+export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
 export {
   BillingEmail,

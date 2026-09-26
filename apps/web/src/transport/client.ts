@@ -18,6 +18,7 @@ export type {
   CanonicalSuccess,
   CardEnrollmentType,
   CardPaymentSubmissionType,
+  SubscriptionStatus,
 } from "@fidy/server/client";
 export {
   BackupRecoveryCode,
@@ -49,6 +50,8 @@ export {
   PATScope,
   PATScopes,
   PriceId,
+  BillingAttemptId,
+  IanaTimeZone,
   PaymentRequestId,
   BillingEmail,
   CardEnrollment,

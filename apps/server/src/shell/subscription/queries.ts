@@ -1,5 +1,6 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import { deriveAccessTier } from "~/core/access-tier/operations";
 import type { UserId } from "~/core/identity/reference";
 import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/model";
 import { Unavailable } from "~/shell/public-http/contract";
@@ -170,14 +171,14 @@ export const projectSubscriptionStatus = ({
         };
   const recentAttempts = attemptRows.map(projectAttempt);
   const data = decode(Schema.toCodecJson(SubscriptionStatus), {
-    accessTier:
-      (row.started_at_ms <= now && row.trial_ends_at_ms > now) ||
-      (row.starts_at_ms !== null &&
+    accessTier: deriveAccessTier({
+      trialActive: row.started_at_ms <= now && row.trial_ends_at_ms > now,
+      paidProActive:
+        row.starts_at_ms !== null &&
         row.starts_at_ms <= now &&
         row.ends_at_ms !== null &&
-        row.ends_at_ms > now)
-        ? "pro"
-        : "free",
+        row.ends_at_ms > now,
+    }),
     trialPeriod: { startedAt: instant(row.started_at_ms), endsAt: instant(row.trial_ends_at_ms) },
     paidSubscription,
     recentAttempts,

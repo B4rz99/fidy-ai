@@ -2,8 +2,8 @@ import type { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "@fidy/server/subscription-runtime";
-import { operationCatalog } from "@fidy/server/canonical-runtime";
-import { authorizeCanonicalPAT } from "../pats/pat-authorization";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import coreWorker from "../core-worker";
 import { makeCardEnrollmentD1 } from "../card-enrollment/card-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./subscription-queries";
 
@@ -12,7 +12,6 @@ const userB = "10000000-0000-4000-8000-000000000002";
 const sessionA = "20000000-0000-4000-8000-000000000001";
 const sessionB = "20000000-0000-4000-8000-000000000002";
 const patId = "30000000-0000-4000-8000-000000000001";
-const patBearer = `fin_abcdefgh_${"A".repeat(43)}`;
 const token = new Uint8Array(32);
 const pastEnd = Date.parse("2026-09-08T12:00:00Z");
 let instance: Option.Option<Miniflare> = Option.none();
@@ -33,7 +32,7 @@ const fixture = async (): Promise<D1Database> => {
       "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
       "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
       "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
-      "CREATE TABLE pats (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, short_id TEXT NOT NULL, recipient_label TEXT NOT NULL, bearer_digest BLOB NOT NULL, scopes_json TEXT NOT NULL, lifetime_days INTEGER NOT NULL, created_at_ms INTEGER NOT NULL, expires_at_ms INTEGER NOT NULL, revoked_at_ms INTEGER, last_used_at_ms INTEGER) STRICT",
+      "CREATE TABLE pats (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, bearer_digest BLOB NOT NULL, scopes_json TEXT NOT NULL, expires_at_ms INTEGER NOT NULL, revoked_at_ms INTEGER, last_used_at_ms INTEGER) STRICT",
     ])
   );
   instance = Option.some(created.instance);
@@ -50,9 +49,6 @@ const fixture = async (): Promise<D1Database> => {
   );
   const past = Date.parse("2026-09-01T12:00:00Z");
   const future = Effect.runSync(Clock.currentTimeMillis) + 86_400_000;
-  const patDigest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(patBearer))
-  );
   await db.batch([
     db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userA),
     db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userB),
@@ -65,10 +61,8 @@ const fixture = async (): Promise<D1Database> => {
       .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
       .bind(sessionB, userB, token, future, future),
     db
-      .prepare(
-        "INSERT INTO pats VALUES (?, ?, 'abcdefgh', 'Agent', ?, '[\"write\"]', 7, 1, ?, NULL, NULL)"
-      )
-      .bind(patId, userA, patDigest, future),
+      .prepare("INSERT INTO pats VALUES (?, ?, ?, '[\"write\"]', ?, NULL, NULL)")
+      .bind(patId, userA, token, future),
   ]);
   return db;
 };
@@ -146,27 +140,53 @@ it("refuses an under-scoped PAT without exposing standing or recording successfu
 });
 
 // @effect-diagnostics-next-line asyncFunction:off
-it("denies both new canonical HTTP operations to a valid but under-scoped PAT", async () => {
+it("refuses a revoked WebSession at the canonical HTTP boundary without recording accepted work", async () => {
   const db = await fixture();
-  const operations = [
-    "subscription.getSubscriptionStatus",
-    "subscription.listSubscriptionOffers",
-  ] as const;
-  const results = await Promise.all(
-    operations.map((id) => {
-      const operation = operationCatalog.byId.get(id);
-      if (operation === undefined) throw new Error("Missing canonical operation");
-      return authorizeCanonicalPAT({
-        db,
-        operation,
-        request: new Request("https://api.fidyapp.com/subscription/status", {
-          headers: { authorization: `Bearer ${patBearer}` },
-        }),
-      });
-    })
+  const bearer = "1".repeat(43);
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
   );
-  expect(results).toEqual(["scope_missing", "scope_missing"]);
-  expect((await db.prepare("SELECT * FROM pat_audit").all()).results).toHaveLength(0);
+  await db
+    .prepare("UPDATE web_sessions SET token_digest = ? WHERE id = ?")
+    .bind(digest, sessionA)
+    .run();
+  const environment: Parameters<typeof coreWorker.fetch>[1] = {
+    AI: { run: () => Promise.reject(new Error("unused")) },
+    DB: db,
+    HOSTED_AI_MODEL: approvedWorkersAiModel,
+    CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    BROWSER_ORIGIN: "https://app.fidyapp.com",
+    WOMPI_ENVIRONMENT: "sandbox",
+    WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+    WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+    WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+    USER_TRANSACTION_COORDINATOR: {
+      getByName: (): { fetch: () => Promise<Response> } => ({
+        fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
+      }),
+    },
+    KAPSO_WEBHOOK_SECRET: "",
+    CLOUDFLARE_ACCESS_ISSUER: "",
+    CLOUDFLARE_ACCESS_AUDIENCE: "",
+    KAPSO_API_KEY: "",
+    WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+    RELEASE_GIT_SHA: "",
+  };
+  const request = (): Request =>
+    new Request("https://core.internal/subscription/status", {
+      headers: { cookie: `__Host-fidy_session=${bearer}` },
+    });
+  const before = await coreWorker.fetch(request(), environment);
+  expect(before.status).toBe(200);
+  expect((await db.prepare("SELECT * FROM pat_audit").all()).results).toHaveLength(1);
+  await db
+    .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+    .bind(Effect.runSync(Clock.currentTimeMillis), sessionA)
+    .run();
+  const after = await coreWorker.fetch(request(), environment);
+  expect(after.status).toBe(401);
+  expect(await after.text()).not.toContain("trialPeriod");
+  expect((await db.prepare("SELECT * FROM pat_audit").all()).results).toHaveLength(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

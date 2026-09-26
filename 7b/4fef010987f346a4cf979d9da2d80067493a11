@@ -1,0 +1,27 @@
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_966f707575be21::t_928c5816af6584 37,1285
+apps/server/cloudflare/audit/audit-triggers.ts
+  s_966f707575be21::t_664202adde3ce6 14,31-33
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_966f707575be21::t_b320e40c204971 10-11,426
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_966f707575be21::t_1b91ddc3db8430 3482,3522
+  s_966f707575be21::t_edca2e33c177a4 3483-3521,3523-3540
+  s_966f707575be21::t_2ba67e90526e6d 3481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7b4fef010987f346a4cf979d9da2d80067493a11",
+  "prompts": {},
+  "sessions": {
+    "s_966f707575be21": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0d505-5611-7314-a4e5-96a59292842e",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

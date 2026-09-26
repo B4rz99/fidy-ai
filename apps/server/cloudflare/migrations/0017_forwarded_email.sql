@@ -43,6 +43,10 @@ DROP TRIGGER memory_canonical_daily_budget;
 DROP TRIGGER statement_submission_audit_no_update;
 DROP TRIGGER statement_submission_audit_no_delete;
 DROP TRIGGER statement_audit_daily_budget;
+-- Later migrations may already have added the review guard when this newly introduced
+-- migration is applied to an existing database. Rebuild that guard after all pending
+-- migrations so the table replacement cannot leave a dangling trigger reference.
+DROP TRIGGER IF EXISTS statement_review_audit_daily_budget;
 CREATE TABLE statement_submission_audit_next (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

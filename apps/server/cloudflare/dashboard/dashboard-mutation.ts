@@ -11,7 +11,8 @@ import {
 } from "../../src/core/dashboard/model";
 import { applyDashboardEdit } from "../../src/core/dashboard/rules";
 import { DashboardView } from "../../src/shell/dashboard/operations";
-import { loadDashboardFacts, renderDashboardView } from "./dashboard-view";
+import { loadDashboardFacts } from "./dashboard-view";
+import { renderDashboardView } from "../../src/shell/dashboard/presentation";
 import {
   type TransactionCaller,
   callerAuthority,

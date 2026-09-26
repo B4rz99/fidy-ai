@@ -1,30 +1,14 @@
-import { Data, type DateTime, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { Money } from "../../src/core/_shared/money";
 import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
 import { Category } from "../../src/core/categories/model";
 import { Budget } from "../../src/core/budgets/model";
-import { calculateBudgetStatus } from "../../src/core/budgets/rules";
-import {
-  dashboardBudgetSpent,
-  projectDashboardMetric,
-  resolveDashboardPeriod,
-} from "../../src/core/dashboard/calculation";
-import {
-  type DashboardDocument,
-  type LayoutNode,
-  type Widget,
-} from "../../src/core/dashboard/model";
 import { Transaction } from "../../src/core/transactions/model";
-import {
-  groupDashboardChart,
-  selectDashboardFacts as selected,
-} from "../../src/core/dashboard/projection";
-import { type DashboardView, type DashboardWidgetView } from "../../src/shell/dashboard/operations";
+import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
 import { budgetFromRow } from "../budgets/budget-row";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 
-class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 const maximumBudgets = 128;
 const maximumProjectionFacts = 8192;
 const TransactionRow = Schema.Struct({
@@ -54,12 +38,6 @@ const BudgetRow = Schema.Struct({
   updated_at: Schema.String,
 });
 type DashboardTransactionFact = Readonly<{ transaction: Transaction; category: Category }>;
-type Loaded = Readonly<{
-  movements: ReadonlyArray<DashboardTransactionFact>;
-  budgets: ReadonlyArray<Budget>;
-  categories: ReadonlyMap<string, Category>;
-  context: typeof UserContextRow.Type;
-}>;
 
 const decodeTransactionFact = (raw: unknown): Option.Option<DashboardTransactionFact> =>
   Option.flatMap(Schema.decodeUnknownOption(TransactionRow)(raw), (row) =>
@@ -86,7 +64,7 @@ const decodeFacts = (
     budgets: D1Result<unknown>;
     movements: D1Result<unknown>;
   }>
-): Option.Option<Loaded> => {
+): Option.Option<DashboardFacts> => {
   const context = Schema.decodeUnknownOption(UserContextRow)(input.userResult.results[0]);
   if (
     Option.isNone(context) ||
@@ -116,7 +94,7 @@ const decodeFacts = (
 export const loadDashboardFacts = (
   db: D1Database,
   userId: string
-): Effect.Effect<Option.Option<Loaded>> =>
+): Effect.Effect<Option.Option<DashboardFacts>> =>
   Effect.gen(function* () {
     const relation = effectiveTransactionRelation(userId);
     const [userResult, categories, budgets, movements] = yield* Effect.tryPromise(() =>
@@ -148,202 +126,3 @@ export const loadDashboardFacts = (
     }
     return decodeFacts({ userResult, categories, budgets, movements });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
-
-type ChartWidget = Extract<Widget, { type: "spending-chart" }>;
-
-const renderChart = (
-  widget: ChartWidget,
-  facts: Loaded,
-  now: DateTime.Utc
-): DashboardWidgetView => {
-  const period = resolveDashboardPeriod({
-    now,
-    period: widget.period,
-    timeZone: facts.context.time_zone,
-  });
-  return {
-    widget,
-    result: {
-      appliedPeriod: period,
-      buckets: groupDashboardChart(
-        selected(facts.movements, widget, Option.some(period)).map(({ transaction, category }) => ({
-          category,
-          occurredAt: transaction.occurredAt.epochMilliseconds,
-          direction: transaction.direction,
-          money: transaction.money,
-        })),
-        { groupBy: widget.groupBy, timeZone: facts.context.time_zone }
-      ),
-    },
-  };
-};
-
-const renderList = (
-  widget: Extract<Widget, { type: "transaction-list" }>,
-  facts: Loaded
-): DashboardWidgetView => {
-  const rows = selected(facts.movements, widget, Option.none()).slice(0, widget.limit);
-  return {
-    widget,
-    result: {
-      transactions: rows.map(({ transaction, category }) => ({
-        id: transaction.id,
-        money: transaction.money,
-        counterparty: transaction.counterparty,
-        direction: transaction.direction,
-        category,
-        occurredAt: transaction.occurredAt,
-      })),
-    },
-  };
-};
-
-const renderMetric = (
-  widget: Extract<Widget, { type: "custom-metric" }>,
-  facts: Loaded,
-  now: DateTime.Utc
-): DashboardWidgetView => {
-  const period = resolveDashboardPeriod({
-    now,
-    period: widget.period,
-    timeZone: facts.context.time_zone,
-  });
-  return {
-    widget,
-    result: {
-      appliedPeriod: period,
-      moneyGroups: projectDashboardMetric(
-        selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
-          direction: transaction.direction,
-          money: transaction.money,
-        })),
-        widget.aggregation
-      ),
-    },
-  };
-};
-
-const budgetSpent = (
-  widget: Extract<Widget, { type: "budget-bar" }>,
-  facts: Loaded,
-  period: ReturnType<typeof resolveDashboardPeriod>
-): Money =>
-  dashboardBudgetSpent(
-    selected(facts.movements, widget, Option.some(period)).map(({ transaction }) => ({
-      direction: transaction.direction,
-      money: transaction.money,
-    })),
-    widget.currency
-  );
-
-const renderBudget = (
-  widget: Extract<Widget, { type: "budget-bar" }>,
-  facts: Loaded,
-  now: DateTime.Utc
-): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
-  Effect.gen(function* () {
-    const zone = facts.context.time_zone;
-    const period = resolveDashboardPeriod({ now, period: "this-month", timeZone: zone });
-    const category = facts.categories.get(widget.categoryId);
-    if (category === undefined) return yield* new DashboardUnavailable();
-    const budget = facts.budgets.find(
-      (entry) => entry.categoryId === widget.categoryId && entry.cap.currency === widget.currency
-    );
-    if (budget === undefined) {
-      return {
-        widget,
-        result: {
-          availability: "missing-budget" as const,
-          appliedPeriod: period,
-          category,
-          currency: widget.currency,
-        },
-      };
-    }
-    const spent = budgetSpent(widget, facts, period);
-    const calculated = yield* calculateBudgetStatus({
-      budget,
-      spent,
-      period: { from: period.from, to: period.toExclusive, timeZone: zone },
-    }).pipe(Effect.mapError(() => new DashboardUnavailable()));
-    let status: Extract<
-      Extract<DashboardWidgetView, { widget: Extract<Widget, { type: "budget-bar" }> }>["result"],
-      { availability: "available" }
-    >["status"];
-    if (calculated.type === "under") status = { type: "under", remaining: calculated.remaining };
-    else if (calculated.type === "over") status = { type: "over", overBy: calculated.overBy };
-    else status = { type: "reached" };
-    return {
-      widget,
-      result: {
-        availability: "available" as const,
-        appliedPeriod: period,
-        category,
-        currency: widget.currency,
-        cap: budget.cap,
-        spent,
-        status,
-      },
-    };
-  });
-
-const renderWidget = (
-  widget: Widget,
-  facts: Loaded,
-  now: DateTime.Utc
-): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
-  Effect.gen(function* () {
-    switch (widget.type) {
-      case "transaction-list":
-        return renderList(widget, facts);
-      case "spending-chart":
-        return renderChart(widget, facts, now);
-      case "custom-metric":
-        return renderMetric(widget, facts, now);
-      case "budget-bar":
-        return yield* renderBudget(widget, facts, now);
-    }
-  });
-
-/** Rebuild the recursive view from canonical layout, with one typed result at each leaf. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const renderDashboardView = (
-  document: DashboardDocument,
-  facts: Loaded,
-  now: DateTime.Utc
-): Effect.Effect<DashboardView, DashboardUnavailable> => {
-  const render = (
-    node: LayoutNode
-  ): Effect.Effect<DashboardView["layout"], DashboardUnavailable> =>
-    node.kind === "leaf"
-      ? renderWidget(node.widget, facts, now).pipe(
-          Effect.map((widget) => ({ kind: "leaf" as const, widget }))
-        )
-      : Effect.forEach(node.children, (child) =>
-          render(child.node).pipe(
-            Effect.map((rendered) => ({ weight: child.weight, node: rendered }))
-          )
-        ).pipe(
-          Effect.map(([first, second, ...rest]) => ({
-            kind: "split" as const,
-            axis: node.axis,
-            children: [
-              Option.getOrThrow(Option.fromUndefinedOr(first)),
-              Option.getOrThrow(Option.fromUndefinedOr(second)),
-              ...rest,
-            ],
-          }))
-        );
-  return render(document.layout).pipe(
-    Effect.map((layout) => ({
-      title: document.title,
-      layout,
-      context: {
-        serviceMarket: facts.context.service_market,
-        locale: facts.context.locale,
-        timeZone: facts.context.time_zone,
-        calculatedAt: now,
-      },
-    }))
-  );
-};

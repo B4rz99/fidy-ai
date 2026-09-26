@@ -1,4 +1,9 @@
+import { Schema } from "effect";
+
 export const utcDayMilliseconds = 86_400_000;
+const DailyAuditTotal = Schema.Struct({
+  total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
 
 /** Matches the 256-entry stable-User triggers rebuilt in 0018_batch_envelope_audit.sql. */
 export const dailyAuditBudget = 256;
@@ -40,8 +45,8 @@ export const dailyAuditCount = ({
   db
     .prepare(`SELECT ${auditDayCountExpression} AS total`)
     .bind(...auditDayBindings({ userId, current }))
-    .first<{ total: number }>()
-    .then((row) => row?.total ?? 0);
+    .first<unknown>()
+    .then((row) => Schema.decodeUnknownSync(DailyAuditTotal)(row).total);
 
 /** True while the User's shared daily canonical-work budget is already spent. */
 export const dailyAuditExhausted = ({

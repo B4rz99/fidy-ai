@@ -354,6 +354,7 @@ const dashboardOutcome = (
   operation,
   collisionKey: Option.some("dashboard-document"),
   capacityKey: Option.none(),
+  guardFacts: Option.none(),
   read: (db, userId) => findDashboardValue({ db, userId, operation }),
   inferAbort: ({ db, subject, current }) =>
     findDashboardDocument({ db, userId: subject.userId }).pipe(

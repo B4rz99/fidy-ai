@@ -17,21 +17,10 @@ export {
   maximumAtomicBatchCalls,
 } from "~/shell/operations/operations";
 export type { AtomicBatchCall } from "~/shell/operations/operations";
-/** Canonical input codecs stay owned by the operation module that declares them. */
-export {
-  CreateTransactionCanonicalInput,
-  LinkTransactionsCanonicalInput,
-  UnlinkTransactionsCanonicalInput,
-  UpdateTransactionCanonicalInput,
-} from "~/shell/transactions/operations";
-export { SubmitForExtractionCanonicalInput } from "~/shell/ingestion/operations";
+export { getCanonicalOperationInput } from "~/shell/_shared/typed-operation-input";
+/** Dashboard inputs are also used by its D1 owner. */
 export {
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
   ApplyDashboardEditCanonicalInput,
 } from "~/shell/dashboard/operations";
-export {
-  CreateBudgetCanonicalInput,
-  UpdateBudgetCanonicalInput,
-  DeleteBudgetCanonicalInput,
-} from "~/shell/budgets/operations";

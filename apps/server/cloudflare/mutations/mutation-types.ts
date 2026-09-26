@@ -13,8 +13,6 @@ import type {
   InsightEvent,
   InsightEventId,
 } from "@fidy/server/insights-runtime";
-import type { DashboardDocument } from "../../src/core/dashboard/model";
-import type { DashboardView } from "../../src/shell/dashboard/operations";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -113,6 +111,8 @@ export type OwnerOutcome = Readonly<{
   operation: string;
   collisionKey: Option.Option<string>;
   capacityKey: Option.Option<string>;
+  /** Owner-specific facts retained for earlier-child guard replay inside one batch. */
+  guardFacts: Option.Option<BudgetOutcome | KeywordRuleOutcome>;
   read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
   inferAbort: (work: OwnerWork) => Effect.Effect<Option.Option<CanonicalMutationRefusal>>;
   triggerRefusal: (
@@ -122,7 +122,6 @@ export type OwnerOutcome = Readonly<{
 }>;
 
 export type CanonicalMutationOutcome =
-  | BudgetOutcome
   | OwnerOutcome
   | Readonly<{
       _tag: "Insight";
@@ -133,16 +132,7 @@ export type CanonicalMutationOutcome =
       insightEventId: InsightEventId;
       attemptId: Option.Option<DeliveryAttemptId>;
     }>
-  | Readonly<{
-      _tag: "Dashboard";
-      operation:
-        | "dashboard.getDashboard"
-        | "dashboard.getDashboardView"
-        | "dashboard.applyDashboardEdit";
-      expectedRevision: number;
-    }>
   | TransactionOutcome
-  | KeywordRuleOutcome
   | MemoryOutcome
   | Readonly<{
       _tag: "ForwardingAddress";
@@ -211,8 +201,6 @@ export type CommittedMutationValue =
       insight: InsightEvent;
       deliveryAttempt: InsightDeliveryAttempt;
     }>
-  | Readonly<{ _tag: "Dashboard"; document: DashboardDocument }>
-  | Readonly<{ _tag: "DashboardView"; view: DashboardView }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
   | Readonly<{ _tag: "Transaction"; transaction: StoredTransaction }>

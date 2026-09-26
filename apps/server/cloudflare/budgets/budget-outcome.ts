@@ -104,6 +104,7 @@ export const findBudgetValue = ({
 export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,
+  guardFacts: Option.some(outcome),
   collisionKey: Option.none(),
   capacityKey: Option.none(),
   read: (db, userId) => findBudgetValue({ db, userId, outcome }),

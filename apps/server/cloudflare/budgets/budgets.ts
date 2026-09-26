@@ -130,9 +130,11 @@ const budgetGuardRefusal =
     if (
       earlier.some(
         (child) =>
-          child._tag === "Budget" &&
-          child.operation === "budgets.deleteBudget" &&
-          child.budgetId === outcome.budgetId
+          child._tag === "Owner" &&
+          Option.isSome(child.guardFacts) &&
+          child.guardFacts.value._tag === "Budget" &&
+          child.guardFacts.value.operation === "budgets.deleteBudget" &&
+          child.guardFacts.value.budgetId === outcome.budgetId
       )
     ) {
       return Effect.succeed(refusal("not_found"));

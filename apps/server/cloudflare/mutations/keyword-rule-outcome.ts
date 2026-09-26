@@ -7,8 +7,8 @@ import {
   type CategoryFailure,
   CategoryNotFound,
   KeywordRule,
-  KeywordRuleId,
   KeywordRuleAlreadyExists,
+  KeywordRuleId,
   KeywordRuleLimitReached,
   NotFound,
   type SuggestedOperationCaller,
@@ -256,7 +256,11 @@ export const keywordRuleGuardFor =
           userId: subject.userId,
           outcome,
           earlier: earlier.flatMap((candidate) =>
-            candidate._tag === "KeywordRule" ? [candidate] : []
+            candidate._tag === "Owner" &&
+            Option.isSome(candidate.guardFacts) &&
+            candidate.guardFacts.value._tag === "KeywordRule"
+              ? [candidate.guardFacts.value]
+              : []
           ),
         }).pipe(
           Effect.map((failure) =>
@@ -385,16 +389,14 @@ export const findKeywordRuleValue = ({
 export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,
+  guardFacts: Option.some(outcome),
   collisionKey: Option.some(`keyword-rule:${outcome.ruleId}`),
   capacityKey:
     outcome.operation === "categories.createKeywordRule"
       ? Option.some("keyword-rule-create")
       : Option.none(),
   read: (db, userId) => findKeywordRuleValue({ db, userId, outcome }),
-  inferAbort: ({ db, subject }) =>
-    keywordRuleAbortFailure({ db, userId: subject.userId, outcome }).pipe(
-      Effect.map(Option.map((failure) => keywordRuleRefusal({ failure, subject })))
-    ),
+  inferAbort: () => Effect.succeedNone,
   triggerRefusal: ({ subject }, kind) => {
     if (kind === "capacity") {
       return Option.some(
@@ -407,44 +409,3 @@ export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome =>
     return kind === "audit" ? Option.some(keywordRuleBudgetRefusal()) : Option.none();
   },
 });
-
-/**
- * The create child an exhausted keyword-rule capacity blames: the child the replay finds over
- * budget, otherwise the first create child the trigger can belong to, and None when the unit
- * holds no create child. The retained count reads committed state, then earlier creates are
- * replayed.
- */
-export const keywordRuleCapacityIndex = ({
-  db,
-  userId,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  mutations: ReadonlyArray<{ readonly outcome: CanonicalMutationOutcome }>;
-}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      countRows(
-        db.prepare("SELECT count(*) AS total FROM keyword_rules WHERE user_id = ?").bind(userId)
-      ),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.map((existing) => {
-      const remaining = maximumKeywordRulesPerUser - existing;
-      let createdIndex = -1;
-      let firstOwned: Option.Option<number> = Option.none();
-      for (const [index, mutation] of mutations.entries()) {
-        if (
-          mutation.outcome._tag !== "Owner" ||
-          !Option.contains(mutation.outcome.capacityKey, "keyword-rule-create")
-        ) {
-          continue;
-        }
-        if (Option.isNone(firstOwned)) firstOwned = Option.some(index);
-        createdIndex += 1;
-        if (createdIndex >= remaining) return Option.some(index);
-      }
-      return firstOwned;
-    })
-  );

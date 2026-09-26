@@ -129,7 +129,9 @@ const setup = async (): Promise<D1Database> => {
     "0014_memory",
     "0015_statement_submission",
     "0016_budgets",
+    "0017_statement_dispatch",
     "0018_dashboard",
+    "0019_canonical_child_guards",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => migrate(db, name)),
     Promise.resolve()
@@ -216,7 +218,10 @@ const send = (
                   let coordinator = coordinators.get(name);
                   if (coordinator === undefined) {
                     coordinator = new UserTransactionCoordinator(
-                      { id: { name } },
+                      {
+                        id: { name },
+                        storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+                      },
                       {
                         DB: db,
                         AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },

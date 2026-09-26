@@ -1547,13 +1547,11 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const ownerResponse = Option.orElse(insightResponse(input), () =>
-    Option.orElse(dashboardResponse(input), () =>
-      Option.orElse(budgetResponse(input), () =>
-        Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
-      )
-    )
+  const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
+  const otherOwner = Option.orElse(budgetResponse(input), () =>
+    Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
   );
+  const ownerResponse = Option.orElse(primaryOwner, () => otherOwner);
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
   const transaction = transactionResponse(input);
   if (Option.isSome(transaction)) return transaction.value;

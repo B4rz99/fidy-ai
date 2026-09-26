@@ -127,6 +127,17 @@ unit for individual and atomic-batch calls. Batch preparation does not read earl
 writes; a batch refuses a second Dashboard document child rather than claiming an intermediate
 view. Invalid first edits leave no document or accepted AuditLogEntry.
 
+Dashboard Money views require a write-maintained projection of **effective** Transactions,
+updated atomically with each effective transition and its Audit. The Transaction owner provides
+old/new contributions; core defines exact Currency, Category, period, and time-zone bucketing;
+the Cloudflare adapter stores the User-scoped read model. First-use backfill, zone changes,
+versioned repair, and concurrent writes must prove completeness before a projection-backed
+view is served. An incomplete projection is unavailable, never a partial total. Transaction-list
+Widgets fetch only their bounded, filtered page, independently of aggregate totals. See
+[ADR 0030](../../docs/adr/0030-dashboard-exact-write-maintained-projection.md) for the decision
+and recovery rules. Until projection cutover, the adapter fails closed when its guarded fact
+scan exceeds 8,192 effective Transactions; this interim cutoff is not the target behavior.
+
 Individual and atomic-batch statement submissions share one User-scoped publication unit: the
 submission, staging promotion, Free-backfill reservation, credential accountability, metadata-only
 success AuditLogEntry, and bounded extraction outbox identity commit together or not at all. A batch

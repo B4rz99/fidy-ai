@@ -7,9 +7,9 @@ import {
   NotFound,
   UpdateKeywordRuleInput,
   ValidationFailed,
-  categoryMutationCompletion,
   insertKeywordRule,
   keywordRulesFromRows,
+  maximumKeywordRulesPerUser,
   normalizeCategoryKeyword,
   protectedKeywordRulesQuery,
   recordBrowserKeywordRuleRead,
@@ -48,7 +48,11 @@ import {
   refusedPreparation,
   unavailablePreparation,
 } from "../mutations/mutation-types";
-import { keywordRuleRefusal, keywordRuleUnavailable } from "../mutations/keyword-rule-outcome";
+import {
+  keywordRuleGuardFor,
+  keywordRuleRefusal,
+  keywordRuleUnavailable,
+} from "../mutations/keyword-rule-outcome";
 
 const HTTP_OK = 200;
 // The audit closes the list unit, so the rule rows sit one before it.
@@ -180,7 +184,22 @@ const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
     requiredScope: callerScope(write.subject),
+    guardRefusal: keywordRuleGuardFor(write.outcome),
     outcome: write.outcome,
+    auditBudget: "shared",
+    commitGuards:
+      write.outcome.operation === "categories.createKeywordRule"
+        ? Option.some(({ db, userId, index, operation }) => [
+            db
+              .prepare(`INSERT INTO canonical_child_guard
+          (child_index,operation,accepted,capacity_ok)
+          SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM keyword_rules WHERE user_id = ?) < ?
+            THEN 1 ELSE 0 END
+          ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+            accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
+              .bind(index, operation, userId, maximumKeywordRulesPerUser),
+          ])
+        : Option.none(),
     statements: writeStatements({
       db: write.db,
       subject: write.subject,
@@ -188,7 +207,6 @@ const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
       statement: write.statement,
       current: write.current,
     }),
-    completion: write.db.prepare(categoryMutationCompletion),
   },
 });
 

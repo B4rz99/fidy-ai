@@ -8,6 +8,7 @@ import {
   deriveCurrentBudgetMonth,
 } from "@fidy/server/budgets-runtime";
 import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { AtomicBatchRejected } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import coreWorker from "../core-worker";
@@ -126,6 +127,11 @@ const setup = async (): Promise<D1Database> => {
     "0014_memory",
     "0015_statement_submission",
     "0016_budgets",
+    "0016_statement_processing",
+    "0017_forwarded_email",
+    "0017_statement_dispatch",
+    "0018_batch_envelope_audit",
+    "0019_canonical_child_guards",
   ];
   await migrations.reduce<Promise<void>>(
     (previous, name) => previous.then(() => migrate(db, name)),
@@ -287,6 +293,13 @@ const payload = (cap = "100"): object => ({
   categoryId: category,
   cap: { amount: cap, currency: "COP" },
 });
+const budgetBatch = (calls: ReadonlyArray<object>): Request =>
+  request(0, "/operations/atomic-batch", "POST", { calls });
+const budgetCall = (index: number, operation: string, input: object): object => ({
+  callId: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  operation,
+  input,
+});
 const Created = Schema.Struct({
   data: Schema.toCodecJson(Budget),
   next: Schema.Array(Schema.Unknown),
@@ -298,6 +311,221 @@ const Report = Schema.Struct({
 const Captured = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("attributes a mixed-child Budget Audit limit before the owner's trigger and rolls back", async () => {
+  const db = await setup();
+  const created = Schema.decodeUnknownSync(Created)(
+    await (await send(db, request(0, "/budgets", "POST", payload()))).json()
+  );
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 253)
+    INSERT INTO budget_audit (id, user_id, session_id, operation, occurred_at_ms)
+    SELECT 'budget-audit-seed-' || n, ?, ?, 'budgets.listBudgets', ? FROM seq`)
+    .bind(users[0], sessions[0], current)
+    .run();
+  const limited = await send(
+    db,
+    budgetBatch([
+      budgetCall(1, "budgets.updateBudget", {
+        params: { id: created.data.id },
+        payload: payload("200"),
+      }),
+      budgetCall(2, "budgets.updateBudget", {
+        params: { id: created.data.id },
+        payload: payload("300"),
+      }),
+    ])
+  );
+  expect(limited.status).toBe(400);
+  const rejection = Schema.decodeUnknownSync(AtomicBatchRejected)(await limited.json());
+  expect(rejection.error.code).toBe("rate_limited");
+  expect(rejection.error.failedCallIndex).toBe(1);
+  expect(rejection.error.operation).toBe("budgets.updateBudget");
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>())
+      ?.count
+  ).toBe(255);
+  expect(
+    (
+      await db
+        .prepare("SELECT cap FROM budgets WHERE id = ?")
+        .bind(created.data.id)
+        .first<{ cap: string }>()
+    )?.cap
+  ).toBe("100");
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("admits a browser Budget when only the separate shared Audit cap is exhausted", async () => {
+  const db = await setup();
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
+    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+    SELECT 'shared-audit-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+    .bind(users[0], sessions[0], current)
+    .run();
+  const response = await send(
+    db,
+    budgetBatch([budgetCall(1, "budgets.createBudget", { payload: payload() })])
+  );
+  expect(response.status).toBe(200);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budgets WHERE user_id = ?")
+        .bind(users[0])
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>())
+      ?.count
+  ).toBe(1);
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM transaction_audit").first<{ count: number }>())
+      ?.count
+  ).toBe(256);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("attributes the second Budget create when the first fills the owner capacity", async () => {
+  const db = await setup();
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
+    INSERT INTO categories (id, label, display_order)
+    SELECT printf('10000000-0000-4000-8000-%012d', n + 1000), 'Fixture ' || n, n + 1000 FROM seq`)
+    .run();
+  await db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
+    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
+    SELECT printf('40000000-0000-4000-8000-%012d', n), ?,
+      printf('10000000-0000-4000-8000-%012d', n + 1000), 'COP', '100',
+      '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z' FROM seq`)
+    .bind(users[0])
+    .run();
+  await db.prepare("DELETE FROM budget_reconciliation_work WHERE user_id = ?").bind(users[0]).run();
+  const limited = await send(
+    db,
+    budgetBatch([
+      budgetCall(1, "budgets.createBudget", { payload: payload() }),
+      budgetCall(2, "budgets.createBudget", {
+        payload: {
+          categoryId: "10000000-0000-4000-8000-000000000001",
+          cap: { amount: "200", currency: "COP" },
+        },
+      }),
+    ])
+  );
+  expect(limited.status).toBe(400);
+  const rejection = Schema.decodeUnknownSync(AtomicBatchRejected)(await limited.json());
+  expect(rejection.error.failedCallIndex).toBe(1);
+  expect(rejection.error.operation).toBe("budgets.createBudget");
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budgets WHERE user_id = ?")
+        .bind(users[0])
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(127);
+  expect(
+    (await db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>())
+      ?.count
+  ).toBe(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("classifies a skipped Budget update after an earlier deletion as not_found without partial state", async () => {
+  const db = await setup();
+  const created = Schema.decodeUnknownSync(Created)(
+    await (await send(db, request(0, "/budgets", "POST", payload()))).json()
+  );
+  const refused = await send(
+    db,
+    budgetBatch([
+      budgetCall(1, "budgets.deleteBudget", { params: { id: created.data.id } }),
+      budgetCall(2, "budgets.updateBudget", {
+        params: { id: created.data.id },
+        payload: payload("200"),
+      }),
+    ])
+  );
+  expect(refused.status).toBe(400);
+  const rejection = Schema.decodeUnknownSync(AtomicBatchRejected)(await refused.json());
+  expect(rejection.error.code).toBe("not_found");
+  expect(rejection.error.failedCallIndex).toBe(1);
+  expect(rejection.error.operation).toBe("budgets.updateBudget");
+  expect(
+    (
+      await db
+        .prepare("SELECT cap FROM budgets WHERE id = ?")
+        .bind(created.data.id)
+        .first<{ cap: string }>()
+    )?.cap
+  ).toBe("100");
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'accepted'")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'rejected'")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("classifies a Budget deleted between preparation and its indexed D1 write as not_found", async () => {
+  const db = await setup();
+  const created = Schema.decodeUnknownSync(Created)(
+    await (await send(db, request(0, "/budgets", "POST", payload()))).json()
+  );
+  let vanished = false;
+  const racingDb: D1Database = {
+    prepare: (sql) => db.prepare(sql),
+    batch: (statements) => {
+      if (vanished) return db.batch(statements);
+      vanished = true;
+      return db
+        .prepare("DELETE FROM budgets WHERE id = ?")
+        .bind(created.data.id)
+        .run()
+        .then(() => db.batch(statements));
+    },
+    exec: (sql) => db.exec(sql),
+    withSession: (constraint) => db.withSession(constraint),
+    dump: () => db.dump(),
+  };
+  const refused = await send(
+    racingDb,
+    request(0, `/budgets/${created.data.id}`, "PUT", payload("200"))
+  );
+  expect(vanished).toBe(true);
+  expect(refused.status).toBe(404);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budgets WHERE id = ?")
+        .bind(created.data.id)
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(0);
+  expect(
+    (
+      await db
+        .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'rejected'")
+        .first<{ count: number }>()
+    )?.count
+  ).toBe(1);
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

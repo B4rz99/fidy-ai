@@ -19,9 +19,11 @@ import {
 } from "../transactions/transaction-boundary";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
+import { dailyAuditBudget, utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
+  type GuardRefusalWork,
   failedPreparation,
   refusedPreparation,
 } from "../mutations/mutation-types";
@@ -425,6 +427,53 @@ const sendStatement = (
     );
 };
 
+const insightGuardRefusal =
+  (input: TransitionInput) =>
+  ({ db, subject, current }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> =>
+    findInsight(db, subject.userId, input.id).pipe(
+      Effect.map((event) =>
+        insightRefusal({
+          db,
+          subject,
+          current,
+          operation: input.operation,
+          code: Option.isNone(event) ? "not_found" : "validation_failed",
+        })
+      ),
+      Effect.orElseSucceed(() => ({
+        code: "unavailable" as const,
+        message: "Insight temporarily unavailable.",
+        record: () => Effect.succeed("unavailable" as const),
+        respond: () => Effect.succeed(transactionUnavailable()),
+      }))
+    );
+
+/** Assert the Insight owner's browser Audit limit before its write, naming this exact child. */
+const insightCommitGuards = ({
+  db,
+  userId,
+  current,
+  index,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  current: number;
+  index: number;
+  operation: string;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
+  return [
+    db
+      .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
+    SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM insight_audit
+      WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?) < ? THEN 1 ELSE 0 END
+    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+      accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
+      .bind(index, operation, userId, start, start + utcDayMilliseconds, dailyAuditBudget),
+  ];
+};
+
 const transitionStatements = (
   input: TransitionInput
 ): Extract<CanonicalMutationPreparation, { _tag: "Prepared" }> => {
@@ -465,6 +514,9 @@ const transitionStatements = (
     mutation: {
       requiredScope: callerScope(subject),
       outcome: { _tag: "Insight", operation, insightEventId: id, attemptId },
+      guardRefusal: insightGuardRefusal(input),
+      auditBudget: isPATCaller(subject) ? "shared" : "owner",
+      commitGuards: isPATCaller(subject) ? Option.none() : Option.some(insightCommitGuards),
       statements: [
         ...(isPATCaller(subject)
           ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
@@ -473,9 +525,6 @@ const transitionStatements = (
         ...Option.toArray(Option.map(attemptId, (value) => sendStatement(input, value))),
         audit,
       ],
-      completion: db.prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
-      VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-      ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`),
     },
   };
 };

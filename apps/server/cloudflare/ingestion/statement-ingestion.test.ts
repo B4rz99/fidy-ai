@@ -83,6 +83,7 @@ const migrationNames = [
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
+  "0019_canonical_child_guards",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -389,6 +390,63 @@ it(
           })
         )(yield* fromTestPromise(() => other.json()));
         expect(otherAddress.data.address.address).not.toBe(address);
+      })
+    ),
+  30_000
+);
+
+it(
+  "rejects a skipped forwarding success Audit without enabling unaudited work",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(`INSERT INTO onboarding_consent_records
+          (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+           decision_received_at_ms, accepted_at_ms)
+          VALUES ('30000000-0000-4000-8000-000000000111', ?, '{}', 'fixture', 'fixture', 1, 1)`)
+            .bind(userA)
+            .run()
+        );
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(`CREATE TRIGGER skip_forwarding_audit
+        BEFORE INSERT ON statement_submission_audit
+        WHEN NEW.operation = 'ingestion.enableEmailForwarding' AND NEW.outcome = 'success'
+        BEGIN SELECT RAISE(IGNORE); END`)
+            .run()
+        );
+        const response = yield* fromTestPromise(() =>
+          send(
+            runtime,
+            new Request("https://api.fidyapp.com/ingestion/email-forwarding", {
+              method: "POST",
+              headers: sessionHeaders(0),
+            })
+          )
+        );
+        expect(response.status).toBe(400);
+        expect(yield* fromTestPromise(() => response.text())).not.toMatch(
+          /SQL|INSERT|canonical_child_guard/iu
+        );
+        const audits = yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT operation,outcome FROM statement_submission_audit WHERE user_id = ?")
+            .bind(userA)
+            .all<{ operation: string; outcome: string }>()
+        );
+        expect(audits.results).toEqual([
+          { operation: "ingestion.enableEmailForwarding", outcome: "validation_failed" },
+        ]);
+        const addresses = yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT count(*) AS total FROM email_forwarding_addresses WHERE user_id = ?")
+            .bind(userA)
+            .first<{ total: number }>()
+        );
+        expect(addresses?.total).toBe(1);
       })
     ),
   30_000
@@ -3418,14 +3476,14 @@ it(
 );
 
 it(
-  "leaves a shared daily budget abort unattributed when multiple children write audit rows",
+  "attributes the shared daily budget to its indexed child in a mixed batch",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
         const current = yield* Clock.currentTimeMillis;
-        // 255 audit rows leave one slot, but a concurrent write may consume it before the batch
-        // runs. A post-rollback recount cannot establish which child's audit write was refused.
+        // 255 audit rows leave one slot. The indexed guard identifies the second child's
+        // refusal without relying on a post-rollback recount.
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
@@ -3450,10 +3508,12 @@ it(
             }),
           ])
         );
-        expect(limited.status).toBe(503);
+        expect(limited.status).toBe(400);
+        const refusal = yield* fromTestPromise(() => batchRejectionOf(limited));
+        expect(refusal.error.failedCallIndex).toBe(1);
+        expect(refusal.error.operation).toBe("ingestion.submitForExtraction");
 
-        // The abort has no provable child, so no refusal row is attempted: the day's audit count
-        // is unchanged and neither child's state survives the rollback.
+        // Neither child's state survives rollback; the refusal is metadata-only.
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
           255
         );

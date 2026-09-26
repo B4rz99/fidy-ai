@@ -24,6 +24,11 @@ const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const active: Array<Miniflare> = [];
 let sequence = 0;
+/** Direct owner-statement tests keep their historical assertion; the unit uses indexed guards. */
+const insightCompletion = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
+    VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
+    ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`);
 afterEach(() => Promise.all(active.splice(0).map((mf) => mf.dispose())));
 // @effect-diagnostics-next-line asyncFunction:off
 const migrate = async (db: D1Database, migration: string): Promise<void> => {
@@ -121,7 +126,12 @@ const setup = async (): Promise<D1Database> => {
     "0014_memory",
     "0015_statement_submission",
     "0016_budgets",
+    "0016_statement_processing",
+    "0017_forwarded_email",
+    "0017_statement_dispatch",
+    "0018_batch_envelope_audit",
     "0018_insight_events",
+    "0019_canonical_child_guards",
   ];
   await migrations.reduce<Promise<void>>(
     (prior, migration) => prior.then(() => migrate(db, migration)),
@@ -290,7 +300,7 @@ it("commits one delivery with immutable evidence, then rejects replay and stale 
   );
   expect(prepared._tag).toBe("Prepared");
   if (prepared._tag !== "Prepared") return;
-  await db.batch([...prepared.mutation.statements, prepared.mutation.completion]);
+  await db.batch([...prepared.mutation.statements, insightCompletion(db)]);
   expect(
     Option.getOrThrow(await Effect.runPromise(findInsight(db, users[0] ?? "", event.id)))
       .lifecycleState
@@ -322,7 +332,7 @@ it("commits one delivery with immutable evidence, then rejects replay and stale 
     })
   );
   if (read._tag !== "Prepared") throw new Error("read should be prepared");
-  await db.batch([...read.mutation.statements, read.mutation.completion]);
+  await db.batch([...read.mutation.statements, insightCompletion(db)]);
   expect(
     (
       await Effect.runPromise(
@@ -387,8 +397,8 @@ it("a stale read prepared before dismissal cannot regress the dismissed event", 
     })
   );
   if (read._tag !== "Prepared" || dismiss._tag !== "Prepared") throw new Error("expected pending");
-  await db.batch([...dismiss.mutation.statements, dismiss.mutation.completion]);
-  await expect(db.batch([...read.mutation.statements, read.mutation.completion])).rejects.toThrow();
+  await db.batch([...dismiss.mutation.statements, insightCompletion(db)]);
+  await expect(db.batch([...read.mutation.statements, insightCompletion(db)])).rejects.toThrow();
   expect(
     Option.getOrThrow(await Effect.runPromise(findInsight(db, users[0] ?? "", event.id)))
       .lifecycleState

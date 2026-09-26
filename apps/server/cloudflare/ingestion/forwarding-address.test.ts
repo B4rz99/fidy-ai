@@ -82,6 +82,15 @@ const setup = Effect.fn(function* () {
     .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
     if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
   }
+  const childGuards = yield* wait(() =>
+    Bun.file(new URL("../migrations/0019_canonical_child_guards.sql", import.meta.url)).text()
+  );
+  for (const statement of childGuards
+    .replace(/^--.*$/gmu, "")
+    .trim()
+    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
+    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
+  }
   for (const user of [userA, userB]) {
     yield* wait(() => db.prepare("INSERT INTO users VALUES (?)").bind(user).run());
     yield* wait(() =>

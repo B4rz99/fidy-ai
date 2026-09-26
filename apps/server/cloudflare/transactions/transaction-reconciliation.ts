@@ -10,7 +10,6 @@ import {
   decideTransactionLink,
   orderTransactionPair,
 } from "@fidy/server/transaction-reconciliation";
-import { transactionCaptureCompletion } from "@fidy/server/transaction-capture";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
@@ -34,10 +33,14 @@ import {
 } from "./transaction-boundary";
 import {
   type CanonicalMutationPreparation,
+  type TransactionOutcome,
   credentialRefusedPreparation,
   failedPreparation,
 } from "../mutations/mutation-types";
-import { refusedTransactionMutation } from "../mutations/transaction-outcome";
+import {
+  refusedTransactionMutation,
+  transactionGuardRefusal,
+} from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(TransactionPairInput);
 const policy = Schema.decodeSync(RequestBodyPolicy)({
@@ -320,24 +323,27 @@ export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPrep
       return refuse({ outcome: "validation_failed", message: pairPolicyMessage });
     }
     const decision = decided.value;
+    const outcome: TransactionOutcome = {
+      _tag: "Transaction",
+      operation: "transactions.linkTransactions",
+      transactionId: decision.visibleTransactionId,
+      readback: { _tag: "EffectiveTransaction", pair: decision.pair },
+      expectedRevision: Option.none(),
+    };
     return {
       _tag: "Prepared",
       mutation: {
         requiredScope: callerScope(work.subject),
-        outcome: {
-          _tag: "Transaction",
-          operation: "transactions.linkTransactions",
-          transactionId: decision.visibleTransactionId,
-          readback: { _tag: "EffectiveTransaction", pair: decision.pair },
-          expectedRevision: Option.none(),
-        },
+        guardRefusal: transactionGuardRefusal(outcome),
+        auditBudget: "shared",
+        commitGuards: Option.none(),
+        outcome,
         statements: linkStatements({
           ...work,
           pair: decision.pair,
           visibleTransactionId: decision.visibleTransactionId,
           authority: authority.value,
         }),
-        completion: work.db.prepare(transactionCaptureCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
@@ -377,19 +383,22 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPr
     if (Option.isNone(state) || state.value.state !== "linked") {
       return refuse({ outcome: "validation_failed", message: unlinkedPairMessage });
     }
+    const outcome: TransactionOutcome = {
+      _tag: "Transaction",
+      operation: "transactions.unlinkTransactions",
+      transactionId: pair.firstTransactionId,
+      readback: { _tag: "RestoredPair", pair },
+      expectedRevision: Option.none(),
+    };
     return {
       _tag: "Prepared",
       mutation: {
         requiredScope: callerScope(work.subject),
-        outcome: {
-          _tag: "Transaction",
-          operation: "transactions.unlinkTransactions",
-          transactionId: pair.firstTransactionId,
-          readback: { _tag: "RestoredPair", pair },
-          expectedRevision: Option.none(),
-        },
+        guardRefusal: transactionGuardRefusal(outcome),
+        auditBudget: "shared",
+        commitGuards: Option.none(),
+        outcome,
         statements: unlinkStatements({ ...work, pair, authority: authority.value }),
-        completion: work.db.prepare(transactionCaptureCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));

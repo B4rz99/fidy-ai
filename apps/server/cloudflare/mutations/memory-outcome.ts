@@ -1,34 +1,27 @@
 import { Effect, Option, Schema } from "effect";
 import {
-  type Memory,
   type MemoryAuditOutcome,
   MemoryCapacityExceeded,
   MemoryCapacityExceededApi,
   type MemoryOperationId,
   Unavailable,
-  admitMemory,
   mapMemoryFailure,
   memoriesFromRows,
   memoryRowQuery,
-  memoryRowsQuery,
-  projectMemoryAggregate,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
 import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
 import type {
-  CanonicalMutationOutcome,
   CanonicalMutationRefusal,
   CommittedMutationValue,
+  GuardRefusalWork,
   MemoryOutcome,
 } from "./mutation-types";
 import { newId } from "../pats/pat-shared";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
-  type TransactionBoundaryFailure,
   type TransactionCaller,
-  boundaryFailure,
-  callerAuthority,
   isPATCaller,
   refusedCredentialResponse,
   transactionFailure,
@@ -147,10 +140,52 @@ const memoryRefusalMessage = (outcome: MemoryRefusalOutcome): string => {
   return memoryInvalidMessage;
 };
 
-/**
- * One decided Memory refusal: it records the metadata-only refusal Audit under the exact child
- * authority and renders the owner's own canonical individual response for that disposition.
- */
+/** Classify an indexed Memory guard abort; its returned refusal records evidence when invoked. */
+export const memoryGuardRefusal =
+  (outcome: MemoryOutcome) =>
+  ({ db, subject, current, kind }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> => {
+    const operation = outcome.operation;
+    if (kind === "capacity") {
+      return Effect.succeed(
+        memoryRefusal({
+          db,
+          subject,
+          current,
+          operation,
+          outcome: "resource_limit",
+        })
+      );
+    }
+    const generic = memoryRefusal({
+      db,
+      subject,
+      current,
+      operation,
+      outcome: "validation_failed",
+    });
+    if (operation === "memory.remember") {
+      return Effect.succeed(generic);
+    }
+    return findOwnedMemory({ db, userId: subject.userId, id: outcome.memoryId }).pipe(
+      Effect.map((owns) =>
+        Option.match(owns, {
+          onNone: () => generic,
+          onSome: (owned) =>
+            owned
+              ? generic
+              : memoryRefusal({
+                  db,
+                  subject,
+                  current,
+                  operation,
+                  outcome: "not_found",
+                }),
+        })
+      )
+    );
+  };
+
+/** Record one metadata-only Memory refusal under its child authority and render its response. */
 export const memoryRefusal = ({
   db,
   subject,
@@ -260,63 +295,3 @@ export const findMemoryValue = ({
         ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
-
-/** The exact UTF-8 aggregate metric the owner counts and the D1 trigger mirrors. */
-const candidateAggregate = (memories: ReadonlyArray<Memory>): number =>
-  new TextEncoder().encode(projectMemoryAggregate(memories)).length;
-
-/**
- * The Memory child a commit-time capacity trigger blames: the child the fold finds over budget,
- * otherwise the first writing Memory child the trigger can belong to, and None when the unit
- * holds none. The fold replays the children in order over the committed (rolled-back) state
- * using the same record-level decision and byte metric the D1 trigger enforces.
- */
-export const memoryCapacityIndex = ({
-  db,
-  subject,
-  current,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  mutations: ReadonlyArray<{ readonly outcome: CanonicalMutationOutcome }>;
-}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> =>
-  Effect.gen(function* () {
-    const query = memoryRowsQuery({
-      userId: subject.userId,
-      authority: callerAuthority({ subject, current }),
-    });
-    const rows = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .prepare(query.sql)
-          .bind(...query.params)
-          .all(),
-      catch: boundaryFailure,
-    });
-    const stored = memoriesFromRows(rows.results);
-    if (Option.isNone(stored)) {
-      return yield* boundaryFailure(new Error("Invalid Memory capacity projection"));
-    }
-    let aggregate = [...stored.value];
-    let firstOwned: Option.Option<number> = Option.none();
-    for (const [index, mutation] of mutations.entries()) {
-      if (mutation.outcome._tag !== "Memory" || mutation.outcome.operation === "memory.forget") {
-        continue;
-      }
-      if (Option.isNone(firstOwned)) firstOwned = Option.some(index);
-      const candidate = mutation.outcome.candidate;
-      const final =
-        mutation.outcome.operation === "memory.remember"
-          ? [...aggregate, candidate]
-          : aggregate.map((memory) => (memory.id === candidate.id ? candidate : memory));
-      const admitted = yield* admitMemory({
-        candidate,
-        aggregateTokens: candidateAggregate(final),
-      }).pipe(Effect.option);
-      if (Option.isNone(admitted)) return Option.some(index);
-      aggregate = final;
-    }
-    return firstOwned;
-  });

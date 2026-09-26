@@ -1,16 +1,21 @@
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
-import { forwardingAddressAudit } from "../ingestion/forwarding-address";
-import { statementSubmissionCompletion } from "../ingestion/statement-staging";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
+import {
+  forwardingAddressAudit,
+  forwardingAddressGuardAudit,
+} from "../ingestion/forwarding-address";
 import {
   callerScope,
+  transactionFailure,
   transactionNoStore,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
 import type { CanonicalMutationAdapter } from "./canonical-mutation-registry";
 import {
   type CanonicalMutationRefusal,
+  type GuardRefusalWork,
   failedPreparation,
   refusedPreparation,
 } from "./mutation-types";
@@ -30,6 +35,35 @@ const limited = (): CanonicalMutationRefusal => ({
       )
     ),
 });
+
+const forwardingAddressGuardRefusal = ({
+  db,
+  subject,
+  current,
+}: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> =>
+  Effect.succeed({
+    code: "validation_failed",
+    message: "The forwarding address could not complete its guarded write.",
+    record: () =>
+      Effect.tryPromise(() => forwardingAddressGuardAudit({ db, subject, current }).run()).pipe(
+        Effect.map((result) =>
+          result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
+        ),
+        Effect.catch((cause) =>
+          Effect.succeed(
+            refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
+          )
+        )
+      ),
+    respond: () =>
+      Effect.succeed(
+        transactionFailure({
+          code: "validation_failed",
+          status: 400,
+          message: "The forwarding address could not complete its guarded write.",
+        })
+      ),
+  });
 
 /** Prepare the issued address without a nested D1 unit, for individual calls and atomic batches. */
 export const prepareForwardingAddress = Effect.fn(function* (
@@ -59,14 +93,20 @@ export const prepareForwardingAddress = Effect.fn(function* (
     _tag: "Prepared",
     mutation: {
       requiredScope: callerScope(work.subject),
+      guardRefusal: forwardingAddressGuardRefusal,
+      auditBudget: "shared",
+      commitGuards: Option.none(),
       statements: forwardingAddressAudit({
         db: work.db,
         subject: work.subject,
         current: work.current,
         operation: "ingestion.enableEmailForwarding",
       }),
-      completion: work.db.prepare(statementSubmissionCompletion),
-      outcome: { _tag: "ForwardingAddress", current: work.current },
+      outcome: {
+        _tag: "ForwardingAddress",
+        operation: "ingestion.enableEmailForwarding",
+        current: work.current,
+      },
     },
   } as const;
 });

@@ -133,6 +133,7 @@ const setup = (): Promise<{
         "0017_forwarded_email",
         "0017_statement_dispatch",
         "0018_batch_envelope_audit",
+        "0019_canonical_child_guards",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
@@ -685,13 +686,20 @@ it("stores no rule when its guarded audit evidence cannot commit", () =>
       yield* awaitPromise(
         db
           .prepare(`CREATE TRIGGER refuse_keyword_rule_audit BEFORE INSERT ON category_audit
-    WHEN NEW.operation = 'categories.createKeywordRule' BEGIN SELECT RAISE(IGNORE); END`)
+    WHEN NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
+    BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
       const refused = yield* awaitPromise(
         createRule({ send, session: sessions[0], keyword: "Sin evidencia" })
       );
-      expect(refused.status).not.toBe(201);
+      expect(refused.status).toBe(400);
+      expect(yield* awaitPromise(refused.json())).toMatchObject({
+        error: {
+          code: "validation_failed",
+          message: "The keyword rule could not complete its guarded write.",
+        },
+      });
       expect(yield* ruleCount(db, userA)).toBe(0);
       yield* awaitPromise(db.prepare("DROP TRIGGER refuse_keyword_rule_audit").run());
       expect(

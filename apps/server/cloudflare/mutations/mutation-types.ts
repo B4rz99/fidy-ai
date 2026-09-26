@@ -27,6 +27,7 @@ import type {
 import type { Effect, Option } from "effect";
 import type {
   CanonicalRefusalDisposition,
+  TransactionCaller,
   TransactionMutationOperation,
 } from "../transactions/transaction-boundary";
 import type { StoredTransaction } from "../transactions/transaction-history";
@@ -114,21 +115,32 @@ export type CanonicalMutationOutcome =
   | TransactionOutcome
   | KeywordRuleOutcome
   | MemoryOutcome
-  | Readonly<{ _tag: "ForwardingAddress"; current: number }>
+  | Readonly<{
+      _tag: "ForwardingAddress";
+      operation: "ingestion.enableEmailForwarding";
+      current: number;
+    }>
   | Readonly<{
       _tag: "StatementSubmission";
+      operation: "ingestion.submitForExtraction";
       publication: PreparedStatementPublication;
       config: StatementStagingConfig;
     }>;
 
+/** Facts an owner needs to classify its own indexed guard refusal after rollback. */
+export type GuardRefusalWork = Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  earlier: ReadonlyArray<CanonicalMutationOutcome>;
+  /** The indexed CHECK that proved this child, not an error string guessed after rollback. */
+  kind: "completion" | "capacity";
+}>;
+
 /**
- * One owner-prepared canonical mutation, ready to join a caller-owned D1 unit.
- *
- * `statements` are the guard-chained writes that must all commit, ending in the mutation's success
- * AuditLogEntry so a silently skipped guard is caught by the unit. `completion` is the owner's
- * rollback assertion, appended immediately after `statements` so a skipped guard aborts the whole
- * unit instead of being noticed after commit. `outcome` selects how the unit reads the committed
- * records back and how an aborted unit attributes responsibility.
+ * One owner-prepared canonical mutation ready for a caller-owned D1 unit. `statements` end with
+ * the success AuditLogEntry; the unit appends an indexed rollback assertion after them.
+ * `outcome` drives committed readback, and `guardRefusal` decides a proved completion failure.
  */
 export type PreparedCanonicalMutation = Readonly<{
   /**
@@ -138,8 +150,23 @@ export type PreparedCanonicalMutation = Readonly<{
    */
   requiredScope: Option.Option<CanonicalCapability>;
   statements: ReadonlyArray<D1PreparedStatement>;
-  completion: D1PreparedStatement;
   outcome: CanonicalMutationOutcome;
+  /** Owner-defined checks run after the shared Audit check but before this child's writes. */
+  commitGuards: Option.Option<
+    (
+      work: Readonly<{
+        db: D1Database;
+        userId: string;
+        current: number;
+        index: number;
+        operation: string;
+      }>
+    ) => ReadonlyArray<D1PreparedStatement>
+  >;
+  /** Browser Budget Audits use their own cap rather than the shared PAT/Category cap. */
+  auditBudget: "shared" | "owner";
+  /** Construct the owner's refusal; its metadata-only Audit is recorded only when `record` runs. */
+  guardRefusal: (work: GuardRefusalWork) => Effect.Effect<CanonicalMutationRefusal>;
 }>;
 
 /** One canonical success value an owner read back after the unit committed. */

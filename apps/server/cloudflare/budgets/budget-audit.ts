@@ -10,6 +10,9 @@ import {
   transactionId,
 } from "../transactions/transaction-boundary";
 
+/** Matches budget_audit_daily_budget in migration 0016; Budget browser Audits have a separate cap. */
+export const dailyBudgetAuditLimit = 256;
+
 type BudgetAuditOperation =
   | BudgetOutcome["operation"]
   | "budgets.listBudgets"

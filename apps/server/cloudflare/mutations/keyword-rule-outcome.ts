@@ -1,14 +1,21 @@
 import { Effect, Option, Schema } from "effect";
+import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import { newId } from "../pats/pat-shared";
+import { prepareOwnedStatement } from "../pats/pat-unit";
+import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type CategoryFailure,
   CategoryNotFound,
   type KeywordRule,
+  KeywordRuleAlreadyExists,
+  KeywordRuleLimitReached,
   NotFound,
   type SuggestedOperationCaller,
   ValidationFailed,
   keywordRuleFromRows,
   keywordRuleQuery,
   maximumKeywordRulesPerUser,
+  normalizeCategoryKeyword,
   toApiFailure,
 } from "@fidy/server/categories";
 import {
@@ -20,18 +27,17 @@ import {
 } from "../categories/keyword-rule-shared";
 import { decideKeywordRuleConflict } from "../categories/keyword-rule-conflict";
 import type {
-  CanonicalMutationOutcome,
   CanonicalMutationRefusal,
   CommittedMutationValue,
+  GuardRefusalWork,
   KeywordRuleOutcome,
 } from "./mutation-types";
 import {
-  type TransactionBoundaryFailure,
   type TransactionCaller,
-  boundaryFailure,
+  callerAuthority,
   isPATCaller,
 } from "../transactions/transaction-boundary";
-import { countRows, dailyAuditMessage } from "./transaction-outcome";
+import { dailyAuditMessage } from "./transaction-outcome";
 
 const HTTP_UNAVAILABLE = 503;
 
@@ -86,6 +92,94 @@ export const keywordRuleRefusal = ({
   };
 };
 
+/** Persist the exact guarded child's refusal after its atomic unit has rolled back. */
+const recordKeywordRuleGuard = ({
+  db,
+  subject,
+  current,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  operation: KeywordRuleOutcome["operation"];
+}>): Effect.Effect<"recorded" | "credential_refused" | "rate_limited" | "unavailable"> => {
+  const statement = isPATCaller(subject)
+    ? prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          subject,
+          input: { id: newId(), current, operation, outcome: "rejected", afterOwnerWrite: false },
+        }),
+      })
+    : ((): D1PreparedStatement => {
+        const authority = callerAuthority({ subject, current });
+        return db
+          .prepare(`INSERT INTO category_audit
+          (id,user_id,session_id,operation,occurred_at_ms,outcome)
+          SELECT ?,user_id,id,?,?,'validation_failed' FROM ${authority.table}
+          WHERE ${authority.predicate}`)
+          .bind(newId(), operation, current, ...authority.bindings);
+      })();
+  return Effect.tryPromise(() => statement.run()).pipe(
+    Effect.map((result) =>
+      result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
+    ),
+    Effect.catch((cause) =>
+      Effect.succeed(
+        refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
+      )
+    )
+  );
+};
+
+/** Construct a proved keyword-rule guard refusal; its Audit is deferred to `record`. */
+export const keywordRuleGuardRefusal = ({
+  db,
+  subject,
+  current,
+  operation,
+  failure,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  operation: KeywordRuleOutcome["operation"];
+  failure: Option.Option<CategoryFailure>;
+}>): CanonicalMutationRefusal => {
+  const declared = Option.map(failure, (value) => keywordRuleRefusal({ failure: value, subject }));
+  return {
+    code: Option.match(declared, {
+      onNone: () => "validation_failed",
+      onSome: (value) => value.code,
+    }),
+    message: Option.match(declared, {
+      onNone: () => "The keyword rule could not complete its guarded write.",
+      onSome: (value) => value.message,
+    }),
+    record: () => recordKeywordRuleGuard({ db, subject, current, operation }),
+    respond: (disposition) =>
+      Option.match(declared, {
+        onNone: () =>
+          disposition === "recorded"
+            ? Effect.succeed(
+                declareFailure(
+                  ValidationFailed.make({
+                    error: {
+                      code: "validation_failed",
+                      message: "The keyword rule could not complete its guarded write.",
+                      fields: [],
+                    },
+                    next: [],
+                  })
+                )
+              )
+            : Effect.succeed(keywordRuleUnavailable()),
+        onSome: (value) => value.respond(disposition),
+      }),
+  };
+};
+
 /**
  * The refusal a keyword-rule child reports when the shared daily audit budget, not the child,
  * refused its unit. The batch answers the canonical `rate_limited` result without a row, while the
@@ -133,18 +227,100 @@ const missingCategoryFailure = ({
       : Option.some(new CategoryNotFound({ categoryId }));
   });
 
+/** Replay earlier rule children and construct a refusal whose Audit runs only on `record`. */
+export const keywordRuleGuardFor =
+  (outcome: KeywordRuleOutcome) =>
+  ({
+    db,
+    subject,
+    current,
+    earlier,
+    kind,
+  }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> =>
+    kind === "capacity"
+      ? Effect.succeed(
+          keywordRuleGuardRefusal({
+            db,
+            subject,
+            current,
+            operation: outcome.operation,
+            failure: Option.some(
+              new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser })
+            ),
+          })
+        )
+      : keywordRuleGuardFailure({
+          db,
+          userId: subject.userId,
+          outcome,
+          earlier: earlier.flatMap((candidate) =>
+            candidate._tag === "KeywordRule" ? [candidate] : []
+          ),
+        }).pipe(
+          Effect.map((failure) =>
+            keywordRuleGuardRefusal({
+              db,
+              subject,
+              current,
+              operation: outcome.operation,
+              failure,
+            })
+          ),
+          Effect.orElseSucceed(() =>
+            keywordRuleGuardRefusal({
+              db,
+              subject,
+              current,
+              operation: outcome.operation,
+              failure: Option.none(),
+            })
+          )
+        );
+
+/** Explain a guarded rule child from earlier writes and retained state, or return None. */
+export const keywordRuleGuardFailure = ({
+  db,
+  userId,
+  outcome,
+  earlier,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  outcome: KeywordRuleOutcome;
+  earlier: ReadonlyArray<KeywordRuleOutcome>;
+}>): Effect.Effect<Option.Option<CategoryFailure>> =>
+  Effect.gen(function* () {
+    if (outcome.operation !== "categories.deleteKeywordRule") {
+      const written = new Map<string, KeywordRuleOutcome>();
+      for (const previous of earlier) {
+        if (previous.operation === "categories.deleteKeywordRule") written.delete(previous.ruleId);
+        else written.set(previous.ruleId, previous);
+      }
+      const duplicate = [...written.values()].some(
+        (previous) =>
+          previous.operation !== "categories.deleteKeywordRule" &&
+          previous.ruleId !== outcome.ruleId &&
+          normalizeCategoryKeyword(previous.keyword) === normalizeCategoryKeyword(outcome.keyword)
+      );
+      if (duplicate) return Option.some(new KeywordRuleAlreadyExists({ keyword: outcome.keyword }));
+    }
+    return yield* keywordRuleAbortFailure({ db, userId, outcome, earlier });
+  });
+
 /**
- * The failure one aborted keyword-rule child explains, or None when the rolled-back state cannot
- * name it: a missing Category, a vanished rule, a duplicate keyword, or an exhausted rule set.
+ * Find a missing Category, vanished rule, duplicate keyword, or exhausted rule set in retained
+ * state after rollback. Return None when the retained state cannot prove any of those conflicts.
  */
 export const keywordRuleAbortFailure = ({
   db,
   userId,
   outcome,
+  earlier,
 }: Readonly<{
   db: D1Database;
   userId: string;
   outcome: KeywordRuleOutcome;
+  earlier: ReadonlyArray<KeywordRuleOutcome>;
 }>): Effect.Effect<Option.Option<CategoryFailure>> =>
   Effect.gen(function* () {
     const category = yield* missingCategoryFailure({ db, outcome });
@@ -153,7 +329,24 @@ export const keywordRuleAbortFailure = ({
       Effect.orElseSucceed(() => Option.none<ReadonlyArray<KeywordRule>>())
     );
     if (Option.isNone(rules)) return Option.none<CategoryFailure>();
-    return yield* decideKeywordRuleConflict({ rules: rules.value, outcome });
+    // The retained rows include writes undone by rollback. Reconstruct prior rule changes
+    // before testing a conflict; a rule deleted earlier cannot be a duplicate here.
+    const prior = new Map(earlier.map((change) => [change.ruleId, change]));
+    const projected = rules.value.flatMap((rule) => {
+      const change = prior.get(rule.id);
+      if (change === undefined) return [rule];
+      if (change.operation === "categories.deleteKeywordRule") return [];
+      return [{ ...rule, keyword: change.keyword, categoryId: change.categoryId }];
+    });
+    if (
+      outcome.operation !== "categories.createKeywordRule" &&
+      !projected.some((rule) => rule.id === outcome.ruleId) &&
+      prior.get(outcome.ruleId)?.operation === "categories.createKeywordRule"
+    ) {
+      // A rule created earlier was never in retained rows; absence after rollback proves nothing.
+      return Option.none<CategoryFailure>();
+    }
+    return yield* decideKeywordRuleConflict({ rules: projected, outcome });
   });
 
 /**
@@ -177,44 +370,3 @@ export const findKeywordRuleValue = ({
         ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
-
-/**
- * The create child an exhausted keyword-rule capacity blames: the child the replay finds over
- * budget, otherwise the first create child the trigger can belong to, and None when the unit
- * holds no create child. The retained count reads committed state, then earlier creates are
- * replayed.
- */
-export const keywordRuleCapacityIndex = ({
-  db,
-  userId,
-  mutations,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  mutations: ReadonlyArray<{ readonly outcome: CanonicalMutationOutcome }>;
-}>): Effect.Effect<Option.Option<number>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      countRows(
-        db.prepare("SELECT count(*) AS total FROM keyword_rules WHERE user_id = ?").bind(userId)
-      ),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.map((existing) => {
-      const remaining = maximumKeywordRulesPerUser - existing;
-      let createdIndex = -1;
-      let firstOwned: Option.Option<number> = Option.none();
-      for (const [index, mutation] of mutations.entries()) {
-        if (
-          mutation.outcome._tag !== "KeywordRule" ||
-          mutation.outcome.operation !== "categories.createKeywordRule"
-        ) {
-          continue;
-        }
-        if (Option.isNone(firstOwned)) firstOwned = Option.some(index);
-        createdIndex += 1;
-        if (createdIndex >= remaining) return Option.some(index);
-      }
-      return firstOwned;
-    })
-  );

@@ -7,16 +7,12 @@ import {
   type ReviseInput,
   countAndAdmitMemory,
   countAndAdmitMemoryRevision,
+  maximumAggregateMemoryTokens,
   memoriesFromRows,
-  memoryCompletion,
   memoryRowsQuery,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
-import {
-  patAtomicAssertion,
-  recordCanonicalPATWork,
-  recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
+import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
@@ -37,6 +33,7 @@ import {
 } from "../transactions/transaction-boundary";
 import {
   type CanonicalMutationPreparation,
+  type MemoryOutcome,
   type PreparedCanonicalMutation,
   failedPreparation,
   refusedPreparation,
@@ -45,6 +42,7 @@ import {
 import {
   type MemoryRefusalOutcome,
   memoryBudgetRefusal,
+  memoryGuardRefusal,
   memoryRateLimited,
   memoryRefusal,
   memoryUnavailable,
@@ -276,16 +274,20 @@ export const prepareRemember = ({
         })
       );
     }
+    const outcome: MemoryOutcome = {
+      _tag: "Memory",
+      operation: "memory.remember",
+      memoryId: candidate.id,
+      candidate,
+    };
     return {
       _tag: "Prepared",
       mutation: {
         requiredScope: callerScope(subject),
-        outcome: {
-          _tag: "Memory",
-          operation: "memory.remember",
-          memoryId: candidate.id,
-          candidate,
-        },
+        guardRefusal: memoryGuardRefusal(outcome),
+        auditBudget: "shared",
+        commitGuards: Option.some(memoryCapacityGuards(candidate)),
+        outcome,
         statements: acceptedStatements({
           db,
           subject,
@@ -293,10 +295,46 @@ export const prepareRemember = ({
           mutation: insertMemory({ db, subject, candidate, current }),
           current,
         }),
-        completion: db.prepare(isPATCaller(subject) ? patAtomicAssertion : memoryCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
+
+/** The Memory owner's exact trigger metric, asserted for a named child before its write. */
+const memoryCapacityGuards =
+  (candidate: Memory) =>
+  ({
+    db,
+    userId,
+    index,
+    operation,
+  }: Readonly<{
+    db: D1Database;
+    userId: string;
+    index: number;
+    operation: string;
+  }>): ReadonlyArray<D1PreparedStatement> => [
+    db
+      .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,capacity_ok)
+      SELECT ?,?,1,CASE WHEN
+        (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
+          FROM memories WHERE user_id = ? AND id <> ?)
+        + length(CAST(json_object('id', ?, 'text', ?) AS BLOB))
+        + (SELECT count(*) FROM memories WHERE user_id = ? AND id <> ?) <= ?
+        THEN 1 ELSE 0 END
+      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
+        accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
+      .bind(
+        index,
+        operation,
+        userId,
+        candidate.id,
+        candidate.id,
+        candidate.text,
+        userId,
+        candidate.id,
+        maximumAggregateMemoryTokens
+      ),
+  ];
 
 /** The guarded replacement write and its success AuditLogEntry for one admitted revision. */
 const reviseMutation = ({
@@ -309,23 +347,28 @@ const reviseMutation = ({
   subject: TransactionCaller;
   candidate: Memory;
   current: number;
-}>): PreparedCanonicalMutation => ({
-  requiredScope: callerScope(subject),
-  outcome: {
+}>): PreparedCanonicalMutation => {
+  const outcome: MemoryOutcome = {
     _tag: "Memory",
     operation: "memory.revise",
     memoryId: candidate.id,
     candidate,
-  },
-  statements: acceptedStatements({
-    db,
-    subject,
-    operation: "memory.revise",
-    mutation: replaceMemory({ db, subject, candidate, current }),
-    current,
-  }),
-  completion: db.prepare(isPATCaller(subject) ? patAtomicAssertion : memoryCompletion),
-});
+  };
+  return {
+    requiredScope: callerScope(subject),
+    guardRefusal: memoryGuardRefusal(outcome),
+    auditBudget: "shared",
+    commitGuards: Option.some(memoryCapacityGuards(candidate)),
+    outcome,
+    statements: acceptedStatements({
+      db,
+      subject,
+      operation: "memory.revise",
+      mutation: replaceMemory({ db, subject, candidate, current }),
+      current,
+    }),
+  };
+};
 
 /**
  * Decide one canonical `memory.revise`: the addressed Memory must be current and the resulting
@@ -399,15 +442,15 @@ export const prepareForget = ({
     if (yield* budgetExhausted({ db, subject, current })) {
       return refusedPreparation(memoryBudgetRefusal());
     }
+    const outcome: MemoryOutcome = { _tag: "Memory", operation: "memory.forget", memoryId: id };
     return {
       _tag: "Prepared",
       mutation: {
         requiredScope: callerScope(subject),
-        outcome: {
-          _tag: "Memory",
-          operation: "memory.forget",
-          memoryId: id,
-        },
+        guardRefusal: memoryGuardRefusal(outcome),
+        auditBudget: "shared",
+        commitGuards: Option.none(),
+        outcome,
         statements: acceptedStatements({
           db,
           subject,
@@ -415,7 +458,6 @@ export const prepareForget = ({
           mutation: deleteMemory({ db, subject, id, current }),
           current,
         }),
-        completion: db.prepare(isPATCaller(subject) ? patAtomicAssertion : memoryCompletion),
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));

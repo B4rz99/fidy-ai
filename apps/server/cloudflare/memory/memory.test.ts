@@ -126,6 +126,7 @@ const setup = (): Promise<D1Database> =>
           "0017_forwarded_email",
           "0017_statement_dispatch",
           "0018_batch_envelope_audit",
+          "0019_canonical_child_guards",
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()

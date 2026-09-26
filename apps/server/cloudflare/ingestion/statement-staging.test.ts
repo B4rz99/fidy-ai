@@ -56,6 +56,7 @@ const migrationNames = [
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
+  "0019_canonical_child_guards",
 ] as const;
 const workerScript = "export default { fetch() { return new Response('ok') } }";
 const stagingWorkerName = "statement-staging-test-worker";

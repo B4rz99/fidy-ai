@@ -5,11 +5,12 @@ import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "../ingestion/statement-staging";
 import { statementRefusalResponse } from "../ingestion/statement-ingestion";
 import {
+  type PreparedStatementPublication,
   type StatementStagingConfig,
   prepareStagedStatementPublication,
   recordStatementRefusal,
+  statementAbortRefusal,
   statementRefusal,
-  statementSubmissionCompletion,
 } from "../ingestion/statement-staging";
 import {
   callerAuthority,
@@ -20,6 +21,7 @@ import {
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
+  type GuardRefusalWork,
   failedPreparation,
   refusedPreparation,
   unavailablePreparation,
@@ -70,6 +72,29 @@ export const canonicalStatementRefusal = ({
   },
 });
 
+const guardedStatementRefusal =
+  (config: StatementStagingConfig, publication: PreparedStatementPublication) =>
+  ({ subject, current }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> => {
+    const generic = canonicalStatementRefusal({
+      config,
+      subject,
+      current,
+      refusal: {
+        code: "validation_failed",
+        auditOutcome: "validation_failed",
+        message: "The statement submission could not complete.",
+      },
+    });
+    return statementAbortRefusal(config, publication).pipe(
+      Effect.map(
+        Option.match({
+          onNone: () => generic,
+          onSome: (refusal) => canonicalStatementRefusal({ config, subject, current, refusal }),
+        })
+      )
+    );
+  };
+
 /** One staged reference prepared for the shared canonical mutation unit, never a nested commit. */
 export const statementMutationAdapter: CanonicalMutationAdapter = {
   prepare: (work) =>
@@ -114,8 +139,15 @@ export const statementMutationAdapter: CanonicalMutationAdapter = {
         mutation: {
           requiredScope: callerScope(work.subject),
           statements: publication.statements,
-          completion: work.db.prepare(statementSubmissionCompletion),
-          outcome: { _tag: "StatementSubmission", publication, config },
+          guardRefusal: guardedStatementRefusal(config, publication),
+          auditBudget: "shared",
+          commitGuards: Option.none(),
+          outcome: {
+            _tag: "StatementSubmission",
+            operation: "ingestion.submitForExtraction",
+            publication,
+            config,
+          },
         },
       } as const satisfies CanonicalMutationPreparation;
     }),

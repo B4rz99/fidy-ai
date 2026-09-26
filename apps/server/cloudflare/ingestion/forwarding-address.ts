@@ -97,6 +97,40 @@ export const forwardingAddressAudit = ({
   ];
 };
 
+/** One metadata-only refusal for a guarded forwarding-address mutation after its D1 unit rolls back. */
+export const forwardingAddressGuardAudit = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+}>): D1PreparedStatement => {
+  if (isPATCaller(subject)) {
+    return prepareOwnedStatement({
+      db,
+      statement: recordCanonicalPATWork({
+        subject,
+        input: {
+          id: transactionId(),
+          current,
+          operation: "ingestion.enableEmailForwarding",
+          outcome: "rejected",
+          afterOwnerWrite: false,
+        },
+      }),
+    });
+  }
+  const authority = callerAuthority({ subject, current });
+  return db
+    .prepare(`INSERT INTO statement_submission_audit
+    (id,user_id,operation,outcome,occurred_at_ms)
+    SELECT ?,user_id,'ingestion.enableEmailForwarding','validation_failed',?
+    FROM ${authority.table} WHERE ${authority.predicate}`)
+    .bind(transactionId(), current, ...authority.bindings);
+};
+
 const auditCommitted = (results: D1Result[], subject: TransactionCaller): boolean => {
   const committed = results.at(-1)?.meta.changes === 1;
   return committed && (!isPATCaller(subject) || results.at(results.length - 2)?.meta.changes === 1);

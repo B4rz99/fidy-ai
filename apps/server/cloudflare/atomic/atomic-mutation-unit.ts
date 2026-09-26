@@ -1,6 +1,7 @@
 import type { CanonicalOperationId, ErrorCode } from "@fidy/server/canonical-runtime";
-import { Data, Effect, Exit, Option } from "effect";
+import { Data, Effect, Option } from "effect";
 import { sharedAuditLimitRefusal } from "./daily-canonical-budget";
+import { commitGuardedMutations } from "./guarded-mutation-commit";
 
 /**
  * The metadata-only refusal outcome one child's own audit table records. It is deliberately
@@ -253,25 +254,6 @@ export const settleAtomicRefusal = <Committed>({
   );
 };
 
-/** How many times the unit re-reads one child's committed records before calling them unreadable. */
-const readbackAttempts = 3;
-
-/**
- * One child's committed-record readback, retried while the read itself fails: a transient D1 read
- * defect after a successful commit must not turn a published unit into an unattributed 503 that a
- * client retry would re-commit. Only an exhausted retry is a defect; an absent row stays `None`.
- */
-const committedReadback = <Committed>(
-  readCommitted: Effect.Effect<Option.Option<Committed>, AtomicReadbackFailed>
-): Effect.Effect<Exit.Exit<Option.Option<Committed>, AtomicReadbackFailed>> =>
-  Effect.gen(function* () {
-    let result = yield* Effect.exit(readCommitted);
-    for (let attempt = 1; attempt < readbackAttempts && Exit.isFailure(result); attempt += 1) {
-      result = yield* Effect.exit(readCommitted);
-    }
-    return result;
-  });
-
 /**
  * Commit one ordered set of owner-prepared canonical mutation children in a single D1 atomic unit
  * and read each child's committed records back. Every child is followed by its own completion
@@ -302,28 +284,23 @@ export const executeAtomicMutationUnit = <Committed>({
   attributors: ReadonlyArray<AtomicAbortAttributor>;
 }>): Effect.Effect<AtomicUnitExecution<Committed>> =>
   Effect.uninterruptible(
-    Effect.gen(function* () {
-      if (children.length === 0) return { _tag: "Unavailable" } as const;
-      const statements = children.flatMap((child) => [...child.statements, child.assertion]);
-      const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
-      if (Exit.isFailure(attempt)) {
-        return yield* classifyAborted({
-          attributors,
-          authority,
-          cause: attempt.cause,
-          children,
-          current,
-          db,
-          userId,
-        });
-      }
-      const results: Array<Committed> = [];
-      for (const child of children) {
-        const readback = yield* committedReadback(child.readCommitted);
-        if (Exit.isFailure(readback)) return { _tag: "Unavailable" } as const;
-        if (Option.isNone(readback.value)) return { _tag: "Unavailable" } as const;
-        results.push(readback.value.value);
-      }
-      return { _tag: "Committed", results } as const;
-    })
+    commitGuardedMutations({ db, children }).pipe(
+      Effect.flatMap((commit): Effect.Effect<AtomicUnitExecution<Committed>> =>
+        commit._tag === "Aborted"
+          ? classifyAborted({
+              attributors,
+              authority,
+              cause: commit.cause,
+              children,
+              current,
+              db,
+              userId,
+            })
+          : Effect.succeed(
+              commit._tag === "Committed"
+                ? { _tag: "Committed", results: commit.values }
+                : { _tag: "Unavailable" }
+            )
+      )
+    )
   );

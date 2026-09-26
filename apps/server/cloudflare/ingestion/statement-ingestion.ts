@@ -37,7 +37,6 @@ import {
   StatementStaging,
   type StoredStatementSubmission,
   newIngestionId,
-  recordStatementRefusal,
   stagedMaterialMessage,
   statementSubmissionReadAudit,
   submissionProjection,
@@ -67,7 +66,6 @@ const unavailable = (): Response => unavailableStatement();
 
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
-const HTTP_ACCEPTED = 202;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYWALL = 402;
 const HTTP_NOT_FOUND = 404;
@@ -338,98 +336,6 @@ const refusedCredential = ({
     try: () => refusedTransactionWork({ db, subject }),
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable));
-
-/**
- * Records one refused submission attempt's metadata-only audit before its refusal is answered: a
- * PAT's rejected `pat_audit` row, or a session caller's bounded refusal outcome. Only a refusal the
- * publication unit did not settle reaches here; an already-recorded refusal is answered from its own
- * outcome. A refusal whose audit cannot commit for a dead credential, an exhausted daily budget, or
- * an unavailable authority is answered as that cause instead.
- */
-const recordRefusedSubmission = ({
-  current,
-  environment,
-  refusal,
-  subject,
-}: Readonly<{
-  current: number;
-  environment: StatementIngestionEnvironment;
-  refusal: AtomicMutationRefusal;
-  subject: TransactionCaller;
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const record = yield* Effect.tryPromise(() =>
-      recordStatementRefusal({
-        authority: callerAuthority({ subject, current }),
-        current,
-        database: environment.DB,
-        refusal,
-      })
-    ).pipe(Effect.orElseSucceed(() => "unavailable" as const));
-    if (record === "recorded") return statementRefusalResponse(refusal);
-    if (record === "rate_limited") return dailyBudgetSpent();
-    if (record === "credential_refused") {
-      return yield* refusedCredential({ db: environment.DB, subject });
-    }
-    return unavailable();
-  });
-
-/**
- * Publishes one authorized statement submission from a caller-held staged reference. The caller's
- * live authority, the Free allowance, submission pressure, material ownership, size, digest, and
- * expiry are re-verified inside one D1 atomic unit before any authoritative row exists; a refusal
- * records its metadata-only AuditLogEntry before it is answered.
- */
-export const executeStatementSubmission = ({
-  current,
-  environment,
-  input,
-  subject,
-}: Readonly<{
-  current: number;
-  environment: StatementIngestionEnvironment;
-  input: SubmitForExtractionInput;
-  subject: TransactionCaller;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const staging = stagingService(environment, current);
-      if (Option.isNone(staging)) return unavailable();
-      if (yield* budgetSpent(environment.DB, subject.userId, current)) return dailyBudgetSpent();
-      const published = yield* Effect.result(
-        staging.value.publishStagedStatementSubmission({
-          authority: callerAuthority({ subject, current }),
-          idempotencyKey: input.idempotencyKey,
-          reference: input.reference,
-          userId: subject.userId,
-        })
-      );
-      if (Result.isFailure(published)) {
-        if (published.failure._tag === "StatementStagingRefused") {
-          return yield* refusedCredential({ db: environment.DB, subject });
-        }
-        return unavailable();
-      }
-      if (published.success._tag === "Refused") {
-        // A refusal the unit already settled is answered from its own recorded outcome; only a
-        // pre-unit refusal still needs its metadata-only AuditLogEntry committed under live authority.
-        if (published.success.recorded) return statementRefusalResponse(published.success.refusal);
-        return yield* recordRefusedSubmission({
-          current,
-          environment,
-          refusal: published.success.refusal,
-          subject,
-        });
-      }
-      const stored = yield* staging.value.readOwnedStatementSubmission({
-        submissionId: published.success.submissionId,
-        userId: subject.userId,
-      });
-      if (Option.isNone(stored)) return unavailable();
-      const response = yield* submissionResponse(stored.value, HTTP_ACCEPTED);
-      return Option.getOrElse(response, () => unavailable());
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
 
 /** Decodes one bounded canonical submission input before it reaches the User coordination turn. */
 export const submitForExtractionInput = (

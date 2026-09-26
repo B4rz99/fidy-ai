@@ -1,6 +1,5 @@
 import {
   StatementContentDigest,
-  StatementIdempotencyKey,
   StatementSourceFormat,
   StatementStagingId,
   StatementSubmissionId,
@@ -20,8 +19,6 @@ import {
 } from "./statement-batch.test-fixture";
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
-import { transactionSession } from "../transactions/transactions";
-import { executeStatementSubmission } from "./statement-ingestion";
 import { statementConflictMessage } from "./statement-staging";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -1530,14 +1527,10 @@ it(
 );
 
 /** The idempotency key whose losing unit race must record exactly one refusal audit. */
-const lostRaceIdempotencyKey = Schema.decodeSync(StatementIdempotencyKey)(
-  "20000000-0000-4000-8000-000000000921"
-);
+const lostRaceIdempotencyKey = "20000000-0000-4000-8000-000000000921";
 
 /** The idempotency key whose submission dies between dispatch and its own unit commit. */
-const revokedAtCommitIdempotencyKey = Schema.decodeSync(StatementIdempotencyKey)(
-  "20000000-0000-4000-8000-000000000941"
-);
+const revokedAtCommitIdempotencyKey = "20000000-0000-4000-8000-000000000941";
 
 it(
   "records one refusal audit when a publication loses its own unit race",
@@ -1545,53 +1538,19 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
         const idempotencyKey = lostRaceIdempotencyKey;
         const { staged: winner } = yield* fromTestPromise(() => stageOne(runtime));
         const { staged: loser } = yield* fromTestPromise(() => stageOne(runtime));
-        const subject = Option.getOrThrow(
-          yield* fromTestPromise(() =>
-            transactionSession({
-              db: runtime.db,
-              request: new Request("https://api.fidyapp.com/ingestion/statements", {
-                headers: sessionHeaders(0),
-              }),
-            })
-          )
-        );
-
         // The winner commits after the losing call has read "no submission for this key" and before
         // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
         // call remains one refusal: the unit's recorded refusal is answered without a second write.
         const database = competingWriteDb(runtime.db, () =>
-          executeStatementSubmission({
-            current,
-            environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },
-            input: {
-              idempotencyKey,
-              reference: {
-                byteLength: winner.byteLength,
-                sha256: winner.sha256,
-                stagingId: winner.stagingId,
-              },
-            },
-            subject,
-          }).then((response) => response.text())
+          submit(runtime, { index: 0, idempotencyKey, reference: winner }).then((response) =>
+            response.text()
+          )
         );
         const refused = yield* fromTestPromise(() =>
-          executeStatementSubmission({
-            current,
-            environment: { DB: database, STATEMENT_STAGING_BUCKET: runtime.bucket },
-            input: {
-              idempotencyKey,
-              reference: {
-                byteLength: loser.byteLength,
-                sha256: loser.sha256,
-                stagingId: loser.stagingId,
-              },
-            },
-            subject,
-          })
+          submit({ ...runtime, db: database }, { index: 0, idempotencyKey, reference: loser })
         );
         expect(refused.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("validation_failed");
@@ -1704,30 +1663,13 @@ it(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const current = yield* Clock.currentTimeMillis;
         const idempotencyKey = "20000000-0000-4000-8000-000000000958";
-        const subject = Option.getOrThrow(
-          yield* fromTestPromise(() =>
-            transactionSession({
-              db: runtime.db,
-              request: new Request("https://api.fidyapp.com/ingestion/statements", {
-                headers: sessionHeaders(0),
-              }),
-            })
-          )
-        );
         const raced = {
           ...runtime,
           db: competingWriteDb(runtime.db, () =>
-            executeStatementSubmission({
-              current,
-              environment: { DB: runtime.db, STATEMENT_STAGING_BUCKET: runtime.bucket },
-              input: {
-                idempotencyKey: Schema.decodeSync(StatementIdempotencyKey)(idempotencyKey),
-                reference: staged,
-              },
-              subject,
-            }).then((response) => response.text())
+            submit(runtime, { index: 0, idempotencyKey, reference: staged }).then((response) =>
+              response.text()
+            )
           ),
         };
         const committed = yield* fromTestPromise(() =>
@@ -1967,18 +1909,20 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
-        // Every child stays individually admissible — 3,890 bytes of padding plus the capture
-        // payload is about 4,077 encoded bytes, inside the 4,096-byte per-child body bound — so only
-        // the aggregate request bound can refuse this batch. Twelve admissible children outgrow that
-        // bound together, which a body of individually oversized children could never prove: those
-        // would be named and refused one child at a time instead. The childless refusal asserted
-        // below is what proves the premise, so no measurement duplicates it here.
+        // The size premises are measured independently of the guard under test: each child is
+        // below the individual 4,096-byte bound, while their shared body exceeds 12 × 4,096 bytes.
         const padding = "x".repeat(3_890);
         const calls = Array.from({ length: 12 }, (_, index) => ({
           callId: batchCallId(index + 1),
           operation: "transactions.createTransaction",
           input: { payload: capturePayload({ padding }) },
         }));
+        const encodedBytes = (value: unknown): number =>
+          new TextEncoder().encode(JSON.stringify(value)).byteLength;
+        for (const call of calls) {
+          expect(encodedBytes(call.input)).toBeLessThanOrEqual(4_096);
+        }
+        expect(encodedBytes({ calls })).toBeGreaterThan(12 * 4_096);
         const refused = yield* fromTestPromise(() => batch(runtime, 0, calls));
         expect(refused.status).toBe(400);
         const failure = yield* fromTestPromise(() => failureOf(refused));
@@ -2164,16 +2108,6 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const current = yield* Clock.currentTimeMillis;
-        const subject = Option.getOrThrow(
-          yield* fromTestPromise(() =>
-            transactionSession({
-              db: runtime.db,
-              request: new Request("https://api.fidyapp.com/ingestion/statements", {
-                headers: sessionHeaders(0),
-              }),
-            })
-          )
-        );
         // The session is live for dispatch and every preparation read; it dies only when the
         // publication unit is about to run, so only the unit's own live-authority guard can see it.
         const database = competingWriteDb(runtime.db, () =>
@@ -2183,19 +2117,10 @@ it(
             .run()
         );
         const refused = yield* fromTestPromise(() =>
-          executeStatementSubmission({
-            current,
-            environment: { DB: database, STATEMENT_STAGING_BUCKET: runtime.bucket },
-            input: {
-              idempotencyKey: revokedAtCommitIdempotencyKey,
-              reference: {
-                byteLength: staged.byteLength,
-                sha256: staged.sha256,
-                stagingId: staged.stagingId,
-              },
-            },
-            subject,
-          })
+          submit(
+            { ...runtime, db: database },
+            { index: 0, idempotencyKey: revokedAtCommitIdempotencyKey, reference: staged }
+          )
         );
         expect(refused.status).toBe(401);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("unauthenticated");

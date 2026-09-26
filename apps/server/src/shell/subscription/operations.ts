@@ -1,7 +1,11 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { SubscriptionOffers, UpgradeDestination } from "~/core/subscription/model";
+import {
+  SubscriptionOffers,
+  SubscriptionStatus,
+  UpgradeDestination,
+} from "~/core/subscription/model";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/public-http/contract";
+import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
   success: OperationResponse(UpgradeDestination),
@@ -23,7 +27,7 @@ const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrad
 const listSubscriptionOffers = HttpApiEndpoint.get(
   "listSubscriptionOffers",
   "/subscription/offers",
-  { success: OperationResponse(SubscriptionOffers) }
+  { success: OperationResponse(SubscriptionOffers), error: Unavailable }
 )
   .annotate(
     OpenApi.Description,
@@ -39,7 +43,25 @@ const listSubscriptionOffers = HttpApiEndpoint.get(
     })
   );
 
-/** Canonical Free operation group for discovering and presenting Subscription upgrade offers. */
+const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/subscription/status", {
+  success: OperationResponse(SubscriptionStatus),
+  error: Unavailable,
+})
+  .annotate(
+    OpenApi.Description,
+    "Check your current trial and paid Subscription periods, AccessTier, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: patScoped("read"),
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+/** Canonical Free operation group for discovering and presenting Subscription standing and offers. */
 export const SubscriptionGroup = HttpApiGroup.make("subscription")
   .add(getUpgradeUrl)
-  .add(listSubscriptionOffers);
+  .add(listSubscriptionOffers)
+  .add(getSubscriptionStatus);

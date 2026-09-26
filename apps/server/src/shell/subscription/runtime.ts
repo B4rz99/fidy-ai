@@ -1,3 +1,9 @@
+export { projectSubscriptionOffers, projectSubscriptionStatus } from "./queries";
+export {
+  subscriptionOffersQuery,
+  subscriptionStandingQuery,
+  subscriptionAttemptsQuery,
+} from "./query-sql";
 export { makeWompiOutboundHttp } from "~/shell/outbound-http/operations";
 export {
   makeWompiBillingClient,
@@ -13,6 +19,8 @@ export { IanaTimeZone } from "~/core/_shared/context";
 export { makeWompiEnrollmentClient, type WompiEnrollmentClientService } from "./wompi-client";
 export {
   Price,
+  SubscriptionStatus,
+  SubscriptionOffers,
   BillingAttempt,
   PaymentRequestId,
   BillingAttemptId,

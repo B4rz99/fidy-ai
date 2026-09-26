@@ -79,7 +79,11 @@ mechanism, Workflows the durable multi-step mechanism, and R2 the bounded conten
 platform services must remain infrastructure, not alternate domain models.
 
 The D1 baseline contains the stable Category taxonomy, User-owned keyword rules, and the
-Cloudflare resource-admission tables. The canonical Categories implementation runs the bounded
+Cloudflare resource-admission tables. Subscription queries derive AccessTier from the original
+TrialPeriod and settled paid period at the decision instant, return a bounded User-owned standing
+projection and published Prices, and audit each protected read in its D1 unit. Verified Wompi
+settlement creates immutable paid periods in the same atomic unit as BillingAttempt success; no
+independent AccessTier owner is stored. The canonical Categories implementation runs the bounded
 ordered query, decodes every row through the published Category schema, and is shared by the
 operation registry and the private Core Worker adapter. Keyword rules are scoped to one User and
 reference stable CategoryIds; capture reads them for future Transactions and no rule change

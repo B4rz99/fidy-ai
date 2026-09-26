@@ -1,12 +1,13 @@
 import { Effect } from "effect";
 import type { AccessTier } from "./contract";
 
+type AccessTierBasis = Readonly<{ trialActive: boolean; paidProActive: boolean }>;
+
 /** Derives the User's current capability tier from active trial and paid Pro facts. */
-export const decideAccessTier = Effect.fn("decideAccessTier")(function* (input: {
-  readonly trialActive: boolean;
-  readonly paidProActive: boolean;
-}) {
-  return yield* Effect.succeed<AccessTier>(
-    input.trialActive || input.paidProActive ? "pro" : "free"
-  );
-});
+export const deriveAccessTier = (input: AccessTierBasis): AccessTier =>
+  input.trialActive || input.paidProActive ? "pro" : "free";
+
+/** Effectful AccessTier decision from the same current trial and paid-period activity facts. */
+export const decideAccessTier = Effect.fn("decideAccessTier")((input: AccessTierBasis) =>
+  Effect.succeed(deriveAccessTier(input))
+);

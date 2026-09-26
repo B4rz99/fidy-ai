@@ -1,6 +1,13 @@
 {
   "components": {
     "schemas": {
+      "AccessTier": {
+        "enum": [
+          "free",
+          "pro"
+        ],
+        "type": "string"
+      },
       "AccountHints": {
         "additionalProperties": false,
         "properties": {
@@ -369,6 +376,172 @@
           }
         },
         "type": "object"
+      },
+      "BillingAttempt": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "billingPeriod": {
+                "$ref": "#/components/schemas/BillingPeriod"
+              },
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/BillingAttemptId"
+              },
+              "money": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "priceId": {
+                "$ref": "#/components/schemas/PriceId"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "status": {
+                "enum": [
+                  "pending"
+                ],
+                "type": "string"
+              },
+              "taxTreatment": {
+                "$ref": "#/components/schemas/TaxTreatment"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "status",
+              "id",
+              "priceId",
+              "money",
+              "billingPeriod",
+              "serviceMarket",
+              "taxTreatment",
+              "timeZone",
+              "createdAt"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "billingPeriod": {
+                "$ref": "#/components/schemas/BillingPeriod"
+              },
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "failedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/BillingAttemptId"
+              },
+              "money": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "priceId": {
+                "$ref": "#/components/schemas/PriceId"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "status": {
+                "enum": [
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "taxTreatment": {
+                "$ref": "#/components/schemas/TaxTreatment"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "status",
+              "id",
+              "priceId",
+              "money",
+              "billingPeriod",
+              "serviceMarket",
+              "taxTreatment",
+              "timeZone",
+              "createdAt",
+              "failedAt"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "billingPeriod": {
+                "$ref": "#/components/schemas/BillingPeriod"
+              },
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "finalizedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/BillingAttemptId"
+              },
+              "money": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "paidPeriodEndsAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "priceId": {
+                "$ref": "#/components/schemas/PriceId"
+              },
+              "renewalAnchor": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "status": {
+                "enum": [
+                  "succeeded"
+                ],
+                "type": "string"
+              },
+              "taxTreatment": {
+                "$ref": "#/components/schemas/TaxTreatment"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "status",
+              "id",
+              "priceId",
+              "money",
+              "billingPeriod",
+              "serviceMarket",
+              "taxTreatment",
+              "timeZone",
+              "createdAt",
+              "finalizedAt",
+              "paidPeriodEndsAt",
+              "renewalAnchor"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "BillingAttemptId": {
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
       },
       "BillingPeriod": {
         "enum": [
@@ -3960,6 +4133,46 @@
         ],
         "type": "object"
       },
+      "PaidSubscription": {
+        "additionalProperties": false,
+        "properties": {
+          "billingPeriod": {
+            "$ref": "#/components/schemas/BillingPeriod"
+          },
+          "endsAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money_2"
+          },
+          "priceId": {
+            "$ref": "#/components/schemas/PriceId"
+          },
+          "renewalAnchor": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "serviceMarket": {
+            "$ref": "#/components/schemas/ServiceMarket"
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "taxTreatment": {
+            "$ref": "#/components/schemas/TaxTreatment"
+          }
+        },
+        "required": [
+          "priceId",
+          "money",
+          "billingPeriod",
+          "serviceMarket",
+          "taxTreatment",
+          "startsAt",
+          "endsAt",
+          "renewalAnchor"
+        ],
+        "type": "object"
+      },
       "PATId": {
         "format": "uuid",
         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
@@ -5794,6 +6007,41 @@
         ],
         "type": "array"
       },
+      "SubscriptionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "accessTier": {
+            "$ref": "#/components/schemas/AccessTier"
+          },
+          "paidSubscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaidSubscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recentAttempts": {
+            "items": {
+              "$ref": "#/components/schemas/BillingAttempt"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "trialPeriod": {
+            "$ref": "#/components/schemas/TrialPeriod"
+          }
+        },
+        "required": [
+          "accessTier",
+          "trialPeriod",
+          "paidSubscription",
+          "recentAttempts"
+        ],
+        "type": "object"
+      },
       "SuggestedOperation": {
         "anyOf": [
           {
@@ -7206,6 +7454,29 @@
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
                   "subscription.listSubscriptionOffers"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "subscription.getSubscriptionStatus"
                 ],
                 "type": "string"
               }
@@ -14004,6 +14275,119 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "subscription"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/subscription/status": {
+      "get": {
+        "description": "Check your current trial and paid Subscription periods, AccessTier, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall.",
+        "operationId": "subscription.getSubscriptionStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SubscriptionStatus"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [

@@ -1,4 +1,4 @@
-import { Duration, Schema, Struct } from "effect";
+import { Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import {
   E164PhoneNumber,
@@ -9,27 +9,9 @@ import {
   WhatsAppUsername,
 } from "./reference";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { TrialPeriod } from "./contract";
 
-const trialHours = 168;
-const sevenDaysInMilliseconds = Duration.toMillis(Duration.hours(trialHours));
-const TrialPeriodFields = Schema.Struct({
-  startedAt: UtcTimestamp,
-  endsAt: UtcTimestamp,
-});
-const exactTrialDuration = Schema.makeFilter<typeof TrialPeriodFields.Type>((period) =>
-  period.endsAt.epochMilliseconds - period.startedAt.epochMilliseconds === sevenDaysInMilliseconds
-    ? undefined
-    : { path: ["endsAt"], issue: "Expected exactly 168 hours after startedAt" }
-);
-
-/**
- * TrialPeriod is the immutable, half-open [startedAt, endsAt) interval for a User's single
- * no-card Pro trial. endsAt must be exactly 168 hours after startedAt.
- */
-export const TrialPeriod = TrialPeriodFields.check(exactTrialDuration).annotate({
-  identifier: "TrialPeriod",
-});
-export type TrialPeriod = typeof TrialPeriod.Type;
+export { TrialPeriod } from "./contract";
 
 /**
  * The concrete association between a stable User and one WhatsApp caller, keyed by Business

@@ -17,8 +17,9 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient } from "@/transport/client";
+import { type FidyClient, type SubscriptionStatus } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
+import { formatMoney } from "@/ui/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type PriceId,
@@ -986,6 +987,101 @@ export const SubscriptionOffersView = ({
 const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
   client.query("subscription", "listSubscriptionOffers", {})
 );
+const subscriptionStatusQuery = Atom.family((client: FidyClient) =>
+  client.query("subscription", "getSubscriptionStatus", {})
+);
+
+const billingAttemptLabel = (status: "pending" | "succeeded" | "failed"): string => {
+  switch (status) {
+    case "pending":
+      return "pendiente";
+    case "succeeded":
+      return "aprobado";
+    case "failed":
+      return "fallido";
+  }
+};
+
+const standingDateFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "long",
+  timeZone: "America/Bogota",
+});
+
+type StandingViewState =
+  | Readonly<{ _tag: "Initial" }>
+  | Readonly<{ _tag: "Failure" }>
+  | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
+
+/** Render the closed Subscription standing projection independently of offer loading. */
+export const SubscriptionStandingView = ({
+  state,
+  onRetry,
+}: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
+  if (state._tag === "Initial") return <Skeleton className="h-24 w-full" />;
+  if (state._tag === "Failure") {
+    return (
+      <Alert>
+        <AlertTitle>Estado no disponible</AlertTitle>
+        <AlertDescription>
+          No pudimos consultar tu suscripción. Tus datos siguen disponibles.
+        </AlertDescription>
+        <Button type="button" variant="outline" onClick={onRetry}>
+          Reintentar
+        </Button>
+      </Alert>
+    );
+  }
+  const { accessTier, trialPeriod, paidSubscription, recentAttempts } = state.standing;
+  const lastAttempt = recentAttempts[0];
+  const periodEnd = Option.isSome(paidSubscription)
+    ? paidSubscription.value.endsAt.epochMilliseconds
+    : trialPeriod.endsAt.epochMilliseconds;
+  const periodLabel = standingDateFormatter.format(periodEnd);
+  return (
+    <Card aria-label="Estado de la suscripción">
+      <CardHeader>
+        <CardTitle>Tu acceso: {accessTier === "pro" ? "Pro" : "Gratis"}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <p>
+          {Option.isSome(paidSubscription) ? "Último período pagado" : "Período de prueba"}: hasta
+          el {periodLabel}.
+        </p>
+        {Option.isSome(paidSubscription) && (
+          <p>
+            Precio cobrado: {formatMoney({ locale: "es-CO", money: paidSubscription.value.money })}.
+          </p>
+        )}
+        {lastAttempt !== undefined && (
+          <p>Último intento de cobro: {billingAttemptLabel(lastAttempt.status)}.</p>
+        )}
+        <p className="text-muted-foreground">
+          Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
+          bloqueo de suscripción.
+        </p>
+        <Button type="button" variant="outline" onClick={onRetry}>
+          Actualizar estado
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+const SubscriptionStanding = (): JSX.Element => {
+  const router = useRouter();
+  const query = subscriptionStatusQuery(router.options.context.apiClient);
+  const status = useAtomValue(query);
+  const refresh = useAtomRefresh(query);
+  const view = presentCanonicalQuery(status);
+  return (
+    <SubscriptionStandingView
+      state={
+        view._tag === "Ready" ? { _tag: "Ready", standing: view.value.data } : { _tag: view._tag }
+      }
+      onRetry={refresh}
+    />
+  );
+};
 
 const readyOffersState = ({
   offers,
@@ -1002,6 +1098,13 @@ const readyOffersState = ({
   if (refreshing) return { _tag: "Refreshing", offers };
   return { _tag: "Ready", offers };
 };
+
+const StandingAndOffers = ({ children }: Readonly<{ children: JSX.Element }>): JSX.Element => (
+  <>
+    <SubscriptionStanding />
+    {children}
+  </>
+);
 
 /** Authenticated route that displays offers and invokes only the direct enrollment transport. */
 export const SubscriptionOffersFeature = (): JSX.Element => {
@@ -1021,34 +1124,40 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
   switch (queryState._tag) {
     case "Initial":
       return (
-        <SubscriptionOffersView
-          gateway={Option.none()}
-          state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
-        />
+        <StandingAndOffers>
+          <SubscriptionOffersView
+            gateway={Option.none()}
+            state={{ _tag: queryState.waiting ? "Loading" : "Initial" }}
+          />
+        </StandingAndOffers>
       );
     case "Failure":
       return (
-        <SubscriptionOffersView
-          gateway={Option.none()}
-          state={{
-            _tag: "LoadFailure",
-            boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
-            onRetry: refresh,
-            waiting: queryState.waiting,
-          }}
-        />
+        <StandingAndOffers>
+          <SubscriptionOffersView
+            gateway={Option.none()}
+            state={{
+              _tag: "LoadFailure",
+              boundaryFailure: queryState.failure._tag !== "DeclaredFailure",
+              onRetry: refresh,
+              waiting: queryState.waiting,
+            }}
+          />
+        </StandingAndOffers>
       );
     case "Ready":
       return (
-        <SubscriptionOffersView
-          gateway={Option.some(gateway)}
-          state={readyOffersState({
-            offers: queryState.value.data,
-            refreshFailure: Option.isSome(queryState.refreshFailure),
-            refreshing: queryState.waiting,
-            onRetry: refresh,
-          })}
-        />
+        <StandingAndOffers>
+          <SubscriptionOffersView
+            gateway={Option.some(gateway)}
+            state={readyOffersState({
+              offers: queryState.value.data,
+              refreshFailure: Option.isSome(queryState.refreshFailure),
+              refreshing: queryState.waiting,
+              onRetry: refresh,
+            })}
+          />
+        </StandingAndOffers>
       );
   }
 };

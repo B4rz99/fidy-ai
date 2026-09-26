@@ -7,6 +7,10 @@ import type {
 } from "./canonical-implementation";
 import type { CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
+import {
+  getSubscriptionStatus,
+  listSubscriptionOffersResponse,
+} from "~/shell/subscription/queries";
 import { listCategoriesResponse } from "~/shell/categories/list-categories";
 import { getCurrentUser } from "~/shell/identity/current-user";
 import { listPATsResponse } from "~/shell/tokens/list-pats";
@@ -42,7 +46,9 @@ export const canonicalOperationImplementations = {
   "insights.listPendingInsights": unavailableOperation,
   "memory.recall": unavailableOperation,
   "subscription.getUpgradeUrl": unavailableOperation,
-  "subscription.listSubscriptionOffers": unavailableOperation,
+  "subscription.listSubscriptionOffers": () => listSubscriptionOffersResponse,
+  "subscription.getSubscriptionStatus": (_input, caller) =>
+    getSubscriptionStatus(caller.resolved.subjectUserId),
   "pats.listPATs": (_input, caller) => listPATsResponse(caller.resolved.subjectUserId),
   "operations.executeAtomicBatch": unavailableOperation,
 } as const satisfies CanonicalOperationImplementations;

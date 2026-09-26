@@ -83,6 +83,7 @@ import {
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
+import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {
   keywordRuleIdFromPath,
   keywordRuleInput,
@@ -1031,6 +1032,23 @@ const executeCanonicalWork = (
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
   if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  if (
+    operation.id === "subscription.listSubscriptionOffers" ||
+    operation.id === "subscription.getSubscriptionStatus"
+  ) {
+    return Effect.tryPromise({
+      try: () =>
+        executeProtectedSubscriptionQuery({
+          db: environment.DB,
+          subject,
+          operation:
+            operation.id === "subscription.listSubscriptionOffers"
+              ? "subscription.listSubscriptionOffers"
+              : "subscription.getSubscriptionStatus",
+        }),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
   const ownerResponse = Option.orElse(keywordRuleResponse(input), () => memoryResponse(input));
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
   const transaction = transactionResponse(input);

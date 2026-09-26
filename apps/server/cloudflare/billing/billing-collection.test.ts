@@ -211,9 +211,19 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
       expect(
         (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(1);
-      expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM subscriptions").all())).results
-      ).toHaveLength(1);
+      const standing = yield* Effect.promise(() =>
+        db
+          .prepare(`SELECT s.price_id, p.starts_at_ms, p.ends_at_ms
+        FROM subscriptions AS s JOIN billing_paid_periods AS p ON p.attempt_id = s.attempt_id`)
+          .all()
+      );
+      expect(standing.results).toEqual([
+        {
+          price_id: priceId,
+          starts_at_ms: Date.parse("2026-09-08T12:00:00Z"),
+          ends_at_ms: Date.parse("2026-09-15T12:00:00Z"),
+        },
+      ]);
       expect(
         (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_followup_outbox").all()))
           .results

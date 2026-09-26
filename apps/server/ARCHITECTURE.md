@@ -94,27 +94,22 @@ remain later work. If an adapter is absent, canonical mutation execution returns
 unavailable failure. It must not use an in-memory map, local queue, process lock, or best-effort
 continuation as a substitute.
 
-The statement-byte staging adapter keeps bytes in private R2 as bounded, User-owned,
-non-authoritative material before a canonical submission cites them. Staging is a browser-session
-transport: a PAT or anonymous caller never reaches it, and every response is an acknowledgement with
-no readable content and no authority. R2 and D1 never share a transaction: staging records only an
-expiring non-authoritative row, R2's own SHA-256 verification covers the object write, and a
-publication re-verifies the object's actual size and digest before its conditional D1 unit makes the
-material authoritative, reusing the canonical `ingestion.submitForExtraction` operation whose input
-is one retry key and one opaque staged reference — never bytes, a name, or a media type
-([ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md)). The private
-Core Worker installs the staging R2 binding, and its scheduled sweep deletes expired unpublished
-staging rows and objects; a retained submission reclaims its own staged object when its retention
-expires, leaving the staging row as durable evidence that the locator's bytes are gone. Failure,
-interruption, replay, and abandonment leave no authoritative submission referring to missing or
-mismatched bytes.
-Statement publication is one child of the shared atomic mutation unit, so an individual submission
-and a batch submission run the same owner-prepared publication under one User coordination turn: the
-authoritative submission, its staging promotion, the Free-backfill reservation, the metadata-only
-success AuditLogEntry, the bounded extraction outbox identity, and the caller's own credential
-accountability either all commit or none do. A batch admits at most one statement child, and a
-child's refusal is the same closed refusal an individual call answers
-([ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md)).
+Statement bytes enter private R2 through a bounded, User-authenticated browser-session transport,
+not a canonical operation or PAT surface. Staging returns no readable content or authority. Only
+`ingestion.submitForExtraction`, whose input is a retry key and an opaque staged reference rather
+than bytes, can publish after checking ownership, size, and digest. R2 and D1 cannot commit together:
+the Core Worker owns the R2 binding and expiry sweep, and no authoritative submission may refer to
+missing or mismatched bytes. Unpublished material expires; published bytes follow the submission's
+retention while their staging row records their eventual removal. See
+[ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md) for the
+staging and publication protocol.
+
+Individual and atomic-batch statement submissions share one User-scoped publication unit: the
+submission, staging promotion, Free-backfill reservation, credential accountability, metadata-only
+success AuditLogEntry, and bounded extraction outbox identity commit together or not at all. A batch
+admits at most one statement child; its refusal follows the same canonical contract as individual
+submission. See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md) for
+accountability and abort attribution.
 
 ## 6. Testing seams
 

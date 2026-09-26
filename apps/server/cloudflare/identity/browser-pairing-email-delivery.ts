@@ -76,9 +76,10 @@ const publishWork = (
 
 /** Offer at most 32 unexpired, secret-free email-work identities per scheduled tick. */
 export const dispatchBrowserPairingEmail = (
-  environment: DispatchEnvironment
+  environment: DispatchEnvironment & { readonly identity: Option.Option<string> }
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
+    const identity = environment.identity;
     const current = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.id
@@ -88,8 +89,15 @@ export const dispatchBrowserPairingEmail = (
     WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
       AND p.state = 'pending_approval' AND p.expires_at_ms > ?
       AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+      AND (? IS NULL OR o.id = ?)
     ORDER BY o.created_at_ms LIMIT 32`)
-        .bind(current, current, current - dispatchCooldownMilliseconds)
+        .bind(
+          current,
+          current,
+          current - dispatchCooldownMilliseconds,
+          Option.getOrNull(identity),
+          Option.getOrNull(identity)
+        )
         .all()
     );
     const outbox = yield* Schema.decodeUnknownEffect(Schema.Array(Outbox))(rows.results).pipe(

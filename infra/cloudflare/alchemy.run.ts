@@ -188,6 +188,7 @@ export default Alchemy.Stack(
       className: "StatementExtractionWorkflowV1",
     });
 
+    const asyncDeadLetters = yield* Cloudflare.Queues.Queue("AsyncDeadLetters");
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
@@ -226,6 +227,8 @@ export default Alchemy.Stack(
         HOSTED_AI_MODEL: yield* hostedAiModel,
         KAPSO_API_KEY: kapsoBindings.apiKey,
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
+        ASYNC_HEALTH_ENABLED: "enabled",
+        ASYNC_DEAD_LETTERS: asyncDeadLetters,
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
@@ -262,28 +265,33 @@ export default Alchemy.Stack(
     yield* Cloudflare.Queues.Consumer("StatementExtractionConsumer", {
       queueId: statementExtractionQueue.queueId,
       scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("BillingCollectionConsumer", {
       queueId: billingCollectionQueue.queueId,
       scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {
       queueId: onboardingEmailQueue.queueId,
       scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },
     });
     yield* Cloudflare.Queues.Consumer("BrowserPairingEmailConsumer", {
       queueId: browserPairingEmailQueue.queueId,
       scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },
     });
     yield* Cloudflare.Queues.Consumer("EmailReplacementConsumer", {
       queueId: emailReplacementQueue.queueId,
       scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },
     });
 

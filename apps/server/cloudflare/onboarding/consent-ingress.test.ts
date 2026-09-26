@@ -1,5 +1,5 @@
 import { Miniflare } from "miniflare";
-import { type Cause, Clock, DateTime, Effect, Equal, Exit, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
 import { sweepExpiredConsent } from "./consent-ingress";
 import {
   deliverOnboardingEmail,
@@ -618,7 +618,11 @@ it("reoffers the same bounded work after publication settlement is lost", () =>
       const offered = vi.fn((work: { readonly version: 1; readonly id: string }) =>
         Promise.resolve(work)
       );
-      const dispatcher = { DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } };
+      const dispatcher = {
+        identity: Option.none<string>(),
+        DB: db,
+        ONBOARDING_EMAIL_QUEUE: { send: offered },
+      };
       yield* dispatchOnboardingEmail(dispatcher);
       yield* dispatchOnboardingEmail(dispatcher);
       expect(offered).toHaveBeenCalledTimes(1);
@@ -706,6 +710,7 @@ it("continues to publish other identities when one Queue offer fails", () =>
         Equal.equals(
           yield* Effect.exit(
             dispatchOnboardingEmail({
+              identity: Option.none(),
               DB: db,
               ONBOARDING_EMAIL_QUEUE: { send: offered },
             })
@@ -714,7 +719,11 @@ it("continues to publish other identities when one Queue offer fails", () =>
         )
       ).toBe(true);
       expect(offered).toHaveBeenCalledTimes(2);
-      yield* dispatchOnboardingEmail({ DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } });
+      yield* dispatchOnboardingEmail({
+        identity: Option.none(),
+        DB: db,
+        ONBOARDING_EMAIL_QUEUE: { send: offered },
+      });
       expect(offered).toHaveBeenCalledTimes(2);
       const states = yield* Effect.tryPromise(() =>
         db.prepare("SELECT published_at_ms, last_attempt_at_ms FROM onboarding_email_outbox").all()
@@ -755,7 +764,11 @@ it("offers the 33rd identity after an entire failing Queue batch cools down", ()
         { concurrency: "unbounded" }
       );
       const offered = vi.fn().mockRejectedValue(new Error("Queue unavailable"));
-      const dispatcher = { DB: db, ONBOARDING_EMAIL_QUEUE: { send: offered } };
+      const dispatcher = {
+        identity: Option.none<string>(),
+        DB: db,
+        ONBOARDING_EMAIL_QUEUE: { send: offered },
+      };
       expect(
         Equal.equals(yield* Effect.exit(dispatchOnboardingEmail(dispatcher)), Exit.fail(undefined))
       ).toBe(true);

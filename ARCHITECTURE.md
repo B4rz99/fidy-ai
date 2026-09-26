@@ -44,6 +44,15 @@ The static artifact contains no server implementation or Secrets. Local developm
 entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
 creation.
 
+The application combines synchronous D1 commits with durable asynchronous execution. Onboarding,
+browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
+and versioned Workflows. Statement extraction also uses a durable outbox and a Queue/Workflow path
+through the User coordinator. Prompt email/billing publication follows a commit; cron recovers missed offers and runs
+independent reconciliation and retention activities. Shared dead letters and bounded operational
+signals expose delivery and execution failures; see the
+[background-work runbook](docs/operations/cloudflare-background-work.md). The server architecture
+records incomplete execution paths separately from their declared contracts.
+
 GitHub Actions rechecks trunk immediately before deploying an exact source revision, then verifies
 the redirect, static artifact, and bound health response. Workstation and provider-controlled source deployments
 are not release paths. See the [Production runbook](docs/operations/production-releases.md).

@@ -176,6 +176,7 @@ type Environment = Readonly<{
   readonly KAPSO_API_KEY: string;
   readonly KAPSO_WEBHOOK_SECRET: string;
   readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
+  readonly onAccepted: (id: string) => void;
 }>;
 type Inbound = Readonly<{
   readonly event: WhatsAppInboundEvent;
@@ -428,7 +429,7 @@ const findMailboxReplay = (
   });
 
 const insertMailbox = (
-  db: D1Database,
+  environment: Environment,
   {
     input,
     pending,
@@ -436,6 +437,7 @@ const insertMailbox = (
   }: Readonly<{ input: Inbound; pending: StoredExchange; email: EmailAddress }>
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
   Effect.gen(function* () {
+    const db = environment.DB;
     const cryptoService = yield* Crypto.Crypto;
     const id = yield* cryptoService.randomUUIDv4.pipe(Effect.orDie);
     const inserted = yield* Effect.exit(
@@ -457,17 +459,21 @@ const insertMailbox = (
           .run()
       )
     );
-    if (Exit.isSuccess(inserted)) return answer(HTTP_OK);
+    if (Exit.isSuccess(inserted)) {
+      environment.onAccepted(id);
+      return answer(HTTP_OK);
+    }
     const replay = yield* findMailboxReplay(db, input, pending.id);
     return Option.getOrElse(replay, () => answer(HTTP_UNAVAILABLE));
   });
 
 const recordMailbox = (
-  db: D1Database,
+  environment: Environment,
   input: Inbound,
   pending: StoredExchange
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
   Effect.gen(function* () {
+    const db = environment.DB;
     const replay = yield* findMailboxReplay(db, input, pending.id);
     if (Option.isSome(replay)) return replay.value;
     const decision = yield* attempt(() =>
@@ -492,7 +498,7 @@ const recordMailbox = (
     }
     const email = Schema.decodeOption(EmailAddress)(input.event.content.text);
     if (Option.isNone(email)) return answer(HTTP_UNPROCESSABLE);
-    return yield* insertMailbox(db, { input, pending, email: email.value });
+    return yield* insertMailbox(environment, { input, pending, email: email.value });
   });
 
 const EmailState = Schema.Struct({
@@ -898,7 +904,7 @@ const routeAcceptedInbound = (
     if (Option.isSome(replay)) return replay.value;
     return requestsEmailStatus(input)
       ? yield* reportEmailStatus(environment, input, pending)
-      : yield* recordMailbox(environment.DB, input, pending);
+      : yield* recordMailbox(environment, input, pending);
   });
 
 const routeConsentInbound = (

@@ -1,3 +1,4 @@
+import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../identity/browser-login";
@@ -5,7 +6,7 @@ import {
   deliverBrowserPairingEmail,
   dispatchBrowserPairingEmail,
 } from "../identity/browser-pairing-email-delivery";
-import { Cause, Clock, Effect, Exit, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import {
   deliverEmailReplacement,
   dispatchEmailReplacement,
@@ -53,14 +54,17 @@ const setup = (
     worker,
     database,
     accessIssuer,
+    publication,
   }: {
     worker: typeof coreWorker;
     database: (db: D1Database) => D1Database;
     accessIssuer: string;
+    publication: Option.Option<{ queue: Queue; context: Pick<ExecutionContext, "waitUntil"> }>;
   } = {
     worker: coreWorker,
     database: (db: D1Database): D1Database => db,
     accessIssuer: "https://example.cloudflareaccess.com",
+    publication: Option.none(),
   }
 ): Promise<{
   db: D1Database;
@@ -207,26 +211,33 @@ const setup = (
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CORE: {
             fetch: (request) =>
-              worker.fetch(new Request(request), {
-                DB: database(db),
-                AI: { run: () => Promise.reject(new Error("unused")) },
-                CONTRACT_DIGEST: "a".repeat(64),
-                RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-                HOSTED_AI_MODEL: approvedWorkersAiModel,
-                BROWSER_ORIGIN: "https://app.fidyapp.com",
-                WOMPI_ENVIRONMENT: "",
-                WOMPI_PUBLIC_KEY: "",
-                WOMPI_PRIVATE_KEY: "",
-                WOMPI_INTEGRITY_SECRET: "",
-                USER_TRANSACTION_COORDINATOR: {
-                  getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+              worker.fetch(
+                new Request(request),
+                {
+                  ...(Option.isSome(publication)
+                    ? { BROWSER_PAIRING_EMAIL_QUEUE: publication.value.queue }
+                    : {}),
+                  DB: database(db),
+                  AI: { run: () => Promise.reject(new Error("unused")) },
+                  CONTRACT_DIGEST: "a".repeat(64),
+                  RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+                  HOSTED_AI_MODEL: approvedWorkersAiModel,
+                  BROWSER_ORIGIN: "https://app.fidyapp.com",
+                  WOMPI_ENVIRONMENT: "",
+                  WOMPI_PUBLIC_KEY: "",
+                  WOMPI_PRIVATE_KEY: "",
+                  WOMPI_INTEGRITY_SECRET: "",
+                  USER_TRANSACTION_COORDINATOR: {
+                    getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+                  },
+                  KAPSO_API_KEY: "",
+                  KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
+                  CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
+                  CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",
+                  WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
                 },
-                KAPSO_API_KEY: "",
-                KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
-                CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
-                CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",
-                WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-              }),
+                Option.isSome(publication) ? publication.value.context : undefined
+              ),
           },
         });
       const send = (combinedCode: unknown): Promise<Response> =>
@@ -547,6 +558,7 @@ const deliverPendingReplacement = (db: D1Database): Promise<string> =>
     Effect.gen(function* () {
       let workId = "";
       yield* dispatchEmailReplacement({
+        identity: Option.none(),
         DB: db,
         EMAIL_REPLACEMENT_QUEUE: {
           send: (work) => {
@@ -730,6 +742,7 @@ it("admits email approval only for a browser-held verifier and an existing verif
       ).toBe(1);
       let workId = "";
       yield* dispatchBrowserPairingEmail({
+        identity: Option.none(),
         DB: db,
         BROWSER_PAIRING_EMAIL_QUEUE: {
           send: (work) => {
@@ -1333,6 +1346,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
         setup("person@example.test", "CO.Person1", {
           worker: makeCoreWorker(telemetry),
           database,
+          publication: Option.none(),
           accessIssuer: "https://defect.cloudflareaccess.com",
         })
       );
@@ -1671,3 +1685,143 @@ it("refuses expired proof and a withdrawn pending Consent decision without creat
       ).toBe(0);
     })
   ));
+
+it.each([false, true])(
+  "publishes an accepted login email before cron or recovers a failed offer (%s)",
+  (failFirstOffer) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const pending: Array<Promise<unknown>> = [];
+        const offered: Array<unknown> = [];
+        let unavailable = failFirstOffer;
+        const queue: Queue = {
+          send: (body) => {
+            if (unavailable) return Promise.reject(new Error("private queue failure detail"));
+            offered.push(body);
+            return Promise.resolve({
+              metadata: { metrics: { backlogCount: 1, backlogBytes: 100 } },
+            });
+          },
+          sendBatch: () => Promise.reject(new Error("unused")),
+          metrics: () => Promise.reject(new Error("unused")),
+        };
+        const { db, send, sendRequest } = yield* Effect.tryPromise(() =>
+          setup("person@example.test", "CO.Person1", {
+            worker: coreWorker,
+            database: (db) => db,
+            accessIssuer: "https://example.cloudflareaccess.com",
+            publication: Option.some({
+              queue,
+              context: {
+                waitUntil: (work) => {
+                  pending.push(work);
+                },
+              },
+            }),
+          })
+        );
+        yield* Effect.tryPromise(() => send(code));
+        const start = yield* Effect.tryPromise(() =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/pairings", {
+              method: "POST",
+              headers: { origin: "https://app.fidyapp.com" },
+            })
+          )
+        );
+        const pairing = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+        )(yield* Effect.tryPromise(() => start.json()));
+        for (const email of [
+          "unknown@example.test",
+          "person@example.test",
+          "person@example.test",
+        ]) {
+          const response = yield* Effect.tryPromise(() =>
+            sendRequest(
+              new Request("https://api.fidyapp.com/web/email/authentication/start", {
+                method: "POST",
+                headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+                body: encodeJson({ ...pairing, email }),
+              })
+            )
+          );
+          expect(response.status).toBe(202);
+          yield* Effect.tryPromise(() => Promise.all(pending.splice(0)));
+          if (email !== "unknown@example.test" && unavailable) {
+            expect(offered).toHaveLength(0);
+            unavailable = false;
+            // The next cron tick can reoffer the durable identity after the cooldown expires.
+            yield* Effect.tryPromise(() =>
+              db.prepare("UPDATE browser_pairing_email_outbox SET last_attempt_at_ms = 0").run()
+            );
+            yield* dispatchBrowserPairingEmail({
+              identity: Option.none(),
+              DB: db,
+              BROWSER_PAIRING_EMAIL_QUEUE: queue,
+            });
+          }
+          expect(offered).toHaveLength(email === "unknown@example.test" ? 0 : 1);
+        }
+        expect(offered[0]).toMatchObject({
+          kind: "browser-pairing-email",
+          version: 1,
+        });
+      })
+    ),
+  30_000
+);
+
+it(
+  "reports rejected delivery even when its Workflow completed successfully",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
+        yield* Effect.tryPromise(() => send(code));
+        const pairing = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+        )(
+          yield* Effect.tryPromise(() =>
+            startBrowserPairing(db).then((response) => response.json())
+          )
+        );
+        const accepted = yield* Effect.tryPromise(() =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/email/authentication/start", {
+              method: "POST",
+              headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+              body: encodeJson({ ...pairing, email: "person@example.test" }),
+            })
+          )
+        );
+        expect(accepted.status).toBe(202);
+        const work = yield* Schema.decodeUnknownEffect(Schema.Struct({ work_id: Schema.String }))(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT work_id FROM browser_pairing_email_proofs").first()
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          deliverBrowserPairingEmail({ db, send: () => Promise.resolve("rejected") })(work.work_id)
+        );
+        const signals = yield* observeOperationalHealth({
+          DB: db,
+          workflows: {
+            browserPairing: {
+              get: () => Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) }),
+            },
+          },
+          deadLetters: Option.some({
+            metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
+          }),
+        });
+        expect(signals.find((signal) => signal.operation === "browserPairing")).toMatchObject({
+          state: "attention",
+          sampledPending: 0,
+          sampledRejectedEmailWork: 1,
+          failedWorkflows: 0,
+        });
+      })
+    ),
+  30_000
+);

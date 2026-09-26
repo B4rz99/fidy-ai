@@ -53,6 +53,7 @@ afterEach(() =>
 const setup = (): Promise<{
   db: D1Database;
   environment: {
+    onAccepted: (id: string) => void;
     DB: D1Database;
     BROWSER_ORIGIN: string;
     WOMPI_ENVIRONMENT: string;
@@ -107,6 +108,7 @@ const setup = (): Promise<{
           .run()
       );
       const environment = {
+        onAccepted: (): void => undefined,
         DB: db,
         BROWSER_ORIGIN: browserOrigins.local,
         WOMPI_ENVIRONMENT: "sandbox",

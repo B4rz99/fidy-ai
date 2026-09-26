@@ -48,8 +48,8 @@
   },
   "devDependencies": {
     "@babel/parser": "8.0.5",
-    "@babel/traverse": "8.0.5",
-    "@babel/types": "8.0.5",
+    "@babel/traverse": "8.0.6",
+    "@babel/types": "8.0.6",
     "@effect/tsgo": "0.45.0",
     "@types/istanbul-lib-coverage": "2.0.6",
     "bun-types": "1.4.2",

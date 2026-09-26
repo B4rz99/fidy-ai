@@ -216,8 +216,9 @@ const requiresHostedInference = (work: CanonicalWork): boolean => {
  */
 type CoordinatorEnvironment = Readonly<{
   DB: D1Database;
-  STATEMENT_STAGING_BUCKET: Option.Option<R2Bucket>;
 }> &
+  /** Native optional binding, normalized to Option when work enters the application. */
+  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>> &
   WorkersAiEnvironment;
 
 /**
@@ -282,7 +283,7 @@ export class UserTransactionCoordinator {
               work,
               subject: admissionSubject(admission.value),
               current: transactionNow(),
-              bucket: environment.STATEMENT_STAGING_BUCKET,
+              bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
             });
             if (!requiresHostedInference(work)) {
               // Non-Memory work never consumes hosted inference, so its binding is never built and

@@ -86,7 +86,55 @@ const applyMigration = (db: D1Database, name: string): Promise<void> =>
         )
     );
 
-type Runtime = Readonly<{ db: D1Database; bucket: R2Bucket }>;
+type Coordinator = Parameters<typeof coreWorker.fetch>[1]["USER_TRANSACTION_COORDINATOR"];
+type Runtime = Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  coordinator: Option.Option<Coordinator>;
+}>;
+
+/** Native coordination proves the deployed binding shape; direct mode permits D1 fault injection. */
+type Coordination = "direct" | "bound" | "without-r2";
+
+const platformModule = (): Promise<string> =>
+  Bun.build({
+    entrypoints: [
+      new URL("../transactions/transaction-platform-fixture.ts", import.meta.url).pathname,
+    ],
+    target: "browser",
+  }).then((built) => {
+    const output = built.outputs[0];
+    if (!built.success || output === undefined) throw new Error("Coordinator bundle failed");
+    return output.text();
+  });
+
+/** Bridge host Request/Response objects to Miniflare without adapting any platform bindings. */
+const platformCoordinator = (miniflare: Miniflare): Promise<Coordinator> =>
+  miniflare.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR").then((namespace) => ({
+    getByName: (name) => ({
+      fetch: (input, init) => {
+        const request = new Request(input, init);
+        return request
+          .text()
+          .then((body) =>
+            namespace.getByName(name).fetch(request.url, {
+              method: request.method,
+              headers: Object.fromEntries(request.headers),
+              body,
+            })
+          )
+          .then((response) =>
+            response.text().then(
+              (body) =>
+                new Response(body, {
+                  status: response.status,
+                  headers: Object.fromEntries(response.headers),
+                })
+            )
+          );
+      },
+    }),
+  }));
 
 const seedUser = (
   db: D1Database,
@@ -140,22 +188,53 @@ const seedUser = (
         )
   );
 
-const setup = (): Promise<Runtime> =>
+const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
   Effect.runPromise(
     Effect.gen(function* () {
       sequence += 1;
       const name = `statement-ingestion-${sequence}`;
+      const module =
+        coordination === "direct"
+          ? "export default { fetch() { return new Response('ok') } }"
+          : yield* fromTestPromise(platformModule);
       const miniflare = new Miniflare({
         workers: [
           {
             config: {
               compatibilityDate: "2026-09-08",
-              env: { DB: { id: name, type: "d1" }, BUCKET: { type: "r2" } },
+              env: {
+                DB: { id: name, type: "d1" },
+                BUCKET: { name, type: "r2" },
+                ...(coordination === "direct"
+                  ? {}
+                  : {
+                      USER_TRANSACTION_COORDINATOR: {
+                        type: "durable-object" as const,
+                        worker: name,
+                        exportName: "UserTransactionCoordinator",
+                      },
+                    }),
+                ...(coordination === "bound"
+                  ? {
+                      STATEMENT_STAGING_BUCKET: { name, type: "r2" as const },
+                    }
+                  : {}),
+              },
+              ...(coordination === "direct"
+                ? {}
+                : {
+                    exports: {
+                      UserTransactionCoordinator: {
+                        type: "durable-object" as const,
+                        storage: "sqlite" as const,
+                      },
+                    },
+                  }),
               manifest: {
                 mainModule: "index.mjs",
                 modules: {
                   "index.mjs": {
-                    contents: "export default { fetch() { return new Response('ok') } }",
+                    contents: module,
                     type: "esm",
                   },
                 },
@@ -195,7 +274,11 @@ const setup = (): Promise<Runtime> =>
           })
         )
       );
-      return { bucket: bindings.BUCKET, db: bindings.DB };
+      const coordinator =
+        coordination === "direct"
+          ? Option.none()
+          : Option.some(yield* fromTestPromise(() => platformCoordinator(miniflare)));
+      return { bucket: bindings.BUCKET, db: bindings.DB, coordinator };
     })
   );
 
@@ -217,20 +300,20 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
   KAPSO_WEBHOOK_SECRET: "",
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   STATEMENT_STAGING_BUCKET: runtime.bucket,
-  USER_TRANSACTION_COORDINATOR: {
+  USER_TRANSACTION_COORDINATOR: Option.getOrElse(runtime.coordinator, () => ({
     getByName: (name: string): Pick<Fetcher, "fetch"> => ({
       fetch: (command: Request): Promise<Response> =>
         new UserTransactionCoordinator(
           { id: { name } },
           {
             DB: runtime.db,
-            STATEMENT_STAGING_BUCKET: Option.some(runtime.bucket),
+            STATEMENT_STAGING_BUCKET: runtime.bucket,
             AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
             HOSTED_AI_MODEL: approvedWorkersAiModel,
           }
         ).fetch(new Request(command)),
     }),
-  },
+  })),
   WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
   WOMPI_ENVIRONMENT: "",
   WOMPI_INTEGRITY_SECRET: "",
@@ -808,7 +891,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
+        const runtime = yield* fromTestPromise(() => setup("bound"));
         const { response, staged } = yield* fromTestPromise(() => stageOne(runtime));
 
         expect(response.status).toBe(201);
@@ -872,6 +955,54 @@ it(
             )
           )
         ).toEqual({ source_format: "csv", status: "published" });
+      })
+    ),
+  30_000
+);
+
+it(
+  "refuses publication without the coordinator R2 binding while other mutations remain usable",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup("without-r2"));
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const idempotencyKey = "20000000-0000-4000-8000-000000000950";
+        const individual = yield* fromTestPromise(() =>
+          submit(runtime, { idempotencyKey, index: 0, reference: staged })
+        );
+        expect(individual.status).toBe(503);
+        expect(yield* fromTestPromise(() => failureCode(individual))).toBe("unavailable");
+
+        const mixed = yield* fromTestPromise(() =>
+          batch(runtime, 0, [
+            captureCall(1),
+            statementCall(2, { idempotencyKey, reference: staged }),
+          ])
+        );
+        expect(mixed.status).toBe(503);
+        expect(yield* fromTestPromise(() => mixed.json())).toEqual({ status: "unavailable" });
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 0,
+          statement_ingestion_outbox: 0,
+          statement_submission_audit: 0,
+          transactions: 0,
+          transaction_audit: 0,
+        });
+        expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(1);
+        expect(
+          yield* fromTestPromise(() =>
+            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
+          )
+        ).toEqual({ status: "available" });
+
+        const capture = yield* fromTestPromise(() => batch(runtime, 0, [captureCall(3)]));
+        expect(capture.status).toBe(200);
+        const envelope = yield* fromTestPromise(() => batchEnvelopeOf(capture));
+        expect(envelope.data.results.map(({ operation }) => operation)).toEqual([
+          "transactions.createTransaction",
+        ]);
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
       })
     ),
   30_000
@@ -1028,7 +1159,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
+        const runtime = yield* fromTestPromise(() => setup("bound"));
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
 
         const foreign = yield* fromTestPromise(() =>
@@ -1650,7 +1781,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
+        const runtime = yield* fromTestPromise(() => setup("bound"));
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const idempotencyKey = "20000000-0000-4000-8000-000000000920";
 

@@ -344,10 +344,8 @@ export const rejectInvalidTransactionInput = ({
   });
 
 /**
- * Refuse an atomic batch whose body does not satisfy the published schemas. This is the declared
- * `ValidationFailed` failure every canonical operation exposes through the ValidationGate, not a
- * child failure: no child was named by a decodable call, so no child index is fabricated. The
- * caller records an envelope refusal Audit before returning this response.
+ * Return the batch's declared ValidationGate failure without a child index. The caller decides
+ * whether this refusal owes envelope Audit evidence before returning this response.
  */
 export const rejectInvalidBatchInput = (): Response =>
   transactionFailure({
@@ -384,7 +382,11 @@ const batchEnvelopeStatement = ({
     .bind(transactionId(), atomicBatchOperation, current, ...authority.bindings);
 };
 
-/** Record an envelope refusal, or return the credential/unavailable failure that prevented it. */
+/**
+ * Record one metadata-only envelope refusal for a live credential. Return the declared validation
+ * failure only after the row commits; otherwise answer credential refusal, the separate daily
+ * envelope rate limit, or unavailable without claiming evidence was recorded.
+ */
 export const rejectBatchEnvelope = (
   input: Readonly<{
     db: D1Database;

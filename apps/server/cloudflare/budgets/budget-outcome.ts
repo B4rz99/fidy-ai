@@ -1,16 +1,11 @@
 import { type Budget, type BudgetId } from "@fidy/server/budgets-runtime";
 import { Effect, Option } from "effect";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
-  callerAuthority,
-  isPATCaller,
-  liveTransactionAuthority,
   transactionFailure,
-  transactionId,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
+import { recordBudgetCall } from "./budget-audit";
 import { budgetFromRow } from "./budget-row";
 import type {
   BudgetOutcome,
@@ -41,65 +36,6 @@ const HTTP_BAD_REQUEST = 400;
 
 type BudgetMutationOperation = BudgetOutcome["operation"];
 
-/** A metadata-only refusal AuditLogEntry under the same live User/PAT authority as accepted work. */
-const recordBudgetRefusal = ({
-  db,
-  subject,
-  operation,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  operation: BudgetMutationOperation;
-  current: number;
-}>): Effect.Effect<"recorded" | "credential_refused" | "unavailable"> =>
-  Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })).pipe(
-    Effect.flatMap((live) => {
-      if (!live) return Effect.succeed("credential_refused" as const);
-      if (isPATCaller(subject)) {
-        return Effect.tryPromise(() =>
-          db.batch([
-            prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-            prepareOwnedStatement({
-              db,
-              statement: recordCanonicalPATWork({
-                subject,
-                input: {
-                  id: transactionId(),
-                  current,
-                  operation,
-                  outcome: "rejected",
-                  afterOwnerWrite: false,
-                },
-              }),
-            }),
-          ])
-        ).pipe(
-          Effect.map((results) =>
-            results.every((result) => result.meta.changes === 1)
-              ? ("recorded" as const)
-              : ("credential_refused" as const)
-          )
-        );
-      }
-      const authority = callerAuthority({ subject, current });
-      return Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO budget_audit
-        (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, ?, ?, 'rejected', ? FROM ${authority.table}
-        WHERE ${authority.predicate}`)
-          .bind(transactionId(), subject.id, operation, current, ...authority.bindings)
-          .run()
-      ).pipe(
-        Effect.map((result) =>
-          result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
-        )
-      );
-    }),
-    Effect.orElseSucceed(() => "unavailable" as const)
-  );
-
 /** A declared Budget refusal at the individual and atomic-batch seams. */
 export const budgetRefusal = ({
   db,
@@ -116,7 +52,7 @@ export const budgetRefusal = ({
 }>): CanonicalMutationRefusal => ({
   code,
   message: code === "not_found" ? "Budget or Category unavailable." : "Budget input unavailable.",
-  record: () => recordBudgetRefusal({ db, subject, operation, current }),
+  record: () => recordBudgetCall({ db, subject, operation, current, outcome: "rejected" }),
   respond: () =>
     Effect.succeed(
       transactionFailure({

@@ -4,7 +4,6 @@ import {
   type BudgetStatus,
   IanaTimeZone,
   advanceBudgetLatch,
-  deriveCurrentBudgetMonth,
 } from "@fidy/server/budgets-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
@@ -16,7 +15,7 @@ const Marks = Schema.Struct({
 });
 const eighty = 80;
 const hundred = 100;
-const maximumPendingWork = 64;
+const maximumPendingWork = 8;
 const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
 
 const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLatch => {
@@ -134,26 +133,19 @@ export const reconcileBudgetLatches = ({
         .bind(userId)
         .all()
     );
-    const periods = new Map<number, DateTime.Utc>();
-    const work: Array<typeof PendingWork.Type> = [];
     for (const row of pending.results) {
       const item = Schema.decodeUnknownOption(PendingWork)(row);
       if (Option.isNone(item)) return false;
       const instant = DateTime.make(item.value.occurred_at);
       if (Option.isNone(instant)) return false;
-      const period = deriveCurrentBudgetMonth({ now: instant.value, timeZone });
-      periods.set(period.from.epochMilliseconds, instant.value);
-      work.push(item.value);
-    }
-    for (const now of periods.values()) {
-      if (!(yield* reconcilePendingPeriod({ db, userId, timeZone, now }))) return false;
-    }
-    for (const item of work) {
+      if (!(yield* reconcilePendingPeriod({ db, userId, timeZone, now: instant.value }))) {
+        return false;
+      }
       yield* Effect.tryPromise(() =>
         db
           .prepare(`DELETE FROM budget_reconciliation_work
       WHERE user_id = ? AND occurred_at = ? AND version = ?`)
-          .bind(userId, item.occurred_at, item.version)
+          .bind(userId, item.value.occurred_at, item.value.version)
           .run()
       );
     }

@@ -19,6 +19,17 @@ CREATE TABLE budget_reconciliation_work (
   version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(user_id, occurred_at)
 ) STRICT;
+-- A monotone per-User revision rejects a paged report that overlaps a financial mutation.
+CREATE TABLE budget_user_versions (
+  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
+  revision INTEGER NOT NULL CHECK(revision >= 1)
+) STRICT;
+CREATE TRIGGER budget_work_version_insert AFTER INSERT ON budget_reconciliation_work
+BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (NEW.user_id, 1)
+  ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1; END;
+CREATE TRIGGER budget_work_version_update AFTER UPDATE ON budget_reconciliation_work
+BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (NEW.user_id, 1)
+  ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1; END;
 CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   VALUES (NEW.user_id, NEW.occurred_at)
@@ -48,6 +59,23 @@ CREATE TRIGGER budget_revised_work AFTER UPDATE ON budgets
 BEGIN INSERT INTO budget_reconciliation_work (user_id, occurred_at)
   VALUES (NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ON CONFLICT(user_id, occurred_at) DO UPDATE SET version = version + 1; END;
+CREATE TRIGGER budget_removed_version AFTER DELETE ON budgets
+BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (OLD.user_id, 1)
+  ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1; END;
+-- One bounded cursor per Budget/month at the exact financial-fact revision it summarized.
+CREATE TABLE budget_report_progress (
+  user_id TEXT NOT NULL,
+  budget_id TEXT NOT NULL,
+  from_utc TEXT NOT NULL,
+  time_zone TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  after_at TEXT NOT NULL,
+  after_id TEXT NOT NULL,
+  amount TEXT NOT NULL,
+  complete INTEGER NOT NULL CHECK(complete IN (0, 1)),
+  PRIMARY KEY(user_id, budget_id, from_utc, time_zone),
+  FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE
+) STRICT;
 CREATE TRIGGER budget_capacity BEFORE INSERT ON budgets
 WHEN (SELECT COUNT(*) FROM budgets WHERE user_id = NEW.user_id) >= 128
 BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END;

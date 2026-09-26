@@ -8,26 +8,28 @@ import {
   sumBudgetContributions,
 } from "@fidy/server/budgets-runtime";
 import { Currency, Money } from "@fidy/server/transactions-runtime";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
-import { prepareOwnedStatement } from "../pats/pat-unit";
 import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 import {
   type TransactionCaller,
-  boundaryFailure,
-  callerAuthority,
-  isPATCaller,
-  liveTransactionAuthority,
   transactionFailure,
-  transactionId,
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
 import { budgetFromRow } from "./budget-row";
+import { recordBudgetCall } from "./budget-audit";
+import {
+  type BudgetProgress,
+  type BudgetProgressKey,
+  advanceBudgetProgress,
+  findBudgetProgress,
+  findBudgetRevision,
+} from "./budget-progress";
 
 const maximumBudgetCount = 128;
 const movementPageSize = 512;
+const maximumReportPages = 8;
 const MovementRow = Schema.Struct({
   id: Schema.String,
   amount: Schema.String,
@@ -51,61 +53,6 @@ const invalid = (): Response =>
   transactionFailure({ code: "validation_failed", status: 400, message: "Invalid Budget query." });
 const missing = (): Response =>
   transactionFailure({ code: "not_found", status: 404, message: "Budget unavailable." });
-
-/** Audit a live credential before releasing a User-owned Budget projection. */
-const authorizeRead = ({
-  db,
-  subject,
-  operation,
-  outcome,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  operation: BudgetQueryOperation;
-  outcome: "accepted" | "rejected";
-}>): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const current = transactionNow();
-    const live = yield* Effect.tryPromise({
-      try: () => liveTransactionAuthority({ db, subject, current }),
-      catch: boundaryFailure,
-    });
-    if (!live) return false;
-    if (isPATCaller(subject)) {
-      const audit = yield* Effect.tryPromise({
-        try: () =>
-          db.batch([
-            prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-            prepareOwnedStatement({
-              db,
-              statement: recordCanonicalPATWork({
-                subject,
-                input: {
-                  id: transactionId(),
-                  current,
-                  operation,
-                  outcome,
-                  afterOwnerWrite: false,
-                },
-              }),
-            }),
-          ]),
-        catch: boundaryFailure,
-      });
-      return audit.every((row) => row.meta.changes === 1);
-    }
-    const authority = callerAuthority({ subject, current });
-    const audit = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .prepare(`INSERT INTO budget_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(transactionId(), subject.id, operation, outcome, current, ...authority.bindings)
-          .run(),
-      catch: boundaryFailure,
-    });
-    return audit.meta.changes === 1;
-  }).pipe(Effect.orElseSucceed(() => false));
 
 /** Read a bounded deterministic list; an undecodable or excess row fails closed. */
 export const listOwnedBudgets = ({
@@ -191,31 +138,72 @@ const monthlySpent = ({
   period: BudgetStatusReport["period"];
 }>): Effect.Effect<Option.Option<Money>> =>
   Effect.gen(function* () {
-    let cursorAt = DateTime.formatIso(period.from);
-    let cursorId = "";
-    let amount = BigDecimal.make(0n, 0);
-    // Keyset paging bounds each D1 result and the in-memory page without truncating valid totals.
-    let hasMore = true;
-    while (hasMore) {
-      const page = yield* movementPage({ db, userId, budget, period, cursorAt, cursorId });
-      if (Option.isNone(page)) return Option.none<Money>();
-      const rows = page.value;
-      const movements = decodeMovements(rows);
-      if (Option.isNone(movements)) return Option.none<Money>();
-      amount = BigDecimal.sum(
-        amount,
-        sumBudgetContributions({ budget, period, movements: movements.value }).amount
-      );
-      hasMore = rows.length === movementPageSize;
-      if (hasMore) {
-        const last = rows.at(-1);
-        if (last === undefined) return Option.none<Money>();
-        cursorAt = last.occurred_at;
-        cursorId = last.id;
-      }
+    const key = { db, userId, budget, period };
+    const revision = yield* findBudgetRevision(key);
+    if (Option.isNone(revision)) return Option.none<Money>();
+    const stored = yield* findBudgetProgress(key);
+    let progress = Option.getOrElse(
+      Option.filter(stored, (saved) => saved.revision === revision.value),
+      () => ({
+        revision: revision.value,
+        cursorAt: DateTime.formatIso(period.from),
+        cursorId: "",
+        spent: Money.make({ amount: BigDecimal.make(0n, 0), currency: budget.cap.currency }),
+        complete: false,
+      })
+    );
+    // Persist each bounded page; later calls resume rather than replaying an oversized month.
+    for (
+      let pageNumber = 0;
+      pageNumber < maximumReportPages && !progress.complete;
+      pageNumber += 1
+    ) {
+      const next = yield* advanceMonthlyPage({ key, progress });
+      if (Option.isNone(next)) return Option.none<Money>();
+      progress = next.value;
     }
-    return Option.some(Money.make({ amount, currency: budget.cap.currency }));
+    if (!progress.complete) return Option.none<Money>();
+    const current = yield* findBudgetRevision(key);
+    return Option.isSome(current) && current.value === revision.value
+      ? Option.some(progress.spent)
+      : Option.none<Money>();
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const advanceMonthlyPage = ({
+  key,
+  progress,
+}: Readonly<{ key: BudgetProgressKey; progress: BudgetProgress }>): Effect.Effect<
+  Option.Option<BudgetProgress>
+> =>
+  Effect.gen(function* () {
+    const page = yield* movementPage({
+      ...key,
+      cursorAt: progress.cursorAt,
+      cursorId: progress.cursorId,
+    });
+    if (Option.isNone(page)) return Option.none<BudgetProgress>();
+    const movements = decodeMovements(page.value);
+    if (Option.isNone(movements)) return Option.none<BudgetProgress>();
+    const pageSpent = sumBudgetContributions({
+      budget: key.budget,
+      period: key.period,
+      movements: movements.value,
+    });
+    const last = page.value.at(-1);
+    const next = {
+      revision: progress.revision,
+      cursorAt: last?.occurred_at ?? progress.cursorAt,
+      cursorId: last?.id ?? progress.cursorId,
+      spent: Money.make({
+        amount: BigDecimal.sum(progress.spent.amount, pageSpent.amount),
+        currency: key.budget.cap.currency,
+      }),
+      complete: page.value.length < movementPageSize,
+    };
+    return (yield* advanceBudgetProgress({ key, previous: progress, next }))
+      ? Option.some(next)
+      : Option.none<BudgetProgress>();
+  });
 
 type BudgetMovement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
 const decodeMovements = (
@@ -367,7 +355,15 @@ export const browseBudgets = ({
     Effect.gen(function* () {
       const parsed = budgetParameters(operation, new URL(request.url));
       const outcome = Option.isSome(parsed) ? "accepted" : "rejected";
-      if (!(yield* authorizeRead({ db, subject, operation, outcome }))) {
+      if (
+        (yield* recordBudgetCall({
+          db,
+          subject,
+          operation,
+          outcome,
+          current: transactionNow(),
+        })) !== "recorded"
+      ) {
         return transactionUnavailable();
       }
       if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();

@@ -412,6 +412,12 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
   expect((await decision()).status()).toBe(invalidStatus);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible();
+  await page.getByLabel("Monto en COP").fill("12345");
+  await page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy");
+  await page.getByRole("button", { name: "Registrar transacción" }).click();
+  await expect(page.getByLabel("Transacción recién registrada")).toContainText("Recuperación Fidy");
+  await page.reload();
+  await expect(page.getByText("Recuperación Fidy").first()).toBeVisible();
   expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

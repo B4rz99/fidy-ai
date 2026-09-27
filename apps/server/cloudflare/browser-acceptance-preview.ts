@@ -335,6 +335,30 @@ const transactionResponse = async (request: Request): Promise<Response> => {
     },
   });
 };
+const SourceCreation = Schema.Struct({
+  type: Schema.Literal("CARD"),
+  token: Schema.String,
+  customer_email: Schema.String,
+  acceptance_token: Schema.String,
+  accept_personal_auth: Schema.String,
+});
+// @effect-diagnostics-next-line asyncFunction:off
+const createSourceResponse = async (request: Request): Promise<Response> => {
+  if (request.method !== "POST") return new Response(null, { status: 405 });
+  const body: unknown = await request.json();
+  const source = Schema.decodeUnknownOption(SourceCreation)(body);
+  if (Option.isNone(source)) return new Response(null, { status: 400 });
+  const expected = merchantBody.data;
+  if (
+    source.value.token !== "tok_acceptance_first_card" ||
+    source.value.customer_email !== "tarjeta@example.com" ||
+    source.value.acceptance_token !== expected.presigned_acceptance.acceptance_token ||
+    source.value.accept_personal_auth !== expected.presigned_personal_data_auth.acceptance_token
+  ) {
+    return new Response(null, { status: 400 });
+  }
+  return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+};
 const providerResponse = (request: Request): Promise<Response> => {
   const requestUrl = request.url;
   if (requestUrl.includes("/v1/transactions")) return transactionResponse(request);
@@ -346,11 +370,7 @@ const providerResponse = (request: Request): Promise<Response> => {
       })
     );
   }
-  if (requestUrl.endsWith("/v1/payment_sources")) {
-    return Promise.resolve(
-      Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 })
-    );
-  }
+  if (requestUrl.endsWith("/v1/payment_sources")) return createSourceResponse(request);
   if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
     return Promise.resolve(
       Response.json({

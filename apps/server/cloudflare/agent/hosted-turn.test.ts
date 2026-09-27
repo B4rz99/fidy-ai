@@ -2319,6 +2319,14 @@ it("recovers an abandoned staged reply by durable alarm without another User req
       ).toHaveLength(0);
       yield* Effect.tryPromise(() => coordinator.alarm());
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toHaveLength(4);
+      const oldest = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT MIN(terminal_at_ms) AS due FROM hosted_turns WHERE user_id = ?")
+          .bind(users[0])
+          .first<{ due: number }>()
+      );
+      if (oldest === null) throw Error("missing terminal Turn");
+      expect(Number(scheduled.at(-1))).toBe(oldest.due + hostedTranscriptRetentionMs + 1);
     })
   ));
 

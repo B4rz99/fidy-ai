@@ -858,6 +858,15 @@ const sweepHostedTranscript = (
         .bind(userId, cutoff)
         .run()
     );
+    return yield* readHostedRetentionDeadline(db, userId);
+  });
+
+// Read remaining evidence deadlines after expiry deletes commit; Pending Turn recovery is separate.
+const readHostedRetentionDeadline = (
+  db: D1Database,
+  userId: UserId
+): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
     const compacted = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT MIN(updated_at_ms) AS oldest

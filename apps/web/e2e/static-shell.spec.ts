@@ -1,5 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
-import { type Page, expect, test } from "@playwright/test";
+import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
 
 const expectSeriousAccessibilityViolations = async (page: Page): Promise<void> => {
   const results = await new AxeBuilder({ page }).analyze();
@@ -13,6 +13,7 @@ const ok = 200;
 const notFound = 404;
 const accepted = 204;
 const forbidden = 403;
+const unauthorized = 401;
 const methodNotAllowed = 405;
 
 test("serves the checked-in security policy on SPA fallbacks", async ({ request }) => {
@@ -90,6 +91,49 @@ test("keeps API ownership and credentialed CORS on the real ingress, not the sta
   expect(staticAuth.headers()["content-type"]).toContain("text/html");
   expect(staticAuth.headers()["set-cookie"]).toBeUndefined();
   expect((await request.get(`${api}/openapi.json`)).status()).toBe(notFound);
+});
+
+test("creates a browser pairing through the real public and Core Workers", async ({ request }) => {
+  const response = await request.post("https://127.0.0.1:4174/web/pairings", {
+    headers: { origin: "https://127.0.0.1:4173" },
+  });
+  expect(response.ok()).toBe(true);
+  expect(await response.json()).toMatchObject({
+    pairingId: expect.any(String),
+    privateVerifier: expect.any(String),
+    publicCode: expect.any(String),
+  });
+});
+
+const expectUnauthenticated = (request: APIRequestContext, path: string): Promise<void> =>
+  request
+    .get(`https://127.0.0.1:4174${path}`, { headers: { origin: "https://127.0.0.1:4173" } })
+    .then((result) => {
+      expect(result.status(), path).toBe(unauthorized);
+      return result.text();
+    })
+    .then((body) => {
+      expect(body, path).not.toContain("other-user-private-details");
+    });
+
+test("Core refuses unauthenticated financial routes and untrusted support decisions", async ({
+  request,
+}) => {
+  const api = "https://127.0.0.1:4174";
+  const headers = { origin: "https://127.0.0.1:4173" };
+  const protectedPaths = [
+    "/categories",
+    "/transactions",
+    "/dashboard/view",
+    "/subscription/status",
+  ];
+  await Promise.all(protectedPaths.map((path) => expectUnauthenticated(request, path)));
+  const support = await request.post(`${api}/internal/support-recovery`, {
+    headers,
+    data: { pairingCode: "BCDF-GHJK", backupRecoveryCode: "invalid" },
+  });
+  expect(support.status()).not.toBe(ok);
+  expect(support.headers()["access-control-allow-origin"]).toBeUndefined();
 });
 
 test("renders the public home route without serious accessibility violations", async ({ page }) => {

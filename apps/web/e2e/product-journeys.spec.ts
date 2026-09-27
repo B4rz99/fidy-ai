@@ -232,4 +232,7 @@ test("loads a Dashboard through canonical queries and commits an edited Widget t
   await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
   await expect.poll(() => edit).toBeDefined();
   expect(JSON.stringify(edit)).toContain("Gastos visibles");
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
 });

@@ -118,6 +118,8 @@ apps/server/cloudflare/agent/hosted-turn.test.ts
   s_faf8a5df7be82b::t_d00364604d5a8f 1887-1889,1902-1904
   s_faf8a5df7be82b::t_7520efe8f5218e 1907-1909
   s_98251aab91db5b::t_ca7843be5faef6 3,58-65,99-115,118-119,122-207,209-210,212-219,240-247,253-254,258-262,264-268,273-274,277-285,304-308,310,312-321,329,343-349,357-363,375-382,390-394,402-417,446-447,449-475,477,497-527,535-541,549-555,557,559-634,636,638-661,678-686,688,690-694,735-772,790,799-802,804-806,825-826,834,849-852,872-875,877-881,914-924,970-980,982-986,1001-1004,1019,1028-1033,1048-1077,1079-1088,1095,1097-1101,1123-1152,1169-1178,1206-1215,1217-1220,1678-1683,1691-1712,1720-1737,1745-1753,1759-1767,1769-1774,1801-1825,1844-1845,1847-1852,1890-1901,1910-1922
+  s_faf8a5df7be82b::t_72876d932268c2 2,263,269-272,309,322-328,330-342,476,528-529,635,687,787-789,791-794,803,876,981,1027,1078,1094,1096,1153,1216
+  s_faf8a5df7be82b::t_4dcd9afa014c93 6
 apps/server/cloudflare/http/request-body.ts
   s_faf8a5df7be82b::t_6ff27e38f43627 115-121
 apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
@@ -152,6 +154,7 @@ apps/web/src/features/dashboard/feature.test.tsx
 apps/server/cloudflare/dashboard/dashboard.ts
   s_faf8a5df7be82b::t_075adbf6922253 118
   s_faf8a5df7be82b::t_a54787dfd28f2a 119-121
+  s_faf8a5df7be82b::t_72876d932268c2 122
 apps/web/src/transport/wompi-tokenization.test.ts
   s_faf8a5df7be82b::t_85ef8b3d771dad 2,19,27-43,46,53-60,63,66-70,73,76,81,84,89,96,104,121-125,128,142-146,149,156,161-179,181-183,185-187,189,194,199-214,216-217,219-223
 apps/web/cloudflare/production-policy/artifact.ts
@@ -221,6 +224,8 @@ apps/web/scripts/serve-preview.ts
 apps/server/cloudflare/agent/hosted-turn.ts
   s_faf8a5df7be82b::t_240d70ca84a4cf 120,123-166,168,176-206,222,233-280,288,304-352,356-391,404-418,434,444-586,594,608-649,686,689,692,716
   s_faf8a5df7be82b::t_fd3a01af0fad87 106,114-119,121-122,650-656,665,681-685,687-688,690-691,693-698,701,711-715,717-721
+  s_faf8a5df7be82b::t_4dcd9afa014c93 2-4,6-7,22-30,40,53-65,102-103
+  s_faf8a5df7be82b::t_72876d932268c2 587-593,595-607,657
 apps/server/src/shell/email-authentication/mutation.ts
   s_faf8a5df7be82b::t_c5105d4e52d051 21-27,38-44
 package.json
@@ -263,6 +268,8 @@ apps/server/src/shell/transactions/continuation.ts
 apps/server/cloudflare/agent/turn-store.ts
   s_faf8a5df7be82b::t_240d70ca84a4cf 117-130,136-143,146-151,154-160,162-184,188,193-201,205-207,209-215,217-222,239-243,267,292-309,311-320,326-354,359-367,411,449
   s_faf8a5df7be82b::t_50e7f930e74970 29,368-379,384-400,403,412-419,425-430,433,450-476,491-513,516-521,587,601-611,614-624,626-628,632-634,636-645,653,663-672,676-684,692,702-709,715-753,758,762-768,771-776,778-789,791-799,803-826,830,838-844,847-865,937-943
+  s_faf8a5df7be82b::t_4dcd9afa014c93 3-6,74,77-81,522-546,569-571
+  s_faf8a5df7be82b::t_72876d932268c2 321-322,358,380-383,401
 apps/web/scripts/check-dependency-guards.ts
   s_faf8a5df7be82b::t_db7eb993485a0c 407,409,411-417
 apps/server/src/shell/subscription/wompi-billing-client.test.ts
@@ -300,6 +307,12 @@ apps/web/src/features/subscription/feature.tsx
   s_4b9df51b40ce9e::t_629cab8aa69201 458-462,466-469,475,669-673,749-753,759-761,763-781,825-844,888,892-896
 scripts/document-parsing/protected-document-proof.ts
   s_4b9df51b40ce9e::t_7c4830a1308de0 2,14-18,20-22,36-74
+apps/server/src/shell/agent/runtime.ts
+  s_faf8a5df7be82b::t_10f75235a39ff6 22-26
+apps/server/cloudflare/migrations/0016_hosted_turn.sql
+  s_faf8a5df7be82b::t_10f75235a39ff6 43,47-51,54-59,77-78
+apps/web/scripts/ci-workflow.test.ts
+  s_faf8a5df7be82b::t_1559a7d2960241 10,19-21
 ---
 {
   "schema_version": "authorship/3.0.0",

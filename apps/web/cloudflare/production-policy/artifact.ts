@@ -53,18 +53,18 @@ const validatePath = (path: string): void => {
 };
 
 const artifactPaths = (directory: string): Promise<readonly string[]> =>
-  readdir(directory, { recursive: true, withFileTypes: true }).then((entries) =>
-    entries
-      .filter((entry) => !entry.isDirectory())
-      .map((entry) => {
-        const path = relative(directory, join(entry.parentPath, entry.name));
-        if (!entry.isFile()) {
-          throw new Error(`forbidden production artifact path: ${path}`);
-        }
-        return path;
-      })
-      .sort()
-  );
+  readdir(directory, { recursive: true, withFileTypes: true }).then((entries) => {
+    const paths: Array<string> = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) continue;
+      const path = relative(directory, join(entry.parentPath, entry.name));
+      if (!entry.isFile()) {
+        throw new Error(`forbidden production artifact path: ${path}`);
+      }
+      paths.push(path);
+    }
+    return paths.sort();
+  });
 
 const validateContents = (directory: string, path: string): Promise<void> =>
   Bun.file(`${directory}/${path}`)

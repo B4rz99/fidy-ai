@@ -1,0 +1,32 @@
+tools/depcruise/tsconfig.json
+  s_faf8a5df7be82b::t_44c012f98b832b 1-16
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_01efb1f68fd120 119,131,134
+package.json
+  s_faf8a5df7be82b::t_4e01ce9f1a274c 28
+tools/depcruise/run.mjs
+  s_faf8a5df7be82b::t_163faf783761fe 37-38,169-170
+  s_faf8a5df7be82b::t_0061023fbfb12a 29-34,36,40-46,52,68,70,81,86,94,103-106,116-119,131,148,166,172,182,186,188,197,207,245,262
+  s_faf8a5df7be82b::t_ea41d304eea164 234-244,252-253
+  s_faf8a5df7be82b::t_8a060ef42d8f2c 168
+.oxlintrc.json
+  s_faf8a5df7be82b::t_46309ee61641bf 280,284
+scripts/verify.ts
+  s_faf8a5df7be82b::t_6a04eeb805072a 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb13e8a25ac86a69928b06d17bfb7dca32314c95",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+README.md
+  s_4427c17cb16cae::t_889934558d74dc 26
+docs/operations/production-releases.md
+  s_4427c17cb16cae::t_5ea380e0c528b4 12-15
+  s_4427c17cb16cae::t_cd617afac37861 105
+dependency-policy.json
+  s_4427c17cb16cae::t_f5124c5c8b3011 30
+docs/server-contract-artifacts.md
+  s_4427c17cb16cae::t_01633f1695e129 17
+apps/web/scripts/ci-workflow.test.ts
+  s_4427c17cb16cae::t_5a2bbd9a9a0baa 19
+  s_4427c17cb16cae::t_356e2626b2db57 10
+  s_4427c17cb16cae::t_c364eb4d3c3e66 9,16-18
+  s_4427c17cb16cae::t_63c5322455825a 44
+apps/web/ARCHITECTURE.md
+  s_4427c17cb16cae::t_4540f81be17759 68-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "df2da2674d4d3d511c371d7aa7ba1c4766d7f99b",
+  "prompts": {},
+  "sessions": {
+    "s_4427c17cb16cae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e15d-d35e-7790-889d-38a95837b9d7",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

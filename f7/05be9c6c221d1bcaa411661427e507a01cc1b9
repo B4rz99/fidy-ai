@@ -1,0 +1,21 @@
+.agents/skills/code-review/SKILL.md
+  s_162531c4eb7fd9::t_7efa7636f05834 3,26
+.agents/skills/implement/SKILL.md
+  s_162531c4eb7fd9::t_7efa7636f05834 7,9,11,13,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f705be9c6c221d1bcaa411661427e507a01cc1b9",
+  "prompts": {},
+  "sessions": {
+    "s_162531c4eb7fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e403-ac04-7792-bf6f-f1a6be5a925b",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

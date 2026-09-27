@@ -1,0 +1,25 @@
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_cad2ef0983d2bc::t_367120411dd297 518,532,541,646,776
+  s_cad2ef0983d2bc::t_af58e280d7eb42 299-309,501-517,519,584-594,638,640,644,647,652-662,768,770-772,774-775,777,852
+  s_cad2ef0983d2bc::t_0247a35727cb9a 718-720,889-891,894-896
+apps/server/tools/contracts/generate.ts
+  s_cad2ef0983d2bc::t_44e130e0691849 78
+  s_cad2ef0983d2bc::t_0247a35727cb9a 74-77
+  s_cad2ef0983d2bc::t_e64cc86899d1b4 3,43,45-48,51-53,56-58,61-63,67-68,70,73,79-82,84,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c247c5aaf560c90739c9112e81fac72461fbabe2",
+  "prompts": {},
+  "sessions": {
+    "s_cad2ef0983d2bc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e2f1-adec-7134-bdc1-c339a57baa90",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

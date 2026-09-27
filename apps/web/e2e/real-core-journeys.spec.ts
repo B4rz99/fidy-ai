@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
-import { signInThroughCore, visiblePairingCode } from "./real-core-fixture";
+import {
+  signInFirstCardThroughCore,
+  signInThroughCore,
+  visiblePairingCode,
+} from "./real-core-fixture";
 
 const api = "https://127.0.0.1:4174";
 const ok = 200;
@@ -235,6 +239,66 @@ test("submits reused-source Subscription enrollment through real public and Core
   await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
     timeout: 20_000,
   });
+});
+
+test("tokenizes a first card outside Fidy and enrolls through real public and Core routes", async ({
+  page,
+  request,
+}) => {
+  await signInFirstCardThroughCore({ page, request });
+  const cardNumber = "4111111111111111";
+  let providerTokens = 0;
+  const fidyBodies: Array<string> = [];
+  page.on("request", (outbound) => {
+    if (outbound.url().startsWith(api) && outbound.postData() !== null) {
+      fidyBodies.push(outbound.postData() ?? "");
+    }
+  });
+  await page.route("https://sandbox.wompi.co/v1/tokens/cards", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({
+        status: noContent,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "authorization, content-type",
+          "access-control-allow-methods": "POST",
+        },
+      });
+      return;
+    }
+    providerTokens += 1;
+    expect(route.request().postData()).toContain(cardNumber);
+    await route.fulfill({
+      status: ok,
+      headers: { "access-control-allow-origin": "*" },
+      contentType: "application/json",
+      body: JSON.stringify({ data: { id: "tok_acceptance_first_card", brand: "VISA" } }),
+    });
+  });
+  await page.goto("/upgrade");
+  await page.getByRole("button", { name: "Elegir mensual" }).click();
+  await expect(page.getByLabel("Número de tarjeta")).toBeVisible();
+  await page.getByLabel("Número de tarjeta").fill(cardNumber);
+  await page.getByLabel("Vencimiento").fill("122028");
+  await page.getByLabel("CVC").fill("123");
+  await page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba");
+  await page.getByLabel(/Acepto el reglamento/iu).check();
+  await page.getByLabel(/Autorizo el tratamiento/iu).check();
+  const submitResponse = page.waitForResponse(
+    (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
+  );
+  await page.getByRole("button", { name: "Activar Pro" }).click();
+  const submitted = await submitResponse;
+  expect(submitted.status()).toBe(ok);
+  expect(await submitted.json()).toMatchObject({ status: "payment-pending" });
+  expect((await request.post("http://127.0.0.1:4175/billing/collect")).status()).toBe(noContent);
+  await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
+    timeout: 20_000,
+  });
+  expect(providerTokens).toBe(1);
+  expect(
+    fidyBodies.every((body) => !body.includes(cardNumber) && !body.includes("Usuario Prueba"))
+  ).toBe(true);
 });
 
 test("a read-only PAT issued through the real browser session cannot capture Transactions after review or revocation", async ({

@@ -15,18 +15,26 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
       return code;
     });
 
-export const signInThroughCore = ({
-  page,
-  request,
-}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+const signInWithIdentity = ({ page, request }: SignInFixture, firstCard: boolean): Promise<void> =>
   page
     .goto("/auth/pair")
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
-    .then((code) => request.post(`http://127.0.0.1:4175/approve?code=${code}`))
+    .then((code) =>
+      request.post(`http://127.0.0.1:4175/approve?code=${code}&firstCard=${firstCard}`)
+    )
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
       return expect(page).toHaveURL(/\/app\/transactions$/u, {
         timeout: pairingTimeoutMilliseconds,
       });
     });
+
+/** Signs in the seeded User with an available CardPaymentSource through real Core redemption. */
+export const signInThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, false);
+
+/** Signs in a separate User whose first Subscription must tokenize a new card. */
+export const signInFirstCardThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, true);

@@ -1,35 +1,13 @@
 import { Clock, DateTime, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
+import {
+  UserTransactionCoordinator,
+  makeCoreWorker,
+  runBillingCollectionWorkflow,
+} from "./browser-acceptance-core-module";
 import { newId } from "./pats/pat-shared";
-import type * as CoreWorkerModule from "./core-worker";
 
-const coreBundle = new URL("../node_modules/.cache/browser-acceptance-core.mjs", import.meta.url);
-const compiled = Bun.spawnSync([
-  "bunx",
-  "esbuild",
-  new URL("./core-worker.ts", import.meta.url).pathname,
-  "--bundle",
-  "--platform=node",
-  "--format=esm",
-  "--packages=external",
-  `--alias:cloudflare:workers=${new URL("./workflow-test-runtime.ts", import.meta.url).pathname}`,
-  `--outfile=${coreBundle.pathname}`,
-  `--tsconfig=${new URL("../tsconfig.json", import.meta.url).pathname}`,
-]);
-if (compiled.exitCode !== 0) {
-  throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
-}
-// Esbuild emits this file from core-worker.ts above; keep its imports on that module interface.
-const coreModule: typeof CoreWorkerModule = await import(coreBundle.href);
-if (
-  typeof coreModule.makeCoreWorker !== "function" ||
-  typeof coreModule.UserTransactionCoordinator !== "function" ||
-  typeof coreModule.runBillingCollectionWorkflow !== "function"
-) {
-  throw new Error("Core acceptance bundle is missing Worker exports");
-}
-const { makeCoreWorker, UserTransactionCoordinator, runBillingCollectionWorkflow } = coreModule;
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry");
 const { browserOrigins } = await import("./runtime/topology");
@@ -118,6 +96,7 @@ await migrations.reduce<Promise<void>>(
 // This identity is confined to Miniflare. The separate loopback operator simulates a verified
 // WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.
 const fixtureUserId = "24000000-0000-4000-8000-000000000241";
+const firstCardUserId = "24000000-0000-4000-8000-000000000281";
 const otherUserId = "24000000-0000-4000-8000-000000000261";
 const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
@@ -173,6 +152,7 @@ await db
   .run();
 const sourceEnrollmentId = "24000000-0000-4000-8000-000000000271";
 const sourceId = 3891;
+const firstCardSourceId = 3892;
 const enrollmentLifetimeMs = 900_000;
 await db
   .prepare(`INSERT INTO card_enrollments
@@ -221,6 +201,45 @@ await db
   )
   .run();
 
+// A second User has verified credentials and consent but no CardPaymentSource. It must
+// traverse first-time tokenization instead of silently reusing the primary User's source.
+await db
+  .prepare(
+    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
+  )
+  .bind(firstCardUserId, "CO", "es-CO", "America/Bogota", now)
+  .run();
+await db
+  .prepare(
+    "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
+  )
+  .bind(firstCardUserId, "acceptance-portfolio", "CO.FirstCard", now)
+  .run();
+await db
+  .prepare(
+    "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
+  )
+  .bind(firstCardUserId, "tarjeta@example.com", now)
+  .run();
+await db
+  .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
+  .bind(firstCardUserId, now, now + trialDurationMs)
+  .run();
+await db
+  .prepare(`INSERT INTO onboarding_consent_records
+  (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+   decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
+  .bind(
+    "24000000-0000-4000-8000-000000000282",
+    firstCardUserId,
+    "{}",
+    "first-card-disclosure",
+    "first-card-decision",
+    now,
+    now
+  )
+  .run();
+
 const recoveryDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))
 );
@@ -262,18 +281,20 @@ const providerResponse = async (requestUrl: string): Promise<Response> => {
   if (requestUrl.includes("/v1/transactions")) {
     const attempt = await db
       .prepare(
-        "SELECT wompi_reference, amount FROM billing_attempts ORDER BY created_at_ms DESC LIMIT 1"
+        `SELECT a.id, a.wompi_reference, a.amount, s.wompi_source_id
+         FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.user_id = a.user_id
+         ORDER BY a.created_at_ms DESC LIMIT 1`
       )
-      .first<{ wompi_reference: string; amount: string }>();
+      .first<{ id: string; wompi_reference: string; amount: string; wompi_source_id: number }>();
     if (attempt === null) return new Response(null, { status: 404 });
     return Response.json({
       data: {
-        id: "acceptance-transaction-1",
+        id: `acceptance-transaction-${attempt.id}`,
         reference: attempt.wompi_reference,
         status: "APPROVED",
         amount_in_cents: Number(attempt.amount) * 100,
         currency: "COP",
-        payment_source_id: sourceId,
+        payment_source_id: attempt.wompi_source_id,
         finalized_at: DateTime.formatIso(
           DateTime.makeUnsafe(Effect.runSync(Clock.currentTimeMillis))
         ),
@@ -281,6 +302,14 @@ const providerResponse = async (requestUrl: string): Promise<Response> => {
     });
   }
   if (requestUrl.includes("/v1/merchants/")) return Response.json(merchantBody);
+  if (requestUrl.includes(`/v1/payment_sources/${firstCardSourceId}`)) {
+    return Response.json({
+      data: { id: firstCardSourceId, status: "AVAILABLE", customer_email: "tarjeta@example.com" },
+    });
+  }
+  if (requestUrl.endsWith("/v1/payment_sources")) {
+    return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+  }
   if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
     return Response.json({
       data: { id: sourceId, status: "AVAILABLE", customer_email: "usuario@example.com" },
@@ -397,7 +426,7 @@ const collectBilling = (): Promise<Response> =>
             )
     );
 
-const approveWhatsAppPairing = (code: string): Promise<Response> =>
+const approveWhatsAppPairing = (code: string, userId: string): Promise<Response> =>
   db
     .prepare(
       "SELECT id FROM browser_login_pairings WHERE public_code = ? AND state = 'pending_approval'"
@@ -411,7 +440,7 @@ const approveWhatsAppPairing = (code: string): Promise<Response> =>
             .prepare(
               "INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id) VALUES (?,?,?,?)"
             )
-            .bind("acceptance-portfolio", newId(), pairing.id, fixtureUserId)
+            .bind("acceptance-portfolio", newId(), pairing.id, userId)
             .run()
             .then(() => new Response(null, { status: noContent }))
     );
@@ -440,7 +469,13 @@ const operator = Bun.serve({
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
     const approvalCode = operatorCode(request, "/approve");
-    if (Option.isSome(approvalCode)) return approveWhatsAppPairing(approvalCode.value);
+    if (Option.isSome(approvalCode)) {
+      const userId =
+        new URL(request.url).searchParams.get("firstCard") === "true"
+          ? firstCardUserId
+          : fixtureUserId;
+      return approveWhatsAppPairing(approvalCode.value, userId);
+    }
     return new Response(null, { status: 403 });
   },
 });

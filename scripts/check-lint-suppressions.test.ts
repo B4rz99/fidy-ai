@@ -37,6 +37,7 @@ it("rejects both Oxlint and ESLint directives", () => {
 it("rejects disabled diagnostics that no longer require TypeScript path overrides", () => {
   const sources = [
     '"asyncFunction": "off",',
+    '"globalFetch": "off",',
     '"missingPipeableSignature": "off",',
     '"newPromise": "off",',
     '"strictBooleanExpressions": "off",',
@@ -104,9 +105,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
       );
       expect(exceptions.toSorted()).toEqual(
         [
-          "globalFetch:./scripts/document-parsing/check.ts",
-          "globalFetch:./scripts/document-parsing/extraction-proof.ts",
-          "globalFetch:./scripts/document-parsing/workerd-inspector.ts",
           "nodeBuiltinImport:./apps/web/cloudflare/production-policy/artifact.ts",
           "nodeBuiltinImport:./apps/web/scripts/build-production.test.ts",
           "nodeBuiltinImport:./apps/web/scripts/check-browser-bundle.test.ts",

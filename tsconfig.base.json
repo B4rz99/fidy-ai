@@ -133,18 +133,6 @@
             "include": [
               "./scripts/document-parsing/check.ts",
               "./scripts/document-parsing/extraction-proof.ts",
-              "./scripts/document-parsing/workerd-inspector.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "globalFetch": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./scripts/document-parsing/check.ts",
-              "./scripts/document-parsing/extraction-proof.ts",
               "./scripts/document-parsing/protected-document-proof.ts"
             ],
             "options": {

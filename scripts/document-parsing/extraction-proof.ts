@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { Data, Effect, Option, Schema } from "effect";
+import { requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 
 const kibibyte = Number("1024");
@@ -133,17 +134,24 @@ const buildProof = (
     return { bundleBytes, startupMilliseconds, uploadBytes };
   });
 
+const requestExtraction = (
+  body: string | Uint8Array,
+  signal: AbortSignal,
+  headers: Readonly<Record<string, string>> = {}
+): Promise<Response> =>
+  requestWorkerd({ method: "POST", port: serverPort, path: "/extract", body, headers, signal });
+
 const requestReadiness = (signal: AbortSignal): Promise<Response> =>
-  fetch(`http://127.0.0.1:${serverPort}/extract`, {
-    body: "not a document",
-    method: "POST",
-    signal,
-  });
+  requestExtraction("not a document", signal);
 
 const waitUntilReady = Effect.gen(function* () {
   for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
     const ready = yield* fromPromise(requestReadiness).pipe(
-      Effect.map((response) => response.status === unprocessableContentStatus),
+      Effect.flatMap((response) =>
+        fromPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
+          Effect.as(response.status === unprocessableContentStatus)
+        )
+      ),
       Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
     );
     if (ready) return;
@@ -162,12 +170,7 @@ const profileSuccessfulConversion = (
         profileWorkerRequest({
           debuggerUrl,
           sendRequest: (requestSignal) =>
-            fetch(`http://127.0.0.1:${serverPort}/extract`, {
-              body,
-              headers: { "content-type": claimedContentType },
-              method: "POST",
-              signal: requestSignal,
-            }),
+            requestExtraction(body, requestSignal, { "content-type": claimedContentType }),
           signal: Option.some(signal),
         })
       );
@@ -259,13 +262,7 @@ const proveHostileInputs = (
       },
     ];
     for (const input of inputs) {
-      const response = yield* fromPromise((signal) =>
-        fetch(`http://127.0.0.1:${serverPort}/extract`, {
-          body: input.body,
-          method: "POST",
-          signal,
-        })
-      );
+      const response = yield* fromPromise((signal) => requestExtraction(input.body, signal));
       const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
         yield* fromPromise(() => response.json())
       );

@@ -1,0 +1,27 @@
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_fd58b891768ea6 109-118,143-144,155-163,224-231
+  s_60ae463805ce18::t_f1975f20dc618c 119-142,145-154
+apps/server/cloudflare/browser-acceptance-core-module.ts
+  s_60ae463805ce18::t_21441a0d1609ac 1,17-18
+.gitignore
+  s_60ae463805ce18::t_69b8e124198140 12
+apps/server/cloudflare/browser-acceptance-core-bundle.d.mts
+  s_60ae463805ce18::t_e9b5cc9d0dc150 1-2
+  s_60ae463805ce18::t_daa1d996b94720 3-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a680212e8bef24d7049ebe3c3cc2b471f6df534e",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

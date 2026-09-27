@@ -1,0 +1,41 @@
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_60ae463805ce18::t_b0a4c7bc05f652 28-30,32
+  s_60ae463805ce18::t_28ef744effeff8 31
+apps/web/e2e/real-core-journeys.spec.ts
+  s_60ae463805ce18::t_9081f5e84fd58d 112,122-123
+  s_60ae463805ce18::t_ade49a048f8701 10,57
+  s_60ae463805ce18::t_4c5e3c4fd67da1 60,101-102,104-106,110,113-121,131-132
+  s_60ae463805ce18::t_1e6531e629ebe2 46-47,49-50,52,54-56,58-59
+  s_60ae463805ce18::t_4cb5f9b5177fbb 53
+  s_60ae463805ce18::t_1ec642da263e5f 107-109,111
+  s_60ae463805ce18::t_128cbb901593bb 51,124-130
+  s_60ae463805ce18::t_dcf7978678cf57 48
+  s_60ae463805ce18::t_018c66d6d19bf0 61
+  s_60ae463805ce18::t_6d1929e3981e14 103
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_aa867aacfca048 27-29,323-324,334,339-341
+  s_60ae463805ce18::t_078ff637a77e6a 262,264,267
+  s_60ae463805ce18::t_d8681a297b23b3 307-309,313,319-322,325-333,336-338,342-344
+  s_60ae463805ce18::t_6707732b429ab7 279
+  s_60ae463805ce18::t_7448447109a593 205-208
+  s_60ae463805ce18::t_a69d06886f6a5b 245-248,252-255
+  s_60ae463805ce18::t_1490ddb19fe862 174,177-187,190-199,201-204,234-240,242-244,249-251,256-259,261,263,265-266,268,281,283,285-286,419-422
+  s_60ae463805ce18::t_822f00ebfe65de 175-176,188-189,200,241,280,282
+  s_60ae463805ce18::t_9d0ec1ab03c5f5 260,284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "88908cc1e9ef87b854402510e4c72ab6f8b74518",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+.oxlintrc.json
+  s_60ae463805ce18::t_75f73d18f7750a 204
+apps/web/e2e/static-shell.spec.ts
+  s_60ae463805ce18::t_eaca1fad4c9008 15-81
+  s_60ae463805ce18::t_73c69b4ed3d8f3 12-14
+apps/web/e2e/browser-pairing.spec.ts
+  s_60ae463805ce18::t_f7ef49fa24cabb 189-191,201-203,205,217,280-285,289,292,297,300-301
+  s_60ae463805ce18::t_94a85f67802a81 214-216,218,220-234,267-272,274-276,294-296,302-304
+  s_60ae463805ce18::t_4ba9ed440d061e 195-197,236-261,265-266,273,279
+  s_60ae463805ce18::t_eaca1fad4c9008 192-194
+  s_60ae463805ce18::t_375b1d89c17872 198-200,206-213,219,235,262-264,277-278,286-288,290-291,293,298-299,305-306
+  s_60ae463805ce18::t_1ea7652bdf393f 204
+  s_60ae463805ce18::t_b02ed854c4143c 40,57,97-102,162-163,174,307-319,326-327,329,358-366,368,370
+apps/web/scripts/serve-preview.ts
+  s_60ae463805ce18::t_26f5fcb81c8c19 58,99-100
+  s_60ae463805ce18::t_381fe993fd488a 43-57,59-65,69-71,80-82,86,88-90
+  s_60ae463805ce18::t_f139194f85c20f 72
+  s_60ae463805ce18::t_8293aa00094118 78-79,97-98
+  s_60ae463805ce18::t_b02ed854c4143c 66,75-77,83-84,87
+apps/web/e2e/canonical-browser.spec.ts
+  s_60ae463805ce18::t_94a85f67802a81 16-18,39-41,48-52,57-61,70-73,98-100
+  s_60ae463805ce18::t_4b3bcc2b8015c6 78-97
+  s_60ae463805ce18::t_01611e8a503fd4 1-15,19-38,101-105,107-113
+  s_60ae463805ce18::t_d216ca2525484b 106
+  s_60ae463805ce18::t_ef47a0604ac880 42-47,53-56,62-69,74-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a2aaa9c23b6dc30d49b12562a800608a4973f3e0",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

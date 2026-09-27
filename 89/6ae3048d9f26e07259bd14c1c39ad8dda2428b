@@ -1,0 +1,43 @@
+apps/web/scripts/check-dependency-guards.ts
+  s_672cb0b11117a0::t_6ed763530c6494 407,409,411-417
+apps/web/scripts/check-browser-bundle.test.ts
+  s_672cb0b11117a0::t_c046f8c46cc309 3-4,10-43
+apps/web/scripts/build-production.test.ts
+  s_672cb0b11117a0::t_558fa4c4d9589a 3
+  s_672cb0b11117a0::t_55c65a72cf1d30 11-15,41
+  s_672cb0b11117a0::t_fbddee0b50355f 4,17-20,25-40,42-48,51-53,55,74-79,81-86,88-96,98-108,110-120
+  s_672cb0b11117a0::t_5a53582f7e07c2 22-24,50
+  s_672cb0b11117a0::t_bb2f423c0deac4 49
+  s_672cb0b11117a0::t_36df3236d81ac7 54
+apps/web/scripts/serve-preview.ts
+  s_672cb0b11117a0::t_40bc9dea55bb6c 44,47,50-56,58-61
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_672cb0b11117a0::t_9c9c33f94e9b0d 17-33,35-50,52-67
+apps/web/scripts/check-browser-bundle.ts
+  s_672cb0b11117a0::t_a482f542db1c4b 3,30-31,33-34,113,118-119,122-123,318-322,328-329,336-341,343-344
+  s_672cb0b11117a0::t_49d01284930c26 32,121
+  s_672cb0b11117a0::t_2ebd3eccfee38b 115-117,124
+  s_672cb0b11117a0::t_fbb7b897773980 342
+  s_672cb0b11117a0::t_cb6aebe625f80b 59-65,67-71,78-79,81-84,86-87,101-112,114,125,134,315-317,323-327,330-335,345
+  s_672cb0b11117a0::t_24eff974db1dac 80
+  s_672cb0b11117a0::t_f1fa2cab67c078 85
+  s_672cb0b11117a0::t_c9fb7297faaa21 120
+apps/web/scripts/build-preview.test.ts
+  s_672cb0b11117a0::t_51a80e49a8744a 20,22-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "896ae3048d9f26e07259bd14c1c39ad8dda2428b",
+  "prompts": {},
+  "sessions": {
+    "s_672cb0b11117a0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-dfc1-7155-b931-68aab92fe6d8",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -2916,7 +2916,7 @@ it("shares one Category projection and row codec between HTTP and the hosted-age
       expect(yield* awaitPromise(http.json())).toEqual(fromAgent);
     })
   ));
-it("fails closed with declared unavailable for an authenticated WebSession whose canonical adapter is absent", () =>
+it("fails closed with declared unavailable for an authenticated WebSession when Insight storage is unavailable", () =>
   runTest(
     Effect.gen(function* () {
       const { send, sessions } = yield* awaitPromise(setup());
@@ -2930,9 +2930,7 @@ it("fails closed with declared unavailable for an authenticated WebSession whose
       );
       expect(authenticated.status).toBe(503);
       expect(yield* awaitPromise(authenticated.json())).toMatchObject({
-        error: {
-          code: "unavailable",
-        },
+        status: "unavailable",
       });
       expect(
         (yield* awaitPromise(

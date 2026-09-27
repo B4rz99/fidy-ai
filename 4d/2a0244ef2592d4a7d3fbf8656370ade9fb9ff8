@@ -1,5 +1,6 @@
 apps/web/playwright.config.ts
   s_60ae463805ce18::t_2cc9278ff772c2 21-26,28-34,36-38
+  s_60ae463805ce18::t_851a1c61c6694e 27,35
 apps/web/e2e/static-shell.spec.ts
   s_60ae463805ce18::t_592d6d8cbeaf93 14-16,74,82,85,87,89,92
   s_60ae463805ce18::t_48392600a80485 88,90-91

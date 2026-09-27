@@ -283,13 +283,10 @@
         "typescript/explicit-function-return-type": "off"
       }
     },
-    // The two tooling locations below also have no types. dependency-cruiser
-    // lives in an isolated install under tools/depcruise (see its package.json)
-    // that the root tsconfig does not see; the custom plugin is untyped .js
-    // written against oxlint's untyped JS plugin API. Its local helper import
-    // carries the runtime extension Node ESM requires.
+    // dependency-cruiser lives in an isolated install under tools/depcruise
+    // (see its package.json) that the root tsconfig does not see.
     {
-      "files": ["tools/depcruise/*.mjs", "scripts/oxlint/*.js"],
+      "files": ["tools/depcruise/*.mjs"],
       "rules": {
         "import/extensions": ["error", "never", { "pattern": { "js": "always" } }],
         "typescript/no-unsafe-argument": "off",
@@ -299,12 +296,19 @@
         "typescript/no-unsafe-return": "off"
       }
     },
+    // The custom plugin's local helper import needs the runtime extension Node ESM requires.
+    {
+      "files": ["scripts/oxlint/*.js"],
+      "rules": {
+        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+      }
+    },
     // Only the runner needs the `.mjs` exception turned back off. That
     // exception keys off the *resolved* file, so it also demands an extension
     // on a package subpath that happens to resolve to one — which an
     // exports-map key cannot carry. The runner imports the cruiser's subpaths
     // and no relative .mjs at all, so the exception is all cost and no use to
-    // it. The untyped plugin imports nothing, so it needs no such allowance.
+    // it. The typed plugin's helper import already uses Node ESM's `.js` extension.
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": {

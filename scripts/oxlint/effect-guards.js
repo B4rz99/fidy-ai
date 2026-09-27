@@ -4,13 +4,23 @@
 // Ported from the bespoke ESLint rules in
 // https://github.com/mikearnaldi/accountability/blob/main/eslint.config.mjs
 //
-// oxlint's JS-plugin API mirrors ESLint v9. Written in .js so tsgo (which only
-// typechecks *.ts) does not try to typecheck the untyped plugin API.
+// Oxlint's JS-plugin API mirrors ESLint v9. The JSDoc types below are derived
+// from its published RuleTester contract; keep the runtime plugin as Node ESM.
+
+/** @typedef {import("./ast-types.js").Rule} OxlintRule */
+/** @typedef {import("./ast-types.js").Node} Node */
+/** @typedef {import("./ast-types.js").Program} Program */
+/** @typedef {import("./ast-types.js").TSType} TSType */
+/** @typedef {import("./ast-types.js").TypeEnvironment} TypeEnvironment */
+/** @typedef {import("./ast-types.js").MemberExpression} MemberExpression */
+/** @typedef {import("./ast-types.js").ImportDeclaration} ImportDeclaration */
+/** @typedef {import("./ast-types.js").ImportSpecifier} ImportSpecifier */
 
 import {
   classifyUnsafeDictionary,
   classifyUnsafeDictionaryValue,
   createTypeEnvironment,
+  declarationName,
 } from "./dictionary-types.js";
 
 /**
@@ -18,6 +28,7 @@ import {
  * runtime validation. Use SqlSchema.findOne/findAll/single/void with a Schema
  * so queries validate at runtime.
  */
+/** @satisfies {OxlintRule} */
 const noSqlTypeParameter = {
   meta: {
     type: "problem",
@@ -31,8 +42,7 @@ const noSqlTypeParameter = {
   create(context) {
     return {
       TaggedTemplateExpression(node) {
-        // Oxc exposes `typeArguments`; older ESTree used `typeParameters`.
-        if (!node.typeArguments && !node.typeParameters) return;
+        if (!node.typeArguments) return;
         const tag = node.tag;
         const isSql =
           (tag.type === "Identifier" && tag.name === "sql") ||
@@ -51,6 +61,7 @@ const noSqlTypeParameter = {
  * Ban `{ disableValidation: true }` — disabling Schema validation defeats the
  * purpose of Schema and hides invalid data. Fix the data or the schema instead.
  */
+/** @satisfies {OxlintRule} */
 const noDisableValidation = {
   meta: {
     type: "problem",
@@ -81,9 +92,14 @@ const noDisableValidation = {
 // the v3 spelling of `callback`; both are listed so the fence survives either.
 const ESCAPE_HATCHES = new Set(["sync", "promise", "tryPromise", "async", "callback"]);
 
+/** @param {ImportDeclaration["specifiers"][number]} specifier - Local import binding. */
 const isWholeModuleImport = (specifier) =>
   specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier";
 
+/**
+ * @param {string} source - Imported module specifier.
+ * @param {ImportDeclaration["specifiers"][number]} specifier - Local import binding.
+ */
 const bindsEffectNamespace = (source, specifier) =>
   (source === "effect/Effect" && isWholeModuleImport(specifier)) ||
   (source === "effect" && importsName(specifier, "Effect"));
@@ -93,6 +109,7 @@ const bindsEffectNamespace = (source, specifier) =>
  * a defect. Production adapters use `Effect.tryPromise` and then deliberately map, contain, or die
  * on the foreign failure. This keeps the exceptional decision visible at the interop site.
  */
+/** @satisfies {OxlintRule} */
 const noEffectPromise = {
   meta: {
     type: "problem",
@@ -125,6 +142,7 @@ const noEffectPromise = {
 };
 
 /** Rejects type-only cast helpers that suppress assignability errors without runtime proof. */
+/** @satisfies {OxlintRule} */
 const noTypeCast = {
   meta: {
     type: "problem",
@@ -155,6 +173,7 @@ const noTypeCast = {
 };
 
 /** The member name a `.prop` or `["prop"]` access reads, or undefined. */
+/** @param {MemberExpression} node - Member access to inspect. */
 const staticMemberName = (node) => {
   if (!node.computed && node.property.type === "Identifier") return node.property.name;
   if (node.property.type === "Literal" && typeof node.property.value === "string") {
@@ -171,6 +190,7 @@ const staticMemberName = (node) => {
  * `apps/server/src/core/**` by the config: they are the last remaining way to do I/O in the
  * functional core without the type noticing.
  */
+/** @satisfies {OxlintRule} */
 const noEscapeHatch = {
   meta: {
     type: "problem",
@@ -214,6 +234,10 @@ const noEscapeHatch = {
  * Index a module's top-level statements by the names they bind, as `bindingsOf`
  * reports them. Nameless entries are dropped: nothing can refer to them by name.
  */
+/**
+ * @param {Program} program - Module whose declarations are indexed.
+ * @param {(node: Node) => Array<[string | undefined, Node]>} bindingsOf - Declaration names.
+ */
 const indexByName = (program, bindingsOf) =>
   new Map(program.body.flatMap(bindingsOf).filter(([name]) => name !== undefined));
 
@@ -223,19 +247,22 @@ const indexByName = (program, bindingsOf) =>
  * statement missing it is a shape that cannot occur, and it should fail here
  * rather than quietly walk an empty list and report nothing.
  */
+/**
+ * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Named export list.
+ * @returns {Array<[Node, string]>}
+ */
 const exportedLocals = (statement) =>
   statement.specifiers.flatMap((specifier) =>
-    specifier.type === "ExportSpecifier" && specifier.local.type === "Identifier"
-      ? [[specifier, specifier.local.name]]
-      : []
+    specifier.local.type === "Identifier" ? [[specifier, specifier.local.name]] : []
   );
 
 /** The leftmost identifier of a `typeof X` / `typeof X.Y` query, or undefined. */
+/** @param {TSType} typeAnnotation - Type queried by the schema companion. */
 const typeQueryRoot = (typeAnnotation) => {
-  if (typeAnnotation?.type !== "TSTypeQuery") return undefined;
+  if (typeAnnotation.type !== "TSTypeQuery") return undefined;
   let name = typeAnnotation.exprName;
-  while (name?.type === "TSQualifiedName") name = name.left;
-  return name?.type === "Identifier" ? name.name : undefined;
+  while (name.type === "TSQualifiedName") name = name.left;
+  return name.type === "Identifier" ? name.name : undefined;
 };
 
 /**
@@ -244,19 +271,24 @@ const typeQueryRoot = (typeAnnotation) => {
  * they are one interface, documented once on the schema. Demanding a second
  * comment here would only produce the comment-shaped text that says nothing.
  */
+/** @param {Node} declaration - Exported declaration to inspect. */
 const isSchemaTypeCompanion = (declaration) =>
   declaration.type === "TSTypeAliasDeclaration" &&
-  declaration.id.type === "Identifier" &&
   typeQueryRoot(declaration.typeAnnotation) === declaration.id.name;
 
 /** The names one top-level statement binds, each paired with the statement itself. */
+/**
+ * @param {Node} statement - Top-level declaration to index.
+ * @returns {Array<[string, Node]>}
+ */
 const declaredBindings = (statement) => {
   if (statement.type === "VariableDeclaration") {
     return statement.declarations.flatMap((declarator) =>
       declarator.id.type === "Identifier" ? [[declarator.id.name, statement]] : []
     );
   }
-  return statement.id?.type === "Identifier" ? [[statement.id.name, statement]] : [];
+  const name = declarationName(statement);
+  return name === undefined ? [] : [[name, statement]];
 };
 
 /**
@@ -274,6 +306,7 @@ const declaredBindings = (statement) => {
  * declared, and demanding a second comment above a list of names is how a rule
  * about interfaces starts producing text about nothing.
  */
+/** @satisfies {OxlintRule} */
 const requireInterfaceComment = {
   meta: {
     type: "problem",
@@ -285,13 +318,19 @@ const requireInterfaceComment = {
     schema: [],
   },
   create(context) {
+    /** @param {Node} node - Export site whose leading comment is checked. */
     const lacksLeadingBlockComment = (node) => {
       const comments = context.sourceCode.getCommentsBefore(node);
       const nearest = comments.at(-1);
-      return nearest === undefined || nearest.type !== "Block" || nearest.value.trim() === "";
+      return nearest?.type !== "Block" || nearest.value.trim() === "";
     };
+    /** @param {Node} node - Undocumented export. */
     const report = (node) => context.report({ node, messageId: "requireInterfaceComment" });
 
+    /**
+     * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Export list.
+     * @param {Map<string | undefined, Node>} sites - Local declaration sites.
+     */
     const checkSpecifiers = (statement, sites) => {
       for (const [specifier, name] of exportedLocals(statement)) {
         const site = sites.get(name);
@@ -302,6 +341,10 @@ const requireInterfaceComment = {
       }
     };
 
+    /**
+     * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Named export.
+     * @param {Map<string | undefined, Node>} sites - Local declaration sites.
+     */
     const checkNamed = (statement, sites) => {
       // `export { x } from "./y"` re-exports something already documented
       // where it is declared; the barrel-file rule in .dependency-cruiser.mjs
@@ -337,6 +380,7 @@ const requireInterfaceComment = {
  * imperative integration eventually requires synchronization, it belongs in
  * one narrow adapter with an explicit file-scoped lint exception.
  */
+/** @satisfies {OxlintRule} */
 const noReactUseEffect = {
   meta: {
     type: "problem",
@@ -356,7 +400,7 @@ const noReactUseEffect = {
         for (const specifier of node.specifiers) {
           if (
             specifier.type === "ImportSpecifier" &&
-            (specifier.imported.name === "useEffect" || specifier.imported.value === "useEffect")
+            importedName(specifier.imported) === "useEffect"
           ) {
             context.report({ node: specifier, messageId: "noReactUseEffect" });
           }
@@ -381,6 +425,7 @@ const noReactUseEffect = {
  * DateTime.Utc exposes `partsUtc` only as Effect's mutable lazy cache. Core may
  * carry Utc instants but must never couple domain logic to that internal field.
  */
+/** @satisfies {OxlintRule} */
 const noDateTimeInternals = {
   meta: {
     type: "problem",
@@ -417,7 +462,10 @@ const SCALAR_SCHEMA_CONSTRUCTORS = new Set([
   "TemplateLiteral",
 ]);
 
-/** The Schema constructor at the root of a fluent schema expression. */
+/** The Schema constructor at the root of a fluent schema expression.
+ * @param {Node | undefined} expression - Schema expression to traverse.
+ * @param {Set<string>} schemaNamespaces - Imported Schema bindings.
+ */
 const schemaConstructorName = (expression, schemaNamespaces) => {
   let current = expression;
   while (current !== undefined) {
@@ -438,10 +486,18 @@ const schemaConstructorName = (expression, schemaNamespaces) => {
   return undefined;
 };
 
-const importsName = (specifier, name) =>
-  specifier.type === "ImportSpecifier" &&
-  (specifier.imported.name === name || specifier.imported.value === name);
+/** @param {ImportSpecifier["imported"]} imported - Imported identifier or literal. */
+const importedName = (imported) =>
+  imported.type === "Identifier" ? imported.name : imported.value;
 
+/**
+ * @param {ImportDeclaration["specifiers"][number]} specifier - Local import binding.
+ * @param {string} name - Imported export name.
+ */
+const importsName = (specifier, name) =>
+  specifier.type === "ImportSpecifier" && importedName(specifier.imported) === name;
+
+/** @param {ImportDeclaration} node - Import that may bind Schema. */
 const schemaNamespaceLocals = (node) => {
   if (node.source.value === "effect") {
     return node.specifiers
@@ -456,6 +512,7 @@ const schemaNamespaceLocals = (node) => {
   return [];
 };
 
+/** @param {ImportDeclaration} node - Import that may bind Schema.brand. */
 const brandBindingLocals = (node) =>
   node.source.value === "effect/Schema"
     ? node.specifiers
@@ -468,6 +525,7 @@ const brandBindingLocals = (node) =>
  * phantom variance field is misclassified as mutable. Compensate by permitting
  * Schema.brand only when the branded runtime value is a primitive scalar.
  */
+/** @satisfies {OxlintRule} */
 const scalarBrandOnly = {
   meta: {
     type: "problem",
@@ -482,6 +540,7 @@ const scalarBrandOnly = {
     const schemaNamespaces = new Set(["Schema"]);
     const directBrandBindings = new Set();
 
+    /** @param {import("./ast-types.js").CallExpression} node - Potential brand call. */
     const isBrandCall = (node) => {
       if (node.callee.type === "Identifier") return directBrandBindings.has(node.callee.name);
       return (
@@ -501,7 +560,7 @@ const scalarBrandOnly = {
         if (!isBrandCall(node)) return;
         const pipeCall = node.parent;
         if (
-          pipeCall?.type !== "CallExpression" ||
+          pipeCall.type !== "CallExpression" ||
           pipeCall.callee.type !== "MemberExpression" ||
           staticMemberName(pipeCall.callee) !== "pipe"
         ) {
@@ -534,24 +593,28 @@ const ENTROPY_EXPORTS = new Set([
 
 const CRYPTO_SOURCES = new Set(["crypto", "node:crypto"]);
 
-const bindsWholeModule = (specifier) =>
-  specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier";
-
+/** @param {Node} statement - Top-level import to inspect. */
 const cryptoModuleLocals = (statement) => {
   if (statement.type !== "ImportDeclaration") return [];
   const source = statement.source.value;
   if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return [];
-  return statement.specifiers.filter(bindsWholeModule).map((specifier) => specifier.local.name);
+  return statement.specifiers.filter(isWholeModuleImport).map((specifier) => specifier.local.name);
 };
 
+/** @param {Program} program - Module whose crypto imports are indexed. */
 const cryptoBindings = (program) =>
   new Set(["crypto", ...program.body.flatMap(cryptoModuleLocals)]);
 
+/**
+ * @param {Node} object - Object whose entropy property is accessed.
+ * @param {Set<string>} names - Imported crypto bindings.
+ */
 const isCryptoObject = (object, names) => {
   if (object.type === "Identifier") return names.has(object.name);
   return object.type === "MemberExpression" && staticMemberName(object) === "crypto";
 };
 
+/** @satisfies {OxlintRule} */
 const noAmbientNondeterminism = {
   meta: {
     type: "problem",
@@ -565,6 +628,10 @@ const noAmbientNondeterminism = {
     schema: [],
   },
   create(context) {
+    /**
+     * @param {Node} node - Ambient entropy read.
+     * @param {string} name - Entropy-producing export.
+     */
     const reportRandom = (node, name) =>
       context.report({ node, messageId: "random", data: { name } });
     const cryptoNames = new Set(["crypto"]);
@@ -597,6 +664,10 @@ const noAmbientNondeterminism = {
   },
 };
 
+/**
+ * @param {import("./ast-types.js").Parameter} parameter - Function parameter to inspect.
+ * @returns {import("./ast-types.js").TSTypeAnnotation | null | undefined}
+ */
 const parameterAnnotation = (parameter) => {
   if (parameter.type === "TSParameterProperty") return parameterAnnotation(parameter.parameter);
   if (parameter.type === "RestElement") {
@@ -613,6 +684,7 @@ const parameterAnnotation = (parameter) => {
  * cross the core boundary unless a validation module is recorded as a narrow
  * config-level exception.
  */
+/** @satisfies {OxlintRule} */
 const noUnknownParameters = {
   meta: {
     type: "problem",
@@ -624,8 +696,9 @@ const noUnknownParameters = {
     schema: [],
   },
   create(context) {
-    const check = (node) => {
-      for (const parameter of node.params) {
+    /** @param {Array<import("./ast-types.js").Parameter>} params - Function parameters. */
+    const checkParameters = (params) => {
+      for (const parameter of params) {
         const annotation = parameterAnnotation(parameter);
         if (annotation?.typeAnnotation.type === "TSUnknownKeyword") {
           context.report({ node: annotation.typeAnnotation, messageId: "unknownParameter" });
@@ -633,22 +706,27 @@ const noUnknownParameters = {
       }
     };
     return {
-      ArrowFunctionExpression: check,
-      FunctionDeclaration: check,
-      FunctionExpression: check,
-      TSCallSignatureDeclaration: check,
-      TSConstructSignatureDeclaration: check,
-      TSConstructorType: check,
-      TSDeclareFunction: check,
-      TSEmptyBodyFunctionExpression: check,
-      TSFunctionType: check,
-      TSMethodSignature: check,
+      ArrowFunctionExpression: (node) => checkParameters(node.params),
+      FunctionDeclaration: (node) => checkParameters(node.params),
+      FunctionExpression: (node) => checkParameters(node.params),
+      TSCallSignatureDeclaration: (node) => checkParameters(node.params),
+      TSConstructSignatureDeclaration: (node) => checkParameters(node.params),
+      TSConstructorType: (node) => checkParameters(node.params),
+      TSDeclareFunction: (node) => checkParameters(node.params),
+      TSEmptyBodyFunctionExpression: (node) => checkParameters(node.params),
+      TSFunctionType: (node) => checkParameters(node.params),
+      TSMethodSignature: (node) => checkParameters(node.params),
     };
   },
 };
 
+/** @param {Node} node - AST node to inspect. */
 const isTypeNode = (node) => node.type.startsWith("TS") && node.type !== "TSTypeAnnotation";
 
+/**
+ * @param {Node} node - Type node whose ancestors are inspected.
+ * @param {TypeEnvironment} environment - Local declaration index.
+ */
 const hasUnsafeDictionaryAncestor = (node, environment) => {
   let current = node.parent;
   while (current !== null && current.type !== "Program") {
@@ -658,6 +736,7 @@ const hasUnsafeDictionaryAncestor = (node, environment) => {
   return false;
 };
 
+/** @param {Node} node - Reference whose ancestors are inspected. */
 const isInsideTypeAlias = (node) => {
   let current = node.parent;
   while (current !== null && current.type !== "Program") {
@@ -667,6 +746,10 @@ const isInsideTypeAlias = (node) => {
   return false;
 };
 
+/**
+ * @param {Node} node - Candidate local alias reference.
+ * @param {TypeEnvironment} environment - Local declaration index.
+ */
 const isPlainAliasConsumer = (node, environment) =>
   node.type === "TSTypeReference" &&
   node.typeName.type === "Identifier" &&
@@ -675,6 +758,7 @@ const isPlainAliasConsumer = (node, environment) =>
   !isInsideTypeAlias(node);
 
 /** Reject open object dictionaries whose values have no established contract. */
+/** @satisfies {OxlintRule} */
 const noUnsafeDictionaryType = {
   meta: {
     type: "problem",
@@ -686,7 +770,9 @@ const noUnsafeDictionaryType = {
     schema: [],
   },
   create(context) {
+    /** @type {TypeEnvironment | undefined} */
     let environment;
+    /** @param {Node} node - Type annotation to classify. */
     const reportType = (node) => {
       if (environment === undefined || isPlainAliasConsumer(node, environment)) return;
       if (hasUnsafeDictionaryAncestor(node, environment)) return;
@@ -703,7 +789,7 @@ const noUnsafeDictionaryType = {
       TSTypeLiteral: reportType,
       TSMappedType: reportType,
       TSIndexSignature(node) {
-        if (environment === undefined || node.typeAnnotation === null) return;
+        if (environment === undefined) return;
         if (node.parent.type === "TSTypeLiteral") return;
         const value = classifyUnsafeDictionaryValue(
           node.typeAnnotation.typeAnnotation,
@@ -717,6 +803,7 @@ const noUnsafeDictionaryType = {
   },
 };
 
+/** @satisfies {OxlintRule} */
 const noNullableType = {
   meta: {
     type: "problem",
@@ -730,8 +817,13 @@ const noNullableType = {
     schema: [],
   },
   create(context) {
-    const keyword = (name) => (node) =>
-      context.report({ node, messageId: "keyword", data: { name } });
+    /** @param {string} name - Nullable keyword name. */
+    const keyword = (name) => {
+      /** @param {Node} node - Nullable type keyword. */
+      const reportKeyword = (node) =>
+        context.report({ node, messageId: "keyword", data: { name } });
+      return reportKeyword;
+    };
     return {
       TSUndefinedKeyword: keyword("undefined"),
       TSNullKeyword: keyword("null"),

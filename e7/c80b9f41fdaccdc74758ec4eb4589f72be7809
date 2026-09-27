@@ -1,0 +1,55 @@
+scripts/oxlint/ast-types.d.ts
+  s_faf8a5df7be82b::t_30a41b91bb3b3a 12,16-17
+  s_faf8a5df7be82b::t_1d909357a4aa82 11,13,15,21-25
+  s_faf8a5df7be82b::t_311fae514f0191 7
+  s_faf8a5df7be82b::t_c38ce1571e6dd2 14
+  s_faf8a5df7be82b::t_b1775f3981b279 1-6,8-10,18-20,26-37
+scripts/oxlint/dictionary-types.js
+  s_faf8a5df7be82b::t_50e6307af713b4 253
+  s_faf8a5df7be82b::t_9d6d335ee04435 5-10,13,77,79,81
+  s_faf8a5df7be82b::t_e2933cbd68ec3a 43,240
+  s_faf8a5df7be82b::t_fb078d81fce101 42,44-45,51-52,326
+  s_faf8a5df7be82b::t_fb07b1bca94497 11-12,26,32-36,46-49,63-66,78,91,94-97,113,119,122,132-135,145-150,161-165,180-184,200-205,209-214,222-226,239,241-243,256-260,271-275,281-286,296-300,317,319-321,341,343-344,357-360
+  s_faf8a5df7be82b::t_6b631546b7ddf4 101,318,342
+  s_faf8a5df7be82b::t_d12c5cabb2c389 125
+scripts/oxlint/tsconfig.json
+  s_faf8a5df7be82b::t_4a1dae75872f68 1-10
+scripts/verify.ts
+  s_faf8a5df7be82b::t_eb399010dc9a14 94-96
+package.json
+  s_faf8a5df7be82b::t_0339a3420baa86 27
+.oxlintrc.json
+  s_faf8a5df7be82b::t_ef399fe61d8bca 286-287,289,299-303
+  s_faf8a5df7be82b::t_fe77dbfbeaea75 311
+  s_faf8a5df7be82b::t_bda0d847f51eff 304-305
+scripts/oxlint/effect-guards.js
+  s_faf8a5df7be82b::t_f2042aa07e549a 325,699-701,709-718
+  s_faf8a5df7be82b::t_4e216a46bbed56 465-468,489-496,500,515,543,596,601,604,608-611,631-634,667-670,723,726-729,739,749-752,773,775,792,820,822
+  s_faf8a5df7be82b::t_2dd0f6db06bb69 10-17
+  s_faf8a5df7be82b::t_081e358f1f8f7b 31
+  s_faf8a5df7be82b::t_8468db79d73700 64,112,145,193,309,383,428,528,617,687,761,806
+  s_faf8a5df7be82b::t_8a87b2b8b10859 821,823,825-826
+  s_faf8a5df7be82b::t_3ec8a194ed00b9 7-8,45,95,99-102,176,237-240,250-253,260,262,264-265,274,280-283,321,327,330-333,344-347
+  s_faf8a5df7be82b::t_6f2f8e008ae3f0 23,290-291,563
+  s_faf8a5df7be82b::t_9b1864a449adcb 256
+  s_faf8a5df7be82b::t_c501995dc74eae 403,498,824
+  s_faf8a5df7be82b::t_539be050274db1 9
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_b61d7fdc7532cf 119-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e7c80b9f41fdaccdc74758ec4eb4589f72be7809",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

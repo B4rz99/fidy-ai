@@ -1,0 +1,26 @@
+scripts/check-lint-suppressions.ts
+  s_faf8a5df7be82b::t_e8253ca5c49fc8 21
+.oxlintrc.json
+  s_faf8a5df7be82b::t_5336c3866b37fc 157
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_bae12c6f9da7d7 141-155
+  s_faf8a5df7be82b::t_d905f403aaf4cd 41
+apps/web/cloudflare/production-policy/artifact.ts
+  s_faf8a5df7be82b::t_35a31ca9539549 117-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dc4051ea118a0e569295cd0f693d478d8a72398f",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

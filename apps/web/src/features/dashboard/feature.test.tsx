@@ -370,7 +370,7 @@ describe("Dashboard query notices", () => {
       dashboardFeatureHarness.catalogResults.length,
       AsyncResult.failure(Cause.fail("catalog"), { waiting: true })
     );
-    const apiClient = makeFidyClient("https://api.test.fidyapp.com");
+    const apiClient = makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" });
     const dashboardSuccess = AsyncResult.success({ data: makeView(standardOptions) });
     const dashboardFailure = AsyncResult.failure(Cause.fail("dashboard"), {
       previousSuccess: Option.some(dashboardSuccess),

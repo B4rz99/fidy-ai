@@ -68,21 +68,23 @@ const fromPromise = <A,>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailu
 
 const renderRoute = (
   path: string,
-  apiClient = makeFidyClient("https://api.test.fidyapp.com"),
-  webAuthClient: WebAuthClient = makeWebAuthClient("https://api.test.fidyapp.com")
+  apiClient = makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+  webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
 ): Promise<ReturnType<typeof createWebRouter>> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const router = createWebRouter({
         apiClient,
         webAuthClient,
-        hostedTurnClient: makeHostedTurnClient("https://api.test.fidyapp.com"),
+        hostedTurnClient: makeHostedTurnClient({ apiOrigin: "https://api.test.fidyapp.com" }),
         history: Option.some(createMemoryHistory({ initialEntries: [path] })),
       });
       render(
         <SessionRegistryProvider>
           <SubscriptionEnrollmentLifetime
-            makeClient={() => makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com")}
+            makeClient={() =>
+              makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" })
+            }
           >
             <RouterProvider router={router} />
           </SubscriptionEnrollmentLifetime>
@@ -97,8 +99,8 @@ const renderHostedRoute = (hostedTurnClient: HostedTurnClient): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const router = createWebRouter({
-        apiClient: makeFidyClient("https://api.test.fidyapp.com"),
-        webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com"),
+        apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+        webAuthClient: makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" }),
         hostedTurnClient,
         history: Option.some(createMemoryHistory({ initialEntries: ["/app/agent"] })),
       });
@@ -142,8 +144,11 @@ const emailReplacementClients = (
   });
   const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
   return {
-    apiClient: makeFidyClient("https://api.test.fidyapp.com", layer),
-    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com", layer),
+    apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com", httpClient: layer }),
+    webAuthClient: makeWebAuthClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: layer,
+    }),
   };
 };
 
@@ -171,8 +176,11 @@ const recoveryClients = (): Readonly<{
   });
   const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
   return {
-    apiClient: makeFidyClient("https://api.test.fidyapp.com", layer),
-    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com", layer),
+    apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com", httpClient: layer }),
+    webAuthClient: makeWebAuthClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: layer,
+    }),
     requests,
   };
 };
@@ -217,10 +225,10 @@ const malformedFidyClient = (): FidyClient => {
   const httpClient = makeHttpClient((request) =>
     Effect.succeed(responseJson(request, { unexpected: true }))
   );
-  return makeFidyClient(
-    "https://api.test.fidyapp.com",
-    Layer.succeed(HttpClient.HttpClient, httpClient)
-  );
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
 };
 
 describe("public web application routes", () => {
@@ -330,10 +338,10 @@ const transactionCaptureClient = (
     }
     return Effect.succeed(responseJson(request, { status: "unavailable" }, httpUnavailable));
   });
-  return makeFidyClient(
-    "https://api.test.fidyapp.com",
-    Layer.succeed(HttpClient.HttpClient, httpClient)
-  );
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
 };
 
 const requestCount = (requests: ReadonlyArray<string>, target: string): number =>
@@ -652,10 +660,10 @@ describe("hosted Agent reply delivery", () => {
           );
         };
         const httpClient = makeHttpClient(reply);
-        const channel = makeHostedTurnClient(
-          "https://api.test.fidyapp.com",
-          Layer.succeed(HttpClient.HttpClient, httpClient)
-        );
+        const channel = makeHostedTurnClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+        });
         const route = renderHostedRoute(channel);
         yield* fromPromise(route);
         fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
@@ -695,10 +703,10 @@ describe("rejected hosted Agent receipt", () => {
             )
           );
         const httpClient = makeHttpClient(rejectReceipt);
-        const channel = makeHostedTurnClient(
-          "https://api.test.fidyapp.com",
-          Layer.succeed(HttpClient.HttpClient, httpClient)
-        );
+        const channel = makeHostedTurnClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+        });
         const route = renderHostedRoute(channel);
         yield* fromPromise(route);
         fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {

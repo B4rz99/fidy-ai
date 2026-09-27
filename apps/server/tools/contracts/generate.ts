@@ -81,16 +81,20 @@ const openApiReferencePolicy = ({
   );
 
 export const makeContractArtifacts = (): ContractArtifacts => ({
-  openapi: asJsonObject(OpenApi.fromApi(FidyApi, { referencePolicy: openApiReferencePolicy })),
+  openapi: asJsonObject({
+    value: OpenApi.fromApi(FidyApi, { referencePolicy: openApiReferencePolicy }),
+  }),
   operationPolicy: {
     operations: operationCatalog.operations
       .map(({ id, policy }) => ({
         id,
         policy: asJsonValue({
-          access: publishOperationAccess(policy.access),
-          requiredTier: policy.requiredTier,
-          agentConfirmation: policy.agentConfirmation,
-          kind: policy.kind,
+          value: {
+            access: publishOperationAccess(policy.access),
+            requiredTier: policy.requiredTier,
+            agentConfirmation: policy.agentConfirmation,
+            kind: policy.kind,
+          },
         }),
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
@@ -98,7 +102,7 @@ export const makeContractArtifacts = (): ContractArtifacts => ({
 });
 
 const artifactText = (value: JsonValue | OperationPolicyManifest): string =>
-  `${JSON.stringify(asJsonValue(value), null, 2)}\n`;
+  `${JSON.stringify(asJsonValue({ value }), null, 2)}\n`;
 
 type ContractArtifactFile = {
   readonly name: string;
@@ -110,7 +114,9 @@ const artifactFiles = (artifacts: ContractArtifacts): ReadonlyArray<ContractArti
   {
     name: "pat-pairing-openapi.json",
     contents: artifactText(
-      asJsonObject(OpenApi.fromApi(PATPairingApi, { referencePolicy: openApiReferencePolicy }))
+      asJsonObject({
+        value: OpenApi.fromApi(PATPairingApi, { referencePolicy: openApiReferencePolicy }),
+      })
     ),
   },
   { name: "operation-policy.json", contents: artifactText(artifacts.operationPolicy) },

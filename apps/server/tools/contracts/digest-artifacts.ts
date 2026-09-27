@@ -10,7 +10,9 @@ const main = Effect.gen(function* () {
   }
   const openapi: unknown = yield* Effect.tryPromise(() => Bun.file(openApiPath).json());
   const policy: unknown = yield* Effect.tryPromise(() => Bun.file(operationPolicyPath).json());
-  process.stdout.write(`${contractDigest(contractArtifactsFrom(openapi, policy, "preview"))}\n`);
+  process.stdout.write(
+    `${contractDigest(contractArtifactsFrom({ openapi, policy, subject: "preview" }))}\n`
+  );
 });
 
 if (import.meta.main) await Effect.runPromise(main);

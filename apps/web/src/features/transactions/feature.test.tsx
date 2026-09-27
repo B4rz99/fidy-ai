@@ -89,7 +89,7 @@ describe("manual Transaction capture", () => {
     vi.setSystemTime(DateTime.makeUnsafe("2026-09-01T02:00:00Z").epochMilliseconds);
     render(
       <ManualTransactionCapture
-        apiClient={makeFidyClient("https://api.test.fidyapp.com")}
+        apiClient={makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" })}
         timeZone="America/Bogota"
         onCreated={() => undefined}
       />

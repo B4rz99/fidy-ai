@@ -31,8 +31,13 @@ const decodeIdentity = <Identity>(
   }
 };
 
+type ReleaseMetadataOptions = Readonly<{ gitRevision: string; contractDigest: string }>;
+
 /** Returns an exact release identity or throws when either value is not full lowercase hex. */
-export const releaseMetadata = (gitRevision: string, contractDigest: string): ReleaseMetadata =>
+export const releaseMetadata = ({
+  gitRevision,
+  contractDigest,
+}: ReleaseMetadataOptions): ReleaseMetadata =>
   Schema.decodeSync(ReleaseMetadata)({
     contractDigest: decodeIdentity(
       Schema.decodeUnknownSync(ContractDigest),

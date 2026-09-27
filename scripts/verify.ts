@@ -102,11 +102,6 @@ const checks: Array<Check> = [
     "run",
     "email-formats:check",
   ]),
-  rootCheck("static", "Base contract compatibility", [
-    "bun",
-    "run",
-    "contracts:check:compatibility",
-  ]),
   rootCheck("static", "Effect dependency family", ["bun", "run", "check:effect-family"]),
   rootCheck("static", "Dependency policy", ["bun", "run", "lint:dependencies"]),
   rootCheck("static", "Credential path evidence", ["bun", "run", "check:credential-evidence"]),

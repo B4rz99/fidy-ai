@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { contractArtifactsFrom, contractDigest } from "./compatibility";
+import { contractArtifactsFrom, contractDigest } from "./artifacts";
 
 if (import.meta.main) {
   const [openApiPath, operationPolicyPath] = Bun.argv.slice(2);

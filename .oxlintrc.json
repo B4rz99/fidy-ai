@@ -181,12 +181,9 @@
         "no-console": "off"
       }
     },
-    // The compatibility and generation analyzers coordinate bounded parsing and edge steps.
+    // Contract generation coordinates schema reflection and artifact serialization.
     {
-      "files": [
-        "apps/server/tools/contracts/compatibility.ts",
-        "apps/server/tools/contracts/generate.ts"
-      ],
+      "files": ["apps/server/tools/contracts/generate.ts"],
       "rules": {
         "complexity": "off"
       }
@@ -200,9 +197,9 @@
         "max-lines-per-function": "off"
       }
     },
-    // These two tools reflect raw OpenAPI JSON, whose wire shape necessarily includes null.
+    // Contract generation reflects raw OpenAPI JSON, whose wire shape necessarily includes null.
     {
-      "files": ["apps/server/tools/contracts/check.ts", "apps/server/tools/contracts/generate.ts"],
+      "files": ["apps/server/tools/contracts/generate.ts"],
       "rules": {
         "effect-guards/no-nullable-type": "off"
       }

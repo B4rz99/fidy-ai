@@ -12,7 +12,7 @@ import {
   asJsonObject,
   asJsonValue,
   contractDigest,
-} from "./compatibility";
+} from "./artifacts";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
 const defaultOutputDirectory = `${serverRoot}/contracts`;

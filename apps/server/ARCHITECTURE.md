@@ -39,9 +39,8 @@ The canonical operation definition is the source for reflected operation ids, ac
 suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptions. The reflected
 registries remain complete even when their execution implementation is unavailable; a registry entry
 must never silently fall back to local state. The direct proof-bearing PATPairing API has no stable
-User or canonical operation policy; its generated OpenAPI is checked for freshness and breaking
-changes independently of the stable-User contract pair. Breaking direct-client changes require a
-nonbreaking add/use/remove rollout, not a canonical operation-policy acknowledgement.
+User or canonical operation policy; its generated OpenAPI is checked for freshness independently of
+the stable-User contract pair. No prelaunch compatibility gate compares either API with older revisions.
 
 ## 3. Security and subject boundaries
 

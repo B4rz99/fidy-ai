@@ -1,6 +1,6 @@
 ---
 name: research
-description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Research runs in the current session by default; when delegated, use a Herdr-managed Pi worker with OpenAI Codex gpt-5.6-luna at max reasoning effort.
+description: "Investigate a question using primary sources and save a cited Markdown report in the repository."
 ---
 
 Conduct the research in the current agent session by default. Delegate only when the caller requests AFK or parallel research, or a parent workflow such as `/wayfinder` requires a research worker. Any delegated worker must run in its dedicated Herdr worktree as:

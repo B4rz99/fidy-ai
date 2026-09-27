@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding and architecture standards?), Security (does it satisfy the repo's documented security policy?), and Spec (does the code match what the originating issue/spec asked for?). Runs read-only reviews as parallel Herdr-managed Pi workers using the invoking session's model and reasoning level, then reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: "Review a branch, PR, or uncommitted changes against repository standards, security policy, and the originating spec."
 ---
 
 Three-axis review of the diff between `HEAD` and a fixed point the user supplies:
@@ -23,7 +23,7 @@ Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so th
 
 Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside the Herdr workers.
 
-Run the existing mechanical gates (`bun run lint`, `bun run lint:type-aware`, `bun run format:check`, `bun run typecheck`) before dispatching reviewers, and again after each round of fixes. If a gate fails, report its failure and stop that iteration until it is fixed; do not ask a reviewer to rediscover it. CI still runs the full `bun run verify` gate.
+Run the existing mechanical gates (`bun run lint`, `bun run lint:type-aware`, `bun run format:check`, `bun run typecheck`) before dispatching reviewers, and again after each round of fixes. If a gate fails, defer reviewer dispatch and return the failure to the implementing agent for repair within the authorized scope, then rerun the affected gates. When you are the implementing agent, continue that repair yourself rather than ending the task with a failure report. Review-only workers report failures to their caller and remain read-only. CI still runs the full `bun run verify` gate.
 
 ### 2. Identify the spec source
 
@@ -108,6 +108,8 @@ End with a one-line summary: total findings per axis, and the worst issue _withi
 ### 6. Iterate
 
 Run the review as `review → fix → review`. After aggregation, close that iteration's panes, apply the findings, refresh the diff against the same fixed point, and rerun every active axis in fresh panes. Finish when every active axis reports its no-findings result.
+
+Within an implementation task, aggregation is a progress update: return actionable findings to the implementation checklist and continue the fix loop. Missing acceptance criteria remain implementation work even when all existing tests pass. If a fix attempt fails, use that evidence to try another approach within scope. Yield to the user only for a requested pause or a concrete unresolved access, authorization, or product decision; identify the exact dependency. Read-only workers finish by returning their findings to the implementing caller, which owns continuation.
 
 ## Why three axes
 

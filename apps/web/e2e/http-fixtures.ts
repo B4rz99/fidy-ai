@@ -19,21 +19,23 @@ export const makeUser = (overrides: Partial<UserFixture> = {}): UserFixture => (
 
 export const response = (data: unknown): string => JSON.stringify({ data, next: [] });
 
-export const installUser = async (page: Page): Promise<void> => {
-  await page.route(`${apiOrigin}/user`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: response(makeUser()),
-    })
-  );
-};
+export const installUser = (page: Page): Promise<void> =>
+  page
+    .route(`${apiOrigin}/user`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: response(makeUser()),
+      })
+    )
+    .then(() => {});
 
-export const installCategories = async ({
+export const installCategories = ({
   page,
   categories,
-}: Readonly<{ page: Page; categories: unknown }>): Promise<void> => {
-  await page.route(`${apiOrigin}/categories`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: response(categories) })
-  );
-};
+}: Readonly<{ page: Page; categories: unknown }>): Promise<void> =>
+  page
+    .route(`${apiOrigin}/categories`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: response(categories) })
+    )
+    .then(() => {});

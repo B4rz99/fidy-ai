@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
+import type { Cause } from "effect";
 import {
   signInFirstCardThroughCore,
   signInThroughCore,
@@ -15,248 +16,460 @@ const unauthorized = 401;
 const noContent = 204;
 const notFound = 404;
 
-const assertUnderScopedBrowser = async (
+// Playwright owns these promises; each call is made at its point in the test Effect.
+const fromPlaywright = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
+  Effect.tryPromise(() => promise);
+const continueAfterDelay = (route: Route): Promise<void> =>
+  Effect.runPromise(Effect.sleep("1 second")).then(() => route.continue());
+
+// Playwright serializes this function into the browser; Effect is not present there.
+const fetchWithBearer = ({
+  url,
+  token,
+}: {
+  url: string;
+  token: string;
+}): Promise<{ status: number; body: string }> =>
+  window
+    .fetch(url, { credentials: "omit", headers: { authorization: `Bearer ${token}` } })
+    .then((response) => response.text().then((body) => ({ status: response.status, body })));
+
+const fetchWithSession = (url: string): Promise<{ status: number; body: string }> =>
+  window
+    .fetch(url, { credentials: "include" })
+    .then((response) => response.text().then((body) => ({ status: response.status, body })));
+const assertUnderScopedBrowser = (
   page: Page,
   request: APIRequestContext,
   bearer: string
-): Promise<void> => {
-  // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
-  const refused = await request.get(`${api}/transactions`, {
-    headers: { authorization: `Bearer ${bearer}` },
-  });
-  expect(refused.status()).toBe(forbidden);
-  const browserRefusal = await page.evaluate(
-    async ({ url, token }) => {
-      // @effect-diagnostics-next-line globalFetch:off
-      const response = await fetch(url, {
-        credentials: "omit",
-        headers: { authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.text() };
-    },
-    { url: `${api}/transactions`, token: bearer }
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
+      const refused = yield* fromPlaywright(
+        request.get(`${api}/transactions`, {
+          headers: {
+            authorization: `Bearer ${bearer}`,
+          },
+        })
+      );
+      expect(refused.status()).toBe(forbidden);
+      const browserRefusal = yield* fromPlaywright(
+        page.evaluate(fetchWithBearer, { url: `${api}/transactions`, token: bearer })
+      );
+      expect(browserRefusal.status).toBe(forbidden);
+      expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
+      yield* fromPlaywright(
+        page.route(`${api}/transactions?*`, (route) =>
+          // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
+          request
+            .get(route.request().url(), {
+              headers: {
+                authorization: `Bearer ${bearer}`,
+              },
+            })
+            .then((coreResponse) => {
+              expect(coreResponse.status()).toBe(forbidden);
+              return route.fulfill({
+                response: coreResponse,
+              });
+            })
+        )
+      );
+      yield* fromPlaywright(page.goto("/app/transactions"));
+      yield* fromPlaywright(expect(page.getByRole("alert")).toBeVisible());
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(bearer);
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(
+        yield* fromPlaywright(refused.text())
+      );
+    })
   );
-  expect(browserRefusal.status).toBe(forbidden);
-  expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
-  await page.route(`${api}/transactions?*`, async (route) => {
-    // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
-    const coreResponse = await request.get(route.request().url(), {
-      headers: { authorization: `Bearer ${bearer}` },
-    });
-    expect(coreResponse.status()).toBe(forbidden);
-    await route.fulfill({ response: coreResponse });
-  });
-  await page.goto("/app/transactions");
-  await expect(page.getByRole("alert")).toBeVisible();
-  expect(await page.locator("body").textContent()).not.toContain(bearer);
-  expect(await page.locator("body").textContent()).not.toContain(await refused.text());
-};
-
-test("reviews a real PATPairing and presents its under-scoped Core refusal without leaking details", async ({
-  page,
-  request,
-}) => {
-  await signInThroughCore({ page, request });
-  const started = await request.post(`${api}/pat-pairings`, {
-    data: { recipientLabel: "Agente emparejado", scopes: ["write"], lifetimeDays: 30 },
-  });
+const startPatPairing = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
+  yield* fromPlaywright(
+    signInThroughCore({
+      page,
+      request,
+    })
+  );
+  const started = yield* fromPlaywright(
+    request.post(`${api}/pat-pairings`, {
+      data: {
+        recipientLabel: "Agente emparejado",
+        scopes: ["write"],
+        lifetimeDays: 30,
+      },
+    })
+  );
   expect(started.status()).toBe(ok);
-  const { pairingId, publicCode, privateDeviceCode } = Schema.decodeUnknownSync(
+  const { pairingId, publicCode, privateDeviceCode } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       pairingId: Schema.String,
       publicCode: Schema.String,
       privateDeviceCode: Schema.String,
     })
-  )(await started.json());
-  await page.goto("/settings/pats");
-  await page.getByLabel("Código", { exact: true }).fill(publicCode.toLowerCase());
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByText("Agente emparejado").first()).toBeVisible();
-  await page.getByRole("button", { name: "Autorizar acceso" }).click();
-  await expect(page.getByText("Acceso autorizado")).toBeVisible();
-  expect(await page.locator("body").textContent()).not.toContain(privateDeviceCode);
-  const claimed = await request.post(`${api}/pat-pairings/claim`, {
-    data: { pairingId, privateDeviceCode },
-  });
-  expect(claimed.status()).toBe(ok);
-  const { bearer } = Schema.decodeUnknownSync(Schema.Struct({ bearer: Schema.String }))(
-    await claimed.json()
+  )(yield* fromPlaywright(started.json()));
+  return { pairingId, publicCode, privateDeviceCode };
+});
+
+test("reviews a real PATPairing and presents its under-scoped Core refusal without leaking details", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { pairingId, publicCode, privateDeviceCode } = yield* startPatPairing(page, request);
+      yield* fromPlaywright(page.goto("/settings/pats"));
+      yield* fromPlaywright(
+        page
+          .getByLabel("Código", {
+            exact: true,
+          })
+          .fill(publicCode.toLowerCase())
+      );
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Continuar",
+          })
+          .click()
+      );
+      yield* fromPlaywright(expect(page.getByText("Agente emparejado").first()).toBeVisible());
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Autorizar acceso",
+          })
+          .click()
+      );
+      yield* fromPlaywright(expect(page.getByText("Acceso autorizado")).toBeVisible());
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(
+        privateDeviceCode
+      );
+      const claimed = yield* fromPlaywright(
+        request.post(`${api}/pat-pairings/claim`, {
+          data: {
+            pairingId,
+            privateDeviceCode,
+          },
+        })
+      );
+      expect(claimed.status()).toBe(ok);
+      const { bearer } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          bearer: Schema.String,
+        })
+      )(yield* fromPlaywright(claimed.json()));
+      expect(bearer).toMatch(/^fin_/u);
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(bearer);
+      yield* fromPlaywright(assertUnderScopedBrowser(page, request, bearer));
+    })
+  ));
+test("renders a seeded Category identity from real public and Core routes", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        signInThroughCore({
+          page,
+          request,
+        })
+      );
+      const categories = yield* fromPlaywright(
+        page.request.get(`${api}/categories`, {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+          },
+        })
+      );
+      expect(categories.status()).toBe(ok);
+      expect(yield* fromPlaywright(categories.json())).toMatchObject({
+        data: expect.arrayContaining([
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            label: "Restaurantes",
+          },
+        ]),
+      });
+      const occurredAt = DateTime.formatIso(yield* DateTime.now);
+      const captured = yield* fromPlaywright(
+        page.request.post(`${api}/transactions`, {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+          },
+          data: {
+            money: {
+              amount: "12500",
+              currency: "COP",
+            },
+            counterparty: "La Cocina real",
+            direction: "outflow",
+            categoryId: "10000000-0000-4000-8000-000000000001",
+            occurredAt,
+          },
+        })
+      );
+      expect(captured.status()).toBe(created);
+      yield* fromPlaywright(page.goto("/app/transactions"));
+      yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
+      yield* fromPlaywright(expect(page.getByText("Restaurantes").first()).toBeVisible());
+    })
+  ));
+test("a browser cannot render or fetch another User's private Transaction through public routes", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        signInThroughCore({
+          page,
+          request,
+        })
+      );
+      yield* fromPlaywright(page.goto("/app/transactions"));
+      const refusal = yield* fromPlaywright(
+        page.evaluate(fetchWithSession, `${api}/transactions/24000000-0000-4000-8000-000000000262`)
+      );
+      expect(refusal.status).toBe(notFound);
+      expect(refusal.body).not.toContain("OTHER-USER-PRIVATE");
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(
+        "OTHER-USER-PRIVATE"
+      );
+    })
+  ));
+test("renders loading until the real Core answers Transactions", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        signInThroughCore({
+          page,
+          request,
+        })
+      );
+      yield* fromPlaywright(page.route(`${api}/transactions?*`, continueAfterDelay));
+      yield* fromPlaywright(page.goto("/app/transactions"));
+      yield* fromPlaywright(
+        expect(
+          page.getByRole("region", {
+            name: "Cargando transacciones",
+          })
+        ).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByRole("region", {
+            name: "Cargando transacciones",
+          })
+        ).toHaveCount(0)
+      );
+    })
+  ));
+test("approves a browser pairing through the real verified-email public route", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(page.goto("/auth/pair"));
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Iniciar sesión en el navegador",
+          })
+          .click()
+      );
+      const code = yield* fromPlaywright(visiblePairingCode(page));
+      yield* fromPlaywright(
+        page.getByLabel("O accede con tu correo verificado").fill("usuario@example.com")
+      );
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Enviar código por correo",
+          })
+          .click()
+      );
+      yield* fromPlaywright(expect(page.getByLabel("Código recibido por correo")).toBeVisible());
+      const delivered = yield* fromPlaywright(
+        request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
+      );
+      expect(delivered.status()).toBe(noContent);
+      const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+      yield* fromPlaywright(page.getByLabel("Código recibido por correo").fill(proof));
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Aprobar este navegador",
+          })
+          .click()
+      );
+      yield* fromPlaywright(
+        expect(page).toHaveURL(/\/app\/transactions$/u, {
+          timeout: 15_000,
+        })
+      );
+      expect(page.url()).not.toContain(proof);
+      expect(
+        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
+      ).toBe(0);
+    })
+  ));
+test("replaces a verified EmailCredential through public operations after fixture delivery", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        signInThroughCore({
+          page,
+          request,
+        })
+      );
+      yield* fromPlaywright(page.goto("/settings/email"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("nuevo@example.com"));
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Enviar código",
+          })
+          .click()
+      );
+      yield* fromPlaywright(
+        expect(page.getByText("Enviamos un código a nuevo@example.com.")).toBeVisible()
+      );
+      const delivered = yield* fromPlaywright(
+        request.post("http://127.0.0.1:4175/email/replacement/deliver")
+      );
+      expect(delivered.status()).toBe(noContent);
+      const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+      yield* fromPlaywright(page.getByLabel("Código de verificación").fill(code));
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Cambiar correo",
+          })
+          .click()
+      );
+      yield* fromPlaywright(
+        expect(page.getByText("Tu nuevo correo verificado ya está activo.")).toBeVisible()
+      );
+      expect(page.url()).not.toContain(code);
+      expect(
+        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
+      ).toBe(0);
+    })
+  ));
+const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
+  yield* fromPlaywright(
+    signInThroughCore({
+      page,
+      request,
+    })
   );
-  expect(bearer).toMatch(/^fin_/u);
-  expect(await page.locator("body").textContent()).not.toContain(bearer);
-  await assertUnderScopedBrowser(page, request, bearer);
-});
-
-test("renders a seeded Category identity from real public and Core routes", async ({
-  page,
-  request,
-}) => {
-  await signInThroughCore({ page, request });
-  const categories = await page.request.get(`${api}/categories`, {
-    headers: { origin: "https://127.0.0.1:4173" },
-  });
-  expect(categories.status()).toBe(ok);
-  expect(await categories.json()).toMatchObject({
-    data: expect.arrayContaining([
-      { id: "10000000-0000-4000-8000-000000000001", label: "Restaurantes" },
-    ]),
-  });
-  const captured = await page.request.post(`${api}/transactions`, {
-    headers: { origin: "https://127.0.0.1:4173" },
-    data: {
-      money: { amount: "12500", currency: "COP" },
-      counterparty: "La Cocina real",
-      direction: "outflow",
-      categoryId: "10000000-0000-4000-8000-000000000001",
-      occurredAt: DateTime.formatIso(Effect.runSync(DateTime.now)),
-    },
-  });
-  expect(captured.status()).toBe(created);
-  await page.goto("/app/transactions");
-  await expect(page.getByText("La Cocina real").first()).toBeVisible();
-  await expect(page.getByText("Restaurantes").first()).toBeVisible();
-});
-
-test("a browser cannot render or fetch another User's private Transaction through public routes", async ({
-  page,
-  request,
-}) => {
-  await signInThroughCore({ page, request });
-  await page.goto("/app/transactions");
-  const refusal = await page.evaluate(async (url) => {
-    // @effect-diagnostics-next-line globalFetch:off
-    const response = await fetch(url, { credentials: "include" });
-    return { status: response.status, body: await response.text() };
-  }, `${api}/transactions/24000000-0000-4000-8000-000000000262`);
-  expect(refusal.status).toBe(notFound);
-  expect(refusal.body).not.toContain("OTHER-USER-PRIVATE");
-  expect(await page.locator("body").textContent()).not.toContain("OTHER-USER-PRIVATE");
-});
-
-test("renders loading until the real Core answers Transactions", async ({ page, request }) => {
-  await signInThroughCore({ page, request });
-  await page.route(`${api}/transactions?*`, async (route) => {
-    await Effect.runPromise(Effect.sleep("1 second"));
-    await route.continue();
-  });
-  await page.goto("/app/transactions");
-  await expect(page.getByRole("region", { name: "Cargando transacciones" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Cargando transacciones" })).toHaveCount(0);
-});
-
-test("approves a browser pairing through the real verified-email public route", async ({
-  page,
-  request,
-}) => {
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  const code = await visiblePairingCode(page);
-  await page.getByLabel("O accede con tu correo verificado").fill("usuario@example.com");
-  await page.getByRole("button", { name: "Enviar código por correo" }).click();
-  await expect(page.getByLabel("Código recibido por correo")).toBeVisible();
-  const delivered = await request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`);
-  expect(delivered.status()).toBe(noContent);
-  const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-  await page.getByLabel("Código recibido por correo").fill(proof);
-  await page.getByRole("button", { name: "Aprobar este navegador" }).click();
-  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  expect(page.url()).not.toContain(proof);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
-});
-
-test("replaces a verified EmailCredential through public operations after fixture delivery", async ({
-  page,
-  request,
-}) => {
-  await signInThroughCore({ page, request });
-  await page.goto("/settings/email");
-  await page.getByLabel("Nuevo correo").fill("nuevo@example.com");
-  await page.getByRole("button", { name: "Enviar código" }).click();
-  await expect(page.getByText("Enviamos un código a nuevo@example.com.")).toBeVisible();
-  const delivered = await request.post("http://127.0.0.1:4175/email/replacement/deliver");
-  expect(delivered.status()).toBe(noContent);
-  const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-  await page.getByLabel("Código de verificación").fill(code);
-  await page.getByRole("button", { name: "Cambiar correo" }).click();
-  await expect(page.getByText("Tu nuevo correo verificado ya está activo.")).toBeVisible();
-  expect(page.url()).not.toContain(code);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
-});
-
-test("submits reused-source Subscription enrollment through real public and Core routes", async ({
-  page,
-  request,
-}) => {
-  await signInThroughCore({ page, request });
-  await page.goto("/upgrade");
+  yield* fromPlaywright(page.goto("/upgrade"));
   const preparing = page.waitForResponse(
     (response) => response.url() === `${api}/web/subscription/card-enrollments/prepare`
   );
-  await page.getByRole("button", { name: "Elegir mensual" }).click();
-  const prepared = await preparing;
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Elegir mensual",
+      })
+      .click()
+  );
+  const prepared = yield* fromPlaywright(preparing);
   expect(prepared.status()).toBe(ok);
-  await expect(
-    page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
-  ).toBeVisible();
-  await page.getByLabel(/Acepto el reglamento/iu).check();
-  await page.getByLabel(/Autorizo el tratamiento/iu).check();
+  yield* fromPlaywright(
+    expect(
+      page.getByText("Usaremos de nuevo tu fuente de pago guardada.", {
+        exact: false,
+      })
+    ).toBeVisible()
+  );
+  yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
+  yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
   const submission = page.waitForResponse(
     (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
   );
-  await page.getByRole("button", { name: "Activar Pro" }).click();
-  const submitted = await submission;
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Activar Pro",
+      })
+      .click()
+  );
+  const submitted = yield* fromPlaywright(submission);
   expect(submitted.status()).toBe(ok);
-  const submissionBody: unknown = await submitted.json();
+  const submissionBody: unknown = yield* fromPlaywright(submitted.json());
   expect(submissionBody).toMatchObject({
     status: "payment-pending",
-    billingAttempt: { status: "pending" },
-  });
-  const { billingAttempt } = Schema.decodeUnknownSync(
-    Schema.Struct({ billingAttempt: Schema.Struct({ id: Schema.String }) })
-  )(submissionBody);
-  expect((await request.post("http://127.0.0.1:4175/billing/collect")).status()).toBe(noContent);
-  const settled = await page.request.get(
-    `${api}/web/subscription/billing-attempts/${billingAttempt.id}`,
-    {
-      headers: { origin: "https://127.0.0.1:4173" },
-    }
-  );
-  expect(settled.status()).toBe(ok);
-  expect(await settled.json()).toMatchObject({ status: "succeeded" });
-  const standing = await page.request.get(`${api}/subscription/status`, {
-    headers: { origin: "https://127.0.0.1:4173" },
-  });
-  expect(standing.status()).toBe(ok);
-  expect(await standing.json()).toMatchObject({
-    data: {
-      accessTier: "pro",
-      paidSubscription: {
-        billingPeriod: "monthly",
-        priceId: "22700000-0000-4000-8000-000000000002",
-      },
+    billingAttempt: {
+      status: "pending",
     },
   });
-  await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
-    timeout: 20_000,
-  });
+  const { billingAttempt } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      billingAttempt: Schema.Struct({
+        id: Schema.String,
+      }),
+    })
+  )(submissionBody);
+  return billingAttempt.id;
 });
 
-test("tokenizes a first card outside Fidy and enrolls through real public and Core routes", async ({
+test("submits reused-source Subscription enrollment through real public and Core routes", ({
   page,
   request,
-}) => {
-  await signInFirstCardThroughCore({ page, request });
-  const cardNumber = "4111111111111111";
-  let providerTokens = 0;
-  const fidyBodies: Array<string> = [];
-  page.on("request", (outbound) => {
-    if (outbound.url().startsWith(api) && outbound.postData() !== null) {
-      fidyBodies.push(outbound.postData() ?? "");
-    }
-  });
-  await page.route("https://sandbox.wompi.co/v1/tokens/cards", async (route) => {
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const billingAttemptId = yield* submitReusedCard(page, request);
+      expect(
+        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
+      ).toBe(noContent);
+      const settled = yield* fromPlaywright(
+        page.request.get(`${api}/web/subscription/billing-attempts/${billingAttemptId}`, {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+          },
+        })
+      );
+      expect(settled.status()).toBe(ok);
+      expect(yield* fromPlaywright(settled.json())).toMatchObject({
+        status: "succeeded",
+      });
+      const standing = yield* fromPlaywright(
+        page.request.get(`${api}/subscription/status`, {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+          },
+        })
+      );
+      expect(standing.status()).toBe(ok);
+      expect(yield* fromPlaywright(standing.json())).toMatchObject({
+        data: {
+          accessTier: "pro",
+          paidSubscription: {
+            billingPeriod: "monthly",
+            priceId: "22700000-0000-4000-8000-000000000002",
+          },
+        },
+      });
+      yield* fromPlaywright(
+        expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
+          timeout: 20_000,
+        })
+      );
+    })
+  ));
+const installCardTokenRoute = (
+  page: Page,
+  cardNumber: string,
+  capture: { providerTokens: number }
+): ReturnType<Page["route"]> =>
+  page.route("https://sandbox.wompi.co/v1/tokens/cards", (route) => {
     if (route.request().method() === "OPTIONS") {
-      await route.fulfill({
+      return route.fulfill({
         status: noContent,
         headers: {
           "access-control-allow-origin": "*",
@@ -264,75 +477,216 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
           "access-control-allow-methods": "POST",
         },
       });
-      return;
     }
-    providerTokens += 1;
+    capture.providerTokens += 1;
     expect(route.request().postData()).toContain(cardNumber);
-    await route.fulfill({
+    return route.fulfill({
       status: ok,
-      headers: { "access-control-allow-origin": "*" },
+      headers: {
+        "access-control-allow-origin": "*",
+      },
       contentType: "application/json",
-      body: JSON.stringify({ data: { id: "tok_acceptance_first_card", brand: "VISA" } }),
+      body: '{"data":{"id":"tok_acceptance_first_card","brand":"VISA"}}',
     });
   });
-  await page.goto("/upgrade");
-  await page.getByRole("button", { name: "Elegir mensual" }).click();
-  await expect(page.getByLabel("Número de tarjeta")).toBeVisible();
-  await page.getByLabel("Número de tarjeta").fill(cardNumber);
-  await page.getByLabel("Vencimiento").fill("122028");
-  await page.getByLabel("CVC").fill("123");
-  await page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba");
-  await page.getByLabel(/Acepto el reglamento/iu).check();
-  await page.getByLabel(/Autorizo el tratamiento/iu).check();
-  const submitResponse = page.waitForResponse(
-    (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
-  );
-  await page.getByRole("button", { name: "Activar Pro" }).click();
-  const submitted = await submitResponse;
-  expect(submitted.status()).toBe(ok);
-  expect(await submitted.json()).toMatchObject({ status: "payment-pending" });
-  expect((await request.post("http://127.0.0.1:4175/billing/collect")).status()).toBe(noContent);
-  await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
-    timeout: 20_000,
-  });
-  expect(providerTokens).toBe(1);
-  expect(
-    fidyBodies.every((body) => !body.includes(cardNumber) && !body.includes("Usuario Prueba"))
-  ).toBe(true);
-});
 
-test("a read-only PAT issued through the real browser session cannot capture Transactions after review or revocation", async ({
+const captureFidyBodies = (page: Page, bodies: Array<string>): void => {
+  page.on("request", (outbound) => {
+    if (outbound.url().startsWith(api) && outbound.postData() !== null) {
+      bodies.push(outbound.postData() ?? "");
+    }
+  });
+};
+
+test("tokenizes a first card outside Fidy and enrolls through real public and Core routes", ({
   page,
   request,
-}) => {
-  await signInThroughCore({ page, request });
-  await page.goto("/settings/pats");
-  await page.getByLabel("Nombre", { exact: true }).fill("Agente de casa");
-  await page.getByRole("checkbox", { name: /^Lectura:/u }).check();
-  await page.getByRole("button", { name: "30 días" }).click();
-  await page.getByRole("button", { name: "Revisar token" }).click();
-  await expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
-  await page.getByRole("button", { name: "Confirmar y crear token" }).click();
-  const bearer = await page.locator("code").filter({ hasText: /^fin_/u }).textContent();
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
+      const cardNumber = "4111111111111111";
+      const capture = { providerTokens: 0 };
+      const fidyBodies: Array<string> = [];
+      captureFidyBodies(page, fidyBodies);
+      yield* fromPlaywright(installCardTokenRoute(page, cardNumber, capture));
+      yield* fromPlaywright(page.goto("/upgrade"));
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Elegir mensual",
+          })
+          .click()
+      );
+      yield* fromPlaywright(expect(page.getByLabel("Número de tarjeta")).toBeVisible());
+      yield* fromPlaywright(page.getByLabel("Número de tarjeta").fill(cardNumber));
+      yield* fromPlaywright(page.getByLabel("Vencimiento").fill("122028"));
+      yield* fromPlaywright(page.getByLabel("CVC").fill("123"));
+      yield* fromPlaywright(page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba"));
+      yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
+      yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
+      const submitResponse = page.waitForResponse(
+        (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
+      );
+      yield* fromPlaywright(
+        page
+          .getByRole("button", {
+            name: "Activar Pro",
+          })
+          .click()
+      );
+      const submitted = yield* fromPlaywright(submitResponse);
+      expect(submitted.status()).toBe(ok);
+      expect(yield* fromPlaywright(submitted.json())).toMatchObject({
+        status: "payment-pending",
+      });
+      expect(
+        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
+      ).toBe(noContent);
+      yield* fromPlaywright(
+        expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
+          timeout: 20_000,
+        })
+      );
+      expect(capture.providerTokens).toBe(1);
+      expect(
+        fidyBodies.every((body) => !body.includes(cardNumber) && !body.includes("Usuario Prueba"))
+      ).toBe(true);
+    })
+  ));
+const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
+  yield* fromPlaywright(signInThroughCore({ page, request }));
+  yield* fromPlaywright(page.goto("/settings/pats"));
+  yield* fromPlaywright(
+    page
+      .getByLabel("Nombre", {
+        exact: true,
+      })
+      .fill("Agente de casa")
+  );
+  yield* fromPlaywright(
+    page
+      .getByRole("checkbox", {
+        name: /^Lectura:/u,
+      })
+      .check()
+  );
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "30 días",
+      })
+      .click()
+  );
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Revisar token",
+      })
+      .click()
+  );
+  yield* fromPlaywright(
+    expect(
+      page.getByRole("heading", {
+        name: "Revisa el acceso",
+      })
+    ).toBeVisible()
+  );
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Confirmar y crear token",
+      })
+      .click()
+  );
+  const bearer = yield* fromPlaywright(
+    page
+      .locator("code")
+      .filter({
+        hasText: /^fin_/u,
+      })
+      .textContent()
+  );
   expect(bearer).toMatch(/^fin_/u);
-  const readOnly = await request.post(`${api}/transactions`, {
-    headers: { authorization: `Bearer ${bearer}` },
-    data: { money: { amount: "1", currency: "COP" } },
-  });
-  expect(readOnly.status()).toBe(forbidden);
-  await page.getByRole("button", { name: "Crear otro token" }).click();
-  await expect(page.getByText(bearer ?? "never-issued")).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Agente de casa" })).toBeVisible();
-  await page
-    .locator('[data-slot="card"]')
-    .filter({ has: page.getByRole("heading", { name: "Agente de casa" }) })
-    .getByRole("button", { name: "Desactivar", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Sí, desactivar" }).click();
-  await expect(page.getByText("Token desactivado. Dejó de funcionar de inmediato.")).toBeVisible();
-  const revoked = await request.get(`${api}/transactions`, {
-    headers: { authorization: `Bearer ${bearer}` },
-  });
+  return yield* Schema.decodeUnknownEffect(Schema.String)(bearer);
+});
+
+const revokeReadOnlyPat = Effect.fnUntraced(function* (
+  page: Page,
+  request: APIRequestContext,
+  bearer: string
+) {
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Crear otro token",
+      })
+      .click()
+  );
+  yield* fromPlaywright(expect(page.getByText(bearer)).toHaveCount(0));
+  yield* fromPlaywright(page.reload());
+  yield* fromPlaywright(
+    expect(
+      page.getByRole("heading", {
+        name: "Agente de casa",
+      })
+    ).toBeVisible()
+  );
+  yield* fromPlaywright(
+    page
+      .locator('[data-slot="card"]')
+      .filter({
+        has: page.getByRole("heading", {
+          name: "Agente de casa",
+        }),
+      })
+      .getByRole("button", {
+        name: "Desactivar",
+        exact: true,
+      })
+      .click()
+  );
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Sí, desactivar",
+      })
+      .click()
+  );
+  yield* fromPlaywright(
+    expect(page.getByText("Token desactivado. Dejó de funcionar de inmediato.")).toBeVisible()
+  );
+  const revoked = yield* fromPlaywright(
+    request.get(`${api}/transactions`, {
+      headers: {
+        authorization: `Bearer ${bearer}`,
+      },
+    })
+  );
   expect(revoked.status()).toBe(unauthorized);
 });
+
+test("a read-only PAT issued through the real browser session cannot capture Transactions after review or revocation", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const bearer = yield* issueReadOnlyPat(page, request);
+      const readOnly = yield* fromPlaywright(
+        request.post(`${api}/transactions`, {
+          headers: {
+            authorization: `Bearer ${bearer}`,
+          },
+          data: {
+            money: {
+              amount: "1",
+              currency: "COP",
+            },
+          },
+        })
+      );
+      expect(readOnly.status()).toBe(forbidden);
+      yield* revokeReadOnlyPat(page, request, bearer);
+    })
+  ));

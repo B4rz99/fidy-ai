@@ -1,0 +1,31 @@
+apps/web/cloudflare/production-policy/artifact.ts
+  s_bd104ef1b47c5d::t_2137665a81ff99 1-2,68
+  s_bd104ef1b47c5d::t_538cdf2fa757b8 55-67,88,117-119
+apps/web/scripts/build-production.test.ts
+  s_bd104ef1b47c5d::t_bba70ced4a5733 1,110-132
+  s_faf8a5df7be82b::t_735df0cd2b2c3a 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ccd7d798b02b88a5a7963f3dfbf91c31257941ae",
+  "prompts": {},
+  "sessions": {
+    "s_bd104ef1b47c5d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e314-fb5f-73f9-b3da-99bbe85f38dd",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

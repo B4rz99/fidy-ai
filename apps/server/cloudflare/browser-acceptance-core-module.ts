@@ -1,6 +1,4 @@
-import type * as CoreWorkerModule from "./core-worker";
-
-const coreBundle = new URL("../node_modules/.cache/browser-acceptance-core.mjs", import.meta.url);
+const coreBundle = new URL("./browser-acceptance-core-bundle.mjs", import.meta.url);
 const compiled = Bun.spawnSync([
   "bunx",
   "esbuild",
@@ -16,9 +14,8 @@ const compiled = Bun.spawnSync([
 if (compiled.exitCode !== 0) {
   throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
 }
-// The fixture imports exactly the artifact compiled from the typed source above; the generated
-// URL has no TypeScript declaration. The export check detects a missing or mismatched artifact.
-const coreModule: typeof CoreWorkerModule = await import(coreBundle.href);
+// A sibling declaration re-exports core-worker.ts types for this exact compiled artifact.
+const coreModule = await import("./browser-acceptance-core-bundle.mjs");
 if (
   typeof coreModule.makeCoreWorker !== "function" ||
   typeof coreModule.UserTransactionCoordinator !== "function" ||

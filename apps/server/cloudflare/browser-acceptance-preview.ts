@@ -106,12 +106,61 @@ const replacementCode = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
 const replacementEmail = "nuevo@example.com";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
-await db
-  .prepare(
-    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
-  )
-  .bind(fixtureUserId, "CO", "es-CO", "America/Bogota", now)
-  .run();
+type SeedIdentity = Readonly<{
+  userId: string;
+  bsuid: string;
+  email: string;
+  consentId: string;
+  disclosure: string;
+  decision: string;
+}>;
+// @effect-diagnostics-next-line asyncFunction:off
+const seedIdentity = async (identity: SeedIdentity): Promise<void> => {
+  await db
+    .prepare(
+      "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
+    )
+    .bind(identity.userId, "CO", "es-CO", "America/Bogota", now)
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
+    )
+    .bind(identity.userId, "acceptance-portfolio", identity.bsuid, now)
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
+    )
+    .bind(identity.userId, identity.email, now)
+    .run();
+  await db
+    .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
+    .bind(identity.userId, now, now + trialDurationMs)
+    .run();
+  await db
+    .prepare(`INSERT INTO onboarding_consent_records
+    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+     decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
+    .bind(
+      identity.consentId,
+      identity.userId,
+      "{}",
+      identity.disclosure,
+      identity.decision,
+      now,
+      now
+    )
+    .run();
+};
+await seedIdentity({
+  userId: fixtureUserId,
+  bsuid: "CO.Acceptance",
+  email: "usuario@example.com",
+  consentId: "24000000-0000-4000-8000-000000000260",
+  disclosure: "disclosure",
+  decision: "decision",
+});
 await db
   .prepare(
     "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
@@ -133,22 +182,6 @@ await db
     "2026-09-27T12:00:00.000Z",
     "2026-09-27T12:00:00.000Z"
   )
-  .run();
-await db
-  .prepare(
-    "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
-  )
-  .bind(fixtureUserId, "acceptance-portfolio", "CO.Acceptance", now)
-  .run();
-await db
-  .prepare(
-    "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
-  )
-  .bind(fixtureUserId, "usuario@example.com", now)
-  .run();
-await db
-  .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
-  .bind(fixtureUserId, now, now + trialDurationMs)
   .run();
 const sourceEnrollmentId = "24000000-0000-4000-8000-000000000271";
 const sourceId = 3891;
@@ -186,59 +219,16 @@ await db
   .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
   .bind(sourceEnrollmentId)
   .run();
-await db
-  .prepare(`INSERT INTO onboarding_consent_records
-  (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-   decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
-  .bind(
-    "24000000-0000-4000-8000-000000000260",
-    fixtureUserId,
-    "{}",
-    "disclosure",
-    "decision",
-    now,
-    now
-  )
-  .run();
-
 // A second User has verified credentials and consent but no CardPaymentSource. It must
 // traverse first-time tokenization instead of silently reusing the primary User's source.
-await db
-  .prepare(
-    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
-  )
-  .bind(firstCardUserId, "CO", "es-CO", "America/Bogota", now)
-  .run();
-await db
-  .prepare(
-    "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
-  )
-  .bind(firstCardUserId, "acceptance-portfolio", "CO.FirstCard", now)
-  .run();
-await db
-  .prepare(
-    "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
-  )
-  .bind(firstCardUserId, "tarjeta@example.com", now)
-  .run();
-await db
-  .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
-  .bind(firstCardUserId, now, now + trialDurationMs)
-  .run();
-await db
-  .prepare(`INSERT INTO onboarding_consent_records
-  (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-   decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
-  .bind(
-    "24000000-0000-4000-8000-000000000282",
-    firstCardUserId,
-    "{}",
-    "first-card-disclosure",
-    "first-card-decision",
-    now,
-    now
-  )
-  .run();
+await seedIdentity({
+  userId: firstCardUserId,
+  bsuid: "CO.FirstCard",
+  email: "tarjeta@example.com",
+  consentId: "24000000-0000-4000-8000-000000000282",
+  disclosure: "first-card-disclosure",
+  decision: "first-card-decision",
+});
 
 const recoveryDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))

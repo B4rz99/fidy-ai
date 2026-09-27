@@ -114,17 +114,20 @@ const inspectSocket = <A>(
     const controller = new AbortController();
     let socket = Option.none<WebSocket>();
     let settled = false;
-    const cleanup = (): void => {
+    const cleanup = (failed: boolean): void => {
       signal?.removeEventListener("abort", abort);
       interrupted.removeEventListener("abort", abort);
-      controller.abort();
+      // The successful caller still owns the returned HTTP response body. Abort only when
+      // profiling failed or was interrupted; aborting on success can cut off later body reads.
+      if (failed) controller.abort();
       if (Option.isSome(socket)) socket.value.close();
     };
     const finish = (result: { readonly value: A } | { readonly failure: unknown }): void => {
       if (settled) return;
       settled = true;
-      cleanup();
-      if ("failure" in result) {
+      const failed = "failure" in result;
+      cleanup(failed);
+      if (failed) {
         if (Option.isSome(options.onFailure)) options.onFailure.value();
         resume(Effect.fail(new InspectorIoError({ cause: result.failure })));
       } else resume(Effect.succeed(result.value));
@@ -156,7 +159,7 @@ const inspectSocket = <A>(
     return Effect.sync(() => {
       if (!settled) {
         settled = true;
-        cleanup();
+        cleanup(true);
         if (Option.isSome(options.onFailure)) options.onFailure.value();
       }
     });

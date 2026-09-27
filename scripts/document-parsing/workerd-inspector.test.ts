@@ -50,10 +50,8 @@ describe("workerd inspector", () => {
       const controller = new AbortController();
       return Effect.gen(function* () {
         let requestSignal = Option.none<AbortSignal>();
-        let closed = false;
-        const debuggerUrl = serveInspector(acknowledgeStart, () => {
-          closed = true;
-        });
+        const disconnected = Promise.withResolvers<void>();
+        const debuggerUrl = serveInspector(acknowledgeStart, () => disconnected.resolve());
         const requested = Promise.withResolvers<void>();
         const pending = Promise.withResolvers<Response>();
         const profile = profileWorkerRequest({
@@ -73,8 +71,7 @@ describe("workerd inspector", () => {
         }).pipe(Effect.flip);
         expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
         expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
-        yield* Effect.sleep(10);
-        expect(closed).toBe(true);
+        yield* Effect.tryPromise(() => disconnected.promise);
       });
     }
   );
@@ -100,17 +97,49 @@ describe("workerd inspector", () => {
         catch: (cause) => new InspectorTestError({ cause }),
       }).pipe(Effect.flip);
       expect(failure.cause).toMatchObject({ _tag: "InspectorIoError" });
-      let cancelled = false;
-      const body = new ReadableStream({
-        cancel: (): void => {
-          cancelled = true;
-        },
-      });
+      const cancelled = Promise.withResolvers<void>();
+      const body = new ReadableStream({ cancel: (): void => cancelled.resolve() });
       pending.resolve(new Response(body));
-      yield* Effect.sleep(10);
-      expect(cancelled).toBe(true);
+      yield* Effect.tryPromise(() => cancelled.promise);
     });
   });
+
+  it.live("keeps a successful HTTP response readable after closing the inspector", () =>
+    Effect.gen(function* () {
+      let requestSignal = Option.none<AbortSignal>();
+      const debuggerUrl = serveInspector((socket, message) => {
+        const command = Schema.decodeSync(Command)(message);
+        socket.send(
+          JSON.stringify(
+            command.id === 3
+              ? {
+                  id: 3,
+                  result: {
+                    profile: {
+                      nodes: [{ id: 1, callFrame: { functionName: "(idle)" } }],
+                      samples: [1],
+                      timeDeltas: [1000],
+                    },
+                  },
+                }
+              : { id: command.id }
+          )
+        );
+      });
+      const result = yield* Effect.tryPromise(() =>
+        profileWorkerRequest({
+          debuggerUrl,
+          signal: Option.none(),
+          sendRequest: (signal) => {
+            requestSignal = Option.some(signal);
+            return Promise.resolve(new Response("Profile content"));
+          },
+        })
+      );
+      expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(false);
+      expect(yield* Effect.tryPromise(() => result.response.text())).toBe("Profile content");
+    })
+  );
 
   it.live("releases the HTTP body when the CPU profile is malformed", () =>
     Effect.gen(function* () {

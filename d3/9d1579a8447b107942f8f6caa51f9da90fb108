@@ -1,0 +1,21 @@
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_8bdce2ed59f9fe 1,46-49,51
+apps/web/e2e/browser-pairing.spec.ts
+  s_60ae463805ce18::t_f36de44945cf3c 4,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d39d1579a8447b107942f8f6caa51f9da90fb108",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

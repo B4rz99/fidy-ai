@@ -1,6 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
-import { Schema } from "effect";
 
 const expectSeriousAccessibilityViolations = async (page: Page): Promise<void> => {
   const results = await new AxeBuilder({ page }).analyze();
@@ -42,28 +41,6 @@ test("keeps hashed assets immutable without relaxing security headers or publish
     shell.headers()["content-security-policy"]
   );
   expect((await request.get(`${asset}.map`)).status()).toBe(notFound);
-});
-
-test("keeps the generated canonical OpenAPI artifact server-owned", async () => {
-  const artifact: unknown = await Bun.file(
-    new URL("../../server/contracts/openapi.json", import.meta.url)
-  ).json();
-  const parsed = Schema.decodeUnknownSync(
-    Schema.Struct({
-      openapi: Schema.String,
-      info: Schema.Struct({ title: Schema.String }),
-      paths: Schema.Record(Schema.String, Schema.Unknown),
-    })
-  )(artifact);
-  expect(parsed.openapi).toBe("3.1.0");
-  expect(parsed.info.title).toBe("fidy-ai canonical API");
-  const operation = Schema.Struct({ get: Schema.Struct({ operationId: Schema.String }) });
-  expect(Schema.decodeUnknownSync(operation)(parsed.paths["/transactions"]).get.operationId).toBe(
-    "transactions.listTransactions"
-  );
-  expect(
-    Schema.decodeUnknownSync(operation)(parsed.paths["/subscription/status"]).get.operationId
-  ).toBe("subscription.getSubscriptionStatus");
 });
 
 test("does not publish an OpenAPI document or source maps as static assets", async ({

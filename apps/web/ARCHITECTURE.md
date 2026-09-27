@@ -58,7 +58,8 @@ storage, or application-wide state.
 
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
 `fidyapp.com` permanently redirected to that canonical host. There is no application Worker
-entrypoint. The browser Content Security Policy permits connections only to the stable API origin. Cloudflare applies
+entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
+Wompi's fixed sandbox/production tokenization origins; card fields never pass through Fidy. Cloudflare applies
 the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.
@@ -76,6 +77,8 @@ implementations. Production-policy tests validate the generated static artifact,
 security headers, cache behavior, and browser bundle boundary.
 
 The repository's cross-application browser acceptance remains owned by root architecture. It runs
-the built production web mode on loopback HTTPS with explicit HTTP fixtures for browser-level API
-behavior; it does not yet prove a browser-to-real-Worker flow. Cloudflare integration gates separately
-exercise the public ingress, private service binding, and local D1.
+the built production web mode and real public/Core Worker ingress on separate loopback HTTPS origins,
+backed by isolated Miniflare D1. Loopback operator and provider fixtures supply external approvals,
+proof delivery, and Wompi responses; focused `page.route` fixtures remain for browser presentation
+and failure states. The server contract gate owns generated OpenAPI freshness, while browser checks
+prove that neither host publishes that artifact.

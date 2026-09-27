@@ -74,8 +74,11 @@ without that verifier. One approved pairing bootstraps one web session. The serv
 and owns session authority; the web keeps private material out of URLs, public references, and
 unrelated application state.
 
-The root gate combines generated contract freshness, portable behavior tests, built-browser tests, and Cloudflare
-adapter tests. Browser API scenarios currently use explicit HTTP fixtures; they do not by themselves
-prove a browser-to-real-Worker flow. Cloudflare integration tests exercise the relevant Worker and
-platform boundaries locally; live Workers AI behavior has a separate release gate. Application-specific
-test seams belong in the application architecture documents.
+The root gate combines generated contract freshness, portable behavior tests, built-browser tests,
+and Cloudflare adapter tests. Browser acceptance runs a built production-mode static artifact and real
+public/Core Workers on separate loopback HTTPS origins with isolated Miniflare D1. Loopback operator
+fixtures simulate external proof/approval delivery and provider responses; focused browser HTTP
+fixtures cover presentation and failure cases without substituting for the real-Core journeys.
+Cloudflare integration tests exercise the relevant Worker and platform boundaries locally; live
+Workers AI behavior has a separate release gate. Application-specific test seams belong in the
+application architecture documents.

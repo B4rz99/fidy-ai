@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiOrigin, response, user } from "./http-fixtures";
+import { apiOrigin, makeUser, response } from "./http-fixtures";
 
 // Browser-level HTTP fixtures exercise the built app and generated client; platform authority is
 // covered separately by the public-ingress integration tests, not simulated in this suite.
@@ -9,7 +9,11 @@ test("loads empty Transactions through canonical queries on the separate API ori
   const requests: Array<string> = [];
   await page.route(`${apiOrigin}/user`, (route) => {
     requests.push(route.request().url());
-    return route.fulfill({ status: 200, contentType: "application/json", body: response(user) });
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response(makeUser()),
+    });
   });
   await page.route(`${apiOrigin}/categories`, (route) => {
     requests.push(route.request().url());
@@ -68,7 +72,7 @@ test("replaces verified email through two canonical operations without putting t
 test("an under-scoped Transactions query displays only generic failure copy", async ({ page }) => {
   const secret = "other-user-financial-content";
   await page.route(`${apiOrigin}/user`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: response(user) })
+    route.fulfill({ status: 200, contentType: "application/json", body: response(makeUser()) })
   );
   await page.route(`${apiOrigin}/categories`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: response([]) })

@@ -395,7 +395,6 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
   page,
   request,
 }) => {
-  await installCanonicalProductRoutes(page);
   const pending = page.waitForResponse(
     (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
   );
@@ -412,6 +411,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
   expect((await decision()).status()).toBe(successStatus);
   expect((await decision()).status()).toBe(invalidStatus);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible();
   expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

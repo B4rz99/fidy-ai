@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { apiOrigin, response, user } from "./http-fixtures";
+import { apiOrigin, makeUser, response } from "./http-fixtures";
 
 const ok = 200;
 const offerIds = [
@@ -24,7 +24,7 @@ const offers = (["weekly", "monthly", "yearly"] as const).map((billingPeriod, in
 }));
 const standing = {
   accessTier: "free",
-  trialPeriod: user.trialPeriod,
+  trialPeriod: makeUser().trialPeriod,
   paidSubscription: null,
   recentAttempts: [],
 };

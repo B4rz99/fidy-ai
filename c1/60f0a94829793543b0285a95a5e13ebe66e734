@@ -1,0 +1,24 @@
+apps/web/src/features/email-replacement/feature.test.tsx
+  s_13a600a79f8f92::t_9f17c64ab4f29f 38,40,43,48-53,56,58,61,63-69
+apps/web/src/browser/use-sensitive-clipboard.test.tsx
+  s_13a600a79f8f92::t_cbb4dd73f4eb42 78
+  s_13a600a79f8f92::t_f4808a7fcb5055 3-4,79-97,99-118,120-124,126-130,132-134,154-172
+  s_13a600a79f8f92::t_551168d7cc50af 2
+  s_13a600a79f8f92::t_2bfcb2f745c4d3 173-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c160f0a94829793543b0285a95a5e13ebe66e734",
+  "prompts": {},
+  "sessions": {
+    "s_13a600a79f8f92": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17b-9d94-73a8-b996-9e18f9f3e5a4",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

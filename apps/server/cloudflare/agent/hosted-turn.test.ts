@@ -1,5 +1,5 @@
 import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import {
@@ -436,6 +436,119 @@ it("refuses model-requested mutations that the browser hosted toolkit did not ex
     (await db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(users[0]).all())
       .results
   ).toHaveLength(0);
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("refuses a cross-User hosted tool request before sending context or writing tool evidence", async () => {
+  const db = await setup();
+  let sends = 0;
+  const coordinator = new UserTransactionCoordinator(
+    { id: { name: users[1] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    {
+      DB: db,
+      HOSTED_AI_MODEL: approvedWorkersAiModel,
+      AI: {
+        run: (): Promise<Response> => {
+          sends++;
+          return Promise.resolve(reply("Should not be sent"));
+        },
+      },
+    }
+  );
+  const stolen = await subject(0);
+  const result = await coordinator.fetch(
+    new Request("https://coordinator.internal/hosted-turn", {
+      method: "POST",
+      body: JSON.stringify({
+        userId: users[1],
+        sessionId: stolen.id,
+        digest: Array.from(stolen.digest),
+        text: "Consulta las categorías de A",
+      }),
+    })
+  );
+  expect(result.status).toBe(401);
+  expect(sends).toBe(0);
+  for (const user of users) {
+    expect((await retained(db, user)).results).toHaveLength(0);
+    expect(
+      (await db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(user).all()).results
+    ).toHaveLength(0);
+  }
+});
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("ends a multi-round Turn at its shared deadline without buying another model round", async () => {
+  const db = await setup();
+  const start = now();
+  let elapsed = 0;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => start + elapsed);
+  try {
+    let calls = 0;
+    const coordinator = new UserTransactionCoordinator(
+      { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      {
+        DB: db,
+        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        AI: {
+          run: (): Promise<Response> => {
+            calls++;
+            elapsed = 121_000;
+            return Promise.resolve(
+              Response.json({
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        {
+                          id: "first-call",
+                          type: "function",
+                          function: {
+                            name: "categories__listCategories",
+                            arguments: "{}",
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              })
+            );
+          },
+        },
+      }
+    );
+    const credential = await subject(0);
+    const result = await coordinator.fetch(
+      new Request("https://coordinator.internal/hosted-turn", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: credential.userId,
+          sessionId: credential.id,
+          digest: Array.from(credential.digest),
+          text: "Muéstrame las categorías",
+        }),
+      })
+    );
+    expect(result.status).toBe(503);
+    expect(calls).toBe(1);
+    expect((await retained(db, users[0])).results).toMatchObject([
+      { kind: "user", status: "failed" },
+      { kind: "tool_call", status: "failed" },
+      { kind: "tool_result", status: "failed" },
+      { kind: "failed", status: "failed", marker: "HostedInferenceTimedOut" },
+    ]);
+    expect(
+      (await db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(users[0]).all())
+        .results
+    ).toHaveLength(1);
+  } finally {
+    clock.mockRestore();
+  }
 });
 
 // @effect-diagnostics-next-line asyncFunction:off

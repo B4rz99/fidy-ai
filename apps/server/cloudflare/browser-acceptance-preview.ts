@@ -1,4 +1,4 @@
-import { Clock, Effect } from "effect";
+import { Clock, DateTime, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { newId } from "./pats/pat-shared";
@@ -20,16 +20,22 @@ const compiled = Bun.spawnSync([
 if (compiled.exitCode !== 0) {
   throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
 }
-const isCoreWorkerModule = (candidate: unknown): candidate is typeof CoreWorkerModule =>
+type AcceptanceCoreExports = Pick<
+  typeof CoreWorkerModule,
+  "makeCoreWorker" | "UserTransactionCoordinator" | "runBillingCollectionWorkflow"
+>;
+const isCoreWorkerModule = (candidate: unknown): candidate is AcceptanceCoreExports =>
   typeof candidate === "object" &&
   candidate !== null &&
   "makeCoreWorker" in candidate &&
   typeof candidate.makeCoreWorker === "function" &&
   "UserTransactionCoordinator" in candidate &&
-  typeof candidate.UserTransactionCoordinator === "function";
+  typeof candidate.UserTransactionCoordinator === "function" &&
+  "runBillingCollectionWorkflow" in candidate &&
+  typeof candidate.runBillingCollectionWorkflow === "function";
 const coreModule: unknown = await import(coreBundle.href);
 if (!isCoreWorkerModule(coreModule)) throw new Error("Core acceptance bundle has no Worker");
-const { makeCoreWorker, UserTransactionCoordinator } = coreModule;
+const { makeCoreWorker, UserTransactionCoordinator, runBillingCollectionWorkflow } = coreModule;
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry");
 const { browserOrigins } = await import("./runtime/topology");
@@ -257,7 +263,29 @@ const merchantBody = {
     },
   },
 };
-const providerResponse = (requestUrl: string): Response => {
+// @effect-diagnostics-next-line asyncFunction:off
+const providerResponse = async (requestUrl: string): Promise<Response> => {
+  if (requestUrl.includes("/v1/transactions")) {
+    const attempt = await db
+      .prepare(
+        "SELECT wompi_reference, amount FROM billing_attempts ORDER BY created_at_ms DESC LIMIT 1"
+      )
+      .first<{ wompi_reference: string; amount: string }>();
+    if (attempt === null) return new Response(null, { status: 404 });
+    return Response.json({
+      data: {
+        id: "acceptance-transaction-1",
+        reference: attempt.wompi_reference,
+        status: "APPROVED",
+        amount_in_cents: Number(attempt.amount) * 100,
+        currency: "COP",
+        payment_source_id: sourceId,
+        finalized_at: DateTime.formatIso(
+          DateTime.makeUnsafe(Effect.runSync(Clock.currentTimeMillis))
+        ),
+      },
+    });
+  }
   if (requestUrl.includes("/v1/merchants/")) return Response.json(merchantBody);
   if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
     return Response.json({
@@ -281,7 +309,7 @@ globalThis.fetch = new Proxy(globalThis.fetch, {
       return Promise.resolve(Response.json({ keys: [jwk] }));
     }
     if (url.startsWith("https://sandbox.wompi.co/")) {
-      return Promise.resolve(providerResponse(url));
+      return providerResponse(url);
     }
     return Reflect.apply(target, thisArg, args);
   },
@@ -343,6 +371,38 @@ const deliverEmailLoginProof = (code: string): Promise<Response> =>
       .run()
   );
 
+const collectBilling = (): Promise<Response> =>
+  db
+    .prepare(
+      "SELECT id FROM billing_attempts WHERE status = 'pending' ORDER BY created_at_ms DESC LIMIT 1"
+    )
+    .first<{ id: string }>()
+    .then((attempt) =>
+      attempt === null
+        ? new Response(null, { status: 404 })
+        : runBillingCollectionWorkflow({
+            environment: {
+              DB: db,
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: providerPublicKey,
+              WOMPI_PRIVATE_KEY: providerPrivateKey,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+            },
+            payload: { version: 1, attemptId: attempt.id },
+            activity: (_name, _options, run) => run(),
+          })
+            .then(() =>
+              db
+                .prepare("SELECT status FROM billing_attempts WHERE id = ?")
+                .bind(attempt.id)
+                .first<{ status: string }>()
+            )
+            .then(
+              (row) =>
+                new Response(null, { status: row?.status === "succeeded" ? noContent : conflict })
+            )
+    );
+
 const approveWhatsAppPairing = (code: string): Promise<Response> =>
   db
     .prepare(
@@ -363,11 +423,14 @@ const approveWhatsAppPairing = (code: string): Promise<Response> =>
     );
 const operatorRoute = (request: Request, path: string, method: string): boolean =>
   request.method === method && new URL(request.url).pathname === path;
+const operatorCode = (request: Request, path: string): Option.Option<string> =>
+  operatorRoute(request, path, "POST")
+    ? Option.fromNullishOr(new URL(request.url).searchParams.get("code"))
+    : Option.none();
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: 4175,
   fetch: (request) => {
-    const url = new URL(request.url);
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
     if (operatorRoute(request, "/assertion", "GET")) {
       return assertion().then(
@@ -377,13 +440,13 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    const code = url.searchParams.get("code");
-    if (code !== null && operatorRoute(request, "/email/login/deliver", "POST")) {
-      return deliverEmailLoginProof(code);
+    if (operatorRoute(request, "/billing/collect", "POST")) {
+      return collectBilling();
     }
-    if (code !== null && operatorRoute(request, "/approve", "POST")) {
-      return approveWhatsAppPairing(code);
-    }
+    const loginCode = operatorCode(request, "/email/login/deliver");
+    if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
+    const approvalCode = operatorCode(request, "/approve");
+    if (Option.isSome(approvalCode)) return approveWhatsAppPairing(approvalCode.value);
     return new Response(null, { status: 403 });
   },
 });

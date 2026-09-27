@@ -155,7 +155,10 @@ import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
-export { BillingCollectionWorkflowV1 } from "./billing/billing-collection";
+export {
+  BillingCollectionWorkflowV1,
+  runBillingCollectionWorkflow,
+} from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 export { StatementExtractionWorkflowV1 };

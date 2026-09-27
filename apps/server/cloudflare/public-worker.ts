@@ -219,6 +219,7 @@ const ownedPath = (path: string): boolean =>
 const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
+  if (enrollmentStatusPath.test(path)) return ["GET"];
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
 };

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
-import { Clock, DateTime, Effect } from "effect";
+import type { BrowserContext, Page } from "@playwright/test";
+import { Array, Clock, DateTime, Effect, Option } from "effect";
 
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5_000;
@@ -302,6 +302,34 @@ const visiblePairingCode = async (page: Page): Promise<string> => {
   return code ?? "";
 };
 
+type BrowserCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
+const verifyRevokedBrowser = async (
+  page: Page,
+  context: BrowserContext,
+  session: Option.Option<BrowserCookie>
+): Promise<void> => {
+  if (Option.isNone(session)) throw new Error("Expected a redeemed WebSession cookie");
+  await context.addCookies([session.value]);
+  await page.goto("/app/transactions");
+  await expect(page.getByRole("alert")).toContainText("Sesión vencida");
+  expect(await page.locator("body").textContent()).not.toContain("OTHER-USER-PRIVATE");
+};
+
+const editAndCheckDashboard = async (page: Page): Promise<void> => {
+  await page.goto("/app/dashboard");
+  await expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible();
+  await page.getByRole("button", { name: "Personalizar" }).click();
+  await page
+    .getByRole("button", { name: /^Renombrar /u })
+    .first()
+    .click();
+  await page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles");
+  await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+};
+
 test("redeems a real pairing approved out of band and obtains a real WebSession", async ({
   context,
   page,
@@ -314,9 +342,12 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
   expect(approval.status()).toBe(noContentStatus);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
   await expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible();
-  const session = (await context.cookies()).find((cookie) => cookie.name === "__Host-fidy_session");
-  expect(session?.httpOnly).toBe(true);
-  expect(session?.secure).toBe(true);
+  const session = Array.findFirst(
+    await context.cookies(),
+    (cookie) => cookie.name === "__Host-fidy_session"
+  );
+  expect(Option.getOrUndefined(session)?.httpOnly).toBe(true);
+  expect(Option.getOrUndefined(session)?.secure).toBe(true);
   const current = await page.request.get("https://127.0.0.1:4174/user", {
     headers: { origin: "https://127.0.0.1:4173" },
   });
@@ -326,7 +357,12 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
   });
   const otherTransaction = await request.get(
     "https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262",
-    { headers: { origin: "https://127.0.0.1:4173", cookie: `${session?.name}=${session?.value}` } }
+    {
+      headers: {
+        origin: "https://127.0.0.1:4173",
+        cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
+      },
+    }
   );
   expect(otherTransaction.status()).toBe(notFoundStatus);
   expect(await otherTransaction.text()).not.toContain("OTHER-USER-PRIVATE");
@@ -334,19 +370,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
   await page.getByLabel("Contraparte (opcional)").fill("La Cocina");
   await page.getByRole("button", { name: "Registrar transacción" }).click();
   await expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina");
-  await page.goto("/app/dashboard");
-  await expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible();
-  await page.getByRole("button", { name: "Personalizar" }).click();
-  await page
-    .getByRole("button", { name: /^Renombrar /u })
-    .first()
-    .click();
-  await page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles");
-  await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
-  await page.reload();
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+  await editAndCheckDashboard(page);
   await page.goto("/upgrade");
   await expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible();
   await page.goto("/app/transactions");
@@ -358,9 +382,13 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
     )
     .toBe(false);
   const revoked = await request.get("https://127.0.0.1:4174/user", {
-    headers: { origin: "https://127.0.0.1:4173", cookie: `${session?.name}=${session?.value}` },
+    headers: {
+      origin: "https://127.0.0.1:4173",
+      cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
+    },
   });
   expect(revoked.status()).toBe(unauthorizedStatus);
+  await verifyRevokedBrowser(page, context, session);
 });
 
 test("a SupportRecoveryCase approves the browser-private pairing through the real Core", async ({

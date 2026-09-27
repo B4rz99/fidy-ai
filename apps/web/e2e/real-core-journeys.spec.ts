@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { signInThroughCore, visiblePairingCode } from "./real-core-fixture";
 
 const api = "https://127.0.0.1:4174";
@@ -9,13 +9,13 @@ const unauthorized = 401;
 const noContent = 204;
 const notFound = 404;
 
-test("reviews a real PATPairing and leaves its private code with only the requesting client", async ({
+test("reviews a real PATPairing and presents its under-scoped Core refusal without leaking details", async ({
   page,
   request,
 }) => {
   await signInThroughCore({ page, request });
   const started = await request.post(`${api}/pat-pairings`, {
-    data: { recipientLabel: "Agente emparejado", scopes: ["read"], lifetimeDays: 30 },
+    data: { recipientLabel: "Agente emparejado", scopes: ["write"], lifetimeDays: 30 },
   });
   expect(started.status()).toBe(ok);
   const { pairingId, publicCode, privateDeviceCode } = Schema.decodeUnknownSync(
@@ -41,6 +41,15 @@ test("reviews a real PATPairing and leaves its private code with only the reques
   );
   expect(bearer).toMatch(/^fin_/u);
   expect(await page.locator("body").textContent()).not.toContain(bearer);
+  const refused = await request.get(`${api}/transactions`, {
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  expect(refused.status()).toBe(forbidden);
+  await page.route(`${api}/transactions?*`, (route) => route.fulfill({ response: refused }));
+  await page.goto("/app/transactions");
+  await expect(page.getByRole("alert")).toBeVisible();
+  expect(await page.locator("body").textContent()).not.toContain(bearer);
+  expect(await page.locator("body").textContent()).not.toContain(await refused.text());
 });
 
 test("a browser cannot render or fetch another User's private Transaction through public routes", async ({
@@ -57,6 +66,17 @@ test("a browser cannot render or fetch another User's private Transaction throug
   expect(refusal.status).toBe(notFound);
   expect(refusal.body).not.toContain("OTHER-USER-PRIVATE");
   expect(await page.locator("body").textContent()).not.toContain("OTHER-USER-PRIVATE");
+});
+
+test("renders loading until the real Core answers Transactions", async ({ page, request }) => {
+  await signInThroughCore({ page, request });
+  await page.route(`${api}/transactions?*`, async (route) => {
+    await Effect.runPromise(Effect.sleep("1 second"));
+    await route.continue();
+  });
+  await page.goto("/app/transactions");
+  await expect(page.getByRole("region", { name: "Cargando transacciones" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Cargando transacciones" })).toHaveCount(0);
 });
 
 test("approves a browser pairing through the real verified-email public route", async ({
@@ -121,13 +141,26 @@ test("submits reused-source Subscription enrollment through real public and Core
   await page.getByRole("button", { name: "Activar Pro" }).click();
   const submitted = await submission;
   expect(submitted.status()).toBe(ok);
-  expect(await submitted.json()).toMatchObject({
+  const submissionBody: unknown = await submitted.json();
+  expect(submissionBody).toMatchObject({
     status: "payment-pending",
     billingAttempt: { status: "pending" },
   });
-  await expect(
-    page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
-  ).toBeVisible();
+  const { billingAttempt } = Schema.decodeUnknownSync(
+    Schema.Struct({ billingAttempt: Schema.Struct({ id: Schema.String }) })
+  )(submissionBody);
+  expect((await request.post("http://127.0.0.1:4175/billing/collect")).status()).toBe(noContent);
+  const settled = await page.request.get(
+    `${api}/web/subscription/billing-attempts/${billingAttempt.id}`,
+    {
+      headers: { origin: "https://127.0.0.1:4173" },
+    }
+  );
+  expect(settled.status()).toBe(ok);
+  expect(await settled.json()).toMatchObject({ status: "succeeded" });
+  await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 test("a read-only PAT issued through the real browser session cannot capture Transactions after review or revocation", async ({

@@ -114,9 +114,9 @@ export const validateProductionArtifact = (request: ProductionArtifactRequest): 
         }
         return Promise.all(paths.map((path) => validateContents(request.directory, path)));
       })
-      .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).text())
-      .then((metadataText) => {
-        const metadata = Schema.decodeSync(Schema.fromJsonString(ReleaseMetadata))(metadataText);
+      .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).json())
+      .then((value) => {
+        const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(value);
         if (
           metadata.gitRevision !== request.expectedSha ||
           metadata.contractDigest !== request.expectedDigest

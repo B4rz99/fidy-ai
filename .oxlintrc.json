@@ -154,10 +154,9 @@
         "max-lines-per-function": "off"
       }
     },
-    // Workerd readiness and dependency-guard batches advance in order and clean up before retry.
+    // Dependency-guard batches advance in order and clean up before retry.
     {
       "files": [
-        "scripts/document-parsing/check.ts",
         "apps/server/scripts/check-dependency-guards.ts",
         "apps/web/scripts/check-dependency-guards.ts"
       ],
@@ -298,26 +297,6 @@
         "typescript/no-unsafe-call": "off",
         "typescript/no-unsafe-member-access": "off",
         "typescript/no-unsafe-return": "off"
-      }
-    },
-    // Resolving nested aliases and utility wrappers is one recursive syntax
-    // traversal. Splitting it to satisfy per-function shape limits would hide
-    // the resolution state rather than simplify the algorithm.
-    {
-      "files": ["scripts/oxlint/dictionary-types.js"],
-      "rules": {
-        "complexity": "off",
-        "max-depth": "off",
-        "max-params": "off"
-      }
-    },
-    // A className expression is one recursive Babel syntax tree. Keeping its
-    // literal, template, condition, array, and call cases together makes the
-    // design-system gate's accepted syntax visible in one place.
-    {
-      "files": ["scripts/check-web-design-system.ts"],
-      "rules": {
-        "complexity": "off"
       }
     },
     // Only the runner needs the `.mjs` exception turned back off. That

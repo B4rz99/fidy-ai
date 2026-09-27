@@ -142,14 +142,6 @@
             }
           },
           {
-            "include": ["./scripts/document-parsing/workerd-inspector.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "newPromise": "off"
-              }
-            }
-          },
-          {
             "include": [
               "./scripts/document-parsing/check.ts",
               "./scripts/document-parsing/extraction-proof.ts",

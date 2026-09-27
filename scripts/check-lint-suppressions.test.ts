@@ -38,6 +38,7 @@ it("rejects disabled diagnostics that no longer require TypeScript path override
   const sources = [
     '"asyncFunction": "off",',
     '"missingPipeableSignature": "off",',
+    '"newPromise": "off",',
     '"strictBooleanExpressions": "off",',
   ];
 
@@ -106,7 +107,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "globalFetch:./scripts/document-parsing/check.ts",
           "globalFetch:./scripts/document-parsing/extraction-proof.ts",
           "globalFetch:./scripts/document-parsing/workerd-inspector.ts",
-          "newPromise:./scripts/document-parsing/workerd-inspector.ts",
           "nodeBuiltinImport:./apps/web/cloudflare/production-policy/artifact.ts",
           "nodeBuiltinImport:./apps/web/scripts/build-production.test.ts",
           "nodeBuiltinImport:./apps/web/scripts/check-browser-bundle.test.ts",
@@ -130,7 +130,6 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
         [
           "apps/server/scripts/check-dependency-guards.ts",
           "apps/web/scripts/check-dependency-guards.ts",
-          "scripts/document-parsing/check.ts",
         ].toSorted()
       );
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
@@ -139,4 +138,19 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
           files.includes("apps/server/cloudflare/card-enrollment/card-enrollment.ts")
         )?.rules["max-params"]
       ).toBeUndefined();
+      expect(
+        overrides.flatMap(({ rules }) =>
+          ["max-depth", "max-params"].filter((rule) => rules[rule] === "off")
+        )
+      ).toEqual([]);
+      const refactoredComplexity = new Set([
+        "apps/server/tools/contracts/generate.ts",
+        "scripts/oxlint/dictionary-types.js",
+        "scripts/check-web-design-system.ts",
+      ]);
+      expect(
+        overrides
+          .filter(({ files }) => files.some((file) => refactoredComplexity.has(file)))
+          .some(({ rules }) => rules["complexity"] === "off")
+      ).toBe(false);
     }));

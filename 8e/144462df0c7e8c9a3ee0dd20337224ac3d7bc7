@@ -1,0 +1,44 @@
+scripts/oxlint/effect-guards.js
+  s_faf8a5df7be82b::t_134c41dfb9194b 53,58,63,66
+  s_faf8a5df7be82b::t_f7420e315cfcff 35
+  s_faf8a5df7be82b::t_82c7f39ed2b54f 20,28-31,45-52,54-57,59-62,65,67-74,894
+  s_faf8a5df7be82b::t_1fdbff109ea4dc 14,32-34,36-44,64
+package.json
+  s_faf8a5df7be82b::t_aa5a749f26beee 12
+.github/workflows/ci.yml
+  s_faf8a5df7be82b::t_b49873aed88b75 25-29
+scripts/oxlint/no-ordinary-interface.test.js
+  s_faf8a5df7be82b::t_029456a53bc2ec 1-76
+.oxlintrc.json
+  s_faf8a5df7be82b::t_1d4b4de5d5faf7 114
+  s_faf8a5df7be82b::t_b29985a25f6f1d 302-304
+  s_faf8a5df7be82b::t_d5ba048b0911d1 300-301,305
+  s_98251aab91db5b::t_d91bea007be605 306-307
+docs/research/ast-standards-feasibility.md
+  s_faf8a5df7be82b::t_796567707e0ca7 1-2,4-6,8,10-14,16-20,22,24-34,36-40,47-49,51-54
+  s_faf8a5df7be82b::t_934fb6e4e7be37 3,7,9,15,21,23,35,41-46,50,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8e144462df0c7e8c9a3ee0dd20337224ac3d7bc7",
+  "prompts": {},
+  "sessions": {
+    "s_98251aab91db5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0ec-f843-724a-9138-f40331cd3c04",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

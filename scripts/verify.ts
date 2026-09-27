@@ -94,6 +94,7 @@ const checks: Array<Check> = [
   // The JS plugin is checked with the classic compiler in the isolated tool install;
   // the patched root compiler applies Effect diagnostics to these foreign AST callbacks.
   rootCheck("static", "Oxlint plugin JS types", ["bun", "run", "typecheck:oxlint"]),
+  rootCheck("static", "Dependency cruiser JS types", ["bun", "run", "typecheck:depcruise"]),
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),

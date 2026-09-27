@@ -277,17 +277,11 @@
         "typescript/explicit-function-return-type": "off"
       }
     },
-    // dependency-cruiser lives in an isolated install under tools/depcruise
-    // (see its package.json) that the root tsconfig does not see.
+    // dependency-cruiser's public imports resolve through its isolated install.
     {
       "files": ["tools/depcruise/*.mjs"],
       "rules": {
-        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }],
-        "typescript/no-unsafe-argument": "off",
-        "typescript/no-unsafe-assignment": "off",
-        "typescript/no-unsafe-call": "off",
-        "typescript/no-unsafe-member-access": "off",
-        "typescript/no-unsafe-return": "off"
+        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
       }
     },
     // The custom plugin's local helper import needs the runtime extension Node ESM requires.

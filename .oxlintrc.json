@@ -172,13 +172,6 @@
         "no-console": "off"
       }
     },
-    // Contract generation coordinates schema reflection and artifact serialization.
-    {
-      "files": ["apps/server/tools/contracts/generate.ts"],
-      "rules": {
-        "complexity": "off"
-      }
-    },
     // SMTP admission is one ordered trust boundary: splitting its receipt-before-R2,
     // publication, and ambiguity cleanup steps would obscure their required sequence.
     {

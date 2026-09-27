@@ -34,6 +34,16 @@ const hasShareableStructure = (ast: SchemaAST.AST): boolean => {
   return ast._tag === "Union" && ast.types.some(hasShareableStructure);
 };
 
+const inlineReferenceCost = (ast: SchemaAST.AST): Option.Option<number> => {
+  if (ast._tag === "Union") return Option.some(ast.types.length + 1);
+  if (ast._tag === "Enum") return Option.some(ast.enums.length + 1);
+  if (ast._tag === "TemplateLiteral") return Option.some(ast.parts.length + 1);
+  if (ast._tag === "Literal" && typeof ast.literal === "string") {
+    return Option.some(ast.literal.length / literalReferenceCostScale + 1);
+  }
+  return Option.none();
+};
+
 const contractReferencePolicy = ({
   ast,
   identifier,
@@ -47,27 +57,10 @@ const contractReferencePolicy = ({
   if (occurrences <= 1) return Option.none();
   if (hasShareableStructure(ast)) return Option.some(`${ast._tag}_`);
 
-  if (ast._tag === "Union") {
-    return isWorthReferencing(ast.types.length + 1, occurrences)
-      ? Option.some(`${ast._tag}_`)
-      : Option.none();
-  }
-  if (ast._tag === "Enum") {
-    return isWorthReferencing(ast.enums.length + 1, occurrences)
-      ? Option.some(`${ast._tag}_`)
-      : Option.none();
-  }
-  if (ast._tag === "TemplateLiteral") {
-    return isWorthReferencing(ast.parts.length + 1, occurrences)
-      ? Option.some(`${ast._tag}_`)
-      : Option.none();
-  }
-  if (ast._tag === "Literal" && typeof ast.literal === "string") {
-    return isWorthReferencing(ast.literal.length / literalReferenceCostScale + 1, occurrences)
-      ? Option.some(`${ast._tag}_`)
-      : Option.none();
-  }
-  return Option.none();
+  const cost = inlineReferenceCost(ast);
+  return Option.isSome(cost) && isWorthReferencing(cost.value, occurrences)
+    ? Option.some(`${ast._tag}_`)
+    : Option.none();
 };
 
 // SchemaRepresentation's foreign policy uses undefined for inline candidates, not JSON null.

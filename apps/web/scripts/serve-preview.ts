@@ -63,30 +63,33 @@ if (policyHeaders["Content-Security-Policy"] === undefined || assetCache === und
   throw new Error("Production security policy lacks security or asset caching rules");
 }
 
-const responseFor = async (request: Request): Promise<Response> => {
+const responseFor = (request: Request): Promise<Response> => {
   const pathname = new URL(request.url).pathname;
   const candidate = filePath(pathname);
-  if (Option.isNone(candidate)) return new Response(null, { status: 400, headers: policyHeaders });
+  if (Option.isNone(candidate)) {
+    return Promise.resolve(new Response(null, { status: 400, headers: policyHeaders }));
+  }
   if (pathname.endsWith(".map")) {
-    return new Response(null, { status: 404, headers: policyHeaders });
+    return Promise.resolve(new Response(null, { status: 404, headers: policyHeaders }));
   }
 
   const file = Bun.file(candidate.value);
-  if (await file.exists()) {
-    const extension = candidate.value.slice(candidate.value.lastIndexOf(".")).toLowerCase();
-    return new Response(file, {
-      headers: {
-        ...policyHeaders,
-        ...(pathname.startsWith("/assets/") ? { "Cache-Control": assetCache } : {}),
-        "content-type": contentTypes[extension] ?? "application/octet-stream",
-      },
+  return file.exists().then((exists) => {
+    if (exists) {
+      const extension = candidate.value.slice(candidate.value.lastIndexOf(".")).toLowerCase();
+      return new Response(file, {
+        headers: {
+          ...policyHeaders,
+          ...(pathname.startsWith("/assets/") ? { "Cache-Control": assetCache } : {}),
+          "content-type": contentTypes[extension] ?? "application/octet-stream",
+        },
+      });
+    }
+    if (pathname.includes(".")) return new Response(null, { status: 404, headers: policyHeaders });
+    const shell = Bun.file(`${root}/index.html`);
+    return new Response(shell, {
+      headers: { ...policyHeaders, "content-type": "text/html; charset=utf-8" },
     });
-  }
-
-  if (pathname.includes(".")) return new Response(null, { status: 404, headers: policyHeaders });
-  const shell = Bun.file(`${root}/index.html`);
-  return new Response(shell, {
-    headers: { ...policyHeaders, "content-type": "text/html; charset=utf-8" },
   });
 };
 

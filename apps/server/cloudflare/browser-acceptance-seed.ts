@@ -73,45 +73,45 @@ const defaultIdentity: SeedIdentity = {
   disclosure: "disclosure",
   decision: "decision",
 };
-// @effect-diagnostics-next-line asyncFunction:off
-const seedIdentity = async (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
+const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   const identity = { ...defaultIdentity, ...overrides };
-  await db
-    .prepare(
-      "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
-    )
-    .bind(identity.userId, "CO", "es-CO", "America/Bogota", now)
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
-    )
-    .bind(identity.userId, "acceptance-portfolio", identity.bsuid, now)
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
-    )
-    .bind(identity.userId, identity.email, now)
-    .run();
-  await db
-    .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
-    .bind(identity.userId, now, now + trialDurationMs)
-    .run();
-  await db
-    .prepare(`INSERT INTO onboarding_consent_records
+  const statements = [
+    db
+      .prepare(
+        "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
+      )
+      .bind(identity.userId, "CO", "es-CO", "America/Bogota", now),
+    db
+      .prepare(
+        "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
+      )
+      .bind(identity.userId, "acceptance-portfolio", identity.bsuid, now),
+    db
+      .prepare(
+        "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
+      )
+      .bind(identity.userId, identity.email, now),
+    db
+      .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
+      .bind(identity.userId, now, now + trialDurationMs),
+    db
+      .prepare(`INSERT INTO onboarding_consent_records
     (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
      decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
-    .bind(
-      identity.consentId,
-      identity.userId,
-      "{}",
-      identity.disclosure,
-      identity.decision,
-      now,
-      now
-    )
-    .run();
+      .bind(
+        identity.consentId,
+        identity.userId,
+        "{}",
+        identity.disclosure,
+        identity.decision,
+        now,
+        now
+      ),
+  ];
+  return statements.reduce<Promise<void>>(
+    (previous, statement) => previous.then(() => statement.run()).then(() => undefined),
+    Promise.resolve()
+  );
 };
 await seedIdentity();
 await db

@@ -50,12 +50,10 @@ const matchesCharge = (charge: typeof WompiCharge.Type, attempt: ProviderAttempt
     (attempt.billing_email === "tarjeta@example.com" ? firstCardSourceId : sourceId) &&
   charge.customer_email === attempt.billing_email &&
   attempt.amount === "28900";
-// @effect-diagnostics-next-line asyncFunction:off
-const decodeCharge = async (request: Request): Promise<Option.Option<typeof WompiCharge.Type>> => {
-  if (request.method !== "POST") return Option.none();
-  const body: unknown = await request.json();
-  return Schema.decodeUnknownOption(WompiCharge)(body);
-};
+const decodeCharge = (request: Request): Promise<Option.Option<typeof WompiCharge.Type>> =>
+  request.method !== "POST"
+    ? Promise.resolve(Option.none())
+    : request.json().then((body: unknown) => Schema.decodeUnknownOption(WompiCharge)(body));
 const providerKey = (
   request: Request,
   charge: Option.Option<typeof WompiCharge.Type>
@@ -65,37 +63,38 @@ const providerKey = (
     : Option.fromNullishOr(
         new URL(request.url).pathname.split("/v1/transactions/")[1]?.replace(transactionPrefix, "")
       );
-// @effect-diagnostics-next-line asyncFunction:off
-const transactionResponse = async (request: Request): Promise<Response> => {
-  const isCreate = request.method === "POST";
-  const charge = await decodeCharge(request);
-  const key = providerKey(request, charge);
-  if (Option.isNone(key)) return new Response(null, { status: 400 });
-  const column = isCreate ? "a.wompi_reference" : "a.id";
-  const attempt = await db
-    .prepare(`SELECT a.id, a.wompi_reference, a.amount, s.wompi_source_id,
+const transactionResponse = (request: Request): Promise<Response> =>
+  decodeCharge(request).then((charge) => {
+    const isCreate = request.method === "POST";
+    const key = providerKey(request, charge);
+    if (Option.isNone(key)) return new Response(null, { status: 400 });
+    const column = isCreate ? "a.wompi_reference" : "a.id";
+    return db
+      .prepare(`SELECT a.id, a.wompi_reference, a.amount, s.wompi_source_id,
     s.billing_email FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.user_id = a.user_id
     WHERE ${column} = ?`)
-    .bind(key.value)
-    .first<ProviderAttempt>();
-  if (attempt === null) return new Response(null, { status: 404 });
-  if (isCreate && !matchesCharge(Option.getOrThrow(charge), attempt)) {
-    return new Response(null, { status: 400 });
-  }
-  return Response.json({
-    data: {
-      id: `${transactionPrefix}${attempt.id}`,
-      reference: attempt.wompi_reference,
-      status: "APPROVED",
-      amount_in_cents: monthlyChargeCents,
-      currency: "COP",
-      payment_source_id: attempt.wompi_source_id,
-      finalized_at: DateTime.formatIso(
-        DateTime.makeUnsafe(Effect.runSync(Clock.currentTimeMillis))
-      ),
-    },
+      .bind(key.value)
+      .first<ProviderAttempt>()
+      .then((attempt) => {
+        if (attempt === null) return new Response(null, { status: 404 });
+        if (isCreate && !matchesCharge(Option.getOrThrow(charge), attempt)) {
+          return new Response(null, { status: 400 });
+        }
+        return Response.json({
+          data: {
+            id: `${transactionPrefix}${attempt.id}`,
+            reference: attempt.wompi_reference,
+            status: "APPROVED",
+            amount_in_cents: monthlyChargeCents,
+            currency: "COP",
+            payment_source_id: attempt.wompi_source_id,
+            finalized_at: DateTime.formatIso(
+              DateTime.makeUnsafe(Effect.runSync(Clock.currentTimeMillis))
+            ),
+          },
+        });
+      });
   });
-};
 const SourceCreation = Schema.Struct({
   type: Schema.Literal("CARD"),
   token: Schema.String,
@@ -103,22 +102,22 @@ const SourceCreation = Schema.Struct({
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
-// @effect-diagnostics-next-line asyncFunction:off
-const createSourceResponse = async (request: Request): Promise<Response> => {
-  if (request.method !== "POST") return new Response(null, { status: 405 });
-  const body: unknown = await request.json();
-  const source = Schema.decodeUnknownOption(SourceCreation)(body);
-  if (Option.isNone(source)) return new Response(null, { status: 400 });
-  const expected = merchantBody.data;
-  if (
-    source.value.token !== "tok_acceptance_first_card" ||
-    source.value.customer_email !== "tarjeta@example.com" ||
-    source.value.acceptance_token !== expected.presigned_acceptance.acceptance_token ||
-    source.value.accept_personal_auth !== expected.presigned_personal_data_auth.acceptance_token
-  ) {
-    return new Response(null, { status: 400 });
-  }
-  return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+const createSourceResponse = (request: Request): Promise<Response> => {
+  if (request.method !== "POST") return Promise.resolve(new Response(null, { status: 405 }));
+  return request.json().then((body: unknown) => {
+    const source = Schema.decodeUnknownOption(SourceCreation)(body);
+    if (Option.isNone(source)) return new Response(null, { status: 400 });
+    const expected = merchantBody.data;
+    if (
+      source.value.token !== "tok_acceptance_first_card" ||
+      source.value.customer_email !== "tarjeta@example.com" ||
+      source.value.acceptance_token !== expected.presigned_acceptance.acceptance_token ||
+      source.value.accept_personal_auth !== expected.presigned_personal_data_auth.acceptance_token
+    ) {
+      return new Response(null, { status: 400 });
+    }
+    return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+  });
 };
 export const providerResponse = (request: Request): Promise<Response> => {
   const requestUrl = request.url;

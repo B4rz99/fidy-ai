@@ -1,0 +1,51 @@
+apps/server/tools/contracts/check.ts
+  s_6c913d3db00564::t_446864f18b1588 35-38,62-63,65,121,149,151,171-172,174,333,337,356-358,392,394,420-422
+  s_6c913d3db00564::t_f0afacbcf657c0 127-141
+  s_6c913d3db00564::t_1b17dc2a98ed46 90-102,104-108,124,330,332,334,343,359
+  s_6c913d3db00564::t_d2720acafb8f67 168-170,175-176
+  s_6c913d3db00564::t_efee431307d033 59,110-112,161-164,323,388
+  s_6c913d3db00564::t_cb74d772315858 60-61,66,113,123,154-160,165-167,177,308,324,344,364,366,369-370,374,387,389,399,404,414-416,423,425
+  s_3c5ba397386570::t_5820c542e78632 64,103,114-120,126,143-148,150,152-153,173,325-329,331,335-336,338-342,345-355,361,393
+apps/server/tools/contracts/digest-artifacts.ts
+  s_6c913d3db00564::t_50da4faab7ec12 3,6,13-16
+  s_6c913d3db00564::t_2755908c1e4290 11-12
+apps/server/tools/contracts/check.test.ts
+  s_6c913d3db00564::t_fd708a9a6d1016 53-60
+  s_6c913d3db00564::t_81f9ae112a1266 107-119,136-139
+  s_6c913d3db00564::t_dbefa4b9f56f37 36-37,39-40,42,44,63-64,66,68,70-76,89-92,94-101,103-105,130-132,134
+  s_6c913d3db00564::t_030d2063dec75c 106,120,122-125,127-129,133,140-151
+apps/server/tools/contracts/generate.ts
+  s_6c913d3db00564::t_349a619678069a 142,149,152-154,156,162,164
+  s_6c913d3db00564::t_7187efbb3e88c1 145-147,151
+  s_6c913d3db00564::t_52d1cf9bc75347 3,124-141,148
+apps/server/tools/contracts/compatibility.ts
+  s_6c913d3db00564::t_3e20a35c9f14e2 2,398,401
+  s_6c913d3db00564::t_39eab689baf5a8 402-410,412-420,422-423
+apps/server/tools/contracts/compatibility.test.ts
+  s_6c913d3db00564::t_01c02544a8d3c4 1,87-94,96,122-123
+  s_6c913d3db00564::t_6ad3e06074c402 124,127,144-146,149,172-174,177,206-210,213,238-242,245,275-277,280,301,339,345-347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9d6946378f51fb17735870255625ad9ee6b5a0df",
+  "prompts": {},
+  "sessions": {
+    "s_3c5ba397386570": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17c-566a-72f1-99bf-41fef633aec2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_6c913d3db00564": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17d-107f-730e-b825-19031c3d8303",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

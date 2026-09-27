@@ -1,0 +1,367 @@
+apps/server/src/shell/testing/crypto.ts
+  s_faf8a5df7be82b::t_532ac0fbd09d18 13,16-21,28
+  s_faf8a5df7be82b::t_915ff7ca116136 4-12,25
+  s_60ae463805ce18::t_f107b5d3ee9a92 14-15
+apps/server/src/shell/ingestion/parser.test.ts
+  s_faf8a5df7be82b::t_cf8466ff621a72 274
+apps/web/src/application.test.tsx
+  s_faf8a5df7be82b::t_f1cd69fae693c8 2,61-69,73-93,96-111,180-191,193-201,203-214,228-247,249-264,345-348,350-386,388-389,391-412,418-464,470-517,523-575,577-599,605-620,631-672,678-716,722-760
+apps/server/cloudflare/ingestion/statement-batch.test-fixture.ts
+  s_faf8a5df7be82b::t_26fe6afb20a256 1,31-34,38,102-105,117
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_faf8a5df7be82b::t_ab84c1d292c238 1229-1605,1607-1674
+  s_faf8a5df7be82b::t_409c98c820afd3 289,293,299-300,353,367,371,386,398,421,424,430-431,435,441-442,481-482,486,492-493,531,545,665,669,675,698,704-705,711,717-718,725,731,776,780-781,785,795,810,814,820-821,830,838,844-845,856-857,861,867-868,885,891-892,899,905,909-910,928,931,937-938,945,952,958-959,963,966,990,996-997,1008,1014-1015,1023,1037,1043-1044,1092,1105,1111-1112,1119,1154,1158,1164-1165,1182,1188-1189,1196,1202,1224,1227,1687,1716,1741,1755,1778-1779,1783,1789-1790,1797,1829,1833,1839-1840,1856-1857,1861,1867-1868,1875,1879,1885-1886,1905-1906
+  s_faf8a5df7be82b::t_310a6f81d5c912 286-288
+  s_faf8a5df7be82b::t_7e694f45240589 290-292
+  s_faf8a5df7be82b::t_f82709bb2dd4b6 294-298
+  s_faf8a5df7be82b::t_3b6f4ecac8cea4 301-303
+  s_faf8a5df7be82b::t_6495ebd6cad972 350-352
+  s_faf8a5df7be82b::t_65a90989d5323d 354-356,364-366
+  s_faf8a5df7be82b::t_069f6f4d0df040 368-370
+  s_faf8a5df7be82b::t_4cb7bc41fb20c8 372-374,383-385
+  s_faf8a5df7be82b::t_70879c4f2daeab 387-389,395-397
+  s_faf8a5df7be82b::t_363e7a591488b2 399-401,418-420
+  s_faf8a5df7be82b::t_6f59a6a001e332 422-423
+  s_faf8a5df7be82b::t_b3ec90b42428e6 425-429
+  s_faf8a5df7be82b::t_a84203ac400edc 432-434
+  s_faf8a5df7be82b::t_661d2bf37c8e4c 436-440
+  s_faf8a5df7be82b::t_2b06030fbaf003 443-445
+  s_faf8a5df7be82b::t_7b237b03c4c929 478-480
+  s_faf8a5df7be82b::t_9eeee29b848bbb 483-485
+  s_faf8a5df7be82b::t_f90d2e3fd99f79 487-491
+  s_faf8a5df7be82b::t_0b730355c23136 494-496
+  s_faf8a5df7be82b::t_76bb1d2c05ba78 530
+  s_faf8a5df7be82b::t_e77d5fd9961de5 532-534,542-544
+  s_faf8a5df7be82b::t_c609c5deda6594 546-548
+  s_faf8a5df7be82b::t_b58ce2ee2a8e87 662-664
+  s_faf8a5df7be82b::t_e4f16b63ebfb19 666-668
+  s_faf8a5df7be82b::t_5933a1282fb4fe 670-674
+  s_faf8a5df7be82b::t_a997bea56e3ddb 695-697
+  s_faf8a5df7be82b::t_af3b46efe25ce3 699-703
+  s_faf8a5df7be82b::t_7f704b886dbbe8 706-710
+  s_faf8a5df7be82b::t_4edb005e1148da 712-716
+  s_faf8a5df7be82b::t_c907ddc764f3f4 719-724
+  s_faf8a5df7be82b::t_cc4a60a0c9c520 726-730
+  s_faf8a5df7be82b::t_1d4abac476e7ab 732-734,773-775
+  s_faf8a5df7be82b::t_bb4b7fe2fa1b11 777-779
+  s_faf8a5df7be82b::t_751a34c313b662 782-784
+  s_faf8a5df7be82b::t_d9775de4a76dcb 786
+  s_faf8a5df7be82b::t_972c7c32a6e545 796-798
+  s_faf8a5df7be82b::t_8ec045ebdf8dcb 807-809
+  s_faf8a5df7be82b::t_912eaea7869908 811-813
+  s_faf8a5df7be82b::t_8f57d9dc8f7f82 815-819
+  s_faf8a5df7be82b::t_37fef64aded141 822-824,827-829
+  s_faf8a5df7be82b::t_d18df860846dab 831-833,835-837
+  s_faf8a5df7be82b::t_3277394e099df5 839-843
+  s_faf8a5df7be82b::t_6c1dcb74784d4a 846-848,853-855
+  s_faf8a5df7be82b::t_8e857f9fcbede8 858-860
+  s_faf8a5df7be82b::t_b9bedd9948259a 862-866
+  s_faf8a5df7be82b::t_5b837714ab05ec 869-871
+  s_faf8a5df7be82b::t_69b01e422223e8 882-884
+  s_faf8a5df7be82b::t_9684bb1fc2e206 886-890
+  s_faf8a5df7be82b::t_2536f29ffff32a 893-898
+  s_faf8a5df7be82b::t_9c44b88ed6dbd9 900-904
+  s_faf8a5df7be82b::t_a73246f2ab57cf 906-908
+  s_faf8a5df7be82b::t_1b3eec98bd03d6 911-913,925-927
+  s_faf8a5df7be82b::t_1d61fb2763e71d 929-930
+  s_faf8a5df7be82b::t_5c076b9a0b4d19 932-936
+  s_faf8a5df7be82b::t_59f38711418054 939-944
+  s_faf8a5df7be82b::t_8af4f44490f1fc 946-951
+  s_faf8a5df7be82b::t_3383837d858826 953-957
+  s_faf8a5df7be82b::t_46837647de9c30 960-962
+  s_faf8a5df7be82b::t_ab57ba50f61688 964-965
+  s_faf8a5df7be82b::t_d31868261da442 967-969
+  s_faf8a5df7be82b::t_3f27d7887ff55c 987-989
+  s_faf8a5df7be82b::t_2c3561f1e07bb7 991-995
+  s_faf8a5df7be82b::t_a2c473d13b83a4 998-1000,1005-1007
+  s_faf8a5df7be82b::t_72789dfbb1a7da 1009-1013
+  s_faf8a5df7be82b::t_8ad55cf412bbb1 1016-1018,1020-1022
+  s_faf8a5df7be82b::t_36f22cc7d22306 1024-1026
+  s_faf8a5df7be82b::t_a3252e28e6f232 1034-1036
+  s_faf8a5df7be82b::t_26cfca00245a15 1038-1042
+  s_faf8a5df7be82b::t_34fd86412e9ede 1045-1047
+  s_faf8a5df7be82b::t_31d48eb8611810 1089-1091
+  s_faf8a5df7be82b::t_1c20b0e33d3397 1093
+  s_faf8a5df7be82b::t_86feee1a39388a 1102-1104
+  s_faf8a5df7be82b::t_bd61c1a5db60ab 1106-1110
+  s_faf8a5df7be82b::t_fecc283f79535c 1113-1118
+  s_faf8a5df7be82b::t_de9232fd071053 1120-1122
+  s_faf8a5df7be82b::t_391e672ac1db31 1155-1157
+  s_faf8a5df7be82b::t_6d005fae1982df 1159-1163
+  s_faf8a5df7be82b::t_d5fb808160aa3f 1166-1168,1179-1181
+  s_faf8a5df7be82b::t_477a2de47c02f8 1183-1187
+  s_faf8a5df7be82b::t_b70d07e70c6854 1190-1195
+  s_faf8a5df7be82b::t_02958b7e31f290 1197-1201
+  s_faf8a5df7be82b::t_e49699d97f6958 1203-1205
+  s_faf8a5df7be82b::t_85b8528480005b 1221-1223
+  s_faf8a5df7be82b::t_82ea5fcc1f7926 1225-1226
+  s_faf8a5df7be82b::t_395b0b40570982 1228
+  s_faf8a5df7be82b::t_2656bb495a4883 1675-1677,1684-1686
+  s_faf8a5df7be82b::t_6a59de617a522b 1688-1690,1713-1715
+  s_faf8a5df7be82b::t_7f80110f625e65 1717-1719,1738-1740
+  s_faf8a5df7be82b::t_cc75b5d9574479 1742-1744
+  s_faf8a5df7be82b::t_93bd324b6880a4 1756-1758
+  s_faf8a5df7be82b::t_17b36a7f485f42 1775-1777
+  s_faf8a5df7be82b::t_9f484e2eb92717 1780-1782
+  s_faf8a5df7be82b::t_ff99372ffcfbeb 1784-1788
+  s_faf8a5df7be82b::t_97b1468f35a520 1791-1796
+  s_faf8a5df7be82b::t_24a73bba4fa090 1798-1800,1826-1828
+  s_faf8a5df7be82b::t_c970c89279cfb7 1830-1832
+  s_faf8a5df7be82b::t_f6f9afb81ae4fd 1834-1838
+  s_faf8a5df7be82b::t_9e72019b1c81ed 1841-1843
+  s_faf8a5df7be82b::t_8feff2636867e1 1853-1855
+  s_faf8a5df7be82b::t_a9c745abd53c51 1858-1860
+  s_faf8a5df7be82b::t_f6cbcd06e478cb 1862-1866
+  s_faf8a5df7be82b::t_5a8b53fd15d441 1869-1874
+  s_faf8a5df7be82b::t_3c9ebb71960618 1876-1878
+  s_faf8a5df7be82b::t_77e99acfd1005b 1880-1884
+  s_faf8a5df7be82b::t_d00364604d5a8f 1887-1889,1902-1904
+  s_faf8a5df7be82b::t_7520efe8f5218e 1907-1909
+  s_98251aab91db5b::t_ca7843be5faef6 3,58-65,99-115,118-119,122-207,209-210,212-219,240-247,253-254,258-262,264-268,273-274,277-285,304-308,310,312-321,329,343-349,357-363,375-382,390-394,402-417,446-447,449-475,477,497-527,535-541,549-555,557,559-634,636,638-661,678-686,688,690-694,735-772,790,799-802,804-806,825-826,834,849-852,872-875,877-881,914-924,970-980,982-986,1001-1004,1019,1028-1033,1048-1077,1079-1088,1095,1097-1101,1123-1152,1169-1178,1206-1215,1217-1220,1678-1683,1691-1712,1720-1737,1745-1753,1759-1767,1769-1774,1801-1825,1844-1845,1847-1852,1890-1901,1910-1922
+apps/server/cloudflare/http/request-body.ts
+  s_faf8a5df7be82b::t_6ff27e38f43627 115-121
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_faf8a5df7be82b::t_d424d179e50bbe 55
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 17-32
+scripts/document-parsing/workerd-inspector.ts
+  s_faf8a5df7be82b::t_00c4e460ff284f 51-52,177-183,185,206-208
+  s_faf8a5df7be82b::t_16cf69afdea915 54-58,184,201,209-219
+  s_faf8a5df7be82b::t_bc992333d7f141 53
+  s_faf8a5df7be82b::t_554c9ac7fd5824 59-61
+  s_faf8a5df7be82b::t_894e9a35d9a6ee 174-176
+  s_faf8a5df7be82b::t_704648c344bbff 186-188,198-200
+  s_faf8a5df7be82b::t_cf75a7de995ae8 202-205
+  s_faf8a5df7be82b::t_1b075becff2ab2 220
+  s_3ea47fec821644::t_6462d9e8c4c0a7 1,27-49,62-70,73-80,82,84-99,101-106,109-118,121-122,125-161,163-165,167-173,189-197
+apps/server/src/shell/consent/current-disclosure.test.ts
+  s_faf8a5df7be82b::t_1b1b668fe8ea48 6
+apps/server/cloudflare/agent/hosted-turn-sweep.ts
+  s_faf8a5df7be82b::t_f51d2c29b3a3b0 2
+  s_faf8a5df7be82b::t_e4169c2122203e 14-18,50
+  s_faf8a5df7be82b::t_9c5d2d84c3d5ca 19-21,36-44,49
+  s_faf8a5df7be82b::t_b36f5339a76db0 45-48
+apps/web/scripts/check-browser-bundle.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 3,30-34,59-65,67-71,78-87,101-125,134,315-345
+apps/server/cloudflare/ingestion/statement-migrations.test-fixture.ts
+  s_faf8a5df7be82b::t_26fe6afb20a256 1-3,16-21
+apps/server/src/shell/dashboard/presentation.ts
+  s_faf8a5df7be82b::t_8eab2aa81cd96e 172-180
+apps/web/src/features/dashboard/feature.test.tsx
+  s_faf8a5df7be82b::t_85ef8b3d771dad 2-3,334-345,349-351,426-440,445-457,461-480,482-502,801-828,830-841
+apps/server/cloudflare/dashboard/dashboard.ts
+  s_faf8a5df7be82b::t_075adbf6922253 118
+  s_faf8a5df7be82b::t_a54787dfd28f2a 119-121
+apps/web/src/transport/wompi-tokenization.test.ts
+  s_faf8a5df7be82b::t_85ef8b3d771dad 2,19,27-43,46,53-60,63,66-70,73,76,81,84,89,96,104,121-125,128,142-146,149,156,161-179,181-183,185-187,189,194,199-214,216-217,219-223
+apps/web/cloudflare/production-policy/artifact.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 72-85,87-119
+apps/web/e2e/static-shell.spec.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 4-9,12-18,20-31,33-37
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_faf8a5df7be82b::t_e94368349d1250 178,309
+apps/web/scripts/check-browser-bundle.test.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 3-4,10-43
+apps/web/src/features/subscription/feature.test.tsx
+  s_faf8a5df7be82b::t_f1cd69fae693c8 2,23-30,327-336,338-346,349-369,371-389,413-422,424-443,445-456,458-464,466-468,477-535,657-683,685-691,693-699,701-712,714-737,739-754,756-764,767-862,879-894,896-902,904-912,914-929,931-943,945-1002,1004,1006-1040,1042-1055,1057-1060,1062-1068
+apps/server/cloudflare/core-worker.ts
+  s_faf8a5df7be82b::t_ef8bbf9ddae5c8 1883-1885
+  s_faf8a5df7be82b::t_a60c01d63dffd0 811,830
+  s_faf8a5df7be82b::t_7effdc7b2955ba 472,963,1067,1069,1074,1224,1259,1481-1485
+  s_faf8a5df7be82b::t_31504e2918db6f 939-941,1070-1073,1749-1752
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_1277e794eb4ed3 1-8,15-19,23-25,30,32-38,40-41,43
+  s_faf8a5df7be82b::t_cf49b951551fa6 26-29
+  s_faf8a5df7be82b::t_4109c6b4028fec 9-11,13-14,20-22,31,39,42
+  s_faf8a5df7be82b::t_20d00f30b85a69 12
+apps/server/cloudflare/mutations/canonical-mutation-batch.ts
+  s_faf8a5df7be82b::t_bc25c4f6b1b915 149,479
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_faf8a5df7be82b::t_26fe6afb20a256 31,1198-1216,1252-1253,1331-1339,1345-1346,1349-1357,1365-1380,1409-1410
+apps/server/cloudflare/transactions/transaction-corrections.ts
+  s_faf8a5df7be82b::t_c87a248b9f551c 59
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_faf8a5df7be82b::t_b4b105884daec8 2-3,5,20-22,33-101,104-105,108-149,177-178,249-261,263,267-286,288-346,350-357,359-363,370-377,379-384,391-392,399-419,421-429,434-457,459,461-467,470-513,517,520,523-655
+apps/server/cloudflare/insights/insight-store.ts
+  s_faf8a5df7be82b::t_b4b105884daec8 82-90,145,150-153,438,494,504,602,617-625
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_faf8a5df7be82b::t_85ef8b3d771dad 2-3,57-80,111-117,119-126,128-133,137-138,140-143,145-150
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_faf8a5df7be82b::t_b4b105884daec8 901,908-935,938-970,972-1008,1013-1027,1029-1068,1070-1099,1101-1169,1173,1177-1222,1224-1240,1242
+  s_faf8a5df7be82b::t_2c7ca7b9f10814 1009-1012
+apps/server/tools/contracts/generate.ts
+  s_faf8a5df7be82b::t_70e707c0e60b7f 3,124-142,145-149,151-154,156,162,164
+apps/server/cloudflare/categories/canonical-keyword-rules.ts
+  s_faf8a5df7be82b::t_e6318047599cd0 113-116
+  s_41b634ce9ec4ef::t_53422223017fb1 117-118
+apps/server/cloudflare/billing/subscription-queries.test.ts
+  s_faf8a5df7be82b::t_b4b105884daec8 2-3,11-13,23-33,35-85,88-122,124-147,149-183,185-247,249-277
+apps/server/cloudflare/transactions/transactions.ts
+  s_faf8a5df7be82b::t_905546865125ac 94
+apps/web/e2e/browser-pairing.spec.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 3,28,30-39,42-56,58-93,95,104-143,146,149-162,165-176,179-187,189-198,200-213,215-231,233-269,271-290,292-297,299-303,305-314,316-332
+apps/web/src/transport/client.test.ts
+  s_faf8a5df7be82b::t_85ef8b3d771dad 141-164,479-481,483-515,517-525,527-541,544-566,568-569,571-582,584-591,593-601,603-615,617-625,628,630,632-641,643-644,646-651,653-655,657-667,669-683,685-691,693,695-701,703-718,720-731,733-735,737-739,741-762,764-810,812-862,865-866,877-878,887,890-915,917-929,931-949
+apps/server/src/shell/transactions/cloudflare-routes.ts
+  s_faf8a5df7be82b::t_04754a328c1bca 23-26,41
+apps/server/cloudflare/dashboard/dashboard-mutation.ts
+  s_faf8a5df7be82b::t_609da06bb41b58 402-406
+apps/server/src/shell/ingestion/email-interpretation/interpret.test.ts
+  s_faf8a5df7be82b::t_cf49b951551fa6 18
+  s_faf8a5df7be82b::t_30e96a9679f74a 78,172,175
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_faf8a5df7be82b::t_1d424d7168cc38 386-388,391-395
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_faf8a5df7be82b::t_69705edd846206 79-86
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_faf8a5df7be82b::t_26fe6afb20a256 9,243-246,254-255,398-435,437-450
+  s_faf8a5df7be82b::t_786ea940743dcf 341
+apps/web/scripts/serve-preview.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 44,47,50-56,58-61
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_faf8a5df7be82b::t_240d70ca84a4cf 120,123-166,168,176-206,222,233-280,288,304-352,356-391,404-418,434,444-586,594,608-649,686,689,692,716
+  s_faf8a5df7be82b::t_fd3a01af0fad87 106,114-119,121-122,650-656,665,681-685,687-688,690-691,693-698,701,711-715,717-721
+apps/server/src/shell/email-authentication/mutation.ts
+  s_faf8a5df7be82b::t_c5105d4e52d051 21-27,38-44
+package.json
+  s_faf8a5df7be82b::t_cb02402b4781a4 32
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 257-258,292-293,301,308-309,316-317,325,330-331,336-337,345,349-350,524-525,533-534
+scripts/document-parsing/check.ts
+  s_faf8a5df7be82b::t_7c59198b597375 208-209,211-217,333-334,336-341
+  s_faf8a5df7be82b::t_eb4d40f1bbb87f 4,201-202,210,335,355
+apps/server/tools/contracts/digest-artifacts.ts
+  s_faf8a5df7be82b::t_70e707c0e60b7f 3,6,11-16
+apps/server/cloudflare/ingestion/forwarded-email-delivery.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 19-25
+  s_faf8a5df7be82b::t_7a046f7ba80285 1-7,26-58,60-70
+scripts/check-lint-suppressions.ts
+  s_faf8a5df7be82b::t_10a02f62acd4eb 18,54,67-71
+  s_faf8a5df7be82b::t_4deb633f3fcd77 92-96,98,100-110
+  s_faf8a5df7be82b::t_186b797f4cd6d7 16
+  s_faf8a5df7be82b::t_a084ff986cda88 51-52
+  s_faf8a5df7be82b::t_6d76a81390cbd5 3-6,15,17
+  s_faf8a5df7be82b::t_23ec4d32ed72b5 79-82,97
+  s_faf8a5df7be82b::t_05a36aa847f01f 86-89
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_faf8a5df7be82b::t_8c38c60ea8b5dc 52-58
+scripts/document-parsing/extraction-proof.ts
+  s_faf8a5df7be82b::t_d93e82242405c2 171,311,313-320
+  s_faf8a5df7be82b::t_e709867f7001a7 162-164,172-181,183-184,186,189-215,217,220-274,276,278-282,285-310,312
+  s_faf8a5df7be82b::t_0d5feb21262f47 2
+  s_faf8a5df7be82b::t_b2b31915609a8f 159-161
+  s_faf8a5df7be82b::t_6b0c1df0cd6090 165-170
+  s_faf8a5df7be82b::t_14957039eb8632 321-323
+  s_41b634ce9ec4ef::t_0709d41cf2b863 71-77,84,86-141,143,145-149,152,154,158,324-358
+apps/web/src/session/subscription-enrollment-lifetime.test.tsx
+  s_faf8a5df7be82b::t_85ef8b3d771dad 2-3,5,54-57,59-62,66-80,82,84-97,99-104,106-114,116-118,120-131,133-137
+apps/server/cloudflare/transactions/transaction-reconciliation.ts
+  s_faf8a5df7be82b::t_c75faa72283b6d 75
+apps/server/src/shell/transactions/continuation.ts
+  s_faf8a5df7be82b::t_6cf69369aa9730 13,17
+  s_faf8a5df7be82b::t_3bb32d8a4f324b 10-12,14-16,18
+apps/server/cloudflare/agent/turn-store.ts
+  s_faf8a5df7be82b::t_240d70ca84a4cf 117-130,136-143,146-151,154-160,162-184,188,193-201,205-207,209-215,217-222,239-243,267,292-309,311-320,326-354,359-367,411,449
+  s_faf8a5df7be82b::t_50e7f930e74970 29,368-379,384-400,403,412-419,425-430,433,450-476,491-513,516-521,587,601-611,614-624,626-628,632-634,636-645,653,663-672,676-684,692,702-709,715-753,758,762-768,771-776,778-789,791-799,803-826,830,838-844,847-865,937-943
+apps/web/scripts/check-dependency-guards.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 407,409,411-417
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_faf8a5df7be82b::t_cf49b951551fa6 36-44
+  s_faf8a5df7be82b::t_8ffc7017e3e477 146
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_faf8a5df7be82b::t_b4b105884daec8 4-5,12-14,43-61,65-78,80-104,107-120,124-136,138-145,147-157,167-173,175-179,181-186,188-215,217,219-246,248-260,263-278,280-291,294-311,315-323,325-345,347-363,367-372,374-388,392-398,400-431,433-479,481-510,512-593,595-618,620-654,656-691,693-741,743
+apps/web/scripts/build-production.test.ts
+  s_faf8a5df7be82b::t_db7eb993485a0c 3-4,11-15,17-20,22-55,74-79,81-86,88-96,98-108,110-120
+apps/server/cloudflare/billing/subscription-queries.ts
+  s_672cb0b11117a0::t_081c2d368fe95a 16,143-157
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_faf8a5df7be82b::t_97563fabee9551 3,28-45,48-110,113-114,117-150,228-229,232-242,245-260,269-273,279-287,289,331-344,347-386,388-395,398-424,426-432,435-439,444-484,486-538,540-587,589-608,610-664,666-704,706,708-726,728-734,736-751,753-759,761-776,778-843,846-873,875,877-917,919-1007,1009-1021,1023-1037,1039-1041,1043-1092,1094-1177,1179-1181,1183-1235,1237,1239-1289,1291-1322,1324-1360,1362-1364,1366-1419
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_faf8a5df7be82b::t_105de5159fd099 3,25-39,41,51-95,97-112,115-116,119-153,157,160-170,173-186,293-309,311-329,332-370,372-373,375-437,439-496,498-521,523-531,533-560,562-563,565-573,575-583,585-586,588-640,642-680,682-715,717-752,754-789,791-807,809-811,813-922,924-973,975-977,979-1036,1038-1086,1088-1090,1092-1140,1142-1213,1215-1217,1219-1228,1232-1249,1251-1260,1266-1294,1296-1309,1316-1379,1381-1402,1405-1415,1417-1468
+apps/server/cloudflare/ingestion/forwarded-email-processing.ts
+  s_672cb0b11117a0::t_04736fbbd38a72 2,65-69,97-103,109-114,116-138,140,143-158,160,165-166,168-200,203,205-220,223-234,240-254,272-277,282-327,332-334,337-339,344-355
+apps/server/cloudflare/ingestion/statement-delivery.ts
+  s_672cb0b11117a0::t_420d0049eaa679 173,176-193,230
+apps/server/cloudflare/ingestion/statement-processing.ts
+  s_672cb0b11117a0::t_ed42f0f49dffb9 20,57-66,68,72-79,84-89,91,101-105,118-136,144-146,164-173,297-312,315-323,326-371,390,393-411,413-417,419-437,439,443-475,477-482,486-490,492,495-511,513,525-531,535-548,550,554-559,565-575,579-592,594,598-602,604-625,627,629-653
+apps/server/cloudflare/ingestion/statement-review.ts
+  s_672cb0b11117a0::t_eca815a8a46b34 111,115-120,127-140,142,146-151,155-168,192-198
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_672cb0b11117a0::t_5c7a399adf9ce6 488-503,506-533,537-570
+apps/web/src/browser/clipboard.test.ts
+  s_4b9df51b40ce9e::t_97018e5864ff7b 4,8-10,12,14-16,18-20,22,24-26,28-30,32-34
+apps/web/src/browser/use-sensitive-clipboard.test.tsx
+  s_faf8a5df7be82b::t_dd27e226ce646b 2-4,78-97,99-118,120-124,126-130,132-134,154-174
+apps/web/src/features/email-replacement/feature.test.tsx
+  s_faf8a5df7be82b::t_a1c127929b4e63 38,40,43,48-53,56,58,61,63-69
+apps/web/src/features/signed-in/feature.test.tsx
+  s_4b9df51b40ce9e::t_dde2a2d27acfc7 2,17-19,21,23-25,27,36-39
+apps/web/src/features/subscription/feature.tsx
+  s_4b9df51b40ce9e::t_629cab8aa69201 458-462,466-469,475,669-673,749-753,759-761,763-781,825-844,888,892-896
+scripts/document-parsing/protected-document-proof.ts
+  s_4b9df51b40ce9e::t_7c4830a1308de0 2,14-18,20-22,36-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bd0300ed0b7b7e4e7f3d6e46a0ed7c3210d3a70d",
+  "prompts": {},
+  "sessions": {
+    "s_3ea47fec821644": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-e263-729f-8bfc-a3055b09f8f2",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_41b634ce9ec4ef": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17a-7687-73f5-8ef3-4077e260bf4b",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_4b9df51b40ce9e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17a-7619-717a-9297-9695c1b09e61",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_672cb0b11117a0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-dfc1-7155-b931-68aab92fe6d8",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_98251aab91db5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0ec-f843-724a-9138-f40331cd3c04",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_98251aab91db5b::t_2d9e79e2e3fc8e 6,357-361
+  s_98251aab91db5b::t_08ca78d92d05aa 337-339,348-350,352-354,356
+  s_98251aab91db5b::t_3a3c74524f1561 351
+  s_98251aab91db5b::t_810d02f7c5fccb 355
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_98251aab91db5b::t_ca6d9df9be49c2 27,415-419,421-422,491-500
+  s_98251aab91db5b::t_26a611dc1a6226 467
+  s_98251aab91db5b::t_d12c57834cd695 468-469
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5962ae27092b2c6fc4520a932bf847b95a4517cf",
+  "prompts": {},
+  "sessions": {
+    "s_98251aab91db5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0ec-f843-724a-9138-f40331cd3c04",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

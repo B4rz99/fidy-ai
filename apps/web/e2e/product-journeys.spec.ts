@@ -1,8 +1,15 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
+import { type Cause, Effect, Schema } from "effect";
 import { apiOrigin, makeUser, response } from "./http-fixtures";
 
 const ok = 200;
+const installRoute = (
+  page: Page,
+  url: string,
+  handler: (route: Route) => Promise<void>
+): Effect.Effect<unknown, Cause.UnknownError> => Effect.tryPromise(() => page.route(url, handler));
+const waitForEdit = (readEdit: () => unknown): Promise<void> => expect.poll(readEdit).toBeDefined();
 const offerIds = [
   "24000000-0000-4000-8000-000000000250",
   "24000000-0000-4000-8000-000000000251",
@@ -29,27 +36,47 @@ const standing = {
   recentAttempts: [],
 };
 
-test("shows expired TrialPeriod standing and the authoritative three Subscription offers", async ({
+test("shows expired TrialPeriod standing and the authoritative three Subscription offers", ({
   page,
-}) => {
-  const calls: Array<string> = [];
-  await page.route(`${apiOrigin}/subscription/status`, (route) => {
-    calls.push(route.request().url());
-    return route.fulfill({ status: ok, contentType: "application/json", body: response(standing) });
-  });
-  await page.route(`${apiOrigin}/subscription/offers`, (route) => {
-    calls.push(route.request().url());
-    return route.fulfill({ status: ok, contentType: "application/json", body: response(offers) });
-  });
-  await page.goto("/upgrade");
-  await expect(page.getByText("Tu acceso: Gratis")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Elegir semanal" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Elegir anual" })).toBeVisible();
-  expect(calls).toEqual(
-    expect.arrayContaining([`${apiOrigin}/subscription/status`, `${apiOrigin}/subscription/offers`])
-  );
-});
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      yield* installRoute(page, `${apiOrigin}/subscription/status`, (route) => {
+        calls.push(route.request().url());
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response(standing),
+        });
+      });
+      yield* installRoute(page, `${apiOrigin}/subscription/offers`, (route) => {
+        calls.push(route.request().url());
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response(offers),
+        });
+      });
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() => expect(page.getByText("Tu acceso: Gratis")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Elegir semanal" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Elegir anual" })).toBeVisible()
+      );
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          `${apiOrigin}/subscription/status`,
+          `${apiOrigin}/subscription/offers`,
+        ])
+      );
+    })
+  ));
 
 const sha256HexLength = 64;
 const enrollmentId = "24000000-0000-4000-8000-000000000254";
@@ -89,75 +116,96 @@ const prepared = {
   },
 };
 
-const installReusedEnrollment = async (page: Page): Promise<() => unknown> => {
-  await page.route(`${apiOrigin}/subscription/status`, (route) =>
-    route.fulfill({ status: ok, contentType: "application/json", body: response(standing) })
+const installReusedEnrollment = (page: Page): Promise<() => unknown> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/subscription/status`, (route) =>
+          route.fulfill({ status: ok, contentType: "application/json", body: response(standing) })
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/subscription/offers`, (route) =>
+          route.fulfill({ status: ok, contentType: "application/json", body: response(offers) })
+        )
+      );
+      let submitted: unknown;
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/subscription/card-enrollments/prepare`, (route) => {
+          expect(route.request().postDataJSON()).toEqual({ priceId: offerIds[1] });
+          return route.fulfill({
+            status: ok,
+            contentType: "application/json",
+            body: JSON.stringify(prepared),
+          });
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/subscription/card-enrollments/submit`, (route) => {
+          submitted = route.request().postDataJSON();
+          return route.fulfill({
+            status: ok,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "payment-pending",
+              enrollmentId,
+              billingAttempt: {
+                id: "24000000-0000-4000-8000-000000000257",
+                priceId: offerIds[1],
+                money: offers[1]?.money,
+                billingPeriod: "monthly",
+                serviceMarket: "CO",
+                taxTreatment: "not-taxable",
+                timeZone: "America/Bogota",
+                createdAt: "2026-09-27T00:00:00.000Z",
+                status: "succeeded",
+                finalizedAt: "2026-09-27T00:00:01.000Z",
+                paidPeriodEndsAt: "2026-10-27T00:00:00.000Z",
+                renewalAnchor: "2026-09-27T00:00:00.000Z",
+              },
+            }),
+          });
+        })
+      );
+      return () => submitted;
+    })
   );
-  await page.route(`${apiOrigin}/subscription/offers`, (route) =>
-    route.fulfill({ status: ok, contentType: "application/json", body: response(offers) })
-  );
-  let submitted: unknown;
-  await page.route(`${apiOrigin}/web/subscription/card-enrollments/prepare`, (route) => {
-    expect(route.request().postDataJSON()).toEqual({ priceId: offerIds[1] });
-    return route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: JSON.stringify(prepared),
-    });
-  });
-  await page.route(`${apiOrigin}/web/subscription/card-enrollments/submit`, (route) => {
-    submitted = route.request().postDataJSON();
-    return route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: JSON.stringify({
-        status: "payment-pending",
-        enrollmentId,
-        billingAttempt: {
-          id: "24000000-0000-4000-8000-000000000257",
-          priceId: offerIds[1],
-          money: offers[1]?.money,
-          billingPeriod: "monthly",
-          serviceMarket: "CO",
-          taxTreatment: "not-taxable",
-          timeZone: "America/Bogota",
-          createdAt: "2026-09-27T00:00:00.000Z",
-          status: "succeeded",
-          finalizedAt: "2026-09-27T00:00:01.000Z",
-          paidPeriodEndsAt: "2026-10-27T00:00:00.000Z",
-          renewalAnchor: "2026-09-27T00:00:00.000Z",
-        },
-      }),
-    });
-  });
-  return () => submitted;
-};
 
-test("activates Subscription through reviewed reused-source terms without sending card data to Fidy", async ({
+test("activates Subscription through reviewed reused-source terms without sending card data to Fidy", ({
   page,
-}) => {
-  const submitted = await installReusedEnrollment(page);
-  await page.goto("/upgrade");
-  await page.getByRole("button", { name: "Elegir mensual" }).click();
-  await expect(
-    page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
-  ).toBeVisible();
-  await page.getByLabel(/Acepto el reglamento/iu).check();
-  await page.getByLabel(/Autorizo el tratamiento/iu).check();
-  await page.getByRole("button", { name: "Activar Pro" }).click();
-  await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible();
-  expect(submitted()).toMatchObject({
-    paymentSourceMode: "reuse",
-    enrollmentId,
-    billingEmail: "usuario@example.com",
-    decisions: {
-      acceptedEndUserPolicy: true,
-      acceptedPersonalDataAuthorization: true,
-      authorizedRecurringCharges: true,
-    },
-  });
-  expect(JSON.stringify(submitted())).not.toContain("cardToken");
-});
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const submitted = yield* Effect.tryPromise(() => installReusedEnrollment(page));
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Elegir mensual" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
+      yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Activar Pro" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible()
+      );
+      expect(submitted()).toMatchObject({
+        paymentSourceMode: "reuse",
+        enrollmentId,
+        billingEmail: "usuario@example.com",
+        decisions: {
+          acceptedEndUserPolicy: true,
+          acceptedPersonalDataAuthorization: true,
+          authorizedRecurringCharges: true,
+        },
+      });
+      const submittedJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        submitted()
+      );
+      expect(submittedJson).not.toContain("cardToken");
+    })
+  ));
 
 const widgetId = "24000000-0000-4000-8000-000000000255";
 const dashboardView = {
@@ -191,48 +239,62 @@ const dashboardView = {
   },
 };
 
-test("loads a Dashboard through canonical queries and commits an edited Widget title", async ({
-  page,
-}) => {
-  let view = dashboardView;
-  let edit: unknown;
-  await page.route(`${apiOrigin}/dashboard/view`, (route) =>
-    route.fulfill({ status: ok, contentType: "application/json", body: response(view) })
-  );
-  await page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
-    route.fulfill({ status: ok, contentType: "application/json", body: response([]) })
-  );
-  await page.route(`${apiOrigin}/dashboard/edits`, async (route) => {
-    edit = route.request().postDataJSON();
-    view = {
-      ...dashboardView,
-      layout: {
-        ...dashboardView.layout,
-        widget: {
-          ...dashboardView.layout.widget,
-          widget: { ...dashboardView.layout.widget.widget, title: "Gastos visibles" },
-        },
-      },
-    };
-    await route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({
-        title: "Mi tablero",
-        layout: { kind: "leaf", widget: view.layout.widget.widget },
-      }),
-    });
-  });
-  await page.goto("/app/dashboard");
-  await expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible();
-  await expect(page.getByText("Gastos por categoría").first()).toBeVisible();
-  await page.getByRole("button", { name: "Personalizar" }).click();
-  await page.getByRole("button", { name: "Renombrar Gastos por categoría" }).click();
-  await page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles");
-  await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
-  await expect.poll(() => edit).toBeDefined();
-  expect(JSON.stringify(edit)).toContain("Gastos visibles");
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
-  await page.reload();
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
-});
+test("loads a Dashboard through canonical queries and commits an edited Widget title", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let view = dashboardView;
+      let edit: unknown;
+      yield* installRoute(page, `${apiOrigin}/dashboard/view`, (route) =>
+        route.fulfill({ status: ok, contentType: "application/json", body: response(view) })
+      );
+      yield* installRoute(page, `${apiOrigin}/dashboard/catalog`, (route) =>
+        route.fulfill({ status: ok, contentType: "application/json", body: response([]) })
+      );
+      yield* installRoute(page, `${apiOrigin}/dashboard/edits`, (route) => {
+        edit = route.request().postDataJSON();
+        view = {
+          ...dashboardView,
+          layout: {
+            ...dashboardView.layout,
+            widget: {
+              ...dashboardView.layout.widget,
+              widget: { ...dashboardView.layout.widget.widget, title: "Gastos visibles" },
+            },
+          },
+        };
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            title: "Mi tablero",
+            layout: { kind: "leaf", widget: view.layout.widget.widget },
+          }),
+        });
+      });
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Gastos por categoría").first()).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Renombrar Gastos por categoría" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar nombre del Widget" }).click()
+      );
+      const readEdit = (): unknown => edit;
+      yield* Effect.tryPromise(() => waitForEdit(readEdit));
+      const editJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(edit);
+      expect(editJson).toContain("Gastos visibles");
+      const visibleTitle = page.getByText("Gastos visibles").first();
+      yield* Effect.tryPromise(() => expect(visibleTitle).toBeVisible());
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => expect(visibleTitle).toBeVisible());
+    })
+  ));

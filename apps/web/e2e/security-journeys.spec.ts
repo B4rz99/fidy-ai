@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
+import { type Cause, Effect } from "effect";
 import { apiOrigin, response } from "./http-fixtures";
 
 const patId = "24000000-0000-4000-8000-000000000245";
@@ -19,9 +20,24 @@ const pat = {
 const bearer = "fin_default1_0123456789abcdefghijklmnopqrstuvwxyzABCD";
 const code = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const ok = 200;
+const installRoute = (
+  page: Page,
+  url: string,
+  handler: (route: Route) => Promise<void>
+): Effect.Effect<unknown, Cause.UnknownError> => Effect.tryPromise(() => page.route(url, handler));
+const revokeIssuedPAT = (page: Page): Promise<void> =>
+  showIssuedPATForRevocation(page)
+    .then(() => page.getByRole("button", { name: "Desactivar", exact: true }).click())
+    .then(() => page.getByRole("button", { name: "Sí, desactivar" }).click())
+    .then(() =>
+      expect(page.getByText("Token desactivado. Dejó de funcionar de inmediato.")).toBeVisible()
+    );
 
-const installActivePATs = async (page: Page): Promise<void> => {
-  await page.route(`${apiOrigin}/pats`, (route) => {
+const browserStorageLength = (page: Page): Promise<number> =>
+  page.evaluate(() => localStorage.length + sessionStorage.length);
+
+const installActivePATs = (page: Page): Promise<unknown> =>
+  page.route(`${apiOrigin}/pats`, (route) => {
     if (route.request().method() !== "GET") return route.fallback();
     return route.fulfill({
       status: ok,
@@ -29,142 +45,172 @@ const installActivePATs = async (page: Page): Promise<void> => {
       body: response({ pats: [] }),
     });
   });
-};
 
-const showIssuedPATForRevocation = async (page: Page): Promise<void> => {
-  await page.route(`${apiOrigin}/pats`, (route) =>
-    route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({
-        pats: [
-          {
-            shortId: pat.shortId,
-            recipientLabel: pat.recipientLabel,
-            scopes: pat.scopes,
-            createdAt: pat.createdAt,
-            lastUsedAt: null,
-            expiresAt: pat.expiresAt,
-          },
-        ],
-      }),
+const showIssuedPATForRevocation = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/pats`, (route) =>
+          route.fulfill({
+            status: ok,
+            contentType: "application/json",
+            body: response({
+              pats: [
+                {
+                  shortId: pat.shortId,
+                  recipientLabel: pat.recipientLabel,
+                  scopes: pat.scopes,
+                  createdAt: pat.createdAt,
+                  lastUsedAt: null,
+                  expiresAt: pat.expiresAt,
+                },
+              ],
+            }),
+          })
+        )
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Agente de casa" })).toBeVisible()
+      );
+      expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
+        bearer
+      );
     })
   );
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Agente de casa" })).toBeVisible();
-  expect(await page.locator("body").textContent()).not.toContain(bearer);
-};
 
-test("reviews, issues, discloses once, and revokes a manually created PAT", async ({ page }) => {
-  await installActivePATs(page);
-  let issued: unknown;
-  let revoked = false;
-  await page.route(`${apiOrigin}/pats`, async (route) => {
-    if (route.request().method() !== "POST") return route.fallback();
-    issued = route.request().postDataJSON();
-    await route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({ pat, bearer }),
-    });
-  });
-  await page.route(`${apiOrigin}/pats/default1`, async (route) => {
-    revoked = true;
-    await route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({ shortId: "default1" }),
-    });
-  });
-  await page.goto("/settings/pats");
-  await page.getByLabel("Nombre", { exact: true }).fill("Agente de casa");
-  await page.getByRole("checkbox", { name: /^Lectura:/u }).check();
-  await page.getByRole("button", { name: "30 días" }).click();
-  await page.getByRole("button", { name: "Revisar token" }).click();
-  await expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
-  expect(issued).toBeUndefined();
-  await page.getByRole("button", { name: "Confirmar y crear token" }).click();
-  await expect(page.getByText(bearer)).toBeVisible();
-  expect(issued).toMatchObject({
-    grant: { recipientLabel: "Agente de casa", scopes: ["read"], lifetimeDays: 30 },
-  });
-  expect(page.url()).not.toContain(bearer);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
-  await page.getByRole("button", { name: "Crear otro token" }).click();
-  await expect(page.getByText(bearer)).toHaveCount(0);
-  await showIssuedPATForRevocation(page);
-  await page.getByRole("button", { name: "Desactivar", exact: true }).click();
-  await page.getByRole("button", { name: "Sí, desactivar" }).click();
-  await expect(page.getByText("Token desactivado. Dejó de funcionar de inmediato.")).toBeVisible();
-  expect(revoked).toBe(true);
-});
+test("reviews, issues, discloses once, and revokes a manually created PAT", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installActivePATs(page));
+      let issued: unknown;
+      let revoked = false;
+      yield* installRoute(page, `${apiOrigin}/pats`, (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        issued = route.request().postDataJSON();
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({ pat, bearer }),
+        });
+      });
+      yield* installRoute(page, `${apiOrigin}/pats/default1`, (route) => {
+        revoked = true;
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({ shortId: "default1" }),
+        });
+      });
+      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Nombre", { exact: true }).fill("Agente de casa")
+      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "30 días" }).click());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Revisar token" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible()
+      );
+      expect(issued).toBeUndefined();
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Confirmar y crear token" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(bearer)).toBeVisible());
+      expect(issued).toMatchObject({
+        grant: { recipientLabel: "Agente de casa", scopes: ["read"], lifetimeDays: 30 },
+      });
+      expect(page.url()).not.toContain(bearer);
+      expect(yield* Effect.tryPromise(() => browserStorageLength(page))).toBe(0);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear otro token" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(bearer)).toHaveCount(0));
+      yield* Effect.tryPromise(() => revokeIssuedPAT(page));
+      expect(revoked).toBe(true);
+    })
+  ));
 
-test("reviews a PATPairing before approval without receiving its private bearer", async ({
+test("reviews a PATPairing before approval without receiving its private bearer", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installActivePATs(page));
+      const pairingId = "24000000-0000-4000-8000-000000000246";
+      let approved = false;
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/inspect`, (route) => {
+        expect(route.request().postDataJSON()).toEqual({ publicCode: "BCDF-GHJK" });
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            pairingId,
+            recipientLabel: "Agente de casa",
+            scopes: ["read"],
+            lifetimeDays: 30,
+            claimBy: "2099-01-01T00:00:00.000Z",
+          }),
+        });
+      });
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/approve`, (route) => {
+        expect(route.request().postDataJSON()).toEqual({ pairingId });
+        approved = true;
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            pairingId,
+            patExpiresAt: "2099-02-01T00:00:00.000Z",
+            claimBy: "2099-01-01T00:00:00.000Z",
+          }),
+        });
+      });
+      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
+      yield* Effect.tryPromise(() => page.getByLabel("Código", { exact: true }).fill("bcdf-ghjk"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Continuar" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Agente de casa").first()).toBeVisible()
+      );
+      expect(approved).toBe(false);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Autorizar acceso" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText("Acceso autorizado")).toBeVisible());
+      expect(approved).toBe(true);
+      expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
+        bearer
+      );
+    })
+  ));
+
+test("rotates a BackupRecoveryCode in a fresh session and drops the proof on navigation", ({
   page,
-}) => {
-  await installActivePATs(page);
-  const pairingId = "24000000-0000-4000-8000-000000000246";
-  let approved = false;
-  await page.route(`${apiOrigin}/pats/pairings/inspect`, (route) => {
-    expect(route.request().postDataJSON()).toEqual({ publicCode: "BCDF-GHJK" });
-    return route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({
-        pairingId,
-        recipientLabel: "Agente de casa",
-        scopes: ["read"],
-        lifetimeDays: 30,
-        claimBy: "2099-01-01T00:00:00.000Z",
-      }),
-    });
-  });
-  await page.route(`${apiOrigin}/pats/pairings/approve`, (route) => {
-    expect(route.request().postDataJSON()).toEqual({ pairingId });
-    approved = true;
-    return route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({
-        pairingId,
-        patExpiresAt: "2099-02-01T00:00:00.000Z",
-        claimBy: "2099-01-01T00:00:00.000Z",
-      }),
-    });
-  });
-  await page.goto("/settings/pats");
-  await page.getByLabel("Código", { exact: true }).fill("bcdf-ghjk");
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByText("Agente de casa").first()).toBeVisible();
-  expect(approved).toBe(false);
-  await page.getByRole("button", { name: "Autorizar acceso" }).click();
-  await expect(page.getByText("Acceso autorizado")).toBeVisible();
-  expect(approved).toBe(true);
-  expect(await page.locator("body").textContent()).not.toContain(bearer);
-});
-
-test("rotates a BackupRecoveryCode in a fresh session and drops the proof on navigation", async ({
-  page,
-}) => {
-  let rotated = false;
-  await page.route(`${apiOrigin}/recovery/backup-code/rotate`, (route) => {
-    rotated = true;
-    return route.fulfill({
-      status: ok,
-      contentType: "application/json",
-      body: response({
-        status: "rotated",
-        backupRecoveryCode: code,
-        rotatedAt: "2026-09-27T00:00:00.000Z",
-      }),
-    });
-  });
-  await page.goto("/settings/recovery");
-  await page.getByRole("button", { name: "Crear un código nuevo" }).click();
-  await expect(page.getByText(code)).toBeVisible();
-  expect(rotated).toBe(true);
-  expect(page.url()).not.toContain(code);
-  await page.goto("/settings/pats");
-  expect(await page.locator("body").textContent()).not.toContain(code);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
-});
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let rotated = false;
+      yield* installRoute(page, `${apiOrigin}/recovery/backup-code/rotate`, (route) => {
+        rotated = true;
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            status: "rotated",
+            backupRecoveryCode: code,
+            rotatedAt: "2026-09-27T00:00:00.000Z",
+          }),
+        });
+      });
+      yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear un código nuevo" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText(code)).toBeVisible());
+      expect(rotated).toBe(true);
+      expect(page.url()).not.toContain(code);
+      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
+      expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
+        code
+      );
+      expect(yield* Effect.tryPromise(() => browserStorageLength(page))).toBe(0);
+    })
+  ));

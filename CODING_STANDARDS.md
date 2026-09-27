@@ -29,11 +29,8 @@ Bad names cause bugs. **A good name says what the entity is and what it is not.*
 
 ## Comments
 
-Presence is enforced in the core tree. **Quality is not, and quality is the whole point.**
-
-**Interface comments** precede exported declarations and describe the abstraction: behaviour, what
-the arguments _mean_ beyond their types, what the caller must guarantee, what it may rely on
-afterwards, side effects, failures.
+**Interface comments** describe the abstraction: behaviour, what the arguments _mean_ beyond their
+types, what the caller must guarantee, what it may rely on afterwards, side effects, failures.
 
 > The test: a caller should be able to use this correctly having read only the comment and the
 > signature, **never the body**.
@@ -54,31 +51,18 @@ requires equal Currency. None of those obligations is recoverable from `{ amount
 
 ### Make illegal states unrepresentable
 
-First-party production source does not handwrite `Symbol(...)` or `unique symbol` nominal tokens.
-Use closure-backed behavior for one-shot capabilities and `Schema.brand(...)` for validated scalar
-domain identities. Language interop such as `Symbol.iterator` remains legitimate.
+Use closure-backed behavior for one-shot capabilities and validated scalar domain identities.
 
 Beyond branded ids and refined primitives, model **cardinality and structure**: `NonEmptyArray`
 where empty is illegal, `Tuple` where arity is fixed, `UniqueArray` where duplicates are, and
-discriminated unions instead of optional-field combinations.
-
-> **If two optional fields are always present together or always absent together, it is a union.**
-
-`{ merged?: boolean, mergedIntoId?: TransactionId, mergedAt?: DateTime }` has eight representable
-combinations and two legal ones. `Union(Unmerged, Merged({ intoId, at }))` has exactly two. Same for
-the reconciliation outcome, the `NeedsReviewItem` lifecycle, and the dashboard's leaf-or-split node.
+state-specific variants instead of one shape that permits invalid combinations. For example,
+Reconciliation outcomes, the `NeedsReviewItem` lifecycle, and dashboard leaf-or-split nodes have
+different legal states that a discriminated union can express directly.
 
 Unions are cheap to handle safely because a missing case is a build failure.
 
 **This binds the model, not the storage.** A discriminated union rarely maps cleanly onto relational
 columns, so the row schema may be flatter, and the repo's decode is where the two reconcile.
-
-### Type declarations
-
-Use `type` aliases for first-party object shapes. They are closed declarations and also compose with
-unions, tuples, mapped types, and conditional types. Use `interface` only when declaration merging
-or module augmentation is deliberately required; never leave a shape open for hypothetical future
-extension.
 
 ### Tuples
 
@@ -98,8 +82,6 @@ Build derived shapes from their canonical schemas rather than maintaining parall
 Judge a `Record` by its actual keyspace and value contract.
 
 - A finite `Record<FailureTag, Status>` is an exhaustive table and strengthens the contract.
-- Core never uses an open dictionary whose direct value contract is `unknown`, `any`, `object`, or
-  `{}`. Its values are established domain contracts; test builders use named shapes and `Partial<T>`.
 - In shell production code, `Record<string, unknown>` is reserved for genuinely open property bags
   whose keys and values Fidy does not know.
 - Do not return `Record<string, unknown>` for a value whose fields are already known. Use the
@@ -119,15 +101,13 @@ Judge a `Record` by its actual keyspace and value contract.
 
 ### Other defaults
 
-- Type-only casts are prohibited. Preserve assignability through the module interface or validate
-  unknown values at runtime; never use `Function.cast`, `as Type`, angle-bracket assertions, or
-  custom guards that claim more than they check. Const assertions remain valid literal inference.
+- A custom guard must check everything it claims to establish. `as const` is valid literal inference,
+  not an escape from assignability.
 - Use `WeakMap` only when private data must be associated with an object by identity and must not
   extend that object's lifetime.
-- Core functions do not accept explicit `unknown` parameters. Raw input is decoded at the shell
-  boundary; a genuine pure validation module is a narrow, explained config-level exception.
-- `Option` for absence. Never `null`. `undefined` only where an Effect API demands it.
-- `ReadonlyArray<T>` in **return** types. Parameters are enforced in core; returns are not.
+- Decode raw input at the shell boundary before passing it to core.
+- Model runtime absence with `Option`, not `null`; use `undefined` where a foreign API demands it.
+- `ReadonlyArray<T>` in **return** types.
 - `Data.struct` / `Data.tuple` for value objects needing structural equality.
 - Effect's own collections (`Chunk`, `HashMap`) only where they earn it. `ReadonlyArray` is the
   default; reaching for `Chunk` on a twenty-element list is cargo cult.
@@ -164,14 +144,11 @@ So: nothing this repo defines `extends` anything this repo defines, and two hand
 alike do not get an abstract base — the shared decision moves into a core function both call. This
 is the composition half of the same rule the table above states for state.
 
-`class` and `extends` are unrestricted by every gate in the repo, and the distinction is one no
-linter could draw, so it lives here.
-
 ---
 
 ## Errors and absence
 
-Absence is an `Option` everywhere, and the linter enforces it. Two rules nothing can check:
+Two decisions require review:
 
 - **`orDie` is for defects only.** A dead connection, yes. "Budget not found", no — that is a typed
   error that must reach the API response.
@@ -184,11 +161,10 @@ Absence is an `Option` everywhere, and the linter enforces it. Two rules nothing
 
 ## Promise interop
 
-Production application source does not use `Effect.promise`. A foreign Promise is rejectable unless
-its owning adapter makes and tests a stronger guarantee; representing it as `Effect<A, never>` turns
-an unexpected rejection into a defect before the workflow has deliberately classified it. Start with
-`Effect.tryPromise`, then map the rejection to the workflow's closed typed failure, contain it at an
-explicit best-effort boundary, or use `orDie` only when rejection genuinely violates an invariant.
+Wrapping a foreign Promise does not classify its rejection: even `Effect.tryPromise` without a
+`catch` callback widens the typed failure set with `Cause.UnknownError`. The owning adapter must
+choose a closed workflow failure, explicit best-effort containment, or a defect only for a genuine
+invariant violation. Test any stronger non-rejection guarantee.
 
 Interruption and rejection are separate decisions. Pass the supplied `AbortSignal` to APIs that
 accept it. When an API owns a reader, process, socket, or other resource that does not observe that
@@ -286,8 +262,7 @@ imagined behaviour before exercising the first slice.
 
 React application code is event-driven and keeps only irreducible interaction state.
 
-- **`useEffect` is banned.** Derive presentation during render and perform commands in the event
-  handler that caused them. A state transition must never serve as an indirect command.
+- A state transition must never serve as an indirect command.
 - Shared and server state belongs to Effect Atom, navigation state to TanStack Router, and local
   one-component interaction state to React. Keep each state value under exactly one owner.
 - Do not store values that can be derived from props, atom data, router state, or existing local

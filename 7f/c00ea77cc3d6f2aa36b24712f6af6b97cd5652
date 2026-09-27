@@ -1,0 +1,21 @@
+apps/server/cloudflare/agent/turn-store.ts
+  s_98251aab91db5b::t_72cce1ba384af3 861-869
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_98251aab91db5b::t_71431daa681db4 2322-2329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7fc00ea77cc3d6f2aa36b24712f6af6b97cd5652",
+  "prompts": {},
+  "sessions": {
+    "s_98251aab91db5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0ec-f843-724a-9138-f40331cd3c04",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

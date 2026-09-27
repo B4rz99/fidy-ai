@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
@@ -42,40 +43,12 @@ const miniflare = new Miniflare({
 });
 await miniflare.ready;
 const db = await miniflare.getD1Database("DB");
-const migrations = [
-  "0001_categories",
-  "0002_resource_admission",
-  "0003_pending_consent",
-  "0004_onboarding_email",
-  "0005_verified_onboarding",
-  "0006_browser_login",
-  "0007_browser_pairing_email",
-  "0008_support_recovery",
-  "0009_email_replacement",
-  "0009_card_enrollment",
-  "0009_transactions",
-  "0010_pat_lifecycle",
-  "0011_transaction_corrections",
-  "0012_billing_collection",
-  "0012_statement_staging",
-  "0012_transaction_search",
-  "0013_category_keyword_rules",
-  "0013_transaction_reconciliation",
-  "0014_memory",
-  "0015_statement_submission",
-  "0016_budgets",
-  "0016_hosted_turn",
-  "0016_subscription_standing",
-  "0017_hosted_compaction",
-  "0017_forwarded_email",
-  "0017_statement_dispatch",
-  "0018_dashboard",
-  "0018_batch_envelope_audit",
-  "0019_canonical_child_guards",
-  "0020_dashboard_projection",
-];
+const migrationDirectory = new URL("./migrations/", import.meta.url);
+const migrations = Array.from(
+  new Bun.Glob("*.sql").scanSync({ cwd: fileURLToPath(migrationDirectory) })
+).sort();
 const applyMigration = (name: string): Promise<void> =>
-  Bun.file(new URL(`./migrations/${name}.sql`, import.meta.url))
+  Bun.file(new URL(name, migrationDirectory))
     .text()
     .then((sql) =>
       sql

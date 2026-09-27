@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { BrowserContext, Page } from "@playwright/test";
 import { Array, Clock, DateTime, Effect, Option } from "effect";
+import { makeUser, response } from "./http-fixtures";
 
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5_000;
@@ -60,20 +61,7 @@ const installStartAndLogoutRoutes = async (
     route.fulfill({
       contentType: "application/json",
       status: successStatus,
-      body: JSON.stringify({
-        data: {
-          id: "24000000-0000-4000-8000-000000000241",
-          serviceMarket: "CO",
-          locale: "es-CO",
-          timeZone: "America/Bogota",
-          trialPeriod: {
-            startedAt: "2026-08-01T00:00:00Z",
-            endsAt: "2026-08-08T00:00:00Z",
-          },
-          createdAt: "2026-08-01T00:00:00Z",
-        },
-        next: [],
-      }),
+      body: response(makeUser()),
     })
   );
   await installCanonicalProductRoutes(page);

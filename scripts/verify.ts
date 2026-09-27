@@ -91,6 +91,9 @@ const checks: Array<Check> = [
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),
   rootCheck("static", "Project-reference build", ["bun", "run", "typecheck"]),
+  // The JS plugin is checked with the classic compiler in the isolated tool install;
+  // the patched root compiler applies Effect diagnostics to these foreign AST callbacks.
+  rootCheck("static", "Oxlint plugin JS types", ["bun", "run", "typecheck:oxlint"]),
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),

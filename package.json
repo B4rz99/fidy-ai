@@ -24,6 +24,7 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "typecheck": "rm -rf .tsbuild && tsc --build --force",
+    "typecheck:oxlint": "node tools/depcruise/node_modules/typescript/bin/tsc --project scripts/oxlint/tsconfig.json --noEmit",
     "contracts:generate": "bun run --cwd apps/server contracts:generate",
     "email-formats:generate": "bun run --cwd apps/server email-formats:generate",
     "email-formats:check": "bun run --cwd apps/server email-formats:check",

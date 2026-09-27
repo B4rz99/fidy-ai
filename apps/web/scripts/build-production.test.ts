@@ -56,17 +56,17 @@ const validate = (directory: string): Promise<void> =>
 
 describe("production static release identity", () => {
   it("binds one static artifact to a full Git revision and canonical contract digest", () => {
-    expect(releaseMetadata(gitRevision, contractDigest)).toEqual({
+    expect(releaseMetadata({ gitRevision, contractDigest })).toEqual({
       contractDigest,
       gitRevision,
     });
   });
 
   it("rejects abbreviated or non-hexadecimal release identity", () => {
-    expect(() => releaseMetadata("HEAD", contractDigest)).toThrow(
+    expect(() => releaseMetadata({ gitRevision: "HEAD", contractDigest })).toThrow(
       "Git revision must be 40 lowercase hexadecimal characters"
     );
-    expect(() => releaseMetadata(gitRevision, "digest")).toThrow(
+    expect(() => releaseMetadata({ gitRevision, contractDigest: "digest" })).toThrow(
       "Contract digest must be 64 lowercase hexadecimal characters"
     );
   });

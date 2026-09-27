@@ -143,7 +143,9 @@ describe("subscription enrollment transport", () => {
       const started = Deferred.makeUnsafe<void>();
       const context = yield* Effect.context<never>();
       let interrupted = 0;
-      const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
+      const client = makeSubscriptionEnrollmentClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+      });
       const onStarted = (): void => {
         Effect.runSyncWith(context)(Deferred.succeed(started, undefined));
       };
@@ -492,10 +494,10 @@ describe("canonical browser transport", () => {
           })
         );
       });
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("subscription", "getUpgradeUrl", {
         serializationKey: "upgrade",
       });
@@ -516,22 +518,22 @@ describe("canonical browser transport", () => {
 
   it.effect("keeps malformed schemas and HTTP failures as distinguishable boundary defects", () =>
     Effect.gen(function* () {
-      const malformedClient = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(
+      const malformedClient = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
           HttpClient.HttpClient,
           makeHttpClient((request) =>
             Effect.succeed(responseJson(request, { unexpected: "secret parser material" }))
           )
-        )
-      );
+        ),
+      });
       const malformedAtom = malformedClient.query("subscription", "getUpgradeUrl", {});
       const malformedRegistry = AtomRegistry.make();
       const unmountMalformed = malformedRegistry.mount(malformedAtom);
 
-      const transportClient = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(
+      const transportClient = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
           HttpClient.HttpClient,
           makeHttpClient((request) =>
             Effect.fail(
@@ -540,8 +542,8 @@ describe("canonical browser transport", () => {
               })
             )
           )
-        )
-      );
+        ),
+      });
       const transportAtom = transportClient.query("subscription", "getUpgradeUrl", {});
       const transportRegistry = AtomRegistry.make();
       const unmountTransport = transportRegistry.mount(transportAtom);
@@ -582,10 +584,10 @@ describe("canonical browser transport", () => {
           )
         )
       );
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("identity", "getCurrentUser", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -606,10 +608,10 @@ describe("canonical browser transport", () => {
       const httpClient = makeHttpClient((request) =>
         Effect.succeed(responseJson(request, manualPATDisclosureBody(rawBearer)))
       );
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const mutation = client.mutation("pats", "createManualPAT", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(mutation);
@@ -650,10 +652,10 @@ describe("canonical browser transport", () => {
         requests.push({ body: requestBodyText(request), url: request.url });
         return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
       });
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const payload = yield* Schema.decodeEffect(SubmitForExtractionInput)({
         idempotencyKey: "20000000-0000-4000-8000-000000000201",
         reference: {
@@ -717,10 +719,10 @@ describe("canonical browser transport", () => {
         });
         return Effect.succeed(responseJson(request, { data: [], next: [] }));
       });
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("transactions", "listTransactions", {
         query: {
           from: DateTime.makeUnsafe("2026-03-01T05:00:00Z"),
@@ -748,23 +750,21 @@ describe("canonical browser transport", () => {
 
   it.effect("preserves query data through a real refresh failure and retries the same atom", () =>
     Effect.gen(function* () {
-      const refreshResponse = Promise.withResolvers<HttpClientResponse.HttpClientResponse>();
+      const refreshResponse = yield* Deferred.make<HttpClientResponse.HttpClientResponse>();
       let requestCount = 0;
       let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
-      const deferredResponse = (): Promise<HttpClientResponse.HttpClientResponse> =>
-        refreshResponse.promise;
       const httpClient = makeHttpClient((request) => {
         requestCount += 1;
         if (requestCount === 1 || requestCount === 3) {
           return Effect.succeed(responseJson(request, { data: [], next: [] }));
         }
         pendingRequest = Option.some(request);
-        return Effect.promise(deferredResponse);
+        return Deferred.await(refreshResponse);
       });
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -787,7 +787,8 @@ describe("canonical browser transport", () => {
           { startImmediately: true }
         );
 
-        refreshResponse.resolve(
+        yield* Deferred.succeed(
+          refreshResponse,
           responseJson(
             Option.getOrThrow(pendingRequest),
             {
@@ -838,10 +839,10 @@ describe("canonical browser transport", () => {
           )
         )
       );
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -865,10 +866,10 @@ describe("canonical browser transport", () => {
   ] as const)("classifies a real initial %s without exposing its Cause", ([_label, request, tag]) =>
     Effect.gen(function* () {
       const httpClient = makeHttpClient(() => request);
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+      });
       const atom = client.query("transactions", "listTransactions", { query: {} });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);
@@ -894,10 +895,10 @@ describe("canonical browser transport", () => {
         const httpClient = makeHttpClient((request) =>
           Effect.succeed(responseJson(request, { data: [], next: [] }))
         );
-        const client = makeFidyClient(
-          "https://api.test.fidyapp.com",
-          Layer.succeed(HttpClient.HttpClient, httpClient)
-        );
+        const client = makeFidyClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+        });
         const atom = client.query("transactions", "listTransactions", { query: {} });
         const priorRegistry = AtomRegistry.make();
         const priorUnmount = priorRegistry.mount(atom);
@@ -929,11 +930,11 @@ describe("canonical browser transport", () => {
           )
         )
       );
-      const client = makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient),
-        { onAuthenticationExpired: () => expirations++ }
-      );
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+        observer: { onAuthenticationExpired: () => expirations++ },
+      });
       const atom = client.query("identity", "getCurrentUser", {});
       const registry = AtomRegistry.make();
       const unmount = registry.mount(atom);

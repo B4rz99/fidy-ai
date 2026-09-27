@@ -67,7 +67,9 @@ const trackedClient = (): Readonly<{
     makeClient: () => {
       created += 1;
       active += 1;
-      const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
+      const client = makeSubscriptionEnrollmentClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+      });
       return {
         execute: client.execute,
         dispose: () => {

@@ -1,7 +1,7 @@
 import type { Miniflare } from "miniflare";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   type WompiBillingClientService,
   WompiSourceId,
@@ -49,7 +49,7 @@ const fixture = (): Promise<D1Database> =>
       ]);
       instance = Option.some(created.instance);
       const db = created.db;
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userId),
           db
@@ -198,20 +198,20 @@ const state = (db: D1Database): Promise<string> =>
 it("settles verified approval with standing, Audit and follow-up exactly once across replay and reordering", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("APPROVED");
       const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
         reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       observed = transaction("DECLINED");
       yield* verify();
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(1);
-      const standing = yield* Effect.promise(() =>
+      const standing = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT s.price_id, p.starts_at_ms, p.ends_at_ms
         FROM subscriptions AS s JOIN billing_paid_periods AS p ON p.attempt_id = s.attempt_id`)
@@ -225,7 +225,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
         },
       ]);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_followup_outbox").all()))
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_followup_outbox").all()))
           .results
       ).toHaveLength(1);
     })
@@ -234,31 +234,31 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
 it("holds verified negative until the retry opportunity and admits a later verified success", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("DECLINED");
       const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
         reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM billing_transaction_candidates").all()
         )).results
       ).toHaveLength(1);
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_transaction_evidence
       SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
           .run()
       );
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("failed");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("failed");
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
       const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).not.toHaveBeenCalled();
       const callbackAt = yield* Clock.currentTimeMillis;
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO billing_event_candidates
         (transaction_id, received_at_ms) VALUES (?, ?)`)
@@ -270,7 +270,7 @@ it("holds verified negative until the retry opportunity and admits a later verif
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(1);
       // A transient lookup failure does not consume the later signed approval hint.
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_event_candidates
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
@@ -278,14 +278,14 @@ it("holds verified negative until the retry opportunity and admits a later verif
       );
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(2);
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_collection_arms
         SET state = 'sent', sent_at_ms = 1 WHERE attempt_id = ?`)
           .bind(attemptId)
           .run()
       );
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO billing_no_charge_confirmations
         (attempt_id, wompi_reference, wompi_environment, provider_case_id, operator_id, confirmed_at_ms)
@@ -295,12 +295,12 @@ it("holds verified negative until the retry opportunity and admits a later verif
       );
       observed = transaction("APPROVED");
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(2);
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db.prepare("SELECT provider_case_id FROM billing_recovery_reviews").all()
         )).results
       ).toEqual([{ provider_case_id: "case-123" }]);
@@ -310,12 +310,12 @@ it("holds verified negative until the retry opportunity and admits a later verif
 it("restarts the negative retry opportunity after a verified pending observation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("DECLINED");
       const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
         reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
       yield* verify();
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_transaction_evidence
       SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
@@ -323,17 +323,17 @@ it("restarts the negative retry opportunity after a verified pending observation
       );
       observed = transaction("PENDING");
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       observed = transaction("DECLINED");
       yield* verify();
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
     })
   ));
 
 it("does not repeat an ambiguous Workflow POST and settles a later signed callback after provider GET", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const environment = billingRuntime(db);
       const eventSecret = environment.WOMPI_EVENT_SECRET;
       const provider = vi.fn((_request: URL, init?: RequestInit): Promise<Response> => {
@@ -362,10 +362,10 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
             return activity();
           },
         });
-      yield* Effect.promise(run);
-      yield* Effect.promise(run);
+      yield* Effect.tryPromise(run);
+      yield* Effect.tryPromise(run);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       const timestamp = 1530291411;
       const data = {
         transaction: { id: transactionId, status: "APPROVED", amount_in_cents: 990000 },
@@ -373,7 +373,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       const properties = ["transaction.id", "transaction.status", "transaction.amount_in_cents"];
       const signed = `${transactionId}APPROVED990000${timestamp}${eventSecret}`;
       const hashed = new Uint8Array(
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(signed))
         )
       );
@@ -385,12 +385,12 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
         signature: { properties, checksum },
         timestamp,
       };
-      const send = (payload: unknown = event): Effect.Effect<Response> =>
+      const send = (payload: unknown = event): Effect.Effect<Response, Cause.UnknownError> =>
         Effect.gen(function* () {
           const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
             payload
           ).pipe(Effect.orDie);
-          return yield* Effect.promise(() =>
+          return yield* Effect.tryPromise(() =>
             publicBillingCallback(
               db,
               new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
@@ -406,12 +406,12 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
           .status
       ).toBe(400);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
           .results
       ).toHaveLength(0);
       expect((yield* send()).status).toBe(200);
       expect((yield* send()).status).toBe(200);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(provider.mock.calls.filter(([, init]) => init?.method === "GET")).toHaveLength(0);
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }) =>
@@ -429,14 +429,14 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).toHaveBeenCalledTimes(1);
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect((yield* send()).status).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).toHaveBeenCalledTimes(1);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "GET")).toHaveLength(1);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(1);
     })
   ));
@@ -444,7 +444,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
 it("retains ambiguity without a callback and settles a privileged provider-ID recovery hint", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const environment = billingRuntime(db);
       const provider = vi.fn((_url: URL, init?: RequestInit): Promise<Response> =>
         init?.method === "POST"
@@ -468,7 +468,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
         _options: WorkflowStepConfig,
         run: () => Promise<void>
       ): Promise<void> => run();
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         runBillingCollectionWorkflow({
           environment,
           payload: { version: 1, attemptId },
@@ -485,10 +485,10 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).not.toHaveBeenCalled();
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       // An operator supplies only the provider id as a hint; the Workflow GET authorizes settlement.
       const now = yield* Clock.currentTimeMillis;
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO billing_event_candidates
       (transaction_id, received_at_ms) SELECT ?, ? WHERE EXISTS
@@ -498,7 +498,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
       );
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).toHaveBeenCalledTimes(1);
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
     })
   ));
@@ -506,7 +506,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
 it("rejects forged callback evidence across Public and Core ingress without writes or provider calls", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const provider = vi.fn(() => Promise.reject(new Error("forbidden provider call")));
       vi.stubGlobal("fetch", provider);
       const request = new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
@@ -516,15 +516,15 @@ it("rejects forged callback evidence across Public and Core ingress without writ
           data: { transaction: { id: transactionId } },
         }),
       });
-      const response = yield* Effect.promise(() => publicBillingCallback(db, request));
+      const response = yield* Effect.tryPromise(() => publicBillingCallback(db, request));
       expect(response.status).toBe(400);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
           .results
       ).toHaveLength(0);
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM billing_transaction_evidence").all()
         )).results
       ).toHaveLength(0);
@@ -535,7 +535,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
 it("durably claims each lookup before Workflow handoff, even if the handoff is ambiguous", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       yield* reconcileBillingTransaction({
         db,
         client: client(() => transaction("PENDING")),
@@ -552,7 +552,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
         yield* Effect.exit(
           reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow })
         );
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           db
             .prepare(`UPDATE billing_transaction_candidates
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
@@ -562,7 +562,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(8);
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db
             .prepare(`SELECT lookup_attempts FROM billing_transaction_candidates
       WHERE transaction_id = ?`)
@@ -576,7 +576,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
 it("bounds pending provider-ID lookups and resumes only from a confirmed lookup hint", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       yield* reconcileBillingTransaction({
         db,
         client: client(() => transaction("PENDING")),
@@ -586,7 +586,7 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
       for (let index = 0; index < 8; index++) {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           db
             .prepare(`UPDATE billing_transaction_candidates
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
@@ -597,7 +597,7 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       expect(create).toHaveBeenCalledTimes(8);
       // A support-confirmed ID may renew GET without creating another arm or POST.
       const now = yield* Clock.currentTimeMillis;
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT OR IGNORE INTO billing_event_candidates
       (transaction_id, received_at_ms) VALUES (?, ?)`)
@@ -606,21 +606,21 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       );
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(9);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
     })
   ));
 
 it("bounds unrelated signed callback lookups and ignores identical event replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const secret = "test_events_payment_test_secret";
       const unrelatedId = "other-merchant-transaction";
       const timestamp = 1530291411;
       const status = "APPROVED";
       const amount = 990000;
       const digest = new Uint8Array(
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           crypto.subtle.digest(
             "SHA-256",
             new TextEncoder().encode(`${unrelatedId}${status}${amount}${timestamp}${secret}`)
@@ -648,7 +648,7 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
             body,
           })
         );
-      expect((yield* Effect.promise(send)).status).toBe(200);
+      expect((yield* Effect.tryPromise(send)).status).toBe(200);
       const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
         Promise.resolve(
           Response.json({
@@ -678,25 +678,25 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
       const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
       for (let index = 0; index < 8; index++) {
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           db
             .prepare(`UPDATE billing_event_candidates
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
             .run()
         );
       }
-      expect((yield* Effect.promise(send)).status).toBe(200);
+      expect((yield* Effect.tryPromise(send)).status).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(8);
       expect(provider).toHaveBeenCalledTimes(8);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
     })
   ));
 
 it("accepts same-second signed approval after a verified negative without replaying collection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const timestamp = 1530291411;
       const environment = billingRuntime(db);
       let observed: "APPROVED" | "DECLINED" = "DECLINED";
@@ -731,24 +731,24 @@ it("accepts same-second signed approval after a verified negative without replay
         get: (_id: string): Promise<unknown> => Promise.resolve({}),
       };
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           sendSignedEvent(db, { transactionId, status: "DECLINED", timestamp })
         )).status
       ).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       observed = "APPROVED";
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           sendSignedEvent(db, { transactionId, status: "APPROVED", timestamp })
         )).status
       ).toBe(200);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
-      expect(yield* Effect.promise(() => state(db))).toBe("succeeded");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(provider).toHaveBeenCalledTimes(2);
       expect(started.size).toBe(2);
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           sendSignedEvent(db, { transactionId, status: "DECLINED", timestamp })
         )).status
       ).toBe(200);
@@ -760,12 +760,12 @@ it("accepts same-second signed approval after a verified negative without replay
 it("rejects a signed callback with another User's source even when its reference matches", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const otherUser = "10000000-0000-4000-8000-000000000002";
       const otherEnrollment = "20000000-0000-4000-8000-000000000002";
       const otherSource = "30000000-0000-4000-8000-000000000002";
       const otherAttempt = "40000000-0000-4000-8000-000000000002";
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(otherUser),
           db
@@ -800,7 +800,7 @@ it("rejects a signed callback with another User's source even when its reference
         ])
       );
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           sendSignedEvent(db, { transactionId, status: "APPROVED", timestamp: 1530291411 })
         )).status
       ).toBe(200);
@@ -836,9 +836,9 @@ it("rejects a signed callback with another User's source even when its reference
       };
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(provider).toHaveBeenCalledTimes(1);
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db
             .prepare("SELECT status FROM billing_attempts WHERE id = ?")
             .bind(otherAttempt)
@@ -846,15 +846,15 @@ it("rejects a signed callback with another User's source even when its reference
         ))?.status
       ).toBe("pending");
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM billing_transaction_evidence").all()
         )).results
       ).toHaveLength(0);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM subscriptions").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscriptions").all())).results
       ).toHaveLength(0);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(0);
     })
   ));
@@ -862,7 +862,7 @@ it("rejects a signed callback with another User's source even when its reference
 it("publishes the armed intent once per cooldown and deduplicates Queue redelivery by Workflow identity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const send = vi.fn((_work: unknown) => Promise.resolve());
       yield* dispatchBillingCollection({
         identity: Option.none(),
@@ -901,7 +901,7 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
 it("coordinates two out-of-order BillingAttempts by stable User in the Subscription D1 unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const secondEnrollment = "20000000-0000-4000-8000-000000000002";
       const secondAttempt = "40000000-0000-4000-8000-000000000002";
       const secondRequest = "50000000-0000-4000-8000-000000000002";
@@ -913,7 +913,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
         transactionId,
       });
       // A settled attempt releases admission for a separately authorized action.
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         db.batch([
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
@@ -952,19 +952,19 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
         client: client(() => older),
         transactionId: secondTransaction,
       });
-      const standing = yield* Effect.promise(() =>
+      const standing = yield* Effect.tryPromise(() =>
         db
           .prepare("SELECT attempt_id FROM subscriptions WHERE user_id = ?")
           .bind(userId)
           .first<{ attempt_id: string }>()
       );
       expect(standing?.attempt_id).toBe(attemptId);
-      const followup = yield* Effect.promise(() =>
+      const followup = yield* Effect.tryPromise(() =>
         db.prepare("SELECT attempt_id FROM billing_followup_outbox").all<{ attempt_id: string }>()
       );
       expect(followup.results.map((row) => row.attempt_id)).toEqual([attemptId]);
       expect(
-        (yield* Effect.promise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
       ).toHaveLength(2);
     })
   ));
@@ -972,7 +972,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
 it("refuses a mismatched source even with a valid provider id and reference", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.promise(fixture);
+      const db = yield* Effect.tryPromise(fixture);
       const forged = client(() => ({
         ...transaction("APPROVED"),
         sourceId: Option.some(WompiSourceId.make(3892)),
@@ -981,9 +981,9 @@ it("refuses a mismatched source even with a valid provider id and reference", ()
         reconcileBillingTransaction({ db, client: forged, transactionId })
       );
       expect(result._tag).toBe("Failure");
-      expect(yield* Effect.promise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
-        (yield* Effect.promise(() =>
+        (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM billing_transaction_evidence").all()
         )).results
       ).toHaveLength(0);

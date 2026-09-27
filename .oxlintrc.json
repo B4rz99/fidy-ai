@@ -139,13 +139,6 @@
     "yoda": "error"
   },
   "overrides": [
-    // Hosted Turn integration scenarios must finish each Turn or abort before starting the next.
-    {
-      "files": ["apps/server/cloudflare/agent/hosted-turn.test.ts"],
-      "rules": {
-        "no-await-in-loop": "off"
-      }
-    },
     // Compaction is one ordered preflight with failure checks at each provider stage.
     {
       "files": ["apps/server/cloudflare/agent/hosted-turn.ts"],
@@ -161,14 +154,12 @@
         "max-lines-per-function": "off"
       }
     },
-    // These sequential probes and dependency guards must await each step before advancing.
+    // Workerd readiness and dependency-guard batches advance in order and clean up before retry.
     {
       "files": [
         "scripts/document-parsing/check.ts",
-        "scripts/document-parsing/extraction-proof.ts",
         "apps/server/scripts/check-dependency-guards.ts",
-        "apps/web/scripts/check-dependency-guards.ts",
-        "apps/web/scripts/check-browser-bundle.ts"
+        "apps/web/scripts/check-dependency-guards.ts"
       ],
       "rules": {
         "no-await-in-loop": "off"
@@ -195,13 +186,6 @@
       "rules": {
         "complexity": "off",
         "max-lines-per-function": "off"
-      }
-    },
-    // Contract generation reflects raw OpenAPI JSON, whose wire shape necessarily includes null.
-    {
-      "files": ["apps/server/tools/contracts/generate.ts"],
-      "rules": {
-        "effect-guards/no-nullable-type": "off"
       }
     },
     // Vitest discovers these standalone configurations through its required default-export contract.
@@ -264,12 +248,11 @@
       }
     },
     // Card enrollment orchestrates atomic D1 claims and provider ambiguity at one Worker
-    // boundary. The test request builder models HTTP's optional body and headers.
+    // boundary. Its independent inputs are named; only the ordered workflow remains exempt.
     {
       "files": ["apps/server/cloudflare/card-enrollment/card-enrollment.ts"],
       "rules": {
         "complexity": "off",
-        "max-params": "off",
         "max-lines-per-function": "off"
       }
     },
@@ -465,8 +448,6 @@
         ]
       }
     },
-    // Tests retain Effect.promise for fixture Promises whose rejection would itself mean the
-    // fixture is broken. All non-test first-party source starts foreign interop with tryPromise.
     // Ingestion obtains entropy, UUIDs, and SHA digests through Effect's substitutable Crypto
     // service. This subtree has no legitimate direct platform-crypto operation; HMAC and
     // constant-time comparison remain permitted in their owning identity/security modules.
@@ -498,7 +479,6 @@
     {
       "files": ["**/*.test.ts", "**/*.test.js"],
       "rules": {
-        "effect-guards/no-effect-promise": "off",
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",
         "no-magic-numbers": "off"

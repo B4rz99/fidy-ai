@@ -18,7 +18,7 @@ if (import.meta.main) {
   });
   if (digestResult.exitCode !== 0) throw new Error("Contract digest calculation failed");
   const contractDigest = new TextDecoder().decode(digestResult.stdout).trim();
-  const metadata = releaseMetadata(gitRevision, contractDigest);
+  const metadata = releaseMetadata({ gitRevision, contractDigest });
 
   const environment = Object.fromEntries(
     Object.entries(Bun.env).flatMap(([name, value]): ReadonlyArray<readonly [string, string]> =>

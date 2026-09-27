@@ -116,14 +116,24 @@ export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<
   HostedTurnApiGroups
 >;
 
-export const makeHostedTurnClient = (
-  apiOrigin: string,
-  httpClient: FidyClientLayer = FetchHttpClient.layer
-): HostedTurnClient =>
+type BrowserClientOptions =
+  | Readonly<{ apiOrigin: string }>
+  | Readonly<{ apiOrigin: string; httpClient: FidyClientLayer }>;
+
+type FidyClientOptions =
+  | BrowserClientOptions
+  | (BrowserClientOptions & Readonly<{ observer: CanonicalAuthenticationObserver }>);
+
+const browserClientLayer = (options: BrowserClientOptions): FidyClientLayer =>
+  "httpClient" in options ? options.httpClient : FetchHttpClient.layer;
+
+export const makeHostedTurnClient = (options: BrowserClientOptions): HostedTurnClient =>
   AtomHttpApi.Service<never>()("@fidy/web/HostedTurnClient", {
     api: HostedTurnApi,
-    baseUrl: apiOrigin,
-    httpClient: httpClient.pipe(browserHttpClientLayer("hosted-turn", apiOrigin)),
+    baseUrl: options.apiOrigin,
+    httpClient: browserClientLayer(options).pipe(
+      browserHttpClientLayer("hosted-turn", options.apiOrigin)
+    ),
   });
 
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
@@ -141,16 +151,14 @@ export type FidyClient = AtomHttpApi.AtomHttpApiClient<
  * transport failures once, and exposes transport or schema failures as sanitized defects while
  * retaining canonical request decoding and endpoint-declared failures.
  */
-export const makeFidyClient = (
-  apiOrigin: string,
-  httpClient: FidyClientLayer = FetchHttpClient.layer,
-  observer?: CanonicalAuthenticationObserver
-): FidyClient =>
+export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
   AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
-    baseUrl: apiOrigin,
-    httpClient: canonicalHttpClientLayer(apiOrigin, httpClient),
-    transformResponse: observeAuthenticationExpiration(observer),
+    baseUrl: options.apiOrigin,
+    httpClient: canonicalHttpClientLayer(options.apiOrigin, browserClientLayer(options)),
+    transformResponse: observeAuthenticationExpiration(
+      "observer" in options ? options.observer : undefined
+    ),
   });
 
 /** Direct authentication transport, separate from product operations because it carries proofs. */
@@ -167,14 +175,13 @@ export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
  * and redirects, and apply the authentication deadline and response-byte budget. GET/HEAD transport
  * failures retry once; sanitized transport and schema failures remain defects.
  */
-export const makeWebAuthClient = (
-  apiOrigin: string,
-  httpClient: FidyClientLayer = FetchHttpClient.layer
-): WebAuthClient =>
+export const makeWebAuthClient = (options: BrowserClientOptions): WebAuthClient =>
   AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
     api: WebAuthApi,
-    baseUrl: apiOrigin,
-    httpClient: httpClient.pipe(browserHttpClientLayer("web-auth", apiOrigin)),
+    baseUrl: options.apiOrigin,
+    httpClient: browserClientLayer(options).pipe(
+      browserHttpClientLayer("web-auth", options.apiOrigin)
+    ),
   });
 
 type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
@@ -204,13 +211,16 @@ export type SubscriptionEnrollmentClient = Readonly<{
  * generated semantics.
  */
 export const makeSubscriptionEnrollmentClient = (
-  apiOrigin: string,
-  httpClient: FidyClientLayer = FetchHttpClient.layer
+  options: BrowserClientOptions
 ): SubscriptionEnrollmentClient => {
   const live = Layer.effect(
     EnrollmentClientService,
-    HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: apiOrigin })
-  ).pipe(Layer.provide(httpClient.pipe(browserHttpClientLayer("enrollment", apiOrigin))));
+    HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: options.apiOrigin })
+  ).pipe(
+    Layer.provide(
+      browserClientLayer(options).pipe(browserHttpClientLayer("enrollment", options.apiOrigin))
+    )
+  );
   const runtime = ManagedRuntime.make(live);
   let available = true;
   let disposal = Option.none<Promise<void>>();

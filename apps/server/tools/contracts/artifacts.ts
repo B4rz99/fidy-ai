@@ -33,35 +33,41 @@ const sortJson = (value: JsonValue): JsonValue => {
   return value;
 };
 
-export const asJsonValue = (value: unknown, path = "$"): JsonValue => {
+type JsonInput = Readonly<{ value: unknown }> | Readonly<{ value: unknown; path: string }>;
+
+export const asJsonValue = (input: JsonInput): JsonValue => {
+  const path = "path" in input ? input.path : "$";
   try {
-    return sortJson(Schema.decodeUnknownSync(Schema.Json)(value));
+    return sortJson(Schema.decodeUnknownSync(Schema.Json)(input.value));
   } catch {
     throw new Error(`Contract value at ${path} is not valid JSON`);
   }
 };
 
-export const asJsonObject = (value: unknown, path = "$"): JsonObject => {
+export const asJsonObject = (input: JsonInput): JsonObject => {
+  const path = "path" in input ? input.path : "$";
   try {
-    return Schema.decodeUnknownSync(JsonObject)(value);
+    return Schema.decodeUnknownSync(JsonObject)(input.value);
   } catch {
     throw new Error(`Contract value at ${path} is not a JSON object`);
   }
 };
 
 /** Stable JSON representation for generated artifacts and release identities. */
-export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonValue(value));
+export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonValue({ value }));
 
 /** Returns the lowercase SHA-256 identity of the canonical API and operation policy. */
 export const contractDigest = (artifacts: ContractArtifacts): string =>
   new Bun.CryptoHasher("sha256").update(canonicalJson(artifacts)).digest("hex");
 
+type ContractArtifactInput = Readonly<{ openapi: unknown; policy: unknown; subject: string }>;
+
 /** Rejects malformed generated files before trusting them as a release identity. */
-export const contractArtifactsFrom = (
-  openapi: unknown,
-  policy: unknown,
-  subject: string
-): ContractArtifacts => {
+export const contractArtifactsFrom = ({
+  openapi,
+  policy,
+  subject,
+}: ContractArtifactInput): ContractArtifacts => {
   let operationPolicy: OperationPolicyManifest;
   try {
     operationPolicy = Schema.decodeUnknownSync(OperationPolicyManifest)(policy);
@@ -69,7 +75,7 @@ export const contractArtifactsFrom = (
     throw new Error(`${subject} operation policy is not an operation-policy manifest`);
   }
   return {
-    openapi: asJsonObject(openapi, `${subject} OpenAPI contract`),
+    openapi: asJsonObject({ value: openapi, path: `${subject} OpenAPI contract` }),
     operationPolicy,
   };
 };

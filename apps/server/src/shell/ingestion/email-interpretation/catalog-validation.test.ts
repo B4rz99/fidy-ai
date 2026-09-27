@@ -61,7 +61,9 @@ it.effect("rejects canonical facts that fail final schema validation", () =>
           accountHints,
         }),
     };
-    const { interpretNotificationEmail } = yield* Effect.promise(() => importWithCatalog([format]));
+    const { interpretNotificationEmail } = yield* Effect.tryPromise(() =>
+      importWithCatalog([format])
+    );
     const context = yield* Schema.decodeEffect(CapturedInterpretationContext)({
       serviceMarket: "CO",
       locale: "es-CO",
@@ -95,7 +97,9 @@ it.effect("bounds competing candidates from a valid generated catalog", () =>
         "shared-anchor"
       )
     );
-    const { interpretNotificationEmail } = yield* Effect.promise(() => importWithCatalog(formats));
+    const { interpretNotificationEmail } = yield* Effect.tryPromise(() =>
+      importWithCatalog(formats)
+    );
     const context = yield* Schema.decodeEffect(CapturedInterpretationContext)({
       serviceMarket: "CO",
       locale: "es-CO",

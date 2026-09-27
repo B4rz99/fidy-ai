@@ -18,11 +18,12 @@ const AuthenticationRouter = ({ apiOrigin }: Readonly<{ apiOrigin: string }>): J
   const { expireAuthentication } = useSession();
   const [router] = useState(() =>
     createWebRouter({
-      apiClient: makeFidyClient(apiOrigin, undefined, {
-        onAuthenticationExpired: expireAuthentication,
+      apiClient: makeFidyClient({
+        apiOrigin,
+        observer: { onAuthenticationExpired: expireAuthentication },
       }),
-      webAuthClient: makeWebAuthClient(apiOrigin),
-      hostedTurnClient: makeHostedTurnClient(apiOrigin),
+      webAuthClient: makeWebAuthClient({ apiOrigin }),
+      hostedTurnClient: makeHostedTurnClient({ apiOrigin }),
       history: Option.none(),
     })
   );
@@ -32,7 +33,7 @@ const AuthenticationRouter = ({ apiOrigin }: Readonly<{ apiOrigin: string }>): J
 const RoutedApplication = (): JSX.Element => {
   const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
   const makeEnrollmentClient = useCallback(
-    () => makeSubscriptionEnrollmentClient(apiOrigin),
+    () => makeSubscriptionEnrollmentClient({ apiOrigin }),
     [apiOrigin]
   );
   return (

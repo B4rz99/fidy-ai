@@ -234,10 +234,10 @@ describe("Production topology contract", () => {
 describe("Cloudflare Worker topology", () => {
   it.effect("returns only bounded release and health metadata from Core", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), coreEnvironment)
       );
-      const body = yield* Effect.promise(() => response.json());
+      const body = yield* Effect.tryPromise(() => response.json());
 
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -251,7 +251,7 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("fails closed without disclosing malformed release configuration", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         coreWorker.fetch(new Request("https://core.internal/health"), {
           ...coreEnvironment,
           CONTRACT_DIGEST: "secret configuration",
@@ -260,8 +260,8 @@ describe("Cloudflare Worker topology", () => {
         })
       );
       const body = response.clone();
-      const json = yield* Effect.promise(() => response.json());
-      const text = yield* Effect.promise(() => body.text());
+      const json = yield* Effect.tryPromise(() => response.json());
+      const text = yield* Effect.tryPromise(() => body.text());
 
       expect(response.status).toBe(503);
       expect(json).toEqual({ status: "unavailable" });
@@ -272,7 +272,7 @@ describe("Cloudflare Worker topology", () => {
   it.effect("reaches health through the Core service binding", () =>
     Effect.gen(function* () {
       const requests: Array<Request> = [];
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/health"),
           makePublicEnvironment({
@@ -286,7 +286,7 @@ describe("Cloudflare Worker topology", () => {
           })
         )
       );
-      const body = yield* Effect.promise(() => response.json());
+      const body = yield* Effect.tryPromise(() => response.json());
 
       expect(requests).toHaveLength(1);
       const coreRequest = requests.at(0);
@@ -307,7 +307,7 @@ describe("Cloudflare Worker topology", () => {
       const telemetry = collectingTelemetry(records);
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/health"),
           makePublicEnvironment({
@@ -349,7 +349,7 @@ describe("Cloudflare Worker topology", () => {
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
       const observedPublic = makePublicWorker(collectingTelemetry(records));
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/not-published"),
           makePublicEnvironment({
@@ -372,7 +372,7 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("permits credentialed browser reads only from the configured application origin", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/categories", {
             headers: {
@@ -396,7 +396,7 @@ describe("Cloudflare Worker topology", () => {
   it.effect("rejects an unapproved browser origin before invoking Core", () =>
     Effect.gen(function* () {
       let delegated = false;
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/categories", {
             headers: { origin: "https://attacker.example" },
@@ -421,7 +421,7 @@ describe("Cloudflare Worker topology", () => {
   it.effect("fails closed when the configured browser origin is outside the topology", () =>
     Effect.gen(function* () {
       let delegated = false;
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/health"),
           makePublicEnvironment({
@@ -444,7 +444,7 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("answers only bounded preflight requests for an owned browser route", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/categories", {
             headers: {
@@ -468,7 +468,7 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("applies non-cacheable API security headers to rejection responses", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(new Request("https://api.fidyapp.com/internal"), makePublicEnvironment())
       );
 
@@ -486,7 +486,7 @@ describe("Cloudflare Worker topology", () => {
 
   it.effect("rejects an unauthenticated Categories request before querying D1", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/categories"),
           makePublicEnvironment({
@@ -494,7 +494,7 @@ describe("Cloudflare Worker topology", () => {
           })
         )
       );
-      const body = yield* Effect.promise(() => response.json());
+      const body = yield* Effect.tryPromise(() => response.json());
 
       expect(response.status).toBe(401);
       expect(body).toEqual({
@@ -510,7 +510,7 @@ describe("Cloudflare Worker topology", () => {
       const telemetry = collectingTelemetry(records);
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/categories", {
             headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
@@ -526,7 +526,7 @@ describe("Cloudflare Worker topology", () => {
           })
         )
       );
-      const text = yield* Effect.promise(() => response.text());
+      const text = yield* Effect.tryPromise(() => response.text());
 
       expect(response.status).toBe(503);
       expect(text).toBe(
@@ -550,7 +550,7 @@ describe("Cloudflare Worker topology", () => {
   it.effect("rejects other public routes before invoking Core", () =>
     Effect.gen(function* () {
       let delegated = false;
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/internal"),
           makePublicEnvironment({

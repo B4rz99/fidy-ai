@@ -441,12 +441,17 @@ for (const [name, configLayer, candidate] of [
 ] as const) {
   it.effect(`rejects an invalid ${name} without echoing the candidate`, () => {
     const runtime = ManagedRuntime.make(layerWithConfig(configLayer));
-    return Effect.gen(function* () {
-      const failure = yield* exitFailure(
-        yield* Effect.promise(() => runtime.runPromiseExit(loadContracts))
-      );
-      const rendered = yield* renderedFailure(failure);
-      expect(rendered).not.toContain(candidate);
-    }).pipe(Effect.ensuring(Effect.promise(() => runtime.dispose())));
+    return Effect.acquireUseRelease(
+      Effect.succeed(runtime),
+      () =>
+        Effect.gen(function* () {
+          const failure = yield* exitFailure(
+            yield* Effect.tryPromise(() => runtime.runPromiseExit(loadContracts))
+          );
+          const rendered = yield* renderedFailure(failure);
+          expect(rendered).not.toContain(candidate);
+        }),
+      () => Effect.tryPromise(() => runtime.dispose())
+    );
   });
 }

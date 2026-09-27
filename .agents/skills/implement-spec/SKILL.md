@@ -12,7 +12,7 @@ The tickets form a task graph, not a checklist: only tickets whose blockers are 
 
 - Read `docs/agents/issue-tracker.md` for the tracker's source of truth and blocking-edge operations.
 - Read the spec and every ticket's full body and comments. Confirm the parent-child relationships, acceptance criteria, blocking edges, and current ticket states.
-- If the graph, ticket criteria, or pre-agreed test seams are missing or contradictory, stop and ask the user rather than inventing them.
+- Ask about missing or contradictory ticket dependencies and acceptance criteria that prevent correct implementation. Choose routine test seams from existing public interfaces unless the user has reserved that decision.
 - This flow delegates workers that edit files. Check `test "${HERDR_ENV:-}" = 1` before creating branches or dispatching work. If it fails, stop and report that this flow requires Herdr; do not fall back to in-process agents or shared-checkout workers.
 - Check the working tree before branching. Preserve existing user changes; if they would interfere with an integration branch, ask how to proceed.
 
@@ -26,7 +26,7 @@ The tickets form a task graph, not a checklist: only tickets whose blockers are 
 
    Each implementer must:
    - Verify that its clean worktree is based on the integration branch tip before editing. If it is not, bring it up to date without discarding work; stop and report any unexpected existing changes.
-   - Read `.agents/skills/tdd/SKILL.md` and implement the ticket in vertical red-green slices at the seams already approved in the spec. `/tdd` is user-invoked in this repo, so follow its documented process directly rather than attempting to invoke it from the worker. If the seam is not approved, pause for the user rather than inventing one.
+   - Read `.agents/skills/tdd/SKILL.md` and implement the ticket in vertical red-green slices at the spec’s seams or existing public interfaces. Ask only if the seam requires an unresolved contract decision or explicit user approval.
    - Run the focused tests for changed behavior and the relevant typecheck/build commands. Follow the repository's `CONTEXT.md`, architecture, coding, and security instructions.
    - Commit the ticket work using this repository's commit convention.
    - Merge the latest integration branch tip into its own branch before reporting completion. Resolve conflicts against the spec and both tickets' intent; do not choose a side mechanically.

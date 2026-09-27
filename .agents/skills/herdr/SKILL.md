@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Control Herdr, a terminal multiplexer for coding agents. Use when the user explicitly mentions Herdr or when a skill needs isolated or parallel work in this harness. Use it to inspect or control panes, tabs, workspaces, terminals, commands, or communication with another agent. Requires HERDR_ENV=1."
+description: "Control Herdr panes, worktrees, and agents when explicitly requested or required by another skill. Requires HERDR_ENV=1."
 ---
 
 # Herdr

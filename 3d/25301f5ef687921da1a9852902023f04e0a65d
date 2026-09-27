@@ -1,0 +1,21 @@
+tools/depcruise/package.json
+  s_faf8a5df7be82b::t_da9fcecc6928fd 7
+tools/depcruise/bun.lock
+  s_faf8a5df7be82b::t_5953362bcac1d8 8,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3d25301f5ef687921da1a9852902023f04e0a65d",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

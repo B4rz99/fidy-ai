@@ -1,0 +1,38 @@
+apps/web/e2e/static-shell.spec.ts
+  s_60ae463805ce18::t_3d8b1b05c819e6 96-107
+  s_60ae463805ce18::t_fe8d8bc2893032 119-121
+  s_60ae463805ce18::t_6c88ff4fa0a85a 16
+  s_60ae463805ce18::t_a7fd092d589c9a 2,108-118,130
+  s_60ae463805ce18::t_95ddc50f701f16 124-127,129
+  s_60ae463805ce18::t_e568892b9c0070 122-123,131-138
+  s_60ae463805ce18::t_2fd6b5dd2a3a92 128
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_b51618e714f447 2,27
+  s_60ae463805ce18::t_b22ccfeacf7a5f 1,39-49,56-70,89-92,107-109,111-118,122-128
+  s_60ae463805ce18::t_26f7dfdf858134 20-26
+  s_60ae463805ce18::t_5c12b3bede2532 28-31
+  s_60ae463805ce18::t_26837ff64b7685 3
+  s_60ae463805ce18::t_e659aa19076954 84-88,94,110,119,121
+  s_60ae463805ce18::t_5e1db75b7e0e2c 4-19
+  s_60ae463805ce18::t_8e180959174967 71-83
+  s_60ae463805ce18::t_085f7a72353d22 50-55
+  s_60ae463805ce18::t_d7c298834d914a 120
+apps/web/e2e/product-journeys.spec.ts
+  s_60ae463805ce18::t_97d87706d369ce 235-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ad2f390fe6af782becccf69e88ee46811041086",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_60ae463805ce18::t_4298f8f6132e59 5
+infra/cloudflare/verify-edge-policy.test.ts
+  s_60ae463805ce18::t_d7c455aab31bf2 7
+.oxlintrc.json
+  s_60ae463805ce18::t_6958299e76baed 142-149
+apps/web/e2e/real-core-journeys.spec.ts
+  s_60ae463805ce18::t_ff8d2426ce79c3 3,86-87,89-90,94-100,102-109,111-113
+  s_60ae463805ce18::t_cc4a206656e938 8,110
+  s_60ae463805ce18::t_48ab99eba70db9 91-93,101
+  s_60ae463805ce18::t_3ff42478045d7d 88
+  s_60ae463805ce18::t_450a19027240bc 114-115
+apps/server/package.json
+  s_60ae463805ce18::t_dae1f0e07d47b8 194
+bun.lock
+  s_60ae463805ce18::t_4f5ea32c8197a6 44,354,356,358,360,362,364,366,368,370,372,374,376,378,380,382,384,386,388,390,392,394,396,398,400,402,404,1114,1962-1963,2294-2345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2341044094af8ebeb05cecd03e124e977e571129",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

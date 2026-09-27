@@ -1,0 +1,55 @@
+apps/server/cloudflare/public-worker.ts
+  s_60ae463805ce18::t_efd36d6c9ec3aa 222
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_4660dd1339cdd5 23-26,33-35,38
+  s_60ae463805ce18::t_773aa2dc4a4d70 27
+  s_60ae463805ce18::t_214188b2eaa48d 446,448
+  s_60ae463805ce18::t_b8da945b4fcd3c 426-429,447,449
+  s_60ae463805ce18::t_868a7611141b92 393-403
+  s_60ae463805ce18::t_edb34a8e3a3ef9 1,266,283-285
+  s_60ae463805ce18::t_9f25d56941d13f 267-282,287-288,312,374-392,404,443-444
+  s_60ae463805ce18::t_1ef33b377d6c1f 286,405
+apps/web/e2e/real-core-journeys.spec.ts
+  s_60ae463805ce18::t_87d1e776ba6cf1 12,18,44-52
+  s_60ae463805ce18::t_b7d218ae36ccea 159-160
+  s_60ae463805ce18::t_ae9e896635afca 2,72-78
+  s_60ae463805ce18::t_a5b636c30b1abc 71,79
+  s_60ae463805ce18::t_a2ca74a2f9f918 144
+  s_60ae463805ce18::t_868a7611141b92 145,149-158
+  s_60ae463805ce18::t_8ae3a775fe2269 161,163
+  s_60ae463805ce18::t_71bc5b1111bb84 80-81
+  s_60ae463805ce18::t_4b50c5f805cdc7 162
+apps/server/cloudflare/core-worker.ts
+  s_60ae463805ce18::t_ac3ad4e9652ea6 158
+  s_60ae463805ce18::t_296d7565ae4db6 159-161
+apps/web/e2e/browser-pairing.spec.ts
+  s_60ae463805ce18::t_d1bb294dc46739 2,305-308,310,313,315-317,391
+  s_60ae463805ce18::t_cd4239e4333371 318-332,373
+  s_60ae463805ce18::t_17bad2318cd6f0 3,309,311-312,345-350,360-362,365,385-386,388
+  s_60ae463805ce18::t_2e15ae31f56a58 314
+  s_faf8a5df7be82b::t_6f789b843109b1 363-364,387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "02cc783f9eae4a44d4b64f26c09a92113b35ed59",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

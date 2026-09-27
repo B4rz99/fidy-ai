@@ -1,0 +1,39 @@
+apps/web/e2e/product-journeys.spec.ts
+  s_60ae463805ce18::t_84ec01794cbc1c 3,27
+apps/web/e2e/canonical-browser.spec.ts
+  s_60ae463805ce18::t_76757001e614a8 2,12
+  s_60ae463805ce18::t_9883c70a039898 13-16,75
+apps/web/e2e/browser-pairing.spec.ts
+  s_60ae463805ce18::t_d9474b3a2a57f2 414
+apps/web/ARCHITECTURE.md
+  s_60ae463805ce18::t_c7f88e2807f2e8 61-62,80-84
+apps/web/e2e/http-fixtures.ts
+  s_60ae463805ce18::t_bb5bbeea32ae69 4,13-19,24-26,28
+  s_60ae463805ce18::t_48f588179dc0b9 27
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_b850cf0e4a3879 1,269-270,273-277,308-309,313-316,320,322,324-334,336-341,343-347,350-352,355-359,361
+  s_60ae463805ce18::t_84bdec7fc9ec89 278-291,319,321
+  s_60ae463805ce18::t_74ed273c215146 378,380,382
+  s_60ae463805ce18::t_b37e16f5bf209a 271-272
+  s_60ae463805ce18::t_a65536a73dd326 379,381
+  s_60ae463805ce18::t_604efa5b3b651d 293-300,302,307,310-311
+  s_60ae463805ce18::t_43d56458fd1f47 301,303-306,312,318
+  s_60ae463805ce18::t_c6d62e3f0f7073 317
+  s_60ae463805ce18::t_e427f032ea1fa7 335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a074fd61eafe0695493fc0090369adebb605f3b0",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

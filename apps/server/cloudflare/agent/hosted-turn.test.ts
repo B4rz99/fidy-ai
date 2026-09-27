@@ -3,6 +3,7 @@ import { afterEach, expect, it } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import {
+  CanonicalToolOutcome,
   DisclosureSnapshot,
   HostedAgentSessionId,
   TranscriptText,
@@ -333,7 +334,9 @@ it("executes an eligible canonical query under the live User authority and retai
   expect(JSON.stringify(requests[1])).toContain("categories__listCategories");
   expect(JSON.stringify(requests[1])).toContain("Restaurantes");
   const entries = await db
-    .prepare("SELECT kind FROM transcript_entries WHERE user_id = ? ORDER BY sequence")
+    .prepare(
+      "SELECT kind, tool_call_id, operation, input_json, outcome_json FROM transcript_entries WHERE user_id = ? ORDER BY sequence"
+    )
     .bind(users[0])
     .all();
   expect(entries.results.map((entry) => entry.kind)).toEqual([
@@ -342,6 +345,20 @@ it("executes an eligible canonical query under the live User authority and retai
     "tool_result",
     "assistant",
   ]);
+  expect(entries.results[1]).toMatchObject({
+    tool_call_id: "call-1",
+    operation: "categories.listCategories",
+    input_json: "{}",
+  });
+  expect(entries.results[2]).toMatchObject({
+    tool_call_id: "call-1",
+    operation: "categories.listCategories",
+  });
+  const outcome = Schema.decodeUnknownSync(Schema.fromJsonString(CanonicalToolOutcome))(
+    entries.results[2]?.outcome_json
+  );
+  expect(outcome._tag).toBe("Succeeded");
+  expect(JSON.stringify(outcome)).toContain('"label":"Restaurantes"');
   const audit = await db
     .prepare("SELECT operation FROM category_audit WHERE user_id = ?")
     .bind(users[0])

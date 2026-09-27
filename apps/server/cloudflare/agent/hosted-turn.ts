@@ -24,6 +24,7 @@ import { HostedToolCallMaximum } from "@fidy/server/hosted-inference";
 import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
 import {
   maximumHostedTurnIterations,
+  maximumModelRoundMillis,
   maximumToolCallsPerTurn,
 } from "../../src/shell/_shared/hosted-turn-bounds";
 import { executeProtectedCategories } from "../categories/canonical-category";
@@ -411,11 +412,14 @@ const executeAdmittedTurn = async ({
       await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
       return unavailable();
     }
+    const remainingMs = startedAtMs + maximumModelRoundMillis - transactionNow();
+    if (remainingMs <= 0) {
+      await finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" });
+      return unavailable();
+    }
     const generated = await Effect.runPromiseExit(
-      active.execute.pipe(Effect.timeout("120 seconds")),
-      {
-        signal,
-      }
+      active.execute.pipe(Effect.timeout(`${remainingMs} millis`)),
+      { signal }
     );
     if (signal.aborted || (Exit.isFailure(generated) && Cause.hasInterrupts(generated.cause))) {
       return (await finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
@@ -460,6 +464,9 @@ const executeAdmittedTurn = async ({
       const next = await Effect.runPromiseExit(generated.value.continuation.prepare(events.value), {
         signal,
       });
+      if (Exit.isFailure(next) && Cause.hasInterrupts(next.cause)) {
+        return (await finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
+      }
       if (Exit.isFailure(next)) {
         await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
         return unavailable();
@@ -481,7 +488,16 @@ const executeAdmittedTurn = async ({
       scheduleRecovery,
     });
   };
-  return executeRound(prepared, 1, 0);
+  try {
+    return await executeRound(prepared, 1, 0);
+  } catch {
+    // A platform defect may still have committed a canonical query. Never publish a reply or
+    // claim a successful Turn without its evidence; the durable alarm is the fallback if D1 fails.
+    const result = signal.aborted
+      ? await finish({ _tag: "Interrupted" }).catch(() => false)
+      : await finish({ _tag: "Failed", reason: "HostedInferenceFailed" }).catch(() => false);
+    return result && signal.aborted ? interrupted() : unavailable();
+  }
 };
 
 type HostedToolEvent = Extract<

@@ -1,0 +1,32 @@
+apps/server/scripts/check-lint-guards.ts
+  s_51427bde09c3f6::t_1ca9ca158e7860 17-19,74
+  s_51427bde09c3f6::t_bc859df17ca7f4 75,89-100,128
+  s_51427bde09c3f6::t_8e677c8df80eb1 67-73,76
+scripts/check-web-design-system.ts
+  s_51427bde09c3f6::t_eeb6356234998f 122
+  s_51427bde09c3f6::t_412ba258d6e5c4 120-121,123-127
+  s_51427bde09c3f6::t_2908265675cfb2 46-51
+scripts/oxlint/dictionary-types.js
+  s_51427bde09c3f6::t_873709be957813 27,36-39,44-45,140-141,149,158,184-188,190,192
+  s_51427bde09c3f6::t_537eb11e64f85d 40-43,46
+  s_51427bde09c3f6::t_95174919ddbe3b 143-147,154-155,159
+  s_51427bde09c3f6::t_478f5a8c954603 229
+  s_51427bde09c3f6::t_31fd0c80d29246 22-26,31,142,148
+  s_51427bde09c3f6::t_a88d5849d3cae9 28-30,32-35,47-48,51-57,123-139,150,153,157,160-166,168-171,174,180-183,189,191,193,195,198,201,205,207-208,210-214,219,226,235-240,248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a5e43fb7439519c520f5d9486fd74d92bf2f5f77",
+  "prompts": {},
+  "sessions": {
+    "s_51427bde09c3f6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e314-fb5c-7358-9fe2-86388c3c3dfe",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

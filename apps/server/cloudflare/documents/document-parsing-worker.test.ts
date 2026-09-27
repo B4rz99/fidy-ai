@@ -27,12 +27,12 @@ const parse = (body: BodyInit, headers?: HeadersInit, signal?: AbortSignal): Pro
 describe("Document parsing Worker proof", () => {
   it.effect("sniffs CSV bytes instead of trusting a mismatched type claim", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         parse("Date,Amount\n2026-01-01,1000", { "content-type": "application/pdf" })
       );
 
       expect(response.status).toBe(200);
-      expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
         format: "csv",
         outcome: "parsed",
         rowCount: 1,
@@ -46,10 +46,10 @@ describe("Document parsing Worker proof", () => {
       const bytes = yield* readFixture(
         "../../src/shell/ingestion/fixtures/synthetic-statement.xlsx"
       );
-      const response = yield* Effect.promise(() => parse(new Uint8Array(bytes)));
+      const response = yield* Effect.tryPromise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(200);
-      expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
         format: "xlsx",
         outcome: "parsed",
         rowCount: 2,
@@ -62,10 +62,10 @@ describe("Document parsing Worker proof", () => {
   it.effect("rejects a genuinely encrypted PDF instead of interpreting it as CSV", () =>
     Effect.gen(function* () {
       const bytes = yield* readFixture("./fixtures/protected-document.pdf");
-      const response = yield* Effect.promise(() => parse(new Uint8Array(bytes)));
+      const response = yield* Effect.tryPromise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(422);
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         outcome: "rejected",
         reason: "unsupported-format",
       });
@@ -75,10 +75,10 @@ describe("Document parsing Worker proof", () => {
   it.effect("rejects image bytes instead of interpreting them as CSV", () =>
     Effect.gen(function* () {
       const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]);
-      const response = yield* Effect.promise(() => parse(bytes));
+      const response = yield* Effect.tryPromise(() => parse(bytes));
 
       expect(response.status).toBe(422);
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         outcome: "rejected",
         reason: "unsupported-format",
       });
@@ -87,14 +87,14 @@ describe("Document parsing Worker proof", () => {
 
   it.effect("rejects an oversized declared body before reading it", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         parse("not read", {
           "content-length": String(statementParserLimits.maximumDecodedBytes + 1),
         })
       );
 
       expect(response.status).toBe(413);
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         outcome: "rejected",
         reason: "resource-limit",
       });
@@ -116,12 +116,12 @@ describe("Document parsing Worker proof", () => {
         },
       });
 
-      const response = yield* Effect.promise(() => parse(body));
+      const response = yield* Effect.tryPromise(() => parse(body));
 
       expect(response.status).toBe(413);
       expect(cancelled).toBe(true);
       expect(emittedChunks).toBeLessThanOrEqual(7);
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         outcome: "rejected",
         reason: "resource-limit",
       });
@@ -141,11 +141,11 @@ describe("Document parsing Worker proof", () => {
           abort.abort();
         },
       });
-      const response = yield* Effect.promise(() => parse(body, {}, abort.signal));
+      const response = yield* Effect.tryPromise(() => parse(body, {}, abort.signal));
 
       expect(response.status).toBe(499);
       expect(cancelled).toBe(true);
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         outcome: "rejected",
         reason: "cancelled",
       });

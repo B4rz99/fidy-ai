@@ -2853,7 +2853,7 @@ it(
         // The aggregate bound is a request-shape refusal, not a child failure contract: it names no
         // child, so no failedCallIndex is fabricated and no child is admitted.
         expect(failure.error.message).toBe("Invalid atomic batch input.");
-        yield* Effect.promise(() => expect(batchRejectionOf(refused)).rejects.toThrow());
+        yield* Effect.tryPromise(() => expect(batchRejectionOf(refused)).rejects.toThrow());
         yield* expectCanonicalState(runtime.db, {
           transactions: 0,
           transaction_audit: 1,

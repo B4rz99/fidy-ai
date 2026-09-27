@@ -36,7 +36,7 @@ const verify = (
 it("authenticates an independently calculated ordered-property Wompi event vector", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      expect(yield* Effect.promise(() => verify(event))).toEqual(
+      expect(yield* Effect.tryPromise(() => verify(event))).toEqual(
         Option.some({
           transactionId: event.data.transaction.id,
           signedAt: event.timestamp,
@@ -50,25 +50,25 @@ it("rejects changed status, forged checksum, unsigned ids and a different provid
   Effect.runPromise(
     Effect.gen(function* () {
       expect(
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           verify({
             ...event,
             data: { transaction: { ...event.data.transaction, status: "DECLINED" } },
           })
         )
       ).toEqual(Option.none());
-      expect(yield* Effect.promise(() => verify(event, "0".repeat(checksum.length)))).toEqual(
+      expect(yield* Effect.tryPromise(() => verify(event, "0".repeat(checksum.length)))).toEqual(
         Option.none()
       );
       expect(
-        yield* Effect.promise(() =>
+        yield* Effect.tryPromise(() =>
           verify({
             ...event,
             signature: { ...event.signature, properties: ["transaction.status"] },
           })
         )
       ).toEqual(Option.none());
-      expect(yield* Effect.promise(() => verify({ ...event, environment: "test" }))).toEqual(
+      expect(yield* Effect.tryPromise(() => verify({ ...event, environment: "test" }))).toEqual(
         Option.none()
       );
     })

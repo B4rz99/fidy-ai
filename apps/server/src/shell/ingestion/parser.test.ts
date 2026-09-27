@@ -270,7 +270,7 @@ it.effect("ignores a workbook VBA project while parsing statement cells", () =>
 it.effect("reads XLSX cells directly and retains hidden/formula evidence", () =>
   Effect.gen(function* () {
     const bytes = new Uint8Array(
-      yield* Effect.promise(() =>
+      yield* Effect.tryPromise(() =>
         Bun.file(new URL("./fixtures/synthetic-statement.xlsx", import.meta.url)).bytes()
       )
     );

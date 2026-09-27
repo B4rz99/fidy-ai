@@ -42,13 +42,13 @@ describe("Document extraction Worker proof", () => {
     "converts a bounded $expectedName through the Workers AI binding",
     ({ fixture, expectedName }) =>
       Effect.gen(function* () {
-        const body = yield* Effect.promise(() => readFixture(fixture));
+        const body = yield* Effect.tryPromise(() => readFixture(fixture));
         const bindings = successfulBindings("bounded markdown");
-        const response = yield* Effect.promise(() => extract(body, bindings));
+        const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
         expect(response.status).toBe(200);
         const result = yield* Schema.decodeUnknownEffect(ConvertedResponse)(
-          yield* Effect.promise(() => responseBody(response))
+          yield* Effect.tryPromise(() => responseBody(response))
         );
         expect(result.outcome).toBe("converted");
         expect(result.outputBytes).toBe(16);
@@ -62,9 +62,9 @@ describe("Document extraction Worker proof", () => {
 
   it.effect("selects the converter from bytes rather than a mismatched content-type claim", () =>
     Effect.gen(function* () {
-      const body = yield* Effect.promise(() => readFixture("valid-image.png"));
+      const body = yield* Effect.tryPromise(() => readFixture("valid-image.png"));
       const bindings = successfulBindings("image");
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         extract(body, bindings, { headers: { "content-type": "application/pdf" } })
       );
 
@@ -94,10 +94,10 @@ describe("Document extraction Worker proof", () => {
   ])("rejects $label before invoking Workers AI", ({ body, expectedReason }) =>
     Effect.gen(function* () {
       const bindings = successfulBindings("must not run");
-      const response = yield* Effect.promise(() => extract(body, bindings));
+      const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
       expect(response.status).toBe(422);
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: expectedReason,
       });
@@ -109,10 +109,10 @@ describe("Document extraction Worker proof", () => {
     Effect.gen(function* () {
       const body = Uint8Array.fromBase64("iVBORw0KGgoAAAANSUhEUgD/////AAAAAQ==");
       const bindings = successfulBindings("must not run");
-      const response = yield* Effect.promise(() => extract(body, bindings));
+      const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
       expect(response.status).toBe(413);
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: "resource-limit",
       });
@@ -122,12 +122,12 @@ describe("Document extraction Worker proof", () => {
 
   it.effect("rejects an encrypted PDF for the isolated protected-document path", () =>
     Effect.gen(function* () {
-      const body = yield* Effect.promise(() => readFixture("protected-document.pdf"));
+      const body = yield* Effect.tryPromise(() => readFixture("protected-document.pdf"));
       const bindings = successfulBindings("must not run");
-      const response = yield* Effect.promise(() => extract(body, bindings));
+      const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
       expect(response.status).toBe(422);
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: "password-required",
       });
@@ -138,7 +138,7 @@ describe("Document extraction Worker proof", () => {
   it.effect("rejects a declared body above the input ceiling before invoking Workers AI", () =>
     Effect.gen(function* () {
       const bindings = successfulBindings("must not run");
-      const response = yield* Effect.promise(() =>
+      const response = yield* Effect.tryPromise(() =>
         extract("%PDF-1.7\n%%EOF", bindings, {
           headers: { "content-length": String(documentExtractionLimits.maximumInputBytes + 1) },
         })
@@ -162,7 +162,7 @@ describe("Document extraction Worker proof", () => {
         },
       });
       const bindings = successfulBindings("must not run");
-      const response = yield* Effect.promise(() => extract(body, bindings));
+      const response = yield* Effect.tryPromise(() => extract(body, bindings));
 
       expect(response.status).toBe(413);
       expect(cancelled).toBe(true);
@@ -175,11 +175,11 @@ describe("Document extraction Worker proof", () => {
       const bindings = successfulBindings(
         "x".repeat(documentExtractionLimits.maximumOutputBytes + 1)
       );
-      const response = yield* Effect.promise(() => extract("%PDF-1.4\n%%EOF", bindings));
+      const response = yield* Effect.tryPromise(() => extract("%PDF-1.4\n%%EOF", bindings));
 
       expect(response.status).toBe(413);
       expect(bindings.AI.toMarkdown).toHaveBeenCalledOnce();
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: "resource-limit",
       });
@@ -191,10 +191,10 @@ describe("Document extraction Worker proof", () => {
       const bindings: Parameters<typeof documentExtractionWorker.fetch>[1] = {
         AI: { toMarkdown: vi.fn(() => Promise.reject(new Error("provider details"))) },
       };
-      const response = yield* Effect.promise(() => extract("%PDF-1.4\n%%EOF", bindings));
+      const response = yield* Effect.tryPromise(() => extract("%PDF-1.4\n%%EOF", bindings));
 
       expect(response.status).toBe(422);
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: "conversion-failed",
       });
@@ -217,12 +217,12 @@ describe("Document extraction Worker proof", () => {
       const responsePromise = extract("%PDF-1.4\n%%EOF", bindings, {
         signal: controller.signal,
       });
-      yield* Effect.promise(() => conversionStarted.promise);
+      yield* Effect.tryPromise(() => conversionStarted.promise);
       controller.abort();
-      const response = yield* Effect.promise(() => responsePromise);
+      const response = yield* Effect.tryPromise(() => responsePromise);
 
       expect(response.status).toBe(499);
-      expect(yield* Effect.promise(() => responseBody(response))).toEqual({
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
         outcome: "rejected",
         reason: "cancelled",
       });

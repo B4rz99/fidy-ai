@@ -11,6 +11,9 @@ const expectSeriousAccessibilityViolations = async (page: Page): Promise<void> =
 
 const ok = 200;
 const notFound = 404;
+const accepted = 204;
+const forbidden = 403;
+const methodNotAllowed = 405;
 
 test("serves the checked-in security policy on SPA fallbacks", async ({ request }) => {
   const shell = await request.get("/app/transactions");
@@ -52,6 +55,41 @@ test("does not publish an OpenAPI document or source maps as static assets", asy
       (body) => !body.includes('id="root"')
     )
   ).toBe(true);
+});
+
+test("keeps API ownership and credentialed CORS on the real ingress, not the static host", async ({
+  request,
+}) => {
+  const api = "https://127.0.0.1:4174";
+  const browser = "https://127.0.0.1:4173";
+  const headers = {
+    origin: browser,
+    "access-control-request-method": "POST",
+    "access-control-request-headers": "content-type",
+  };
+  const preflight = await request.fetch(`${api}/web/pairings`, {
+    method: "OPTIONS",
+    headers,
+  });
+  expect(preflight.status()).toBe(accepted);
+  expect(preflight.headers()["access-control-allow-origin"]).toBe(browser);
+  expect(preflight.headers()["access-control-allow-credentials"]).toBe("true");
+  expect(preflight.headers()["cache-control"]).toBe("no-store");
+  const hostile = await request.fetch(`${api}/web/pairings`, {
+    method: "OPTIONS",
+    headers: { ...headers, origin: "https://attacker.example" },
+  });
+  expect(hostile.status()).toBe(forbidden);
+  expect(hostile.headers()["access-control-allow-origin"]).toBeUndefined();
+  const wrongMethod = await request.get(`${api}/web/pairings`, { headers: { origin: browser } });
+  expect(wrongMethod.status()).toBe(methodNotAllowed);
+  expect(wrongMethod.headers().allow).toBe("POST");
+  expect((await request.post("/web/pairings")).status()).toBe(methodNotAllowed);
+  const staticAuth = await request.get("/web/email/authentication/start");
+  expect(staticAuth.status()).toBe(ok);
+  expect(staticAuth.headers()["content-type"]).toContain("text/html");
+  expect(staticAuth.headers()["set-cookie"]).toBeUndefined();
+  expect((await request.get(`${api}/openapi.json`)).status()).toBe(notFound);
 });
 
 test("renders the public home route without serious accessibility violations", async ({ page }) => {

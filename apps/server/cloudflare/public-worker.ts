@@ -41,6 +41,7 @@ const apiSecurityHeaders = {
 
 const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> => {
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
+  if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
   return Option.none();
 };

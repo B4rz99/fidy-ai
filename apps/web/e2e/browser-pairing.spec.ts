@@ -291,6 +291,49 @@ test("approves email login with the private browser verifier without exposing ma
   ).toEqual({ local: 0, session: 0 });
 });
 
+test("a SupportRecoveryCase approves only the existing browser-private pairing", async ({
+  page,
+}) => {
+  let approvedBySupport = false;
+  await installStartAndLogoutRoutes(page, {
+    startCount: 0,
+    redeemCount: 0,
+    activeRedeems: 0,
+    maximumActiveRedeems: 0,
+    logoutCount: 0,
+    redeemTimes: [],
+  });
+  await page.route("**/web/pairings/redeem", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
+    return route.fulfill({
+      contentType: "application/json",
+      status: approvedBySupport ? successStatus : pendingStatus,
+      headers: approvedBySupport
+        ? {
+            "set-cookie":
+              "__Host-fidy_session=support-session; Secure; HttpOnly; SameSite=Strict; Path=/",
+          }
+        : {},
+      body: JSON.stringify(
+        approvedBySupport
+          ? { status: "authenticated" }
+          : { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
+      ),
+    });
+  });
+  const pending = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
+  );
+  await page.goto("/auth/pair");
+  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
+  await pending;
+  await expectVerifierIsBrowserEphemeral(page);
+  approvedBySupport = true;
+  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
+  expect(page.url()).not.toContain(privateVerifier);
+});
+
 test("honors server slowdown before showing the generic terminal refusal", async ({ page }) => {
   let redeemCount = 0;
   await page.route("**/web/pairings", (route) =>

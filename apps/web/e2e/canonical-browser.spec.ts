@@ -1,15 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const apiOrigin = "https://127.0.0.1:4174";
-const user = {
-  id: "24000000-0000-4000-8000-000000000241",
-  serviceMarket: "CO",
-  locale: "es-CO",
-  timeZone: "America/Bogota",
-  trialPeriod: { startedAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-08T00:00:00Z" },
-  createdAt: "2026-08-01T00:00:00Z",
-};
-const response = (data: unknown): string => JSON.stringify({ data, next: [] });
+import { apiOrigin, response, user } from "./http-fixtures";
 
 // Browser-level HTTP fixtures exercise the built app and generated client; platform authority is
 // covered separately by the public-ingress integration tests, not simulated in this suite.

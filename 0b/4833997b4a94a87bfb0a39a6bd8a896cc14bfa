@@ -1,0 +1,43 @@
+scripts/oxlint/effect-guards.js
+  s_faf8a5df7be82b::t_5e8d6846ba9fcf 60
+  s_faf8a5df7be82b::t_2513353ee72099 229,262,500,925
+  s_faf8a5df7be82b::t_759104a5b80eb1 923
+apps/server/scripts/check-lint-guards.ts
+  s_faf8a5df7be82b::t_0ab41333263436 13-17,20-22
+  s_faf8a5df7be82b::t_316a82a075f250 26-28,30
+  s_faf8a5df7be82b::t_78a4489fb97bf6 18-19,23-25
+  s_faf8a5df7be82b::t_56cbd8a92fe93e 7-12
+  s_faf8a5df7be82b::t_003c31d70cb1e3 29,31-32
+CODING_STANDARDS.md
+  s_faf8a5df7be82b::t_05a3d2696469f0 54,108,110
+  s_faf8a5df7be82b::t_0cd8a029f34baf 104-105,109
+  s_faf8a5df7be82b::t_64bf1348e08509 32-33,58-60,151,265
+  s_faf8a5df7be82b::t_9e1a1162fb060c 164-167
+scripts/oxlint/lint-rules.test.js
+  s_faf8a5df7be82b::t_0b40be6c193b29 200
+  s_faf8a5df7be82b::t_b85dfec99bf6ba 3-5,29,64-106
+  s_faf8a5df7be82b::t_5f1108d7c6141e 176-199,201-205
+  s_faf8a5df7be82b::t_c63a5ad4b7767c 107
+docs/research/anti-slop-effect-rules-assessment.md
+  s_faf8a5df7be82b::t_68439ba0e71cbe 7,11-15,17
+  s_faf8a5df7be82b::t_e43dd9eea3ff1a 19,23,27
+  s_faf8a5df7be82b::t_5dfefbf010331b 21
+  s_faf8a5df7be82b::t_6fca27e8fb78c2 16
+  s_faf8a5df7be82b::t_600b2fae0fa7e0 1-6,8-10,18,20,22,24-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0b4833997b4a94a87bfb0a39a6bd8a896cc14bfa",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

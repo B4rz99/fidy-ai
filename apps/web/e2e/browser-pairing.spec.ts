@@ -341,7 +341,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
   const approval = await request.post(`http://127.0.0.1:4175/approve?code=${code}`);
   expect(approval.status()).toBe(noContentStatus);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  await expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible();
   const session = Array.findFirst(
     await context.cookies(),
     (cookie) => cookie.name === "__Host-fidy_session"

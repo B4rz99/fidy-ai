@@ -1,0 +1,19 @@
+apps/server/tools/contracts/check.ts
+  s_6c913d3db00564::t_0da02b2c582d53 4,295-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f376374274248e334d47593f448d1b17d08abcc9",
+  "prompts": {},
+  "sessions": {
+    "s_6c913d3db00564": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17d-107f-730e-b825-19031c3d8303",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -110,22 +110,6 @@ test("keeps API ownership and credentialed CORS on the real ingress, not the sta
       expect((yield* wait(request.get(`${api}/openapi.json`))).status()).toBe(notFound);
     })
   ));
-test("creates a browser pairing through the real public and Core Workers", ({ request }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const response = yield* wait(
-        request.post("https://127.0.0.1:4174/web/pairings", {
-          headers: { origin: "https://127.0.0.1:4173" },
-        })
-      );
-      expect(response.ok()).toBe(true);
-      expect(yield* wait(response.json())).toMatchObject({
-        pairingId: expect.any(String),
-        privateVerifier: expect.any(String),
-        publicCode: expect.any(String),
-      });
-    })
-  ));
 const expectUnauthenticated = (request: APIRequestContext, path: string): Promise<void> =>
   request
     .get(`https://127.0.0.1:4174${path}`, { headers: { origin: "https://127.0.0.1:4173" } })

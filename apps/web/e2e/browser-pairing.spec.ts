@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { makeUser, response } from "./http-fixtures";
+import { visiblePairingCode } from "./real-core-fixture";
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
@@ -349,19 +350,6 @@ test("approves email login with the private browser verifier without exposing ma
       ).toEqual({ local: 0, session: 0 });
     })
   ));
-const visiblePairingCode = (page: Page): Promise<string> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const locator = page.locator('[aria-label^="Código de vinculación "]');
-      yield* wait(expect(locator).toBeVisible());
-      const code = (yield* wait(locator.getAttribute("aria-label")))?.replace(
-        "Código de vinculación ",
-        ""
-      );
-      expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
-      return code ?? "";
-    })
-  );
 type BrowserCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
 const verifyRevokedBrowser = (
   page: Page,

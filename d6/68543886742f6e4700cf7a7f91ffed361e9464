@@ -1,0 +1,36 @@
+apps/server/tools/contracts/digest-artifacts.ts
+  s_4427c17cb16cae::t_0c865b1888e12d 3
+apps/server/ARCHITECTURE.md
+  s_4427c17cb16cae::t_3fb32863916874 42-43
+apps/server/tools/contracts/artifacts.test.ts
+  s_4427c17cb16cae::t_4346ccbd0cfd07 1-20,24
+  s_4427c17cb16cae::t_32a8720043d1c2 21-23
+apps/server/tools/contracts/generate.ts
+  s_4427c17cb16cae::t_db340a0a9d690a 15
+.oxlintrc.json
+  s_4427c17cb16cae::t_38f49e29efb945 184,186,200,202
+ARCHITECTURE.md
+  s_4427c17cb16cae::t_99be98ea56fe7c 26,77
+  s_4427c17cb16cae::t_3bea75078b4ace 27
+apps/server/tools/contracts/artifacts.ts
+  s_4427c17cb16cae::t_a8cfb75874a5da 1-17,52-59
+  s_4427c17cb16cae::t_4e280dd505dfeb 36-44
+docs/server-contract-artifacts.md
+  s_4427c17cb16cae::t_823fbc4b54835b 1,13-14,16-18,20,23-25,28-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d668543886742f6e4700cf7a7f91ffed361e9464",
+  "prompts": {},
+  "sessions": {
+    "s_4427c17cb16cae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e15d-d35e-7790-889d-38a95837b9d7",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

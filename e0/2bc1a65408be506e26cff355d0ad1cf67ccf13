@@ -1,0 +1,100 @@
+.agents/skills/wrangler/references/ai-and-databases.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-110
+.agents/skills/wrangler/references/configuration.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-109
+.agents/skills/domain-modeling/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/vercel-react-best-practices/RULE-INDEX.md
+  s_162531c4eb7fd9::t_5149c306deb27d 1-97
+.agents/skills/cloudflare/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3,31,33,35
+.agents/skills/wrangler/references/async-and-containers.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-184
+.agents/skills/wayfinder/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/shadcn/COMPONENTS.md
+  s_162531c4eb7fd9::t_2233270568ff88 63
+  s_162531c4eb7fd9::t_5149c306deb27d 1-62,64-77
+.agents/skills/diagnosing-bugs/SKILL.md
+  s_162531c4eb7fd9::t_5149c306deb27d 8,10,12,14,16,18,20,22,24,26,28,30
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/implement/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 11,13
+  s_162531c4eb7fd9::t_e4c3b1dab27a3e 7,9,15-19
+.agents/skills/shadcn/SKILL.md
+  s_162531c4eb7fd9::t_5149c306deb27d 10,12,14,16-19,21
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/opening-a-pr/PR-BODY.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-152
+.agents/skills/writing-for-agents/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 10-13
+.agents/skills/to-spec/SKILL.md
+  s_162531c4eb7fd9::t_5149c306deb27d 9,17,33,41
+.agents/skills/shadcn/UPDATING.md
+  s_162531c4eb7fd9::t_5149c306deb27d 1-12,14-34
+  s_162531c4eb7fd9::t_2233270568ff88 13
+.agents/skills/vercel-react-best-practices/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+  s_162531c4eb7fd9::t_5149c306deb27d 14,29,49
+.agents/skills/herdr/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/grilling/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/wrangler/references/storage.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-171
+.agents/skills/wrangler/SKILL.md
+  s_162531c4eb7fd9::t_f4cfc0cd964d1a 14-23
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3,8,10,12,25
+.agents/skills/tdd/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3,8,22,37-39
+.agents/skills/codebase-design/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/wrangler/references/deployment.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-83
+.agents/skills/ask-matt/SKILL.md
+  s_162531c4eb7fd9::t_5149c306deb27d 9-10,30-33
+  s_162531c4eb7fd9::t_f4cfc0cd964d1a 11-29
+  s_162531c4eb7fd9::t_2233270568ff88 34-35
+.agents/skills/diagnosing-bugs/FEEDBACK-LOOPS.md
+  s_162531c4eb7fd9::t_5149c306deb27d 1-16
+.agents/skills/wrangler/references/diagnostics.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-65
+.agents/skills/wrangler/references/local-development.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-92
+.agents/skills/opening-a-pr/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3,22,26,42,69
+  s_162531c4eb7fd9::t_d61e3d3e1f424a 70
+.agents/skills/code-review/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+  s_162531c4eb7fd9::t_e4c3b1dab27a3e 26,112
+  s_162531c4eb7fd9::t_3b909627e42fab 113
+.agents/skills/wrangler/references/secrets-store.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-50
+.agents/skills/implement-spec/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 15,29
+.agents/skills/ask-matt/PHASE-BOUNDARIES.md
+  s_162531c4eb7fd9::t_2233270568ff88 1,3,5,7
+.agents/skills/to-tickets/SKILL.md
+  s_162531c4eb7fd9::t_5149c306deb27d 11,60
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/research/SKILL.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 3
+.agents/skills/cloudflare/PRODUCT-SELECTION.md
+  s_162531c4eb7fd9::t_89ebbdfc70d3fe 1-231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e02bc1a65408be506e26cff355d0ad1cf67ccf13",
+  "prompts": {},
+  "sessions": {
+    "s_162531c4eb7fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e403-ac04-7792-bf6f-f1a6be5a925b",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

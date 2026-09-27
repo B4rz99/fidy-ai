@@ -1,0 +1,19 @@
+apps/server/cloudflare/migrations/0020_dashboard_projection.sql
+  s_7118d7c4e2dd1a::t_f71d7466cc133a 180,182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6b0226e551005f9992edad9b273b05a408e3dbe7",
+  "prompts": {},
+  "sessions": {
+    "s_7118d7c4e2dd1a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0f0-ea02-758b-a06b-93edbc738f44",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

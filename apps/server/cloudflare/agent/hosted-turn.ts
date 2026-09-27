@@ -24,7 +24,6 @@ import { HostedToolCallMaximum } from "@fidy/server/hosted-inference";
 import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
 import {
   maximumHostedTurnIterations,
-  maximumModelRoundMillis,
   maximumToolCallsPerTurn,
 } from "../../src/shell/_shared/hosted-turn-bounds";
 import { executeProtectedCategories } from "../categories/canonical-category";
@@ -103,7 +102,8 @@ type HostedTurnInput = Readonly<{
  * admission and exact evidence; the adapter owns bounded provider rounds and delivery. A lost
  * request after Pending is recovered by the next Turn, never silently reported Completed.
  */
-export const completeHostedTurn = ({
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const completeHostedTurn = async ({
   db,
   subject,
   text,
@@ -111,61 +111,51 @@ export const completeHostedTurn = ({
   deliver,
   signal,
   scheduleRecovery,
-}: HostedTurnInput): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const userId = UserId.make(subject.userId);
-      const snapshot = yield* Effect.tryPromise(() =>
-        readAdmissibleSnapshot({ db, subject, userId })
-      );
-      if (snapshot instanceof Response) return snapshot;
-      const startedAtMs = transactionNow();
-      const selection = selectHostedSession({ snapshot, userId, now: startedAtMs });
-      const activeTurnId = TranscriptTurnId.make(newId());
-      const prepared = yield* Effect.tryPromise(() =>
-        prepareHostedWork({
-          db,
-          subject,
-          selection,
-          snapshot,
-          userId,
-          activeTurnId,
-          startedAtMs,
-          text,
-          inference,
-          signal,
-        })
-      );
-      if (Option.isNone(prepared)) return unavailable();
-      const turn = yield* Effect.tryPromise(() =>
-        admitHostedTurn({
-          db,
-          subject,
-          selection,
-          text,
-          now: startedAtMs,
-          id: activeTurnId,
-        })
-      );
-      if (Option.isNone(turn)) return unauthenticated();
-      yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
-      return yield* Effect.tryPromise(() =>
-        executeAdmittedTurn({
-          db,
-          userId,
-          turnId: turn.value,
-          subject,
-          startedAtMs,
-          prepared: prepared.value,
-          deliver,
-          signal,
-          scheduleRecovery,
-        })
-      );
-    })
-  );
+}: HostedTurnInput): Promise<Response> => {
+  const userId = UserId.make(subject.userId);
+  const snapshot = await readAdmissibleSnapshot({ db, subject, userId });
+  if (snapshot instanceof Response) return snapshot;
+  const startedAtMs = transactionNow();
+  const selection = selectHostedSession(snapshot, userId, startedAtMs);
+  const activeTurnId = TranscriptTurnId.make(newId());
+  const prepared = await prepareHostedWork({
+    db,
+    subject,
+    selection,
+    snapshot,
+    userId,
+    activeTurnId,
+    startedAtMs,
+    text,
+    inference,
+    signal,
+  });
+  if (Option.isNone(prepared)) return unavailable();
+  const turn = await admitHostedTurn({
+    db,
+    subject,
+    selection,
+    text,
+    now: startedAtMs,
+    id: activeTurnId,
+  });
+  if (Option.isNone(turn)) return unauthenticated();
+  await scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs);
+  return executeAdmittedTurn({
+    db,
+    userId,
+    turnId: turn.value,
+    subject,
+    startedAtMs,
+    prepared: prepared.value,
+    deliver,
+    signal,
+    scheduleRecovery,
+  });
+};
 
-const readAdmissibleSnapshot = ({
+// @effect-diagnostics-next-line asyncFunction:off
+const readAdmissibleSnapshot = async ({
   db,
   subject,
   userId,
@@ -173,37 +163,28 @@ const readAdmissibleSnapshot = ({
   db: D1Database;
   subject: TransactionSubject;
   userId: UserId;
-}>): Promise<HostedTurnSnapshot | Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = transactionNow();
-      const initial = yield* Effect.tryPromise(() =>
-        readHostedSnapshot({ db, subject, now: current })
-      );
-      if (Option.isNone(initial)) return unauthenticated();
-      const recovered = yield* Effect.tryPromise(() =>
-        recoverPending({
-          db,
-          userId,
-          pending: initial.value.pending,
-          now: current,
-        })
-      );
-      if (recovered === "awaiting") {
-        return Response.json({ status: "awaiting_delivery" }, { status: 409, headers: noStore });
-      }
-      if (recovered === "error") return unavailable();
-      const fresh = yield* Effect.tryPromise(() =>
-        readHostedSnapshot({ db, subject, now: transactionNow() })
-      );
-      if (Option.isNone(fresh)) return unauthenticated();
-      if (fresh.value.revoked) return consentRequired();
-      if (!fresh.value.capacityAvailable) {
-        return Response.json({ status: "capacity_exceeded" }, { status: 429, headers: noStore });
-      }
-      return fresh.value;
-    })
-  );
+}>): Promise<HostedTurnSnapshot | Response> => {
+  const current = transactionNow();
+  const initial = await readHostedSnapshot(db, subject, current);
+  if (Option.isNone(initial)) return unauthenticated();
+  const recovered = await recoverPending({
+    db,
+    userId,
+    pending: initial.value.pending,
+    now: current,
+  });
+  if (recovered === "awaiting") {
+    return Response.json({ status: "awaiting_delivery" }, { status: 409, headers: noStore });
+  }
+  if (recovered === "error") return unavailable();
+  const fresh = await readHostedSnapshot(db, subject, transactionNow());
+  if (Option.isNone(fresh)) return unauthenticated();
+  if (fresh.value.revoked) return consentRequired();
+  if (!fresh.value.capacityAvailable) {
+    return Response.json({ status: "capacity_exceeded" }, { status: 429, headers: noStore });
+  }
+  return fresh.value;
+};
 
 type WorkPreflight = Readonly<{
   db: D1Database;
@@ -219,7 +200,8 @@ type WorkPreflight = Readonly<{
 }>;
 
 /** Check the complete semantic request before any Pending or User evidence can be written. */
-const prepareHostedWork = ({
+// @effect-diagnostics-next-line asyncFunction:off
+const prepareHostedWork = async ({
   db,
   subject,
   selection,
@@ -230,62 +212,52 @@ const prepareHostedWork = ({
   text,
   inference,
   signal,
-}: WorkPreflight): Promise<Option.Option<PreparedHostedText>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const initial = yield* Effect.tryPromise(() =>
-        readHostedContinuity({
-          db,
-          subject,
-          sessionId: selection.id,
-          now: startedAtMs,
-        })
-      );
-      const continuity = yield* Effect.tryPromise(() =>
-        compactHostedContinuity({
-          db,
-          subject,
-          sessionId: selection.id,
-          now: startedAtMs,
-          inference,
-          initial,
-          signal,
-        })
-      );
-      const context = assembleWorkingContext({
-        sessionId: selection.id,
-        userId,
-        activeTurnId,
-        user: snapshot.user,
-        startedAt: DateTime.makeUnsafe(startedAtMs),
-        memories: continuity.memories,
-        compactedConversation: continuity.compactedConversation,
-        transcript: continuity.transcript,
-        activeRequest: text,
-      });
-      const prepared = yield* Effect.tryPromise(() =>
-        Effect.runPromiseExit(
-          inference.prepareText({
-            context,
-            toolChoice: "auto",
-            maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
-            availableOperations: hostedExecutableOperations.map(({ id }) => id),
-          }),
-          { signal }
-        )
-      );
-      return Exit.isFailure(prepared) || signal.aborted
-        ? Option.none()
-        : Option.some(prepared.value);
-    })
+}: WorkPreflight): Promise<Option.Option<PreparedHostedText>> => {
+  const initial = await readHostedContinuity({
+    db,
+    subject,
+    sessionId: selection.id,
+    now: startedAtMs,
+  });
+  const continuity = await compactHostedContinuity({
+    db,
+    subject,
+    sessionId: selection.id,
+    now: startedAtMs,
+    inference,
+    initial,
+    signal,
+  });
+  const context = assembleWorkingContext({
+    sessionId: selection.id,
+    userId,
+    activeTurnId,
+    user: snapshot.user,
+    startedAt: DateTime.makeUnsafe(startedAtMs),
+    memories: continuity.memories,
+    compactedConversation: continuity.compactedConversation,
+    transcript: continuity.transcript,
+    activeRequest: text,
+  });
+  const prepared = await Effect.runPromiseExit(
+    inference.prepareText({
+      context,
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
+      availableOperations: hostedExecutableOperations.map(({ id }) => id),
+    }),
+    { signal }
   );
+  return Exit.isFailure(prepared) || signal.aborted ? Option.none() : Option.some(prepared.value);
+};
 
 type HostedContinuity = Awaited<ReturnType<typeof readHostedContinuity>>;
 
 /** Best-effort replacement: failure cannot delete evidence or invalidate existing continuity. */
 // No new telemetry: this optional preflight shares the Turn's bounded provider work; existing
 // provider telemetry observes its execution. Failures are contained without reporting User content.
-const compactHostedContinuity = ({
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+const compactHostedContinuity = async ({
   db,
   subject,
   sessionId,
@@ -301,95 +273,81 @@ const compactHostedContinuity = ({
   inference: HostedInferenceService;
   initial: HostedContinuity;
   signal: AbortSignal;
-}>): Promise<HostedContinuity> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const wasAborted = (): boolean => signal.aborted;
-      const prefix = initial.transcript.filter((entry) =>
-        Option.exists(initial.terminalThroughSequence, (cursor) => entry.sequence <= BigInt(cursor))
-      );
-      if (prefix.length === 0 || wasAborted()) {
-        return initial;
-      }
-      const nearEntryCapacity = initial.transcript.length >= compactionEntryTrigger;
-      const counted = nearEntryCapacity
-        ? Option.none()
-        : Option.some(
-            yield* Effect.tryPromise(() =>
-              Effect.runPromiseExit(
-                inference.countTranscript(initial.transcript.map(({ entry }) => entry)),
-                { signal }
-              )
-            )
-          );
-      if (
-        (!nearEntryCapacity &&
-          !Option.exists(
-            counted,
-            (result) =>
-              Exit.isSuccess(result) &&
-              shouldCompactConversation({
-                entryCount: initial.transcript.length,
-                tokenCount: result.value,
-              })
-          )) ||
-        wasAborted()
-      ) {
-        return initial;
-      }
-      if (!(yield* Effect.tryPromise(() => reserveHostedCompaction({ db, subject, sessionId })))) {
-        return initial;
-      }
-      const prepared = yield* Effect.tryPromise(() =>
-        Effect.runPromiseExit(
-          inference.prepareStructured({
-            purpose: "conversation-compaction",
-            context: {
-              prior: Option.map(initial.compactedConversation, ({ text }) => text),
-              entries: prefix.map(({ entry }) => entry),
-            },
-            outputSchema: CompactedConversationOutput,
-          }),
+}>): Promise<HostedContinuity> => {
+  const wasAborted = (): boolean => signal.aborted;
+  const prefix = initial.transcript.filter((entry) =>
+    Option.exists(initial.terminalThroughSequence, (cursor) => entry.sequence <= BigInt(cursor))
+  );
+  if (prefix.length === 0 || wasAborted()) {
+    return initial;
+  }
+  const nearEntryCapacity = initial.transcript.length >= compactionEntryTrigger;
+  const counted = nearEntryCapacity
+    ? Option.none()
+    : Option.some(
+        await Effect.runPromiseExit(
+          inference.countTranscript(initial.transcript.map(({ entry }) => entry)),
           { signal }
         )
       );
-      if (Exit.isFailure(prepared) || wasAborted()) {
-        return initial;
-      }
-      const generated = yield* Effect.tryPromise(() =>
-        Effect.runPromiseExit(prepared.value.execute, { signal })
-      );
-      if (Exit.isFailure(generated) || wasAborted()) {
-        return initial;
-      }
-      const tokens = yield* Effect.tryPromise(() =>
-        Effect.runPromiseExit(inference.countText(generated.value.compactedConversation), {
-          signal,
-        })
-      );
-      if (Exit.isFailure(tokens) || tokens.value > defaultCompactionMaximumTokens || wasAborted()) {
-        return initial;
-      }
-      const last = prefix.at(-1);
-      if (last === undefined) {
-        return initial;
-      }
-      const saved = yield* Effect.tryPromise(() =>
-        commitHostedCompaction({
-          db,
-          subject,
-          sessionId,
-          continuity: initial,
-          throughSequence: Number(last.sequence),
-          text: generated.value.compactedConversation,
-          signal,
-        })
-      );
-      return saved
-        ? yield* Effect.tryPromise(() => readHostedContinuity({ db, subject, sessionId, now }))
-        : initial;
-    })
+  if (
+    (!nearEntryCapacity &&
+      !Option.exists(
+        counted,
+        (result) =>
+          Exit.isSuccess(result) &&
+          shouldCompactConversation({
+            entryCount: initial.transcript.length,
+            tokenCount: result.value,
+          })
+      )) ||
+    wasAborted()
+  ) {
+    return initial;
+  }
+  if (!(await reserveHostedCompaction({ db, subject, sessionId }))) {
+    return initial;
+  }
+  const prepared = await Effect.runPromiseExit(
+    inference.prepareStructured({
+      purpose: "conversation-compaction",
+      context: {
+        prior: Option.map(initial.compactedConversation, ({ text }) => text),
+        entries: prefix.map(({ entry }) => entry),
+      },
+      outputSchema: CompactedConversationOutput,
+    }),
+    { signal }
   );
+  if (Exit.isFailure(prepared) || wasAborted()) {
+    return initial;
+  }
+  const generated = await Effect.runPromiseExit(prepared.value.execute, { signal });
+  if (Exit.isFailure(generated) || wasAborted()) {
+    return initial;
+  }
+  const tokens = await Effect.runPromiseExit(
+    inference.countText(generated.value.compactedConversation),
+    { signal }
+  );
+  if (Exit.isFailure(tokens) || tokens.value > defaultCompactionMaximumTokens || wasAborted()) {
+    return initial;
+  }
+  const last = prefix.at(-1);
+  if (last === undefined) {
+    return initial;
+  }
+  const saved = await commitHostedCompaction({
+    db,
+    subject,
+    sessionId,
+    continuity: initial,
+    throughSequence: Number(last.sequence),
+    text: generated.value.compactedConversation,
+    signal,
+  });
+  return saved ? readHostedContinuity({ db, subject, sessionId, now }) : initial;
+};
 
 const recoverPending = ({
   db,
@@ -401,22 +359,18 @@ const recoverPending = ({
   userId: UserId;
   pending: Option.Option<Parameters<typeof recoverHostedTurn>[0]["turn"]>;
   now: number;
-}>): Promise<"clear" | "awaiting" | "error"> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (Option.isNone(pending)) return "clear" as const;
-      if (
-        pending.value.proposed_at_ms !== null &&
-        now - pending.value.proposed_at_ms < deliveryAcknowledgmentWindowMs
-      ) {
-        return "awaiting" as const;
-      }
-      const recovered = yield* Effect.tryPromise(() =>
-        recoverHostedTurn({ db, userId, turn: pending.value, now })
-      );
-      return recovered ? ("clear" as const) : ("error" as const);
-    })
+}>): Promise<"clear" | "awaiting" | "error"> => {
+  if (Option.isNone(pending)) return Promise.resolve("clear");
+  if (
+    pending.value.proposed_at_ms !== null &&
+    now - pending.value.proposed_at_ms < deliveryAcknowledgmentWindowMs
+  ) {
+    return Promise.resolve("awaiting");
+  }
+  return recoverHostedTurn({ db, userId, turn: pending.value, now }).then((recovered) =>
+    recovered ? ("clear" as const) : ("error" as const)
   );
+};
 
 type AdmittedWork = Readonly<{
   db: D1Database;
@@ -431,7 +385,8 @@ type AdmittedWork = Readonly<{
 }>;
 
 /** The only path allowed to terminalize a Pending Turn. */
-const executeAdmittedTurn = ({
+// @effect-diagnostics-next-line asyncFunction:off
+const executeAdmittedTurn = async ({
   db,
   userId,
   turnId,
@@ -441,149 +396,93 @@ const executeAdmittedTurn = ({
   deliver,
   signal,
   scheduleRecovery,
-}: AdmittedWork): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const finish = (result: HostedTurnOutcome): Promise<boolean> =>
-        finishHostedTurn({
-          db,
-          userId,
-          turnId,
-          startedAtMs,
-          result,
-          subject,
-          now: transactionNow(),
-        });
-      const seenCalls = new Set<string>();
-      // Each continuation is one-shot; the next round starts only after every result is retained.
-      const executeRound = (
-        active: PreparedHostedText,
-        iteration: number,
-        usedCalls: number
-      ): Effect.Effect<Response, Cause.UnknownError> =>
-        Effect.gen(function* () {
-          if (iteration > maximumHostedTurnIterations) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-            );
-            return unavailable();
-          }
-          const remainingMs = startedAtMs + maximumModelRoundMillis - transactionNow();
-          if (remainingMs <= 0) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" })
-            );
-            return unavailable();
-          }
-          const generated = yield* Effect.tryPromise(() =>
-            Effect.runPromiseExit(active.execute.pipe(Effect.timeout(`${remainingMs} millis`)), {
-              signal,
-            })
-          );
-          if (
-            signal.aborted ||
-            (Exit.isFailure(generated) && Cause.hasInterrupts(generated.cause))
-          ) {
-            return (yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" })))
-              ? interrupted()
-              : unavailable();
-          }
-          if (Exit.isFailure(generated)) {
-            const timedOut = Option.exists(
-              Cause.findErrorOption(generated.cause),
-              Cause.isTimeoutError
-            );
-            yield* Effect.tryPromise(() =>
-              finish({
-                _tag: "Failed",
-                reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
-              })
-            );
-            return unavailable();
-          }
-          if (generated.value.toolCalls.length > 0) {
-            const nextCount = usedCalls + generated.value.toolCalls.length;
-            const ids = generated.value.toolCalls.map(({ id }) => id);
-            const duplicate =
-              ids.some((id) => seenCalls.has(id)) || new Set(ids).size !== ids.length;
-            if (
-              nextCount > maximumToolCallsPerTurn ||
-              generated.value.finishReason !== "tool-calls" ||
-              duplicate
-            ) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-              );
-              return unavailable();
-            }
-            const events: Array<HostedToolEvent> = [];
-            let recorded = true;
-            for (const call of generated.value.toolCalls) {
-              seenCalls.add(call.id);
-              const result = yield* Effect.tryPromise(() =>
-                executeHostedTool({ db, subject, userId, turnId, call, iteration })
-              );
-              if (Option.isNone(result)) {
-                recorded = false;
-                break;
-              }
-              events.push(result.value);
-            }
-            if (!recorded) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-              );
-              return unavailable();
-            }
-            const next = yield* Effect.tryPromise(() =>
-              Effect.runPromiseExit(generated.value.continuation.prepare(events), {
-                signal,
-              })
-            );
-            if (Exit.isFailure(next) && Cause.hasInterrupts(next.cause)) {
-              return (yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" })))
-                ? interrupted()
-                : unavailable();
-            }
-            if (Exit.isFailure(next)) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-              );
-              return unavailable();
-            }
-            return yield* executeRound(next.value, iteration + 1, nextCount);
-          }
-          const answer = approvedAnswer(generated.value);
-          if (Option.isNone(answer)) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-            );
-            return unavailable();
-          }
-          return yield* Effect.tryPromise(() =>
-            proposeDelivery({
-              db,
-              userId,
-              turnId,
-              answer: answer.value,
-              deliver,
-              finish,
-              scheduleRecovery,
-            })
-          );
-        });
-      const outcome = yield* Effect.exit(executeRound(prepared, 1, 0));
-      if (Exit.isSuccess(outcome)) return outcome.value;
-      // A platform defect may still have committed a canonical query. Never publish a reply or
-      // claim a successful Turn without its evidence; the durable alarm is the fallback if D1 fails.
-      const result = signal.aborted
-        ? yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" }).catch(() => false))
-        : yield* Effect.tryPromise(() =>
-            finish({ _tag: "Failed", reason: "HostedInferenceFailed" }).catch(() => false)
-          );
-      return result && signal.aborted ? interrupted() : unavailable();
-    })
-  );
+}: AdmittedWork): Promise<Response> => {
+  const finish = (result: HostedTurnOutcome): Promise<boolean> =>
+    finishHostedTurn({ db, userId, turnId, startedAtMs, result, subject, now: transactionNow() });
+  const seenCalls = new Set<string>();
+  // Each continuation is one-shot; the next round starts only after every result is retained.
+  // @effect-diagnostics-next-line asyncFunction:off
+  const executeRound = async (
+    active: PreparedHostedText,
+    iteration: number,
+    usedCalls: number
+  ): Promise<Response> => {
+    if (iteration > maximumHostedTurnIterations) {
+      await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+      return unavailable();
+    }
+    const generated = await Effect.runPromiseExit(
+      active.execute.pipe(Effect.timeout("120 seconds")),
+      {
+        signal,
+      }
+    );
+    if (signal.aborted || (Exit.isFailure(generated) && Cause.hasInterrupts(generated.cause))) {
+      return (await finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
+    }
+    if (Exit.isFailure(generated)) {
+      const timedOut = Option.exists(Cause.findErrorOption(generated.cause), Cause.isTimeoutError);
+      await finish({
+        _tag: "Failed",
+        reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
+      });
+      return unavailable();
+    }
+    if (generated.value.toolCalls.length > 0) {
+      const nextCount = usedCalls + generated.value.toolCalls.length;
+      const ids = generated.value.toolCalls.map(({ id }) => id);
+      const duplicate = ids.some((id) => seenCalls.has(id)) || new Set(ids).size !== ids.length;
+      if (
+        nextCount > maximumToolCallsPerTurn ||
+        generated.value.finishReason !== "tool-calls" ||
+        duplicate
+      ) {
+        await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+        return unavailable();
+      }
+      const events = await generated.value.toolCalls.reduce<
+        Promise<Option.Option<ReadonlyArray<HostedToolEvent>>>
+      >(
+        // @effect-diagnostics-next-line asyncFunction:off
+        async (previous, call) => {
+          const prior = await previous;
+          if (Option.isNone(prior)) return prior;
+          seenCalls.add(call.id);
+          const result = await executeHostedTool({ db, subject, userId, turnId, call, iteration });
+          return Option.map(result, (event) => [...prior.value, event]);
+        },
+        Promise.resolve(Option.some([]))
+      );
+      if (Option.isNone(events)) {
+        await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+        return unavailable();
+      }
+      const next = await Effect.runPromiseExit(generated.value.continuation.prepare(events.value), {
+        signal,
+      });
+      if (Exit.isFailure(next)) {
+        await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+        return unavailable();
+      }
+      return executeRound(next.value, iteration + 1, nextCount);
+    }
+    const answer = approvedAnswer(generated.value);
+    if (Option.isNone(answer)) {
+      await finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+      return unavailable();
+    }
+    return proposeDelivery({
+      db,
+      userId,
+      turnId,
+      answer: answer.value,
+      deliver,
+      finish,
+      scheduleRecovery,
+    });
+  };
+  return executeRound(prepared, 1, 0);
+};
 
 type HostedToolEvent = Extract<
   Parameters<HostedTextResult["continuation"]["prepare"]>[0][number],
@@ -591,7 +490,8 @@ type HostedToolEvent = Extract<
 >;
 
 /** Dispatch only installed catalog queries, retaining exact call and outcome for this Pending Turn. */
-const executeHostedTool = ({
+// @effect-diagnostics-next-line asyncFunction:off
+const executeHostedTool = async ({
   db,
   subject,
   userId,
@@ -605,64 +505,63 @@ const executeHostedTool = ({
   turnId: TranscriptTurnId;
   call: HostedTextResult["toolCalls"][number];
   iteration: number;
-}>): Promise<Option.Option<HostedToolEvent>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const operation = hostedExecutableOperations.find(({ id }) => id === call.operation);
-      const evidence = Schema.decodeUnknownOption(CanonicalToolEvidence)(call.params);
-      const toolCallId = Schema.decodeOption(ToolCallId)(call.id);
-      if (operation === undefined || Option.isNone(evidence) || Option.isNone(toolCallId)) {
-        return Option.none();
-      }
-      const canonicalInput = Schema.decodeOption(operation.input)(evidence.value);
-      if (Option.isNone(canonicalInput)) return Option.none();
-      const identity = {
-        turnId,
-        occurredAt: DateTime.formatIso(DateTime.makeUnsafe(transactionNow())),
-        iteration,
-        toolCallId: toolCallId.value,
-        operation: operation.id,
-      };
-      const callEntry = yield* Schema.decodeEffect(CanonicalToolCallEntry)({
-        _tag: "CanonicalToolCallEntry",
-        ...identity,
-        id: TranscriptEntryId.make(newId()),
-        input: evidence.value,
-      });
-      const recorded = yield* Effect.tryPromise(() =>
-        appendHostedToolEntry({ db, userId, entry: callEntry })
-      );
-      if (!recorded) return Option.none();
-      const response = yield* Effect.tryPromise(() => executeProtectedCategories({ db, subject }));
-      const body = yield* Effect.tryPromise(() => response.json().catch(() => undefined));
-      const output = Schema.decodeUnknownOption(CanonicalToolEvidence)(body);
-      if (Option.isNone(output)) return Option.none();
-      const outcome = response.ok
-        ? { _tag: "Succeeded" as const, output: output.value }
-        : { _tag: "CanonicalOperationFailed" as const, failure: output.value };
-      const result = yield* Schema.decodeEffect(CanonicalToolResultEntry)({
-        _tag: "CanonicalToolResultEntry",
-        ...identity,
-        id: TranscriptEntryId.make(newId()),
-        outcome,
-      });
-      return (yield* Effect.tryPromise(() => appendHostedToolEntry({ db, userId, entry: result })))
-        ? Option.some({
-            _tag: "ToolResult",
-            toolCallId: result.toolCallId,
-            operation: result.operation,
-            outcome: result.outcome,
-          })
-        : Option.none();
+}>): Promise<Option.Option<HostedToolEvent>> => {
+  const operation = hostedExecutableOperations.find(({ id }) => id === call.operation);
+  const evidence = Schema.decodeUnknownOption(CanonicalToolEvidence)(call.params);
+  const toolCallId = Schema.decodeOption(ToolCallId)(call.id);
+  if (operation === undefined || Option.isNone(evidence) || Option.isNone(toolCallId)) {
+    return Option.none();
+  }
+  const canonicalInput = Schema.decodeOption(operation.input)(evidence.value);
+  if (Option.isNone(canonicalInput)) return Option.none();
+  const identity = {
+    turnId,
+    occurredAt: DateTime.formatIso(DateTime.makeUnsafe(transactionNow())),
+    iteration,
+    toolCallId: toolCallId.value,
+    operation: operation.id,
+  };
+  const recorded = await appendHostedToolEntry(
+    db,
+    userId,
+    Schema.decodeSync(CanonicalToolCallEntry)({
+      _tag: "CanonicalToolCallEntry",
+      ...identity,
+      id: TranscriptEntryId.make(newId()),
+      input: evidence.value,
     })
   );
+  if (!recorded) return Option.none();
+  const response = await executeProtectedCategories({ db, subject });
+  const body = await response.json().catch(() => undefined);
+  const output = Schema.decodeUnknownOption(CanonicalToolEvidence)(body);
+  if (Option.isNone(output)) return Option.none();
+  const outcome = response.ok
+    ? { _tag: "Succeeded" as const, output: output.value }
+    : { _tag: "CanonicalOperationFailed" as const, failure: output.value };
+  const result = Schema.decodeSync(CanonicalToolResultEntry)({
+    _tag: "CanonicalToolResultEntry",
+    ...identity,
+    id: TranscriptEntryId.make(newId()),
+    outcome,
+  });
+  return (await appendHostedToolEntry(db, userId, result))
+    ? Option.some({
+        _tag: "ToolResult",
+        toolCallId: result.toolCallId,
+        operation: result.operation,
+        outcome: result.outcome,
+      })
+    : Option.none();
+};
 
 const approvedAnswer = (result: HostedTextResult): Option.Option<TranscriptText> =>
   result.toolCalls.length === 0 && result.finishReason === "stop"
     ? Schema.decodeUnknownOption(TranscriptText)(result.text)
     : Option.none();
 
-const proposeDelivery = ({
+// @effect-diagnostics-next-line asyncFunction:off
+const proposeDelivery = async ({
   db,
   userId,
   turnId,
@@ -678,27 +577,22 @@ const proposeDelivery = ({
   deliver: HostedDelivery;
   finish: (outcome: HostedTurnOutcome) => Promise<boolean>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const receipt = yield* Effect.tryPromise(() =>
-        stageHostedDelivery({ db, userId, turnId, text: answer })
-      );
-      yield* Effect.tryPromise(() =>
-        scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
-      );
-      const delivered = yield* Effect.exit(
-        Effect.tryPromise(() => deliver({ text: answer, turnId, receipt }))
-      );
-      if (Exit.isSuccess(delivered) && delivered.value.ok) return delivered.value;
-      // The channel rejected the proposed reply. Nothing became visible.
-      yield* Effect.tryPromise(() => finish({ _tag: "Failed", reason: "DeliveryFailed" }));
-      return unavailable();
-    })
-  );
+}>): Promise<Response> => {
+  const receipt = await stageHostedDelivery({ db, userId, turnId, text: answer });
+  await scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs);
+  try {
+    const response = await deliver({ text: answer, turnId, receipt });
+    if (response.ok) return response;
+  } catch {
+    // The channel rejected the proposed reply. Nothing became visible.
+  }
+  await finish({ _tag: "Failed", reason: "DeliveryFailed" });
+  return unavailable();
+};
 
 /** Complete only after the authenticated browser has rendered and acknowledged the staged reply. */
-export const acknowledgeBrowserTurn = ({
+// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
+export const acknowledgeBrowserTurn = async ({
   db,
   subject,
   turnId,
@@ -708,17 +602,12 @@ export const acknowledgeBrowserTurn = ({
   subject: TransactionSubject;
   turnId: TranscriptTurnId;
   receipt: string;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const acknowledged = yield* Effect.tryPromise(() =>
-        acknowledgeHostedDelivery({ db, subject, turnId, receipt })
-      );
-      return Option.isSome(acknowledged)
-        ? Response.json({ status: "completed" }, { status: 200, headers: noStore })
-        : unauthenticated();
-    })
-  );
+}>): Promise<Response> => {
+  const acknowledged = await acknowledgeHostedDelivery({ db, subject, turnId, receipt });
+  return Option.isSome(acknowledged)
+    ? Response.json({ status: "completed" }, { status: 200, headers: noStore })
+    : unauthenticated();
+};
 
 /** Decode a bounded User request; the authenticated channel owns its credential separately. */
 export const hostedTurnInput = HostedTurnRequest;

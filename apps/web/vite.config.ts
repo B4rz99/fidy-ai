@@ -4,7 +4,6 @@ import { defineConfig } from "vite";
 import { serverClientBoundary } from "./server-client-boundary.ts";
 
 const publicDirectory = (mode: string): string | false => {
-  if (mode === "preview") return "cloudflare/public";
   if (mode === "production") return "cloudflare/production";
   return false;
 };

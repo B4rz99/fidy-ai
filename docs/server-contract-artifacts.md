@@ -14,8 +14,7 @@ writes:
 - `apps/server/contracts/pat-pairing-openapi.json` from the separate proof-bearing direct API.
 
 These files are deterministic review evidence, not declarations. The canonical OpenAPI and operation
-policy together produce the digest used by Production health, release metadata, and preview
-validation. `bun run contracts:check:freshness` fails if any committed artifact is stale.
+policy together produce the digest used by Production health and release metadata. `bun run contracts:check:freshness` fails if any committed artifact is stale.
 
 ## Prelaunch verification
 

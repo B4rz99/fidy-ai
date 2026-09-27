@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
-import type { BrowserContext, Page } from "@playwright/test";
-import { Array, Clock, DateTime, Effect, Option } from "effect";
+import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
+import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { makeUser, response } from "./http-fixtures";
 
+const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
+  Effect.tryPromise(() => promise);
+const json = (value: object): string => JSON.stringify(value);
+const runFixture = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 const opaqueProofEncodedLength = 43;
-const minimumPollIntervalMilliseconds = 5_000;
+const minimumPollIntervalMilliseconds = 5000;
 const successStatus = 200;
 const pendingStatus = 202;
 const noContentStatus = 204;
@@ -17,9 +21,7 @@ const privateVerifier = "v".repeat(opaqueProofEncodedLength);
 const publicCode = "BCDF-GHJK";
 const expiresAt = "2099-01-01T00:00:00.000Z";
 const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo.";
-
 test.describe.configure({ mode: "parallel" });
-
 type PairingApiFixture = {
   startCount: number;
   redeemCount: number;
@@ -28,461 +30,591 @@ type PairingApiFixture = {
   logoutCount: number;
   readonly redeemTimes: Array<number>;
 };
-
-const installCanonicalProductRoutes = async (page: Page): Promise<void> => {
-  const emptyList = JSON.stringify({ data: [], next: [] });
-  await page.route("**/categories", (route) =>
-    route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
-  );
-  await page.route(/^https:\/\/127\.0\.0\.1:4174\/transactions(?:\?.*)?$/u, (route) =>
-    route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
-  );
-};
-
-const installStartAndLogoutRoutes = async (
-  page: Page,
-  fixture: PairingApiFixture
-): Promise<void> => {
-  await page.route("**/web/pairings", async (route) => {
-    fixture.startCount += 1;
-    await route.fulfill({
-      contentType: "application/json",
-      status: successStatus,
-      body: JSON.stringify({
-        pairingId,
-        privateVerifier,
-        publicCode,
-        expiresAt,
-        pollingIntervalSeconds: 5,
-      }),
-    });
-  });
-  await page.route("**/user", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      status: successStatus,
-      body: response(makeUser()),
+const installCanonicalProductRoutes = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const emptyList = json({ data: [], next: [] });
+      yield* wait(
+        page.route("**/categories", (route) =>
+          route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
+        )
+      );
+      yield* wait(
+        page.route(/^https:\/\/127\.0\.0\.1:4174\/transactions(?:\?.*)?$/u, (route) =>
+          route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
+        )
+      );
     })
   );
-  await installCanonicalProductRoutes(page);
-  await page.route("**/web/session/logout", async (route) => {
-    fixture.logoutCount += 1;
-    await route.fulfill({
-      status: 204,
-      headers: {
-        "set-cookie": "__Host-fidy_session=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
-      },
-    });
-  });
-};
-
-const installPairingApiFixture = async (page: Page): Promise<PairingApiFixture> => {
-  const fixture: PairingApiFixture = {
-    startCount: 0,
-    redeemCount: 0,
-    activeRedeems: 0,
-    maximumActiveRedeems: 0,
-    logoutCount: 0,
-    redeemTimes: [],
-  };
-  await installStartAndLogoutRoutes(page, fixture);
-  await page.route("**/web/pairings/redeem", async (route) => {
-    fixture.activeRedeems += 1;
-    fixture.maximumActiveRedeems = Math.max(fixture.maximumActiveRedeems, fixture.activeRedeems);
-    fixture.redeemCount += 1;
-    fixture.redeemTimes.push(await Effect.runPromise(Clock.currentTimeMillis));
-    expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
-    await Effect.runPromise(Effect.sleep("100 millis"));
-    fixture.activeRedeems -= 1;
-
-    const pending = fixture.redeemCount === 1;
-    const responseHeaders: Record<string, string> = {
-      "access-control-allow-origin": "https://127.0.0.1:4173",
-      "access-control-allow-credentials": "true",
-    };
-    if (!pending) {
-      responseHeaders["set-cookie"] =
-        "__Host-fidy_session=session-test; Secure; HttpOnly; SameSite=Strict; Path=/";
-    }
-    await route.fulfill({
-      contentType: "application/json",
-      status: pending ? pendingStatus : successStatus,
-      headers: responseHeaders,
-      body: JSON.stringify(
-        pending
-          ? { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
-          : { status: "authenticated" }
-      ),
-    });
-  });
-  return fixture;
-};
-
-const expectVerifierIsBrowserEphemeral = async (page: Page): Promise<void> => {
-  expect(page.url()).not.toContain(pairingId);
-  expect(page.url()).not.toContain(privateVerifier);
-  expect(await page.locator("html").textContent()).not.toContain(pairingId);
-  expect(await page.locator("html").textContent()).not.toContain(privateVerifier);
-  expect(
-    await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
-  ).toEqual({ local: 0, session: 0 });
-  expect(await page.evaluate(async () => await caches.keys())).toEqual([]);
-  await expect(page.getByRole("link", { name: "Abrir WhatsApp" })).not.toHaveAttribute(
-    "href",
-    new RegExp(`${pairingId}|${privateVerifier}`, "u")
+const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(
+        page.route("**/web/pairings", (route) =>
+          runFixture(
+            Effect.gen(function* () {
+              fixture.startCount += 1;
+              yield* wait(
+                route.fulfill({
+                  contentType: "application/json",
+                  status: successStatus,
+                  body: json({
+                    pairingId,
+                    privateVerifier,
+                    publicCode,
+                    expiresAt,
+                    pollingIntervalSeconds: 5,
+                  }),
+                })
+              );
+            })
+          )
+        )
+      );
+      yield* wait(
+        page.route("**/user", (route) =>
+          route.fulfill({
+            contentType: "application/json",
+            status: successStatus,
+            body: response(makeUser()),
+          })
+        )
+      );
+      yield* wait(installCanonicalProductRoutes(page));
+      yield* wait(
+        page.route("**/web/session/logout", (route) =>
+          runFixture(
+            Effect.gen(function* () {
+              fixture.logoutCount += 1;
+              yield* wait(
+                route.fulfill({
+                  status: 204,
+                  headers: {
+                    "set-cookie":
+                      "__Host-fidy_session=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+                  },
+                })
+              );
+            })
+          )
+        )
+      );
+    })
   );
-};
-
-test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and logs out", async ({
+const installPairingApiFixture = (page: Page): Promise<PairingApiFixture> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture: PairingApiFixture = {
+        startCount: 0,
+        redeemCount: 0,
+        activeRedeems: 0,
+        maximumActiveRedeems: 0,
+        logoutCount: 0,
+        redeemTimes: [],
+      };
+      yield* wait(installStartAndLogoutRoutes(page, fixture));
+      yield* wait(
+        page.route("**/web/pairings/redeem", (route) =>
+          runFixture(
+            Effect.gen(function* () {
+              fixture.activeRedeems += 1;
+              fixture.maximumActiveRedeems = Math.max(
+                fixture.maximumActiveRedeems,
+                fixture.activeRedeems
+              );
+              fixture.redeemCount += 1;
+              fixture.redeemTimes.push(yield* Clock.currentTimeMillis);
+              expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
+              yield* Effect.sleep("100 millis");
+              fixture.activeRedeems -= 1;
+              const pending = fixture.redeemCount === 1;
+              const responseHeaders: Record<string, string> = {
+                "access-control-allow-origin": "https://127.0.0.1:4173",
+                "access-control-allow-credentials": "true",
+              };
+              if (!pending) {
+                responseHeaders["set-cookie"] =
+                  "__Host-fidy_session=session-test; Secure; HttpOnly; SameSite=Strict; Path=/";
+              }
+              yield* wait(
+                route.fulfill({
+                  contentType: "application/json",
+                  status: pending ? pendingStatus : successStatus,
+                  headers: responseHeaders,
+                  body: json(
+                    pending
+                      ? { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
+                      : { status: "authenticated" }
+                  ),
+                })
+              );
+            })
+          )
+        )
+      );
+      return fixture;
+    })
+  );
+const expectVerifierIsBrowserEphemeral = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(page.url()).not.toContain(pairingId);
+      expect(page.url()).not.toContain(privateVerifier);
+      expect(yield* wait(page.locator("html").textContent())).not.toContain(pairingId);
+      expect(yield* wait(page.locator("html").textContent())).not.toContain(privateVerifier);
+      expect(
+        yield* wait(
+          page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
+        )
+      ).toEqual({ local: 0, session: 0 });
+      expect(yield* wait(page.evaluate(() => caches.keys()))).toEqual([]);
+      yield* wait(
+        expect(page.getByRole("link", { name: "Abrir WhatsApp" })).not.toHaveAttribute(
+          "href",
+          new RegExp(`${pairingId}|${privateVerifier}`, "u")
+        )
+      );
+    })
+  );
+test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and logs out", ({
   context,
   page,
-}) => {
-  const api = await installPairingApiFixture(page);
-  await page.goto("/auth/pair");
-  await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
-  expect(api.startCount).toBe(0);
-
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  await expect(page.getByText(publicCode, { exact: true })).toBeVisible();
-  expect(api.startCount).toBe(1);
-  await expectVerifierIsBrowserEphemeral(page);
-  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible();
-
-  expect(api.redeemCount).toBe(2);
-  expect(api.maximumActiveRedeems).toBe(1);
-  const [firstPollAt = 0, secondPollAt = 0] = api.redeemTimes;
-  expect(secondPollAt - firstPollAt).toBeGreaterThanOrEqual(minimumPollIntervalMilliseconds);
-  expect(await context.cookies()).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        name: "__Host-fidy_session",
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-      }),
-    ])
-  );
-
-  await page.reload();
-  await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
-  expect(api.startCount).toBe(1);
-  expect(await context.cookies()).toEqual(
-    expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])
-  );
-
-  await page.getByRole("button", { name: "Cerrar sesión" }).click();
-  await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
-  expect(api.logoutCount).toBe(1);
-  expect((await context.cookies()).some(({ name }) => name === "__Host-fidy_session")).toBe(false);
-});
-
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const api = yield* wait(installPairingApiFixture(page));
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(
+        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
+      );
+      expect(api.startCount).toBe(0);
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      expect(api.startCount).toBe(1);
+      yield* wait(expectVerifierIsBrowserEphemeral(page));
+      yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
+      yield* wait(expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible());
+      expect(api.redeemCount).toBe(2);
+      expect(api.maximumActiveRedeems).toBe(1);
+      const [firstPollAt = 0, secondPollAt = 0] = api.redeemTimes;
+      expect(secondPollAt - firstPollAt).toBeGreaterThanOrEqual(minimumPollIntervalMilliseconds);
+      expect(yield* wait(context.cookies())).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "__Host-fidy_session",
+            httpOnly: true,
+            secure: true,
+            sameSite: "Strict",
+          }),
+        ])
+      );
+      yield* wait(page.reload());
+      yield* wait(expect(page.getByText("America/Bogota", { exact: true })).toBeVisible());
+      expect(api.startCount).toBe(1);
+      expect(yield* wait(context.cookies())).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])
+      );
+      yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
+      yield* wait(
+        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
+      );
+      expect(api.logoutCount).toBe(1);
+      expect(
+        (yield* wait(context.cookies())).some(({ name }) => name === "__Host-fidy_session")
+      ).toBe(false);
+    })
+  ));
 const emailLoginCode = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
 const emailLoginAddress = "usuario@example.com";
-
-const installEmailApprovalRoutes = async (
+const installEmailApprovalRoutes = (
   page: Page
 ): Promise<{
   isApproved: () => boolean;
   attempts: () => number;
-}> => {
-  let completed = false;
-  let attempts = 0;
-  await page.route("**/web/email/authentication/start", async (route) => {
-    expect(route.request().postDataJSON()).toEqual({
-      pairingId,
-      privateVerifier,
-      email: emailLoginAddress,
-    });
-    await route.fulfill({
-      contentType: "application/json",
-      status: pendingStatus,
-      body: JSON.stringify({ status: "pending", retryAfterSeconds: 60 }),
-    });
-  });
-  await page.route("**/web/email/authentication/complete", async (route) => {
-    attempts += 1;
-    expect(route.request().postDataJSON()).toEqual({
-      pairingId,
-      privateVerifier,
-      combinedCode: emailLoginCode,
-    });
-    completed = attempts === 2;
-    await route.fulfill(
-      completed
-        ? {
-            status: successStatus,
+}> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let completed = false;
+      let attempts = 0;
+      yield* wait(
+        page.route("**/web/email/authentication/start", (route) => {
+          expect(route.request().postDataJSON()).toEqual({
+            pairingId,
+            privateVerifier,
+            email: emailLoginAddress,
+          });
+          return route.fulfill({
             contentType: "application/json",
-            body: JSON.stringify({ status: "approved" }),
-          }
-        : {
-            status: invalidStatus,
-            contentType: "application/json",
-            body: JSON.stringify({
-              error: { code: "email_authentication_invalid", message: "El código no es válido." },
-            }),
-          }
-    );
-  });
-  return { isApproved: () => completed, attempts: () => attempts };
-};
-
-const installEmailLoginRoutes = async (page: Page): Promise<() => number> => {
-  await installStartAndLogoutRoutes(page, {
-    startCount: 0,
-    redeemCount: 0,
-    activeRedeems: 0,
-    maximumActiveRedeems: 0,
-    logoutCount: 0,
-    redeemTimes: [],
-  });
-  const approval = await installEmailApprovalRoutes(page);
-  await page.route("**/web/pairings/redeem", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      status: approval.isApproved() ? successStatus : pendingStatus,
-      headers: approval.isApproved()
-        ? {
-            "set-cookie":
-              "__Host-fidy_session=session-test; Secure; HttpOnly; SameSite=Strict; Path=/",
-          }
-        : {},
-      body: JSON.stringify(
-        approval.isApproved()
-          ? { status: "authenticated" }
-          : { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
-      ),
+            status: pendingStatus,
+            body: json({ status: "pending", retryAfterSeconds: 60 }),
+          });
+        })
+      );
+      yield* wait(
+        page.route("**/web/email/authentication/complete", (route) => {
+          attempts += 1;
+          expect(route.request().postDataJSON()).toEqual({
+            pairingId,
+            privateVerifier,
+            combinedCode: emailLoginCode,
+          });
+          completed = attempts === 2;
+          return route.fulfill(
+            completed
+              ? {
+                  status: successStatus,
+                  contentType: "application/json",
+                  body: json({ status: "approved" }),
+                }
+              : {
+                  status: invalidStatus,
+                  contentType: "application/json",
+                  body: json({
+                    error: {
+                      code: "email_authentication_invalid",
+                      message: "El código no es válido.",
+                    },
+                  }),
+                }
+          );
+        })
+      );
+      return { isApproved: () => completed, attempts: () => attempts };
     })
   );
-  return approval.attempts;
-};
-
-test("approves email login with the private browser verifier without exposing mailbox proof", async ({
+const installEmailLoginRoutes = (page: Page): Promise<() => number> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(
+        installStartAndLogoutRoutes(page, {
+          startCount: 0,
+          redeemCount: 0,
+          activeRedeems: 0,
+          maximumActiveRedeems: 0,
+          logoutCount: 0,
+          redeemTimes: [],
+        })
+      );
+      const approval = yield* wait(installEmailApprovalRoutes(page));
+      yield* wait(
+        page.route("**/web/pairings/redeem", (route) =>
+          route.fulfill({
+            contentType: "application/json",
+            status: approval.isApproved() ? successStatus : pendingStatus,
+            headers: approval.isApproved()
+              ? {
+                  "set-cookie":
+                    "__Host-fidy_session=session-test; Secure; HttpOnly; SameSite=Strict; Path=/",
+                }
+              : {},
+            body: json(
+              approval.isApproved()
+                ? { status: "authenticated" }
+                : { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
+            ),
+          })
+        )
+      );
+      return approval.attempts;
+    })
+  );
+test("approves email login with the private browser verifier without exposing mailbox proof", ({
   page,
-}) => {
-  const attempts = await installEmailLoginRoutes(page);
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  await expect(page.getByText(publicCode, { exact: true })).toBeVisible();
-  await page.getByLabel("O accede con tu correo verificado").fill(emailLoginAddress);
-  await page.getByRole("button", { name: "Enviar código por correo" }).click();
-  await expect(page.getByLabel("Código recibido por correo")).toBeVisible();
-  await page.getByLabel("Código recibido por correo").fill(emailLoginCode);
-  await page.getByRole("button", { name: "Aprobar este navegador" }).click();
-  await expect(
-    page.getByText("El código no es válido. Revisa el correo o solicita uno nuevo.")
-  ).toBeVisible();
-  await page.getByLabel("Código recibido por correo").fill(emailLoginCode);
-  await page.getByRole("button", { name: "Aprobar este navegador" }).click();
-  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  expect(attempts()).toBe(2);
-  expect(page.url()).not.toContain(emailLoginCode);
-  expect(
-    await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
-  ).toEqual({ local: 0, session: 0 });
-});
-
-const visiblePairingCode = async (page: Page): Promise<string> => {
-  const locator = page.locator('[aria-label^="Código de vinculación "]');
-  await expect(locator).toBeVisible();
-  const code = (await locator.getAttribute("aria-label"))?.replace("Código de vinculación ", "");
-  expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
-  return code ?? "";
-};
-
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const attempts = yield* wait(installEmailLoginRoutes(page));
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      yield* wait(page.getByLabel("O accede con tu correo verificado").fill(emailLoginAddress));
+      yield* wait(page.getByRole("button", { name: "Enviar código por correo" }).click());
+      yield* wait(expect(page.getByLabel("Código recibido por correo")).toBeVisible());
+      yield* wait(page.getByLabel("Código recibido por correo").fill(emailLoginCode));
+      yield* wait(page.getByRole("button", { name: "Aprobar este navegador" }).click());
+      yield* wait(
+        expect(
+          page.getByText("El código no es válido. Revisa el correo o solicita uno nuevo.")
+        ).toBeVisible()
+      );
+      yield* wait(page.getByLabel("Código recibido por correo").fill(emailLoginCode));
+      yield* wait(page.getByRole("button", { name: "Aprobar este navegador" }).click());
+      yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
+      expect(attempts()).toBe(2);
+      expect(page.url()).not.toContain(emailLoginCode);
+      expect(
+        yield* wait(
+          page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
+        )
+      ).toEqual({ local: 0, session: 0 });
+    })
+  ));
+const visiblePairingCode = (page: Page): Promise<string> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const locator = page.locator('[aria-label^="Código de vinculación "]');
+      yield* wait(expect(locator).toBeVisible());
+      const code = (yield* wait(locator.getAttribute("aria-label")))?.replace(
+        "Código de vinculación ",
+        ""
+      );
+      expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
+      return code ?? "";
+    })
+  );
 type BrowserCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
-const verifyRevokedBrowser = async (
+const verifyRevokedBrowser = (
   page: Page,
   context: BrowserContext,
   session: Option.Option<BrowserCookie>
-): Promise<void> => {
-  if (Option.isNone(session)) throw new Error("Expected a redeemed WebSession cookie");
-  await context.addCookies([session.value]);
-  await page.goto("/app/transactions");
-  await expect(page.getByRole("alert")).toContainText("Sesión vencida");
-  expect(await page.locator("body").textContent()).not.toContain("OTHER-USER-PRIVATE");
-};
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (Option.isNone(session)) throw new Error("Expected a redeemed WebSession cookie");
+      yield* wait(context.addCookies([session.value]));
+      yield* wait(page.goto("/app/transactions"));
+      yield* wait(expect(page.getByRole("alert")).toContainText("Sesión vencida"));
+      expect(yield* wait(page.locator("body").textContent())).not.toContain("OTHER-USER-PRIVATE");
+    })
+  );
+const editAndCheckDashboard = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.goto("/app/dashboard"));
+      yield* wait(expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible());
+      yield* wait(page.getByRole("button", { name: "Personalizar" }).click());
+      yield* wait(
+        page
+          .getByRole("button", { name: /^Renombrar /u })
+          .first()
+          .click()
+      );
+      yield* wait(
+        page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles")
+      );
+      yield* wait(page.getByRole("button", { name: "Guardar nombre del Widget" }).click());
+      yield* wait(expect(page.getByText("Gastos visibles").first()).toBeVisible());
+      yield* wait(page.reload());
+      yield* wait(expect(page.getByText("Gastos visibles").first()).toBeVisible());
+    })
+  );
+const hasSessionCookie = (context: BrowserContext): Promise<boolean> =>
+  context
+    .cookies()
+    .then((cookies) => cookies.some((cookie) => cookie.name === "__Host-fidy_session"));
 
-const editAndCheckDashboard = async (page: Page): Promise<void> => {
-  await page.goto("/app/dashboard");
-  await expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible();
-  await page.getByRole("button", { name: "Personalizar" }).click();
-  await page
-    .getByRole("button", { name: /^Renombrar /u })
-    .first()
-    .click();
-  await page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles");
-  await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
-  await page.reload();
-  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
-};
+const finishRealPairing = ({
+  page,
+  context,
+  request,
+  session,
+}: {
+  page: Page;
+  context: BrowserContext;
+  request: APIRequestContext;
+  session: Option.Option<BrowserCookie>;
+}): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.getByLabel("Monto en COP").fill("12500"));
+      yield* wait(page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
+      yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
+      yield* wait(
+        expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina")
+      );
+      yield* wait(editAndCheckDashboard(page));
+      yield* wait(page.goto("/upgrade"));
+      yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
+      yield* wait(page.goto("/app/transactions"));
+      yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
+      yield* wait(
+        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
+      );
+      yield* wait(expect.poll(() => hasSessionCookie(context)).toBe(false));
+      const revoked = yield* wait(
+        request.get("https://127.0.0.1:4174/user", {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+            cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
+          },
+        })
+      );
+      expect(revoked.status()).toBe(unauthorizedStatus);
+      yield* wait(verifyRevokedBrowser(page, context, session));
+    })
+  );
 
-test("redeems a real pairing approved out of band and obtains a real WebSession", async ({
+test("redeems a real pairing approved out of band and obtains a real WebSession", ({
   context,
   page,
   request,
-}) => {
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  const code = await visiblePairingCode(page);
-  const approval = await request.post(`http://127.0.0.1:4175/approve?code=${code}`);
-  expect(approval.status()).toBe(noContentStatus);
-  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible();
-  const session = Array.findFirst(
-    await context.cookies(),
-    (cookie) => cookie.name === "__Host-fidy_session"
-  );
-  expect(Option.getOrUndefined(session)?.httpOnly).toBe(true);
-  expect(Option.getOrUndefined(session)?.secure).toBe(true);
-  const current = await page.request.get("https://127.0.0.1:4174/user", {
-    headers: { origin: "https://127.0.0.1:4173" },
-  });
-  expect(current.status()).toBe(successStatus);
-  expect(await current.json()).toMatchObject({
-    data: { id: "24000000-0000-4000-8000-000000000241" },
-  });
-  const otherTransaction = await request.get(
-    "https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262",
-    {
-      headers: {
-        origin: "https://127.0.0.1:4173",
-        cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
-      },
-    }
-  );
-  expect(otherTransaction.status()).toBe(notFoundStatus);
-  expect(await otherTransaction.text()).not.toContain("OTHER-USER-PRIVATE");
-  await page.getByLabel("Monto en COP").fill("12500");
-  await page.getByLabel("Contraparte (opcional)").fill("La Cocina");
-  await page.getByRole("button", { name: "Registrar transacción" }).click();
-  await expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina");
-  await editAndCheckDashboard(page);
-  await page.goto("/upgrade");
-  await expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible();
-  await page.goto("/app/transactions");
-  await page.getByRole("button", { name: "Cerrar sesión" }).click();
-  await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
-  await expect
-    .poll(async () =>
-      (await context.cookies()).some((cookie) => cookie.name === "__Host-fidy_session")
-    )
-    .toBe(false);
-  const revoked = await request.get("https://127.0.0.1:4174/user", {
-    headers: {
-      origin: "https://127.0.0.1:4173",
-      cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
-    },
-  });
-  expect(revoked.status()).toBe(unauthorizedStatus);
-  await verifyRevokedBrowser(page, context, session);
-});
-
-test("a SupportRecoveryCase approves the browser-private pairing through the real Core", async ({
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      const code = yield* wait(visiblePairingCode(page));
+      const approval = yield* wait(request.post(`http://127.0.0.1:4175/approve?code=${code}`));
+      expect(approval.status()).toBe(noContentStatus);
+      yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
+      yield* wait(
+        expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible()
+      );
+      const session = Array.findFirst(
+        yield* wait(context.cookies()),
+        (cookie) => cookie.name === "__Host-fidy_session"
+      );
+      expect(Option.getOrUndefined(session)?.httpOnly).toBe(true);
+      expect(Option.getOrUndefined(session)?.secure).toBe(true);
+      const current = yield* wait(
+        page.request.get("https://127.0.0.1:4174/user", {
+          headers: { origin: "https://127.0.0.1:4173" },
+        })
+      );
+      expect(current.status()).toBe(successStatus);
+      expect(yield* wait(current.json())).toMatchObject({
+        data: { id: "24000000-0000-4000-8000-000000000241" },
+      });
+      const otherTransaction = yield* wait(
+        request.get("https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262", {
+          headers: {
+            origin: "https://127.0.0.1:4173",
+            cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
+          },
+        })
+      );
+      expect(otherTransaction.status()).toBe(notFoundStatus);
+      expect(yield* wait(otherTransaction.text())).not.toContain("OTHER-USER-PRIVATE");
+      yield* wait(finishRealPairing({ page, context, request, session }));
+    })
+  ));
+test("a SupportRecoveryCase approves the browser-private pairing through the real Core", ({
   page,
   request,
-}) => {
-  const pending = page.waitForResponse(
-    (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
-  );
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  const code = await visiblePairingCode(page);
-  await pending;
-  const signed = await (await request.get("http://127.0.0.1:4175/assertion")).text();
-  const decision = (): ReturnType<typeof request.post> =>
-    request.post("https://127.0.0.1:4174/internal/support-recovery", {
-      headers: { "cf-access-jwt-assertion": signed },
-      data: { pairingCode: code, backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2" },
-    });
-  expect((await decision()).status()).toBe(successStatus);
-  expect((await decision()).status()).toBe(invalidStatus);
-  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible();
-  await page.getByLabel("Monto en COP").fill("12345");
-  await page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy");
-  await page.getByRole("button", { name: "Registrar transacción" }).click();
-  await expect(page.getByLabel("Transacción recién registrada")).toContainText("Recuperación Fidy");
-  await page.reload();
-  await expect(page.getByText("Recuperación Fidy").first()).toBeVisible();
-  expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
-});
-
-test("honors server slowdown before showing the generic terminal refusal", async ({ page }) => {
-  let redeemCount = 0;
-  await page.route("**/web/pairings", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      status: successStatus,
-      body: JSON.stringify({
-        pairingId,
-        privateVerifier,
-        publicCode,
-        expiresAt,
-        pollingIntervalSeconds: 5,
-      }),
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const pending = page.waitForResponse(
+        (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
+      );
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      const code = yield* wait(visiblePairingCode(page));
+      yield* wait(pending);
+      const signed = yield* wait(
+        (yield* wait(request.get("http://127.0.0.1:4175/assertion"))).text()
+      );
+      const decision = (): ReturnType<typeof request.post> =>
+        request.post("https://127.0.0.1:4174/internal/support-recovery", {
+          headers: { "cf-access-jwt-assertion": signed },
+          data: { pairingCode: code, backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2" },
+        });
+      expect((yield* wait(decision())).status()).toBe(successStatus);
+      expect((yield* wait(decision())).status()).toBe(invalidStatus);
+      yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
+      yield* wait(
+        expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible()
+      );
+      yield* wait(page.getByLabel("Monto en COP").fill("12345"));
+      yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
+      yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
+      yield* wait(
+        expect(page.getByLabel("Transacción recién registrada")).toContainText("Recuperación Fidy")
+      );
+      yield* wait(page.reload());
+      yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
+      expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+      expect(yield* wait(page.evaluate(() => localStorage.length + sessionStorage.length))).toBe(0);
     })
-  );
-  await page.route("**/web/pairings/redeem", async (route) => {
-    redeemCount += 1;
-    await route.fulfill(
-      redeemCount === 1
-        ? {
+  ));
+test("honors server slowdown before showing the generic terminal refusal", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let redeemCount = 0;
+      yield* wait(
+        page.route("**/web/pairings", (route) =>
+          route.fulfill({
             contentType: "application/json",
-            status: rateLimitedStatus,
-            headers: { "retry-after": "10" },
-            body: JSON.stringify({ error: { code: "rate_limited", retryAfterSeconds: 10 } }),
-          }
-        : {
-            contentType: "application/json",
-            status: invalidStatus,
-            body: JSON.stringify({
-              error: { code: "pairing_invalid", message: invalidPairingMessage },
+            status: successStatus,
+            body: json({
+              pairingId,
+              privateVerifier,
+              publicCode,
+              expiresAt,
+              pollingIntervalSeconds: 5,
             }),
-          }
-    );
-  });
+          })
+        )
+      );
+      yield* wait(
+        page.route("**/web/pairings/redeem", (route) => {
+          redeemCount += 1;
+          return route.fulfill(
+            redeemCount === 1
+              ? {
+                  contentType: "application/json",
+                  status: rateLimitedStatus,
+                  headers: { "retry-after": "10" },
+                  body: json({ error: { code: "rate_limited", retryAfterSeconds: 10 } }),
+                }
+              : {
+                  contentType: "application/json",
+                  status: invalidStatus,
+                  body: json({
+                    error: { code: "pairing_invalid", message: invalidPairingMessage },
+                  }),
+                }
+          );
+        })
+      );
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 20000 }));
+      expect(redeemCount).toBe(2);
+    })
+  ));
+const installExpiringPairingRoutes = (
+  page: Page,
+  counts: { start: number; redeem: number }
+): Promise<void> =>
+  page
+    .route("**/web/pairings", (route: Route) => {
+      counts.start += 1;
+      return runFixture(
+        DateTime.now.pipe(
+          Effect.map((now) => DateTime.add(now, { seconds: 6 })),
+          Effect.map(DateTime.formatIso)
+        )
+      ).then((shortExpiry) =>
+        route.fulfill({
+          contentType: "application/json",
+          status: successStatus,
+          body: json({
+            pairingId,
+            privateVerifier,
+            publicCode,
+            expiresAt: shortExpiry,
+            pollingIntervalSeconds: 5,
+          }),
+        })
+      );
+    })
+    .then(() =>
+      page.route("**/web/pairings/redeem", () => {
+        counts.redeem += 1;
+      })
+    )
+    .then(() => Promise.resolve());
 
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  await expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 20_000 });
-  expect(redeemCount).toBe(2);
-});
-
-test("stops at pairing expiry after a timed-out poll without creating a replacement", async ({
-  page,
-}) => {
-  let startCount = 0;
-  let redeemCount = 0;
-  await page.route("**/web/pairings", async (route) => {
-    startCount += 1;
-    const shortExpiry = await Effect.runPromise(
-      DateTime.now.pipe(
-        Effect.map((now) => DateTime.add(now, { seconds: 6 })),
-        Effect.map(DateTime.formatIso)
-      )
-    );
-    await route.fulfill({
-      contentType: "application/json",
-      status: successStatus,
-      body: JSON.stringify({
-        pairingId,
-        privateVerifier,
-        publicCode,
-        expiresAt: shortExpiry,
-        pollingIntervalSeconds: 5,
-      }),
-    });
-  });
-  await page.route("**/web/pairings/redeem", async () => {
-    redeemCount += 1;
-  });
-
-  await page.goto("/auth/pair");
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  await expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 10_000 });
-  expect(startCount).toBe(1);
-  expect(redeemCount).toBe(1);
-});
+test("stops at pairing expiry after a timed-out poll without creating a replacement", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const counts = { start: 0, redeem: 0 };
+      yield* wait(installExpiringPairingRoutes(page, counts));
+      yield* wait(page.goto("/auth/pair"));
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 10000 }));
+      expect(counts.start).toBe(1);
+      expect(counts.redeem).toBe(1);
+    })
+  ));

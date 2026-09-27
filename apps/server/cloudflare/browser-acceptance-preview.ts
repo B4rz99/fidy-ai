@@ -20,21 +20,16 @@ const compiled = Bun.spawnSync([
 if (compiled.exitCode !== 0) {
   throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
 }
-type AcceptanceCoreExports = Pick<
-  typeof CoreWorkerModule,
-  "makeCoreWorker" | "UserTransactionCoordinator" | "runBillingCollectionWorkflow"
->;
-const isCoreWorkerModule = (candidate: unknown): candidate is AcceptanceCoreExports =>
-  typeof candidate === "object" &&
-  candidate !== null &&
-  "makeCoreWorker" in candidate &&
-  typeof candidate.makeCoreWorker === "function" &&
-  "UserTransactionCoordinator" in candidate &&
-  typeof candidate.UserTransactionCoordinator === "function" &&
-  "runBillingCollectionWorkflow" in candidate &&
-  typeof candidate.runBillingCollectionWorkflow === "function";
-const coreModule: unknown = await import(coreBundle.href);
-if (!isCoreWorkerModule(coreModule)) throw new Error("Core acceptance bundle has no Worker");
+// Esbuild emits this file from core-worker.ts above; keep its imports on that module interface.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- The URL is the output of the typed core-worker.ts compiled immediately above.
+const coreModule: typeof CoreWorkerModule = await import(coreBundle.href);
+if (
+  typeof coreModule.makeCoreWorker !== "function" ||
+  typeof coreModule.UserTransactionCoordinator !== "function" ||
+  typeof coreModule.runBillingCollectionWorkflow !== "function"
+) {
+  throw new Error("Core acceptance bundle is missing Worker exports");
+}
 const { makeCoreWorker, UserTransactionCoordinator, runBillingCollectionWorkflow } = coreModule;
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry");

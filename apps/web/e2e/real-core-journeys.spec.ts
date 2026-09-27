@@ -41,10 +41,24 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
   );
   expect(bearer).toMatch(/^fin_/u);
   expect(await page.locator("body").textContent()).not.toContain(bearer);
+  // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
   const refused = await request.get(`${api}/transactions`, {
     headers: { authorization: `Bearer ${bearer}` },
   });
   expect(refused.status()).toBe(forbidden);
+  const browserRefusal = await page.evaluate(
+    async ({ url, token }) => {
+      // @effect-diagnostics-next-line globalFetch:off
+      const response = await fetch(url, {
+        credentials: "omit",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return { status: response.status, body: await response.text() };
+    },
+    { url: `${api}/transactions`, token: bearer }
+  );
+  expect(browserRefusal.status).toBe(forbidden);
+  expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
   await page.route(`${api}/transactions?*`, (route) => route.fulfill({ response: refused }));
   await page.goto("/app/transactions");
   await expect(page.getByRole("alert")).toBeVisible();
@@ -158,6 +172,19 @@ test("submits reused-source Subscription enrollment through real public and Core
   );
   expect(settled.status()).toBe(ok);
   expect(await settled.json()).toMatchObject({ status: "succeeded" });
+  const standing = await page.request.get(`${api}/subscription/status`, {
+    headers: { origin: "https://127.0.0.1:4173" },
+  });
+  expect(standing.status()).toBe(ok);
+  expect(await standing.json()).toMatchObject({
+    data: {
+      accessTier: "pro",
+      paidSubscription: {
+        billingPeriod: "monthly",
+        priceId: "22700000-0000-4000-8000-000000000002",
+      },
+    },
+  });
   await expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
     timeout: 20_000,
   });

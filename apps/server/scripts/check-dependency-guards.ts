@@ -28,10 +28,16 @@ const retiredOutboundHttpFiles = [
   "src/shell/_shared/protected-http-client.ts",
   "src/shell/_shared/projected-http-client-error.ts",
 ] as const;
-for (const path of retiredOutboundHttpFiles) {
-  if (await Bun.file(`${serverRoot}/${path}`).exists()) {
-    throw new Error(`Retired Outbound HTTP implementation still exists: ${path}`);
-  }
+const retiredFileChecks = await Promise.all(
+  retiredOutboundHttpFiles.map((path) =>
+    Bun.file(`${serverRoot}/${path}`)
+      .exists()
+      .then((exists) => ({ path, exists }))
+  )
+);
+const retainedFile = retiredFileChecks.find(({ exists }) => exists);
+if (retainedFile !== undefined) {
+  throw new Error(`Retired Outbound HTTP implementation still exists: ${retainedFile.path}`);
 }
 
 const PROBE_PARENT = "src/core/audit";

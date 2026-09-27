@@ -15,7 +15,10 @@ type Suppression = {
 const SUPPRESSION_PATTERN = new RegExp(
   ["(?:ox|es)lint-disable", "@effect" + "-diagnostics(?:-next-line)?\\b"].join("|")
 );
-const ASYNC_FUNCTION_DISABLED = /"asyncFunction"\s*:\s*"off"/;
+// These diagnostics have no first-party path that needs an opt-out. Scoped platform
+// boundaries use other, reviewable overrides in tsconfig.base.json.
+const UNJUSTIFIED_DIAGNOSTIC_DISABLED =
+  /"(?:asyncFunction|missingPipeableSignature|strictBooleanExpressions)"\s*:\s*"off"/;
 
 /**
  * Every extension oxlint will lint — wider than this repo writes today, on
@@ -49,7 +52,7 @@ const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 /**
  * Tracked files plus untracked ones git would not ignore. Include TypeScript
- * configs so a path override cannot silently disable the async diagnostic.
+ * configs so a path override cannot silently disable a required diagnostic.
  */
 const checkedFiles = (): readonly string[] => {
   const listed = Bun.spawnSync(
@@ -84,7 +87,7 @@ export const suppressionsIn = ({
     .split(/\r?\n/)
     .flatMap((source, index) =>
       SUPPRESSION_PATTERN.test(source) ||
-      (file.endsWith(".json") && ASYNC_FUNCTION_DISABLED.test(source))
+      (file.endsWith(".json") && UNJUSTIFIED_DIAGNOSTIC_DISABLED.test(source))
         ? [{ file, line: index + 1, source: source.trim() }]
         : []
     );

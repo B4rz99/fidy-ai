@@ -750,18 +750,16 @@ describe("canonical browser transport", () => {
 
   it.effect("preserves query data through a real refresh failure and retries the same atom", () =>
     Effect.gen(function* () {
-      const refreshResponse = Promise.withResolvers<HttpClientResponse.HttpClientResponse>();
+      const refreshResponse = yield* Deferred.make<HttpClientResponse.HttpClientResponse>();
       let requestCount = 0;
       let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
-      const deferredResponse = (): Promise<HttpClientResponse.HttpClientResponse> =>
-        refreshResponse.promise;
       const httpClient = makeHttpClient((request) => {
         requestCount += 1;
         if (requestCount === 1 || requestCount === 3) {
           return Effect.succeed(responseJson(request, { data: [], next: [] }));
         }
         pendingRequest = Option.some(request);
-        return Effect.promise(deferredResponse);
+        return Deferred.await(refreshResponse);
       });
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
@@ -789,7 +787,8 @@ describe("canonical browser transport", () => {
           { startImmediately: true }
         );
 
-        refreshResponse.resolve(
+        yield* Deferred.succeed(
+          refreshResponse,
           responseJson(
             Option.getOrThrow(pendingRequest),
             {

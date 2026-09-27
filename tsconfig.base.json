@@ -111,22 +111,17 @@
         },
         "overrides": [
           {
-            "include": [
-              "./apps/web/cloudflare/production-policy/**/*.ts",
-              "./scripts/production/**/*.ts"
-            ],
+            "include": ["./apps/web/cloudflare/production-policy/artifact.ts"],
             "options": {
               "diagnosticSeverity": {
-                "missingPipeableSignature": "off",
                 "nodeBuiltinImport": "off"
               }
             }
           },
           {
             "include": [
-              "./apps/web/src/**/*.test.ts",
-              "./apps/web/src/**/*.test.tsx",
-              "./apps/web/scripts/**/*.test.ts"
+              "./apps/web/scripts/build-production.test.ts",
+              "./apps/web/scripts/check-browser-bundle.test.ts"
             ],
             "options": {
               "diagnosticSeverity": {
@@ -135,45 +130,42 @@
             }
           },
           {
-            "include": ["./apps/web/scripts/**/*.ts"],
+            "include": [
+              "./scripts/document-parsing/check.ts",
+              "./scripts/document-parsing/extraction-proof.ts",
+              "./scripts/document-parsing/workerd-inspector.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
-                "missingPipeableSignature": "off"
+                "globalFetch": "off"
               }
             }
           },
           {
-            "include": ["./scripts/document-parsing/**/*.ts"],
+            "include": ["./scripts/document-parsing/workerd-inspector.ts"],
             "options": {
               "diagnosticSeverity": {
-                "globalFetch": "off",
-                "newPromise": "off",
+                "newPromise": "off"
+              }
+            }
+          },
+          {
+            "include": [
+              "./scripts/document-parsing/check.ts",
+              "./scripts/document-parsing/extraction-proof.ts",
+              "./scripts/document-parsing/protected-document-proof.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
                 "nodeBuiltinImport": "off"
               }
             }
           },
           {
-            "include": ["./apps/web/src/transport/client.ts"],
+            "include": ["./apps/web/playwright.config.ts"],
             "options": {
               "diagnosticSeverity": {
-                "missingPipeableSignature": "off"
-              }
-            }
-          },
-          {
-            "include": ["./apps/web/e2e/**/*.ts", "./apps/web/playwright.config.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "processEnv": "off",
-                "strictBooleanExpressions": "off"
-              }
-            }
-          },
-          {
-            "include": ["./apps/server/tools/contracts/**/*.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "missingPipeableSignature": "off"
+                "processEnv": "off"
               }
             }
           }

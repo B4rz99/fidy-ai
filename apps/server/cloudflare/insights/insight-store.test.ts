@@ -132,6 +132,7 @@ const setup = async (): Promise<D1Database> => {
     "0018_batch_envelope_audit",
     "0018_insight_events",
     "0019_canonical_child_guards",
+    "0020_dashboard_projection",
   ];
   await migrations.reduce<Promise<void>>(
     (prior, migration) => prior.then(() => migrate(db, migration)),

@@ -396,13 +396,10 @@ export const findDashboardValue = ({
         encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
       });
     }
-    const facts = yield* loadDashboardFacts(db, userId, found.value.document);
+    const now = DateTime.nowUnsafe();
+    const facts = yield* loadDashboardFacts({ db, userId, document: found.value.document, now });
     if (Option.isNone(facts)) return Option.none();
-    const view = yield* renderDashboardView(
-      found.value.document,
-      facts.value,
-      DateTime.nowUnsafe()
-    );
+    const view = yield* renderDashboardView(found.value.document, facts.value, now);
     return Option.some({
       _tag: "Owner" as const,
       payload: view,

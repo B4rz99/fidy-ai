@@ -2,14 +2,9 @@ import { Option, Schema } from "effect";
 import { Money } from "../../src/core/_shared/money";
 import { Category } from "../../src/core/categories/model";
 import { Transaction } from "../../src/core/transactions/model";
-import {
-  type EffectiveTransactionRelation,
-  effectiveTransactionRelation,
-} from "./effective-transaction";
 
 /** Transaction-owned, User-scoped storage interface for Dashboard fact queries. */
 export type DashboardTransactionFact = Readonly<{ transaction: Transaction; category: Category }>;
-export const maximumDashboardAggregateFacts = 8192;
 
 const TransactionRow = Schema.Struct({
   id: Transaction.fields.id,
@@ -52,26 +47,10 @@ export const decodeDashboardTransactions = (
 const selectedColumns = `effective.id, effective.amount, effective.currency,
   effective.direction, effective.counterparty, effective.notes, effective.category_id, category.label,
   effective.occurred_at, effective.created_at, effective.revision`;
-const selectedFrom = `FROM effective_transaction effective
+const selectedFrom = `FROM dashboard_projection_leaf effective
   JOIN categories category ON category.id = effective.category_id`;
-
-const prepareTotals = ({
-  db,
-  relation,
-  userId,
-  needed,
-}: Readonly<{
-  db: D1Database;
-  relation: EffectiveTransactionRelation;
-  userId: string;
-  needed: boolean;
-}>): D1PreparedStatement =>
-  db
-    .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
-      WHERE effective.user_id = ? AND ? = 1
-      ORDER BY effective.occurred_at DESC, effective.created_at DESC, effective.id DESC
-      LIMIT ${maximumDashboardAggregateFacts + 1}`)
-    .bind(...relation.bindings, userId, needed ? 1 : 0);
+const recentOrder = `effective.occurred_at DESC, effective.created_at DESC, effective.id DESC`;
+const categoryWindowOrder = `occurred_at DESC, created_at DESC, id DESC`;
 
 // SQLite's lower() is ASCII-only; fold Spanish capital accents explicitly for es-CO search.
 const listSearchText = [
@@ -87,53 +66,74 @@ const listSearchText = [
   "coalesce(effective.counterparty, '') || ' ' || coalesce(effective.notes, '')"
 );
 
-const prepareList = ({
-  db,
-  relation,
-  userId,
-  categories,
-  search,
-  limit,
-}: Readonly<{
+type ListInput = Readonly<{
   db: D1Database;
-  relation: EffectiveTransactionRelation;
   userId: string;
   categories: ReadonlyArray<string>;
   search: Option.Option<string>;
   limit: number;
-}>): D1PreparedStatement => {
-  const filter =
-    categories.length > 0
-      ? `AND effective.category_id IN (${categories.map(() => "?").join(",")})`
-      : "";
-  const searchPredicate = Option.isNone(search) ? "" : `AND instr(lower(${listSearchText}), ?) > 0`;
+}>;
+
+const recentCategoryPage = ({ db, userId, categories, limit }: ListInput): D1PreparedStatement => {
+  const windows = categories.map(
+    () => `SELECT id FROM (
+    SELECT id FROM dashboard_projection_leaf INDEXED BY dashboard_projection_leaf_category_recent
+    WHERE user_id = ? AND category_id = ? ORDER BY ${categoryWindowOrder} LIMIT ?)`
+  );
+  const bindings = categories.flatMap((category) => [userId, category, limit]);
   return db
-    .prepare(`WITH ${relation.sql} SELECT ${selectedColumns} ${selectedFrom}
-      WHERE effective.user_id = ? ${filter} ${searchPredicate}
-      ORDER BY effective.occurred_at DESC, effective.created_at DESC, effective.id DESC
-      LIMIT ?`)
-    .bind(
-      ...relation.bindings,
-      userId,
-      ...categories,
-      ...Option.match(search, {
-        onNone: () => [],
-        onSome: (value) => [value.toLocaleLowerCase("es-CO")],
-      }),
-      limit
-    );
+    .prepare(`WITH selected AS (${windows.join(" UNION ALL ")})
+    SELECT ${selectedColumns} ${selectedFrom}
+    JOIN selected ON selected.id = effective.id
+    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`)
+    .bind(...bindings, userId, limit);
 };
 
-/** Publish prepared, User-scoped Transaction queries; caller owns the encompassing D1 batch. */
+const indexedSearchText = (text: string): string => {
+  const codePoints = Array.from(text).length;
+  if (codePoints === 1) return `§${text}§`;
+  if (codePoints === 2) return `§${text}`;
+  return text;
+};
+
+const searchPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {
+  const categoryPredicate =
+    categories.length === 0
+      ? ""
+      : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
+  const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
+  // FTS5's trigram index narrows candidates; the exact predicate preserves the established
+  // accent-aware substring semantics for returned effective Transactions.
+  const phrase = `"${indexedSearchText(text).replaceAll('"', '""')}"`;
+  return db
+    .prepare(`SELECT ${selectedColumns}
+    FROM dashboard_projection_list_search
+    JOIN dashboard_projection_leaf effective
+      ON effective.rowid = dashboard_projection_list_search.rowid
+    JOIN categories category ON category.id = effective.category_id
+    WHERE dashboard_projection_list_search MATCH ? AND effective.user_id = ?
+      ${categoryPredicate} AND instr(lower(${listSearchText}), ?) > 0
+    ORDER BY ${recentOrder} LIMIT ?`)
+    .bind(phrase, userId, ...categories, text, limit);
+};
+
+const recentPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {
+  if (Option.isSome(search)) return searchPage({ db, userId, categories, search, limit });
+  if (categories.length > 0) return recentCategoryPage({ db, userId, categories, search, limit });
+  return db
+    .prepare(`SELECT ${selectedColumns} ${selectedFrom}
+    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`)
+    .bind(userId, limit);
+};
+
+/** Publish indexed, User-scoped effective list pages; caller owns the encompassing D1 batch. */
 export const dashboardTransactionQueries = ({
   db,
   userId,
-  needsTotals,
   lists,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  needsTotals: boolean;
   lists: ReadonlyArray<
     Readonly<{
       categories: ReadonlyArray<string>;
@@ -141,12 +141,7 @@ export const dashboardTransactionQueries = ({
       limit: number;
     }>
   >;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const relation = effectiveTransactionRelation(userId);
-  return [
-    prepareTotals({ db, relation, userId, needed: needsTotals }),
-    ...lists.map(({ categories, search, limit }) =>
-      prepareList({ db, relation, userId, categories, search, limit })
-    ),
-  ];
-};
+}>): ReadonlyArray<D1PreparedStatement> =>
+  lists.map(({ categories, search, limit }) =>
+    recentPage({ db, userId, categories, search, limit })
+  );

@@ -1,8 +1,11 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { BigDecimal, DateTime, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Schema } from "effect";
+import { repairDashboardProjection } from "../transactions/dashboard-repair";
 import { DashboardDocument } from "../../src/core/dashboard/model";
 import { Transaction } from "../../src/core/transactions/model";
+import { IanaTimeZone } from "../../src/core/_shared/context";
+import { resolveDashboardPeriod } from "../../src/core/dashboard/calculation";
 import { DashboardView } from "../../src/shell/dashboard/operations";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
@@ -132,6 +135,7 @@ const setup = async (): Promise<D1Database> => {
     "0017_statement_dispatch",
     "0018_dashboard",
     "0019_canonical_child_guards",
+    "0020_dashboard_projection",
   ].reduce<Promise<void>>(
     (previous, name) => previous.then(() => migrate(db, name)),
     Promise.resolve()
@@ -274,6 +278,40 @@ const count = (db: D1Database, table: "dashboard_documents" | "dashboard_audit")
     .bind(users[0])
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
+
+// @effect-diagnostics-next-line asyncFunction:off
+const metricTotals = async (response: Response): Promise<ReadonlyArray<string>> => {
+  expect(response.status).toBe(200);
+  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
+    await response.json()
+  ).data;
+  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+  const metric = leaves(view.layout).find(
+    (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
+  );
+  if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
+    throw new Error("Expected custom metric");
+  }
+  return metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount));
+};
+
+// @effect-diagnostics-next-line asyncFunction:off
+const listIds = async (response: Response, widgetId: string): Promise<ReadonlyArray<string>> => {
+  expect(response.status).toBe(200);
+  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
+    await response.json()
+  ).data;
+  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+  const list = leaves(view.layout).find(
+    (node) => node.kind === "leaf" && node.widget.widget.id === widgetId
+  );
+  if (list?.kind !== "leaf" || !("transactions" in list.widget.result)) {
+    throw new Error("Expected list results");
+  }
+  return list.widget.result.transactions.map((transaction) => transaction.id);
+};
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("a first invalid or missing Dashboard edit records only its refusal and never persists a document", async () => {
@@ -642,7 +680,7 @@ it("finds a recent Transaction by its captured notes in a configured list Widget
       categoryId: "10000000-0000-4000-8000-000000000001",
       direction: "outflow",
       occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-      notes: "private note",
+      notes: "private note Café",
     },
   });
   expect(created.status).toBe(201);
@@ -658,6 +696,42 @@ it("finds a recent Transaction by its captured notes in a configured list Widget
     throw new Error("Missing list result");
   }
   expect(row.widget.result.transactions).toHaveLength(1);
+  const accented = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: { op: "update-widget", widget: { ...list.widget, search: "CAFÉ" } },
+  });
+  expect(accented.status).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
+  const twoCharacters = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: { op: "update-widget", widget: { ...list.widget, search: "fé" } },
+  });
+  expect(twoCharacters.status).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
+  const oneCharacter = await send(db, 0, {
+    path: "/dashboard/edits",
+    method: "POST",
+    body: { op: "update-widget", widget: { ...list.widget, search: "é" } },
+  });
+  expect(oneCharacter.status).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
+  const captured = Schema.decodeUnknownSync(
+    Schema.Struct({
+      data: Schema.Struct({ id: Transaction.fields.id }),
+    })
+  )(await created.json()).data;
+  expect(
+    (
+      await send(db, 0, {
+        path: `/transactions/${captured.id}`,
+        method: "PUT",
+        body: { expectedRevision: 0, changes: { notes: "unrelated" } },
+      })
+    ).status
+  ).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([]);
 }, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
@@ -792,6 +866,127 @@ it("a stale Dashboard read is replaced by current canonical facts after a Transa
 }, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
+it("reinterprets maintained UTC contributions immediately after a User IANA time-zone change", async () => {
+  const db = await setup();
+  const now = DateTime.nowUnsafe();
+  const zones = ["Pacific/Kiritimati", "America/Bogota"]
+    .map((name) => ({
+      name,
+      from: resolveDashboardPeriod({
+        now,
+        period: "this-month",
+        timeZone: Schema.decodeSync(IanaTimeZone)(name),
+      }).from.epochMilliseconds,
+    }))
+    .sort((left, right) => left.from - right.from);
+  const earlier = zones[0];
+  const later = zones[1];
+  if (earlier === undefined || later === undefined || earlier.from === later.from) {
+    throw new Error("Expected distinct IANA month boundaries");
+  }
+  const occurredAt = DateTime.formatIso(DateTime.makeUnsafe(earlier.from + 60_000));
+  expect(
+    (
+      await send(db, 0, {
+        path: "/transactions",
+        method: "POST",
+        body: {
+          money: { amount: "3.04", currency: "COP" },
+          categoryId: "10000000-0000-4000-8000-000000000001",
+          direction: "outflow",
+          occurredAt,
+        },
+      })
+    ).status
+  ).toBe(201);
+  // @effect-diagnostics-next-line asyncFunction:off
+  const projected = async (zone: string): Promise<ReadonlyArray<string>> => {
+    await db.prepare("UPDATE users SET time_zone = ? WHERE id = ?").bind(zone, users[0]).run();
+    return metricTotals(await send(db, 0, "/dashboard/view"));
+  };
+  expect(await projected(earlier.name)).toEqual(["3.04"]);
+  expect(await projected(later.name)).toEqual([]);
+  expect(await projected(earlier.name)).toEqual(["3.04"]);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("updates the next Dashboard view after linking, correcting, and unlinking effective Transactions", async () => {
+  const db = await setup();
+  const responses = await Promise.all(
+    [0, 1].map(() =>
+      send(db, 0, {
+        path: "/transactions",
+        method: "POST",
+        body: {
+          money: { amount: "7", currency: "COP" },
+          categoryId: "10000000-0000-4000-8000-000000000001",
+          direction: "outflow",
+          occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+        },
+      })
+    )
+  );
+  expect(responses.map((response) => response.status)).toEqual([201, 201]);
+  const ids = (await Promise.all(responses.map((response) => response.json()))).map(
+    (body) =>
+      Schema.decodeUnknownSync(
+        Schema.Struct({
+          data: Schema.Struct({ id: Transaction.fields.id }),
+        })
+      )(body).data.id
+  );
+  const first = [...ids].sort()[0];
+  const second = [...ids].sort()[1];
+  if (first === undefined || second === undefined) throw new Error("Missing Transactions");
+  // @effect-diagnostics-next-line asyncFunction:off
+  const total = async (): Promise<string> =>
+    (await metricTotals(await send(db, 0, "/dashboard/view"))).join(",");
+  expect(await total()).toBe("14");
+  const pair = { firstTransactionId: first, secondTransactionId: second };
+  expect(
+    (await send(db, 0, { path: "/transactions/link", method: "POST", body: pair })).status
+  ).toBe(200);
+  expect(await total()).toBe("7");
+  expect(
+    (
+      await send(db, 0, {
+        path: `/transactions/${first}`,
+        method: "PUT",
+        body: { expectedRevision: 0, changes: { money: { amount: "9", currency: "COP" } } },
+      })
+    ).status
+  ).toBe(200);
+  expect(await total()).toBe("9");
+  expect(
+    (await send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })).status
+  ).toBe(200);
+  expect(await total()).toBe("16");
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("retains exact decimal Money above SQLite's precise numeric range", async () => {
+  const db = await setup();
+  const time = DateTime.formatIso(DateTime.nowUnsafe());
+  await db
+    .prepare(`INSERT INTO transactions
+    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?, ?, ?),
+      ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?, ?, ?)`)
+    .bind(
+      users[0],
+      "10000000-0000-4000-8000-000000000001",
+      time,
+      time,
+      users[0],
+      "10000000-0000-4000-8000-000000000001",
+      time,
+      time
+    )
+    .run();
+  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["18014398509481987"]);
+}, 30_000);
+
+// @effect-diagnostics-next-line asyncFunction:off
 it("keeps exact Currency totals beyond a small fixed Transaction window", async () => {
   const db = await setup();
   // Spread retained records over days to respect the canonical 100-writes-per-day limit.
@@ -827,16 +1022,18 @@ it("keeps exact Currency totals beyond a small fixed Transaction window", async 
 }, 60_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
-it("rejects an oversized projection instead of presenting partial Money totals", async () => {
+it("returns exact totals beyond 8,192 effective Transactions", async () => {
   const db = await setup();
   expect((await send(db, 0, "/dashboard/view")).status).toBe(200);
   // Bypass only the fixture's daily capture quota to exercise the read work budget.
   await db.prepare("DROP TRIGGER transaction_manual_daily_budget").run();
   await db
     .prepare(`INSERT INTO transactions
-    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 8193)
-    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, ?, ?
+    SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow',
+      CASE WHEN number = 1 THEN '10000000-0000-4000-8000-000000000002' ELSE ? END,
+      CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, ?, ?
     FROM sequence`)
     .bind(
       users[0],
@@ -845,11 +1042,76 @@ it("rejects an oversized projection instead of presenting partial Money totals",
       DateTime.formatIso(DateTime.nowUnsafe())
     )
     .run();
-  expect((await send(db, 0, "/dashboard/view")).status).toBe(503);
+  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["81.93"]);
   const document = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+    Schema.Struct({
+      data: Schema.toCodecJson(DashboardDocument),
+    })
   )(await (await send(db, 0, "/dashboard")).json()).data;
-  expect(document.title).toBe("Tablero");
+  const leaves = (node: DashboardDocument["layout"]): ReadonlyArray<DashboardDocument["layout"]> =>
+    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+  const list = leaves(document.layout).find(
+    (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
+  );
+  if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
+    throw new Error("Expected list Widget");
+  }
+  const rareCategory = { ...list.widget, categories: ["10000000-0000-4000-8000-000000000002"] };
+  expect(
+    (
+      await send(db, 0, {
+        path: "/dashboard/edits",
+        method: "POST",
+        body: { op: "update-widget", widget: rareCategory },
+      })
+    ).status
+  ).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([
+    "30000000-0000-4000-8000-000000000001",
+  ]);
+  expect(
+    (
+      await send(db, 0, {
+        path: "/dashboard/edits",
+        method: "POST",
+        body: { op: "update-widget", widget: { ...rareCategory, search: "CAFÉ" } },
+      })
+    ).status
+  ).toBe(200);
+  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([
+    "30000000-0000-4000-8000-000000000001",
+  ]);
+  // A damaged projection cannot become a stale financial view while its private repair proceeds.
+  await db
+    .prepare(
+      "UPDATE dashboard_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
+    )
+    .bind(users[0])
+    .run();
+  await db
+    .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+    .bind(users[0])
+    .run();
+  expect((await send(db, 0, "/dashboard/view")).status).toBe(503);
+  const repair = (remaining: number): Promise<boolean> =>
+    remaining <= 0
+      ? Promise.resolve(false)
+      : Effect.runPromise(repairDashboardProjection({ db, userId: users[0] ?? "" })).then(
+          (status) => (status === "ready" ? true : repair(remaining - 1))
+        );
+  expect(await repair(35)).toBe(false);
+  // Bypass the fixture's daily capture admission limit to simulate a concurrent committed
+  // effective Transaction during the private rebuild; both use the same D1 maintenance triggers.
+  const time = DateTime.formatIso(DateTime.nowUnsafe());
+  await db
+    .prepare(`INSERT INTO transactions
+    (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+    VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?, ?, ?)`)
+    .bind(users[0], "10000000-0000-4000-8000-000000000001", time, time)
+    .run();
+  expect((await send(db, 0, "/dashboard/view")).status).toBe(503);
+  expect(await repair(80)).toBe(true);
+  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["81.95"]);
 }, 60_000);
 
 // @effect-diagnostics-next-line asyncFunction:off

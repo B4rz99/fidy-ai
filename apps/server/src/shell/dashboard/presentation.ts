@@ -1,25 +1,24 @@
 import { Data, type DateTime, Effect, Option } from "effect";
 
 import type { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { type Money } from "~/core/_shared/money";
 import type { Category } from "~/core/categories/model";
-import type { Budget } from "~/core/budgets/model";
-import { calculateBudgetStatus } from "@fidy/server/budgets-runtime";
+import { type Budget, calculateBudgetStatus } from "~/shell/budgets/contract";
+import { resolveDashboardPeriod } from "~/core/dashboard/calculation";
 import {
-  dashboardBudgetSpent,
-  projectDashboardMetric,
-  resolveDashboardPeriod,
-} from "~/core/dashboard/calculation";
+  type ProjectedRange,
+  projectAggregateBudgetSpent,
+  projectAggregateChart,
+  projectAggregateMetric,
+} from "~/core/dashboard/aggregation";
 import { type DashboardDocument, type LayoutNode, type Widget } from "~/core/dashboard/model";
-import type { Transaction } from "~/core/transactions/model";
-import { groupDashboardChart, selectDashboardFacts as selected } from "~/core/dashboard/projection";
+import type { Transaction } from "~/shell/transactions/contract";
 import { type DashboardView, type DashboardWidgetView } from "./operations";
 
 class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
 
 /** Decoded User-owned facts supplied by the storage adapter for one Dashboard projection. */
 export type DashboardFacts = Readonly<{
-  transactions: ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>;
+  groups: ReadonlyMap<string, ReadonlyArray<ProjectedRange>>;
   lists: ReadonlyMap<
     string,
     ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>
@@ -39,30 +38,23 @@ const renderChart = (
   widget: ChartWidget,
   facts: DashboardFacts,
   now: DateTime.Utc
-): DashboardWidgetView => {
-  const period = resolveDashboardPeriod({
-    now,
-    period: widget.period,
-    timeZone: facts.context.time_zone,
+): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
+  Effect.gen(function* () {
+    const period = resolveDashboardPeriod({
+      now,
+      period: widget.period,
+      timeZone: facts.context.time_zone,
+    });
+    const ranges = facts.groups.get(widget.id);
+    if (ranges === undefined) return yield* new DashboardUnavailable();
+    const buckets = projectAggregateChart({
+      widget,
+      ranges,
+      lookupCategory: (id) => Option.fromUndefinedOr(facts.categories.get(id)),
+    });
+    if (Option.isNone(buckets)) return yield* new DashboardUnavailable();
+    return { widget, result: { appliedPeriod: period, buckets: buckets.value } };
   });
-  return {
-    widget,
-    result: {
-      appliedPeriod: period,
-      buckets: groupDashboardChart(
-        selected(facts.transactions, widget, Option.some(period)).map(
-          ({ transaction, category }) => ({
-            category,
-            occurredAt: transaction.occurredAt.epochMilliseconds,
-            direction: transaction.direction,
-            money: transaction.money,
-          })
-        ),
-        { groupBy: widget.groupBy, timeZone: facts.context.time_zone }
-      ),
-    },
-  };
-};
 
 const renderList = (
   widget: Extract<Widget, { type: "transaction-list" }>,
@@ -90,39 +82,20 @@ const renderMetric = (
   widget: Extract<Widget, { type: "custom-metric" }>,
   facts: DashboardFacts,
   now: DateTime.Utc
-): DashboardWidgetView => {
-  const period = resolveDashboardPeriod({
-    now,
-    period: widget.period,
-    timeZone: facts.context.time_zone,
+): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
+  Effect.gen(function* () {
+    const period = resolveDashboardPeriod({
+      now,
+      period: widget.period,
+      timeZone: facts.context.time_zone,
+    });
+    const ranges = facts.groups.get(widget.id);
+    if (ranges === undefined) return yield* new DashboardUnavailable();
+    return {
+      widget,
+      result: { appliedPeriod: period, moneyGroups: projectAggregateMetric(widget, ranges) },
+    };
   });
-  return {
-    widget,
-    result: {
-      appliedPeriod: period,
-      moneyGroups: projectDashboardMetric(
-        selected(facts.transactions, widget, Option.some(period)).map(({ transaction }) => ({
-          direction: transaction.direction,
-          money: transaction.money,
-        })),
-        widget.aggregation
-      ),
-    },
-  };
-};
-
-const budgetSpent = (
-  widget: Extract<Widget, { type: "budget-bar" }>,
-  facts: DashboardFacts,
-  period: ReturnType<typeof resolveDashboardPeriod>
-): Money =>
-  dashboardBudgetSpent(
-    selected(facts.transactions, widget, Option.some(period)).map(({ transaction }) => ({
-      direction: transaction.direction,
-      money: transaction.money,
-    })),
-    widget.currency
-  );
 
 const renderBudget = (
   widget: Extract<Widget, { type: "budget-bar" }>,
@@ -148,7 +121,9 @@ const renderBudget = (
         },
       };
     }
-    const spent = budgetSpent(widget, facts, period);
+    const ranges = facts.groups.get(widget.id);
+    if (ranges === undefined) return yield* new DashboardUnavailable();
+    const spent = projectAggregateBudgetSpent(widget, ranges);
     const calculated = yield* calculateBudgetStatus({
       budget,
       spent,
@@ -185,9 +160,9 @@ const renderWidget = (
       case "transaction-list":
         return yield* renderList(widget, facts);
       case "spending-chart":
-        return renderChart(widget, facts, now);
+        return yield* renderChart(widget, facts, now);
       case "custom-metric":
-        return renderMetric(widget, facts, now);
+        return yield* renderMetric(widget, facts, now);
       case "budget-bar":
         return yield* renderBudget(widget, facts, now);
     }

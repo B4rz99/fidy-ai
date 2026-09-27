@@ -81,6 +81,7 @@ import {
   type PATAuthority,
   type WebSessionAuthority,
 } from "./transactions/transaction-coordinator";
+import { repairDashboardProjections } from "./transactions/dashboard-repair";
 import {
   CanonicalOperationId,
   type CatalogOperation,
@@ -1877,6 +1878,9 @@ const scheduledActivities = (
       try: () => sweepExpiredPATPairings(environment.DB),
       catch: () => undefined,
     }),
+    "dashboard.projectionRepair": repairDashboardProjections(environment.DB).pipe(
+      Effect.mapError(() => undefined)
+    ),
     "ingestion.submissionRetention":
       staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":

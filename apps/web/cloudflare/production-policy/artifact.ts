@@ -1,4 +1,5 @@
-import { extname } from "node:path";
+import { readdir } from "node:fs/promises";
+import { extname, join, relative } from "node:path";
 import { Schema } from "effect";
 import { ReleaseMetadata } from "../../scripts/release-metadata";
 
@@ -51,6 +52,20 @@ const validatePath = (path: string): void => {
   }
 };
 
+const artifactPaths = (directory: string): Promise<readonly string[]> =>
+  readdir(directory, { recursive: true, withFileTypes: true }).then((entries) =>
+    entries
+      .filter((entry) => !entry.isDirectory())
+      .map((entry) => {
+        const path = relative(directory, join(entry.parentPath, entry.name));
+        if (!entry.isFile()) {
+          throw new Error(`forbidden production artifact path: ${path}`);
+        }
+        return path;
+      })
+      .sort()
+  );
+
 const validateContents = (directory: string, path: string): Promise<void> =>
   Bun.file(`${directory}/${path}`)
     .text()
@@ -70,14 +85,7 @@ const validateContents = (directory: string, path: string): Promise<void> =>
  * paths, or known Secret material.
  */
 export const validateProductionArtifact = (request: ProductionArtifactRequest): Promise<void> =>
-  Promise.resolve().then(() => {
-    const paths = Array.from(
-      new Bun.Glob("**/*").scanSync({
-        cwd: request.directory,
-        followSymlinks: false,
-        onlyFiles: true,
-      })
-    ).sort();
+  artifactPaths(request.directory).then((paths) => {
     const pathSet = new Set(paths);
     const missing = [...REQUIRED_PATHS].filter((path) => !pathSet.has(path));
     if (missing.length > 0) {
@@ -106,9 +114,9 @@ export const validateProductionArtifact = (request: ProductionArtifactRequest): 
         }
         return Promise.all(paths.map((path) => validateContents(request.directory, path)));
       })
-      .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).json())
-      .then((value) => {
-        const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(value);
+      .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).text())
+      .then((metadataText) => {
+        const metadata = Schema.decodeSync(Schema.fromJsonString(ReleaseMetadata))(metadataText);
         if (
           metadata.gitRevision !== request.expectedSha ||
           metadata.contractDigest !== request.expectedDigest

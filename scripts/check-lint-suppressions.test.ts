@@ -116,7 +116,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
       );
     }));
 
-it("confines unsafe tooling rules to the isolated dependency analyzer", () =>
+it("does not re-disable unsafe rules for the typed dependency analyzer", () =>
   Bun.file(new URL("../.oxlintrc.json", import.meta.url))
     .text()
     .then((contents) => Schema.decodeUnknownSync(OxlintExceptions)(Bun.JSONC.parse(contents)))
@@ -128,10 +128,10 @@ it("confines unsafe tooling rules to the isolated dependency analyzer", () =>
         "typescript/no-unsafe-member-access",
         "typescript/no-unsafe-return",
       ];
-      const scopes = overrides.flatMap(({ files, rules }) =>
+      const exceptions = overrides.flatMap(({ files, rules }) =>
         unsafeRules.flatMap((rule) => (rules[rule] === "off" ? files : []))
       );
-      expect(new Set(scopes)).toEqual(new Set(["tools/depcruise/*.mjs"]));
+      expect(exceptions).toEqual([]);
     }));
 
 it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules", () =>

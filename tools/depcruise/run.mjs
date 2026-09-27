@@ -26,17 +26,30 @@ const sourceRoots = graphRoots.length > 0 ? graphRoots : ["src"];
 process.chdir(packageRoot);
 
 const ruleSet = await extractDepcruiseConfig(resolve(packageRoot, ".dependency-cruiser.mjs"));
-const tsConfig = extractTSConfig(resolve(packageRoot, ruleSet.options.tsConfig.fileName));
+const tsConfigFileName = ruleSet.options?.tsConfig?.fileName;
+if (tsConfigFileName === undefined || ruleSet.forbidden === undefined) {
+  throw new Error("dependency-cruiser requires a TypeScript config and forbidden rules");
+}
+const forbiddenRules = ruleSet.forbidden;
+const tsConfig = extractTSConfig(resolve(packageRoot, tsConfigFileName));
 
-const cruiseSource = (options) => cruise(sourceRoots, { ruleSet, ...options }, null, { tsConfig });
+/** @param {import("dependency-cruiser").ICruiseOptions} options - Cruise validation options. */
+const cruiseSource = (options) =>
+  cruise(sourceRoots, { ruleSet, ...options }, undefined, { tsConfig });
 
-const cruiseReport = async (options) =>
-  JSON.parse((await cruiseSource({ outputType: "json", ...options })).output);
+/** @param {import("dependency-cruiser").ICruiseOptions} options - Cruise validation options. */
+const cruiseReport = async (options) => {
+  // Without a reporter, dependency-cruiser returns its typed graph object directly.
+  const { output } = await cruiseSource(options);
+  if (typeof output === "string") throw new Error("Expected a dependency-cruiser graph object");
+  return output;
+};
 
 /**
  * The tripwire. A cruise that found no modules cannot have found a violation
  * either, so a green run means nothing until this has passed.
  */
+/** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
 const assertCruisedSomething = (report) => {
   if (report.summary.totalCruised > 0) return;
   console.error(
@@ -52,8 +65,9 @@ const assertCruisedSomething = (report) => {
 // to be looked back up — and a rule whose message did not travel with it is a
 // rule nobody can act on. Every rule in the config carries a `comment`, so a
 // missing one is a bug in the config rather than a violation to print bare.
+/** @param {string} ruleName - Name of a graph rule. */
 const ruleReason = (ruleName) => {
-  const rule = ruleSet.forbidden.find((candidate) => candidate.name === ruleName);
+  const rule = forbiddenRules.find((candidate) => candidate.name === ruleName);
   if (typeof rule?.comment === "string" && rule.comment.length > 0) return rule.comment;
   console.error(
     `The rule "${ruleName}" fired and has no \`comment\` in .dependency-cruiser.mjs. The ` +
@@ -64,10 +78,12 @@ const ruleReason = (ruleName) => {
   process.exit(1);
 };
 
+/** @param {string} path - Package-relative module path. */
 const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
 
 // Dependency-cruiser marks direct `export ... from` edges, but a local `export { imported }`
 // loses that provenance. Inspect only Published Trio interfaces to close that laundering form.
+/** @param {string} specifier - Relative import path to inspect. */
 const isInternalSpecifier = (specifier) =>
   [
     specifier.startsWith("./internal/"),
@@ -75,6 +91,7 @@ const isInternalSpecifier = (specifier) =>
     specifier.includes("/internal/"),
   ].includes(true);
 
+/** @param {import("typescript").ImportClause} clause - Imported bindings. */
 const importNames = (clause) => {
   const names = clause.name === undefined ? [] : [clause.name.text];
   const named = clause.namedBindings;
@@ -83,6 +100,10 @@ const importNames = (clause) => {
   return [...names, ...named.elements.map((element) => element.name.text)];
 };
 
+/**
+ * @param {import("typescript").Statement} statement - Candidate import.
+ * @returns {Array<readonly [string, string]>} Local binding and internal specifier pairs.
+ */
 const internalImport = (statement) => {
   if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
     return [];
@@ -92,6 +113,10 @@ const internalImport = (statement) => {
   return importNames(statement.importClause).map((name) => [name, specifier]);
 };
 
+/**
+ * @param {import("typescript").Statement} statement - Candidate alias declaration.
+ * @returns {Array<readonly [string, string]>} Local alias and source binding pairs.
+ */
 const localAliases = (statement) => {
   if (!ts.isVariableStatement(statement)) return [];
   return statement.declarationList.declarations.flatMap((declaration) =>
@@ -103,6 +128,7 @@ const localAliases = (statement) => {
   );
 };
 
+/** @param {import("typescript").SourceFile} sourceFile - Published interface module. */
 const internalBindings = (sourceFile) => {
   const bindings = new Map(sourceFile.statements.flatMap(internalImport));
   const aliases = sourceFile.statements.flatMap(localAliases);
@@ -119,6 +145,7 @@ const internalBindings = (sourceFile) => {
   return bindings;
 };
 
+/** @param {import("typescript").Statement} statement - Candidate local export. */
 const localExportNames = (statement) => {
   if (
     ts.isExportDeclaration(statement) &&
@@ -136,9 +163,13 @@ const localExportNames = (statement) => {
   return [];
 };
 
+/** @param {import("typescript").Statement} statement - Candidate exported declaration. */
 const isExported = (statement) =>
-  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+  ts.canHaveModifiers(statement) &&
+  ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ===
+    true;
 
+/** @param {import("typescript").Statement} statement - Candidate exported alias. */
 const exportedVariableAliases = (statement) => {
   if (!ts.isVariableStatement(statement) || !isExported(statement)) return [];
   return statement.declarationList.declarations.flatMap((declaration) =>
@@ -148,10 +179,13 @@ const exportedVariableAliases = (statement) => {
   );
 };
 
+/** @param {import("typescript").Statement} statement - Candidate exported type. */
 const exportedTypeReferences = (statement) => {
   if (!(ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))) return [];
   if (!isExported(statement)) return [];
+  /** @type {string[]} */
   const names = [];
+  /** @param {import("typescript").Node} node - Identifier-bearing type syntax. */
   const visit = (node) => {
     if (ts.isIdentifier(node)) names.push(node.text);
     ts.forEachChild(node, visit);
@@ -160,6 +194,7 @@ const exportedTypeReferences = (statement) => {
   return names;
 };
 
+/** @param {import("typescript").SourceFile} sourceFile - Published interface module. */
 const locallyExportedBindings = (sourceFile) =>
   new Set(
     sourceFile.statements.flatMap((statement) => [
@@ -169,6 +204,7 @@ const locallyExportedBindings = (sourceFile) =>
     ])
   );
 
+/** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
 const reportLaunderedInternals = (report) => {
   let violations = 0;
   for (const module of report.modules) {
@@ -195,16 +231,26 @@ const reportLaunderedInternals = (report) => {
   return violations;
 };
 
+/** @param {string} target - Resolved module path to inspect. */
+const nestedInternalOwner = (target) => {
+  const match = /^src\/(core|shell)\/(.+)\/internal\//u.exec(target);
+  if (match === null) return undefined;
+  const [, layer, modulePath] = match;
+  if (layer === undefined || modulePath === undefined) {
+    throw new Error(`Invalid internal module path: ${target}`);
+  }
+  return modulePath.includes("/") ? `src/${layer}/${modulePath}` : undefined;
+};
+
+/** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
 const reportNestedForeignInternals = (report) => {
   let violations = 0;
   for (const module of report.modules) {
     for (const dependency of module.dependencies) {
       const target = dependency.resolved;
       if (typeof target !== "string") continue;
-      const match = /^src\/(core|shell)\/(.+)\/internal\//u.exec(target);
-      if (match === null || !match[2].includes("/")) continue;
-      const owner = `src/${match[1]}/${match[2]}`;
-      if (module.source.startsWith(`${owner}/`)) continue;
+      const owner = nestedInternalOwner(target);
+      if (owner === undefined || module.source.startsWith(`${owner}/`)) continue;
       violations += 1;
       console.error(`error foreign-module-imports-internal: ${module.source} → ${target}`);
       console.error(`  ${ruleReason("foreign-module-imports-internal")}\n`);
@@ -213,6 +259,7 @@ const reportNestedForeignInternals = (report) => {
   return violations;
 };
 
+/** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
 const reportViolations = (report) => {
   for (const violation of report.summary.violations) {
     const path = violation.cycle

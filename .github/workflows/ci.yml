@@ -22,6 +22,11 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
+      # Oxlint's RuleTester requires Node 22+; pin the static gate rather than
+      # relying on whichever Node version the runner image supplies.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

@@ -111,7 +111,7 @@
       { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true }
     ],
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
-    "typescript/consistent-type-definitions": ["error", "type"],
+    "effect-guards/no-ordinary-interface": "error",
     "typescript/consistent-type-imports": [
       "error",
       { "prefer": "type-imports", "fixStyle": "inline-type-imports" }
@@ -257,12 +257,6 @@
       }
     },
     {
-      "files": ["apps/web/src/app/routes.ts"],
-      "rules": {
-        "typescript/consistent-type-definitions": "off"
-      }
-    },
-    {
       "files": ["apps/web/src/**/*.{ts,tsx}"],
       "rules": {
         "no-restricted-globals": [
@@ -301,6 +295,14 @@
       "files": ["scripts/oxlint/*.js"],
       "rules": {
         "import/extensions": ["error", "never", { "pattern": { "js": "always" } }]
+      }
+    },
+    // Oxlint's test API requires an extensionless package export while the local
+    // Node ESM plugin import needs `.js`; import/extensions rejects one or the other.
+    {
+      "files": ["scripts/oxlint/no-ordinary-interface.test.js"],
+      "rules": {
+        "import/extensions": "off"
       }
     },
     // Only the runner needs the `.mjs` exception turned back off. That

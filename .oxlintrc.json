@@ -268,13 +268,13 @@
         ]
       }
     },
-    // TanStack Router must infer the complete literal route subtree through both factories so
-    // registered links reject unknown paths. Explicit return types widen the tree to AnyRoute and
-    // silently remove that compile-time contract; tsc grades the inferred tree.
+    // TanStack Router needs inferred return types on two exact exported factories; the custom
+    // guard still requires annotations on other named functions in these files.
     {
       "files": ["apps/web/src/app/routes.ts", "apps/web/src/features/public-site/feature.tsx"],
       "rules": {
-        "typescript/explicit-function-return-type": "off"
+        "typescript/explicit-function-return-type": "off",
+        "effect-guards/require-route-return-type": "error"
       }
     },
     // dependency-cruiser's public imports resolve through its isolated install.
@@ -294,7 +294,7 @@
     // Oxlint's test API requires an extensionless package export while the local
     // Node ESM plugin import needs `.js`; import/extensions rejects one or the other.
     {
-      "files": ["scripts/oxlint/no-ordinary-interface.test.js"],
+      "files": ["scripts/oxlint/lint-rules.test.js"],
       "rules": {
         "import/extensions": "off"
       }

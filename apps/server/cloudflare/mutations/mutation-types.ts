@@ -7,12 +7,6 @@ import type {
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
-import type {
-  DeliveryAttemptId,
-  InsightDeliveryAttempt,
-  InsightEvent,
-  InsightEventId,
-} from "@fidy/server/insights-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -24,7 +18,7 @@ import type {
   RestoredTransactionPair,
   TransactionPresentation,
 } from "@fidy/server/transactions-runtime";
-import type { Effect, Option } from "effect";
+import type { Effect, Option, Schema } from "effect";
 import type {
   CanonicalRefusalDisposition,
   TransactionCaller,
@@ -101,19 +95,27 @@ export type BudgetOutcome = Readonly<{
   budgetId: BudgetId;
 }>;
 
+export type MutationTriggerKind = "movement" | "capacity" | "audit";
+
+type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
+
+/** Owner behavior at the shared commit, audit, and readback boundary. */
+export type OwnerOutcome = Readonly<{
+  _tag: "Owner";
+  operation: string;
+  collisionKey: Option.Option<string>;
+  /** Owner-specific facts retained for earlier-child guard replay inside one batch. */
+  guardFacts: Option.Option<BudgetOutcome | KeywordRuleOutcome>;
+  read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
+  triggerRefusal: (
+    work: OwnerWork,
+    kind: MutationTriggerKind
+  ) => Option.Option<CanonicalMutationRefusal>;
+}>;
+
 export type CanonicalMutationOutcome =
-  | BudgetOutcome
-  | Readonly<{
-      _tag: "Insight";
-      operation:
-        | "insights.markInsightDelivered"
-        | "insights.markInsightRead"
-        | "insights.dismissInsight";
-      insightEventId: InsightEventId;
-      attemptId: Option.Option<DeliveryAttemptId>;
-    }>
+  | OwnerOutcome
   | TransactionOutcome
-  | KeywordRuleOutcome
   | MemoryOutcome
   | Readonly<{
       _tag: "ForwardingAddress";
@@ -171,11 +173,10 @@ export type PreparedCanonicalMutation = Readonly<{
 
 /** One canonical success value an owner read back after the unit committed. */
 export type CommittedMutationValue =
-  | Readonly<{ _tag: "Insight"; insight: InsightEvent }>
   | Readonly<{
-      _tag: "DeliveredInsight";
-      insight: InsightEvent;
-      deliveryAttempt: InsightDeliveryAttempt;
+      _tag: "Owner";
+      payload: unknown;
+      encode: () => Effect.Effect<unknown, Schema.SchemaError>;
     }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>

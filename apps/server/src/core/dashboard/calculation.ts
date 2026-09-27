@@ -1,4 +1,4 @@
-import { BigDecimal, DateTime } from "effect";
+import { BigDecimal, DateTime, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import {
   type Currency,
@@ -151,3 +151,22 @@ export const dashboardMoneyGroupsFromMetrics = (
   dashboardMoneyGroupsFromSums(
     facts.map((fact) => ({ direction: fact.direction, money: metricMoney(fact) }))
   );
+
+/** Exact outflow spend for the selected Budget Currency, never netted with income. */
+export const dashboardBudgetSpent: {
+  (facts: ReadonlyArray<DashboardDirectionalAmountFact>, currency: Currency): Money;
+  (currency: Currency): (facts: ReadonlyArray<DashboardDirectionalAmountFact>) => Money;
+} = Function.dual(
+  2,
+  (facts: ReadonlyArray<DashboardDirectionalAmountFact>, currency: Currency): Money =>
+    money(
+      currency,
+      facts.reduce(
+        (total: Readonly<ReadonlyMoney["amount"]>, fact) =>
+          fact.direction === "outflow" && fact.money.currency === currency
+            ? BigDecimal.sum(total, fact.money.amount)
+            : total,
+        zero
+      )
+    )
+);

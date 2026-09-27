@@ -19,6 +19,7 @@ import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/bud
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
 import { listPendingInsights } from "./insights/insight-store";
+import { browseDashboard } from "./dashboard/dashboard";
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
 import { budgetRefusal } from "./budgets/budget-outcome";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
@@ -80,6 +81,7 @@ import {
   type PATAuthority,
   type WebSessionAuthority,
 } from "./transactions/transaction-coordinator";
+import { repairDashboardProjections } from "./transactions/dashboard-repair";
 import {
   CanonicalOperationId,
   type CatalogOperation,
@@ -1493,6 +1495,31 @@ const insightResponse = (
   );
 };
 
+const DashboardOperation = Schema.Literals([
+  "dashboard.getDashboard",
+  "dashboard.getDashboardView",
+  "dashboard.listDashboardCatalog",
+  "dashboard.applyDashboardEdit",
+]);
+
+/** Select Dashboard work from the canonical catalog without an independent route declaration. */
+const dashboardResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreEnvironment;
+    operation: CatalogOperation;
+    subject: TransactionCaller;
+  }>
+): Option.Option<Effect.Effect<Response>> =>
+  Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) =>
+    browseDashboard({
+      db: input.environment.DB,
+      subject: input.subject,
+      operation,
+      request: input.request,
+    })
+  );
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1521,11 +1548,11 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const ownerResponse = Option.orElse(insightResponse(input), () =>
-    Option.orElse(budgetResponse(input), () =>
-      Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
-    )
+  const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
+  const otherOwner = Option.orElse(budgetResponse(input), () =>
+    Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
   );
+  const ownerResponse = Option.orElse(primaryOwner, () => otherOwner);
   if (Option.isSome(ownerResponse)) return ownerResponse.value;
   const transaction = transactionResponse(input);
   if (Option.isSome(transaction)) return transaction.value;
@@ -1851,6 +1878,9 @@ const scheduledActivities = (
       try: () => sweepExpiredPATPairings(environment.DB),
       catch: () => undefined,
     }),
+    "dashboard.projectionRepair": repairDashboardProjections(environment.DB).pipe(
+      Effect.mapError(() => undefined)
+    ),
     "ingestion.submissionRetention":
       staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":

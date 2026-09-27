@@ -26,7 +26,7 @@ import {
   failedPreparation,
   refusedPreparation,
 } from "../mutations/mutation-types";
-import { budgetRefusal, findOwnedBudget } from "./budget-outcome";
+import { budgetOutcome, budgetRefusal, findOwnedBudget } from "./budget-outcome";
 import { dailyBudgetAuditLimit } from "./budget-audit";
 import { utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 
@@ -130,9 +130,11 @@ const budgetGuardRefusal =
     if (
       earlier.some(
         (child) =>
-          child._tag === "Budget" &&
-          child.operation === "budgets.deleteBudget" &&
-          child.budgetId === outcome.budgetId
+          child._tag === "Owner" &&
+          Option.isSome(child.guardFacts) &&
+          child.guardFacts.value._tag === "Budget" &&
+          child.guardFacts.value.operation === "budgets.deleteBudget" &&
+          child.guardFacts.value.budgetId === outcome.budgetId
       )
     ) {
       return Effect.succeed(refusal("not_found"));
@@ -165,7 +167,7 @@ const statements = ({
   _tag: "Prepared",
   mutation: {
     requiredScope: callerScope(subject),
-    outcome,
+    outcome: budgetOutcome(outcome),
     auditBudget: isPATCaller(subject) ? "shared" : "owner",
     commitGuards: Option.some(({ db, userId, current, index }) =>
       budgetCommitGuards({

@@ -138,6 +138,7 @@ const setup = (
         "0017_statement_dispatch",
         "0018_batch_envelope_audit",
         "0019_canonical_child_guards",
+        "0020_dashboard_projection",
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(
@@ -2915,13 +2916,13 @@ it("shares one Category projection and row codec between HTTP and the hosted-age
       expect(yield* awaitPromise(http.json())).toEqual(fromAgent);
     })
   ));
-it("fails closed with declared unavailable for an authenticated WebSession whose canonical adapter is absent", () =>
+it("fails closed with declared unavailable for an authenticated WebSession when Insight storage is unavailable", () =>
   runTest(
     Effect.gen(function* () {
       const { send, sessions } = yield* awaitPromise(setup());
       const authenticated = yield* awaitPromise(
         send({
-          path: "/dashboard/edits",
+          path: "/insights/30000000-0000-4000-8000-000000000001/read",
           method: "POST",
           payload: {},
           session: sessions[0],
@@ -2929,9 +2930,7 @@ it("fails closed with declared unavailable for an authenticated WebSession whose
       );
       expect(authenticated.status).toBe(503);
       expect(yield* awaitPromise(authenticated.json())).toMatchObject({
-        error: {
-          code: "unavailable",
-        },
+        status: "unavailable",
       });
       expect(
         (yield* awaitPromise(

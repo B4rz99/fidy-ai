@@ -20,10 +20,13 @@ import {
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { dailyAuditBudget, utcDayMilliseconds } from "../atomic/daily-canonical-budget";
+import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
+  type CommittedMutationValue,
   type GuardRefusalWork,
+  type OwnerOutcome,
   failedPreparation,
   refusedPreparation,
 } from "../mutations/mutation-types";
@@ -474,6 +477,65 @@ const insightCommitGuards = ({
   ];
 };
 
+const findCommittedInsight = ({
+  db,
+  userId,
+  insightEventId,
+  attemptId,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  insightEventId: InsightEventId;
+  attemptId: Option.Option<InsightDeliveryAttempt["id"]>;
+}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+  Effect.gen(function* () {
+    const event = yield* findInsight(db, userId, insightEventId);
+    if (Option.isNone(event)) return Option.none<CommittedMutationValue>();
+    if (Option.isNone(attemptId)) {
+      const insight = event.value;
+      return Option.some({
+        _tag: "Owner" as const,
+        payload: insight,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(InsightEvent))(insight),
+      });
+    }
+    const attempt = yield* findInsightAttempt(db, userId, insightEventId);
+    return Option.map(
+      Option.filter(attempt, (found) => found.id === attemptId.value),
+      (deliveryAttempt) => {
+        const payload = { insight: event.value, deliveryAttempt };
+        return {
+          _tag: "Owner" as const,
+          payload,
+          encode: () =>
+            Schema.encodeEffect(
+              Schema.toCodecJson(
+                Schema.Struct({ insight: InsightEvent, deliveryAttempt: InsightDeliveryAttempt })
+              )
+            )(payload),
+        };
+      }
+    );
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const insightOutcome = ({
+  operation,
+  insightEventId,
+  attemptId,
+}: Readonly<{
+  operation: TransitionInput["operation"];
+  insightEventId: InsightEventId;
+  attemptId: Option.Option<InsightDeliveryAttempt["id"]>;
+}>): OwnerOutcome => ({
+  _tag: "Owner",
+  operation,
+  guardFacts: Option.none(),
+  collisionKey: Option.none(),
+  read: (db, userId) => findCommittedInsight({ db, userId, insightEventId, attemptId }),
+  triggerRefusal: (_work, kind) =>
+    kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none(),
+});
+
 const transitionStatements = (
   input: TransitionInput
 ): Extract<CanonicalMutationPreparation, { _tag: "Prepared" }> => {
@@ -513,7 +575,7 @@ const transitionStatements = (
     _tag: "Prepared",
     mutation: {
       requiredScope: callerScope(subject),
-      outcome: { _tag: "Insight", operation, insightEventId: id, attemptId },
+      outcome: insightOutcome({ operation, insightEventId: id, attemptId }),
       guardRefusal: insightGuardRefusal(input),
       auditBudget: isPATCaller(subject) ? "shared" : "owner",
       commitGuards: isPATCaller(subject) ? Option.none() : Option.some(insightCommitGuards),

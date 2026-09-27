@@ -132,6 +132,7 @@ const setup = async (): Promise<D1Database> => {
     "0017_statement_dispatch",
     "0018_batch_envelope_audit",
     "0019_canonical_child_guards",
+    "0020_dashboard_projection",
   ];
   await migrations.reduce<Promise<void>>(
     (previous, name) => previous.then(() => migrate(db, name)),
@@ -601,6 +602,66 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
   expect((await send(db, request(0, `/budgets/${id}`))).status).toBe(404);
   expect((await send(db, request(1, "/budgets", "POST", payload()))).status).toBe(201);
 });
+
+// @effect-diagnostics-next-line asyncFunction:off
+it("reads back Budget creation, replacement and removal through the atomic batch without leaking a foreign Budget", async () => {
+  const db = await setup();
+  const call = (operation: string, input: object, index: number): object => ({
+    callId: `30000000-0000-4000-8000-00000000000${index}`,
+    operation,
+    input,
+  });
+  const batch = (calls: ReadonlyArray<object>): Promise<Response> =>
+    send(db, request(0, "/operations/atomic-batch", "POST", { calls }));
+  const created = await batch([call("budgets.createBudget", { payload: payload() }, 1)]);
+  expect(created.status).toBe(200);
+  const result = await created.json();
+  const id = Schema.decodeUnknownSync(
+    Schema.Struct({
+      data: Schema.Struct({
+        results: Schema.Array(
+          Schema.Struct({
+            output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+          })
+        ),
+      }),
+    })
+  )(result).data.results[0]?.output.data.id;
+  expect(id).toBeDefined();
+  const changed = await batch([
+    call(
+      "budgets.updateBudget",
+      {
+        params: { id },
+        payload: payload("250.25"),
+      },
+      2
+    ),
+  ]);
+  expect(changed.status).toBe(200);
+  const updated = Schema.decodeUnknownSync(
+    Schema.Struct({
+      data: Schema.Struct({
+        results: Schema.Array(
+          Schema.Struct({
+            output: Schema.Struct({ data: Schema.toCodecJson(Budget) }),
+          })
+        ),
+      }),
+    })
+  )(await changed.json());
+  const first = updated.data.results[0];
+  if (first === undefined) throw new Error("Missing batch Budget result");
+  expect(encodeMoneyAmount(first.output.data.cap.amount)).toBe("250.25");
+  const foreign = await send(db, request(1, `/budgets/${id}`));
+  expect(foreign.status).toBe(404);
+  const removed = await batch([call("budgets.deleteBudget", { params: { id } }, 3)]);
+  expect(removed.status).toBe(200);
+  expect(await removed.json()).toMatchObject({
+    data: { results: [{ output: { data: id } }] },
+  });
+  expect((await send(db, request(0, `/budgets/${id}`))).status).toBe(404);
+}, 30_000);
 
 // @effect-diagnostics-next-line asyncFunction:off
 it("reports only this User's exact same-Currency outflows in the applied half-open month", async () => {

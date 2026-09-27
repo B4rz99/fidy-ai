@@ -149,6 +149,13 @@ export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
+/** Canonical call shape for first-use Dashboard persistence. */
+export const GetDashboardCanonicalInput = Schema.Struct({});
+/** Canonical call shape for first-use Dashboard view persistence. */
+export const GetDashboardViewCanonicalInput = Schema.Struct({});
+/** Canonical call shape for a Dashboard edit, shared by individual and batch execution. */
+export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
+
 /** Canonical contracts for the caller's one persistent DashboardDocument and ephemeral view. */
 export const DashboardGroup = HttpApiGroup.make("dashboard")
   .add(

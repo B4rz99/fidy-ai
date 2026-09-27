@@ -107,7 +107,7 @@ The infrastructure admission primitive atomically charges Stable-User, source, o
 outstanding-work, and spend policies with caller-owned proof, replay, or outbox statements. Its
 resource refusal and authority-unavailable failures are separate from commercial allowance results.
 The shared canonical mutation unit in `cloudflare/mutations` composes the Reconciliation, Category
-keyword-rule, Memory, and statement-publication owners into one User-scoped D1 commit, derived from
+keyword-rule, Memory, Dashboard document, and statement-publication owners into one User-scoped D1 commit, derived from
 the operation catalog so a new canonical mutation joins it without editing the unit. If an adapter is absent, canonical mutation execution returns the closed
 unavailable failure. It must not use an in-memory map, local queue, process lock, or best-effort
 continuation as a substitute.
@@ -121,6 +121,22 @@ missing or mismatched bytes. Unpublished material expires; published bytes follo
 retention while their staging row records their eventual removal. See
 [ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md) for the
 staging and publication protocol.
+
+Dashboard first-use document creation, edits, and view preparation use the same canonical mutation
+unit for individual and atomic-batch calls. Batch preparation does not read earlier children's
+writes; a batch refuses a second Dashboard document child rather than claiming an intermediate
+view. Invalid first edits leave no document or accepted AuditLogEntry.
+
+Dashboard Money views require a write-maintained projection of **effective** Transactions,
+updated atomically with each effective transition and its Audit. The Transaction owner provides
+old/new contributions; core defines exact Currency, Category, period, and time-zone bucketing;
+the Cloudflare adapter stores the User-scoped read model. First-use backfill, zone changes,
+versioned repair, and concurrent writes must prove completeness before a projection-backed
+view is served. An incomplete projection is unavailable, never a partial total. Transaction-list
+Widgets fetch only their bounded, filtered page, independently of aggregate totals. See
+[ADR 0030](../../docs/adr/0030-dashboard-exact-write-maintained-projection.md) for the decision
+and recovery rules. Until projection cutover, the adapter fails closed when its guarded fact
+scan exceeds 8,192 effective Transactions; this interim cutoff is not the target behavior.
 
 Individual and atomic-batch statement submissions share one User-scoped publication unit: the
 submission, staging promotion, Free-backfill reservation, credential accountability, metadata-only

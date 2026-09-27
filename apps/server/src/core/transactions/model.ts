@@ -52,6 +52,15 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 });
 export type Direction = typeof Direction.Type;
 
+/** Effective Transactions grouped by interval, Category, Currency, and direction for Dashboard. */
+export type EffectiveTransactionAggregate = Readonly<{
+  categoryId: CategoryId;
+  direction: Direction;
+  sum: Money;
+  maximum: Money;
+  count: bigint;
+}>;
+
 /** A user-recognizable person or organization explicitly identified on the other side. */
 export const Counterparty = Schema.NonEmptyString.check(
   Schema.isTrimmed(),

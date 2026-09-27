@@ -6,8 +6,9 @@ import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type CategoryFailure,
   CategoryNotFound,
-  type KeywordRule,
+  KeywordRule,
   KeywordRuleAlreadyExists,
+  KeywordRuleId,
   KeywordRuleLimitReached,
   NotFound,
   type SuggestedOperationCaller,
@@ -31,6 +32,7 @@ import type {
   CommittedMutationValue,
   GuardRefusalWork,
   KeywordRuleOutcome,
+  OwnerOutcome,
 } from "./mutation-types";
 import {
   type TransactionCaller,
@@ -254,7 +256,11 @@ export const keywordRuleGuardFor =
           userId: subject.userId,
           outcome,
           earlier: earlier.flatMap((candidate) =>
-            candidate._tag === "KeywordRule" ? [candidate] : []
+            candidate._tag === "Owner" &&
+            Option.isSome(candidate.guardFacts) &&
+            candidate.guardFacts.value._tag === "KeywordRule"
+              ? [candidate.guardFacts.value]
+              : []
           ),
         }).pipe(
           Effect.map((failure) =>
@@ -363,10 +369,38 @@ export const findKeywordRuleValue = ({
   outcome: KeywordRuleOutcome;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   outcome.operation === "categories.deleteKeywordRule"
-    ? Effect.succeedSome({ _tag: "RemovedKeywordRule" as const, id: outcome.ruleId })
+    ? Effect.succeedSome({
+        _tag: "Owner" as const,
+        payload: outcome.ruleId,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(outcome.ruleId),
+      })
     : Effect.tryPromise(() => findOwnedRule({ db, userId, id: outcome.ruleId })).pipe(
-        Effect.map((rule) =>
-          Option.map(rule, (value) => ({ _tag: "KeywordRule" as const, rule: value }))
+        Effect.map(
+          Option.map((rule) => ({
+            _tag: "Owner" as const,
+            payload: rule,
+            encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(rule),
+          }))
         ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
+
+/** The rule owner supplies readback, conflict replay, and its own trigger refusals. */
+export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome => ({
+  _tag: "Owner",
+  operation: outcome.operation,
+  guardFacts: Option.some(outcome),
+  collisionKey: Option.some(`keyword-rule:${outcome.ruleId}`),
+  read: (db, userId) => findKeywordRuleValue({ db, userId, outcome }),
+  triggerRefusal: ({ subject }, kind) => {
+    if (kind === "capacity") {
+      return Option.some(
+        keywordRuleRefusal({
+          failure: new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
+          subject,
+        })
+      );
+    }
+    return kind === "audit" ? Option.some(keywordRuleBudgetRefusal()) : Option.none();
+  },
+});

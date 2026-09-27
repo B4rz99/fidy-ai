@@ -1,0 +1,24 @@
+apps/web/scripts/serve-preview.ts
+  s_60ae463805ce18::t_b9cca343905794 66,69-71,73,77-91
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_60ae463805ce18::t_fddb6ceae04b71 76,78-97,110-114
+  s_60ae463805ce18::t_254612c5cea6b8 98,101-109
+apps/server/cloudflare/browser-acceptance-wompi.ts
+  s_60ae463805ce18::t_0f3c2ec1ff58a6 53-56,66-73,76-96,105-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "19cb9577158b885f1a1f87672a7b85575c13dbbd",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

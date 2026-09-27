@@ -28,6 +28,13 @@ import {
 const routerRegistrationFile = fileURLToPath(
   new URL("../../apps/web/src/app/routes.ts", import.meta.url)
 );
+const publicSiteRouteFile = fileURLToPath(
+  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
+);
+const routeFactories = new Map([
+  [routerRegistrationFile, "createWebRouter"],
+  [publicSiteRouteFile, "createPublicSiteRoute"],
+]);
 
 /** @param {TSInterfaceDeclaration} node - Interface to inspect. */
 const isRouterRegistration = (node) => {
@@ -67,6 +74,60 @@ const noOrdinaryInterface = {
           return;
         }
         context.report({ node, messageId: "ordinaryInterface" });
+      },
+    };
+  },
+};
+
+/**
+ * Keep route-factory inference without exempting other named functions in their files.
+ * The built-in rule remains active everywhere else; route callbacks are not named declarations.
+ */
+/** @satisfies {OxlintRule} */
+const requireRouteReturnType = {
+  meta: {
+    type: "problem",
+    docs: { description: "Require return annotations except on the two reviewed route factories" },
+    messages: {
+      routeReturnType:
+        "Named functions need an explicit return type; only the reviewed TanStack Router factories require inferred returns.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const factoryName = routeFactories.get(context.filename);
+    let factorySeen = false;
+    /** @param {import("./ast-types.js").VariableDeclarator} owner - Named function binding. */
+    const isExportedFactory = (owner) => {
+      const declaration = owner.parent;
+      return (
+        owner.id.type === "Identifier" &&
+        owner.id.name === factoryName &&
+        declaration.type === "VariableDeclaration" &&
+        declaration.parent.type === "ExportNamedDeclaration" &&
+        declaration.parent.parent.type === "Program"
+      );
+    };
+    /**
+     * @param {import("./ast-types.js").ArrowFunctionExpression | import("./ast-types.js").FunctionExpression} node - Function expression to inspect.
+     */
+    const checkInitializer = (node) => {
+      if (node.returnType !== null) return;
+      const owner = node.parent;
+      if (owner.type !== "VariableDeclarator") return;
+      if (!factorySeen && isExportedFactory(owner)) {
+        factorySeen = true;
+        return;
+      }
+      context.report({ node, messageId: "routeReturnType" });
+    };
+    return {
+      ArrowFunctionExpression: checkInitializer,
+      FunctionExpression: checkInitializer,
+      FunctionDeclaration(node) {
+        if (node.returnType === null) {
+          context.report({ node, messageId: "routeReturnType" });
+        }
       },
     };
   },
@@ -892,6 +953,7 @@ const plugin = {
     "no-unknown-parameters": noUnknownParameters,
     "no-unsafe-dictionary-type": noUnsafeDictionaryType,
     "no-ordinary-interface": noOrdinaryInterface,
+    "require-route-return-type": requireRouteReturnType,
     "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,

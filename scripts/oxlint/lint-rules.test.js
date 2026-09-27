@@ -6,6 +6,9 @@ import { RuleTester } from "oxlint/plugins-dev";
 import effectGuards from "./effect-guards.js";
 
 const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
+const publicSiteFile = fileURLToPath(
+  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
+);
 const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 
@@ -55,6 +58,56 @@ tester.run("effect-guards/no-ordinary-interface", effectGuards.rules["no-ordinar
     },
   ],
 });
+
+tester.run(
+  "effect-guards/require-route-return-type",
+  effectGuards.rules["require-route-return-type"],
+  {
+    valid: [
+      { code: "export const createWebRouter = () => 1;", filename: routeFile },
+      { code: "export const createPublicSiteRoute = () => 1;", filename: publicSiteFile },
+      { code: "const local = (): number => 1;", filename: routeFile },
+      { code: "const values = [1].map((value) => value + 1);", filename: publicSiteFile },
+    ],
+    invalid: [
+      {
+        code: "export const unrelated = () => 1;",
+        filename: routeFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "const helper = () => 1;",
+        filename: publicSiteFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "export const createWebRouter = () => 1;",
+        filename: otherFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "const createWebRouter = () => 1;",
+        filename: routeFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "export function helper() { return 1; }",
+        filename: routeFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "const helper = function () { return 1; };",
+        filename: publicSiteFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+      {
+        code: "export const createWebRouter = () => 1; { const createWebRouter = () => 2; }",
+        filename: routeFile,
+        errors: [{ messageId: "routeReturnType" }],
+      },
+    ],
+  }
+);
 
 // Exercise the real lint config as well as the isolated rule: a new source file
 // must not escape merely because the old built-in rule was replaced.

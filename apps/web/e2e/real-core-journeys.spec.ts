@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { signInThroughCore, visiblePairingCode } from "./real-core-fixture";
 
 const api = "https://127.0.0.1:4174";
 const ok = 200;
+const created = 201;
 const forbidden = 403;
 const unauthorized = 401;
 const noContent = 204;
@@ -80,6 +81,36 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
   expect(bearer).toMatch(/^fin_/u);
   expect(await page.locator("body").textContent()).not.toContain(bearer);
   await assertUnderScopedBrowser(page, request, bearer);
+});
+
+test("renders a seeded Category identity from real public and Core routes", async ({
+  page,
+  request,
+}) => {
+  await signInThroughCore({ page, request });
+  const categories = await page.request.get(`${api}/categories`, {
+    headers: { origin: "https://127.0.0.1:4173" },
+  });
+  expect(categories.status()).toBe(ok);
+  expect(await categories.json()).toMatchObject({
+    data: expect.arrayContaining([
+      { id: "10000000-0000-4000-8000-000000000001", label: "Restaurantes" },
+    ]),
+  });
+  const captured = await page.request.post(`${api}/transactions`, {
+    headers: { origin: "https://127.0.0.1:4173" },
+    data: {
+      money: { amount: "12500", currency: "COP" },
+      counterparty: "La Cocina real",
+      direction: "outflow",
+      categoryId: "10000000-0000-4000-8000-000000000001",
+      occurredAt: DateTime.formatIso(Effect.runSync(DateTime.now)),
+    },
+  });
+  expect(captured.status()).toBe(created);
+  await page.goto("/app/transactions");
+  await expect(page.getByText("La Cocina real").first()).toBeVisible();
+  await expect(page.getByText("Restaurantes").first()).toBeVisible();
 });
 
 test("a browser cannot render or fetch another User's private Transaction through public routes", async ({

@@ -21,7 +21,6 @@ if (compiled.exitCode !== 0) {
   throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
 }
 // Esbuild emits this file from core-worker.ts above; keep its imports on that module interface.
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- The URL is the output of the typed core-worker.ts compiled immediately above.
 const coreModule: typeof CoreWorkerModule = await import(coreBundle.href);
 if (
   typeof coreModule.makeCoreWorker !== "function" ||

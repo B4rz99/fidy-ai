@@ -28,7 +28,6 @@
     "email-formats:generate": "bun run --cwd apps/server email-formats:generate",
     "email-formats:check": "bun run --cwd apps/server email-formats:check",
     "contracts:check:freshness": "bun run --cwd apps/server contracts:generate --check",
-    "contracts:check:compatibility": "bun run --cwd apps/server tools/contracts/check.ts",
     "test:contracts": "bun run --cwd apps/server test:contracts",
     "test:ci-tools": "bun --bun vitest run scripts/check-effect-family.test.ts --environment node",
     "test": "bun run --cwd apps/server test:core && bun run --cwd apps/server test:email-interpretation && bun run --cwd apps/server test:cloudflare && bun run --cwd apps/web test && bun run --cwd infra/cloudflare test",

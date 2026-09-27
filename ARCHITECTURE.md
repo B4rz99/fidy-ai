@@ -23,8 +23,8 @@ The server declares canonical operations once for HTTP, typed clients, MCP, and 
 The web derives its typed client from the browser-safe server declaration, without importing server
 implementations or copying the contract. The server generates OpenAPI and operation-policy artifacts
 as review evidence, not competing declarations. The project-reference build orders server before
-web; the root gate checks generated artifact freshness and compatibility with the pull-request base. See
-[Contract compatibility](docs/contract-compatibility.md).
+web; the root gate checks generated artifact freshness, not compatibility with older revisions.
+See [Server contract artifacts](docs/server-contract-artifacts.md).
 
 Three transports sit outside the stable-User canonical operation surface: proof-bearing credential
 bootstrap before a stable User exists, bounded User-authenticated statement-byte staging before a
@@ -74,7 +74,7 @@ without that verifier. One approved pairing bootstraps one web session. The serv
 and owns session authority; the web keeps private material out of URLs, public references, and
 unrelated application state.
 
-The root gate combines contract checks, portable behavior tests, built-browser tests, and Cloudflare
+The root gate combines generated contract freshness, portable behavior tests, built-browser tests, and Cloudflare
 adapter tests. Browser API scenarios currently use explicit HTTP fixtures; they do not by themselves
 prove a browser-to-real-Worker flow. Cloudflare integration tests exercise the relevant Worker and
 platform boundaries locally; live Workers AI behavior has a separate release gate. Application-specific

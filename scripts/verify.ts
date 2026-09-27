@@ -151,7 +151,6 @@ const checks: Array<Check> = [
   ]),
   rootCheck("unit", "Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
   rootCheck("unit", "Web Istanbul coverage", ["bun", "run", "--cwd", "apps/web", "test:coverage"]),
-  rootCheck("unit", "Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),
   rootCheck("unit", "Production deployment adapters", ["bun", "run", "test:production-adapters"]),
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),

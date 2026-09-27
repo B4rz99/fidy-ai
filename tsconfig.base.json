@@ -112,7 +112,6 @@
         "overrides": [
           {
             "include": [
-              "./apps/web/cloudflare/preview-policy/**/*.ts",
               "./apps/web/cloudflare/production-policy/**/*.ts",
               "./scripts/production/**/*.ts"
             ],

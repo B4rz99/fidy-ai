@@ -65,9 +65,9 @@ content-hashed assets.
 
 Production artifact validation rejects unhashed assets, missing shell entry assets, source maps,
 server-shaped output, and known Secret material. Application build and policy checks own these
-properties; `infra/cloudflare` owns Production hosting topology. The checked-in Wrangler adapter is
-restricted to static pull-request previews and has no Production route. Cross-application deployment
-ordering and recovery behavior remain in the root architecture and production runbook.
+properties; `infra/cloudflare` owns Production hosting topology. There is no pull-request preview
+deployment. Cross-application deployment ordering and recovery behavior remain in the root
+architecture and production runbook.
 
 ## 5. Testing seams
 

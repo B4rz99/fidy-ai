@@ -9,8 +9,10 @@ provider repository integration or from a workstation.
 `infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. It declares the static
 application, apex redirect, public ingress Worker, private Core Worker, service binding, and release
 metadata bindings as one Alchemy stack. Remote stages other than `production` are rejected before
-resource creation. `apps/web/cloudflare/wrangler.json` is restricted to static pull-request previews
-and owns no Production route.
+resource creation. Pull requests validate builds without deploying preview sites. The legacy
+`fidy-web-preview` Worker and its public aliases were created outside Alchemy; removing the preview
+workflow does not delete those existing Cloudflare resources. An account operator must retire that
+Worker separately after confirming Production `fidy-web` remains untouched.
 
 Create the GitHub `production` environment and configure:
 
@@ -100,7 +102,7 @@ A failed build, test, plan, supersession check, or public-topology verification 
 deployment starts and fails, inspect the Alchemy plan/state and Cloudflare resource state before fixing
 forward with a new trunk revision. Recovery remains a reviewed change through this GitHub Actions
 workflow; do not deploy from a workstation, dashboard, provider source integration, Railway, or the
-preview Wrangler adapter.
+a separate preview deployment.
 
 The assets Worker keeps the legacy physical name `fidy-web` and explicitly opts that resource into
 Alchemy adoption, so the first Alchemy release updates the old Wrangler-managed Worker in place,

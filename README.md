@@ -23,7 +23,7 @@ service-binding graph. `bun run dev:web` remains available for isolated UI work,
 the Cloudflare boundary. The built static artifact can be checked with:
 
 ```sh
-bun run --cwd apps/web build:preview
+bun run --cwd apps/web build
 bun run --cwd apps/web test:browser
 ```
 

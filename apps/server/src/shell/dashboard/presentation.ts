@@ -169,12 +169,15 @@ const renderWidget = (
   });
 
 /** Rebuild the recursive view from canonical layout, with one typed result at each leaf. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const renderDashboardView = (
-  document: DashboardDocument,
-  facts: DashboardFacts,
-  now: DateTime.Utc
-): Effect.Effect<DashboardView, DashboardUnavailable> => {
+export const renderDashboardView = ({
+  document,
+  facts,
+  now,
+}: Readonly<{
+  document: DashboardDocument;
+  facts: DashboardFacts;
+  now: DateTime.Utc;
+}>): Effect.Effect<DashboardView, DashboardUnavailable> => {
   const render = (
     node: LayoutNode
   ): Effect.Effect<DashboardView["layout"], DashboardUnavailable> =>

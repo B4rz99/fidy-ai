@@ -404,17 +404,17 @@ const remove = (path: string): void => {
   const result = Bun.spawnSync(["rm", "-rf", path], { stderr: "pipe" });
   if (result.exitCode !== 0) throw new Error(decode(result.stderr));
 };
-const removeProbeFiles = async (probe: Probe): Promise<void> => {
+const removeProbeFiles = (probe: Probe): Promise<void> => {
   const directories = new Set<string>();
-  for (const { path } of probe.files) {
+  const restore = probe.files.flatMap(({ path }) => {
     const original = Option.fromUndefinedOr(preservedProbeSources.get(path));
-    if (Option.isSome(original)) {
-      await Bun.write(`${webRoot}/${path}`, original.value);
-    } else {
-      directories.add(path.slice(0, path.lastIndexOf("/")));
-    }
-  }
-  for (const directory of directories) remove(`${webRoot}/${directory}`);
+    if (Option.isSome(original)) return [Bun.write(`${webRoot}/${path}`, original.value)];
+    directories.add(path.slice(0, path.lastIndexOf("/")));
+    return [];
+  });
+  return Promise.all(restore).then(() => {
+    for (const directory of directories) remove(`${webRoot}/${directory}`);
+  });
 };
 const missingFrom = (report: string, expected: readonly string[]): readonly string[] =>
   expected.filter((entry) => !report.includes(entry));

@@ -117,7 +117,6 @@
             ],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off",
                 "missingPipeableSignature": "off",
                 "nodeBuiltinImport": "off"
               }
@@ -131,7 +130,6 @@
             ],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off",
                 "nodeBuiltinImport": "off"
               }
             }
@@ -140,7 +138,6 @@
             "include": ["./apps/web/scripts/**/*.ts"],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off",
                 "missingPipeableSignature": "off"
               }
             }
@@ -167,7 +164,6 @@
             "include": ["./apps/web/e2e/**/*.ts", "./apps/web/playwright.config.ts"],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off",
                 "processEnv": "off",
                 "strictBooleanExpressions": "off"
               }
@@ -177,7 +173,6 @@
             "include": ["./apps/server/tools/contracts/**/*.ts"],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off",
                 "missingPipeableSignature": "off"
               }
             }

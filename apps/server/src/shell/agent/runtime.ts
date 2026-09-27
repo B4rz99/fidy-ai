@@ -19,6 +19,11 @@ export { HostedAgentSessionConsentBasis } from "~/core/transcript/hosted-agent-s
 export { HostedAgentSessionId } from "~/core/transcript/reference";
 export {
   AssistantTranscriptEntry,
+  CanonicalToolCallEntry,
+  CanonicalToolEvidence,
+  CanonicalToolOutcome,
+  CanonicalToolResultEntry,
+  ToolCallId,
   FailedTurnTranscriptEntry,
   InterruptedTurnTranscriptEntry,
   TranscriptEntry,

@@ -112,12 +112,13 @@ export const readBoundedRequestBody = Effect.fn(function* (
  * unreadable, oversized, late, malformed, or schema-invalid body are all refused as `Option.none`
  * without retaining any body detail.
  */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>(
-  request: Request,
-  policy: RequestBodyPolicy,
-  schema: A
-): Promise<Option.Option<A["Type"]>> => {
+export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
+  request,
+  policy,
+  schema,
+}: Readonly<{ request: Request; policy: RequestBodyPolicy; schema: A }>): Promise<
+  Option.Option<A["Type"]>
+> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return Promise.resolve(Option.none());
   }

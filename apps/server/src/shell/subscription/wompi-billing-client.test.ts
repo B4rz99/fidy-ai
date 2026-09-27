@@ -1,8 +1,3 @@
-// Node standard-library seams keep these focused fixtures independent of a production runtime.
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { createHash } from "node:crypto";
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
@@ -38,18 +33,15 @@ const config = ConfigProvider.layer(
   })
 );
 
-const recordedCreatedTransaction = await readFile(
-  new URL("./fixtures/wompi-transaction-created.sandbox.json", import.meta.url),
-  "utf8"
-);
-const recordedApprovedTransaction = await readFile(
-  new URL("./fixtures/wompi-transaction-approved.sandbox.json", import.meta.url),
-  "utf8"
-);
-const recordedDeclinedTransaction = await readFile(
-  new URL("./fixtures/wompi-transaction-declined.sandbox.json", import.meta.url),
-  "utf8"
-);
+const recordedCreatedTransaction = await Bun.file(
+  new URL("./fixtures/wompi-transaction-created.sandbox.json", import.meta.url)
+).text();
+const recordedApprovedTransaction = await Bun.file(
+  new URL("./fixtures/wompi-transaction-approved.sandbox.json", import.meta.url)
+).text();
+const recordedDeclinedTransaction = await Bun.file(
+  new URL("./fixtures/wompi-transaction-declined.sandbox.json", import.meta.url)
+).text();
 const successResponse = (method: string): Response =>
   method === "GET"
     ? new Response(recordedApprovedTransaction)
@@ -151,7 +143,7 @@ layer(credentialBoundaryLayer, { excludeTestServices: true })(
             new TextDecoder().decode(created.body.body)
           );
           expect(body).toMatchObject({
-            signature: createHash("sha256")
+            signature: new Bun.CryptoHasher("sha256")
               .update(
                 `${creationInput.reference}${creationInput.amountInCents}${creationInput.currency}${integritySecretFixture}`
               )

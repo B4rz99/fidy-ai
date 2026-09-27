@@ -175,7 +175,7 @@ const triggerRefusal = ({
   mutation: PreparedCanonicalMutation;
   kind: TriggerKind;
 }>): Option.Option<CanonicalMutationRefusal> => {
-  const scoped = childCaller(subject, mutation.requiredScope);
+  const scoped = childCaller({ subject, requiredScope: mutation.requiredScope });
   const auditOnly = (refusal: CanonicalMutationRefusal): Option.Option<CanonicalMutationRefusal> =>
     kind === "audit" ? Option.some(refusal) : Option.none();
   switch (mutation.outcome._tag) {
@@ -306,7 +306,7 @@ const refuseChildGuard = ({
   Effect.gen(function* () {
     const mutation = mutations[index];
     if (mutation === undefined) return { _tag: "Unavailable" } as const;
-    const scoped = childCaller(subject, mutation.requiredScope);
+    const scoped = childCaller({ subject, requiredScope: mutation.requiredScope });
     // A same-material publication that won the race is a retry, not a refused child.
     if (
       mutation.outcome._tag === "StatementSubmission" &&

@@ -485,67 +485,88 @@ export class UserTransactionCoordinator {
     return action;
   }
 
-  // @effect-diagnostics-next-line asyncFunction:off
-  private async recoverAbandonedWork(): Promise<void> {
-    const next = await expireHostedPending({
-      db: this.env.DB,
-      userId: UserId.make(this.state.id.name),
-      now: transactionNow(),
-    });
-    if (Option.isSome(next)) {
-      await this.state.storage.setAlarm(next.value);
-    }
-  }
-
-  // @effect-diagnostics-next-line asyncFunction:off
-  private async runHostedReceipt(request: Request, userId: string): Promise<Response> {
-    const admission = Schema.decodeUnknownOption(HostedDeliveryAdmission)(
-      await request.json().catch(() => undefined)
+  private recoverAbandonedWork(): Promise<void> {
+    const { env, state } = this;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const next = yield* Effect.tryPromise(() =>
+          expireHostedPending({
+            db: env.DB,
+            userId: UserId.make(state.id.name),
+            now: transactionNow(),
+          })
+        );
+        if (Option.isSome(next)) {
+          yield* Effect.tryPromise(() => state.storage.setAlarm(next.value));
+        }
+      })
     );
-    if (
-      Option.isNone(admission) ||
-      admission.value.userId !== userId ||
-      admission.value.digest.length !== digestBytes
-    ) {
-      return transactionUnavailable();
-    }
-    return acknowledgeBrowserTurn({
-      db: this.env.DB,
-      subject: {
-        userId,
-        id: admission.value.sessionId,
-        digest: new Uint8Array(admission.value.digest),
-      },
-      turnId: admission.value.turnId,
-      receipt: admission.value.receipt,
-    }).catch(() => transactionUnavailable());
   }
 
-  // @effect-diagnostics-next-line asyncFunction:off
-  private async runHostedTurn(request: Request, userId: string): Promise<Response> {
-    const candidate = await request.json().catch(() => undefined);
-    const admission = Schema.decodeUnknownOption(HostedTurnAdmission)(candidate);
-    if (
-      Option.isNone(admission) ||
-      admission.value.userId !== userId ||
-      admission.value.digest.length !== digestBytes
-    ) {
-      return transactionUnavailable();
-    }
-    const inference = await Effect.runPromiseExit(makeCloudflareHostedInference(this.env));
-    if (Exit.isFailure(inference)) return transactionUnavailable();
-    return completeHostedTurn({
-      db: this.env.DB,
-      subject: {
-        userId: admission.value.userId,
-        id: admission.value.sessionId,
-        digest: new Uint8Array(admission.value.digest),
-      },
-      text: admission.value.text,
-      inference: inference.value,
-      deliver: browserHostedDelivery,
-      signal: request.signal,
-      scheduleRecovery: (dueAtMs) => this.state.storage.setAlarm(dueAtMs),
-    }).catch(() => transactionUnavailable());
+  private runHostedReceipt(request: Request, userId: string): Promise<Response> {
+    const { env } = this;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+          Effect.orElseSucceed(() => undefined)
+        );
+        const admission = Schema.decodeUnknownOption(HostedDeliveryAdmission)(candidate);
+        if (
+          Option.isNone(admission) ||
+          admission.value.userId !== userId ||
+          admission.value.digest.length !== digestBytes
+        ) {
+          return transactionUnavailable();
+        }
+        return yield* Effect.tryPromise(() =>
+          acknowledgeBrowserTurn({
+            db: env.DB,
+            subject: {
+              userId,
+              id: admission.value.sessionId,
+              digest: new Uint8Array(admission.value.digest),
+            },
+            turnId: admission.value.turnId,
+            receipt: admission.value.receipt,
+          })
+        ).pipe(Effect.orElseSucceed(transactionUnavailable));
+      })
+    );
+  }
+
+  private runHostedTurn(request: Request, userId: string): Promise<Response> {
+    const { env, state } = this;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+          Effect.orElseSucceed(() => undefined)
+        );
+        const admission = Schema.decodeUnknownOption(HostedTurnAdmission)(candidate);
+        if (
+          Option.isNone(admission) ||
+          admission.value.userId !== userId ||
+          admission.value.digest.length !== digestBytes
+        ) {
+          return transactionUnavailable();
+        }
+        const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
+        if (Exit.isFailure(inference)) return transactionUnavailable();
+        return yield* Effect.tryPromise(() =>
+          completeHostedTurn({
+            db: env.DB,
+            subject: {
+              userId: admission.value.userId,
+              id: admission.value.sessionId,
+              digest: new Uint8Array(admission.value.digest),
+            },
+            text: admission.value.text,
+            inference: inference.value,
+            deliver: browserHostedDelivery,
+            signal: request.signal,
+            scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+          })
+        ).pipe(Effect.orElseSucceed(transactionUnavailable));
+      })
+    );
   }
 }

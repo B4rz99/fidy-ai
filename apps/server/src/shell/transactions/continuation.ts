@@ -7,14 +7,15 @@ import {
 } from "~/shell/_shared/suggested-operations";
 
 /** An authorized, typed canonical continuation for the next bounded Transaction history page. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const nextTransactionPage = (
-  cursor: string,
-  filters: Readonly<Record<string, string>>,
-  operation:
-    | "transactions.listTransactions"
-    | "transactions.searchTransactions" = "transactions.listTransactions"
-): typeof NextOperations.Encoded =>
+export const nextTransactionPage = ({
+  cursor,
+  filters,
+  operation,
+}: Readonly<{
+  cursor: string;
+  filters: Readonly<Record<string, string>>;
+  operation: "transactions.listTransactions" | "transactions.searchTransactions";
+}>): typeof NextOperations.Encoded =>
   Schema.encodeSync(NextOperations)(
     checkpointSuggestedOperations({
       candidates: [

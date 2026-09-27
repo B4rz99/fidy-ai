@@ -1,5 +1,3 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import type { WorkBook, WorkSheet } from "xlsx";
@@ -273,7 +271,7 @@ it.effect("reads XLSX cells directly and retains hidden/formula evidence", () =>
   Effect.gen(function* () {
     const bytes = new Uint8Array(
       yield* Effect.promise(() =>
-        readFile(new URL("./fixtures/synthetic-statement.xlsx", import.meta.url))
+        Bun.file(new URL("./fixtures/synthetic-statement.xlsx", import.meta.url)).bytes()
       )
     );
     const parsed = yield* parseStatementFile(bytes);

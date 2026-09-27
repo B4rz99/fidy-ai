@@ -18,11 +18,13 @@ export class EmailReplacementMutation extends Context.Service<
 >()("@fidy/server/shell/email-authentication/mutation/EmailReplacementMutation") {}
 
 /** Both browser operations enter the same canonical mutation seam as other stable-User work. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const requestEmailReplacement = (
-  input: CanonicalInput<"emailAuthentication.requestEmailReplacement">,
-  caller: CanonicalImplementationCaller
-): Effect.Effect<
+export const requestEmailReplacement = ({
+  input,
+  caller,
+}: Readonly<{
+  input: CanonicalInput<"emailAuthentication.requestEmailReplacement">;
+  caller: CanonicalImplementationCaller;
+}>): Effect.Effect<
   CanonicalSuccess<"emailAuthentication.requestEmailReplacement">,
   never,
   EmailReplacementMutation
@@ -33,11 +35,13 @@ export const requestEmailReplacement = (
     return { data: { status: "pending" }, next: [] } as const;
   });
 
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const completeEmailReplacement = (
-  input: CanonicalInput<"emailAuthentication.completeEmailReplacement">,
-  caller: CanonicalImplementationCaller
-): Effect.Effect<
+export const completeEmailReplacement = ({
+  input,
+  caller,
+}: Readonly<{
+  input: CanonicalInput<"emailAuthentication.completeEmailReplacement">;
+  caller: CanonicalImplementationCaller;
+}>): Effect.Effect<
   CanonicalSuccess<"emailAuthentication.completeEmailReplacement">,
   EmailReplacementInvalidApi,
   EmailReplacementMutation

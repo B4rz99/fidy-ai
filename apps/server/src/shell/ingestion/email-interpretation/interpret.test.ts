@@ -1,5 +1,3 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { readFile } from "node:fs/promises";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
@@ -17,9 +15,7 @@ const fixtureUrl = (name: string): URL =>
   new URL(`./formats/${name}/fixtures/positive.synthetic.html`, import.meta.url);
 
 const interpretFixture = Effect.fn(function* (name: string) {
-  const html = yield* Effect.tryPromise(() => readFile(fixtureUrl(name), "utf8")).pipe(
-    Effect.orDie
-  );
+  const html = yield* Effect.tryPromise(() => Bun.file(fixtureUrl(name)).text()).pipe(Effect.orDie);
   return yield* interpretNotificationEmail({
     content: {
       receivedEmailId: ReceivedEmailId.make(`received-${name}`),
@@ -79,7 +75,7 @@ it.effect(
 it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suffix fields", () =>
   Effect.gen(function* () {
     const html = yield* Effect.tryPromise(() =>
-      readFile(fixtureUrl("rappicard-purchase"), "utf8")
+      Bun.file(fixtureUrl("rappicard-purchase")).text()
     ).pipe(Effect.orDie);
     const interpret = (
       source: string,
@@ -173,10 +169,10 @@ it.effect("fails closed for unknown, image-only, ambiguous, and complete-number 
       });
     expect((yield* make("<p>Compra desconocida</p>"))._tag).toBe("NeedsReview");
     const davibank = yield* Effect.tryPromise(() =>
-      readFile(fixtureUrl("davibank-card"), "utf8")
+      Bun.file(fixtureUrl("davibank-card")).text()
     ).pipe(Effect.orDie);
     const rappicard = yield* Effect.tryPromise(() =>
-      readFile(fixtureUrl("rappicard-purchase"), "utf8")
+      Bun.file(fixtureUrl("rappicard-purchase")).text()
     ).pipe(Effect.orDie);
     expect(yield* make(`${davibank}${rappicard}`)).toMatchObject({
       _tag: "NeedsReview",

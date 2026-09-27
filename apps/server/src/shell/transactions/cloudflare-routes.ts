@@ -20,8 +20,10 @@ const routes = implemented.map((id) => {
 });
 
 /** Match implemented Cloudflare adapters against paths and methods derived from the canonical API. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const transactionRoute = (path: string, method: string): Option.Option<CatalogOperation> =>
+export const transactionRoute = ({
+  path,
+  method,
+}: Readonly<{ path: string; method: string }>): Option.Option<CatalogOperation> =>
   Option.fromUndefinedOr(
     routes.find(
       (operation) =>
@@ -36,5 +38,5 @@ export const ownsTransactionPath = (path: string): boolean =>
 /** Published HTTP methods for the matched canonical path, not a parallel route registry. */
 export const transactionMethods = (path: string): ReadonlyArray<string> =>
   routes
-    .filter(({ method }) => Option.isSome(transactionRoute(path, method)))
+    .filter(({ method }) => Option.isSome(transactionRoute({ path, method })))
     .map(({ method }) => method);

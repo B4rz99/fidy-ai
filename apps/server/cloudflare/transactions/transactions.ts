@@ -91,7 +91,7 @@ export const transactionSession = ({
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
-  boundedJsonBody(request, policy, Input);
+  boundedJsonBody({ request, policy, schema: Input });
 
 const captureAudit = (
   db: D1Database,

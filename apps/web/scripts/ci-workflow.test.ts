@@ -7,7 +7,7 @@ const bunInstallAction = await Bun.file(
 ).text();
 
 describe("pull-request checks workflow policy", () => {
-  it("builds the application without uploading or deploying a PR preview artifact", async () => {
+  it("builds the application without uploading or deploying a PR preview artifact", () => {
     const buildsJob = checksWorkflow.slice(
       checksWorkflow.indexOf("  builds:"),
       checksWorkflow.indexOf("  unit:")
@@ -16,7 +16,9 @@ describe("pull-request checks workflow policy", () => {
     expect(buildsJob).toContain("bun run verify -- --group builds");
     expect(buildsJob).not.toContain("upload-artifact");
     expect(checksWorkflow).not.toContain("build:preview");
-    expect(await Bun.file(`${repositoryRoot}/.github/workflows/preview.yml`).exists()).toBe(false);
+    return Bun.file(`${repositoryRoot}/.github/workflows/preview.yml`)
+      .exists()
+      .then((exists) => expect(exists).toBe(false));
   });
 
   it("keeps the required checks focused on static and browser validation", () => {

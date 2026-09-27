@@ -1,31 +1,37 @@
 import { Deferred, Effect, Exit, Option, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { it as effectIt, expect } from "@effect/vitest";
-import { it, vi } from "vitest";
+import { vi } from "vitest";
 import { type BrowserClipboard, ClipboardAccessFailed, writeClipboardText } from "./clipboard";
 import { makeSensitiveClipboard } from "./sensitive-clipboard";
 
-it("writes text through an available browser clipboard", async () => {
-  const writeText = vi.fn(() => Promise.resolve());
+effectIt.effect("writes text through an available browser clipboard", () =>
+  Effect.gen(function* () {
+    const writeText = vi.fn(() => Promise.resolve());
 
-  await Effect.runPromise(writeClipboardText(Option.some({ writeText }), "texto"));
+    yield* writeClipboardText(Option.some({ writeText }), "texto");
 
-  expect(writeText).toHaveBeenCalledWith("texto");
-});
+    expect(writeText).toHaveBeenCalledWith("texto");
+  })
+);
 
-it("reports clipboard rejection through the typed failure channel", async () => {
-  const writeText = vi.fn(() => Promise.reject(new Error("permission denied")));
+effectIt.effect("reports clipboard rejection through the typed failure channel", () =>
+  Effect.gen(function* () {
+    const writeText = vi.fn(() => Promise.reject(new Error("permission denied")));
 
-  const exit = await Effect.runPromiseExit(writeClipboardText(Option.some({ writeText }), "texto"));
+    const exit = yield* Effect.exit(writeClipboardText(Option.some({ writeText }), "texto"));
 
-  expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
-});
+    expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
+  })
+);
 
-it("reports an unavailable clipboard through the typed failure channel", async () => {
-  const exit = await Effect.runPromiseExit(writeClipboardText(Option.none(), "texto"));
+effectIt.effect("reports an unavailable clipboard through the typed failure channel", () =>
+  Effect.gen(function* () {
+    const exit = yield* Effect.exit(writeClipboardText(Option.none(), "texto"));
 
-  expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
-});
+    expect(exit).toEqual(Exit.fail(new ClipboardAccessFailed()));
+  })
+);
 
 type ClipboardStub = Readonly<{
   clipboard: BrowserClipboard;

@@ -469,7 +469,7 @@ const dispatchCanonicalBatch = (
   Effect.runPromise(
     Effect.gen(function* () {
       const parsed = yield* Effect.tryPromise(() =>
-        boundedJsonBody(request, batchPolicy, BatchInput)
+        boundedJsonBody({ request, policy: batchPolicy, schema: BatchInput })
       );
       if (Option.isNone(parsed)) {
         return yield* Effect.tryPromise(() =>
@@ -808,7 +808,7 @@ const keywordRuleMutationResponse = (
   const { request, environment, subject, operation } = input;
   return Effect.gen(function* () {
     if (operation === "categories.createKeywordRule") {
-      const payload = yield* Effect.tryPromise(() => keywordRuleInput(request, false));
+      const payload = yield* Effect.tryPromise(() => keywordRuleInput({ request, update: false }));
       return Option.isNone(payload)
         ? keywordRuleInvalidInput()
         : yield* sendToCoordinator({
@@ -827,7 +827,7 @@ const keywordRuleMutationResponse = (
       });
     }
     if (operation !== "categories.updateKeywordRule") return unavailable();
-    const payload = yield* Effect.tryPromise(() => keywordRuleInput(request, true));
+    const payload = yield* Effect.tryPromise(() => keywordRuleInput({ request, update: true }));
     return Option.isNone(payload)
       ? keywordRuleInvalidInput()
       : yield* sendToCoordinator({
@@ -936,7 +936,9 @@ const rememberMemoryResponse = ({
     environment,
     subject,
     operation: "memory.remember",
-    decode: Effect.tryPromise(() => boundedJsonBody(request, memoryBodyPolicy, RememberInput)).pipe(
+    decode: Effect.tryPromise(() =>
+      boundedJsonBody({ request, policy: memoryBodyPolicy, schema: RememberInput })
+    ).pipe(
       Effect.map(Option.map((payload) => ({ payload }))),
       Effect.orElseSucceed(() => Option.none<{ payload: RememberInput }>())
     ),
@@ -958,7 +960,7 @@ const reviseMemoryResponse = ({
     operation: "memory.revise",
     decode: Effect.gen(function* () {
       const payload = yield* Effect.tryPromise(() =>
-        boundedJsonBody(request, memoryBodyPolicy, ReviseInput)
+        boundedJsonBody({ request, policy: memoryBodyPolicy, schema: ReviseInput })
       ).pipe(Effect.orElseSucceed(() => Option.none<ReviseInput>()));
       return Option.zipWith(memoryIdFromPath(request), payload, (id, value) => ({
         params: { id },
@@ -1062,13 +1064,14 @@ const budgetMutationResponse = ({
       operation === "budgets.deleteBudget"
         ? Option.none<CreateBudgetInput>()
         : yield* Effect.tryPromise(() =>
-            boundedJsonBody(
+            boundedJsonBody({
               request,
-              budgetBodyPolicy,
-              operation === "budgets.createBudget"
-                ? Schema.toCodecJson(CreateBudgetInput)
-                : Schema.toCodecJson(UpdateBudgetInput)
-            )
+              policy: budgetBodyPolicy,
+              schema:
+                operation === "budgets.createBudget"
+                  ? Schema.toCodecJson(CreateBudgetInput)
+                  : Schema.toCodecJson(UpdateBudgetInput),
+            })
           ).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
     if (operation !== "budgets.deleteBudget" && Option.isNone(payload)) {
       return yield* sendToCoordinator({
@@ -1218,7 +1221,7 @@ const hostedTurnResponse = (
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
     const input = yield* Effect.tryPromise(() =>
-      boundedJsonBody(request, hostedTurnPolicy, hostedTurnInput)
+      boundedJsonBody({ request, policy: hostedTurnPolicy, schema: hostedTurnInput })
     );
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
@@ -1253,7 +1256,7 @@ const hostedReceiptResponse = (
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
     const input = yield* Effect.tryPromise(() =>
-      boundedJsonBody(request, hostedReceiptPolicy, hostedDeliveryReceipt)
+      boundedJsonBody({ request, policy: hostedReceiptPolicy, schema: hostedDeliveryReceipt })
     );
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
@@ -1475,7 +1478,11 @@ const insightResponse = (
       }
       if (operation.id === "insights.markInsightDelivered") {
         const payload = yield* Effect.tryPromise(() =>
-          boundedJsonBody(request, insightBodyPolicy, Schema.toCodecJson(DeliveryEvidenceInput))
+          boundedJsonBody({
+            request,
+            policy: insightBodyPolicy,
+            schema: Schema.toCodecJson(DeliveryEvidenceInput),
+          })
         );
         return yield* sendToCoordinator({
           environment,
@@ -1739,7 +1746,10 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
     }
     return Effect.tryPromise({
       try: () =>
-        receiveForwardedEmailWork(batch.messages, environment.USER_TRANSACTION_COORDINATOR),
+        receiveForwardedEmailWork({
+          messages: batch.messages,
+          coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        }),
       catch: () => new ForwardedEmailDeliveryUnavailable(),
     }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
   }
@@ -1870,10 +1880,9 @@ const scheduledActivities = (
             BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
           }).pipe(Effect.mapError(() => undefined)),
     "consent.sweep": sweepExpiredConsent(environment.DB)(),
-    "hostedTurn.sweep": Effect.tryPromise({
-      try: () => sweepHostedTurns(environment.DB, current),
-      catch: () => undefined,
-    }),
+    "hostedTurn.sweep": sweepHostedTurns({ db: environment.DB, now: current }).pipe(
+      Effect.mapError(() => undefined)
+    ),
     "patPairing.sweep": Effect.tryPromise({
       try: () => sweepExpiredPATPairings(environment.DB),
       catch: () => undefined,

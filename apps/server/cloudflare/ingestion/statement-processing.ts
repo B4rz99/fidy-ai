@@ -17,7 +17,7 @@ import {
   keywordRulesFromRows,
   keywordRulesQuery,
 } from "@fidy/server/categories";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
   ParsedStatementRow,
@@ -54,27 +54,41 @@ const extractorRevision = "statement-mechanical-v1";
 const newId = newIngestionId;
 const nowMs = currentMillis;
 const iso = (): string => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
+class StatementProcessingUnavailable extends Data.TaggedError("StatementProcessingUnavailable")<{
+  readonly cause: unknown;
+}> {}
+const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingUnavailable> =>
+  Effect.tryPromise({ try: run, catch: (cause) => new StatementProcessingUnavailable({ cause }) });
+const restoreRejection = <A>(promise: Promise<A>): Promise<A> =>
+  promise.catch((error: unknown) => {
+    if (error instanceof StatementProcessingUnavailable) throw error.cause;
+    throw error;
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const findOwned = async (
+const findOwned = (
   db: D1Database,
   userId: string,
   submissionId: string
-): Promise<Option.Option<SubmissionRow>> => {
-  const raw = await db
-    .prepare(`SELECT s.staging_id, s.source_format, s.parser_revision,
+): Effect.Effect<
+  Option.Option<SubmissionRow>,
+  StatementProcessingUnavailable | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const raw = yield* attempt(() =>
+      db
+        .prepare(`SELECT s.staging_id, s.source_format, s.parser_revision,
     s.service_market, s.locale, s.time_zone, o.sha256, s.retention_expires_at_ms, s.status
     FROM statement_submissions s JOIN statement_staging_objects o
       ON o.id = s.staging_id AND o.user_id = s.user_id AND o.published_submission_id = s.id
     WHERE s.id = ? AND s.user_id = ?`)
-    .bind(submissionId, userId)
-    .first();
-  if (raw === null) return Option.none();
-  return Option.some(Schema.decodeUnknownSync(submissionRow)(raw));
-};
+        .bind(submissionId, userId)
+        .first()
+    );
+    if (raw === null) return Option.none();
+    return Option.some(yield* Schema.decodeUnknownEffect(submissionRow)(raw));
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const markFailed = async ({
+const markFailed = ({
   db,
   userId,
   submissionId,
@@ -84,11 +98,11 @@ const markFailed = async ({
   userId: string;
   submissionId: string;
   reason: typeof StatementFailureReason.Type;
-}>): Promise<void> => {
-  // Failed submissions retain conserved counts for every row committed before interruption.
-  await db.batch([
-    db
-      .prepare(`UPDATE statement_submissions SET status = 'failed',
+}>): Effect.Effect<void, StatementProcessingUnavailable> =>
+  attempt(() =>
+    db.batch([
+      db
+        .prepare(`UPDATE statement_submissions SET status = 'failed',
       started_at_ms = coalesce(started_at_ms, ?), completed_at_ms = ?, failure_reason = ?,
       input_rows = (SELECT nullif(count(*), 0) FROM statement_record_outcomes
         WHERE submission_id = ? AND user_id = ?),
@@ -101,25 +115,25 @@ const markFailed = async ({
         (SELECT count(*) FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?
           AND outcome = 'needs-review') ELSE NULL END
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
-      .bind(
-        nowMs(),
-        nowMs(),
-        reason,
-        submissionId,
-        userId,
-        submissionId,
-        userId,
-        submissionId,
-        userId,
-        submissionId,
-        userId,
-        submissionId,
-        userId,
-        submissionId,
-        userId
-      ),
-    db
-      .prepare(`UPDATE statement_backfill_entitlements
+        .bind(
+          nowMs(),
+          nowMs(),
+          reason,
+          submissionId,
+          userId,
+          submissionId,
+          userId,
+          submissionId,
+          userId,
+          submissionId,
+          userId,
+          submissionId,
+          userId,
+          submissionId,
+          userId
+        ),
+      db
+        .prepare(`UPDATE statement_backfill_entitlements
       SET consumed_at_ms = CASE WHEN EXISTS (
         SELECT 1 FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?)
         THEN coalesce(consumed_at_ms, ?) ELSE consumed_at_ms END,
@@ -127,9 +141,9 @@ const markFailed = async ({
         SELECT 1 FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?)
         THEN submission_id ELSE NULL END
       WHERE user_id = ? AND submission_id = ? AND changes() = 1`)
-      .bind(submissionId, userId, nowMs(), submissionId, userId, userId, submissionId),
-  ]);
-};
+        .bind(submissionId, userId, nowMs(), submissionId, userId, userId, submissionId),
+    ])
+  ).pipe(Effect.asVoid);
 
 /**
  * Settles exhausted statement work under the User coordinator, atomically releasing a pending
@@ -147,12 +161,16 @@ export const failStatementSubmission = ({
   submissionId: string;
   reason: typeof StatementFailureReason.Type;
 }>): Promise<void> =>
-  markFailed({
-    db: DB,
-    userId,
-    submissionId,
-    reason: Schema.decodeSync(StatementFailureReason)(reason),
-  });
+  restoreRejection(
+    Effect.runPromise(
+      markFailed({
+        db: DB,
+        userId,
+        submissionId,
+        reason: Schema.decodeSync(StatementFailureReason)(reason),
+      })
+    )
+  );
 
 type RowWork = Readonly<{
   db: D1Database;
@@ -276,64 +294,81 @@ const reviewStatement = (
     );
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const rowOutcome = async (work: RowWork): Promise<void> => {
-  const { db, userId, submissionId, row, result } = work;
-  const existing = await db
-    .prepare(`SELECT outcome FROM statement_record_outcomes
-    WHERE submission_id = ? AND user_id = ? AND record_number = ?`)
-    .bind(submissionId, userId, row.recordNumber)
-    .first();
-  if (existing !== null) {
-    if (Option.isNone(Schema.decodeUnknownOption(outcomeRow)(existing))) {
-      throw new Error("Statement outcome unavailable");
-    }
-    return;
-  }
-  const id = newId();
-  const activeArgs = [submissionId, userId, nowMs()];
-  const statements =
-    result.outcome === "accepted"
-      ? acceptedStatements(
-          {
-            ...work,
-            result,
-            categoryId: Option.isSome(result.extraction.counterparty)
-              ? Option.getOrElse(
-                  await Effect.runPromise(
-                    findKeywordCategory({
-                      counterparty: result.extraction.counterparty.value,
-                      rules: work.rules,
-                    })
-                  ),
-                  () => fallbackCaptureCategory(result.extraction.direction)
-                )
-              : fallbackCaptureCategory(result.extraction.direction),
-          },
-          id,
-          activeArgs
-        )
-      : [reviewStatement({ ...work, result }, id, activeArgs)];
-  // The unique record identity, its evidence and its Transaction or review commit together.
-  await db.batch([
-    ...statements,
-    db
-      .prepare(`INSERT INTO statement_record_outcomes
+const commitOutcome = ({
+  work,
+  id,
+  activeArgs,
+  statements,
+}: Readonly<{
+  work: RowWork;
+  id: string;
+  activeArgs: ReadonlyArray<string | number>;
+  statements: ReadonlyArray<D1PreparedStatement>;
+}>): Effect.Effect<void, StatementProcessingUnavailable> =>
+  attempt(() =>
+    work.db.batch([
+      ...statements,
+      work.db
+        .prepare(`INSERT INTO statement_record_outcomes
       (user_id, submission_id, record_number, outcome, transaction_id)
       SELECT ?, ?, ?, ?, ? WHERE ${active}`)
-      .bind(
-        userId,
-        submissionId,
-        row.recordNumber,
-        result.outcome,
-        result.outcome === "accepted" ? id : null,
-        ...activeArgs
-      ),
-    db.prepare(`INSERT INTO statement_submission_assertion (id, accepted)
+        .bind(
+          work.userId,
+          work.submissionId,
+          work.row.recordNumber,
+          work.result.outcome,
+          work.result.outcome === "accepted" ? id : null,
+          ...activeArgs
+        ),
+      work.db.prepare(`INSERT INTO statement_submission_assertion (id, accepted)
       VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
       ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`),
-  ]);
-};
+    ])
+  ).pipe(Effect.asVoid);
+
+const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { db, userId, submissionId, row, result } = work;
+    const existing = yield* attempt(() =>
+      db
+        .prepare(`SELECT outcome FROM statement_record_outcomes
+    WHERE submission_id = ? AND user_id = ? AND record_number = ?`)
+        .bind(submissionId, userId, row.recordNumber)
+        .first()
+    );
+    if (existing !== null) {
+      if (Option.isNone(Schema.decodeUnknownOption(outcomeRow)(existing))) {
+        return yield* new StatementProcessingUnavailable({
+          cause: new Error("Statement outcome unavailable"),
+        });
+      }
+      return;
+    }
+    const id = newId();
+    const activeArgs = [submissionId, userId, nowMs()];
+    const statements =
+      result.outcome === "accepted"
+        ? acceptedStatements(
+            {
+              ...work,
+              result,
+              categoryId: Option.isSome(result.extraction.counterparty)
+                ? Option.getOrElse(
+                    yield* findKeywordCategory({
+                      counterparty: result.extraction.counterparty.value,
+                      rules: work.rules,
+                    }),
+                    () => fallbackCaptureCategory(result.extraction.direction)
+                  )
+                : fallbackCaptureCategory(result.extraction.direction),
+            },
+            id,
+            activeArgs
+          )
+        : [reviewStatement({ ...work, result }, id, activeArgs)];
+    // The unique record identity, its evidence and its Transaction or review commit together.
+    yield* commitOutcome({ work, id, activeArgs, statements });
+  });
 
 /**
  * Finalizes an owned submission under its stable User's Durable Object turn. The caller MUST
@@ -352,123 +387,130 @@ type ProcessInput = Readonly<{
 }>;
 type Progress = typeof countRow.Type;
 
-// @effect-diagnostics-next-line asyncFunction:off
-const readParsed = async (
+const readParsed = (
   input: ProcessInput,
   context: SubmissionRow
-): Promise<Option.Option<ParsedStatement>> => {
-  const { DB, STATEMENT_STAGING_BUCKET, userId, submissionId } = input;
-  const staging = StatementStaging.make({
-    database: DB,
-    bucket: STATEMENT_STAGING_BUCKET,
-    nowEpochMs: nowMs,
-  });
-  const bytes = await Effect.runPromise(
-    Effect.result(
-      staging.readOwnedStagedBytes({
+): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { DB, STATEMENT_STAGING_BUCKET, userId, submissionId } = input;
+    const staging = StatementStaging.make({
+      database: DB,
+      bucket: STATEMENT_STAGING_BUCKET,
+      nowEpochMs: nowMs,
+    });
+    const bytes = yield* Effect.result(
+      staging.readOwnedStagedBytes({ userId, stagingId: context.staging_id })
+    );
+    if (bytes._tag === "Failure") {
+      if (bytes.failure._tag === "StatementStagingUnavailable") {
+        return yield* new StatementProcessingUnavailable({
+          cause: new Error("Statement storage unavailable"),
+        });
+      }
+      yield* markFailed({
+        db: DB,
         userId,
-        stagingId: context.staging_id,
-      })
-    )
-  );
-  if (bytes._tag === "Failure") {
-    if (bytes.failure._tag === "StatementStagingUnavailable") {
-      throw new Error("Statement storage unavailable");
+        submissionId,
+        reason:
+          bytes.failure.reason === "retention-expired" ? "retention-expired" : "malformed-file",
+      });
+      return Option.none();
     }
-    await markFailed({
-      db: DB,
-      userId,
-      submissionId,
-      reason: bytes.failure.reason === "retention-expired" ? "retention-expired" : "malformed-file",
-    });
-    return Option.none();
-  }
-  if (bytes.success.length > maximumStatementBytes) {
-    await markFailed({ db: DB, userId, submissionId, reason: "resource-limit" });
-    return Option.none();
-  }
-  const parsed = await Effect.runPromise(Effect.result(parseStatementFile(bytes.success)));
-  if (parsed._tag === "Failure") {
-    await markFailed({
-      db: DB,
-      userId,
-      submissionId,
-      reason:
-        parsed.failure instanceof StatementParseFailed
-          ? parsed.failure.safeReason
-          : "malformed-file",
-    });
-    return Option.none();
-  }
-  return validateParsed(input, context, parsed.success);
-};
+    if (bytes.success.length > maximumStatementBytes) {
+      yield* markFailed({ db: DB, userId, submissionId, reason: "resource-limit" });
+      return Option.none();
+    }
+    const parsed = yield* Effect.result(parseStatementFile(bytes.success));
+    if (parsed._tag === "Failure") {
+      yield* markFailed({
+        db: DB,
+        userId,
+        submissionId,
+        reason:
+          parsed.failure instanceof StatementParseFailed
+            ? parsed.failure.safeReason
+            : "malformed-file",
+      });
+      return Option.none();
+    }
+    return yield* validateParsed(input, context, parsed.success);
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const validateParsed = async (
+const validateParsed = (
   input: ProcessInput,
   context: SubmissionRow,
   parsed: ParsedStatement
-): Promise<Option.Option<ParsedStatement>> => {
-  if (parsed.sourceFormat !== context.source_format) {
-    await markFailed({
-      db: input.DB,
-      userId: input.userId,
-      submissionId: input.submissionId,
-      reason: "malformed-file",
-    });
-    return Option.none();
-  }
-  // A header-only or other zero-row document has no Transaction or review outcome to conserve.
-  // It is not a successfully finalized statement, even if its bytes passed the staging gate.
-  if (parsed.rows.length === 0) {
-    await markFailed({
-      db: input.DB,
-      userId: input.userId,
-      submissionId: input.submissionId,
-      reason: "malformed-file",
-    });
-    return Option.none();
-  }
-  if (parsed.rows.length > statementParserLimits.maximumRows) {
-    await markFailed({
-      db: input.DB,
-      userId: input.userId,
-      submissionId: input.submissionId,
-      reason: "resource-limit",
-    });
-    return Option.none();
-  }
-  return Option.some(parsed);
-};
+): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    if (parsed.sourceFormat !== context.source_format) {
+      yield* markFailed({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        reason: "malformed-file",
+      });
+      return Option.none();
+    }
+    // A header-only or other zero-row document has no Transaction or review outcome to conserve.
+    // It is not a successfully finalized statement, even if its bytes passed the staging gate.
+    if (parsed.rows.length === 0) {
+      yield* markFailed({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        reason: "malformed-file",
+      });
+      return Option.none();
+    }
+    if (parsed.rows.length > statementParserLimits.maximumRows) {
+      yield* markFailed({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        reason: "resource-limit",
+      });
+      return Option.none();
+    }
+    return Option.some(parsed);
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const readProgress = async (input: ProcessInput): Promise<Progress> => {
-  const raw = await input.DB.prepare(`SELECT count(*) AS total,
+const readProgress = (
+  input: ProcessInput
+): Effect.Effect<Progress, StatementProcessingUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const raw = yield* attempt(() =>
+      input.DB.prepare(`SELECT count(*) AS total,
     coalesce(sum(outcome = 'accepted'), 0) AS accepted,
     coalesce(sum(outcome = 'needs-review'), 0) AS review
     FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?`)
-    .bind(input.submissionId, input.userId)
-    .first();
-  return Schema.decodeUnknownSync(countRow)(raw);
-};
+        .bind(input.submissionId, input.userId)
+        .first()
+    );
+    return yield* Schema.decodeUnknownEffect(countRow)(raw);
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const ownedStatementRules = async (
+const ownedStatementRules = (
   db: D1Database,
   userId: string
-): Promise<ReadonlyArray<KeywordRule>> => {
-  const query = keywordRulesQuery({ userId });
-  const rows = await db
-    .prepare(query.sql)
-    .bind(...query.params)
-    .all();
-  const decoded = keywordRulesFromRows(rows.results);
-  if (Option.isNone(decoded)) throw new Error("Statement keyword rules unavailable");
-  return decoded.value;
-};
+): Effect.Effect<ReadonlyArray<KeywordRule>, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const query = keywordRulesQuery({ userId });
+    const rows = yield* attempt(() =>
+      db
+        .prepare(query.sql)
+        .bind(...query.params)
+        .all()
+    );
+    const decoded = keywordRulesFromRows(rows.results);
+    if (Option.isNone(decoded)) {
+      return yield* new StatementProcessingUnavailable({
+        cause: new Error("Statement keyword rules unavailable"),
+      });
+    }
+    return decoded.value;
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const finalizeChunk = async ({
+const finalizeChunk = ({
   input,
   context,
   parsed,
@@ -480,117 +522,132 @@ const finalizeChunk = async ({
   parsed: ParsedStatement;
   rows: ReadonlyArray<ParsedStatementRow>;
   progress: Progress;
-}>): Promise<void> => {
-  const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
-  const mapping = mechanicalMappingFor(parsed.headers);
-  const rules = Option.isSome(mapping) ? await ownedStatementRules(input.DB, input.userId) : [];
-  const interpreted = Option.isSome(mapping)
-    ? await Effect.runPromise(
-        interpretStatementRows(
+}>): Effect.Effect<void, StatementProcessingUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
+    const mapping = mechanicalMappingFor(parsed.headers);
+    const rules = Option.isSome(mapping) ? yield* ownedStatementRules(input.DB, input.userId) : [];
+    const interpreted = Option.isSome(mapping)
+      ? yield* interpretStatementRows(
           { rows: chunk, mapping: mapping.value, timeZone: context.time_zone },
           Schema.decodeUnknownEffect(Schema.toCodecJson(TransactionExtraction))
         )
-      )
-    : undefined;
-  // D1 batches must settle sequentially; a parallel batch could reorder this durable cursor.
-  await chunk.reduce<Promise<void>>(
-    (previous, row, index) =>
-      previous.then(() =>
-        rowOutcome({
-          db: input.DB,
-          userId: input.userId,
-          submissionId: input.submissionId,
-          row,
-          context,
-          rules,
-          result: interpreted?.outcomes[index] ?? unmappedStatementRow(row),
-        })
-      ),
-    Promise.resolve()
-  );
-};
+      : undefined;
+    // D1 batches must settle sequentially; a parallel batch could reorder this durable cursor.
+    for (const [index, row] of chunk.entries()) {
+      yield* rowOutcome({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        row,
+        context,
+        rules,
+        result: interpreted?.outcomes[index] ?? unmappedStatementRow(row),
+      });
+    }
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const completeSubmission = async (
+const completeSubmission = (
   input: ProcessInput,
   rows: number,
   counts: Progress
-): Promise<void> => {
-  const { DB, userId, submissionId } = input;
-  const finished = await DB.batch([
-    DB.prepare(`UPDATE statement_submissions
+): Effect.Effect<void, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { DB, userId, submissionId } = input;
+    const finished = yield* attempt(() =>
+      DB.batch([
+        DB.prepare(`UPDATE statement_submissions
     SET status = 'completed', completed_at_ms = ?, input_rows = ?,
       accepted_rows = ?, needs_review_rows = ?
     WHERE id = ? AND user_id = ? AND status = 'processing'
       AND (SELECT count(*) FROM statement_record_outcomes
         WHERE submission_id = ? AND user_id = ?) = ?`).bind(
-      nowMs(),
-      rows,
-      counts.accepted,
-      counts.review,
-      submissionId,
-      userId,
-      submissionId,
-      userId,
-      rows
-    ),
-    DB.prepare(`UPDATE statement_backfill_entitlements
+          nowMs(),
+          rows,
+          counts.accepted,
+          counts.review,
+          submissionId,
+          userId,
+          submissionId,
+          userId,
+          rows
+        ),
+        DB.prepare(`UPDATE statement_backfill_entitlements
       SET consumed_at_ms = CASE WHEN ? > 0 THEN ? ELSE NULL END,
           submission_id = CASE WHEN ? > 0 THEN submission_id ELSE NULL END
       WHERE user_id = ? AND submission_id = ? AND changes() = 1`).bind(
-      rows,
-      nowMs(),
-      rows,
-      userId,
-      submissionId
-    ),
-  ]);
-  if (finished[0]?.meta.changes !== 1) throw new Error("Statement finalization unavailable");
-};
+          rows,
+          nowMs(),
+          rows,
+          userId,
+          submissionId
+        ),
+      ])
+    );
+    if (finished[0]?.meta.changes !== 1) {
+      return yield* new StatementProcessingUnavailable({
+        cause: new Error("Statement finalization unavailable"),
+      });
+    }
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const advanceSubmission = async (
+const advanceSubmission = (
   input: ProcessInput,
   context: SubmissionRow,
   parsed: ParsedStatement
-): Promise<"continue" | "completed"> => {
-  const rows = Schema.decodeUnknownSync(Schema.Array(ParsedStatementRow))(parsed.rows);
-  await input.DB.prepare(`UPDATE statement_submissions SET status = 'processing',
+): Effect.Effect<"continue" | "completed", StatementProcessingUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ParsedStatementRow))(parsed.rows);
+    yield* attempt(() =>
+      input.DB.prepare(`UPDATE statement_submissions SET status = 'processing',
     started_at_ms = coalesce(started_at_ms, ?) WHERE id = ? AND user_id = ? AND status = 'queued'`)
-    .bind(nowMs(), input.submissionId, input.userId)
-    .run();
-  const progress = await readProgress(input);
-  if (progress.total > rows.length || progress.accepted + progress.review !== progress.total) {
-    throw new Error("Statement accounting unavailable");
-  }
-  if (progress.total < rows.length) await finalizeChunk({ input, context, parsed, rows, progress });
-  const counts = await readProgress(input);
-  if (counts.total < rows.length) return "continue";
-  if (counts.total !== rows.length || counts.accepted + counts.review !== rows.length) {
-    throw new Error("Statement accounting unavailable");
-  }
-  await completeSubmission(input, rows.length, counts);
-  return "completed";
-};
-
-// @effect-diagnostics-next-line asyncFunction:off
-export const processStatementSubmission = async (
-  input: ProcessInput
-): Promise<"continue" | "completed"> => {
-  const context = await findOwned(input.DB, input.userId, input.submissionId);
-  if (Option.isNone(context)) return "completed";
-  if (context.value.status === "completed" || context.value.status === "failed") return "completed";
-  if (context.value.retention_expires_at_ms <= nowMs()) {
-    await markFailed({
-      db: input.DB,
-      userId: input.userId,
-      submissionId: input.submissionId,
-      reason: "retention-expired",
-    });
+        .bind(nowMs(), input.submissionId, input.userId)
+        .run()
+    );
+    const progress = yield* readProgress(input);
+    if (progress.total > rows.length || progress.accepted + progress.review !== progress.total) {
+      return yield* new StatementProcessingUnavailable({
+        cause: new Error("Statement accounting unavailable"),
+      });
+    }
+    if (progress.total < rows.length) {
+      yield* finalizeChunk({ input, context, parsed, rows, progress });
+    }
+    const counts = yield* readProgress(input);
+    if (counts.total < rows.length) return "continue";
+    if (counts.total !== rows.length || counts.accepted + counts.review !== rows.length) {
+      return yield* new StatementProcessingUnavailable({
+        cause: new Error("Statement accounting unavailable"),
+      });
+    }
+    yield* completeSubmission(input, rows.length, counts);
     return "completed";
-  }
-  const parsed = await readParsed(input, context.value);
-  return Option.isSome(parsed)
-    ? advanceSubmission(input, context.value, parsed.value)
-    : "completed";
-};
+  });
+
+export const processStatementSubmission = (
+  input: ProcessInput
+): Promise<"continue" | "completed"> =>
+  restoreRejection(
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const context = yield* findOwned(input.DB, input.userId, input.submissionId);
+        if (Option.isNone(context)) return "completed";
+        if (context.value.status === "completed" || context.value.status === "failed") {
+          return "completed";
+        }
+        if (context.value.retention_expires_at_ms <= nowMs()) {
+          yield* markFailed({
+            db: input.DB,
+            userId: input.userId,
+            submissionId: input.submissionId,
+            reason: "retention-expired",
+          });
+          return "completed";
+        }
+        const parsed = yield* readParsed(input, context.value);
+        return Option.isSome(parsed)
+          ? yield* advanceSubmission(input, context.value, parsed.value)
+          : "completed";
+      })
+    )
+  );

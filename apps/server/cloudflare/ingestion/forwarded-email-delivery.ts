@@ -1,4 +1,10 @@
-import { Option, Schema } from "effect";
+import { Data, Effect, Exit, Option, Schema } from "effect";
+
+class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
+  "ForwardedEmailDeliveryUnavailable"
+)<{
+  readonly cause: unknown;
+}> {}
 
 /** Versioned, secret-free identity from the private forwarded-email Queue. */
 export const ForwardedEmailWork = Schema.Struct({
@@ -10,36 +16,58 @@ export const ForwardedEmailWork = Schema.Struct({
  * coordinator rechecks ownership, Consent, retention, and the outcome before reading R2.
  * A failed coordinator call rejects for Queue redelivery; cron also reoffers unsettled receipts.
  */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const receiveForwardedEmailWork =
-  // @effect-diagnostics-next-line asyncFunction:off
-  async (
-    messages: ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>,
-    coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
-  ): Promise<void> => {
-    await Promise.all(
-      messages.map((message) => {
-        const work = Schema.decodeUnknownOption(ForwardedEmailWork)(message.body);
-        if (Option.isNone(work)) {
-          message.ack();
-          return Promise.resolve();
-        }
-        return coordinator
-          .getByName(work.value.userId)
-          .fetch(
-            new Request("https://coordinator.internal/forwarded-email-work", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: Schema.encodeSync(Schema.fromJsonString(ForwardedEmailWork))(work.value),
+export const receiveForwardedEmailWork = ({
+  messages,
+  coordinator,
+}: Readonly<{
+  messages: ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
+  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const outcomes = yield* Effect.forEach(
+        messages,
+        (message) =>
+          Effect.exit(
+            Effect.gen(function* () {
+              const work = Schema.decodeUnknownOption(ForwardedEmailWork)(message.body);
+              if (Option.isNone(work)) {
+                message.ack();
+                return;
+              }
+              const body = yield* Schema.encodeEffect(Schema.fromJsonString(ForwardedEmailWork))(
+                work.value
+              );
+              const response = yield* Effect.tryPromise({
+                try: (signal) =>
+                  coordinator.getByName(work.value.userId).fetch(
+                    new Request("https://coordinator.internal/forwarded-email-work", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body,
+                      signal,
+                    })
+                  ),
+                catch: (cause) => new ForwardedEmailDeliveryUnavailable({ cause }),
+              });
+              if (!response.ok) {
+                return yield* new ForwardedEmailDeliveryUnavailable({
+                  cause: new Error("Forwarded email coordinator unavailable"),
+                });
+              }
+              message.ack();
             })
-          )
-          .then((response) => {
-            if (!response.ok) throw new Error("Forwarded email coordinator unavailable");
-            message.ack();
-          });
-      })
-    );
-  };
+          ),
+        { concurrency: "unbounded" }
+      );
+      for (const outcome of outcomes) {
+        if (Exit.isFailure(outcome)) return yield* Effect.failCause(outcome.cause);
+      }
+    })
+  ).catch((error: unknown) => {
+    if (error instanceof ForwardedEmailDeliveryUnavailable) throw error.cause;
+    throw error;
+  });
 
 /** Recognize a versioned identity-only Queue message before routing to User coordination. */
 export const isForwardedEmailWork = (body: unknown): boolean =>

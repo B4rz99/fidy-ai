@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Function, Schema } from "effect";
 
 /**
  * Fixtures for statement-ingestion's mixed canonical batches: one committed
@@ -28,12 +28,14 @@ export const batchCallId = (suffix: number): string =>
   `20000000-0000-4000-8000-${String(suffix).padStart(batchCallIdDigits, "0")}`;
 
 /** One canonical correction child addressing a Transaction at the revision the caller observed. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const correctionCall = (suffix: number, id: string, payload: object): object => ({
+export const correctionCall: {
+  (id: string, payload: object): (suffix: number) => object;
+  (suffix: number, id: string, payload: object): object;
+} = Function.dual(3, (suffix: number, id: string, payload: object): object => ({
   callId: batchCallId(suffix),
   operation: "transactions.updateTransaction",
   input: { params: { id }, payload },
-});
+}));
 
 /** Seeds one retained Transaction directly, so a correction has a premise the unit re-checks. */
 export const seedTransaction = ({
@@ -97,8 +99,10 @@ export const concurrentCorrection = ({
  * the caller observed can move after preparation and only the unit's own guard or the post-rollback
  * re-check can see it. Later batches pass through untouched.
  */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const competingWriteDb = (db: D1Database, before: () => Promise<unknown>): D1Database => {
+export const competingWriteDb: {
+  (before: () => Promise<unknown>): (db: D1Database) => D1Database;
+  (db: D1Database, before: () => Promise<unknown>): D1Database;
+} = Function.dual(2, (db: D1Database, before: () => Promise<unknown>): D1Database => {
   let fired = false;
   return new Proxy(db, {
     get: (target, property): unknown =>
@@ -110,7 +114,7 @@ export const competingWriteDb = (db: D1Database, before: () => Promise<unknown>)
           }
         : Reflect.get(target, property, target),
   });
-};
+});
 
 /** A D1 binding whose unit batch always fails, so a defect can never leave partial state. */
 export const defectiveBatchDb = (db: D1Database): D1Database =>

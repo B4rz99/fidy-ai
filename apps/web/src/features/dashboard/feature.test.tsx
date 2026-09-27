@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { BigDecimal, Cause, DateTime, Option, Schema } from "effect";
+import { BigDecimal, Cause, DateTime, Effect, Option, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type JSX, type ReactNode, createContext, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -330,11 +331,24 @@ const makeView = (options: FixtureOptions): DashboardView => ({
   },
 });
 
-const renderDashboardView = async (data: DashboardView): Promise<void> => {
+const findDashboardText = (text: string): Effect.Effect<HTMLElement, Cause.UnknownError> =>
+  Effect.tryPromise(() => screen.findByText(text));
+
+const headingTexts = (headings: ReadonlyArray<HTMLElement>): ReadonlyArray<string> =>
+  headings.map(({ textContent }) => textContent);
+
+const exactMoneyElements = (): ReadonlyArray<HTMLElement> =>
+  screen.getAllByText(
+    (_text, element) => element?.textContent.includes("USD 9.007.199.254.740.993,12") ?? false
+  );
+
+const renderDashboardView = (data: DashboardView): Effect.Effect<void, Cause.UnknownError> => {
   render(
     <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.success({ data })} />
   );
-  await screen.findByLabelText("Diseño responsivo del tablero");
+  return Effect.tryPromise(() => screen.findByLabelText("Diseño responsivo del tablero")).pipe(
+    Effect.asVoid
+  );
 };
 
 const dashboardFeature = (
@@ -409,67 +423,83 @@ describe("read-only Dashboard resources", () => {
     expect(screen.getByLabelText("Cargando tablero")).toBeVisible();
   });
 
-  it("renders a declared failure safely and retries the owning query", async () => {
-    const onRefresh = vi.fn();
-    render(
-      <DashboardRouteContent
-        onRefresh={onRefresh}
-        result={AsyncResult.failure(Cause.fail(new Error("canonical failure")))}
-      />
-    );
-    expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
-    expect(screen.queryByText("canonical failure")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga del tablero" }));
-    expect(onRefresh).toHaveBeenCalledOnce();
-  });
+  effectIt.effect("renders a declared failure safely and retries the owning query", () =>
+    Effect.gen(function* () {
+      const onRefresh = vi.fn();
+      render(
+        <DashboardRouteContent
+          onRefresh={onRefresh}
+          result={AsyncResult.failure(Cause.fail(new Error("canonical failure")))}
+        />
+      );
+      expect(yield* findDashboardText("No pudimos cargar tu tablero")).toBeVisible();
+      expect(screen.queryByText("canonical failure")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Reintentar carga del tablero" }));
+      expect(onRefresh).toHaveBeenCalledOnce();
+    })
+  );
 
   it.each([
     ["defect", Cause.die("private protocol details")],
     ["interruption", Cause.interrupt(1)],
-  ])("renders a %s as a safe boundary retry state", async (_label, cause) => {
-    render(
-      <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.failure(cause)} />
-    );
+  ])("renders a %s as a safe boundary retry state", (_label, cause) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        render(
+          <DashboardRouteContent onRefresh={() => undefined} result={AsyncResult.failure(cause)} />
+        );
 
-    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
-    expect(screen.queryByText("private protocol details")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar carga del tablero" })).toBeVisible();
-  });
+        expect(yield* findDashboardText("No pudimos comunicarnos con Fidy")).toBeVisible();
+        expect(screen.queryByText("private protocol details")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Reintentar carga del tablero" })).toBeVisible();
+      })
+    )
+  );
 });
 
 describe("read-only Dashboard responsive rendering", () => {
-  it("uses one recursive DOM tree with mobile columns, desktop axes, weights, and stable order", async () => {
-    await renderDashboardView(makeView(standardOptions));
-    const dashboard = within(screen.getByLabelText("Diseño responsivo del tablero"));
-    expect(
-      dashboard.getAllByRole("heading", { level: 2 }).map(({ textContent }) => textContent)
-    ).toEqual(["Transacciones", "Presupuesto", "Transacciones recientes", "Promedio mensual"]);
-    expect(screen.getByTestId("responsive-weight-2")).toHaveStyle({
-      "--dashboard-weight": "2",
-    });
-    expect(screen.getByLabelText("Diseño responsivo del tablero").firstElementChild).toHaveClass(
-      "flex-col",
-      "md:flex-row"
-    );
-  });
+  effectIt.effect(
+    "uses one recursive DOM tree with mobile columns, desktop axes, weights, and stable order",
+    () =>
+      Effect.gen(function* () {
+        yield* renderDashboardView(makeView(standardOptions));
+        const dashboard = within(screen.getByLabelText("Diseño responsivo del tablero"));
+        expect(headingTexts(dashboard.getAllByRole("heading", { level: 2 }))).toEqual([
+          "Transacciones",
+          "Presupuesto",
+          "Transacciones recientes",
+          "Promedio mensual",
+        ]);
+        expect(screen.getByTestId("responsive-weight-2")).toHaveStyle({
+          "--dashboard-weight": "2",
+        });
+        expect(
+          screen.getByLabelText("Diseño responsivo del tablero").firstElementChild
+        ).toHaveClass("flex-col", "md:flex-row");
+      })
+  );
 
-  it("renders colocated Categories, separated directions, and Currency without repeated zones", async () => {
-    await renderDashboardView(makeView(standardOptions));
-    const dashboard = within(screen.getByLabelText("Diseño responsivo del tablero"));
-    expect(dashboard.getAllByText("Restaurantes").length).toBeGreaterThan(0);
-    expect(dashboard.getAllByText("COP").length).toBeGreaterThan(1);
-    const spendingHeading = dashboard.getAllByRole("heading", { level: 2 })[0];
-    if (spendingHeading === undefined) throw new Error("Expected the spending heading");
-    const spendingCard = spendingHeading.closest('[data-slot="card"]');
-    expect(spendingCard).not.toBeNull();
-    if (!(spendingCard instanceof HTMLElement)) throw new Error("Expected the spending Card");
-    expect(spendingCard).toHaveClass("flex-1");
-    expect(within(spendingCard).queryByText("Ingresos")).not.toBeInTheDocument();
-    expect(within(spendingCard).getByText("Gastos")).toBeVisible();
-    expect(dashboard.getByText("El Corral")).toBeVisible();
-    expect(dashboard.queryByText("America/Bogota")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Zona horaria aplicada/u)).not.toBeInTheDocument();
-  });
+  effectIt.effect(
+    "renders colocated Categories, separated directions, and Currency without repeated zones",
+    () =>
+      Effect.gen(function* () {
+        yield* renderDashboardView(makeView(standardOptions));
+        const dashboard = within(screen.getByLabelText("Diseño responsivo del tablero"));
+        expect(dashboard.getAllByText("Restaurantes").length).toBeGreaterThan(0);
+        expect(dashboard.getAllByText("COP").length).toBeGreaterThan(1);
+        const spendingHeading = dashboard.getAllByRole("heading", { level: 2 })[0];
+        if (spendingHeading === undefined) throw new Error("Expected the spending heading");
+        const spendingCard = spendingHeading.closest('[data-slot="card"]');
+        expect(spendingCard).not.toBeNull();
+        if (!(spendingCard instanceof HTMLElement)) throw new Error("Expected the spending Card");
+        expect(spendingCard).toHaveClass("flex-1");
+        expect(within(spendingCard).queryByText("Ingresos")).not.toBeInTheDocument();
+        expect(within(spendingCard).getByText("Gastos")).toBeVisible();
+        expect(dashboard.getByText("El Corral")).toBeVisible();
+        expect(dashboard.queryByText("America/Bogota")).not.toBeInTheDocument();
+        expect(screen.queryByText(/Zona horaria aplicada/u)).not.toBeInTheDocument();
+      })
+  );
 });
 
 const editorCatalog: ReadonlyArray<DashboardCatalogEntry> = [
@@ -768,43 +798,45 @@ describe("Dashboard edit rejection", () => {
 });
 
 describe("Dashboard result and Money states", () => {
-  it("renders explicit missing, reached, over, empty, and inflow states", async () => {
-    await renderDashboardView(makeView({ ...standardOptions, budgetState: "missing" }));
-    expect(screen.getByText("No hay presupuesto configurado")).toBeVisible();
-    cleanup();
-    await renderDashboardView(
-      makeView({
-        ...standardOptions,
-        budgetState: "over",
-        chartEmpty: true,
-        metricEmpty: true,
-        transactionEmpty: true,
-        transactionInflow: true,
-      })
-    );
-    expect(screen.getByText("No hay transacciones en este periodo")).toBeVisible();
-    expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
-    expect(screen.getByText("No hay transacciones para calcular")).toBeVisible();
-    expect(screen.getByText(/Excedido por/u)).toBeVisible();
-    cleanup();
-    await renderDashboardView(makeView({ ...standardOptions, transactionInflow: true }));
-    expect(screen.getByText("Ingreso")).toBeVisible();
-    expect(screen.getByText("Sin contraparte")).toBeVisible();
-    cleanup();
-    await renderDashboardView(makeView({ ...standardOptions, budgetState: "reached" }));
-    expect(screen.getByText("Presupuesto alcanzado")).toBeVisible();
-  });
+  effectIt.effect("renders explicit missing, reached, over, empty, and inflow states", () =>
+    Effect.gen(function* () {
+      yield* renderDashboardView(makeView({ ...standardOptions, budgetState: "missing" }));
+      expect(screen.getByText("No hay presupuesto configurado")).toBeVisible();
+      cleanup();
+      yield* renderDashboardView(
+        makeView({
+          ...standardOptions,
+          budgetState: "over",
+          chartEmpty: true,
+          metricEmpty: true,
+          transactionEmpty: true,
+          transactionInflow: true,
+        })
+      );
+      expect(screen.getByText("No hay transacciones en este periodo")).toBeVisible();
+      expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
+      expect(screen.getByText("No hay transacciones para calcular")).toBeVisible();
+      expect(screen.getByText(/Excedido por/u)).toBeVisible();
+      cleanup();
+      yield* renderDashboardView(makeView({ ...standardOptions, transactionInflow: true }));
+      expect(screen.getByText("Ingreso")).toBeVisible();
+      expect(screen.getByText("Sin contraparte")).toBeVisible();
+      cleanup();
+      yield* renderDashboardView(makeView({ ...standardOptions, budgetState: "reached" }));
+      expect(screen.getByText("Presupuesto alcanzado")).toBeVisible();
+    })
+  );
 
-  it("keeps exact Money tooltips correlated to their row while geometry stays bounded", async () => {
-    await renderDashboardView(makeView({ ...standardOptions, exact: true }));
-    expect(
-      screen.getAllByText(
-        (_text, element) => element?.textContent.includes("USD 9.007.199.254.740.993,12") ?? false
-      ).length
-    ).toBeGreaterThan(0);
-    const chart = document.querySelector("[data-chart-values]");
-    expect(chart?.getAttribute("data-chart-values")).not.toContain("inflowExact");
-    expect(chart?.getAttribute("data-chart-values")).not.toContain('"inflow":');
-    expect(screen.queryByText(/9\.007\.199\.254\.740\.993,13/u)).not.toBeInTheDocument();
-  });
+  effectIt.effect(
+    "keeps exact Money tooltips correlated to their row while geometry stays bounded",
+    () =>
+      Effect.gen(function* () {
+        yield* renderDashboardView(makeView({ ...standardOptions, exact: true }));
+        expect(exactMoneyElements().length).toBeGreaterThan(0);
+        const chart = document.querySelector("[data-chart-values]");
+        expect(chart?.getAttribute("data-chart-values")).not.toContain("inflowExact");
+        expect(chart?.getAttribute("data-chart-values")).not.toContain('"inflow":');
+        expect(screen.queryByText(/9\.007\.199\.254\.740\.993,13/u)).not.toBeInTheDocument();
+      })
+  );
 });

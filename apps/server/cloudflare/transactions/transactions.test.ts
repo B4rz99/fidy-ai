@@ -898,269 +898,348 @@ const grantHostedConsent = ({
     .run();
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const hostedNegativeFixture = async (
+const hostedNegativeFixture = (
   run: () => Promise<Response>
 ): Promise<
   Readonly<{
     db: D1Database;
     coordinator: Readonly<{ getByName: () => Pick<Fetcher, "fetch"> }>;
   }>
-> => {
-  const db = await setup();
-  await grantHostedConsent({
-    db,
-    user: users[0] ?? "",
-    grant: "10000000-0000-4000-8000-000000000091",
-    time: transactionNow(),
-  });
-  const instance = new UserTransactionCoordinator(
-    { id: { name: users[0] ?? "" }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
-    { ...coordinatorEnvironment(db), AI: { run } }
+> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: users[0] ?? "",
+          grant: "10000000-0000-4000-8000-000000000091",
+          time: transactionNow(),
+        })
+      );
+      const instance = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        { ...coordinatorEnvironment(db), AI: { run } }
+      );
+      return {
+        db,
+        coordinator: {
+          getByName: (): Pick<Fetcher, "fetch"> => ({
+            fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+          }),
+        },
+      };
+    })
   );
-  return {
-    db,
-    coordinator: {
-      getByName: (): Pick<Fetcher, "fetch"> => ({
-        fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
-      }),
-    },
-  };
-};
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("rejects malformed model output at public ingress without retaining assistant evidence", async () => {
-  const { db, coordinator } = await hostedNegativeFixture(() =>
-    Promise.resolve(
-      Response.json({
-        choices: [{ message: { role: "assistant", content: "" }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
-      })
-    )
-  );
-  const response = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator);
-  expect(response.status).toBe(503);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "failed" },
-  ]);
-  expect(
-    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
-      .results
-  ).toEqual([{ kind: "user" }, { kind: "failed" }]);
-  expect(
-    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
-  ).toHaveLength(0);
-});
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("recovers a committed Pending Turn by independent Core cron when its DO alarm fails", async () => {
-  const db = await setup();
-  await grantHostedConsent({
-    db,
-    user: users[0] ?? "",
-    grant: "10000000-0000-4000-8000-000000000091",
-    time: transactionNow(),
-  });
-  const instance = new UserTransactionCoordinator(
-    {
-      id: { name: users[0] ?? "" },
-      storage: { setAlarm: (): Promise<void> => Promise.reject(new Error("alarm unavailable")) },
-    },
-    {
-      ...coordinatorEnvironment(db),
-      AI: { run: (): Promise<never> => Promise.reject(new Error("must not run")) },
-    }
-  );
-  const binding = {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
-    }),
-  };
-  const response = await sendPublicRequest(db, hostedBrowserRequest(0, "Private text"), binding);
-  expect(response.status).toBe(503);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "pending" },
-  ]);
-  await sweepHostedTurns(db, transactionNow() + pendingExecutionRecoveryMs + 1);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "interrupted" },
-  ]);
-  expect(
-    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
-      .results
-  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
-  expect(
-    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
-  ).toHaveLength(0);
-});
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("interrupts an aborted public Turn without retaining a proposed assistant reply", async () => {
-  const controller = new AbortController();
-  const { db, coordinator } = await hostedNegativeFixture(() => {
-    controller.abort();
-    return Promise.resolve(
-      Response.json({
-        choices: [
-          { message: { role: "assistant", content: "Must not persist" }, finish_reason: "stop" },
-        ],
-        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
-      })
-    );
-  });
-  const request = new Request(hostedBrowserRequest(0, "Hola"), { signal: controller.signal });
-  const response = await sendPublicRequest(db, request, coordinator);
-  expect(response.status).not.toBe(200);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "interrupted" },
-  ]);
-  expect(
-    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
-      .results
-  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
-  expect(
-    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
-  ).toHaveLength(0);
-});
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("rejects a receipt when its WebSession is revoked between lookup and atomic completion", async () => {
-  const db = await setup();
-  await grantHostedConsent({
-    db,
-    user: users[0] ?? "",
-    grant: "10000000-0000-4000-8000-000000000091",
-    time: transactionNow(),
-  });
-  let revokeBeforeBatch = false;
-  const controlledDb = new Proxy(db, {
-    get(target, property): unknown {
-      if (property === "batch") {
-        return (
-          statements: Parameters<D1Database["batch"]>[0]
-        ): ReturnType<D1Database["batch"]> => {
-          if (!revokeBeforeBatch) {
-            return target.batch(statements);
-          }
-          revokeBeforeBatch = false;
-          return target
-            .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
-            .bind(transactionNow(), users[0])
-            .run()
-            .then(() => target.batch(statements));
-        };
-      }
-      const method: unknown = Reflect.get(target, property);
-      return typeof method === "function" ? method.bind(target) : method;
-    },
-  });
-  const instance = new UserTransactionCoordinator(
-    { id: { name: users[0] ?? "" }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
-    {
-      ...coordinatorEnvironment(controlledDb),
-      AI: {
-        run: (): Promise<Response> =>
+effectIt.effect(
+  "rejects malformed model output at public ingress without retaining assistant evidence",
+  () =>
+    Effect.gen(function* () {
+      const { db, coordinator } = yield* fromTestPromise(() =>
+        hostedNegativeFixture(() =>
           Promise.resolve(
             Response.json({
+              choices: [{ message: { role: "assistant", content: "" }, finish_reason: "stop" }],
+              usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+            })
+          )
+        )
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator)
+      );
+      expect(response.status).toBe(503);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "failed" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all()
+        )).results
+      ).toEqual([{ kind: "user" }, { kind: "failed" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+        )).results
+      ).toHaveLength(0);
+    })
+);
+
+effectIt.effect(
+  "recovers a committed Pending Turn by independent Core cron when its DO alarm fails",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: users[0] ?? "",
+          grant: "10000000-0000-4000-8000-000000000091",
+          time: transactionNow(),
+        })
+      );
+      const instance = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: {
+            setAlarm: (): Promise<void> => Promise.reject(new Error("alarm unavailable")),
+          },
+        },
+        {
+          ...coordinatorEnvironment(db),
+          AI: { run: (): Promise<never> => Promise.reject(new Error("must not run")) },
+        }
+      );
+      const binding = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+        }),
+      };
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Private text"), binding)
+      );
+      expect(response.status).toBe(503);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "pending" }]);
+      yield* sweepHostedTurns({
+        db,
+        now: transactionNow() + pendingExecutionRecoveryMs + 1,
+      });
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all()
+        )).results
+      ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+        )).results
+      ).toHaveLength(0);
+    })
+);
+
+const abortedTurnController = (): AbortController => new AbortController();
+effectIt.effect(
+  "interrupts an aborted public Turn without retaining a proposed assistant reply",
+  () =>
+    Effect.gen(function* () {
+      const controller = abortedTurnController();
+      const { db, coordinator } = yield* fromTestPromise(() =>
+        hostedNegativeFixture(() => {
+          controller.abort();
+          return Promise.resolve(
+            Response.json({
               choices: [
-                { message: { role: "assistant", content: "Proposal" }, finish_reason: "stop" },
+                {
+                  message: { role: "assistant", content: "Must not persist" },
+                  finish_reason: "stop",
+                },
               ],
               usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
             })
-          ),
-      },
-    }
-  );
-  const binding = {
-    getByName: (): Pick<Fetcher, "fetch"> => ({
-      fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
-    }),
-  };
-  const proposed = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), binding);
-  expect(proposed.status).toBe(202);
-  const reply = Schema.decodeUnknownSync(Schema.Struct({ ...hostedDeliveryReceipt.fields }))(
-    await proposed.json()
-  );
-  revokeBeforeBatch = true;
-  const receipt = await sendPublicRequest(
-    db,
-    hostedReceiptBrowserRequest(
-      0,
-      JSON.stringify({ turnId: reply.turnId, receipt: reply.receipt })
-    ),
-    binding
-  );
-  expect(receipt.status).toBe(401);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "pending" },
-  ]);
-  expect((await db.prepare("SELECT kind FROM transcript_entries").all()).results).toEqual([
-    { kind: "user" },
-  ]);
-  expect(
-    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
-  ).toHaveLength(1);
-});
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("rejects an expired visible receipt and interrupts the Turn at public ingress", async () => {
-  const { db, coordinator } = await hostedNegativeFixture(() =>
-    Promise.resolve(
-      Response.json({
-        choices: [{ message: { role: "assistant", content: "Reply" }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
-      })
-    )
-  );
-  const reply = await sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator);
-  expect(reply.status).toBe(202);
-  const proposal = Schema.decodeUnknownSync(
-    Schema.Struct({
-      text: Schema.String,
-      ...hostedDeliveryReceipt.fields,
+          );
+        })
+      );
+      const request = new Request(hostedBrowserRequest(0, "Hola"), { signal: controller.signal });
+      const response = yield* fromTestPromise(() => sendPublicRequest(db, request, coordinator));
+      expect(response.status).not.toBe(200);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all()
+        )).results
+      ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+        )).results
+      ).toHaveLength(0);
     })
-  )(await reply.json());
-  const stored = await db
-    .prepare("SELECT receipt_digest FROM hosted_delivery_proposals WHERE turn_id = ?")
-    .bind(proposal.turnId)
-    .first<{ receipt_digest: ArrayBuffer }>();
-  if (stored === null) throw Error("missing proposal");
-  await db
-    .prepare("DELETE FROM hosted_delivery_proposals WHERE turn_id = ?")
-    .bind(proposal.turnId)
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
-    )
-    .bind(
-      proposal.turnId,
-      users[0],
-      stored.receipt_digest,
-      transactionNow() - 121_000,
-      proposal.text
-    )
-    .run();
-  const receipt = await sendPublicRequest(
-    db,
-    hostedReceiptBrowserRequest(
-      0,
-      JSON.stringify({ turnId: proposal.turnId, receipt: proposal.receipt })
-    ),
-    coordinator
-  );
-  expect(receipt.status).toBe(401);
-  expect((await db.prepare("SELECT status FROM hosted_turns").all()).results).toEqual([
-    { status: "interrupted" },
-  ]);
-  expect(
-    (await db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all())
-      .results
-  ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
-  expect(
-    (await db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()).results
-  ).toHaveLength(0);
-});
+);
+
+effectIt.effect(
+  "rejects a receipt when its WebSession is revoked between lookup and atomic completion",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: users[0] ?? "",
+          grant: "10000000-0000-4000-8000-000000000091",
+          time: transactionNow(),
+        })
+      );
+      let revokeBeforeBatch = false;
+      const controlledDb = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "batch") {
+            return (
+              statements: Parameters<D1Database["batch"]>[0]
+            ): ReturnType<D1Database["batch"]> => {
+              if (!revokeBeforeBatch) {
+                return target.batch(statements);
+              }
+              revokeBeforeBatch = false;
+              return target
+                .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+                .bind(transactionNow(), users[0])
+                .run()
+                .then(() => target.batch(statements));
+            };
+          }
+          const method: unknown = Reflect.get(target, property);
+          return typeof method === "function" ? method.bind(target) : method;
+        },
+      });
+      const instance = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        {
+          ...coordinatorEnvironment(controlledDb),
+          AI: {
+            run: (): Promise<Response> =>
+              Promise.resolve(
+                Response.json({
+                  choices: [
+                    { message: { role: "assistant", content: "Proposal" }, finish_reason: "stop" },
+                  ],
+                  usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+                })
+              ),
+          },
+        }
+      );
+      const binding = {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+        }),
+      };
+      const proposed = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), binding)
+      );
+      expect(proposed.status).toBe(202);
+      const reply = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ ...hostedDeliveryReceipt.fields })
+      )(yield* fromTestPromise(() => proposed.json()));
+      revokeBeforeBatch = true;
+      const receipt = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          hostedReceiptBrowserRequest(
+            0,
+            JSON.stringify({ turnId: reply.turnId, receipt: reply.receipt })
+          ),
+          binding
+        )
+      );
+      expect(receipt.status).toBe(401);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "pending" }]);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT kind FROM transcript_entries").all()))
+          .results
+      ).toEqual([{ kind: "user" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+        )).results
+      ).toHaveLength(1);
+    })
+);
+
+effectIt.effect(
+  "rejects an expired visible receipt and interrupts the Turn at public ingress",
+  () =>
+    Effect.gen(function* () {
+      const { db, coordinator } = yield* fromTestPromise(() =>
+        hostedNegativeFixture(() =>
+          Promise.resolve(
+            Response.json({
+              choices: [
+                { message: { role: "assistant", content: "Reply" }, finish_reason: "stop" },
+              ],
+              usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+            })
+          )
+        )
+      );
+      const reply = yield* fromTestPromise(() =>
+        sendPublicRequest(db, hostedBrowserRequest(0, "Hola"), coordinator)
+      );
+      expect(reply.status).toBe(202);
+      const proposal = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          text: Schema.String,
+          ...hostedDeliveryReceipt.fields,
+        })
+      )(yield* fromTestPromise(() => reply.json()));
+      const stored = yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT receipt_digest FROM hosted_delivery_proposals WHERE turn_id = ?")
+          .bind(proposal.turnId)
+          .first<{ receipt_digest: ArrayBuffer }>()
+      );
+      if (stored === null) throw Error("missing proposal");
+      yield* fromTestPromise(() =>
+        db
+          .prepare("DELETE FROM hosted_delivery_proposals WHERE turn_id = ?")
+          .bind(proposal.turnId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
+          )
+          .bind(
+            proposal.turnId,
+            users[0],
+            stored.receipt_digest,
+            transactionNow() - 121_000,
+            proposal.text
+          )
+          .run()
+      );
+      const receipt = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          hostedReceiptBrowserRequest(
+            0,
+            JSON.stringify({ turnId: proposal.turnId, receipt: proposal.receipt })
+          ),
+          coordinator
+        )
+      );
+      expect(receipt.status).toBe(401);
+      expect(
+        (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
+      ).toEqual([{ status: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all()
+        )).results
+      ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+        )).results
+      ).toHaveLength(0);
+    })
+);
 
 effectIt.effect("refuses repeated public over-allowance Turns before buying model context", () =>
   Effect.gen(function* () {

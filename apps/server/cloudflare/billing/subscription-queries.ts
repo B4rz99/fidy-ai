@@ -13,7 +13,7 @@ import {
   subscriptionOffersQuery,
   subscriptionStandingQuery,
 } from "@fidy/server/subscription-runtime";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { currentMillis, newId } from "../pats/pat-shared";
 import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
@@ -140,18 +140,18 @@ const presentSubscription = ({
 };
 
 /** Commit one bounded query and its metadata-only AuditLogEntry under the same live User authority. */
-// @effect-diagnostics-next-line asyncFunction:off
-export const executeProtectedSubscriptionQuery = async (input: QueryInput): Promise<Response> => {
-  const current = currentMillis();
-  try {
-    const results = await input.db.batch([...subscriptionStatements(input, current)]);
-    return presentSubscription({
-      results,
-      operation: input.operation,
-      current,
-      pat: isPATCaller(input.subject),
-    });
-  } catch {
-    return unavailable();
-  }
-};
+export const executeProtectedSubscriptionQuery = (input: QueryInput): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const current = currentMillis();
+      const results = yield* Effect.tryPromise(() =>
+        input.db.batch([...subscriptionStatements(input, current)])
+      );
+      return presentSubscription({
+        results,
+        operation: input.operation,
+        current,
+        pat: isPATCaller(input.subject),
+      });
+    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
+  );

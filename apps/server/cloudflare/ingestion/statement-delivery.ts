@@ -170,19 +170,27 @@ type StatementCoordinator = Readonly<{
   getByName: (name: string) => Pick<Fetcher, "fetch">;
 }>;
 
-// @effect-diagnostics-next-line asyncFunction:off
-const workflowState = async (
+const workflowState = (
   workflow: Pick<StatementWorkflow, "get">,
   id: string
-): Promise<typeof WorkflowState.Type> => {
-  const instance = await workflow.get(id);
-  const statusMethod =
-    typeof instance === "object" && instance !== null && "status" in instance
-      ? instance.status
-      : undefined;
-  if (typeof statusMethod !== "function") throw new Error("Workflow status unavailable");
-  return Schema.decodeUnknownSync(WorkflowState)(await statusMethod.call(instance));
-};
+): Effect.Effect<typeof WorkflowState.Type, StatementDeliveryUnavailable> =>
+  Effect.gen(function* () {
+    const instance = yield* attempt(() => workflow.get(id));
+    const statusMethod =
+      typeof instance === "object" && instance !== null && "status" in instance
+        ? instance.status
+        : undefined;
+    if (typeof statusMethod !== "function") {
+      return yield* new StatementDeliveryUnavailable({ cause: "Workflow status unavailable" });
+    }
+    const status = yield* attempt(() => {
+      const result: unknown = statusMethod.call(instance);
+      return Promise.resolve(result);
+    });
+    return yield* Schema.decodeUnknownEffect(WorkflowState)(status).pipe(
+      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
+    );
+  });
 
 /** Reconcile failed or completed Workflow instances whose final report activity also exhausted.
  * The authoritative submission remains nonterminal until its own User coordinator settles it.
@@ -219,7 +227,7 @@ export const reconcileStatementExtraction = (
           .run()
       );
       const state = yield* Effect.result(
-        attempt(() => workflowState(input.STATEMENT_EXTRACTION_WORKFLOW, row.submission_id))
+        workflowState(input.STATEMENT_EXTRACTION_WORKFLOW, row.submission_id)
       );
       if (Result.isFailure(state)) continue;
       if (!["errored", "terminated", "complete"].includes(state.success.status)) continue;

@@ -1,19 +1,9 @@
 #!/usr/bin/env bun
 
-// Bans lint suppression directives in first-party source, and it has to live
-// outside the linter to do it: a whole-file `/* …-disable */` turns off every
-// oxlint rule in that file, including any rule written to catch the directive
-// itself. `.oxlintrc.json` is the gate the two trees rest on — the core fence,
-// the escape-hatch ban, the import restrictions — and one comment above a
-// declaration was enough to opt out of all of it. The repo already bans
-// `@ts-ignore` and `@ts-expect-error` through `typescript/ban-ts-comment`; this
-// closes the same door on oxlint's own escape hatch.
-//
-// There is no exclusion list, not even for this file, which is why the pattern
-// below is written as an alternation over the prefix rather than spelling the
-// two directive names out. Spell them out and this file starts matching itself,
-// and the first thing anyone would reach for is an exclusion — at which point
-// the check has a hole in exactly the shape of the check.
+// Bans first-party lint and Effect language-service suppression directives.
+// This must run outside the linter: a file-scoped directive can silence even
+// the rule intended to catch it. Keep the directive spellings split across
+// strings below so this checker checks itself without an exclusion list.
 
 type Suppression = {
   readonly file: string;
@@ -22,7 +12,10 @@ type Suppression = {
   readonly source: string;
 };
 
-const SUPPRESSION_PATTERN = /(?:ox|es)lint-disable/;
+const SUPPRESSION_PATTERN = new RegExp(
+  ["(?:ox|es)lint-disable", "@effect" + "-diagnostics(?:-next-line)?\\b"].join("|")
+);
+const ASYNC_FUNCTION_DISABLED = /"asyncFunction"\s*:\s*"off"/;
 
 /**
  * Every extension oxlint will lint — wider than this repo writes today, on
@@ -55,10 +48,10 @@ const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 /**
- * Tracked files plus untracked ones git would not ignore — the same set oxlint
- * walks, so a file added and not yet committed is checked too.
+ * Tracked files plus untracked ones git would not ignore. Include TypeScript
+ * configs so a path override cannot silently disable the async diagnostic.
  */
-const lintedFiles = (): readonly string[] => {
+const checkedFiles = (): readonly string[] => {
   const listed = Bun.spawnSync(
     ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
     { cwd: repoRoot, stdout: "pipe", stderr: "pipe" }
@@ -71,7 +64,11 @@ const lintedFiles = (): readonly string[] => {
   return (
     decode(listed.stdout)
       .split("\0")
-      .filter((path) => LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)))
+      .filter(
+        (path) =>
+          LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)) ||
+          /(?:^|\/)tsconfig[^/]*\.json$/.test(path)
+      )
       .filter((path) => !NOT_FIRST_PARTY.some((directory) => path.startsWith(directory)))
       // `git ls-files --cached` retains a deleted path until the deletion is staged;
       // do not try to read that stale index entry.
@@ -79,36 +76,36 @@ const lintedFiles = (): readonly string[] => {
   );
 };
 
-const suppressionsIn = (file: string, contents: string): readonly Suppression[] =>
+export const suppressionsIn = ({
+  file,
+  contents,
+}: Readonly<{ file: string; contents: string }>): readonly Suppression[] =>
   contents
     .split(/\r?\n/)
     .flatMap((source, index) =>
-      SUPPRESSION_PATTERN.test(source) ? [{ file, line: index + 1, source: source.trim() }] : []
+      SUPPRESSION_PATTERN.test(source) ||
+      (file.endsWith(".json") && ASYNC_FUNCTION_DISABLED.test(source))
+        ? [{ file, line: index + 1, source: source.trim() }]
+        : []
     );
 
-const scanned = await Promise.all(
-  lintedFiles().map((file) =>
-    Bun.file(`${repoRoot}${file}`)
-      .text()
-      .then((contents) => suppressionsIn(file, contents))
-  )
-);
-
-const found = scanned.flat();
-
-if (found.length > 0) {
-  const report = found.map(({ file, line, source }) => `${file}:${line}: ${source}`).join("\n");
-
-  process.stderr.write(
-    `${report}\n\n` +
-      `${found.length} lint suppression directive(s) in first-party source.\n\n` +
-      `A suppression turns the gate off at the one place it was about to fire, and a ` +
-      `whole-file one turns off every rule in the file — the core fence, the escape-hatch ` +
-      `ban and the import restrictions included. A rule a tool could enforce, but no tool ` +
-      `runs, is not a standard (CODING_STANDARDS.md) — and a rule anyone can switch off with ` +
-      `a comment is one that no longer runs.\n\n` +
-      `Fix the code, or change the rule in .oxlintrc.json so the exception is written down ` +
-      `once, in the open, with a reason.\n`
+if (import.meta.main) {
+  const scanned = await Promise.all(
+    checkedFiles().map((file) =>
+      Bun.file(`${repoRoot}${file}`)
+        .text()
+        .then((contents) => suppressionsIn({ file, contents }))
+    )
   );
-  process.exit(1);
+  const found = scanned.flat();
+  if (found.length > 0) {
+    const report = found.map(({ file, line, source }) => `${file}:${line}: ${source}`).join("\n");
+    process.stderr.write(
+      `${report}\n\n` +
+        `${found.length} lint suppression directive(s) in first-party source.\n\n` +
+        `A suppression turns off a rule at the place it would report a problem. ` +
+        `Fix the code rather than disabling a diagnostic with a comment or config override.\n`
+    );
+    process.exit(1);
+  }
 }

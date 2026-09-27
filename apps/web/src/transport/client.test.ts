@@ -138,27 +138,30 @@ const manualPATDisclosureBody = (bearer: string): unknown => ({
 });
 
 describe("subscription enrollment transport", () => {
-  it("interrupts in-flight work and refuses access as soon as its runtime is disposed", async () => {
-    const started = Deferred.makeUnsafe<void>();
-    let interrupted = 0;
-    const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
-    const request = client.execute(() =>
-      interruptibleWork(
-        () => Effect.runSync(Deferred.succeed(started, undefined)),
-        () => {
-          interrupted += 1;
-        }
-      )
-    );
+  it.effect("interrupts in-flight work and refuses access as soon as its runtime is disposed", () =>
+    Effect.gen(function* () {
+      const started = Deferred.makeUnsafe<void>();
+      const context = yield* Effect.context<never>();
+      let interrupted = 0;
+      const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
+      const onStarted = (): void => {
+        Effect.runSyncWith(context)(Deferred.succeed(started, undefined));
+      };
+      const onInterrupted = (): void => {
+        interrupted += 1;
+      };
+      const request = client.execute(() => interruptibleWork(onStarted, onInterrupted));
 
-    await Effect.runPromise(Deferred.await(started));
-    const disposal = client.dispose();
+      yield* Deferred.await(started);
+      const disposal = client.dispose();
 
-    await expect(request).rejects.toBeDefined();
-    await disposal;
-    expect(interrupted).toBe(1);
-    await expect(client.execute(() => Effect.succeed("stale"))).rejects.toBeDefined();
-  });
+      yield* Effect.tryPromise(() => expect(request).rejects.toBeDefined());
+      yield* Effect.tryPromise(() => disposal);
+      expect(interrupted).toBe(1);
+      const staleWork = (): Effect.Effect<string> => Effect.succeed("stale");
+      yield* Effect.tryPromise(() => expect(client.execute(staleWork)).rejects.toBeDefined());
+    })
+  );
 });
 
 describe("browser HTTP policy", () => {
@@ -473,370 +476,394 @@ describe("browser HTTP policy", () => {
   );
 });
 
+const waitForAssertion = (assertion: () => void): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => vi.waitFor(assertion));
+
 describe("canonical browser transport", () => {
-  it("keeps the typed Atom client while substituting only HttpClient", async () => {
-    const requests: string[] = [];
-    const httpClient = makeHttpClient((request) => {
-      requests.push(request.url);
-      return Effect.succeed(
-        responseJson(request, {
-          data: { url: "https://upgrade.fidyapp.com" },
-          next: [],
-        })
+  it.effect("keeps the typed Atom client while substituting only HttpClient", () =>
+    Effect.gen(function* () {
+      const requests: string[] = [];
+      const httpClient = makeHttpClient((request) => {
+        requests.push(request.url);
+        return Effect.succeed(
+          responseJson(request, {
+            data: { url: "https://upgrade.fidyapp.com" },
+            next: [],
+          })
+        );
+      });
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
       );
-    });
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("subscription", "getUpgradeUrl", {
-      serializationKey: "upgrade",
-    });
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
+      const atom = client.query("subscription", "getUpgradeUrl", {
+        serializationKey: "upgrade",
+      });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
 
-    try {
-      const response = await Effect.runPromise(AtomRegistry.getResult(registry, atom));
+      try {
+        const response = yield* AtomRegistry.getResult(registry, atom);
 
-      expect(response.data.url.href).toBe("https://upgrade.fidyapp.com/");
-      expect(requests).toEqual(["https://api.test.fidyapp.com/subscription/upgrade-url"]);
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+        expect(response.data.url.href).toBe("https://upgrade.fidyapp.com/");
+        expect(requests).toEqual(["https://api.test.fidyapp.com/subscription/upgrade-url"]);
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
 
-  it("keeps malformed schemas and HTTP failures as distinguishable boundary defects", async () => {
-    const malformedClient = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(
-        HttpClient.HttpClient,
-        makeHttpClient((request) =>
-          Effect.succeed(responseJson(request, { unexpected: "secret parser material" }))
-        )
-      )
-    );
-    const malformedAtom = malformedClient.query("subscription", "getUpgradeUrl", {});
-    const malformedRegistry = AtomRegistry.make();
-    const unmountMalformed = malformedRegistry.mount(malformedAtom);
-
-    const transportClient = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(
-        HttpClient.HttpClient,
-        makeHttpClient((request) =>
-          Effect.fail(
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({ request }),
-            })
+  it.effect("keeps malformed schemas and HTTP failures as distinguishable boundary defects", () =>
+    Effect.gen(function* () {
+      const malformedClient = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(
+          HttpClient.HttpClient,
+          makeHttpClient((request) =>
+            Effect.succeed(responseJson(request, { unexpected: "secret parser material" }))
           )
         )
-      )
-    );
-    const transportAtom = transportClient.query("subscription", "getUpgradeUrl", {});
-    const transportRegistry = AtomRegistry.make();
-    const unmountTransport = transportRegistry.mount(transportAtom);
-
-    try {
-      const malformedExit = await Effect.runPromiseExit(
-        AtomRegistry.getResult(malformedRegistry, malformedAtom)
       );
-      const transportExit = await Effect.runPromiseExit(
-        AtomRegistry.getResult(transportRegistry, transportAtom)
-      );
-      expect(Exit.isFailure(malformedExit)).toBe(true);
-      expect(Exit.isFailure(transportExit)).toBe(true);
-      if (Exit.isFailure(malformedExit) && Exit.isFailure(transportExit)) {
-        expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
-        expect(boundaryExitKind(transportExit)).toBe("http-defect");
-      }
-    } finally {
-      unmountMalformed();
-      malformedRegistry.dispose();
-      unmountTransport();
-      transportRegistry.dispose();
-    }
-  });
+      const malformedAtom = malformedClient.query("subscription", "getUpgradeUrl", {});
+      const malformedRegistry = AtomRegistry.make();
+      const unmountMalformed = malformedRegistry.mount(malformedAtom);
 
-  it("preserves endpoint-declared failures as typed product outcomes", async () => {
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(
-        responseJson(
-          request,
-          {
-            error: { code: "unauthenticated", message: "Authentication expired." },
-            next: [],
-          },
-          401
+      const transportClient = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(
+          HttpClient.HttpClient,
+          makeHttpClient((request) =>
+            Effect.fail(
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({ request }),
+              })
+            )
+          )
         )
-      )
-    );
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("identity", "getCurrentUser", {});
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
+      );
+      const transportAtom = transportClient.query("subscription", "getUpgradeUrl", {});
+      const transportRegistry = AtomRegistry.make();
+      const unmountTransport = transportRegistry.mount(transportAtom);
 
-    try {
-      const exit = await Effect.runPromiseExit(AtomRegistry.getResult(registry, atom));
-      expect(boundaryExitKind(exit)).toBe("typed-failure");
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+      try {
+        const malformedExit = yield* Effect.exit(
+          AtomRegistry.getResult(malformedRegistry, malformedAtom)
+        );
+        const transportExit = yield* Effect.exit(
+          AtomRegistry.getResult(transportRegistry, transportAtom)
+        );
+        expect(Exit.isFailure(malformedExit)).toBe(true);
+        expect(Exit.isFailure(transportExit)).toBe(true);
+        if (Exit.isFailure(malformedExit) && Exit.isFailure(transportExit)) {
+          expect(boundaryExitKind(malformedExit)).toBe("schema-defect");
+          expect(boundaryExitKind(transportExit)).toBe("http-defect");
+        }
+      } finally {
+        unmountMalformed();
+        malformedRegistry.dispose();
+        unmountTransport();
+        transportRegistry.dispose();
+      }
+    })
+  );
 
-  it("decodes a one-time PAT disclosure into redacted shared client state", async () => {
-    const rawBearer = "fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD";
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(responseJson(request, manualPATDisclosureBody(rawBearer)))
-    );
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const mutation = client.mutation("pats", "createManualPAT", {});
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(mutation);
+  it.effect("preserves endpoint-declared failures as typed product outcomes", () =>
+    Effect.gen(function* () {
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(
+          responseJson(
+            request,
+            {
+              error: { code: "unauthenticated", message: "Authentication expired." },
+              next: [],
+            },
+            401
+          )
+        )
+      );
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const atom = client.query("identity", "getCurrentUser", {});
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
 
-    try {
-      registry.set(mutation, {
-        payload: {
-          requestId: ManualPATRequestId.make("0d3e1c52-8c92-4c94-9d2f-5c7d0aef2d61"),
-          grant: {
-            recipientLabel: PATRecipientLabel.make("Automatización casa"),
-            scopes: ["read", "dashboard"],
-            lifetimeDays: 90,
-            reviewExpiresAt: DateTime.makeUnsafe("2026-04-01T00:00:00Z"),
-          },
-        },
-      });
+      try {
+        const exit = yield* Effect.exit(AtomRegistry.getResult(registry, atom));
+        expect(boundaryExitKind(exit)).toBe("typed-failure");
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
 
-      const response = await Effect.runPromise(AtomRegistry.getResult(registry, mutation));
+  it.effect("decodes a one-time PAT disclosure into redacted shared client state", () =>
+    Effect.gen(function* () {
+      const rawBearer = "fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD";
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(responseJson(request, manualPATDisclosureBody(rawBearer)))
+      );
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const mutation = client.mutation("pats", "createManualPAT", {});
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(mutation);
 
-      expect(response.data.pat.shortId).toBe("created1");
-      expect(Redacted.value(response.data.bearer)).toBe(rawBearer);
-      expect(Redacted.isRedacted(response.data.bearer)).toBe(true);
-      expect(JSON.stringify(registry.get(mutation))).not.toContain(rawBearer);
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
-
-  it("submits one staged statement reference and decodes visible queued status", async () => {
-    const requests: Array<Readonly<{ body: string; url: string }>> = [];
-    const httpClient = makeHttpClient((request) => {
-      requests.push({ body: requestBodyText(request), url: request.url });
-      return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
-    });
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const payload = Schema.decodeSync(SubmitForExtractionInput)({
-      idempotencyKey: "20000000-0000-4000-8000-000000000201",
-      reference: {
-        byteLength: 42,
-        sha256: "a".repeat(64),
-        stagingId: "30000000-0000-4000-8000-000000000301",
-      },
-    });
-    const mutation = client.mutation("ingestion", "submitForExtraction", {});
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(mutation);
-
-    try {
-      registry.set(mutation, { payload });
-      const response = await Effect.runPromise(AtomRegistry.getResult(registry, mutation));
-
-      expect(response.data.status).toBe("queued");
-      // The browser sends exactly the retry key and the opaque staged reference: no name, media
-      // type, or byte claim travels beside them.
-      expect(
-        requests.map(({ body, url }) => ({
-          body: Schema.decodeUnknownSync(SentStatementSubmission)(
-            Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body)
-          ),
-          url,
-        }))
-      ).toEqual([
-        {
-          body: {
-            idempotencyKey: "20000000-0000-4000-8000-000000000201",
-            reference: {
-              byteLength: 42,
-              sha256: "a".repeat(64),
-              stagingId: "30000000-0000-4000-8000-000000000301",
+      try {
+        registry.set(mutation, {
+          payload: {
+            requestId: ManualPATRequestId.make("0d3e1c52-8c92-4c94-9d2f-5c7d0aef2d61"),
+            grant: {
+              recipientLabel: PATRecipientLabel.make("Automatización casa"),
+              scopes: ["read", "dashboard"],
+              lifetimeDays: 90,
+              reviewExpiresAt: DateTime.makeUnsafe("2026-04-01T00:00:00Z"),
             },
           },
-          url: "https://api.test.fidyapp.com/ingestion/statements",
-        },
-      ]);
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+        });
 
-  it("serializes exact half-open UTC Transaction bounds through the derived client", async () => {
-    const requests: Array<
-      Readonly<{
-        url: string;
-        from: Option.Option<string>;
-        to: Option.Option<string>;
-      }>
-    > = [];
-    const httpClient = makeHttpClient((request) => {
-      requests.push({
-        url: request.url,
-        from: UrlParams.getFirst(request.urlParams, "from"),
-        to: UrlParams.getFirst(request.urlParams, "to"),
+        const response = yield* AtomRegistry.getResult(registry, mutation);
+
+        expect(response.data.pat.shortId).toBe("created1");
+        expect(Redacted.value(response.data.bearer)).toBe(rawBearer);
+        expect(Redacted.isRedacted(response.data.bearer)).toBe(true);
+        const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          registry.get(mutation)
+        );
+        expect(serialized).not.toContain(rawBearer);
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
+
+  it.effect("submits one staged statement reference and decodes visible queued status", () =>
+    Effect.gen(function* () {
+      const requests: Array<Readonly<{ body: string; url: string }>> = [];
+      const httpClient = makeHttpClient((request) => {
+        requests.push({ body: requestBodyText(request), url: request.url });
+        return Effect.succeed(responseJson(request, queuedStatementSubmissionBody(), 202));
       });
-      return Effect.succeed(responseJson(request, { data: [], next: [] }));
-    });
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("transactions", "listTransactions", {
-      query: {
-        from: DateTime.makeUnsafe("2026-03-01T05:00:00Z"),
-        to: DateTime.makeUnsafe("2026-04-01T04:00:00Z"),
-      },
-    });
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
-
-    try {
-      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
-      expect(requests).toEqual([
-        {
-          url: "https://api.test.fidyapp.com/transactions",
-          from: Option.some("2026-03-01T05:00:00.000Z"),
-          to: Option.some("2026-04-01T04:00:00.000Z"),
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const payload = yield* Schema.decodeEffect(SubmitForExtractionInput)({
+        idempotencyKey: "20000000-0000-4000-8000-000000000201",
+        reference: {
+          byteLength: 42,
+          sha256: "a".repeat(64),
+          stagingId: "30000000-0000-4000-8000-000000000301",
         },
-      ]);
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+      });
+      const mutation = client.mutation("ingestion", "submitForExtraction", {});
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(mutation);
 
-  it("preserves query data through a real refresh failure and retries the same atom", async () => {
-    const refreshResponse = Promise.withResolvers<HttpClientResponse.HttpClientResponse>();
-    let requestCount = 0;
-    let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
-    const httpClient = makeHttpClient((request) => {
-      requestCount += 1;
-      if (requestCount === 1 || requestCount === 3) {
+      try {
+        registry.set(mutation, { payload });
+        const response = yield* AtomRegistry.getResult(registry, mutation);
+
+        expect(response.data.status).toBe("queued");
+        // The browser sends exactly the retry key and the opaque staged reference: no name, media
+        // type, or byte claim travels beside them.
+        expect(
+          requests.map(({ body, url }) => ({
+            body: Schema.decodeUnknownSync(SentStatementSubmission)(
+              Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(body)
+            ),
+            url,
+          }))
+        ).toEqual([
+          {
+            body: {
+              idempotencyKey: "20000000-0000-4000-8000-000000000201",
+              reference: {
+                byteLength: 42,
+                sha256: "a".repeat(64),
+                stagingId: "30000000-0000-4000-8000-000000000301",
+              },
+            },
+            url: "https://api.test.fidyapp.com/ingestion/statements",
+          },
+        ]);
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
+
+  it.effect("serializes exact half-open UTC Transaction bounds through the derived client", () =>
+    Effect.gen(function* () {
+      const requests: Array<
+        Readonly<{
+          url: string;
+          from: Option.Option<string>;
+          to: Option.Option<string>;
+        }>
+      > = [];
+      const httpClient = makeHttpClient((request) => {
+        requests.push({
+          url: request.url,
+          from: UrlParams.getFirst(request.urlParams, "from"),
+          to: UrlParams.getFirst(request.urlParams, "to"),
+        });
         return Effect.succeed(responseJson(request, { data: [], next: [] }));
+      });
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const atom = client.query("transactions", "listTransactions", {
+        query: {
+          from: DateTime.makeUnsafe("2026-03-01T05:00:00Z"),
+          to: DateTime.makeUnsafe("2026-04-01T04:00:00Z"),
+        },
+      });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
+
+      try {
+        yield* AtomRegistry.getResult(registry, atom);
+        expect(requests).toEqual([
+          {
+            url: "https://api.test.fidyapp.com/transactions",
+            from: Option.some("2026-03-01T05:00:00.000Z"),
+            to: Option.some("2026-04-01T04:00:00.000Z"),
+          },
+        ]);
+      } finally {
+        unmount();
+        registry.dispose();
       }
-      pendingRequest = Option.some(request);
-      return Effect.promise(() => refreshResponse.promise);
-    });
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("transactions", "listTransactions", { query: {} });
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
+    })
+  );
 
-    try {
-      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
-      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-        _tag: "Ready",
-        waiting: false,
+  it.effect("preserves query data through a real refresh failure and retries the same atom", () =>
+    Effect.gen(function* () {
+      const refreshResponse = Promise.withResolvers<HttpClientResponse.HttpClientResponse>();
+      let requestCount = 0;
+      let pendingRequest = Option.none<HttpClientRequest.HttpClientRequest>();
+      const deferredResponse = (): Promise<HttpClientResponse.HttpClientResponse> =>
+        refreshResponse.promise;
+      const httpClient = makeHttpClient((request) => {
+        requestCount += 1;
+        if (requestCount === 1 || requestCount === 3) {
+          return Effect.succeed(responseJson(request, { data: [], next: [] }));
+        }
+        pendingRequest = Option.some(request);
+        return Effect.promise(deferredResponse);
       });
-
-      registry.refresh(atom);
-      await vi.waitFor(() => expect(requestCount).toBe(2));
-      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-        _tag: "Ready",
-        waiting: true,
-      });
-      const failedRefresh = Effect.runPromise(
-        Effect.result(AtomRegistry.getResult(registry, atom))
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
       );
+      const atom = client.query("transactions", "listTransactions", { query: {} });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
 
-      refreshResponse.resolve(
-        responseJson(
-          Option.getOrThrow(pendingRequest),
-          {
-            error: {
-              code: "validation_failed",
-              message: "The query was rejected.",
-              fields: [],
+      try {
+        yield* AtomRegistry.getResult(registry, atom);
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Ready",
+          waiting: false,
+        });
+
+        registry.refresh(atom);
+        yield* waitForAssertion(() => expect(requestCount).toBe(2));
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Ready",
+          waiting: true,
+        });
+        const failedRefresh = yield* Effect.forkChild(
+          Effect.result(AtomRegistry.getResult(registry, atom)),
+          { startImmediately: true }
+        );
+
+        refreshResponse.resolve(
+          responseJson(
+            Option.getOrThrow(pendingRequest),
+            {
+              error: {
+                code: "validation_failed",
+                message: "The query was rejected.",
+                fields: [],
+              },
+              next: [],
             },
-            next: [],
-          },
-          400
+            400
+          )
+        );
+        yield* Fiber.join(failedRefresh);
+        yield* waitForAssertion(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Ready",
+          waiting: false,
+          refreshFailure: { _tag: "Some", value: { _tag: "DeclaredFailure" } },
+        });
+
+        registry.refresh(atom);
+        yield* waitForAssertion(() => expect(requestCount).toBe(3));
+        yield* waitForAssertion(() => expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true));
+        yield* AtomRegistry.getResult(registry, atom);
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Ready",
+          waiting: false,
+        });
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
+
+  it.effect("classifies a real initial declared failure without previous data", () =>
+    Effect.gen(function* () {
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(
+          responseJson(
+            request,
+            {
+              error: { code: "validation_failed", message: "The query was rejected.", fields: [] },
+              next: [],
+            },
+            400
+          )
         )
       );
-      await failedRefresh;
-      await vi.waitFor(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
-      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-        _tag: "Ready",
-        waiting: false,
-        refreshFailure: { _tag: "Some", value: { _tag: "DeclaredFailure" } },
-      });
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      );
+      const atom = client.query("transactions", "listTransactions", { query: {} });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
 
-      registry.refresh(atom);
-      await vi.waitFor(() => expect(requestCount).toBe(3));
-      await vi.waitFor(() => expect(AsyncResult.isSuccess(registry.get(atom))).toBe(true));
-      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
-      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-        _tag: "Ready",
-        waiting: false,
-      });
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+      try {
+        yield* Effect.result(AtomRegistry.getResult(registry, atom));
+        expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: "DeclaredFailure" },
+        });
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
 
-  it("classifies a real initial declared failure without previous data", async () => {
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(
-        responseJson(
-          request,
-          {
-            error: { code: "validation_failed", message: "The query was rejected.", fields: [] },
-            next: [],
-          },
-          400
-        )
-      )
-    );
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("transactions", "listTransactions", { query: {} });
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
-
-    try {
-      await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom)));
-      expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "DeclaredFailure" },
-      });
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
-
-  it.each([
+  it.effect.each([
     ["defect", Effect.die("private decoder defect"), "BoundaryFailure"],
     ["interruption", Effect.interrupt, "Interrupted"],
-  ] as const)(
-    "classifies a real initial %s without exposing its Cause",
-    async (_label, request, tag) => {
+  ] as const)("classifies a real initial %s without exposing its Cause", ([_label, request, tag]) =>
+    Effect.gen(function* () {
       const httpClient = makeHttpClient(() => request);
       const client = makeFidyClient(
         "https://api.test.fidyapp.com",
@@ -847,10 +874,8 @@ describe("canonical browser transport", () => {
       const unmount = registry.mount(atom);
 
       try {
-        await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom))).catch(
-          () => undefined
-        );
-        await vi.waitFor(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
+        yield* Effect.exit(Effect.result(AtomRegistry.getResult(registry, atom)));
+        yield* waitForAssertion(() => expect(AsyncResult.isFailure(registry.get(atom))).toBe(true));
         expect(presentCanonicalQuery(registry.get(atom))).toMatchObject({
           _tag: "Failure",
           failure: { _tag: tag },
@@ -859,61 +884,67 @@ describe("canonical browser transport", () => {
         unmount();
         registry.dispose();
       }
-    }
+    })
   );
 
-  it("starts the same canonical query without prior-principal success in a replacement registry", async () => {
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(responseJson(request, { data: [], next: [] }))
-    );
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    const atom = client.query("transactions", "listTransactions", { query: {} });
-    const priorRegistry = AtomRegistry.make();
-    const priorUnmount = priorRegistry.mount(atom);
-    await Effect.runPromise(AtomRegistry.getResult(priorRegistry, atom));
-    expect(presentCanonicalQuery(priorRegistry.get(atom))._tag).toBe("Ready");
-    priorUnmount();
-    priorRegistry.dispose();
+  it.effect(
+    "starts the same canonical query without prior-principal success in a replacement registry",
+    () =>
+      Effect.gen(function* () {
+        const httpClient = makeHttpClient((request) =>
+          Effect.succeed(responseJson(request, { data: [], next: [] }))
+        );
+        const client = makeFidyClient(
+          "https://api.test.fidyapp.com",
+          Layer.succeed(HttpClient.HttpClient, httpClient)
+        );
+        const atom = client.query("transactions", "listTransactions", { query: {} });
+        const priorRegistry = AtomRegistry.make();
+        const priorUnmount = priorRegistry.mount(atom);
+        yield* AtomRegistry.getResult(priorRegistry, atom);
+        expect(presentCanonicalQuery(priorRegistry.get(atom))._tag).toBe("Ready");
+        priorUnmount();
+        priorRegistry.dispose();
 
-    const replacementRegistry = AtomRegistry.make();
-    expect(presentCanonicalQuery(replacementRegistry.get(atom))).toMatchObject({
-      _tag: "Initial",
-    });
-    replacementRegistry.dispose();
-  });
+        const replacementRegistry = AtomRegistry.make();
+        expect(presentCanonicalQuery(replacementRegistry.get(atom))).toMatchObject({
+          _tag: "Initial",
+        });
+        replacementRegistry.dispose();
+      })
+  );
 
-  it("notifies the authentication lifetime when the canonical API rejects the session", async () => {
-    let expirations = 0;
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(
-        responseJson(
-          request,
-          {
-            error: { code: "unauthenticated", message: "Authentication expired." },
-            next: [],
-          },
-          401
+  it.effect("notifies the authentication lifetime when the canonical API rejects the session", () =>
+    Effect.gen(function* () {
+      let expirations = 0;
+      const httpClient = makeHttpClient((request) =>
+        Effect.succeed(
+          responseJson(
+            request,
+            {
+              error: { code: "unauthenticated", message: "Authentication expired." },
+              next: [],
+            },
+            401
+          )
         )
-      )
-    );
-    const client = makeFidyClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient),
-      { onAuthenticationExpired: () => expirations++ }
-    );
-    const atom = client.query("identity", "getCurrentUser", {});
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(atom);
+      );
+      const client = makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        { onAuthenticationExpired: () => expirations++ }
+      );
+      const atom = client.query("identity", "getCurrentUser", {});
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(atom);
 
-    try {
-      await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom)));
-      expect(expirations).toBe(1);
-    } finally {
-      unmount();
-      registry.dispose();
-    }
-  });
+      try {
+        yield* Effect.result(AtomRegistry.getResult(registry, atom));
+        expect(expirations).toBe(1);
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+  );
 });

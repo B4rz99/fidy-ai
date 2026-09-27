@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import * as XLSX from "xlsx/xlsx.mjs";
 import { runExtractionProof } from "./extraction-proof";
 import { runProtectedDocumentProof } from "./protected-document-proof";
@@ -198,20 +198,23 @@ try {
     throw new Error("Document parser workerd did not start");
   }
 
-  const debuggerUrl = await inspectorTarget(inspectorPort);
-  const baselineHeapBytes = await heapUsage(debuggerUrl);
+  const debuggerUrl = await inspectorTarget({ port: inspectorPort, signal: Option.none() });
+  const baselineHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
 
   const rows = Array.from(
     { length: 20_000 },
     (_, index) => `2026-01-01,${index},bounded representative row ${index}`
   );
-  const csvProfile = await profileWorkerRequest(debuggerUrl, () =>
-    fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: `Date,Amount,Description\n${rows.join("\n")}`,
-      headers: { "content-type": "application/pdf" },
-      method: "POST",
-    })
-  );
+  const csvProfile = await profileWorkerRequest({
+    debuggerUrl,
+    signal: Option.none(),
+    sendRequest: () =>
+      fetch(`http://127.0.0.1:${serverPort}/statement`, {
+        body: `Date,Amount,Description\n${rows.join("\n")}`,
+        headers: { "content-type": "application/pdf" },
+        method: "POST",
+      }),
+  });
   const response = csvProfile.response;
   const parsed = Schema.decodeUnknownSync(ParseResult)(await response.json());
   if (!response.ok || parsed.format !== "csv" || parsed.rowCount !== rows.length) {
@@ -327,12 +330,15 @@ try {
     XLSX.utils.aoa_to_sheet([representativeHeaders, ...representativeRows]),
     "Statement"
   );
-  const xlsxProfile = await profileWorkerRequest(debuggerUrl, () =>
-    fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: workbookBytes(representativeWorkbook, "xlsx"),
-      method: "POST",
-    })
-  );
+  const xlsxProfile = await profileWorkerRequest({
+    debuggerUrl,
+    signal: Option.none(),
+    sendRequest: () =>
+      fetch(`http://127.0.0.1:${serverPort}/statement`, {
+        body: workbookBytes(representativeWorkbook, "xlsx"),
+        method: "POST",
+      }),
+  });
   const xlsxResponse = xlsxProfile.response;
   const parsedXlsx = Schema.decodeUnknownSync(ParseResult)(await xlsxResponse.json());
   if (
@@ -346,7 +352,7 @@ try {
     throw new Error("XLSX parsing exceeds the configured Worker CPU limit");
   }
 
-  const retainedHeapBytes = await heapUsage(debuggerUrl);
+  const retainedHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
   if (retainedHeapBytes > maximumMemoryBytes) {
     throw new Error("Document parser exceeds the Worker memory limit");
   }

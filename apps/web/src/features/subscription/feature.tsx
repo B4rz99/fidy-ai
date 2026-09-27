@@ -455,22 +455,24 @@ const submissionFlow = (
   prepared,
 });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const preparePaymentFlow = async (
-  gateway: EnrollmentGateway,
-  priceId: PriceId
-): Promise<PaymentFlowState> => {
-  const prepared = await gateway.prepare(priceId);
+const preparePaymentFlow = Effect.fn(function* (gateway: EnrollmentGateway, priceId: PriceId) {
+  const prepared = yield* Effect.tryPromise({
+    try: () => gateway.prepare(priceId),
+    catch: () => new EnrollmentInteractionFailed(),
+  });
   if (prepared.status !== "verifying" && prepared.status !== "creating") {
     return enrollmentFlow(prepared);
   }
-  const resumed = await gateway.resume(prepared.enrollmentId);
+  const resumed = yield* Effect.tryPromise({
+    try: () => gateway.resume(prepared.enrollmentId),
+    catch: () => new EnrollmentInteractionFailed(),
+  });
   return Option.match(resumed, {
     onNone: () => enrollmentFlow(prepared),
     onSome: ({ submission, billingEmail }) =>
       submissionFlow(submission, billingEmail, Option.none()),
   });
-};
+});
 
 const pageIsHidden = (): boolean => globalThis.document.visibilityState === "hidden";
 
@@ -664,7 +666,11 @@ type EnrollmentInteraction = Readonly<{
   busy: boolean;
   failed: boolean;
   interrupt: () => void;
-  start: (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>) => void;
+  start: (
+    work: (
+      gateway: EnrollmentGateway
+    ) => Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed>
+  ) => void;
   reset: () => void;
 }>;
 
@@ -740,36 +746,39 @@ const useEnrollmentInteraction = (
   const [failed, setFailed] = useState(false);
   const activeFlowId = useRef(0);
   const paymentRefresh = usePaymentRefresh(gateway, setScopedFlow);
-  const run = (flowId: number, work: () => Promise<PaymentFlowState>): Promise<void> => {
-    setBusy(true);
-    setFailed(false);
-    return work().then(
-      (value) => {
-        if (activeFlowId.current !== flowId) return;
-        setScopedFlow(Option.some({ flowId, state: value }));
-        setBusy(false);
-        paymentRefresh.start(flowId, value);
-      },
-      () => {
-        if (activeFlowId.current !== flowId) return;
-        setFailed(true);
-        setBusy(false);
-      }
-    );
-  };
-  const start = (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>): void => {
+  const start = (
+    work: (
+      gateway: EnrollmentGateway
+    ) => Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed>
+  ): void => {
     paymentRefresh.interrupt();
     activeFlowId.current += 1;
     const flowId = activeFlowId.current;
     Option.match(gateway, {
       onNone: () => undefined,
-      onSome: (availableGateway) =>
+      onSome: (availableGateway) => {
+        setBusy(true);
+        setFailed(false);
         Effect.runFork(
-          Effect.tryPromise({
-            try: () => run(flowId, () => work(availableGateway)),
-            catch: () => new EnrollmentInteractionFailed(),
-          }).pipe(Effect.ignore)
-        ),
+          work(availableGateway).pipe(
+            Effect.matchEffect({
+              onSuccess: (value) =>
+                Effect.sync(() => {
+                  if (activeFlowId.current !== flowId) return;
+                  setScopedFlow(Option.some({ flowId, state: value }));
+                  setBusy(false);
+                  paymentRefresh.start(flowId, value);
+                }),
+              onFailure: () =>
+                Effect.sync(() => {
+                  if (activeFlowId.current !== flowId) return;
+                  setFailed(true);
+                  setBusy(false);
+                }),
+            })
+          )
+        );
+      },
     });
   };
   const reset = (): void => {
@@ -812,6 +821,26 @@ const OfferSelection = ({
     ))}
   </section>
 );
+
+const refreshEnrollmentFlow = (
+  gateway: EnrollmentGateway,
+  enrollmentId: PreparedEnrollment["enrollmentId"]
+): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
+  Effect.tryPromise({
+    try: () => gateway.status(enrollmentId),
+    catch: () => new EnrollmentInteractionFailed(),
+  }).pipe(Effect.map(enrollmentFlow));
+
+const submitPaymentFlow = (
+  gateway: EnrollmentGateway,
+  input: Readonly<{ prepared: PreparedEnrollment; email: string; card: Option.Option<CardFields> }>
+): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
+  Effect.tryPromise({
+    try: () => gateway.submit(input.prepared, input.email, Option.getOrUndefined(input.card)),
+    catch: () => new EnrollmentInteractionFailed(),
+  }).pipe(
+    Effect.map((submission) => submissionFlow(submission, input.email, Option.some(input.prepared)))
+  );
 
 const ReadyOffersContent = ({
   offers,
@@ -856,13 +885,15 @@ const ReadyOffersContent = ({
               start((availableGateway) => preparePaymentFlow(availableGateway, offer.id))
             }
             refresh={(id) =>
-              start((availableGateway) => availableGateway.status(id).then(enrollmentFlow))
+              start((availableGateway) => refreshEnrollmentFlow(availableGateway, id))
             }
             submit={(prepared, email, card) =>
               start((availableGateway) =>
-                availableGateway
-                  .submit(prepared, email, card)
-                  .then((submission) => submissionFlow(submission, email, Option.some(prepared)))
+                submitPaymentFlow(availableGateway, {
+                  prepared,
+                  email,
+                  card: Option.fromNullishOr(card),
+                })
               )
             }
           />

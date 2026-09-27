@@ -1,5 +1,5 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { Effect, Layer, Option } from "effect";
+import { Data, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -58,44 +58,58 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
-const renderRoute = async (
+class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
+
+const fromPromise = <A,>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailure> =>
+  Effect.tryPromise({
+    try: () => promise,
+    catch: (cause) => new TestPromiseFailure({ cause }),
+  });
+
+const renderRoute = (
   path: string,
   apiClient = makeFidyClient("https://api.test.fidyapp.com"),
   webAuthClient: WebAuthClient = makeWebAuthClient("https://api.test.fidyapp.com")
-): Promise<ReturnType<typeof createWebRouter>> => {
-  const router = createWebRouter({
-    apiClient,
-    webAuthClient,
-    hostedTurnClient: makeHostedTurnClient("https://api.test.fidyapp.com"),
-    history: Option.some(createMemoryHistory({ initialEntries: [path] })),
-  });
-  render(
-    <SessionRegistryProvider>
-      <SubscriptionEnrollmentLifetime
-        makeClient={() => makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com")}
-      >
-        <RouterProvider router={router} />
-      </SubscriptionEnrollmentLifetime>
-    </SessionRegistryProvider>
+): Promise<ReturnType<typeof createWebRouter>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const router = createWebRouter({
+        apiClient,
+        webAuthClient,
+        hostedTurnClient: makeHostedTurnClient("https://api.test.fidyapp.com"),
+        history: Option.some(createMemoryHistory({ initialEntries: [path] })),
+      });
+      render(
+        <SessionRegistryProvider>
+          <SubscriptionEnrollmentLifetime
+            makeClient={() => makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com")}
+          >
+            <RouterProvider router={router} />
+          </SubscriptionEnrollmentLifetime>
+        </SessionRegistryProvider>
+      );
+      yield* fromPromise(router.load());
+      return router;
+    })
   );
-  await router.load();
-  return router;
-};
 
-const renderHostedRoute = async (hostedTurnClient: HostedTurnClient): Promise<void> => {
-  const router = createWebRouter({
-    apiClient: makeFidyClient("https://api.test.fidyapp.com"),
-    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com"),
-    hostedTurnClient,
-    history: Option.some(createMemoryHistory({ initialEntries: ["/app/agent"] })),
-  });
-  render(
-    <SessionRegistryProvider>
-      <RouterProvider router={router} />
-    </SessionRegistryProvider>
+const renderHostedRoute = (hostedTurnClient: HostedTurnClient): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const router = createWebRouter({
+        apiClient: makeFidyClient("https://api.test.fidyapp.com"),
+        webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com"),
+        hostedTurnClient,
+        history: Option.some(createMemoryHistory({ initialEntries: ["/app/agent"] })),
+      });
+      render(
+        <SessionRegistryProvider>
+          <RouterProvider router={router} />
+        </SessionRegistryProvider>
+      );
+      yield* fromPromise(router.load());
+    })
   );
-  await router.load();
-};
 
 const resetApplicationTest = (): void => {
   cleanup();
@@ -163,28 +177,41 @@ const recoveryClients = (): Readonly<{
   };
 };
 
-const beginRenderedEmailReplacement = async (candidateEmail: string): Promise<void> => {
-  fireEvent.change(await screen.findByLabelText("Nuevo correo"), {
-    target: { value: candidateEmail },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
-  expect(await screen.findByText(`Enviamos un código a ${candidateEmail}.`)).toBeVisible();
-};
+const beginRenderedEmailReplacement = (candidateEmail: string): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+        target: { value: candidateEmail },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+      expect(
+        yield* fromPromise(screen.findByText(`Enviamos un código a ${candidateEmail}.`))
+      ).toBeVisible();
+    })
+  );
 
-const enterReplacementCode = async (): Promise<void> => {
-  fireEvent.change(await screen.findByLabelText("Código de verificación"), {
-    target: { value: "BCDF-GHJK-MNPQ-RSTW-XY23-4567" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
-};
+const enterReplacementCode = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
+        target: { value: "BCDF-GHJK-MNPQ-RSTW-XY23-4567" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+    })
+  );
 
-const submitRenderedEmailReplacement = async (requests: Array<string>): Promise<void> => {
-  await beginRenderedEmailReplacement("new.mailbox@example.com");
-  fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
-  await waitFor(() => expect(requests).toHaveLength(2));
-  await enterReplacementCode();
-  expect(await screen.findByText("Tu nuevo correo verificado ya está activo.")).toBeVisible();
-};
+const submitRenderedEmailReplacement = (requests: Array<string>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPromise(beginRenderedEmailReplacement("new.mailbox@example.com"));
+      fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
+      yield* fromPromise(waitFor(() => expect(requests).toHaveLength(2)));
+      yield* fromPromise(enterReplacementCode());
+      expect(
+        yield* fromPromise(screen.findByText("Tu nuevo correo verificado ya está activo."))
+      ).toBeVisible();
+    })
+  );
 
 const malformedFidyClient = (): FidyClient => {
   const httpClient = makeHttpClient((request) =>
@@ -198,29 +225,43 @@ const malformedFidyClient = (): FidyClient => {
 
 describe("public web application routes", () => {
   afterEach(resetApplicationTest);
-  it("renders the authoritative policy at its stable route", async () => {
-    await renderRoute("/politica");
+  it("renders the authoritative policy at its stable route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/politica"));
 
-    expect(
-      await screen.findByRole("heading", {
-        level: 1,
-        name: "Política de tratamiento de datos personales",
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", {
+              level: 1,
+              name: "Política de tratamiento de datos personales",
+            })
+          )
+        ).toBeVisible();
+        expect(screen.getByText("policy-2026-09-21")).toBeVisible();
+        expect(screen.getByText(/Cloudflare Workers AI/iu)).toBeVisible();
+        expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
+        expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("link", { name: /términos de servicio/iu })
+        ).not.toBeInTheDocument();
       })
-    ).toBeVisible();
-    expect(screen.getByText("policy-2026-09-21")).toBeVisible();
-    expect(screen.getByText(/Cloudflare Workers AI/iu)).toBeVisible();
-    expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
-    expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /términos de servicio/iu })).not.toBeInTheDocument();
-  });
+    ));
 
-  it("does not start browser pairing merely by opening its route", async () => {
-    await renderRoute("/auth/pair");
+  it("does not start browser pairing merely by opening its route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/auth/pair"));
 
-    expect(await screen.findByRole("heading", { name: "Inicia sesión en Fidy" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
-    expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
-  });
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+        ).toBeVisible();
+        expect(
+          screen.getByRole("button", { name: "Iniciar sesión en el navegador" })
+        ).toBeVisible();
+        expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
+      })
+    ));
 });
 
 const transactionCaptureInstant = (request: HttpClientRequest.HttpClientRequest): string => {
@@ -301,190 +342,282 @@ const requestCount = (requests: ReadonlyArray<string>, target: string): number =
 describe("signed-in web application routes", () => {
   afterEach(resetApplicationTest);
 
-  it("owns Transactions at /app/transactions and safely presents malformed canonical data", async () => {
-    await renderRoute("/app/transactions", malformedFidyClient());
+  it("owns Transactions at /app/transactions and safely presents malformed canonical data", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app/transactions", malformedFidyClient()));
 
-    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
-  });
+        expect(
+          yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))
+        ).toBeVisible();
+      })
+    ));
 
-  it("captures through the generated HTTP client and presents the returned Transaction even outside the first history page", async () => {
-    const requests: Array<string> = [];
-    const capturedInstants: Array<string> = [];
-    await renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants));
-    expect(await screen.findByText("Aún no hay transacciones este mes")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "25000" } });
-    fireEvent.change(screen.getByLabelText("Fecha del movimiento"), {
-      target: { value: "2025-01-10" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
-    expect(await screen.findByLabelText("Transacción recién registrada")).toHaveTextContent(
-      "El Corral"
-    );
-    expect(screen.getByLabelText("Transacción recién registrada")).toHaveTextContent("10-01-2025");
-    await waitFor(() => expect(requestCount(requests, "GET /transactions")).toBe(2));
-    expect(requests).toContain("POST /transactions");
-    expect(capturedInstants).toEqual(["2025-01-10T05:00:00.000Z"]);
-  });
+  it("captures through the generated HTTP client and presents the returned Transaction even outside the first history page", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const capturedInstants: Array<string> = [];
+        yield* fromPromise(
+          renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
+        );
+        expect(
+          yield* fromPromise(screen.findByText("Aún no hay transacciones este mes"))
+        ).toBeVisible();
+        fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "25000" } });
+        fireEvent.change(screen.getByLabelText("Fecha del movimiento"), {
+          target: { value: "2025-01-10" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+        expect(
+          yield* fromPromise(screen.findByLabelText("Transacción recién registrada"))
+        ).toHaveTextContent("El Corral");
+        expect(screen.getByLabelText("Transacción recién registrada")).toHaveTextContent(
+          "10-01-2025"
+        );
+        const assertRefetched = (): void => {
+          expect(requestCount(requests, "GET /transactions")).toBe(2);
+        };
+        yield* fromPromise(waitFor(assertRefetched));
+        expect(requests).toContain("POST /transactions");
+        expect(capturedInstants).toEqual(["2025-01-10T05:00:00.000Z"]);
+      })
+    ));
+});
 
-  it("refuses malformed Money before sending a canonical create request", async () => {
-    const requests: Array<string> = [];
-    const capturedInstants: Array<string> = [];
-    await renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants));
-    expect(await screen.findByText("Aún no hay transacciones este mes")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "not-a-number" } });
-    fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo guardar la transacción");
-    expect(requests).not.toContain("POST /transactions");
-    expect(capturedInstants).toEqual([]);
-  });
+describe("signed-in web application routes — invalid Money", () => {
+  afterEach(resetApplicationTest);
+
+  it("refuses malformed Money before sending a canonical create request", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const capturedInstants: Array<string> = [];
+        yield* fromPromise(
+          renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
+        );
+        expect(
+          yield* fromPromise(screen.findByText("Aún no hay transacciones este mes"))
+        ).toBeVisible();
+        fireEvent.change(screen.getByLabelText("Monto en COP"), {
+          target: { value: "not-a-number" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+        expect(yield* fromPromise(screen.findByRole("alert"))).toHaveTextContent(
+          "No se pudo guardar la transacción"
+        );
+        expect(requests).not.toContain("POST /transactions");
+        expect(capturedInstants).toEqual([]);
+      })
+    ));
 });
 
 describe("backup recovery route", () => {
   afterEach(resetApplicationTest);
 
-  it("drops one-time disclosure through navigation, logout, and a fresh application mount", async () => {
-    const code = BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
-    const clients = recoveryClients();
-    const router = await renderRoute(
-      "/settings/recovery",
-      clients.apiClient,
-      clients.webAuthClient
-    );
+  it("drops one-time disclosure through navigation, logout, and a fresh application mount", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const code = BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+        const clients = recoveryClients();
+        const router = yield* fromPromise(
+          renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient)
+        );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Crear un código nuevo" }));
-    expect(await screen.findByText(code)).toBeVisible();
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        );
+        expect(yield* fromPromise(screen.findByText(code))).toBeVisible();
 
-    await act(() => router.navigate({ to: "/settings/email" }));
-    expect(screen.queryByText(code)).not.toBeInTheDocument();
-    await act(() => router.navigate({ to: "/settings/recovery" }));
-    expect(screen.queryByText(code)).not.toBeInTheDocument();
+        const navigateToEmail = (): ReturnType<typeof router.navigate> =>
+          router.navigate({ to: "/settings/email" });
+        yield* fromPromise(act(navigateToEmail));
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+        const navigateToRecovery = (): ReturnType<typeof router.navigate> =>
+          router.navigate({ to: "/settings/recovery" });
+        yield* fromPromise(act(navigateToRecovery));
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Crear un código nuevo" }));
-    expect(await screen.findByText(code)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
-    await waitFor(() => expect(clients.requests).toContain("/web/session/logout"));
-    expect(await screen.findByRole("heading", { name: "Inicia sesión en Fidy" })).toBeVisible();
-    expect(screen.queryByText(code)).not.toBeInTheDocument();
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        );
+        expect(yield* fromPromise(screen.findByText(code))).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+        const assertLoggedOut = (): void => {
+          expect(clients.requests).toContain("/web/session/logout");
+        };
+        yield* fromPromise(waitFor(assertLoggedOut));
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+        ).toBeVisible();
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
 
-    cleanup();
-    await renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient);
-    expect(await screen.findByRole("button", { name: "Crear un código nuevo" })).toBeVisible();
-    expect(screen.queryByText(code)).not.toBeInTheDocument();
-  });
+        cleanup();
+        yield* fromPromise(
+          renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient)
+        );
+        expect(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        ).toBeVisible();
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+      })
+    ));
 });
 
 describe("verified-email replacement request route", () => {
   afterEach(resetApplicationTest);
 
-  it("runs verified-email replacement through the rendered route and typed clients", async () => {
-    localStorage.clear();
-    sessionStorage.clear();
-    const requests: Array<string> = [];
-    const clients = emailReplacementClients(requests);
-    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
-    await submitRenderedEmailReplacement(requests);
-    expect(requests).toEqual([
-      "/email/replacement",
-      "/email/replacement",
-      "/web/email/replacement/verify",
-    ]);
-    expect(window.location.search).toBe("");
-    expect(localStorage.length).toBe(0);
-    expect(sessionStorage.length).toBe(0);
-  });
+  it("runs verified-email replacement through the rendered route and typed clients", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        localStorage.clear();
+        sessionStorage.clear();
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        yield* fromPromise(submitRenderedEmailReplacement(requests));
+        expect(requests).toEqual([
+          "/email/replacement",
+          "/email/replacement",
+          "/web/email/replacement/verify",
+        ]);
+        expect(window.location.search).toBe("");
+        expect(localStorage.length).toBe(0);
+        expect(sessionStorage.length).toBe(0);
+      })
+    ));
 
-  it("requires fresh pairing when replacement initiation is refused", async () => {
-    const requests: Array<string> = [];
-    const clients = emailReplacementClients(requests, {
-      status: 401,
-      body: {
-        error: { code: "unauthenticated", message: "Authenticate before continuing." },
-        next: [],
-      },
-    });
-    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
+  it("requires fresh pairing when replacement initiation is refused", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests, {
+          status: 401,
+          body: {
+            error: { code: "unauthenticated", message: "Authenticate before continuing." },
+            next: [],
+          },
+        });
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
 
-    fireEvent.change(await screen.findByLabelText("Nuevo correo"), {
-      target: { value: "new.mailbox@example.com" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+          target: { value: "new.mailbox@example.com" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
 
-    expect(await screen.findByText("Vincula el navegador de nuevo")).toBeVisible();
-    expect(requests).toEqual(["/email/replacement"]);
-  });
+        expect(
+          yield* fromPromise(screen.findByText("Vincula el navegador de nuevo"))
+        ).toBeVisible();
+        expect(requests).toEqual(["/email/replacement"]);
+      })
+    ));
 });
 
 describe("verified-email replacement completion failures", () => {
   afterEach(resetApplicationTest);
 
-  it("distinguishes stale authority from an invalid replacement proof", async () => {
-    const freshPairingResponse: StubResponse = {
-      status: 401,
-      body: {
-        error: {
-          code: "fresh_pairing_required",
-          message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
-        },
-      },
-    };
-    const freshRequests: Array<string> = [];
-    const freshClients = emailReplacementClients(
-      freshRequests,
-      successfulReplacementRequest,
-      freshPairingResponse
-    );
-    await renderRoute("/settings/email", freshClients.apiClient, freshClients.webAuthClient);
-    await beginRenderedEmailReplacement("fresh@example.com");
-    await enterReplacementCode();
-    expect(await screen.findByText("Vincula el navegador de nuevo")).toBeVisible();
+  it("distinguishes stale authority from an invalid replacement proof", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const freshPairingResponse: StubResponse = {
+          status: 401,
+          body: {
+            error: {
+              code: "fresh_pairing_required",
+              message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
+            },
+          },
+        };
+        const freshRequests: Array<string> = [];
+        const freshClients = emailReplacementClients(
+          freshRequests,
+          successfulReplacementRequest,
+          freshPairingResponse
+        );
+        yield* fromPromise(
+          renderRoute("/settings/email", freshClients.apiClient, freshClients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("fresh@example.com"));
+        yield* fromPromise(enterReplacementCode());
+        expect(
+          yield* fromPromise(screen.findByText("Vincula el navegador de nuevo"))
+        ).toBeVisible();
 
-    cleanup();
-    const invalidRequests: Array<string> = [];
-    const invalidClients = emailReplacementClients(invalidRequests, successfulReplacementRequest, {
-      status: 400,
-      body: {
-        error: {
-          code: "verification_invalid",
-          message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
-        },
-      },
-    });
-    await renderRoute("/settings/email", invalidClients.apiClient, invalidClients.webAuthClient);
-    await beginRenderedEmailReplacement("invalid@example.com");
-    await enterReplacementCode();
-    expect(await screen.findByText("El código no es válido")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Usar otro correo" }));
-    expect(await screen.findByLabelText("Nuevo correo")).toBeVisible();
-  });
+        cleanup();
+        const invalidRequests: Array<string> = [];
+        const invalidClients = emailReplacementClients(
+          invalidRequests,
+          successfulReplacementRequest,
+          {
+            status: 400,
+            body: {
+              error: {
+                code: "verification_invalid",
+                message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
+              },
+            },
+          }
+        );
+        yield* fromPromise(
+          renderRoute("/settings/email", invalidClients.apiClient, invalidClients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("invalid@example.com"));
+        yield* fromPromise(enterReplacementCode());
+        expect(yield* fromPromise(screen.findByText("El código no es válido"))).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Usar otro correo" }));
+        expect(yield* fromPromise(screen.findByLabelText("Nuevo correo"))).toBeVisible();
+      })
+    ));
+});
 
-  it("keeps malformed candidate email local to the editing state", async () => {
-    const requests: Array<string> = [];
-    const clients = emailReplacementClients(requests);
-    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
-    const input = await screen.findByLabelText("Nuevo correo");
-    fireEvent.change(input, { target: { value: "not-an-email" } });
-    const form = input.closest("form");
-    if (form === null) throw new Error("replacement form missing");
-    fireEvent.submit(form);
-    await waitFor(() => expect(requests).toHaveLength(0));
-    expect(screen.getByLabelText("Nuevo correo")).toBeVisible();
-  });
+describe("verified-email replacement malformed candidate", () => {
+  afterEach(resetApplicationTest);
+
+  it("keeps malformed candidate email local to the editing state", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        const input = yield* fromPromise(screen.findByLabelText("Nuevo correo"));
+        fireEvent.change(input, { target: { value: "not-an-email" } });
+        const form = input.closest("form");
+        if (form === null) throw new Error("replacement form missing");
+        fireEvent.submit(form);
+        const assertNoRequests = (): void => {
+          expect(requests).toHaveLength(0);
+        };
+        yield* fromPromise(waitFor(assertNoRequests));
+        expect(screen.getByLabelText("Nuevo correo")).toBeVisible();
+      })
+    ));
 });
 
 describe("verified-email replacement malformed proof", () => {
   afterEach(resetApplicationTest);
 
-  it("rejects malformed proof locally without sending it to the API", async () => {
-    const requests: Array<string> = [];
-    const clients = emailReplacementClients(requests);
-    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
-    await beginRenderedEmailReplacement("new.mailbox@example.com");
-    const input = await screen.findByLabelText("Código de verificación");
-    fireEvent.change(input, { target: { value: "not-a-code" } });
-    fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
-    expect(await screen.findByText("El código no es válido")).toBeVisible();
-    expect(requests).toEqual(["/email/replacement"]);
-  });
+  it("rejects malformed proof locally without sending it to the API", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("new.mailbox@example.com"));
+        const input = yield* fromPromise(screen.findByLabelText("Código de verificación"));
+        fireEvent.change(input, { target: { value: "not-a-code" } });
+        fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+        expect(yield* fromPromise(screen.findByText("El código no es válido"))).toBeVisible();
+        expect(requests).toEqual(["/email/replacement"]);
+      })
+    ));
 });
 
 const hostedReceiptLength = 64;
@@ -495,96 +628,134 @@ const rejectedStatus = 401;
 describe("hosted Agent reply delivery", () => {
   afterEach(resetApplicationTest);
 
-  it("requires a visibly rendered reply and explicit receipt before showing Completed", async () => {
-    const paths: Array<string> = [];
-    const httpClient = makeHttpClient((request) => {
-      const path = new URL(request.url).pathname;
-      paths.push(path);
-      return Effect.succeed(
-        responseJson(
-          request,
-          path.endsWith("/delivery")
-            ? { status: "completed" }
-            : {
-                text: "Respuesta exacta",
-                turnId: "10000000-0000-4000-8000-000000000097",
-                receipt: "a".repeat(hostedReceiptLength),
-              },
-          path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
-        )
-      );
-    });
-    const channel = makeHostedTurnClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    await renderHostedRoute(channel);
-    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "Hola" } });
-    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-    expect(await screen.findByText("Respuesta exacta")).toBeVisible();
-    expect(paths).toEqual(["/web/hosted-turns"]);
-    expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }));
-    expect(await screen.findByText("Respuesta entregada.")).toBeVisible();
-    expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
-  });
+  it("requires a visibly rendered reply and explicit receipt before showing Completed", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const paths: Array<string> = [];
+        const reply = (
+          request: HttpClientRequest.HttpClientRequest
+        ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
+          const path = new URL(request.url).pathname;
+          paths.push(path);
+          return Effect.succeed(
+            responseJson(
+              request,
+              path.endsWith("/delivery")
+                ? { status: "completed" }
+                : {
+                    text: "Respuesta exacta",
+                    turnId: "10000000-0000-4000-8000-000000000097",
+                    receipt: "a".repeat(hostedReceiptLength),
+                  },
+              path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
+            )
+          );
+        };
+        const httpClient = makeHttpClient(reply);
+        const channel = makeHostedTurnClient(
+          "https://api.test.fidyapp.com",
+          Layer.succeed(HttpClient.HttpClient, httpClient)
+        );
+        const route = renderHostedRoute(channel);
+        yield* fromPromise(route);
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+          target: { value: "Hola" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+        expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
+        expect(paths).toEqual(["/web/hosted-turns"]);
+        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }));
+        expect(yield* fromPromise(screen.findByText("Respuesta entregada."))).toBeVisible();
+        expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
+      })
+    ));
 });
 
 describe("rejected hosted Agent receipt", () => {
   afterEach(resetApplicationTest);
 
-  it("does not label a rejected receipt Completed", async () => {
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(
-        responseJson(
-          request,
-          request.url.endsWith("/delivery")
-            ? { status: "unauthenticated" }
-            : {
-                text: "Respuesta sin confirmar",
-                turnId: "10000000-0000-4000-8000-000000000097",
-                receipt: "a".repeat(hostedReceiptLength),
-              },
-          request.url.endsWith("/delivery") ? rejectedStatus : proposedStatus
-        )
-      )
-    );
-    const channel = makeHostedTurnClient(
-      "https://api.test.fidyapp.com",
-      Layer.succeed(HttpClient.HttpClient, httpClient)
-    );
-    await renderHostedRoute(channel);
-    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "Hola" } });
-    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar recepción" }));
-    expect(await screen.findByText(/La entrega no se pudo confirmar/u)).toBeVisible();
-    expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
-  });
+  it("does not label a rejected receipt Completed", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const rejectReceipt = (
+          request: HttpClientRequest.HttpClientRequest
+        ): Effect.Effect<HttpClientResponse.HttpClientResponse> =>
+          Effect.succeed(
+            responseJson(
+              request,
+              request.url.endsWith("/delivery")
+                ? { status: "unauthenticated" }
+                : {
+                    text: "Respuesta sin confirmar",
+                    turnId: "10000000-0000-4000-8000-000000000097",
+                    receipt: "a".repeat(hostedReceiptLength),
+                  },
+              request.url.endsWith("/delivery") ? rejectedStatus : proposedStatus
+            )
+          );
+        const httpClient = makeHttpClient(rejectReceipt);
+        const channel = makeHostedTurnClient(
+          "https://api.test.fidyapp.com",
+          Layer.succeed(HttpClient.HttpClient, httpClient)
+        );
+        const route = renderHostedRoute(channel);
+        yield* fromPromise(route);
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+          target: { value: "Hola" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Confirmar recepción" }))
+        );
+        expect(
+          yield* fromPromise(screen.findByText(/La entrega no se pudo confirmar/u))
+        ).toBeVisible();
+        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+      })
+    ));
 });
 
 describe("signed-in web application data routes", () => {
   afterEach(resetApplicationTest);
 
-  it("owns the authenticated Subscription offer page at /upgrade", async () => {
-    await renderRoute("/upgrade", malformedFidyClient());
+  it("owns the authenticated Subscription offer page at /upgrade", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/upgrade", malformedFidyClient()));
 
-    expect(await screen.findByRole("heading", { name: "Mejora tu suscripción" })).toBeVisible();
-    expect(await screen.findByText("No pudimos comunicarnos con Fidy")).toBeVisible();
-  });
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Mejora tu suscripción" }))
+        ).toBeVisible();
+        expect(
+          yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))
+        ).toBeVisible();
+      })
+    ));
 
-  it("owns the Dashboard at /app/dashboard and safely presents malformed canonical data", async () => {
-    await renderRoute("/app/dashboard", malformedFidyClient());
+  it("owns the Dashboard at /app/dashboard and safely presents malformed canonical data", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app/dashboard", malformedFidyClient()));
 
-    expect(
-      await screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
-    ).toBeVisible();
-  });
+        expect(
+          yield* fromPromise(
+            screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
+          )
+        ).toBeVisible();
+      })
+    ));
 
-  it("redirects the authenticated /app index to the Dashboard", async () => {
-    await renderRoute("/app", malformedFidyClient());
+  it("redirects the authenticated /app index to the Dashboard", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app", malformedFidyClient()));
 
-    expect(
-      await screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
-    ).toBeVisible();
-  });
+        expect(
+          yield* fromPromise(
+            screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
+          )
+        ).toBeVisible();
+      })
+    ));
 });

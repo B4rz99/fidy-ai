@@ -1,5 +1,6 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { Cause, Array as EffectArray, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Array as EffectArray, Exit, Option, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +54,30 @@ const setCatalogResult = (result: unknown): void => {
   atomHarness.catalogResults.splice(0, atomHarness.catalogResults.length, result);
 };
 
+const waitForAssertion = (assertion: () => void): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => waitFor(assertion));
+
+const triggerGesture = (gesture: Parameters<DashboardEditor["onGesture"]>[0]): void => {
+  act(() => currentEditor().onGesture(gesture));
+};
+const expectRemoveApplied = (): void =>
+  expect(atomHarness.applyEdit).toHaveBeenCalledWith({ op: "remove-widget", widgetId });
+const expectEditSettled = (): void => expect(currentEditor().submitting).toBe(false);
+const expectEditRejected = (): void =>
+  expect(Option.getOrThrow(currentError()).title).toBe("No pudimos guardar el cambio");
+
+const settleEdit = (
+  pending: PromiseWithResolvers<Exit.Exit<unknown, unknown>>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    Promise.resolve(
+      act(() => {
+        pending.resolve(Exit.succeed({}));
+        return Promise.resolve();
+      })
+    )
+  );
+
 beforeEach(() => {
   atomHarness.applyEdit.mockReset();
   atomHarness.applyEdit.mockResolvedValue(Exit.succeed({}));
@@ -83,46 +108,44 @@ describe("Dashboard route resources", () => {
 });
 
 describe("Dashboard route edits", () => {
-  it("queues a canonical edit and clears its pending state after success", async () => {
-    const deferredEdit = Promise.withResolvers<Exit.Exit<unknown, unknown>>();
-    atomHarness.applyEdit.mockReturnValueOnce(deferredEdit.promise);
-    render(
-      <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
-    );
+  effectIt.effect("queues a canonical edit and clears its pending state after success", () =>
+    Effect.gen(function* () {
+      const deferredEdit = Promise.withResolvers<Exit.Exit<unknown, unknown>>();
+      atomHarness.applyEdit.mockReturnValueOnce(deferredEdit.promise);
+      render(
+        <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
+      );
 
-    act(() => currentEditor().onGesture({ kind: "remove-widget", widgetId }));
-    expect(currentEditor().submitting).toBe(true);
-    await waitFor(() =>
-      expect(atomHarness.applyEdit).toHaveBeenCalledWith({ op: "remove-widget", widgetId })
-    );
-    await act(async () => deferredEdit.resolve(Exit.succeed({})));
-    await waitFor(() => expect(currentEditor().submitting).toBe(false));
-    expect(currentError()).toEqual(Option.none());
-  });
+      triggerGesture({ kind: "remove-widget", widgetId });
+      expect(currentEditor().submitting).toBe(true);
+      yield* waitForAssertion(expectRemoveApplied);
+      yield* settleEdit(deferredEdit);
+      yield* waitForAssertion(expectEditSettled);
+      expect(currentError()).toEqual(Option.none());
+    })
+  );
 
-  it("reports schema rejection, canonical failure, and promise rejection safely", async () => {
-    render(
-      <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
-    );
-    act(() =>
-      currentEditor().onGesture({
+  effectIt.effect("reports schema rejection, canonical failure, and promise rejection safely", () =>
+    Effect.gen(function* () {
+      render(
+        <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
+      );
+      triggerGesture({
         kind: "resize-region",
         widgetIds: [widgetId],
         weight: Number.NaN,
-      })
-    );
-    await waitFor(() =>
-      expect(Option.getOrThrow(currentError()).title).toBe("No pudimos guardar el cambio")
-    );
+      });
+      yield* waitForAssertion(expectEditRejected);
 
-    atomHarness.applyEdit.mockResolvedValueOnce(Exit.fail(Cause.fail("rejected")));
-    act(() => currentEditor().onGesture({ kind: "remove-widget", widgetId }));
-    await waitFor(() => expect(currentEditor().submitting).toBe(false));
-    expect(Option.getOrThrow(currentError()).title).toBe("No pudimos guardar el cambio");
+      atomHarness.applyEdit.mockResolvedValueOnce(Exit.fail(Cause.fail("rejected")));
+      triggerGesture({ kind: "remove-widget", widgetId });
+      yield* waitForAssertion(expectEditSettled);
+      expectEditRejected();
 
-    atomHarness.applyEdit.mockRejectedValueOnce(new Error("transport failed"));
-    act(() => currentEditor().onGesture({ kind: "remove-widget", widgetId }));
-    await waitFor(() => expect(currentEditor().submitting).toBe(false));
-    expect(Option.getOrThrow(currentError()).title).toBe("No pudimos guardar el cambio");
-  });
+      atomHarness.applyEdit.mockRejectedValueOnce(new Error("transport failed"));
+      triggerGesture({ kind: "remove-widget", widgetId });
+      yield* waitForAssertion(expectEditSettled);
+      expectEditRejected();
+    })
+  );
 });

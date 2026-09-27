@@ -146,7 +146,7 @@ const childAccess = ({
   current: number;
   capability: ReturnType<typeof patScopeCapability>;
 }>): Promise<ChildAccess> => {
-  const scoped = childCaller(subject, capability);
+  const scoped = childCaller({ subject, requiredScope: capability });
   return liveTransactionAuthority({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
     if (!isPATCaller(subject)) return "credential_refused" as const;
@@ -476,7 +476,7 @@ const prepareCall = ({
     const accessStep = yield* childAccessStep({ db, subject, current, catalogOperation, index });
     if (Option.isSome(accessStep)) return accessStep.value;
     const capability = patScopeCapability(catalogOperation.policy.access);
-    const scopedSubject = childCaller(subject, capability);
+    const scopedSubject = childCaller({ subject, requiredScope: capability });
     const decodedCall = Schema.decodeUnknownOption(getAtomicBatchCallSchema())(call);
     if (Option.isNone(decodedCall)) {
       // The child names an executable mutation, so its own callId or input failed the published

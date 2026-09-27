@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { createHmac } from "node:crypto";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Effect, Exit, Redacted, Schema } from "effect";
@@ -54,7 +52,7 @@ const decode = (
   const signature =
     override._tag === "Signature"
       ? override.value
-      : createHmac("sha256", webhookSecret).update(body).digest("hex");
+      : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
   return decodeKapsoDisclosureLifecycleWebhook({
     rawBody: body,
     secret: Redacted.make(webhookSecret),

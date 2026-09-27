@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Effect } from "effect";
+import { type Cause, Effect } from "effect";
+import { it as effectIt } from "@effect/vitest";
 import { StrictMode, useState } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect } from "vitest";
 import { SessionRegistryProvider } from "./session";
 import { useSubscriptionEnrollmentClient } from "./subscription-enrollment-context";
 import { SubscriptionEnrollmentLifetime } from "./subscription-enrollment-lifetime";
@@ -50,63 +51,87 @@ const StatusProbe = ({
   );
 };
 
-afterEach(cleanup);
+const findStartStatus = (): Effect.Effect<HTMLElement, Cause.UnknownError> =>
+  Effect.tryPromise(() => screen.findByRole("button", { name: "start status" }));
+const waitForAssertion = (assertion: () => void): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => waitFor(assertion));
 
-it("disposes every replaced authentication lifetime without stale status publication", async () => {
-  const completions: Array<() => void> = [];
+const trackedClient = (): Readonly<{
+  makeClient: () => SubscriptionEnrollmentClient;
+  counts: () => Readonly<{ created: number; disposed: number; active: number }>;
+}> => {
   let created = 0;
   let disposed = 0;
   let active = 0;
-  const makeClient = (): SubscriptionEnrollmentClient => {
-    created += 1;
-    active += 1;
-    const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
-    return {
-      execute: client.execute,
-      dispose: () => {
-        disposed += 1;
-        active -= 1;
-        return client.dispose();
-      },
-    };
+  return {
+    makeClient: () => {
+      created += 1;
+      active += 1;
+      const client = makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com");
+      return {
+        execute: client.execute,
+        dispose: () => {
+          disposed += 1;
+          active -= 1;
+          return client.dispose();
+        },
+      };
+    },
+    counts: () => ({ created, disposed, active }),
   };
+};
 
-  const application = render(
-    <StrictMode>
-      <SessionRegistryProvider>
-        <SubscriptionEnrollmentLifetime makeClient={makeClient}>
-          <StatusProbe completions={completions} />
-        </SubscriptionEnrollmentLifetime>
-      </SessionRegistryProvider>
-    </StrictMode>
-  );
-
-  await screen.findByRole("button", { name: "start status" });
-  expect(active).toBe(1);
-  expect(created - disposed).toBe(1);
-
-  fireEvent.click(screen.getByRole("button", { name: "start status" }));
-  await waitFor(() => expect(completions).toHaveLength(1));
-  fireEvent.click(screen.getByRole("button", { name: "login" }));
-  await screen.findByRole("button", { name: "start status" });
-  await waitFor(() => expect(active).toBe(1));
-
-  completions[0]?.();
-  await waitFor(() => expect(screen.getByText("idle")).toBeVisible());
-
-  const transition = async (name: "logout" | "expire" | "restart pairing"): Promise<void> => {
+const transition = (
+  name: "logout" | "expire" | "restart pairing",
+  counts: ReturnType<typeof trackedClient>["counts"]
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
     fireEvent.click(screen.getByRole("button", { name }));
-    await screen.findByRole("button", { name: "start status" });
-    await waitFor(() => {
-      expect(active).toBe(1);
-      expect(created - disposed).toBe(1);
+    yield* findStartStatus();
+    yield* waitForAssertion(() => {
+      expect(counts().active).toBe(1);
+      expect(counts().created - counts().disposed).toBe(1);
     });
-  };
-  await transition("logout");
-  await transition("expire");
-  await transition("restart pairing");
+  });
 
-  application.unmount();
-  expect(active).toBe(0);
-  expect(disposed).toBe(created);
-});
+afterEach(cleanup);
+
+effectIt.effect(
+  "disposes every replaced authentication lifetime without stale status publication",
+  () =>
+    Effect.gen(function* () {
+      const completions: Array<() => void> = [];
+      const { makeClient, counts } = trackedClient();
+
+      const application = render(
+        <StrictMode>
+          <SessionRegistryProvider>
+            <SubscriptionEnrollmentLifetime makeClient={makeClient}>
+              <StatusProbe completions={completions} />
+            </SubscriptionEnrollmentLifetime>
+          </SessionRegistryProvider>
+        </StrictMode>
+      );
+
+      yield* findStartStatus();
+      expect(counts().active).toBe(1);
+      expect(counts().created - counts().disposed).toBe(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "start status" }));
+      yield* waitForAssertion(() => expect(completions).toHaveLength(1));
+      fireEvent.click(screen.getByRole("button", { name: "login" }));
+      yield* findStartStatus();
+      yield* waitForAssertion(() => expect(counts().active).toBe(1));
+
+      completions[0]?.();
+      yield* waitForAssertion(() => expect(screen.getByText("idle")).toBeVisible());
+
+      yield* transition("logout", counts);
+      yield* transition("expire", counts);
+      yield* transition("restart pairing", counts);
+
+      application.unmount();
+      expect(counts().active).toBe(0);
+      expect(counts().disposed).toBe(counts().created);
+    })
+);

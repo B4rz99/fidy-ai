@@ -254,8 +254,8 @@ it("settles a bounded known email into one Transaction and one immutable attesta
         },
       };
       const owner = { getByName: (_name: string): Pick<Fetcher, "fetch"> => coordinator };
-      yield* wait(() => receiveForwardedEmailWork([work], owner));
-      yield* wait(() => receiveForwardedEmailWork([work], owner));
+      yield* wait(() => receiveForwardedEmailWork({ messages: [work], coordinator: owner }));
+      yield* wait(() => receiveForwardedEmailWork({ messages: [work], coordinator: owner }));
       expect(acknowledgements).toBe(2);
       const transactions = yield* wait(() =>
         db.prepare("SELECT id, amount FROM transactions WHERE user_id = ?").bind(userA).all()
@@ -289,8 +289,8 @@ it("offers only decoded User and receipt identities to private coordination", ()
       const seen: string[] = [];
       let acked = false;
       yield* wait(() =>
-        receiveForwardedEmailWork(
-          [
+        receiveForwardedEmailWork({
+          messages: [
             {
               body: jobs[0],
               ack: (): void => {
@@ -298,23 +298,23 @@ it("offers only decoded User and receipt identities to private coordination", ()
               },
             },
           ],
-          {
+          coordinator: {
             getByName: (name) => ({
               fetch: (request): Promise<Response> => {
                 seen.push(name, new URL(new Request(request).url).pathname);
                 return Promise.resolve(new Response(null, { status: 200 }));
               },
             }),
-          }
-        )
+          },
+        })
       );
       expect(acked).toBe(true);
       expect(seen).toEqual([userA, "/forwarded-email-work"]);
       let retryAcked = false;
       yield* Effect.exit(
         Effect.tryPromise(() =>
-          receiveForwardedEmailWork(
-            [
+          receiveForwardedEmailWork({
+            messages: [
               {
                 body: jobs[0],
                 ack: (): void => {
@@ -322,19 +322,19 @@ it("offers only decoded User and receipt identities to private coordination", ()
                 },
               },
             ],
-            {
+            coordinator: {
               getByName: () => ({
                 fetch: (): Promise<Response> =>
                   Promise.resolve(new Response(null, { status: 503 })),
               }),
-            }
-          )
+            },
+          })
         )
       );
       expect(retryAcked).toBe(false);
       yield* wait(() =>
-        receiveForwardedEmailWork(
-          [
+        receiveForwardedEmailWork({
+          messages: [
             {
               body: jobs[0],
               ack: (): void => {
@@ -342,12 +342,12 @@ it("offers only decoded User and receipt identities to private coordination", ()
               },
             },
           ],
-          {
+          coordinator: {
             getByName: () => ({
               fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 200 })),
             }),
-          }
-        )
+          },
+        })
       );
       expect(retryAcked).toBe(true);
     })
@@ -521,8 +521,8 @@ it("does not let another User's receipt identity authorize reading or finalizing
       const coordinator = coordinatorFor(db, bucket, userB);
       let acked = false;
       yield* wait(() =>
-        receiveForwardedEmailWork(
-          [
+        receiveForwardedEmailWork({
+          messages: [
             {
               body: { receiptId: receipt.id, userId: userB },
               ack: (): void => {
@@ -530,8 +530,8 @@ it("does not let another User's receipt identity authorize reading or finalizing
               },
             },
           ],
-          { getByName: (): Pick<Fetcher, "fetch"> => coordinator }
-        )
+          coordinator: { getByName: (): Pick<Fetcher, "fetch"> => coordinator },
+        })
       );
       expect(acked).toBe(true);
       expect(

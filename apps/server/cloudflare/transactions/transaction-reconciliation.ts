@@ -72,7 +72,7 @@ type PairWork = Readonly<{
 
 /** Decode one bounded canonical pair without treating either id as authority. */
 export const transactionPairInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
-  boundedJsonBody(request, policy, Input);
+  boundedJsonBody({ request, policy, schema: Input });
 
 const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,
   retained.direction, retained.created_at AS created_at,

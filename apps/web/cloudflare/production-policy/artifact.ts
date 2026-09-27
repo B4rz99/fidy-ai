@@ -69,47 +69,51 @@ const validateContents = (directory: string, path: string): Promise<void> =>
  * references at least one asset present in that tree. It cannot contain source maps, server-shaped
  * paths, or known Secret material.
  */
-export const validateProductionArtifact = async (
-  request: ProductionArtifactRequest
-): Promise<void> => {
-  const paths = Array.from(
-    new Bun.Glob("**/*").scanSync({
-      cwd: request.directory,
-      followSymlinks: false,
-      onlyFiles: true,
-    })
-  ).sort();
-  const pathSet = new Set(paths);
-  const missing = [...REQUIRED_PATHS].filter((path) => !pathSet.has(path));
-  if (missing.length > 0) {
-    throw new Error(`production artifact is missing required files: ${missing.join(", ")}`);
-  }
+export const validateProductionArtifact = (request: ProductionArtifactRequest): Promise<void> =>
+  Promise.resolve().then(() => {
+    const paths = Array.from(
+      new Bun.Glob("**/*").scanSync({
+        cwd: request.directory,
+        followSymlinks: false,
+        onlyFiles: true,
+      })
+    ).sort();
+    const pathSet = new Set(paths);
+    const missing = [...REQUIRED_PATHS].filter((path) => !pathSet.has(path));
+    if (missing.length > 0) {
+      throw new Error(`production artifact is missing required files: ${missing.join(", ")}`);
+    }
 
-  paths.forEach(validatePath);
-  const assetPaths = paths.filter((path) => path.startsWith("assets/"));
-  const unhashedAsset = assetPaths.find((path) => !CONTENT_HASHED_ASSET.test(path));
-  if (unhashedAsset !== undefined) {
-    throw new Error(`production artifact asset is not content-hashed: ${unhashedAsset}`);
-  }
-  const shell = await Bun.file(`${request.directory}/index.html`).text();
-  const shellAssets = Array.from(shell.matchAll(SHELL_ASSET_REFERENCE), (match) => match[1]);
-  const missingShellAsset = shellAssets.find((path) => path === undefined || !pathSet.has(path));
-  if (shellAssets.length === 0 || missingShellAsset !== undefined) {
-    throw new Error(
-      `production artifact shell references a missing hashed asset${
-        missingShellAsset === undefined ? "" : `: ${missingShellAsset}`
-      }`
-    );
-  }
-  await Promise.all(paths.map((path) => validateContents(request.directory, path)));
-
-  const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(
-    await Bun.file(`${request.directory}/deployment-metadata.json`).json()
-  );
-  if (
-    metadata.gitRevision !== request.expectedSha ||
-    metadata.contractDigest !== request.expectedDigest
-  ) {
-    throw new Error("production artifact release identity does not match");
-  }
-};
+    paths.forEach(validatePath);
+    const assetPaths = paths.filter((path) => path.startsWith("assets/"));
+    const unhashedAsset = assetPaths.find((path) => !CONTENT_HASHED_ASSET.test(path));
+    if (unhashedAsset !== undefined) {
+      throw new Error(`production artifact asset is not content-hashed: ${unhashedAsset}`);
+    }
+    return Bun.file(`${request.directory}/index.html`)
+      .text()
+      .then((shell) => {
+        const shellAssets = Array.from(shell.matchAll(SHELL_ASSET_REFERENCE), (match) => match[1]);
+        const missingShellAsset = shellAssets.find(
+          (path) => path === undefined || !pathSet.has(path)
+        );
+        if (shellAssets.length === 0 || missingShellAsset !== undefined) {
+          throw new Error(
+            `production artifact shell references a missing hashed asset${
+              missingShellAsset === undefined ? "" : `: ${missingShellAsset}`
+            }`
+          );
+        }
+        return Promise.all(paths.map((path) => validateContents(request.directory, path)));
+      })
+      .then(() => Bun.file(`${request.directory}/deployment-metadata.json`).json())
+      .then((value) => {
+        const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(value);
+        if (
+          metadata.gitRevision !== request.expectedSha ||
+          metadata.contractDigest !== request.expectedDigest
+        ) {
+          throw new Error("production artifact release identity does not match");
+        }
+      });
+  });

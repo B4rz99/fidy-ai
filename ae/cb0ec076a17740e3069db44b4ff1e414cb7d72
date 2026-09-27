@@ -1,0 +1,23 @@
+apps/server/cloudflare/ingestion/forwarded-email-delivery.ts
+  s_f33cbc90354094::t_80ba6ead238650 19-25
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_f33cbc90354094::t_a392a7df78e28f 257-258,292-293,301,308-309,316-317,325,330-331,336-337,345,349-350,524-525,533-534
+apps/server/cloudflare/core-worker.ts
+  s_f33cbc90354094::t_f903975bd0a69d 1742-1745
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aecb0ec076a17740e3069db44b4ff1e414cb7d72",
+  "prompts": {},
+  "sessions": {
+    "s_f33cbc90354094": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17b-2fe1-72fb-9af0-e6cf3d1a43f9",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

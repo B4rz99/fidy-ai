@@ -9,6 +9,7 @@ apps/web/preview.tar
 apps/web/playwright-dist/
 apps/web/test-results/
 apps/web/playwright-report/
+apps/server/cloudflare/browser-acceptance-core-bundle.mjs
 
 # TypeScript
 *.tsbuildinfo

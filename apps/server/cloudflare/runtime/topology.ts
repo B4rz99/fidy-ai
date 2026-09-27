@@ -30,5 +30,6 @@ export const productionTopology = {
 /** Closed browser origins accepted by the public Worker in each complete topology mode. */
 export const browserOrigins = {
   local: `http://127.0.0.1:${productionTopology.web.localPort}`,
+  acceptance: "https://127.0.0.1:4173",
   production: `https://${productionTopology.web.hostname}`,
 } as const;

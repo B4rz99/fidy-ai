@@ -41,6 +41,7 @@ const apiSecurityHeaders = {
 
 const resolveBrowserOrigin = (configuredOrigin: string): Option.Option<string> => {
   if (configuredOrigin === browserOrigins.local) return Option.some(browserOrigins.local);
+  if (configuredOrigin === browserOrigins.acceptance) return Option.some(browserOrigins.acceptance);
   if (configuredOrigin === browserOrigins.production) return Option.some(browserOrigins.production);
   return Option.none();
 };
@@ -218,6 +219,7 @@ const ownedPath = (path: string): boolean =>
 const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
+  if (enrollmentStatusPath.test(path)) return ["GET"];
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
 };

@@ -1,0 +1,35 @@
+.oxlintrc.json
+  s_faf8a5df7be82b::t_b89e8c948c03f8 157,162
+  s_faf8a5df7be82b::t_a50ca01e94308b 251
+apps/server/scripts/check-dependency-guards.ts
+  s_faf8a5df7be82b::t_9b2f2edea22f66 31-40
+tsconfig.base.json
+  s_faf8a5df7be82b::t_741b4d713d576f 114,123-124,133-137,140,145,148,153-157,160,165,168
+apps/web/src/transport/client.test.ts
+  s_faf8a5df7be82b::t_d4d9f08d326ca7 753,762,790-791
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_bb3fa8ea8f160d 37-42,44-46,49-56
+  s_faf8a5df7be82b::t_3a2a9c5af27c85 85-95,102
+  s_faf8a5df7be82b::t_7fde359020523a 1,57-84,96-101,103-118,120-135,137-141
+  s_faf8a5df7be82b::t_4670381b357b87 47,119,136,142
+apps/web/playwright.config.ts
+  s_faf8a5df7be82b::t_24854d83711f23 3-4,9-10,26
+scripts/check-lint-suppressions.ts
+  s_faf8a5df7be82b::t_748f837e5fdcc6 18-21,55,90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a822d2c775fb617750ad6c6679fe4cc9941b96dd",
+  "prompts": {},
+  "sessions": {
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

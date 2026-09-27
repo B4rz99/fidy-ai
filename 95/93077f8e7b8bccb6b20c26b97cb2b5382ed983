@@ -1,0 +1,70 @@
+apps/web/cloudflare/preview-policy/artifact.test.ts
+  s_3ea47fec821644::t_7881a392baaab9 106-127,129-130,132,135-149,154-156,159-168,170,174
+  s_3ea47fec821644::t_e0235f48198975 175,190,193,200,203-204,217,219-220,230,232-233,245,247,251,254,259,262
+  s_3ea47fec821644::t_f1a0a34ed3e0c4 176
+  s_faf8a5df7be82b::t_2f3cf96aaa6225 179-180,183,185,268
+apps/web/e2e/browser-pairing.spec.ts
+  s_3ea47fec821644::t_30995080825f72 28,30-35,42-46,56,276
+  s_3ea47fec821644::t_32d385e8877fcb 37-39,78,92-93,167-174
+  s_3ea47fec821644::t_91a6e7929d2bdd 3
+  s_3ea47fec821644::t_15b45b62dc730a 175-176,179-187,189-198,200-213,215-231
+  s_3ea47fec821644::t_f80fad7ee4628d 60-61,79,91,165-166,233-245,247,250-259,265,267-269,275,279-280,295-297,302-303,312,319-320,329-330
+  s_3ea47fec821644::t_6c932efaf1b2f0 58,81,95,104-143,146,149-162,248-249,266,292,294
+  s_3ea47fec821644::t_37c4d5a1f5115e 290,299-301,305-311,313-314,316-318,322-328,331-332
+  s_3ea47fec821644::t_59aae8551f2fcf 36
+  s_3ea47fec821644::t_46358a5058129d 47-49,53-55
+  s_3ea47fec821644::t_88cb82392d70ee 59
+  s_3ea47fec821644::t_d0ebb200ad2095 62-64,75-77
+  s_3ea47fec821644::t_b47d3b4e831dff 80
+  s_3ea47fec821644::t_d08d0b8b618a11 82-84,88-90
+  s_3ea47fec821644::t_c077b3d9c3769f 246
+  s_3ea47fec821644::t_6041225aad2f2b 260-264
+  s_3ea47fec821644::t_96461da3217277 272-274
+  s_3ea47fec821644::t_173afb348b5300 277-278
+  s_3ea47fec821644::t_3a5aae3dcc6dba 281-283,287-289
+  s_3ea47fec821644::t_3fea68913e58a2 293
+  s_3ea47fec821644::t_99366a6501451a 321
+  s_3c5ba397386570::t_eef451f40fdad8 50-52,65-74,85-87,271,284-286
+apps/web/e2e/static-shell.spec.ts
+  s_3ea47fec821644::t_9098ad8a90f185 4-9,12-18,20-31,33-37
+apps/web/cloudflare/preview-policy/artifact.ts
+  s_3ea47fec821644::t_f49dcb094b4fc4 322,324-352,361-368,380-385,387-394
+  s_3ea47fec821644::t_eed73ec19e3ab2 375-377,386
+  s_3ea47fec821644::t_6ea995a3f59c6e 395
+apps/web/cloudflare/production-policy/artifact.ts
+  s_3ea47fec821644::t_d3b07b04a291c7 79,93-118
+  s_3ea47fec821644::t_00525da62efbd7 72-73,119
+  s_3ea47fec821644::t_872966c8ee36fe 74-78,80-85,87-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9593077f8e7b8bccb6b20c26b97cb2b5382ed983",
+  "prompts": {},
+  "sessions": {
+    "s_3c5ba397386570": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17c-566a-72f1-99bf-41fef633aec2",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_3ea47fec821644": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-e263-729f-8bfc-a3055b09f8f2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

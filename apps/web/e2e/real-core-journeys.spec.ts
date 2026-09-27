@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import { signInThroughCore, visiblePairingCode } from "./real-core-fixture";
 
@@ -8,6 +9,43 @@ const forbidden = 403;
 const unauthorized = 401;
 const noContent = 204;
 const notFound = 404;
+
+const assertUnderScopedBrowser = async (
+  page: Page,
+  request: APIRequestContext,
+  bearer: string
+): Promise<void> => {
+  // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
+  const refused = await request.get(`${api}/transactions`, {
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  expect(refused.status()).toBe(forbidden);
+  const browserRefusal = await page.evaluate(
+    async ({ url, token }) => {
+      // @effect-diagnostics-next-line globalFetch:off
+      const response = await fetch(url, {
+        credentials: "omit",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return { status: response.status, body: await response.text() };
+    },
+    { url: `${api}/transactions`, token: bearer }
+  );
+  expect(browserRefusal.status).toBe(forbidden);
+  expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
+  await page.route(`${api}/transactions?*`, async (route) => {
+    // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
+    const coreResponse = await request.get(route.request().url(), {
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+    expect(coreResponse.status()).toBe(forbidden);
+    await route.fulfill({ response: coreResponse });
+  });
+  await page.goto("/app/transactions");
+  await expect(page.getByRole("alert")).toBeVisible();
+  expect(await page.locator("body").textContent()).not.toContain(bearer);
+  expect(await page.locator("body").textContent()).not.toContain(await refused.text());
+};
 
 test("reviews a real PATPairing and presents its under-scoped Core refusal without leaking details", async ({
   page,
@@ -41,29 +79,7 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
   );
   expect(bearer).toMatch(/^fin_/u);
   expect(await page.locator("body").textContent()).not.toContain(bearer);
-  // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
-  const refused = await request.get(`${api}/transactions`, {
-    headers: { authorization: `Bearer ${bearer}` },
-  });
-  expect(refused.status()).toBe(forbidden);
-  const browserRefusal = await page.evaluate(
-    async ({ url, token }) => {
-      // @effect-diagnostics-next-line globalFetch:off
-      const response = await fetch(url, {
-        credentials: "omit",
-        headers: { authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.text() };
-    },
-    { url: `${api}/transactions`, token: bearer }
-  );
-  expect(browserRefusal.status).toBe(forbidden);
-  expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
-  await page.route(`${api}/transactions?*`, (route) => route.fulfill({ response: refused }));
-  await page.goto("/app/transactions");
-  await expect(page.getByRole("alert")).toBeVisible();
-  expect(await page.locator("body").textContent()).not.toContain(bearer);
-  expect(await page.locator("body").textContent()).not.toContain(await refused.text());
+  await assertUnderScopedBrowser(page, request, bearer);
 });
 
 test("a browser cannot render or fetch another User's private Transaction through public routes", async ({

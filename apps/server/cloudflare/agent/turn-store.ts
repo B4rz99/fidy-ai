@@ -26,7 +26,7 @@ import {
   memoryRowsQuery,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { callerAuthority, transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
@@ -784,47 +784,57 @@ const sweepHostedTranscript = (
           .bind(userId, cutoff)
           .run()
       );
-      const compacted = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT MIN(updated_at_ms) AS oldest
+      return yield* readHostedRetentionDeadline(db, userId);
+    })
+  );
+
+// Read the earliest remaining evidence deadline after the expiry deletes have committed.
+// Pending Turns are excluded: their recovery has a separate deadline and must retain evidence.
+const readHostedRetentionDeadline = (
+  db: D1Database,
+  userId: UserId
+): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const compacted = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT MIN(updated_at_ms) AS oldest
     FROM hosted_compacted_conversations WHERE user_id = ?`)
-          .bind(userId)
-          .first()
-      );
-      const compactedAge = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
-      )(compacted);
-      const oldest = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
+        .bind(userId)
+        .first()
+    );
+    const compactedAge = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
+    )(compacted);
+    const oldest = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
       AND status <> 'pending' AND EXISTS
       (SELECT 1 FROM transcript_entries AS e WHERE e.turn_id = t.id AND e.user_id = t.user_id)
       ORDER BY terminal_at_ms LIMIT 1`)
-          .bind(userId)
-          .first()
-      );
-      const transcriptDue =
-        oldest === null
-          ? Option.none<number>()
-          : Option.some(
-              (yield* Schema.decodeUnknownEffect(Schema.Struct({ terminal_at_ms: Schema.Int }))(
-                oldest
-              )).terminal_at_ms +
-                hostedTranscriptRetentionMs +
-                1
-            );
-      const compactDue = Option.map(
-        Option.fromNullishOr(compactedAge.oldest),
-        (updated) => updated + hostedTranscriptRetentionMs + 1
-      );
-      return Option.orElse(
-        Option.map(compactDue, (due) =>
-          Option.isSome(transcriptDue) ? Math.min(due, transcriptDue.value) : due
-        ),
-        () => transcriptDue
-      );
-    })
-  );
+        .bind(userId)
+        .first()
+    );
+    const transcriptDue =
+      oldest === null
+        ? Option.none<number>()
+        : Option.some(
+            (yield* Schema.decodeUnknownEffect(Schema.Struct({ terminal_at_ms: Schema.Int }))(
+              oldest
+            )).terminal_at_ms +
+              hostedTranscriptRetentionMs +
+              1
+          );
+    const compactDue = Option.map(
+      Option.fromNullishOr(compactedAge.oldest),
+      (updated) => updated + hostedTranscriptRetentionMs + 1
+    );
+    return Option.orElse(
+      Option.map(compactDue, (due) =>
+        Option.isSome(transcriptDue) ? Math.min(due, transcriptDue.value) : due
+      ),
+      () => transcriptDue
+    );
+  });
 
 /** DO alarm sweep: recover abandoned work and delete expired terminal content for this User. */
 export const expireHostedPending = ({

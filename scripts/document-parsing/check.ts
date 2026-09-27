@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import * as XLSX from "xlsx/xlsx.mjs";
 import { runExtractionProof } from "./extraction-proof";
 import { runProtectedDocumentProof } from "./protected-document-proof";
@@ -70,6 +70,13 @@ if (
   throw new Error("Document proof Workers must pin the same compatibility and CPU limits");
 }
 const maximumCpuMilliseconds = config.limits.cpu_ms;
+
+const requestStatement = (
+  body: string | Uint8Array,
+  signal: AbortSignal,
+  headers?: Readonly<Record<string, string>>
+): Promise<Response> =>
+  fetch(`http://127.0.0.1:${serverPort}/statement`, { body, headers, method: "POST", signal });
 
 const runWranglerCommand = (command: Array<string>): string => {
   const result = Bun.spawnSync(command, {
@@ -182,21 +189,20 @@ const worker = Bun.spawn(
 );
 
 try {
-  let ready = false;
-  for (let attempt = 0; attempt < readinessAttempts && !ready; attempt += 1) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${serverPort}/statement`, {
-        body: "Date,Amount\n2026-01-01,1",
-        method: "POST",
-      });
-      ready = response.ok;
-    } catch {
-      await Bun.sleep(readinessRetryMilliseconds);
-    }
-  }
-  if (!ready) {
-    throw new Error("Document parser workerd did not start");
-  }
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
+        const ready = yield* Effect.tryPromise((signal) =>
+          requestStatement("Date,Amount\n2026-01-01,1", signal)
+        ).pipe(
+          Effect.map((response) => response.ok),
+          Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
+        );
+        if (ready) return;
+      }
+      throw new Error("Document parser workerd did not start");
+    })
+  );
 
   const debuggerUrl = await inspectorTarget({ port: inspectorPort, signal: Option.none() });
   const baselineHeapBytes = await heapUsage({ debuggerUrl, signal: Option.none() });
@@ -245,32 +251,50 @@ try {
       label: "protected-pdf-password",
     },
   ];
-  for (const document of unsupportedDocuments) {
-    const unsupportedResponse = await fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: document.body,
-      headers: document.headers,
-      method: "POST",
-    });
-    const rejected = Schema.decodeUnknownSync(RejectedResult)(await unsupportedResponse.json());
-    if (
-      unsupportedResponse.status !== unprocessableContentStatus ||
-      rejected.reason !== "unsupported-format"
-    ) {
-      throw new Error(`Document parser did not fail closed for ${document.label}`);
-    }
-  }
+  await Effect.runPromise(
+    Effect.forEach(
+      unsupportedDocuments,
+      (document) =>
+        Effect.gen(function* () {
+          const unsupportedResponse = yield* Effect.tryPromise((signal) =>
+            requestStatement(document.body, signal, document.headers)
+          );
+          const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
+            yield* Effect.tryPromise(() => unsupportedResponse.json())
+          );
+          if (
+            unsupportedResponse.status !== unprocessableContentStatus ||
+            rejected.reason !== "unsupported-format"
+          ) {
+            throw new Error(`Document parser did not fail closed for ${document.label}`);
+          }
+        }),
+      { concurrency: 1, discard: true }
+    )
+  );
 
   const activeWorkbookFixtures = ["SimpleMacro.xlsm", "link-external-workbook-a.xlsx"];
-  for (const fixture of activeWorkbookFixtures) {
-    const activeResponse = await fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: await readFile(`${documentWorkersRoot}/fixtures/${fixture}`),
-      method: "POST",
-    });
-    const activeResult = Schema.decodeUnknownSync(ParseResult)(await activeResponse.json());
-    if (!activeResponse.ok || activeResult.format !== "xlsx") {
-      throw new Error(`Workerd did not safely parse hostile workbook structure: ${fixture}`);
-    }
-  }
+  await Effect.runPromise(
+    Effect.forEach(
+      activeWorkbookFixtures,
+      (fixture) =>
+        Effect.gen(function* () {
+          const body = yield* Effect.tryPromise(() =>
+            readFile(`${documentWorkersRoot}/fixtures/${fixture}`)
+          );
+          const activeResponse = yield* Effect.tryPromise((signal) =>
+            requestStatement(body, signal)
+          );
+          const activeResult = yield* Schema.decodeUnknownEffect(ParseResult)(
+            yield* Effect.tryPromise(() => activeResponse.json())
+          );
+          if (!activeResponse.ok || activeResult.format !== "xlsx") {
+            throw new Error(`Workerd did not safely parse hostile workbook structure: ${fixture}`);
+          }
+        }),
+      { concurrency: 1, discard: true }
+    )
+  );
 
   const oversizedWorkbook = XLSX.utils.book_new();
   const oversizedSheet = XLSX.utils.aoa_to_sheet([["Date", "Amount"]]);
@@ -302,19 +326,27 @@ try {
       label: "malformed-csv",
     },
   ];
-  for (const hostile of hostileWorkbooks) {
-    const hostileResponse = await fetch(`http://127.0.0.1:${serverPort}/statement`, {
-      body: hostile.body,
-      method: "POST",
-    });
-    const rejected = Schema.decodeUnknownSync(RejectedResult)(await hostileResponse.json());
-    if (
-      hostileResponse.status !== hostile.expectedStatus ||
-      rejected.reason !== hostile.expectedReason
-    ) {
-      throw new Error(`Workerd did not reject ${hostile.label}`);
-    }
-  }
+  await Effect.runPromise(
+    Effect.forEach(
+      hostileWorkbooks,
+      (hostile) =>
+        Effect.gen(function* () {
+          const hostileResponse = yield* Effect.tryPromise((signal) =>
+            requestStatement(hostile.body, signal)
+          );
+          const rejected = yield* Schema.decodeUnknownEffect(RejectedResult)(
+            yield* Effect.tryPromise(() => hostileResponse.json())
+          );
+          if (
+            hostileResponse.status !== hostile.expectedStatus ||
+            rejected.reason !== hostile.expectedReason
+          ) {
+            throw new Error(`Workerd did not reject ${hostile.label}`);
+          }
+        }),
+      { concurrency: 1, discard: true }
+    )
+  );
 
   const representativeHeaders = Array.from({ length: representativeXlsxColumns }, (_, index) =>
     index === 0 ? "Date" : `Field${index}`

@@ -1,4 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect";
+import { requestWorkerd } from "./local-workerd-http";
 
 const microsecondsPerMillisecond = Number("1000");
 
@@ -28,15 +29,13 @@ class InspectorIoError extends Data.TaggedError("InspectorIoError")<{
   readonly cause: unknown;
 }> {}
 
-const requestTargets = (port: number, signal: AbortSignal): Promise<Response> =>
-  fetch(`http://127.0.0.1:${port}/json`, { signal });
-
 const fetchTargets = (
   port: number,
   signal?: AbortSignal
 ): Effect.Effect<unknown, InspectorIoError> =>
   Effect.tryPromise({
-    try: (requestSignal) => requestTargets(port, signal ?? requestSignal),
+    try: (requestSignal) =>
+      requestWorkerd({ method: "GET", port, path: "/json", signal: signal ?? requestSignal }),
     catch: (cause) => new InspectorIoError({ cause }),
   }).pipe(
     Effect.flatMap((response) =>

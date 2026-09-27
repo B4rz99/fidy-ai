@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { Effect, Option, Schema } from "effect";
 import * as XLSX from "xlsx/xlsx.mjs";
 import { runExtractionProof } from "./extraction-proof";
+import { closeWorkerdHttp, requestWorkerd } from "./local-workerd-http";
 import { runProtectedDocumentProof } from "./protected-document-proof";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 
@@ -76,7 +77,14 @@ const requestStatement = (
   signal: AbortSignal,
   headers?: Readonly<Record<string, string>>
 ): Promise<Response> =>
-  fetch(`http://127.0.0.1:${serverPort}/statement`, { body, headers, method: "POST", signal });
+  requestWorkerd({
+    method: "POST",
+    port: serverPort,
+    path: "/statement",
+    body,
+    headers: headers ?? {},
+    signal,
+  });
 
 const runWranglerCommand = (command: Array<string>): string => {
   const result = Bun.spawnSync(command, {
@@ -195,7 +203,11 @@ try {
         const ready = yield* Effect.tryPromise((signal) =>
           requestStatement("Date,Amount\n2026-01-01,1", signal)
         ).pipe(
-          Effect.map((response) => response.ok),
+          Effect.flatMap((response) =>
+            Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
+              Effect.as(response.ok)
+            )
+          ),
           Effect.catch(() => Effect.sleep(readinessRetryMilliseconds).pipe(Effect.as(false)))
         );
         if (ready) return;
@@ -214,11 +226,9 @@ try {
   const csvProfile = await profileWorkerRequest({
     debuggerUrl,
     signal: Option.none(),
-    sendRequest: () =>
-      fetch(`http://127.0.0.1:${serverPort}/statement`, {
-        body: `Date,Amount,Description\n${rows.join("\n")}`,
-        headers: { "content-type": "application/pdf" },
-        method: "POST",
+    sendRequest: (signal) =>
+      requestStatement(`Date,Amount,Description\n${rows.join("\n")}`, signal, {
+        "content-type": "application/pdf",
       }),
   });
   const response = csvProfile.response;
@@ -365,11 +375,8 @@ try {
   const xlsxProfile = await profileWorkerRequest({
     debuggerUrl,
     signal: Option.none(),
-    sendRequest: () =>
-      fetch(`http://127.0.0.1:${serverPort}/statement`, {
-        body: workbookBytes(representativeWorkbook, "xlsx"),
-        method: "POST",
-      }),
+    sendRequest: (signal) =>
+      requestStatement(workbookBytes(representativeWorkbook, "xlsx"), signal),
   });
   const xlsxResponse = xlsxProfile.response;
   const parsedXlsx = Schema.decodeUnknownSync(ParseResult)(await xlsxResponse.json());
@@ -433,6 +440,7 @@ try {
 } finally {
   worker.kill();
   await worker.exited;
+  await closeWorkerdHttp();
   await rm(temporaryDirectory, { force: true, recursive: true });
 }
 

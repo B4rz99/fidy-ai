@@ -18,7 +18,7 @@ const SUPPRESSION_PATTERN = new RegExp(
 // These diagnostics have no first-party path that needs an opt-out. Scoped platform
 // boundaries use other, reviewable overrides in tsconfig.base.json.
 const UNJUSTIFIED_DIAGNOSTIC_DISABLED =
-  /"(?:asyncFunction|missingPipeableSignature|newPromise|strictBooleanExpressions)"\s*:\s*"off"/;
+  /"(?:asyncFunction|globalFetch|missingPipeableSignature|newPromise|strictBooleanExpressions)"\s*:\s*"off"/;
 
 /**
  * Every extension oxlint will lint — wider than this repo writes today, on

@@ -25,7 +25,11 @@ import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body"
 import { browserOrigins } from "../runtime/topology";
 import { wompiOutboundHttp, workerCrypto } from "../wompi/wompi-runtime";
 
-const Origin = Schema.Literals([browserOrigins.production, browserOrigins.local]);
+const Origin = Schema.Literals([
+  browserOrigins.production,
+  browserOrigins.local,
+  browserOrigins.acceptance,
+]);
 const WompiConfiguration = Schema.Struct({
   BROWSER_ORIGIN: Origin,
   WOMPI_ENVIRONMENT: Schema.Literals(["sandbox", "production"]),

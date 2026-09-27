@@ -7,6 +7,7 @@ const ok = 200;
 const forbidden = 403;
 const unauthorized = 401;
 const noContent = 204;
+const notFound = 404;
 
 test("reviews a real PATPairing and leaves its private code with only the requesting client", async ({
   page,
@@ -40,6 +41,22 @@ test("reviews a real PATPairing and leaves its private code with only the reques
   );
   expect(bearer).toMatch(/^fin_/u);
   expect(await page.locator("body").textContent()).not.toContain(bearer);
+});
+
+test("a browser cannot render or fetch another User's private Transaction through public routes", async ({
+  page,
+  request,
+}) => {
+  await signInThroughCore({ page, request });
+  await page.goto("/app/transactions");
+  const refusal = await page.evaluate(async (url) => {
+    // @effect-diagnostics-next-line globalFetch:off
+    const response = await fetch(url, { credentials: "include" });
+    return { status: response.status, body: await response.text() };
+  }, `${api}/transactions/24000000-0000-4000-8000-000000000262`);
+  expect(refusal.status).toBe(notFound);
+  expect(refusal.body).not.toContain("OTHER-USER-PRIVATE");
+  expect(await page.locator("body").textContent()).not.toContain("OTHER-USER-PRIVATE");
 });
 
 test("approves a browser pairing through the real verified-email public route", async ({
@@ -79,6 +96,38 @@ test("replaces a verified EmailCredential through public operations after fixtur
   await expect(page.getByText("Tu nuevo correo verificado ya está activo.")).toBeVisible();
   expect(page.url()).not.toContain(code);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test("submits reused-source Subscription enrollment through real public and Core routes", async ({
+  page,
+  request,
+}) => {
+  await signInThroughCore({ page, request });
+  await page.goto("/upgrade");
+  const preparing = page.waitForResponse(
+    (response) => response.url() === `${api}/web/subscription/card-enrollments/prepare`
+  );
+  await page.getByRole("button", { name: "Elegir mensual" }).click();
+  const prepared = await preparing;
+  expect(prepared.status()).toBe(ok);
+  await expect(
+    page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
+  ).toBeVisible();
+  await page.getByLabel(/Acepto el reglamento/iu).check();
+  await page.getByLabel(/Autorizo el tratamiento/iu).check();
+  const submission = page.waitForResponse(
+    (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
+  );
+  await page.getByRole("button", { name: "Activar Pro" }).click();
+  const submitted = await submission;
+  expect(submitted.status()).toBe(ok);
+  expect(await submitted.json()).toMatchObject({
+    status: "payment-pending",
+    billingAttempt: { status: "pending" },
+  });
+  await expect(
+    page.getByText("Usaremos de nuevo tu fuente de pago guardada.", { exact: false })
+  ).toBeVisible();
 });
 
 test("a read-only PAT issued through the real browser session cannot capture Transactions after review or revocation", async ({

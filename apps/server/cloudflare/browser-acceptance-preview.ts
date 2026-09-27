@@ -24,7 +24,9 @@ const isCoreWorkerModule = (candidate: unknown): candidate is typeof CoreWorkerM
   typeof candidate === "object" &&
   candidate !== null &&
   "makeCoreWorker" in candidate &&
-  typeof candidate.makeCoreWorker === "function";
+  typeof candidate.makeCoreWorker === "function" &&
+  "UserTransactionCoordinator" in candidate &&
+  typeof candidate.UserTransactionCoordinator === "function";
 const coreModule: unknown = await import(coreBundle.href);
 if (!isCoreWorkerModule(coreModule)) throw new Error("Core acceptance bundle has no Worker");
 const { makeCoreWorker, UserTransactionCoordinator } = coreModule;
@@ -169,6 +171,41 @@ await db
   .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
   .bind(fixtureUserId, now, now + trialDurationMs)
   .run();
+const sourceEnrollmentId = "24000000-0000-4000-8000-000000000271";
+const sourceId = 3891;
+const enrollmentLifetimeMs = 900_000;
+await db
+  .prepare(`INSERT INTO card_enrollments
+  (id, user_id, price_id, billing_email, status, payment_source_mode, contracts_json,
+   disclosure_json, prepared_at_ms, expires_at_ms, wompi_candidate_source_id)
+  VALUES (?, ?, ?, ?, 'creating', 'create', '{}', '{}', ?, ?, ?)`)
+  .bind(
+    sourceEnrollmentId,
+    fixtureUserId,
+    "22700000-0000-4000-8000-000000000001",
+    "usuario@example.com",
+    now,
+    now + enrollmentLifetimeMs,
+    sourceId
+  )
+  .run();
+await db
+  .prepare(`INSERT INTO card_payment_sources
+  (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
+  VALUES (?, ?, ?, ?, ?, ?)`)
+  .bind(
+    "24000000-0000-4000-8000-000000000272",
+    fixtureUserId,
+    sourceEnrollmentId,
+    sourceId,
+    "usuario@example.com",
+    now
+  )
+  .run();
+await db
+  .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
+  .bind(sourceEnrollmentId)
+  .run();
 await db
   .prepare(`INSERT INTO onboarding_consent_records
   (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
@@ -194,6 +231,41 @@ await db
   .bind(fixtureUserId, recoveryDigest, now)
   .run();
 
+const providerPublicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
+const providerPrivateKey = `prv_test_${"f1d7c0de".repeat(3)}`;
+const signedAcceptance = (permalink: string, hash: string): string =>
+  `header.${btoa(JSON.stringify({ permalink, file_hash: hash }))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "")}.signature`;
+const contractHashLength = 64;
+const merchantBody = {
+  data: {
+    presigned_acceptance: {
+      acceptance_token: signedAcceptance(
+        "https://wompi.example/end.pdf",
+        "2".repeat(contractHashLength)
+      ),
+      permalink: "https://wompi.example/end.pdf",
+    },
+    presigned_personal_data_auth: {
+      acceptance_token: signedAcceptance(
+        "https://wompi.example/data.pdf",
+        "3".repeat(contractHashLength)
+      ),
+      permalink: "https://wompi.example/data.pdf",
+    },
+  },
+};
+const providerResponse = (requestUrl: string): Response => {
+  if (requestUrl.includes("/v1/merchants/")) return Response.json(merchantBody);
+  if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
+    return Response.json({
+      data: { id: sourceId, status: "AVAILABLE", customer_email: "usuario@example.com" },
+    });
+  }
+  return Response.json({ data: { id: sourceId, status: "PENDING" } });
+};
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const jwk = {
   ...(await exportJWK(publicKey)),
@@ -204,9 +276,14 @@ const jwk = {
 globalThis.fetch = new Proxy(globalThis.fetch, {
   apply: (target, thisArg, args): unknown => {
     const requestUrl: unknown = args[0];
-    return String(requestUrl) === `${accessIssuer}/cdn-cgi/access/certs`
-      ? Promise.resolve(Response.json({ keys: [jwk] }))
-      : Reflect.apply(target, thisArg, args);
+    const url = requestUrl instanceof Request ? requestUrl.url : String(requestUrl);
+    if (url === `${accessIssuer}/cdn-cgi/access/certs`) {
+      return Promise.resolve(Response.json({ keys: [jwk] }));
+    }
+    if (url.startsWith("https://sandbox.wompi.co/")) {
+      return Promise.resolve(providerResponse(url));
+    }
+    return Reflect.apply(target, thisArg, args);
   },
 });
 const assertionLifetimeSeconds = 300;
@@ -227,47 +304,44 @@ const publicCodeLength = 9;
 const proofLifetimeMs = 600_000;
 const noContent = 204;
 const conflict = 409;
-const deliverReplacementProof = (): Promise<Response> =>
+const deliverProof = (
+  commit: (digest: Uint8Array, expiry: number) => Promise<D1Result>
+): Promise<Response> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(replacementCode.slice(proofSecretOffset)))
     .then((digest) =>
-      db
-        .prepare(`UPDATE email_replacements SET state = 'awaiting_proof',
-      public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
-      WHERE user_id = ? AND candidate_email = ? AND state = 'awaiting_delivery'`)
-        .bind(
-          replacementCode.slice(0, publicCodeLength),
-          new Uint8Array(digest),
-          Effect.runSync(Clock.currentTimeMillis) + proofLifetimeMs,
-          fixtureUserId,
-          replacementEmail
-        )
-        .run()
+      commit(new Uint8Array(digest), Effect.runSync(Clock.currentTimeMillis) + proofLifetimeMs)
     )
     .then(
       (result) => new Response(null, { status: result.meta.changes === 1 ? noContent : conflict })
     );
 
+const deliverReplacementProof = (): Promise<Response> =>
+  deliverProof((digest, expiry) =>
+    db
+      .prepare(`UPDATE email_replacements SET state = 'awaiting_proof',
+    public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
+    WHERE user_id = ? AND candidate_email = ? AND state = 'awaiting_delivery'`)
+      .bind(
+        replacementCode.slice(0, publicCodeLength),
+        digest,
+        expiry,
+        fixtureUserId,
+        replacementEmail
+      )
+      .run()
+  );
+
 const deliverEmailLoginProof = (code: string): Promise<Response> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(replacementCode.slice(proofSecretOffset)))
-    .then((digest) =>
-      db
-        .prepare(`UPDATE browser_pairing_email_proofs SET state = 'awaiting_proof',
-      public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
-      WHERE pairing_id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
-        AND state = 'awaiting_delivery'`)
-        .bind(
-          replacementCode.slice(0, publicCodeLength),
-          new Uint8Array(digest),
-          Effect.runSync(Clock.currentTimeMillis) + proofLifetimeMs,
-          code
-        )
-        .run()
-    )
-    .then(
-      (result) => new Response(null, { status: result.meta.changes === 1 ? noContent : conflict })
-    );
+  deliverProof((digest, expiry) =>
+    db
+      .prepare(`UPDATE browser_pairing_email_proofs SET state = 'awaiting_proof',
+    public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
+    WHERE pairing_id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
+      AND state = 'awaiting_delivery'`)
+      .bind(replacementCode.slice(0, publicCodeLength), digest, expiry, code)
+      .run()
+  );
 
 const approveWhatsAppPairing = (code: string): Promise<Response> =>
   db
@@ -342,10 +416,10 @@ const server = Bun.serve({
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
             HOSTED_AI_MODEL: approvedWorkersAiModel,
             BROWSER_ORIGIN: browserOrigins.acceptance,
-            WOMPI_ENVIRONMENT: "",
-            WOMPI_PUBLIC_KEY: "",
-            WOMPI_PRIVATE_KEY: "",
-            WOMPI_INTEGRITY_SECRET: "",
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: providerPublicKey,
+            WOMPI_PRIVATE_KEY: providerPrivateKey,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
             USER_TRANSACTION_COORDINATOR: {
               getByName: (name): Pick<Fetcher, "fetch"> => ({
                 fetch: (command) =>

@@ -1,0 +1,28 @@
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_5e7d21da84598c::t_88c237de810c9b 251-271
+  s_5e7d21da84598c::t_439c0b95b7fa5b 167-169
+  s_5e7d21da84598c::t_a422c8b0edc2f7 272-283
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_5e7d21da84598c::t_56c30a02de8089 31,928-935
+apps/server/cloudflare/identity/whatsapp-identity.ts
+  s_5e7d21da84598c::t_102c6435582e4f 1,3-12,14-21,27
+  s_5e7d21da84598c::t_20823199581b5e 2
+  s_5e7d21da84598c::t_875bc52cd5a68b 13
+  s_5e7d21da84598c::t_063ea42da423ec 22-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "af184d74aad4386d6ed2a9017f1a34f62b86c13d",
+  "prompts": {},
+  "sessions": {
+    "s_5e7d21da84598c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e433-20ad-7287-9753-8c32a479f548",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

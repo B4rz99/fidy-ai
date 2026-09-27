@@ -1,0 +1,20 @@
+apps/web/cloudflare/preview-policy/artifact.ts
+  s_3ea47fec821644::t_314d4c7bdb2042 380-384,399
+  s_3ea47fec821644::t_f36f8a0e88d0fc 397-398,400
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "703fb5c2fa730755318816b18605031f11873614",
+  "prompts": {},
+  "sessions": {
+    "s_3ea47fec821644": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-e263-729f-8bfc-a3055b09f8f2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,7 +1,9 @@
-import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, response } from "./http-fixtures";
+import { playwright } from "./playwright-runtime";
+
+const { expect, test } = playwright;
 
 const patId = "24000000-0000-4000-8000-000000000245";
 const pat = {

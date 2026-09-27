@@ -1,5 +1,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect } from "@playwright/test";
+import { playwright } from "./playwright-runtime";
+
+const { expect } = playwright;
 
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;

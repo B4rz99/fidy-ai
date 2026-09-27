@@ -1,7 +1,9 @@
-import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect, Schema } from "effect";
 import { apiOrigin, makeUser, response } from "./http-fixtures";
+import { playwright } from "./playwright-runtime";
+
+const { expect, test } = playwright;
 
 const ok = 200;
 const installRoute = (

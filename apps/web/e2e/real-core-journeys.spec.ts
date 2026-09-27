@@ -1,12 +1,14 @@
-import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import type { Cause } from "effect";
+import { playwright } from "./playwright-runtime";
 import {
   signInFirstCardThroughCore,
   signInThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
+
+const { expect, test } = playwright;
 
 const api = "https://127.0.0.1:4174";
 const ok = 200;

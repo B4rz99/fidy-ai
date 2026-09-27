@@ -1,6 +1,8 @@
-import { expect, test } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, makeUser, response } from "./http-fixtures";
+import { playwright } from "./playwright-runtime";
+
+const { expect, test } = playwright;
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);

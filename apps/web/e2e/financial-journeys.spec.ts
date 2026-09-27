@@ -1,7 +1,9 @@
-import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { playwright } from "./playwright-runtime";
+
+const { expect, test } = playwright;
 
 const category = { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" };
 const transactionId = "24000000-0000-4000-8000-000000000243";

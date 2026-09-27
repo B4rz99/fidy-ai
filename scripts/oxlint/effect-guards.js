@@ -11,17 +11,66 @@
 /** @typedef {import("./ast-types.js").Node} Node */
 /** @typedef {import("./ast-types.js").Program} Program */
 /** @typedef {import("./ast-types.js").TSType} TSType */
+/** @typedef {import("./ast-types.js").TSInterfaceDeclaration} TSInterfaceDeclaration */
 /** @typedef {import("./ast-types.js").TypeEnvironment} TypeEnvironment */
 /** @typedef {import("./ast-types.js").MemberExpression} MemberExpression */
 /** @typedef {import("./ast-types.js").ImportDeclaration} ImportDeclaration */
 /** @typedef {import("./ast-types.js").ImportSpecifier} ImportSpecifier */
 
+import { fileURLToPath } from "node:url";
 import {
   classifyUnsafeDictionary,
   classifyUnsafeDictionaryValue,
   createTypeEnvironment,
   declarationName,
 } from "./dictionary-types.js";
+
+const routerRegistrationFile = fileURLToPath(
+  new URL("../../apps/web/src/app/routes.ts", import.meta.url)
+);
+
+/** @param {TSInterfaceDeclaration} node - Interface to inspect. */
+const isRouterRegistration = (node) => {
+  const block = node.parent;
+  const module = block.type === "TSModuleBlock" ? block.parent : undefined;
+  return (
+    node.id.name === "Register" &&
+    module?.type === "TSModuleDeclaration" &&
+    module.declare &&
+    module.id.type === "Literal" &&
+    module.id.value === "@tanstack/react-router"
+  );
+};
+
+/** Keep first-party object shapes closed except for TanStack Router's required module augmentation. */
+/** @satisfies {OxlintRule} */
+const noOrdinaryInterface = {
+  meta: {
+    type: "problem",
+    docs: { description: "Use type aliases except for the reviewed Router registration" },
+    messages: {
+      ordinaryInterface:
+        "Use a type alias for first-party shapes; only the reviewed Register interface in the TanStack Router module augmentation is permitted.",
+    },
+    schema: [],
+  },
+  create(context) {
+    let registrations = 0;
+    return {
+      TSInterfaceDeclaration(node) {
+        if (
+          context.filename === routerRegistrationFile &&
+          registrations === 0 &&
+          isRouterRegistration(node)
+        ) {
+          registrations += 1;
+          return;
+        }
+        context.report({ node, messageId: "ordinaryInterface" });
+      },
+    };
+  },
+};
 
 /**
  * Ban `sql<Type>`...`` — a type parameter on a sql tagged template provides no
@@ -842,6 +891,7 @@ const plugin = {
     "no-nullable-type": noNullableType,
     "no-unknown-parameters": noUnknownParameters,
     "no-unsafe-dictionary-type": noUnsafeDictionaryType,
+    "no-ordinary-interface": noOrdinaryInterface,
     "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,

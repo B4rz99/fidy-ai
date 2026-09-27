@@ -1,0 +1,44 @@
+.oxlintrc.json
+  s_faf8a5df7be82b::t_8298575d5333e2 271-272,276-277
+  s_faf8a5df7be82b::t_c5062d75c5cf0b 297
+scripts/oxlint/ast-types.d.ts
+  s_faf8a5df7be82b::t_6187c5edc6529d 13-14
+  s_faf8a5df7be82b::t_a55336ba105c41 15
+package.json
+  s_faf8a5df7be82b::t_1dda90820c8628 12
+scripts/oxlint/lint-rules.test.js
+  s_faf8a5df7be82b::t_a52750a0c6a553 9-110,117
+  s_98251aab91db5b::t_defa996be18952 111
+scripts/oxlint/effect-guards.js
+  s_faf8a5df7be82b::t_c6dd8341aacbc2 117
+  s_faf8a5df7be82b::t_45066b96e4f48e 128
+  s_faf8a5df7be82b::t_f2e17adb5e3b4f 31-33,83-97,99,102,105-108,119-127,129-135,956
+  s_faf8a5df7be82b::t_fb951cfa651d58 34-37,98,100-101,103-104,109-116,118
+  s_faf8a5df7be82b::t_b487d384278320 82
+scripts/check-lint-suppressions.test.ts
+  s_faf8a5df7be82b::t_1fc6e600f276a2 137-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0e1030b2daf0ccd9c88e22e9ee8ab19e5c1fd171",
+  "prompts": {},
+  "sessions": {
+    "s_98251aab91db5b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0ec-f843-724a-9138-f40331cd3c04",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

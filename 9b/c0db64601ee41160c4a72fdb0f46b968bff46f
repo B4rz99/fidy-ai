@@ -1,0 +1,35 @@
+apps/web/e2e/real-core-journeys.spec.ts
+  s_60ae463805ce18::t_0f1fe4058599f1 4,11
+  s_60ae463805ce18::t_86cb37ff2cab55 12
+apps/web/e2e/security-journeys.spec.ts
+  s_60ae463805ce18::t_f011e3169373f6 4-6
+apps/web/e2e/playwright-runtime.ts
+  s_60ae463805ce18::t_74bceb5409895b 3
+  s_60ae463805ce18::t_88eeeecc7dba7a 1-2
+apps/web/e2e/real-core-fixture.ts
+  s_60ae463805ce18::t_f39713f68ecda3 2-4
+apps/web/e2e/product-journeys.spec.ts
+  s_60ae463805ce18::t_b89bcf4fc789c7 4-6
+.oxlintrc.json
+  s_60ae463805ce18::t_3edbff738487e7 204
+apps/web/e2e/canonical-browser.spec.ts
+  s_60ae463805ce18::t_f3f2bf81377d8a 3-5
+apps/web/e2e/financial-journeys.spec.ts
+  s_60ae463805ce18::t_559101123f0939 4-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9bc0db64601ee41160c4a72fdb0f46b968bff46f",
+  "prompts": {},
+  "sessions": {
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

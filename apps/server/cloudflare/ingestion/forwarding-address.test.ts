@@ -139,6 +139,7 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
         subject,
         current,
         mutations: [prepared.mutation],
+        hostedFence: Option.none(),
       });
       expect(execution._tag).toBe("Committed");
       if (execution._tag !== "Committed") return;

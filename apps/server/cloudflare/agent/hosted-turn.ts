@@ -1,6 +1,7 @@
 import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
+  type CanonicalToolOutcome,
   CanonicalToolResultEntry,
   CompactedConversationOutput,
   ToolCallId,
@@ -18,8 +19,8 @@ import type {
   HostedTextResult,
   PreparedHostedText,
 } from "@fidy/server/hosted-inference";
-import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { operationCatalog } from "@fidy/server/canonical-runtime";
+import { Cause, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
+import { atomicBatchOperation, operationCatalog } from "@fidy/server/canonical-runtime";
 import { HostedToolCallMaximum } from "@fidy/server/hosted-inference";
 import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
 import {
@@ -27,8 +28,21 @@ import {
   maximumModelRoundMillis,
   maximumToolCallsPerTurn,
 } from "../../src/shell/_shared/hosted-turn-bounds";
-import { executeProtectedCategories } from "../categories/canonical-category";
-import { HostedTurnReceipt, HostedTurnRequest } from "../../src/shell/agent/hosted-turn-api";
+import { executeHostedQuery, isInstalledHostedQuery } from "./hosted-canonical-query";
+import {
+  consumeHostedConfirmation,
+  findHostedConfirmation,
+  isHostedConfirmationAttempt,
+  issueHostedConfirmation,
+} from "./hosted-confirmation";
+import type { ConfirmationRow } from "./hosted-confirmation";
+import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
+import type { HostedCommitFence } from "../mutations/canonical-mutation-unit";
+import {
+  HostedTurnProgressRequest,
+  HostedTurnReceipt,
+  HostedTurnRequest,
+} from "../../src/shell/agent/hosted-turn-api";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
@@ -45,23 +59,54 @@ import {
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
+  refreshHostedDelivery,
   reserveHostedCompaction,
   selectHostedSession,
   stageHostedDelivery,
 } from "./turn-store";
 
-// The installed owner map is deliberately smaller than the canonical catalog: an operation is
-// exposed only when this coordinator can execute it under the live WebSession authority.
+// Only installed owners whose caller policy permits this authority enter the toolkit.
 const hostedExecutableOperations = operationCatalog.operations.filter(
   ({ id, policy }) =>
-    id === "categories.listCategories" &&
-    policy.kind === "query" &&
-    policy.agentConfirmation === "not-required" &&
+    ((policy.kind === "query" && isInstalledHostedQuery(id)) ||
+      (policy.kind === "mutation" &&
+        (id === atomicBatchOperation || Option.isSome(canonicalMutationAdapter(id))))) &&
     decideOperationAccess(policy.access, {
       _tag: "HostedAgentSession",
       authorityRoot: "no-verified-whatsapp-authority",
     })._tag === "Allowed"
 );
+
+const requiresHostedConfirmation = ({
+  operation,
+}: HostedTextResult["toolCalls"][number]): boolean =>
+  hostedExecutableOperations.find(({ id }) => id === operation)?.policy.agentConfirmation ===
+  "required";
+
+const hostedAuthority = {
+  _tag: "HostedAgentSession",
+  authorityRoot: "no-verified-whatsapp-authority",
+} as const;
+const hostedBatchChildren = Schema.Struct({
+  payload: Schema.Struct({
+    calls: Schema.NonEmptyArray(Schema.Struct({ operation: Schema.String })),
+  }),
+});
+/** A batch cannot use its WebSession executor to smuggle a child denied to Hosted Agent Sessions. */
+const hostedBatchAllowed = (input: CanonicalToolEvidence): boolean => {
+  const parsed = Schema.decodeUnknownOption(hostedBatchChildren)(input);
+  return (
+    Option.isSome(parsed) &&
+    parsed.value.payload.calls.every(({ operation: id }) => {
+      const child = operationCatalog.byId.get(id);
+      return (
+        child !== undefined &&
+        child.atomicBatchEligible &&
+        decideOperationAccess(child.policy.access, hostedAuthority)._tag === "Allowed"
+      );
+    })
+  );
+};
 
 const noStore = { "cache-control": "no-store" } as const;
 const unavailable = (): Response =>
@@ -88,32 +133,59 @@ export type HostedDelivery = (
 export const browserHostedDelivery: HostedDelivery = ({ text, turnId, receipt }) =>
   Promise.resolve(Response.json({ text, turnId, receipt }, { status: 202, headers: noStore }));
 
+type HostedMutationExecutor = (
+  operation: (typeof operationCatalog.operations)[number]["id"],
+  input: CanonicalToolEvidence,
+  hostedFence: HostedCommitFence
+) => Promise<Response>;
+
 type HostedTurnInput = Readonly<{
   db: D1Database;
   subject: TransactionSubject;
+  bucket: Option.Option<R2Bucket>;
+  executeMutation: Option.Option<HostedMutationExecutor>;
   text: TranscriptText;
   inference: HostedInferenceService;
   deliver: HostedDelivery;
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
+type AdmittedTurnInput = HostedTurnInput &
+  Readonly<{
+    onAdmitted: Option.Option<(turnId: TranscriptTurnId) => void>;
+  }>;
+
+export const completeHostedTurn = (input: HostedTurnInput): Promise<Response> =>
+  executeHostedTurn({ ...input, onAdmitted: Option.none() });
+export const completeHostedTurnWithAdmission = ({
+  input,
+  onAdmitted,
+}: Readonly<{
+  input: HostedTurnInput;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
+}>): Promise<Response> => executeHostedTurn({ ...input, onAdmitted: Option.some(onAdmitted) });
 
 /**
  * Own one hosted Turn under the per-User Durable Object's serialized request. D1 owns
  * admission and exact evidence; the adapter owns bounded provider rounds and delivery. A lost
  * request after Pending is recovered by the next Turn, never silently reported Completed.
  */
-export const completeHostedTurn = ({
+const executeHostedTurn = ({
   db,
   subject,
+  bucket,
+  executeMutation,
   text,
   inference,
   deliver,
   signal,
   scheduleRecovery,
-}: HostedTurnInput): Promise<Response> =>
+  onAdmitted,
+}: AdmittedTurnInput): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const isAborted = (): boolean => signal.aborted;
+      if (isAborted()) return unavailable();
       const userId = UserId.make(subject.userId);
       const snapshot = yield* Effect.tryPromise(() =>
         readAdmissibleSnapshot({ db, subject, userId })
@@ -122,6 +194,55 @@ export const completeHostedTurn = ({
       const startedAtMs = transactionNow();
       const selection = selectHostedSession({ snapshot, userId, now: startedAtMs });
       const activeTurnId = TranscriptTurnId.make(newId());
+      if (isHostedConfirmationAttempt(text)) {
+        const challenge = yield* findHostedConfirmation({
+          db,
+          userId,
+          command: text,
+          now: startedAtMs,
+        });
+        if (Option.isNone(challenge) || Option.isNone(executeMutation)) return unauthenticated();
+        const turn = yield* admitHostedTurn({
+          db,
+          subject,
+          selection,
+          text,
+          now: startedAtMs,
+          id: activeTurnId,
+        });
+        if (Option.isNone(turn)) return unauthenticated();
+        if (isAborted()) {
+          yield* recoverHostedTurn({
+            db,
+            userId,
+            turn: {
+              id: turn.value,
+              started_at_ms: startedAtMs,
+              proposed_at_ms: null,
+            },
+            now: transactionNow(),
+          });
+          return unavailable();
+        }
+        yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
+        if (Option.isSome(onAdmitted)) {
+          onAdmitted.value(turn.value);
+        }
+        return yield* Effect.tryPromise(() =>
+          executeConfirmedHostedTurn({
+            db,
+            subject,
+            userId,
+            turnId: turn.value,
+            startedAtMs,
+            challenge: challenge.value,
+            executeMutation: executeMutation.value,
+            signal,
+            deliver,
+            scheduleRecovery,
+          })
+        );
+      }
       const prepared = yield* Effect.tryPromise(() =>
         prepareHostedWork({
           db,
@@ -134,27 +255,44 @@ export const completeHostedTurn = ({
           text,
           inference,
           signal,
+          executeMutation,
         })
       );
-      if (Option.isNone(prepared)) return unavailable();
-      const turn = yield* Effect.tryPromise(() =>
-        admitHostedTurn({
-          db,
-          subject,
-          selection,
-          text,
-          now: startedAtMs,
-          id: activeTurnId,
-        })
-      );
+      if (Option.isNone(prepared) || isAborted()) return unavailable();
+      const turn = yield* admitHostedTurn({
+        db,
+        subject,
+        selection,
+        text,
+        now: startedAtMs,
+        id: activeTurnId,
+      });
       if (Option.isNone(turn)) return unauthenticated();
+      if (isAborted()) {
+        yield* recoverHostedTurn({
+          db,
+          userId,
+          turn: {
+            id: turn.value,
+            started_at_ms: startedAtMs,
+            proposed_at_ms: null,
+          },
+          now: transactionNow(),
+        });
+        return unavailable();
+      }
       yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
+      if (Option.isSome(onAdmitted)) {
+        onAdmitted.value(turn.value);
+      }
       return yield* Effect.tryPromise(() =>
         executeAdmittedTurn({
           db,
           userId,
           turnId: turn.value,
           subject,
+          bucket,
+          executeMutation,
           startedAtMs,
           prepared: prepared.value,
           deliver,
@@ -177,25 +315,19 @@ const readAdmissibleSnapshot = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const current = transactionNow();
-      const initial = yield* Effect.tryPromise(() =>
-        readHostedSnapshot({ db, subject, now: current })
-      );
+      const initial = yield* readHostedSnapshot({ db, subject, now: current });
       if (Option.isNone(initial)) return unauthenticated();
-      const recovered = yield* Effect.tryPromise(() =>
-        recoverPending({
-          db,
-          userId,
-          pending: initial.value.pending,
-          now: current,
-        })
-      );
+      const recovered = yield* recoverPending({
+        db,
+        userId,
+        pending: initial.value.pending,
+        now: current,
+      });
       if (recovered === "awaiting") {
         return Response.json({ status: "awaiting_delivery" }, { status: 409, headers: noStore });
       }
       if (recovered === "error") return unavailable();
-      const fresh = yield* Effect.tryPromise(() =>
-        readHostedSnapshot({ db, subject, now: transactionNow() })
-      );
+      const fresh = yield* readHostedSnapshot({ db, subject, now: transactionNow() });
       if (Option.isNone(fresh)) return unauthenticated();
       if (fresh.value.revoked) return consentRequired();
       if (!fresh.value.capacityAvailable) {
@@ -216,6 +348,7 @@ type WorkPreflight = Readonly<{
   text: TranscriptText;
   inference: HostedInferenceService;
   signal: AbortSignal;
+  executeMutation: HostedTurnInput["executeMutation"];
 }>;
 
 /** Check the complete semantic request before any Pending or User evidence can be written. */
@@ -230,17 +363,16 @@ const prepareHostedWork = ({
   text,
   inference,
   signal,
+  executeMutation,
 }: WorkPreflight): Promise<Option.Option<PreparedHostedText>> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const initial = yield* Effect.tryPromise(() =>
-        readHostedContinuity({
-          db,
-          subject,
-          sessionId: selection.id,
-          now: startedAtMs,
-        })
-      );
+      const initial = yield* readHostedContinuity({
+        db,
+        subject,
+        sessionId: selection.id,
+        now: startedAtMs,
+      });
       const continuity = yield* Effect.tryPromise(() =>
         compactHostedContinuity({
           db,
@@ -269,7 +401,9 @@ const prepareHostedWork = ({
             context,
             toolChoice: "auto",
             maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
-            availableOperations: hostedExecutableOperations.map(({ id }) => id),
+            availableOperations: hostedExecutableOperations
+              .filter(({ policy }) => policy.kind === "query" || Option.isSome(executeMutation))
+              .map(({ id }) => id),
           }),
           { signal }
         )
@@ -280,7 +414,7 @@ const prepareHostedWork = ({
     })
   );
 
-type HostedContinuity = Awaited<ReturnType<typeof readHostedContinuity>>;
+type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
 /** Best-effort replacement: failure cannot delete evidence or invalidate existing continuity. */
 // No new telemetry: this optional preflight shares the Turn's bounded provider work; existing
@@ -337,7 +471,7 @@ const compactHostedContinuity = ({
       ) {
         return initial;
       }
-      if (!(yield* Effect.tryPromise(() => reserveHostedCompaction({ db, subject, sessionId })))) {
+      if (!(yield* reserveHostedCompaction({ db, subject, sessionId }))) {
         return initial;
       }
       const prepared = yield* Effect.tryPromise(() =>
@@ -374,20 +508,16 @@ const compactHostedContinuity = ({
       if (last === undefined) {
         return initial;
       }
-      const saved = yield* Effect.tryPromise(() =>
-        commitHostedCompaction({
-          db,
-          subject,
-          sessionId,
-          continuity: initial,
-          throughSequence: Number(last.sequence),
-          text: generated.value.compactedConversation,
-          signal,
-        })
-      );
-      return saved
-        ? yield* Effect.tryPromise(() => readHostedContinuity({ db, subject, sessionId, now }))
-        : initial;
+      const saved = yield* commitHostedCompaction({
+        db,
+        subject,
+        sessionId,
+        continuity: initial,
+        throughSequence: Number(last.sequence),
+        text: generated.value.compactedConversation,
+        signal,
+      });
+      return saved ? yield* readHostedContinuity({ db, subject, sessionId, now }) : initial;
     })
   );
 
@@ -401,27 +531,25 @@ const recoverPending = ({
   userId: UserId;
   pending: Option.Option<Parameters<typeof recoverHostedTurn>[0]["turn"]>;
   now: number;
-}>): Promise<"clear" | "awaiting" | "error"> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (Option.isNone(pending)) return "clear" as const;
-      if (
-        pending.value.proposed_at_ms !== null &&
-        now - pending.value.proposed_at_ms < deliveryAcknowledgmentWindowMs
-      ) {
-        return "awaiting" as const;
-      }
-      const recovered = yield* Effect.tryPromise(() =>
-        recoverHostedTurn({ db, userId, turn: pending.value, now })
-      );
-      return recovered ? ("clear" as const) : ("error" as const);
-    })
+}>): Effect.Effect<"clear" | "awaiting" | "error", Cause.UnknownError | Schema.SchemaError> => {
+  if (Option.isNone(pending)) return Effect.succeed("clear");
+  if (
+    pending.value.proposed_at_ms !== null &&
+    now - pending.value.proposed_at_ms < deliveryAcknowledgmentWindowMs
+  ) {
+    return Effect.succeed("awaiting");
+  }
+  return recoverHostedTurn({ db, userId, turn: pending.value, now }).pipe(
+    Effect.map((recovered) => (recovered ? ("clear" as const) : ("error" as const)))
   );
+};
 
 type AdmittedWork = Readonly<{
   db: D1Database;
   userId: UserId;
   subject: TransactionSubject;
+  bucket: Option.Option<R2Bucket>;
+  executeMutation: HostedTurnInput["executeMutation"];
   turnId: TranscriptTurnId;
   startedAtMs: number;
   prepared: PreparedHostedText;
@@ -436,6 +564,8 @@ const executeAdmittedTurn = ({
   userId,
   turnId,
   subject,
+  bucket,
+  executeMutation,
   startedAtMs,
   prepared,
   deliver,
@@ -444,7 +574,7 @@ const executeAdmittedTurn = ({
 }: AdmittedWork): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const finish = (result: HostedTurnOutcome): Promise<boolean> =>
+      const finish = (result: HostedTurnOutcome): ReturnType<typeof finishHostedTurn> =>
         finishHostedTurn({
           db,
           userId,
@@ -455,24 +585,21 @@ const executeAdmittedTurn = ({
           now: transactionNow(),
         });
       const seenCalls = new Set<string>();
+      const mutation = { started: false };
       // Each continuation is one-shot; the next round starts only after every result is retained.
       const executeRound = (
         active: PreparedHostedText,
         iteration: number,
         usedCalls: number
-      ): Effect.Effect<Response, Cause.UnknownError> =>
+      ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
         Effect.gen(function* () {
           if (iteration > maximumHostedTurnIterations) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-            );
+            yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
             return unavailable();
           }
           const remainingMs = startedAtMs + maximumModelRoundMillis - transactionNow();
           if (remainingMs <= 0) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" })
-            );
+            yield* finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" });
             return unavailable();
           }
           const generated = yield* Effect.tryPromise(() =>
@@ -484,21 +611,17 @@ const executeAdmittedTurn = ({
             signal.aborted ||
             (Exit.isFailure(generated) && Cause.hasInterrupts(generated.cause))
           ) {
-            return (yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" })))
-              ? interrupted()
-              : unavailable();
+            return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
           }
           if (Exit.isFailure(generated)) {
             const timedOut = Option.exists(
               Cause.findErrorOption(generated.cause),
               Cause.isTimeoutError
             );
-            yield* Effect.tryPromise(() =>
-              finish({
-                _tag: "Failed",
-                reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
-              })
-            );
+            yield* finish({
+              _tag: "Failed",
+              reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
+            });
             return unavailable();
           }
           if (generated.value.toolCalls.length > 0) {
@@ -511,53 +634,140 @@ const executeAdmittedTurn = ({
               generated.value.finishReason !== "tool-calls" ||
               duplicate
             ) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-              );
+              yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
               return unavailable();
             }
-            const events: Array<HostedToolEvent> = [];
-            let recorded = true;
+            if (
+              generated.value.toolCalls.length > 1 &&
+              generated.value.toolCalls.some(requiresHostedConfirmation)
+            ) {
+              yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+              return unavailable();
+            }
+            const mutationCommit = { done: false };
+            let executed: Option.Option<ReadonlyArray<HostedToolAction>> = Option.some([]);
             for (const call of generated.value.toolCalls) {
-              seenCalls.add(call.id);
-              const result = yield* Effect.tryPromise(() =>
-                executeHostedTool({ db, subject, userId, turnId, call, iteration })
-              );
-              if (Option.isNone(result)) {
-                recorded = false;
+              if (
+                Option.isNone(executed) ||
+                transactionNow() >= startedAtMs + maximumModelRoundMillis
+              ) {
+                executed = Option.none();
                 break;
               }
-              events.push(result.value);
-            }
-            if (!recorded) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
+              seenCalls.add(call.id);
+              const prior = executed.value;
+              const action = yield* Effect.tryPromise(() =>
+                executeHostedTool({
+                  db,
+                  subject,
+                  bucket,
+                  executeMutation,
+                  userId,
+                  turnId,
+                  call,
+                  iteration,
+                  signal,
+                  mutation,
+                  deadlineMs: startedAtMs + maximumModelRoundMillis,
+                })
               );
+              if (
+                Option.exists(action, (value) => value._tag === "Result" && value.mutationSucceeded)
+              ) {
+                mutationCommit.done = true;
+              }
+              executed = Option.map(action, (value) => [...prior, value]);
+            }
+            if (Option.isNone(executed)) {
+              if (mutationCommit.done) {
+                return yield* Effect.tryPromise(() =>
+                  proposeDelivery({
+                    db,
+                    userId,
+                    turnId,
+                    answer: committedAnswer(Option.none()),
+                    deliver,
+                    finish,
+                    scheduleRecovery,
+                  })
+                );
+              }
+              yield* finish({
+                _tag: "Failed",
+                reason:
+                  transactionNow() >= startedAtMs + maximumModelRoundMillis
+                    ? "HostedInferenceTimedOut"
+                    : "HostedInferenceFailed",
+              });
+              return unavailable();
+            }
+            const actions = executed.value;
+            if (mutationCommit.done) {
+              return yield* Effect.tryPromise(() =>
+                proposeDelivery({
+                  db,
+                  userId,
+                  turnId,
+                  answer: committedAnswer(Option.some(actions)),
+                  deliver,
+                  finish,
+                  scheduleRecovery,
+                })
+              );
+            }
+            if (transactionNow() >= startedAtMs + maximumModelRoundMillis) {
+              yield* finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" });
+              return unavailable();
+            }
+            const challenge = actions.find((action) => action._tag === "Challenge");
+            if (challenge !== undefined) {
+              return yield* Effect.tryPromise(() =>
+                proposeDelivery({
+                  db,
+                  userId,
+                  turnId,
+                  answer: challenge.text,
+                  deliver,
+                  finish,
+                  scheduleRecovery,
+                })
+              );
+            }
+            const events = actions
+              .filter((action) => action._tag === "Result")
+              .map((action) => action.event);
+            const remainingPreparationMs = startedAtMs + maximumModelRoundMillis - transactionNow();
+            if (remainingPreparationMs <= 0) {
+              yield* finish({ _tag: "Failed", reason: "HostedInferenceTimedOut" });
               return unavailable();
             }
             const next = yield* Effect.tryPromise(() =>
-              Effect.runPromiseExit(generated.value.continuation.prepare(events), {
-                signal,
-              })
+              Effect.runPromiseExit(
+                generated.value.continuation
+                  .prepare(events)
+                  .pipe(Effect.timeout(`${remainingPreparationMs} millis`)),
+                { signal }
+              )
             );
             if (Exit.isFailure(next) && Cause.hasInterrupts(next.cause)) {
-              return (yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" })))
-                ? interrupted()
-                : unavailable();
+              return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
             }
             if (Exit.isFailure(next)) {
-              yield* Effect.tryPromise(() =>
-                finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
+              const timedOut = Option.exists(
+                Cause.findErrorOption(next.cause),
+                Cause.isTimeoutError
               );
+              yield* finish({
+                _tag: "Failed",
+                reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
+              });
               return unavailable();
             }
             return yield* executeRound(next.value, iteration + 1, nextCount);
           }
           const answer = approvedAnswer(generated.value);
           if (Option.isNone(answer)) {
-            yield* Effect.tryPromise(() =>
-              finish({ _tag: "Failed", reason: "HostedInferenceFailed" })
-            );
+            yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
             return unavailable();
           }
           return yield* Effect.tryPromise(() =>
@@ -572,16 +782,25 @@ const executeAdmittedTurn = ({
             })
           );
         });
-      const outcome = yield* Effect.exit(executeRound(prepared, 1, 0));
-      if (Exit.isSuccess(outcome)) return outcome.value;
       // A platform defect may still have committed a canonical query. Never publish a reply or
       // claim a successful Turn without its evidence; the durable alarm is the fallback if D1 fails.
-      const result = signal.aborted
-        ? yield* Effect.tryPromise(() => finish({ _tag: "Interrupted" }).catch(() => false))
-        : yield* Effect.tryPromise(() =>
-            finish({ _tag: "Failed", reason: "HostedInferenceFailed" }).catch(() => false)
-          );
-      return result && signal.aborted ? interrupted() : unavailable();
+      return yield* executeRound(prepared, 1, 0).pipe(
+        Effect.catchCause(() =>
+          Effect.gen(function* () {
+            if (mutation.started) return unavailable();
+            const result = yield* Effect.exit(
+              finish(
+                signal.aborted
+                  ? { _tag: "Interrupted" }
+                  : { _tag: "Failed", reason: "HostedInferenceFailed" }
+              )
+            );
+            return Exit.isSuccess(result) && result.value && signal.aborted
+              ? interrupted()
+              : unavailable();
+          })
+        )
+      );
     })
   );
 
@@ -589,64 +808,96 @@ type HostedToolEvent = Extract<
   Parameters<HostedTextResult["continuation"]["prepare"]>[0][number],
   { readonly _tag: "ToolResult" }
 >;
-
-/** Dispatch only installed catalog queries, retaining exact call and outcome for this Pending Turn. */
-const executeHostedTool = ({
-  db,
-  subject,
-  userId,
-  turnId,
-  call,
-  iteration,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionSubject;
-  userId: UserId;
-  turnId: TranscriptTurnId;
-  call: HostedTextResult["toolCalls"][number];
-  iteration: number;
-}>): Promise<Option.Option<HostedToolEvent>> =>
+/** Decode the owner's response into bounded evidence without elevating it to caller authority. */
+const hostedResponseOutcome = (response: Response): Promise<CanonicalToolOutcome> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const operation = hostedExecutableOperations.find(({ id }) => id === call.operation);
-      const evidence = Schema.decodeUnknownOption(CanonicalToolEvidence)(call.params);
-      const toolCallId = Schema.decodeOption(ToolCallId)(call.id);
-      if (operation === undefined || Option.isNone(evidence) || Option.isNone(toolCallId)) {
-        return Option.none();
+      const body = yield* Effect.tryPromise(() => response.json().catch(() => undefined));
+      const output = Schema.decodeUnknownOption(CanonicalToolEvidence)(body);
+      if (Option.isNone(output)) {
+        return { _tag: "ToolOutputRejected", failure: { code: "canonical_result_unavailable" } };
       }
-      const canonicalInput = Schema.decodeOption(operation.input)(evidence.value);
-      if (Option.isNone(canonicalInput)) return Option.none();
-      const identity = {
-        turnId,
-        occurredAt: DateTime.formatIso(DateTime.makeUnsafe(transactionNow())),
-        iteration,
-        toolCallId: toolCallId.value,
-        operation: operation.id,
-      };
-      const callEntry = yield* Schema.decodeEffect(CanonicalToolCallEntry)({
+      if (!response.ok) return { _tag: "CanonicalOperationFailed", failure: output.value };
+      return { _tag: "Succeeded", output: output.value };
+    })
+  );
+
+type HostedToolAction =
+  | Readonly<{ _tag: "Result"; event: HostedToolEvent; mutationSucceeded: boolean }>
+  | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
+/** A completed canonical write never licenses an unqualified success for other failed calls. */
+const committedAnswer = (
+  actions: Option.Option<ReadonlyArray<HostedToolAction>>
+): TranscriptText => {
+  if (Option.isNone(actions)) {
+    return TranscriptText.make(
+      "Una operación se completó; el estado de las demás no está confirmado."
+    );
+  }
+  const partial = actions.value.some(
+    (action) =>
+      action._tag === "Result" &&
+      action.event.outcome._tag !== "Succeeded" &&
+      action.event.outcome._tag !== "CommittedOutputUnavailable"
+  );
+  return TranscriptText.make(
+    partial ? "Una operación se completó; otras no pudieron completarse." : "Operación completada."
+  );
+};
+
+type ToolIdentity = Readonly<{
+  turnId: TranscriptTurnId;
+  occurredAt: string;
+  iteration: number;
+  toolCallId: ToolCallId;
+  operation: (typeof operationCatalog.operations)[number]["id"];
+}>;
+
+/** Persist one canonical call under the Pending Turn before executing its owner. */
+const recordHostedToolCall = ({
+  db,
+  userId,
+  identity,
+  input,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  identity: ToolIdentity;
+  input: CanonicalToolEvidence;
+}>): Promise<boolean> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entry = yield* Schema.decodeEffect(CanonicalToolCallEntry)({
         _tag: "CanonicalToolCallEntry",
         ...identity,
         id: TranscriptEntryId.make(newId()),
-        input: evidence.value,
+        input,
       });
-      const recorded = yield* Effect.tryPromise(() =>
-        appendHostedToolEntry({ db, userId, entry: callEntry })
-      );
-      if (!recorded) return Option.none();
-      const response = yield* Effect.tryPromise(() => executeProtectedCategories({ db, subject }));
-      const body = yield* Effect.tryPromise(() => response.json().catch(() => undefined));
-      const output = Schema.decodeUnknownOption(CanonicalToolEvidence)(body);
-      if (Option.isNone(output)) return Option.none();
-      const outcome = response.ok
-        ? { _tag: "Succeeded" as const, output: output.value }
-        : { _tag: "CanonicalOperationFailed" as const, failure: output.value };
+      return yield* appendHostedToolEntry({ db, userId, entry });
+    })
+  );
+
+/** Retain the terminal outcome linked to the exact call, before handing it back to inference. */
+const recordHostedToolOutcome = ({
+  db,
+  userId,
+  identity,
+  outcome,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  identity: ToolIdentity;
+  outcome: CanonicalToolOutcome;
+}>): Promise<Option.Option<HostedToolEvent>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
       const result = yield* Schema.decodeEffect(CanonicalToolResultEntry)({
         _tag: "CanonicalToolResultEntry",
         ...identity,
         id: TranscriptEntryId.make(newId()),
         outcome,
       });
-      return (yield* Effect.tryPromise(() => appendHostedToolEntry({ db, userId, entry: result })))
+      return (yield* appendHostedToolEntry({ db, userId, entry: result }))
         ? Option.some({
             _tag: "ToolResult",
             toolCallId: result.toolCallId,
@@ -654,6 +905,336 @@ const executeHostedTool = ({
             outcome: result.outcome,
           })
         : Option.none();
+    })
+  );
+
+const serverErrorStatusMinimum = 500;
+
+/** A missing response is not a failed mutation: the atomic fence is authoritative for a commit. */
+const fencedMutationOutcome = ({
+  db,
+  userId,
+  identity,
+  response,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  identity: ToolIdentity;
+  response: Response;
+}>): Promise<CanonicalToolOutcome> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const outcome = yield* Effect.tryPromise(() => hostedResponseOutcome(response));
+      if (outcome._tag === "Succeeded") return outcome;
+      const committed = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT 1 FROM hosted_mutation_commits WHERE user_id = ? AND turn_id = ? AND tool_call_id = ?"
+          )
+          .bind(userId, identity.turnId, identity.toolCallId)
+          .first()
+      );
+      if (committed !== null) return { _tag: "CommittedOutputUnavailable" };
+      // A server error can race a late canonical D1 commit. Keep the Turn Pending for its fence.
+      if (response.status >= serverErrorStatusMinimum) {
+        return yield* Effect.die(new Error("Uncertain canonical mutation"));
+      }
+      return outcome;
+    })
+  );
+
+/** Dispatch only installed catalog operations, retaining exact call and outcome for this Pending Turn. */
+const executeHostedTool = ({
+  db,
+  subject,
+  bucket,
+  executeMutation,
+  userId,
+  turnId,
+  call,
+  iteration,
+  signal,
+  mutation,
+  deadlineMs,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  bucket: Option.Option<R2Bucket>;
+  executeMutation: HostedTurnInput["executeMutation"];
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  call: HostedTextResult["toolCalls"][number];
+  iteration: number;
+  signal: AbortSignal;
+  mutation: { started: boolean };
+  deadlineMs: number;
+}>): Promise<Option.Option<HostedToolAction>> => {
+  const isExpired = (): boolean => signal.aborted || transactionNow() >= deadlineMs;
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      if (isExpired()) return Option.none();
+      const operation = hostedExecutableOperations.find(({ id }) => id === call.operation);
+      const evidence = Schema.decodeUnknownOption(CanonicalToolEvidence)(call.params);
+      const toolCallId = Schema.decodeOption(ToolCallId)(call.id);
+      if (operation === undefined || Option.isNone(evidence) || Option.isNone(toolCallId)) {
+        return Option.none();
+      }
+      const identity = {
+        turnId,
+        occurredAt: DateTime.formatIso(DateTime.makeUnsafe(transactionNow())),
+        iteration,
+        toolCallId: toolCallId.value,
+        operation: operation.id,
+      };
+      const recorded = yield* Effect.tryPromise(() =>
+        recordHostedToolCall({ db, userId, identity, input: evidence.value })
+      );
+      if (!recorded) return Option.none();
+      const valid = Schema.decodeOption(operation.input)(evidence.value);
+      if (
+        Option.isNone(valid) ||
+        (operation.id === atomicBatchOperation && !hostedBatchAllowed(evidence.value))
+      ) {
+        const rejected = yield* Effect.tryPromise(() =>
+          recordHostedToolOutcome({
+            db,
+            userId,
+            identity,
+            outcome: {
+              _tag: "ToolInputRejected",
+              failure: { code: "validation_failed" },
+            },
+          })
+        );
+        return Option.map(rejected, (event): HostedToolAction => ({
+          _tag: "Result",
+          event,
+          mutationSucceeded: false,
+        }));
+      }
+      if (operation.policy.agentConfirmation === "required") {
+        const challenge = yield* issueHostedConfirmation({
+          db,
+          userId,
+          turnId,
+          operation,
+          input: evidence.value,
+          now: transactionNow(),
+        });
+        const rejected = yield* Effect.tryPromise(() =>
+          recordHostedToolOutcome({
+            db,
+            userId,
+            identity,
+            outcome: {
+              _tag: "ToolInputRejected",
+              failure: {
+                code: Option.isSome(challenge)
+                  ? "confirmation_required"
+                  : "confirmation_unavailable",
+              },
+            },
+          })
+        );
+        return Option.isSome(challenge) && Option.isSome(rejected)
+          ? Option.some({ _tag: "Challenge", text: challenge.value.text })
+          : Option.none();
+      }
+      let executed: Option.Option<Response>;
+      if (operation.policy.kind === "mutation") {
+        if (Option.isSome(executeMutation)) mutation.started = true;
+        executed = Option.isSome(executeMutation)
+          ? Option.some(
+              yield* Effect.tryPromise(() =>
+                executeMutation.value(operation.id, evidence.value, {
+                  turnId: identity.turnId,
+                  toolCallId: identity.toolCallId,
+                })
+              )
+            )
+          : Option.none();
+      } else {
+        executed = Option.getOrElse(
+          yield* executeHostedQuery({
+            db,
+            subject,
+            bucket,
+            operation,
+            input: evidence.value,
+          }).pipe(
+            Effect.timeoutOption(Duration.millis(Math.max(0, deadlineMs - transactionNow())))
+          ),
+          Option.none
+        );
+      }
+      // The canonical owner may finish after our deadline; retain the attempted call's
+      // unavailable outcome without claiming that its late Audit or result was delivered.
+      if (operation.policy.kind === "query" && isExpired()) executed = Option.none();
+      const outcome = Option.isSome(executed)
+        ? yield* Effect.tryPromise(() =>
+            operation.policy.kind === "mutation"
+              ? fencedMutationOutcome({ db, userId, identity, response: executed.value })
+              : hostedResponseOutcome(executed.value)
+          )
+        : {
+            _tag: "ToolOutputRejected" as const,
+            failure: { code: "canonical_result_unavailable" },
+          };
+      const event = yield* Effect.tryPromise(() =>
+        recordHostedToolOutcome({ db, userId, identity, outcome })
+      );
+      if (
+        operation.policy.kind === "mutation" &&
+        outcome._tag !== "Succeeded" &&
+        outcome._tag !== "CommittedOutputUnavailable" &&
+        Option.isSome(event)
+      ) {
+        mutation.started = false;
+      }
+      return Option.map(event, (value): HostedToolAction => ({
+        _tag: "Result",
+        event: value,
+        mutationSucceeded:
+          operation.policy.kind === "mutation" &&
+          (outcome._tag === "Succeeded" || outcome._tag === "CommittedOutputUnavailable"),
+      }));
+    })
+  );
+};
+
+/** Redeem one User-authored exact command without giving the model authority to confirm it. */
+const executeConfirmedHostedTurn = ({
+  db,
+  subject,
+  userId,
+  turnId,
+  startedAtMs,
+  challenge,
+  executeMutation,
+  signal,
+  deliver,
+  scheduleRecovery,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  startedAtMs: number;
+  challenge: ConfirmationRow;
+  executeMutation: HostedMutationExecutor;
+  signal: AbortSignal;
+  deliver: HostedDelivery;
+  scheduleRecovery: HostedTurnInput["scheduleRecovery"];
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const finish = (result: HostedTurnOutcome): ReturnType<typeof finishHostedTurn> =>
+        finishHostedTurn({
+          db,
+          userId,
+          turnId,
+          startedAtMs,
+          result,
+          subject,
+          now: transactionNow(),
+        });
+      const mutation = { started: false };
+      const expired = (): boolean =>
+        signal.aborted || transactionNow() >= startedAtMs + maximumModelRoundMillis;
+      return yield* Effect.gen(function* () {
+        if (expired()) {
+          yield* finish({ _tag: "Interrupted" });
+          return unavailable();
+        }
+        const approved = yield* consumeHostedConfirmation({
+          db,
+          subject,
+          turnId,
+          challenge,
+          now: transactionNow(),
+        });
+        if (Option.isNone(approved)) {
+          yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+          return unauthenticated();
+        }
+        const operation = hostedExecutableOperations.find(
+          ({ id }) => id === approved.value.operation
+        );
+        if (
+          operation?.policy.kind !== "mutation" ||
+          operation.policy.agentConfirmation !== "required" ||
+          Option.isNone(Schema.decodeOption(operation.input)(approved.value.input)) ||
+          (operation.id === atomicBatchOperation && !hostedBatchAllowed(approved.value.input))
+        ) {
+          yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+          return unavailable();
+        }
+        const identity = {
+          turnId,
+          occurredAt: DateTime.formatIso(DateTime.makeUnsafe(transactionNow())),
+          iteration: 1,
+          toolCallId: ToolCallId.make(newId()),
+          operation: operation.id,
+        };
+        const saved = yield* Effect.tryPromise(() =>
+          recordHostedToolCall({ db, userId, identity, input: approved.value.input })
+        );
+        if (!saved) {
+          yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
+          return unavailable();
+        }
+        if (expired()) {
+          yield* finish({ _tag: "Interrupted" });
+          return unavailable();
+        }
+        mutation.started = true;
+        const response = yield* Effect.tryPromise(() =>
+          executeMutation(operation.id, approved.value.input, {
+            turnId: identity.turnId,
+            toolCallId: identity.toolCallId,
+          })
+        );
+        // A canonical commit can finish after the model-round deadline. Preserve its exact
+        // outcome; recovery must not mistake the elapsed deadline for a failed mutation.
+        const outcome = yield* Effect.tryPromise(() =>
+          fencedMutationOutcome({ db, userId, identity, response })
+        );
+        const result = yield* Effect.tryPromise(() =>
+          recordHostedToolOutcome({ db, userId, identity, outcome })
+        );
+        if (Option.isNone(result)) return unavailable();
+        return yield* Effect.tryPromise(() =>
+          proposeDelivery({
+            db,
+            userId,
+            turnId,
+            answer: TranscriptText.make(
+              outcome._tag === "Succeeded" || outcome._tag === "CommittedOutputUnavailable"
+                ? "Operación confirmada."
+                : "No se pudo completar la operación."
+            ),
+            deliver,
+            finish,
+            scheduleRecovery,
+          })
+        );
+      }).pipe(
+        Effect.catchCause(() =>
+          Effect.gen(function* () {
+            if (!mutation.started) {
+              yield* Effect.exit(
+                finish(
+                  signal.aborted
+                    ? { _tag: "Interrupted" }
+                    : { _tag: "Failed", reason: "HostedInferenceFailed" }
+                )
+              );
+            }
+            // Once the owner begins, its fence and durable recovery decide an uncertain commit.
+            return unavailable();
+          })
+        )
+      );
     })
   );
 
@@ -676,23 +1257,21 @@ const proposeDelivery = ({
   turnId: TranscriptTurnId;
   answer: TranscriptText;
   deliver: HostedDelivery;
-  finish: (outcome: HostedTurnOutcome) => Promise<boolean>;
+  finish: (outcome: HostedTurnOutcome) => ReturnType<typeof finishHostedTurn>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const receipt = yield* Effect.tryPromise(() =>
-        stageHostedDelivery({ db, userId, turnId, text: answer })
-      );
+      const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: answer });
       yield* Effect.tryPromise(() =>
         scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
       );
-      const delivered = yield* Effect.exit(
-        Effect.tryPromise(() => deliver({ text: answer, turnId, receipt }))
-      );
-      if (Exit.isSuccess(delivered) && delivered.value.ok) return delivered.value;
       // The channel rejected the proposed reply. Nothing became visible.
-      yield* Effect.tryPromise(() => finish({ _tag: "Failed", reason: "DeliveryFailed" }));
+      const delivered = yield* Effect.tryPromise(() =>
+        deliver({ text: answer, turnId, receipt })
+      ).pipe(Effect.option);
+      if (Option.isSome(delivered) && delivered.value.ok) return delivered.value;
+      yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
       return unavailable();
     })
   );
@@ -711,9 +1290,7 @@ export const acknowledgeBrowserTurn = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const acknowledged = yield* Effect.tryPromise(() =>
-        acknowledgeHostedDelivery({ db, subject, turnId, receipt })
-      );
+      const acknowledged = yield* acknowledgeHostedDelivery({ db, subject, turnId, receipt });
       return Option.isSome(acknowledged)
         ? Response.json({ status: "completed" }, { status: 200, headers: noStore })
         : unauthenticated();
@@ -731,6 +1308,55 @@ export const HostedTurnAdmission = Schema.Struct({
 });
 /** The browser sends this receipt only after it has visibly rendered the exact reply. */
 export const hostedDeliveryReceipt = HostedTurnReceipt;
+/** A progress poll never admits or executes a second Turn. */
+export const HostedProgressAdmission = Schema.Struct({
+  userId: UserId,
+  sessionId: Schema.String.check(Schema.isUUID()),
+  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
+  ...HostedTurnProgressRequest.fields,
+});
+
+/** Read the outcome of one pending Turn under the same live WebSession authority. */
+export const readHostedProgress = ({
+  db,
+  subject,
+  turnId,
+  scheduleRecovery,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  turnId: TranscriptTurnId;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const now = transactionNow();
+      const snapshot = yield* readHostedSnapshot({ db, subject, now });
+      if (Option.isNone(snapshot)) return unauthenticated();
+      const pending = snapshot.value.pending;
+      if (Option.isNone(pending) || pending.value.id !== turnId) return interrupted();
+      const due =
+        pending.value.proposed_at_ms === null
+          ? pending.value.started_at_ms + pendingExecutionRecoveryMs
+          : pending.value.proposed_at_ms + deliveryAcknowledgmentWindowMs;
+      if (now >= due) {
+        yield* recoverHostedTurn({
+          db,
+          userId: UserId.make(subject.userId),
+          turn: pending.value,
+          now,
+        });
+        return interrupted();
+      }
+      if (pending.value.proposed_at_ms === null) {
+        return Response.json({ status: "processing", turnId }, { status: 202, headers: noStore });
+      }
+      const refreshed = yield* refreshHostedDelivery({ db, subject, turnId });
+      if (Option.isNone(refreshed)) return unavailable();
+      yield* Effect.tryPromise(() => scheduleRecovery(due));
+      return yield* Effect.tryPromise(() => browserHostedDelivery({ ...refreshed.value, turnId }));
+    })
+  );
 /** Receipt forwarded by Core with a fresh WebSession proof, never from public input. */
 export const HostedDeliveryAdmission = Schema.Struct({
   userId: UserId,

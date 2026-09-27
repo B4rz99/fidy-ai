@@ -146,11 +146,13 @@ import {
 } from "./ingestion/statement-delivery";
 import {
   HostedDeliveryAdmission,
+  HostedProgressAdmission,
   HostedTurnAdmission,
   hostedDeliveryReceipt,
   hostedTurnInput,
 } from "./agent/hosted-turn";
 import { UserId } from "@fidy/server/agent-runtime";
+import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
 import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
@@ -1248,6 +1250,41 @@ const hostedTurnResponse = (
     );
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedTurn"));
 
+const hostedProgressResponse = (
+  request: Request,
+  environment: CoreEnvironment
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (request.method !== "POST") return methodNotAllowed();
+    const subject = yield* Effect.tryPromise(() =>
+      transactionSession({ request, db: environment.DB })
+    );
+    if (Option.isNone(subject)) return unauthenticatedTransaction();
+    const input = yield* Effect.tryPromise(() =>
+      boundedJsonBody({ request, policy: hostedReceiptPolicy, schema: HostedTurnProgressRequest })
+    );
+    if (Option.isNone(input)) {
+      return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
+    }
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedProgressAdmission))({
+      userId: UserId.make(subject.value.userId),
+      sessionId: subject.value.id,
+      digest: Array.from(subject.value.digest),
+      ...input.value,
+    });
+    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
+    return yield* Effect.tryPromise(() =>
+      stub.fetch(
+        new Request("https://coordinator.internal/hosted-turn/progress", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          signal: request.signal,
+        })
+      )
+    );
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedProgress"));
+
 const hostedReceiptResponse = (
   request: Request,
   environment: CoreEnvironment
@@ -1299,6 +1336,9 @@ const directPathResponse = (
   }
   if (path === "/web/hosted-turns/delivery") {
     return Option.some(hostedReceiptResponse(request, environment));
+  }
+  if (path === "/web/hosted-turns/progress") {
+    return Option.some(hostedProgressResponse(request, environment));
   }
   return Option.none();
 };

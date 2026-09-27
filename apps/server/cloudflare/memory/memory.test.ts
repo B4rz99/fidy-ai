@@ -7,6 +7,7 @@ import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/mem
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -128,6 +129,7 @@ const setup = (): Promise<D1Database> =>
           "0018_batch_envelope_audit",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          ...hostedTurnTestMigrations,
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()

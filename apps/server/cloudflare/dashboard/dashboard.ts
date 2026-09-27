@@ -135,5 +135,6 @@ export const browseDashboard = ({
       present: (value) =>
         value._tag === "Owner" ? presentDashboard(value) : Effect.succeed(transactionUnavailable()),
       retryStatement: Option.none(),
+      hostedFence: Option.none(),
     });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));

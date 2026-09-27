@@ -680,6 +680,64 @@ describe("hosted Agent reply delivery", () => {
     ));
 });
 
+const progressTestClient = (progress: {
+  paths: Array<string>;
+  polls: number;
+}): HttpClient.HttpClient =>
+  makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    progress.paths.push(path);
+    if (path.endsWith("/progress")) progress.polls += 1;
+    const body =
+      path.endsWith("/progress") && progress.polls > 1
+        ? {
+            text: "Respuesta recuperada",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "b".repeat(hostedReceiptLength),
+          }
+        : { status: "processing", turnId: "10000000-0000-4000-8000-000000000097" };
+    return Effect.succeed(responseJson(request, body, proposedStatus));
+  });
+
+const waitForProgressPoll = (progress: { polls: number }): Promise<void> =>
+  waitFor(() => {
+    expect(progress.polls).toBe(1);
+  });
+
+describe("hosted Agent progress", () => {
+  afterEach(resetApplicationTest);
+
+  it("polls a processing Turn until its reply is visible without acknowledging it", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const progress: { paths: Array<string>; polls: number } = { paths: [], polls: 0 };
+        const channel = makeHostedTurnClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, progressTestClient(progress)),
+        });
+        const route = renderHostedRoute(channel);
+        yield* fromPromise(route);
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+          target: { value: "Consulta" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Consultar estado" }))
+        );
+        yield* fromPromise(waitForProgressPoll(progress));
+        fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
+        expect(yield* fromPromise(screen.findByText("Respuesta recuperada"))).toBeVisible();
+        expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeVisible();
+        expect(progress.paths).toEqual([
+          "/web/hosted-turns",
+          "/web/hosted-turns/progress",
+          "/web/hosted-turns/progress",
+        ]);
+        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+      })
+    ));
+});
+
 describe("rejected hosted Agent receipt", () => {
   afterEach(resetApplicationTest);
 

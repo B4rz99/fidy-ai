@@ -30,6 +30,7 @@ import {
 } from "../transactions/transaction-boundary";
 import {
   type CanonicalMutationUnitExecution,
+  type HostedCommitFence,
   committedMutationPayload,
   executeCanonicalMutationUnit,
 } from "./canonical-mutation-unit";
@@ -705,19 +706,26 @@ const executionResponse = ({
  * all children commit in one D1 unit under one User coordination turn or none do. Unsupported
  * children fail closed before the unit is attempted.
  */
-export const executeCanonicalBatch = ({
-  db,
-  subject,
-  calls,
-  current,
-  bucket,
-}: Readonly<{
+type BatchWork = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
-}>): Effect.Effect<Response, never, HostedInference> =>
+}>;
+
+const executeBatch = ({
+  db,
+  subject,
+  calls,
+  current,
+  bucket,
+  hostedFence,
+}: BatchWork & Readonly<{ hostedFence: Option.Option<HostedCommitFence> }>): Effect.Effect<
+  Response,
+  never,
+  HostedInference
+> =>
   Effect.gen(function* () {
     const invalidShape = batchShapeRefusal(calls);
     if (Option.isSome(invalidShape)) return invalidShape.value;
@@ -728,6 +736,7 @@ export const executeCanonicalBatch = ({
       subject,
       current,
       mutations: batch.children.map((child) => child.mutation),
+      hostedFence,
     });
     if (execution._tag === "Aborted") {
       const statement = batch.children.find(
@@ -747,6 +756,7 @@ export const executeCanonicalBatch = ({
           subject,
           current,
           mutations: replay.children.map((child) => child.mutation),
+          hostedFence,
         });
         return yield* executionResponse({
           db,
@@ -758,3 +768,13 @@ export const executeCanonicalBatch = ({
     }
     return yield* executionResponse({ db, subject, children: batch.children, execution });
   });
+
+export const executeCanonicalBatch = (
+  input: BatchWork
+): Effect.Effect<Response, never, HostedInference> =>
+  executeBatch({ ...input, hostedFence: Option.none() });
+
+export const executeHostedCanonicalBatch = (
+  input: BatchWork & Readonly<{ hostedFence: HostedCommitFence }>
+): Effect.Effect<Response, never, HostedInference> =>
+  executeBatch({ ...input, hostedFence: Option.some(input.hostedFence) });

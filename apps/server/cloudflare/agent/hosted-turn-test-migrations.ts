@@ -1,0 +1,6 @@
+/** Hosted Turn schema additions shared by D1 fixtures whose owners depend on these tables. */
+export const hostedTurnTestMigrations = [
+  "0021_hosted_confirmation",
+  "0022_hosted_mutation_fence",
+  "0023_hosted_delivery_refresh",
+] as const;

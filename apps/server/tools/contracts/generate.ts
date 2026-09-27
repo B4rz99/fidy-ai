@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { type Cause, Effect, type SchemaAST } from "effect";
+import { type Cause, Effect, Option, type SchemaAST, type SchemaRepresentation } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { PATPairingApi } from "~/pat-pairing-api";
@@ -40,32 +40,48 @@ const contractReferencePolicy = ({
   occurrences,
 }: {
   readonly ast: SchemaAST.AST;
-  readonly identifier: string | undefined;
+  readonly identifier: Option.Option<string>;
   readonly occurrences: number;
-}): string | undefined => {
-  if (identifier !== undefined) return identifier;
-  if (occurrences <= 1) return undefined;
-  if (hasShareableStructure(ast)) return `${ast._tag}_`;
+}): Option.Option<string> => {
+  if (Option.isSome(identifier)) return identifier;
+  if (occurrences <= 1) return Option.none();
+  if (hasShareableStructure(ast)) return Option.some(`${ast._tag}_`);
 
   if (ast._tag === "Union") {
-    return isWorthReferencing(ast.types.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+    return isWorthReferencing(ast.types.length + 1, occurrences)
+      ? Option.some(`${ast._tag}_`)
+      : Option.none();
   }
   if (ast._tag === "Enum") {
-    return isWorthReferencing(ast.enums.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+    return isWorthReferencing(ast.enums.length + 1, occurrences)
+      ? Option.some(`${ast._tag}_`)
+      : Option.none();
   }
   if (ast._tag === "TemplateLiteral") {
-    return isWorthReferencing(ast.parts.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+    return isWorthReferencing(ast.parts.length + 1, occurrences)
+      ? Option.some(`${ast._tag}_`)
+      : Option.none();
   }
   if (ast._tag === "Literal" && typeof ast.literal === "string") {
     return isWorthReferencing(ast.literal.length / literalReferenceCostScale + 1, occurrences)
-      ? `${ast._tag}_`
-      : undefined;
+      ? Option.some(`${ast._tag}_`)
+      : Option.none();
   }
-  return undefined;
+  return Option.none();
 };
 
+// SchemaRepresentation's foreign policy uses undefined for inline candidates, not JSON null.
+const openApiReferencePolicy = ({
+  ast,
+  identifier,
+  occurrences,
+}: SchemaRepresentation.ReferencePolicyInput): ReturnType<SchemaRepresentation.ReferencePolicy> =>
+  Option.getOrUndefined(
+    contractReferencePolicy({ ast, identifier: Option.fromUndefinedOr(identifier), occurrences })
+  );
+
 export const makeContractArtifacts = (): ContractArtifacts => ({
-  openapi: asJsonObject(OpenApi.fromApi(FidyApi, { referencePolicy: contractReferencePolicy })),
+  openapi: asJsonObject(OpenApi.fromApi(FidyApi, { referencePolicy: openApiReferencePolicy })),
   operationPolicy: {
     operations: operationCatalog.operations
       .map(({ id, policy }) => ({
@@ -94,7 +110,7 @@ const artifactFiles = (artifacts: ContractArtifacts): ReadonlyArray<ContractArti
   {
     name: "pat-pairing-openapi.json",
     contents: artifactText(
-      asJsonObject(OpenApi.fromApi(PATPairingApi, { referencePolicy: contractReferencePolicy }))
+      asJsonObject(OpenApi.fromApi(PATPairingApi, { referencePolicy: openApiReferencePolicy }))
     ),
   },
   { name: "operation-policy.json", contents: artifactText(artifacts.operationPolicy) },

@@ -296,12 +296,17 @@ const readBody = <A, E>(
   });
 };
 
-const prepare = (
-  request: Request,
-  session: typeof Session.Type,
-  environment: ConfiguredEnrollmentEnvironment,
-  now: number
-): Promise<Response> =>
+const prepare = ({
+  request,
+  session,
+  environment,
+  now,
+}: Readonly<{
+  request: Request;
+  session: typeof Session.Type;
+  environment: ConfiguredEnrollmentEnvironment;
+  now: number;
+}>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const body = yield* waitFor(() => readBody(request, PrepareCardEnrollmentPayload));
@@ -493,16 +498,25 @@ class EnrollmentBoundaryFailure extends Data.TaggedError("EnrollmentBoundaryFail
 const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, EnrollmentBoundaryFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => new EnrollmentBoundaryFailure({ cause }) });
 
-const finish = (
-  environment: ConfiguredEnrollmentEnvironment,
-  userId: string,
-  row: typeof EnrollmentRow.Type,
-  requestId: string,
-  session: typeof Session.Type,
-  sourceId: string,
-  now: number,
-  wompiSourceId?: number
-): Promise<Response> =>
+const finish = ({
+  environment,
+  userId,
+  row,
+  requestId,
+  session,
+  sourceId,
+  now,
+  wompiSourceId,
+}: Readonly<{
+  environment: ConfiguredEnrollmentEnvironment;
+  userId: string;
+  row: typeof EnrollmentRow.Type;
+  requestId: string;
+  session: typeof Session.Type;
+  sourceId: string;
+  now: number;
+  wompiSourceId: Option.Option<number>;
+}>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const selected = yield* waitFor(() => price(environment.DB, row.price_id));
@@ -515,7 +529,7 @@ const finish = (
       );
       const reference = `fidy-${attemptId}`;
       const statements = [
-        ...(wompiSourceId === undefined
+        ...(Option.isNone(wompiSourceId)
           ? []
           : [
               environment.DB.prepare(`INSERT INTO card_payment_sources
@@ -524,7 +538,7 @@ const finish = (
                 sourceId,
                 userId,
                 row.id,
-                wompiSourceId,
+                wompiSourceId.value,
                 row.billing_email,
                 now
               ),
@@ -567,12 +581,17 @@ const finish = (
     })
   );
 
-const resolveCandidate = (
-  environment: ConfiguredEnrollmentEnvironment,
-  session: typeof Session.Type,
-  row: typeof EnrollmentRow.Type,
-  now: number
-): Promise<Response> =>
+const resolveCandidate = ({
+  environment,
+  session,
+  row,
+  now,
+}: Readonly<{
+  environment: ConfiguredEnrollmentEnvironment;
+  session: typeof Session.Type;
+  row: typeof EnrollmentRow.Type;
+  now: number;
+}>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const candidate = row.wompi_candidate_source_id;
@@ -616,26 +635,31 @@ const resolveCandidate = (
       }
       const requestId = row.payment_request_id;
       return yield* waitFor(() =>
-        finish(
+        finish({
           environment,
-          session.user_id,
+          userId: session.user_id,
           row,
           requestId,
           session,
-          CardPaymentSourceId.make(id()),
+          sourceId: CardPaymentSourceId.make(id()),
           now,
-          candidate
-        )
+          wompiSourceId: Option.some(candidate),
+        })
       );
     })
   );
 
-const submit = (
-  request: Request,
-  session: typeof Session.Type,
-  environment: ConfiguredEnrollmentEnvironment,
-  now: number
-): Promise<Response> =>
+const submit = ({
+  request,
+  session,
+  environment,
+  now,
+}: Readonly<{
+  request: Request;
+  session: typeof Session.Type;
+  environment: ConfiguredEnrollmentEnvironment;
+  now: number;
+}>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const body = yield* waitFor(() => readBody(request, SubmitCardEnrollmentPayload));
@@ -691,7 +715,9 @@ const submit = (
       }
       if (row.value.status === "verifying") {
         const verifying = row.value;
-        return yield* waitFor(() => resolveCandidate(environment, session, verifying, now));
+        return yield* waitFor(() =>
+          resolveCandidate({ environment, session, row: verifying, now })
+        );
       }
       if (row.value.status === "expired" || row.value.expires_at_ms <= now) {
         return json({ status: "refused", enrollmentId: row.value.id, reason: "expired" });
@@ -739,15 +765,16 @@ const submit = (
         );
         if (Option.isNone(source)) return unavailable();
         return yield* waitFor(() =>
-          finish(
+          finish({
             environment,
-            session.user_id,
-            retained,
-            input.paymentRequestId,
+            userId: session.user_id,
+            row: retained,
+            requestId: input.paymentRequestId,
             session,
-            source.value.id,
-            now
-          )
+            sourceId: source.value.id,
+            now,
+            wompiSourceId: Option.none(),
+          })
         );
       }
       const wompi = yield* waitFor(() => makeWompi(environment));
@@ -822,7 +849,7 @@ const submit = (
         enrollment(environment.DB, session.user_id, row.value.id)
       );
       return Option.isSome(pending)
-        ? yield* waitFor(() => resolveCandidate(environment, session, pending.value, now))
+        ? yield* waitFor(() => resolveCandidate({ environment, session, row: pending.value, now }))
         : unavailable();
     })
   );
@@ -859,10 +886,14 @@ export const handleCardEnrollment = ({
       if (Option.isNone(session)) return invalid(unauthorizedStatus);
       const path = new URL(request.url).pathname;
       if (path === "/web/subscription/card-enrollments/prepare" && request.method === "POST") {
-        return yield* waitFor(() => prepare(request, session.value, configured, now));
+        return yield* waitFor(() =>
+          prepare({ request, session: session.value, environment: configured, now })
+        );
       }
       if (path === "/web/subscription/card-enrollments/submit" && request.method === "POST") {
-        return yield* waitFor(() => submit(request, session.value, configured, now));
+        return yield* waitFor(() =>
+          submit({ request, session: session.value, environment: configured, now })
+        );
       }
       const match = uuidPath.exec(path);
       if (match !== null && request.method === "GET") {

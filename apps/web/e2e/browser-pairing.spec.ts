@@ -6,7 +6,10 @@ const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5_000;
 const successStatus = 200;
 const pendingStatus = 202;
+const noContentStatus = 204;
 const invalidStatus = 400;
+const unauthorizedStatus = 401;
+const notFoundStatus = 404;
 const rateLimitedStatus = 429;
 const pairingId = "24000000-0000-4000-8000-000000000240";
 const privateVerifier = "v".repeat(opaqueProofEncodedLength);
@@ -291,47 +294,98 @@ test("approves email login with the private browser verifier without exposing ma
   ).toEqual({ local: 0, session: 0 });
 });
 
-test("a SupportRecoveryCase approves only the existing browser-private pairing", async ({
+const visiblePairingCode = async (page: Page): Promise<string> => {
+  const locator = page.locator('[aria-label^="Código de vinculación "]');
+  await expect(locator).toBeVisible();
+  const code = (await locator.getAttribute("aria-label"))?.replace("Código de vinculación ", "");
+  expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
+  return code ?? "";
+};
+
+test("redeems a real pairing approved out of band and obtains a real WebSession", async ({
+  context,
   page,
+  request,
 }) => {
-  let approvedBySupport = false;
-  await installStartAndLogoutRoutes(page, {
-    startCount: 0,
-    redeemCount: 0,
-    activeRedeems: 0,
-    maximumActiveRedeems: 0,
-    logoutCount: 0,
-    redeemTimes: [],
+  await page.goto("/auth/pair");
+  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
+  const code = await visiblePairingCode(page);
+  const approval = await request.post(`http://127.0.0.1:4175/approve?code=${code}`);
+  expect(approval.status()).toBe(noContentStatus);
+  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
+  await expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible();
+  const session = (await context.cookies()).find((cookie) => cookie.name === "__Host-fidy_session");
+  expect(session?.httpOnly).toBe(true);
+  expect(session?.secure).toBe(true);
+  const current = await page.request.get("https://127.0.0.1:4174/user", {
+    headers: { origin: "https://127.0.0.1:4173" },
   });
-  await page.route("**/web/pairings/redeem", (route) => {
-    expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
-    return route.fulfill({
-      contentType: "application/json",
-      status: approvedBySupport ? successStatus : pendingStatus,
-      headers: approvedBySupport
-        ? {
-            "set-cookie":
-              "__Host-fidy_session=support-session; Secure; HttpOnly; SameSite=Strict; Path=/",
-          }
-        : {},
-      body: JSON.stringify(
-        approvedBySupport
-          ? { status: "authenticated" }
-          : { status: "pending_approval", expiresAt, pollingIntervalSeconds: 5 }
-      ),
-    });
+  expect(current.status()).toBe(successStatus);
+  expect(await current.json()).toMatchObject({
+    data: { id: "24000000-0000-4000-8000-000000000241" },
   });
+  const otherTransaction = await request.get(
+    "https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262",
+    { headers: { origin: "https://127.0.0.1:4173", cookie: `${session?.name}=${session?.value}` } }
+  );
+  expect(otherTransaction.status()).toBe(notFoundStatus);
+  expect(await otherTransaction.text()).not.toContain("OTHER-USER-PRIVATE");
+  await page.getByLabel("Monto en COP").fill("12500");
+  await page.getByLabel("Contraparte (opcional)").fill("La Cocina");
+  await page.getByRole("button", { name: "Registrar transacción" }).click();
+  await expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina");
+  await page.goto("/app/dashboard");
+  await expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible();
+  await page.getByRole("button", { name: "Personalizar" }).click();
+  await page
+    .getByRole("button", { name: /^Renombrar /u })
+    .first()
+    .click();
+  await page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles");
+  await page.getByRole("button", { name: "Guardar nombre del Widget" }).click();
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Gastos visibles").first()).toBeVisible();
+  await page.goto("/upgrade");
+  await expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible();
+  await page.goto("/app/transactions");
+  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
+  await expect
+    .poll(async () =>
+      (await context.cookies()).some((cookie) => cookie.name === "__Host-fidy_session")
+    )
+    .toBe(false);
+  const revoked = await request.get("https://127.0.0.1:4174/user", {
+    headers: { origin: "https://127.0.0.1:4173", cookie: `${session?.name}=${session?.value}` },
+  });
+  expect(revoked.status()).toBe(unauthorizedStatus);
+});
+
+test("a SupportRecoveryCase approves the browser-private pairing through the real Core", async ({
+  page,
+  request,
+}) => {
+  await installCanonicalProductRoutes(page);
   const pending = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
+    (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
   );
   await page.goto("/auth/pair");
   await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
+  const code = await visiblePairingCode(page);
   await pending;
-  await expectVerifierIsBrowserEphemeral(page);
-  approvedBySupport = true;
+  const signed = await (await request.get("http://127.0.0.1:4175/assertion")).text();
+  const decision = (): ReturnType<typeof request.post> =>
+    request.post("https://127.0.0.1:4174/internal/support-recovery", {
+      headers: { "cf-access-jwt-assertion": signed },
+      data: { pairingCode: code, backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2" },
+    });
+  expect((await decision()).status()).toBe(successStatus);
+  expect((await decision()).status()).toBe(invalidStatus);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
-  expect(page.url()).not.toContain(privateVerifier);
+  expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
 
 test("honors server slowdown before showing the generic terminal refusal", async ({ page }) => {

@@ -110,10 +110,8 @@ const expectUnauthenticated = (request: APIRequestContext, path: string): Promis
     .get(`https://127.0.0.1:4174${path}`, { headers: { origin: "https://127.0.0.1:4173" } })
     .then((result) => {
       expect(result.status(), path).toBe(unauthorized);
-      return result.text();
-    })
-    .then((body) => {
-      expect(body, path).not.toContain("other-user-private-details");
+      expect(result.headers()["cache-control"], path).toBe("no-store");
+      expect(result.headers()["set-cookie"], path).toBeUndefined();
     });
 
 test("Core refuses unauthenticated financial routes and untrusted support decisions", async ({
@@ -132,7 +130,7 @@ test("Core refuses unauthenticated financial routes and untrusted support decisi
     headers,
     data: { pairingCode: "BCDF-GHJK", backupRecoveryCode: "invalid" },
   });
-  expect(support.status()).not.toBe(ok);
+  expect(support.status()).toBe(forbidden);
   expect(support.headers()["access-control-allow-origin"]).toBeUndefined();
 });
 

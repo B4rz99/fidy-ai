@@ -191,6 +191,7 @@
     "@effect/vitest": "4.0.0-rc.115",
     "@vitest/coverage-istanbul": "5.0.1",
     "bun-types": "1.4.2",
+    "esbuild": "0.28.1",
     "miniflare": "5.20260911.1-alpha",
     "rolldown": "1.2.9",
     "typescript": "7.0.2",

@@ -1,4 +1,7 @@
+import { Clock, Effect } from "effect";
 import { Miniflare } from "miniflare";
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
+import { newId } from "./pats/pat-shared";
 import type * as CoreWorkerModule from "./core-worker";
 
 const coreBundle = new URL("../node_modules/.cache/browser-acceptance-core.mjs", import.meta.url);
@@ -24,7 +27,7 @@ const isCoreWorkerModule = (candidate: unknown): candidate is typeof CoreWorkerM
   typeof candidate.makeCoreWorker === "function";
 const coreModule: unknown = await import(coreBundle.href);
 if (!isCoreWorkerModule(coreModule)) throw new Error("Core acceptance bundle has no Worker");
-const { makeCoreWorker } = coreModule;
+const { makeCoreWorker, UserTransactionCoordinator } = coreModule;
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry");
 const { browserOrigins } = await import("./runtime/topology");
@@ -60,6 +63,8 @@ const miniflare = new Miniflare({
 await miniflare.ready;
 const db = await miniflare.getD1Database("DB");
 const migrations = [
+  "0001_categories",
+  "0002_resource_admission",
   "0003_pending_consent",
   "0004_onboarding_email",
   "0005_verified_onboarding",
@@ -67,6 +72,27 @@ const migrations = [
   "0007_browser_pairing_email",
   "0008_support_recovery",
   "0009_email_replacement",
+  "0009_card_enrollment",
+  "0009_transactions",
+  "0010_pat_lifecycle",
+  "0011_transaction_corrections",
+  "0012_billing_collection",
+  "0012_statement_staging",
+  "0012_transaction_search",
+  "0013_category_keyword_rules",
+  "0013_transaction_reconciliation",
+  "0014_memory",
+  "0015_statement_submission",
+  "0016_budgets",
+  "0016_hosted_turn",
+  "0016_subscription_standing",
+  "0017_hosted_compaction",
+  "0017_forwarded_email",
+  "0017_statement_dispatch",
+  "0018_dashboard",
+  "0018_batch_envelope_audit",
+  "0019_canonical_child_guards",
+  "0020_dashboard_projection",
 ];
 const applyMigration = (name: string): Promise<void> =>
   Bun.file(new URL(`./migrations/${name}.sql`, import.meta.url))
@@ -75,7 +101,7 @@ const applyMigration = (name: string): Promise<void> =>
       sql
         .replace(/^--.*$/gmu, "")
         .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
         .reduce<Promise<void>>(
           (previous, statement) =>
             previous.then(() => db.prepare(statement).run()).then(() => undefined),
@@ -87,6 +113,208 @@ await migrations.reduce<Promise<void>>(
   Promise.resolve()
 );
 
+// This identity is confined to Miniflare. The separate loopback operator simulates a verified
+// WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.
+const fixtureUserId = "24000000-0000-4000-8000-000000000241";
+const otherUserId = "24000000-0000-4000-8000-000000000261";
+const otherTransactionId = "24000000-0000-4000-8000-000000000262";
+const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
+const accessIssuer = "https://acceptance.cloudflareaccess.com";
+const accessAudience = "browser-acceptance-support";
+const replacementCode = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+const replacementEmail = "nuevo@example.com";
+const now = Effect.runSync(Clock.currentTimeMillis);
+const trialDurationMs = 604_800_000;
+await db
+  .prepare(
+    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
+  )
+  .bind(fixtureUserId, "CO", "es-CO", "America/Bogota", now)
+  .run();
+await db
+  .prepare(
+    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
+  )
+  .bind(otherUserId, "CO", "es-CO", "America/Bogota", now)
+  .run();
+await db
+  .prepare(`INSERT INTO transactions
+  (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at)
+  VALUES (?,?,?,?,?,?,?,?,?)`)
+  .bind(
+    otherTransactionId,
+    otherUserId,
+    "100",
+    "COP",
+    "outflow",
+    "OTHER-USER-PRIVATE",
+    "10000000-0000-4000-8000-000000000001",
+    "2026-09-27T12:00:00.000Z",
+    "2026-09-27T12:00:00.000Z"
+  )
+  .run();
+await db
+  .prepare(
+    "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
+  )
+  .bind(fixtureUserId, "acceptance-portfolio", "CO.Acceptance", now)
+  .run();
+await db
+  .prepare(
+    "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
+  )
+  .bind(fixtureUserId, "usuario@example.com", now)
+  .run();
+await db
+  .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
+  .bind(fixtureUserId, now, now + trialDurationMs)
+  .run();
+await db
+  .prepare(`INSERT INTO onboarding_consent_records
+  (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+   decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
+  .bind(
+    "24000000-0000-4000-8000-000000000260",
+    fixtureUserId,
+    "{}",
+    "disclosure",
+    "decision",
+    now,
+    now
+  )
+  .run();
+
+const recoveryDigest = new Uint8Array(
+  await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))
+);
+await db
+  .prepare(
+    "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
+  )
+  .bind(fixtureUserId, recoveryDigest, now)
+  .run();
+
+const { publicKey, privateKey } = await generateKeyPair("RS256");
+const jwk = {
+  ...(await exportJWK(publicKey)),
+  kid: "acceptance-support",
+  alg: "RS256",
+  use: "sig",
+};
+globalThis.fetch = new Proxy(globalThis.fetch, {
+  apply: (target, thisArg, args): unknown => {
+    const requestUrl: unknown = args[0];
+    return String(requestUrl) === `${accessIssuer}/cdn-cgi/access/certs`
+      ? Promise.resolve(Response.json({ keys: [jwk] }))
+      : Reflect.apply(target, thisArg, args);
+  },
+});
+const assertionLifetimeSeconds = 300;
+const millisecondsPerSecond = 1_000;
+const assertion = (): Promise<string> => {
+  const issuedAt = Math.floor(Effect.runSync(Clock.currentTimeMillis) / millisecondsPerSecond);
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "RS256", kid: "acceptance-support" })
+    .setIssuer(accessIssuer)
+    .setAudience(accessAudience)
+    .setSubject("acceptance-operator")
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + assertionLifetimeSeconds)
+    .sign(privateKey);
+};
+const proofSecretOffset = 10;
+const publicCodeLength = 9;
+const proofLifetimeMs = 600_000;
+const noContent = 204;
+const conflict = 409;
+const deliverReplacementProof = (): Promise<Response> =>
+  crypto.subtle
+    .digest("SHA-256", new TextEncoder().encode(replacementCode.slice(proofSecretOffset)))
+    .then((digest) =>
+      db
+        .prepare(`UPDATE email_replacements SET state = 'awaiting_proof',
+      public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
+      WHERE user_id = ? AND candidate_email = ? AND state = 'awaiting_delivery'`)
+        .bind(
+          replacementCode.slice(0, publicCodeLength),
+          new Uint8Array(digest),
+          Effect.runSync(Clock.currentTimeMillis) + proofLifetimeMs,
+          fixtureUserId,
+          replacementEmail
+        )
+        .run()
+    )
+    .then(
+      (result) => new Response(null, { status: result.meta.changes === 1 ? noContent : conflict })
+    );
+
+const deliverEmailLoginProof = (code: string): Promise<Response> =>
+  crypto.subtle
+    .digest("SHA-256", new TextEncoder().encode(replacementCode.slice(proofSecretOffset)))
+    .then((digest) =>
+      db
+        .prepare(`UPDATE browser_pairing_email_proofs SET state = 'awaiting_proof',
+      public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
+      WHERE pairing_id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
+        AND state = 'awaiting_delivery'`)
+        .bind(
+          replacementCode.slice(0, publicCodeLength),
+          new Uint8Array(digest),
+          Effect.runSync(Clock.currentTimeMillis) + proofLifetimeMs,
+          code
+        )
+        .run()
+    )
+    .then(
+      (result) => new Response(null, { status: result.meta.changes === 1 ? noContent : conflict })
+    );
+
+const approveWhatsAppPairing = (code: string): Promise<Response> =>
+  db
+    .prepare(
+      "SELECT id FROM browser_login_pairings WHERE public_code = ? AND state = 'pending_approval'"
+    )
+    .bind(code)
+    .first<{ id: string }>()
+    .then((pairing) =>
+      pairing === null
+        ? new Response(null, { status: 404 })
+        : db
+            .prepare(
+              "INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id) VALUES (?,?,?,?)"
+            )
+            .bind("acceptance-portfolio", newId(), pairing.id, fixtureUserId)
+            .run()
+            .then(() => new Response(null, { status: noContent }))
+    );
+const operatorRoute = (request: Request, path: string, method: string): boolean =>
+  request.method === method && new URL(request.url).pathname === path;
+const operator = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 4175,
+  fetch: (request) => {
+    const url = new URL(request.url);
+    if (request.headers.has("origin")) return new Response(null, { status: 403 });
+    if (operatorRoute(request, "/assertion", "GET")) {
+      return assertion().then(
+        (signed) => new Response(signed, { headers: { "cache-control": "no-store" } })
+      );
+    }
+    if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
+      return deliverReplacementProof();
+    }
+    const code = url.searchParams.get("code");
+    if (code !== null && operatorRoute(request, "/email/login/deliver", "POST")) {
+      return deliverEmailLoginProof(code);
+    }
+    if (code !== null && operatorRoute(request, "/approve", "POST")) {
+      return approveWhatsAppPairing(code);
+    }
+    return new Response(null, { status: 403 });
+  },
+});
+process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
+
 const telemetry = makeWorkerTelemetry(() => undefined);
 const core = makeCoreWorker(telemetry);
 const worker = makePublicWorker(telemetry);
@@ -96,8 +324,11 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 4174,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
-  fetch: (request) =>
-    worker.fetch(request, {
+  fetch: (request) => {
+    // Cloudflare supplies this header at the edge; never accept a client-provided value.
+    const ingress = new Request(request);
+    ingress.headers.set("cf-connecting-ip", "127.0.0.1");
+    return worker.fetch(ingress, {
       RELEASE_GIT_SHA: "browser-acceptance",
       BROWSER_ORIGIN: browserOrigins.acceptance,
       LOCAL_CANONICAL_READ_BEARER: "",
@@ -116,18 +347,27 @@ const server = Bun.serve({
             WOMPI_PRIVATE_KEY: "",
             WOMPI_INTEGRITY_SECRET: "",
             USER_TRANSACTION_COORDINATOR: {
-              getByName: (): Pick<Fetcher, "fetch"> => ({
-                fetch: () => Promise.reject(new Error("unused")),
+              getByName: (name): Pick<Fetcher, "fetch"> => ({
+                fetch: (command) =>
+                  new UserTransactionCoordinator(
+                    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+                    {
+                      DB: db,
+                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                    }
+                  ).fetch(new Request(command)),
               }),
             },
             KAPSO_API_KEY: "",
             KAPSO_WEBHOOK_SECRET: "",
-            CLOUDFLARE_ACCESS_ISSUER: "",
-            CLOUDFLARE_ACCESS_AUDIENCE: "",
+            CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
+            CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
             WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
           }),
       },
-    }),
+    });
+  },
 });
 
 process.stdout.write(`Browser API ingress listening at ${server.url}\n`);

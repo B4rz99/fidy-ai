@@ -201,7 +201,8 @@
       "files": [
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
-        "apps/web/e2e/{browser-pairing,canonical-browser,financial-journeys,product-journeys,security-journeys,static-shell}.spec.ts",
+        "apps/web/e2e/{browser-pairing,canonical-browser,financial-journeys,product-journeys,real-core-journeys,security-journeys,static-shell}.spec.ts",
+        "apps/web/e2e/real-core-fixture.ts",
         "apps/web/{playwright,vite,vitest}.config.ts",
         "apps/web/src/testing/setup.ts"
       ],

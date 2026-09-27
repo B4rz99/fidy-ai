@@ -121,6 +121,8 @@ export type CanonicalToolCallEntry = typeof CanonicalToolCallEntry.Type;
 /** The mutually exclusive results a canonical tool invocation may retain. */
 export const CanonicalToolOutcome = Schema.Union([
   Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence }),
+  // A fenced mutation committed, but its canonical response was lost before retention.
+  Schema.TaggedStruct("CommittedOutputUnavailable", {}),
   Schema.TaggedStruct("ToolInputRejected", { failure: CanonicalToolEvidence }),
   Schema.TaggedStruct("ToolOutputRejected", { failure: CanonicalToolEvidence }),
   Schema.TaggedStruct("CanonicalOperationFailed", { failure: CanonicalToolEvidence }),

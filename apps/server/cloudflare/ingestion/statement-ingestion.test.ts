@@ -18,6 +18,7 @@ import {
   seedTransaction,
 } from "./statement-batch.test-fixture";
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
+import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { statementConflictMessage } from "./statement-staging";
 import { applyStatementTestMigration as applyMigration } from "./statement-migrations.test-fixture";
@@ -86,6 +87,7 @@ const migrationNames = [
   "0018_forwarded_email_processing",
   "0019_canonical_child_guards",
   "0020_dashboard_projection",
+  ...hostedTurnTestMigrations,
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>

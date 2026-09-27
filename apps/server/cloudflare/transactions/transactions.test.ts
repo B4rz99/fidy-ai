@@ -18,6 +18,7 @@ import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categor
 import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import { hostedDeliveryReceipt } from "../agent/hosted-turn";
+import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
 import { pendingExecutionRecoveryMs } from "../agent/turn-store";
 import { newId } from "../pats/pat-shared";
@@ -198,6 +199,7 @@ const setup = (platform = false): Promise<D1Database> =>
           "0018_batch_envelope_audit",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          ...hostedTurnTestMigrations,
         ].reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()

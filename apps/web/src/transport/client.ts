@@ -3,6 +3,8 @@ import {
   type FidyApiGroups,
   HostedTurnApi,
   type HostedTurnApiGroups,
+  HostedTurnProcessing,
+  HostedTurnProgressRequest,
   HostedTurnProposal,
   HostedTurnReceipt,
   HostedTurnRequest,
@@ -107,7 +109,13 @@ const observeAuthenticationExpiration =
         : Effect.void
     );
 
-export { HostedTurnRequest, HostedTurnReceipt, HostedTurnProposal };
+export {
+  HostedTurnRequest,
+  HostedTurnReceipt,
+  HostedTurnProposal,
+  HostedTurnProcessing,
+  HostedTurnProgressRequest,
+};
 
 /** Dedicated browser-only reply-and-receipt channel; never a canonical tool operation. */
 export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<

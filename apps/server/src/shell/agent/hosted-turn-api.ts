@@ -8,11 +8,19 @@ export const HostedTurnReceipt = Schema.Struct({
   turnId: TranscriptTurnId,
   receipt: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
 });
+export const HostedTurnProcessing = Schema.Struct({
+  status: Schema.Literal("processing"),
+  turnId: TranscriptTurnId,
+}).annotate({ httpApiStatus: 202 });
+export const HostedTurnProgressRequest = Schema.Struct({ turnId: TranscriptTurnId });
 export const HostedTurnProposal = Schema.Struct({
   text: TranscriptText,
   turnId: TranscriptTurnId,
   receipt: HostedTurnReceipt.fields.receipt,
-}).annotate({ httpApiStatus: 202 });
+});
+const HostedTurnReply = Schema.Union([HostedTurnProposal, HostedTurnProcessing]).annotate({
+  httpApiStatus: 202,
+});
 export const HostedTurnCompleted = Schema.Struct({ status: Schema.Literal("completed") });
 const Unauthenticated = Schema.Struct({ status: Schema.Literal("unauthenticated") }).annotate({
   httpApiStatus: 401,
@@ -36,7 +44,7 @@ const HostedTurnGroup = HttpApiGroup.make("hostedTurn")
   .add(
     HttpApiEndpoint.post("propose", "/web/hosted-turns", {
       payload: HostedTurnRequest,
-      success: HostedTurnProposal,
+      success: HostedTurnReply,
       error: [
         Unauthenticated,
         ConsentRequired,
@@ -45,6 +53,13 @@ const HostedTurnGroup = HttpApiGroup.make("hostedTurn")
         AwaitingDelivery,
         CapacityExceeded,
       ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("progress", "/web/hosted-turns/progress", {
+      payload: HostedTurnProgressRequest,
+      success: HostedTurnReply,
+      error: [Unauthenticated, Unavailable, Invalid],
     })
   )
   .add(

@@ -21,9 +21,14 @@ type WindowTextEntry =
   | Pick<typeof UserTranscriptEntry.Encoded, "_tag" | "turnId" | "text">
   | Pick<typeof AssistantTranscriptEntry.Encoded, "_tag" | "turnId" | "text">;
 type SucceededOutcome = Extract<CanonicalToolOutcome, { readonly _tag: "Succeeded" }>;
-type FailedOutcome = Exclude<CanonicalToolOutcome, SucceededOutcome>;
+type CommittedOutcome = Extract<
+  CanonicalToolOutcome,
+  { readonly _tag: "CommittedOutputUnavailable" }
+>;
+type FailedOutcome = Exclude<CanonicalToolOutcome, SucceededOutcome | CommittedOutcome>;
 type WindowOutcome =
   | { readonly _tag: SucceededOutcome["_tag"]; readonly output: ReadonlyJson }
+  | { readonly _tag: CommittedOutcome["_tag"] }
   | { readonly _tag: FailedOutcome["_tag"]; readonly failure: ReadonlyJson };
 type WindowCallEntry = Pick<
   typeof CanonicalToolCallEntry.Encoded,
@@ -75,10 +80,14 @@ const entryCharacters = (entry: TranscriptWindowEntry): number => {
       return entry.text.length;
     case "CanonicalToolCallEntry":
       return JSON.stringify(entry.input).length;
-    case "CanonicalToolResultEntry":
-      return JSON.stringify(
-        entry.outcome._tag === "Succeeded" ? entry.outcome.output : entry.outcome.failure
-      ).length;
+    case "CanonicalToolResultEntry": {
+      const outcome = entry.outcome;
+      let evidence: ReadonlyJson;
+      if (outcome._tag === "Succeeded") evidence = outcome.output;
+      else if (outcome._tag === "CommittedOutputUnavailable") evidence = outcome;
+      else evidence = outcome.failure;
+      return JSON.stringify(evidence).length;
+    }
   }
 };
 

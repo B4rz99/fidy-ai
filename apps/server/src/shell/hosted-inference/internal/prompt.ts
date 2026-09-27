@@ -1,4 +1,4 @@
-import { DateTime, Option } from "effect";
+import { DateTime, Option, type Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { categoryRows } from "~/core/categories/taxonomy";
@@ -66,7 +66,12 @@ const exactTranscriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageE
 });
 
 const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEncoded => {
-  const failed = entry.outcome._tag !== "Succeeded";
+  const failed =
+    entry.outcome._tag !== "Succeeded" && entry.outcome._tag !== "CommittedOutputUnavailable";
+  let result: Schema.Json;
+  if (entry.outcome._tag === "Succeeded") result = entry.outcome.output;
+  else if (entry.outcome._tag === "CommittedOutputUnavailable") result = entry.outcome;
+  else result = entry.outcome.failure;
   return {
     role: "tool",
     content: [
@@ -74,7 +79,7 @@ const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.Mess
         type: "tool-result",
         id: entry.toolCallId,
         name: encodeHostedOperationWireName(CanonicalOperationId.make(entry.operation)),
-        result: failed ? entry.outcome.failure : entry.outcome.output,
+        result,
         isFailure: failed,
       },
     ],

@@ -1,5 +1,6 @@
 import { Effect, Exit, Option, Schema } from "effect";
 import { maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
+import type { ToolCallId, TranscriptTurnId } from "@fidy/server/agent-runtime";
 import {
   auditDayBindings,
   auditDayCountExpression,
@@ -490,6 +491,9 @@ const childStatements = ({
   ];
 };
 
+/** A Turn-scoped commit token, never supplied by an external canonical caller. */
+export type HostedCommitFence = Readonly<{ turnId: TranscriptTurnId; toolCallId: ToolCallId }>;
+
 /**
  * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
  * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
@@ -503,19 +507,37 @@ export const executeCanonicalMutationUnit = ({
   subject,
   current,
   mutations,
+  hostedFence,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
+  hostedFence: Option.Option<HostedCommitFence>;
 }>): Effect.Effect<CanonicalMutationUnitExecution> =>
   Effect.uninterruptible(
     Effect.gen(function* () {
       if (mutations.length === 0) return { _tag: "Unavailable" } as const;
       if (mutations.length > maximumAtomicBatchCalls) return { _tag: "Unavailable" } as const;
-      const statements = mutations.flatMap((mutation, index) =>
-        childStatements({ db, subject, current, mutation, index })
-      );
+      const statements = [
+        ...Option.match(hostedFence, {
+          onNone: (): ReadonlyArray<D1PreparedStatement> => [],
+          onSome: ({ turnId, toolCallId }): ReadonlyArray<D1PreparedStatement> => [
+            // A CHECK failure rolls back the entire D1 batch if recovery won the race.
+            // The unique key prevents a committed call from being repeated after a lost reply.
+            db
+              .prepare(`INSERT INTO hosted_mutation_commits
+              (turn_id, tool_call_id, user_id, committed_at_ms, valid)
+              VALUES (?, ?, ?, ?, CASE WHEN EXISTS (
+                SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending'
+              ) THEN 1 ELSE 0 END)`)
+              .bind(turnId, toolCallId, subject.userId, current, turnId, subject.userId),
+          ],
+        }),
+        ...mutations.flatMap((mutation, index) =>
+          childStatements({ db, subject, current, mutation, index })
+        ),
+      ];
       const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
       if (Exit.isFailure(attempt)) {
         return yield* classifyAbortedUnit({
@@ -724,6 +746,7 @@ type SingleWork = Readonly<{
   preparation: CanonicalMutationPreparation;
   present: (value: CommittedMutationValue) => Effect.Effect<Response>;
   retryStatement: Option.Option<() => Effect.Effect<CanonicalMutationPreparation>>;
+  hostedFence: Option.Option<HostedCommitFence>;
 }>;
 
 /** Commit a prepared single mutation, retrying only a proven same-material statement race. */
@@ -734,11 +757,18 @@ const executePreparedSingle = ({
   preparation,
   present,
   retryStatement,
+  hostedFence,
 }: SingleWork &
   Readonly<{
     preparation: Extract<CanonicalMutationPreparation, { _tag: "Prepared" }>;
   }>): Effect.Effect<Response> =>
-  executeCanonicalMutationUnit({ db, subject, current, mutations: [preparation.mutation] }).pipe(
+  executeCanonicalMutationUnit({
+    db,
+    subject,
+    current,
+    mutations: [preparation.mutation],
+    hostedFence,
+  }).pipe(
     Effect.flatMap((execution) => {
       const outcome = preparation.mutation.outcome;
       if (
@@ -760,6 +790,7 @@ const executePreparedSingle = ({
                     preparation: next,
                     present,
                     retryStatement: Option.none(),
+                    hostedFence,
                   })
                 )
               )
@@ -782,6 +813,7 @@ export const executeSingleCanonicalMutation = ({
   preparation,
   present,
   retryStatement,
+  hostedFence,
 }: SingleWork): Effect.Effect<Response> => {
   switch (preparation._tag) {
     case "Refused":
@@ -794,6 +826,14 @@ export const executeSingleCanonicalMutation = ({
     case "Failed":
       return failedPreparationResponse({ db, subject, current });
     case "Prepared":
-      return executePreparedSingle({ db, subject, current, preparation, present, retryStatement });
+      return executePreparedSingle({
+        db,
+        subject,
+        current,
+        preparation,
+        present,
+        retryStatement,
+        hostedFence,
+      });
   }
 };

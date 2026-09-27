@@ -1,5 +1,5 @@
 import { UserId } from "@fidy/server/agent-runtime";
-import { type Cause, Effect } from "effect";
+import { type Cause, Effect, type Schema } from "effect";
 import {
   expireHostedPending,
   hostedTranscriptRetentionMs,
@@ -14,7 +14,10 @@ const maximumUsersPerSweep = 100;
 export const sweepHostedTurns = ({
   db,
   now,
-}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, Cause.UnknownError> =>
+}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<
+  void,
+  Cause.UnknownError | Schema.SchemaError
+> =>
   Effect.gen(function* () {
     const due = yield* Effect.tryPromise(() =>
       db
@@ -32,19 +35,23 @@ export const sweepHostedTurns = ({
     UNION ALL
     SELECT user_id, day_ms AS due_ms FROM hosted_compaction_attempts
       WHERE day_ms < ?
+    UNION ALL
+    SELECT user_id, expires_at_ms AS due_ms FROM hosted_confirmations
+      WHERE expires_at_ms < ?
     ) GROUP BY user_id ORDER BY MIN(due_ms) LIMIT ?`)
         .bind(
           now - pendingExecutionRecoveryMs,
           now - hostedTranscriptRetentionMs,
           now - hostedTranscriptRetentionMs,
           now - hostedTranscriptRetentionMs,
+          now,
           maximumUsersPerSweep
         )
         .all<{ user_id: string }>()
     );
-    yield* Effect.tryPromise(() =>
-      Promise.all(
-        due.results.map((row) => expireHostedPending({ db, userId: UserId.make(row.user_id), now }))
-      )
+    yield* Effect.forEach(
+      due.results,
+      (row) => expireHostedPending({ db, userId: UserId.make(row.user_id), now }),
+      { concurrency: "unbounded", discard: true }
     );
   });

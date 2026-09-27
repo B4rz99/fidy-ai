@@ -26,7 +26,7 @@ import {
   memoryRowsQuery,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
-import { DateTime, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { callerAuthority, transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
@@ -114,89 +114,129 @@ const decodeConsent = (row: ConsentUserRow): HostedAgentSessionConsentBasis => {
 };
 
 /** Read a live WebSession's current Consent and the latest hosted lifecycle, for one explicit User. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const readHostedSnapshot = async (
-  db: D1Database,
-  subject: TransactionSubject,
-  now: number
-): Promise<Option.Option<HostedTurnSnapshot>> => {
-  const raw = await db
-    .prepare(`SELECT u.service_market, u.locale, u.time_zone, c.id, c.disclosure_json,
+export const readHostedSnapshot = ({
+  db,
+  subject,
+  now,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  now: number;
+}>): Effect.Effect<Option.Option<HostedTurnSnapshot>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT u.service_market, u.locale, u.time_zone, c.id, c.disclosure_json,
       EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = u.id) AS revoked
       FROM users AS u JOIN onboarding_consent_records AS c ON c.user_id = u.id
       JOIN web_sessions AS w ON w.user_id = u.id
       WHERE u.id = ? AND w.id = ? AND w.token_digest = ? AND w.revoked_at_ms IS NULL
         AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?`)
-    .bind(subject.userId, subject.id, subject.digest, now, now)
-    .first();
-  if (raw === null) return Option.none();
-  const user = Schema.decodeUnknownSync(ConsentUserRow)(raw);
-  const sessionRaw = await db
-    .prepare(`SELECT id, user_id, consent_basis_json, started_at_ms, last_activity_at_ms, status
+        .bind(subject.userId, subject.id, subject.digest, now, now)
+        .first()
+    );
+    if (raw === null) return Option.none();
+    const user = yield* Schema.decodeUnknownEffect(ConsentUserRow)(raw);
+    const sessionRaw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT id, user_id, consent_basis_json, started_at_ms, last_activity_at_ms, status
       FROM hosted_agent_sessions WHERE user_id = ?
       ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, started_at_ms DESC, id DESC LIMIT 1`)
-    .bind(subject.userId)
-    .first();
-  const pendingRaw = await db
-    .prepare(`SELECT id, started_at_ms,
+        .bind(subject.userId)
+        .first()
+    );
+    const pendingRaw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT id, started_at_ms,
       (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id) AS proposed_at_ms
       FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
-    .bind(subject.userId)
-    .first();
-  const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
-  const budget = await db
-    .prepare(`SELECT COUNT(*) AS used FROM hosted_turns
+        .bind(subject.userId)
+        .first()
+    );
+    const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
+    const budget = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT COUNT(*) AS used FROM hosted_turns
     WHERE user_id = ? AND started_at_ms >= ? AND started_at_ms < ?`)
-    .bind(subject.userId, day, day + millisecondsPerDay)
-    .first();
-  const budgetRow = Option.flatMap(
-    Option.fromNullishOr(budget),
-    Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
-  );
-  return Option.some({
-    user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
-    consentBasis: decodeConsent(user),
-    revoked: user.revoked === 1,
-    capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
-    session: Option.fromNullishOr(sessionRaw).pipe(
-      Option.map(Schema.decodeUnknownSync(SessionRow))
-    ),
-    pending: Option.fromNullishOr(pendingRaw).pipe(Option.map(Schema.decodeUnknownSync(TurnRow))),
+        .bind(subject.userId, day, day + millisecondsPerDay)
+        .first()
+    );
+    const budgetRow = Option.flatMap(
+      Option.fromNullishOr(budget),
+      Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
+    );
+    return Option.some({
+      user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
+      consentBasis: decodeConsent(user),
+      revoked: user.revoked === 1,
+      capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
+      session:
+        sessionRaw === null
+          ? Option.none()
+          : Option.some(yield* Schema.decodeUnknownEffect(SessionRow)(sessionRaw)),
+      pending:
+        pendingRaw === null
+          ? Option.none()
+          : Option.some(yield* Schema.decodeUnknownEffect(TurnRow)(pendingRaw)),
+    });
   });
-};
 
 /** Recovery works even after revocation: it never admits new work or sends User content. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const recoverHostedTurn = async ({
+export const recoverHostedTurn = ({
   db,
   userId,
   turn,
   now,
-}: Readonly<{ db: D1Database; userId: UserId; turn: TurnRow; now: number }>): Promise<boolean> => {
-  const timestamp = Math.max(now, turn.started_at_ms);
-  const marker = TranscriptEntryId.make(newId());
-  const results = await db.batch([
-    db
-      .prepare(`INSERT INTO transcript_entries
+}: Readonly<{ db: D1Database; userId: UserId; turn: TurnRow; now: number }>): Effect.Effect<
+  boolean,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const timestamp = Math.max(now, turn.started_at_ms);
+    const marker = TranscriptEntryId.make(newId());
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        // A committed owner write and its receipt are atomic. If its response was lost, record
+        // the commit without inventing the unavailable canonical output before interrupting.
+        db
+          .prepare(`INSERT INTO transcript_entries
+      (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
+       tool_call_id, operation, outcome_json)
+      SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+        lower(substr(hex(randomblob(2)), 2, 3)) || '-8' ||
+        lower(substr(hex(randomblob(2)), 2, 3)) || '-' || lower(hex(randomblob(6))),
+        c.user_id, c.hosted_session_id, c.turn_id, 'tool_result', ?, c.iteration,
+        c.tool_call_id, c.operation,
+        '{"_tag":"CommittedOutputUnavailable"}'
+      FROM transcript_entries AS c
+      JOIN hosted_mutation_commits AS m
+        ON m.turn_id = c.turn_id AND m.tool_call_id = c.tool_call_id AND m.user_id = c.user_id
+      WHERE c.turn_id = ? AND c.user_id = ? AND c.kind = 'tool_call'
+        AND NOT EXISTS (SELECT 1 FROM transcript_entries AS r
+          WHERE r.turn_id = c.turn_id AND r.tool_call_id = c.tool_call_id AND r.kind = 'tool_result')`)
+          .bind(timestamp, turn.id, userId),
+        db
+          .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
       SELECT ?, user_id, hosted_session_id, id, 'interrupted', ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(marker, timestamp, turn.id, userId),
-    db
-      .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
+          .bind(marker, timestamp, turn.id, userId),
+        db
+          .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(timestamp, turn.id, userId),
-    db
-      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
-      .bind(turn.id, userId),
-    // A recovered Pending Turn's activity was its start, not this recovery instant.
-    db
-      .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
+          .bind(timestamp, turn.id, userId),
+        db
+          .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
+          .bind(turn.id, userId),
+        // A recovered Pending Turn's activity was its start, not this recovery instant.
+        db
+          .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?)`)
-      .bind(turn.started_at_ms, userId, turn.id, userId),
-  ]);
-  return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;
-};
+          .bind(turn.started_at_ms, userId, turn.id, userId),
+      ])
+    );
+    return results[1]?.meta.changes === 1 && results[2]?.meta.changes === 1;
+  });
 
 const admissionState = (snapshot: HostedTurnSnapshot): HostedAdmissionState => ({
   session: Option.map(snapshot.session, (session) => ({
@@ -213,12 +253,15 @@ const admissionState = (snapshot: HostedTurnSnapshot): HostedAdmissionState => (
 });
 
 /** The one session selection used for both preflight and the guarded admission batch. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const selectHostedSession = (
-  snapshot: HostedTurnSnapshot,
-  userId: UserId,
-  now: number
-): Readonly<{
+export const selectHostedSession = ({
+  snapshot,
+  userId,
+  now,
+}: Readonly<{
+  snapshot: HostedTurnSnapshot;
+  userId: UserId;
+  now: number;
+}>): Readonly<{
   id: HostedAgentSessionId;
   create: boolean;
   basis: HostedAgentSessionConsentBasis;
@@ -242,8 +285,7 @@ export const selectHostedSession = (
 };
 
 /** Read current Memories, CompactedConversation, and exact retained entries for one User and session. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const readHostedContinuity = async ({
+export const readHostedContinuity = ({
   db,
   subject,
   sessionId,
@@ -253,7 +295,7 @@ export const readHostedContinuity = async ({
   subject: TransactionSubject;
   sessionId: HostedAgentSessionId;
   now: number;
-}>): Promise<
+}>): Effect.Effect<
   Readonly<{
     memories: ReadonlyArray<Readonly<{ text: string }>>;
     compactedConversation: Option.Option<
@@ -267,95 +309,117 @@ export const readHostedContinuity = async ({
     >;
     transcript: ReadonlyArray<SessionTranscriptEntry>;
     terminalThroughSequence: Option.Option<number>;
-  }>
-> => {
-  const authority = callerAuthority({ subject, current: now });
-  const query = memoryRowsQuery({ userId: subject.userId, authority });
-  const memoryRows = await db
-    .prepare(query.sql)
-    .bind(...query.params)
-    .all();
-  const memories = Option.getOrThrow(memoriesFromRows(memoryRows.results));
-  if (memories.length > maximumCurrentMemories) throw new Error("Hosted Memory capacity exceeded");
-  const compactRaw = await db
-    .prepare(`SELECT text, through_sequence, revision FROM hosted_compacted_conversations
+  }>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const authority = callerAuthority({ subject, current: now });
+    const query = memoryRowsQuery({ userId: subject.userId, authority });
+    const memoryRows = yield* Effect.tryPromise(() =>
+      db
+        .prepare(query.sql)
+        .bind(...query.params)
+        .all()
+    );
+    const memories = Option.getOrThrow(memoriesFromRows(memoryRows.results));
+    if (memories.length > maximumCurrentMemories) {
+      throw new Error("Hosted Memory capacity exceeded");
+    }
+    const compactRaw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT text, through_sequence, revision FROM hosted_compacted_conversations
     WHERE user_id = ? AND hosted_session_id = ? AND updated_at_ms >= ?`)
-    .bind(subject.userId, sessionId, now - hostedTranscriptRetentionMs)
-    .first();
-  const compactedConversation = Option.map(
-    Option.fromNullishOr(compactRaw),
-    Schema.decodeUnknownSync(CompactRow)
-  );
-  const raw = await db
-    .prepare(`SELECT e.sequence, e.id, e.turn_id, e.occurred_at_ms, e.kind, e.text,
+        .bind(subject.userId, sessionId, now - hostedTranscriptRetentionMs)
+        .first()
+    );
+    const compactedConversation =
+      compactRaw === null
+        ? Option.none()
+        : Option.some(yield* Schema.decodeUnknownEffect(CompactRow)(compactRaw));
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT e.sequence, e.id, e.turn_id, e.occurred_at_ms, e.kind, e.text,
       e.failure_reason, e.iteration, e.tool_call_id, e.operation, e.input_json,
       e.outcome_json, t.status FROM transcript_entries AS e
     JOIN hosted_turns AS t ON t.id = e.turn_id AND t.user_id = e.user_id
     WHERE e.user_id = ? AND e.hosted_session_id = ?
     ORDER BY sequence LIMIT ?`)
-    .bind(subject.userId, sessionId, maximumRetainedEntries + 1)
-    .all();
-  if (raw.results.length > maximumRetainedEntries) {
-    throw new Error("Hosted Transcript capacity exceeded");
-  }
-  const entries = Schema.decodeUnknownSync(Schema.Array(EntryRow))(raw.results);
-  return {
-    memories: memories.map(({ text }) => ({ text })),
-    compactedConversation: Option.map(
-      compactedConversation,
-      ({ text, through_sequence, revision }) => ({
+        .bind(subject.userId, sessionId, maximumRetainedEntries + 1)
+        .all()
+    );
+    if (raw.results.length > maximumRetainedEntries) {
+      throw new Error("Hosted Transcript capacity exceeded");
+    }
+    const entries = yield* Schema.decodeUnknownEffect(Schema.Array(EntryRow))(raw.results);
+    return {
+      memories: memories.map(({ text }) => ({ text })),
+      compactedConversation: Option.map(
+        compactedConversation,
+        ({ text, through_sequence, revision }) => ({
+          userId: UserId.make(subject.userId),
+          sessionId,
+          text,
+          throughSequence: through_sequence,
+          revision,
+        })
+      ),
+      terminalThroughSequence: terminalPrefixCursor(entries),
+      transcript: entries.map((row) => ({
         userId: UserId.make(subject.userId),
         sessionId,
-        text,
-        throughSequence: through_sequence,
-        revision,
-      })
-    ),
-    terminalThroughSequence: terminalPrefixCursor(entries),
-    transcript: entries.map((row) => ({
-      userId: UserId.make(subject.userId),
-      sessionId,
-      sequence: BigInt(row.sequence),
-      entry: decodeEntry(row),
-    })),
-  };
-};
+        sequence: BigInt(row.sequence),
+        entry: decodeEntry(row),
+      })),
+    };
+  });
 
-export type HostedContinuity = Awaited<ReturnType<typeof readHostedContinuity>>;
+export type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
 /** Append one decoded tool entry only while its User's Turn remains Pending. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const appendHostedToolEntry = async (
-  db: D1Database,
-  userId: UserId,
-  entry: CanonicalToolCallEntry | CanonicalToolResultEntry
-): Promise<boolean> => {
-  const call = entry._tag === "CanonicalToolCallEntry";
-  const result = await db
-    .prepare(`INSERT INTO transcript_entries
+export const appendHostedToolEntry = ({
+  db,
+  userId,
+  entry,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  entry: CanonicalToolCallEntry | CanonicalToolResultEntry;
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const call = entry._tag === "CanonicalToolCallEntry";
+    const inputJson = call
+      ? yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(entry.input)
+      : null;
+    const outcomeJson =
+      entry._tag === "CanonicalToolResultEntry"
+        ? yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolOutcome))(entry.outcome)
+        : null;
+    const result = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO transcript_entries
     (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
       tool_call_id, operation, input_json, outcome_json)
     SELECT ?, user_id, hosted_session_id, id, ?, ?, ?, ?, ?, ?, ? FROM hosted_turns
     WHERE id = ? AND user_id = ? AND status = 'pending'`)
-    .bind(
-      entry.id,
-      call ? "tool_call" : "tool_result",
-      entry.occurredAt.epochMilliseconds,
-      entry.iteration,
-      entry.toolCallId,
-      entry.operation,
-      entry._tag === "CanonicalToolCallEntry" ? JSON.stringify(entry.input) : null,
-      entry._tag === "CanonicalToolResultEntry" ? JSON.stringify(entry.outcome) : null,
-      entry.turnId,
-      userId
-    )
-    .run();
-  return result.meta.changes === 1;
-};
+        .bind(
+          entry.id,
+          call ? "tool_call" : "tool_result",
+          entry.occurredAt.epochMilliseconds,
+          entry.iteration,
+          entry.toolCallId,
+          entry.operation,
+          inputJson,
+          outcomeJson,
+          entry.turnId,
+          userId
+        )
+        .run()
+    );
+    return result.meta.changes === 1;
+  });
 
 /** Charge one User-scoped pre-admission model attempt, including abandoned work. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const reserveHostedCompaction = async ({
+export const reserveHostedCompaction = ({
   db,
   subject,
   sessionId,
@@ -363,25 +427,27 @@ export const reserveHostedCompaction = async ({
   db: D1Database;
   subject: TransactionSubject;
   sessionId: HostedAgentSessionId;
-}>): Promise<boolean> => {
-  const current = transactionNow();
-  const authority = callerAuthority({ subject, current });
-  const day = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
-  const reserved = await db
-    .prepare(`INSERT INTO hosted_compaction_attempts (user_id, day_ms, used)
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const current = transactionNow();
+    const authority = callerAuthority({ subject, current });
+    const day = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
+    const reserved = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO hosted_compaction_attempts (user_id, day_ms, used)
     SELECT ?, ?, 1 WHERE EXISTS
       (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
     ON CONFLICT(user_id, day_ms) DO UPDATE SET used = used + 1
     WHERE hosted_compaction_attempts.used < 3`)
-    .bind(subject.userId, day, subject.userId, sessionId, ...authority.bindings)
-    .run();
-  return reserved.meta.changes === 1;
-};
+        .bind(subject.userId, day, subject.userId, sessionId, ...authority.bindings)
+        .run()
+    );
+    return reserved.meta.changes === 1;
+  });
 
 /** Replace continuity only if the exact selected terminal prefix and prior revision still exist. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const commitHostedCompaction = async ({
+export const commitHostedCompaction = ({
   db,
   subject,
   sessionId,
@@ -397,31 +463,33 @@ export const commitHostedCompaction = async ({
   throughSequence: number;
   text: CompactedConversationOutput["compactedConversation"];
   signal: AbortSignal;
-}>): Promise<boolean> => {
-  const userId = UserId.make(subject.userId);
-  const current = transactionNow();
-  const authority = callerAuthority({ subject, current });
-  const selected = continuity.transcript.filter(
-    (entry) => entry.sequence <= BigInt(throughSequence)
-  );
-  if (
-    selected.length === 0 ||
-    !Option.exists(continuity.terminalThroughSequence, (cursor) => cursor === throughSequence)
-  ) {
-    return false;
-  }
-  const prior = Option.match(continuity.compactedConversation, {
-    onNone: () => ({ throughSequence: 0, revision: 0 }),
-    onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
-  });
-  const nonce = newId();
-  const nextRevision = prior.revision + 1;
-  // There is no suspension between this check and dispatching the atomic batch. Once dispatched,
-  // the replacement has entered its non-interruptible commit point; an abort cannot undo success.
-  if (signal.aborted) return false;
-  const results = await db.batch([
-    db
-      .prepare(`INSERT INTO hosted_compacted_conversations
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const userId = UserId.make(subject.userId);
+    const current = transactionNow();
+    const authority = callerAuthority({ subject, current });
+    const selected = continuity.transcript.filter(
+      (entry) => entry.sequence <= BigInt(throughSequence)
+    );
+    if (
+      selected.length === 0 ||
+      !Option.exists(continuity.terminalThroughSequence, (cursor) => cursor === throughSequence)
+    ) {
+      return false;
+    }
+    const prior = Option.match(continuity.compactedConversation, {
+      onNone: () => ({ throughSequence: 0, revision: 0 }),
+      onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
+    });
+    const nonce = newId();
+    const nextRevision = prior.revision + 1;
+    // There is no suspension between this check and dispatching the atomic batch. Once dispatched,
+    // the replacement has entered its non-interruptible commit point; an abort cannot undo success.
+    if (signal.aborted) return false;
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(`INSERT INTO hosted_compacted_conversations
       (user_id, hosted_session_id, text, through_sequence, revision, nonce, updated_at_ms)
       SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS
         (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
@@ -436,35 +504,36 @@ export const commitHostedCompaction = async ({
         revision = excluded.revision, nonce = excluded.nonce, updated_at_ms = excluded.updated_at_ms
       WHERE hosted_compacted_conversations.revision = ?
         AND hosted_compacted_conversations.through_sequence = ?`)
-      .bind(
-        userId,
-        sessionId,
-        text,
-        throughSequence,
-        nextRevision,
-        nonce,
-        current,
-        userId,
-        sessionId,
-        ...authority.bindings,
-        userId,
-        sessionId,
-        throughSequence,
-        selected.length,
-        userId,
-        sessionId,
-        throughSequence,
-        prior.revision,
-        prior.throughSequence
-      ),
-    db
-      .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
+          .bind(
+            userId,
+            sessionId,
+            text,
+            throughSequence,
+            nextRevision,
+            nonce,
+            current,
+            userId,
+            sessionId,
+            ...authority.bindings,
+            userId,
+            sessionId,
+            throughSequence,
+            selected.length,
+            userId,
+            sessionId,
+            throughSequence,
+            prior.revision,
+            prior.throughSequence
+          ),
+        db
+          .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
       AND sequence <= ? AND EXISTS (SELECT 1 FROM hosted_compacted_conversations
         WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)`)
-      .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
-  ]);
-  return results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length;
-};
+          .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
+      ])
+    );
+    return results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length;
+  });
 
 const decodeToolEntry = (
   row: EntryRow,
@@ -530,8 +599,7 @@ const decodeEntry = (row: EntryRow): TranscriptEntry => {
 };
 
 /** Append the exact User entry and Pending Turn atomically after the complete model preflight. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const admitHostedTurn = async ({
+export const admitHostedTurn = ({
   db,
   subject,
   selection,
@@ -545,59 +613,59 @@ export const admitHostedTurn = async ({
   text: TranscriptText;
   now: number;
   id: TranscriptTurnId;
-}>): Promise<Option.Option<TranscriptTurnId>> => {
-  const entryId = TranscriptEntryId.make(newId());
-  const authority = callerAuthority({ subject, current: now });
-  const createSession = selection.create
-    ? db
-        .prepare(`INSERT INTO hosted_agent_sessions
+}>): Effect.Effect<Option.Option<TranscriptTurnId>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const entryId = TranscriptEntryId.make(newId());
+    const authority = callerAuthority({ subject, current: now });
+    const basisJson = yield* Schema.encodeEffect(
+      Schema.fromJsonString(HostedAgentSessionConsentBasis)
+    )(selection.basis);
+    const createSession = selection.create
+      ? db
+          .prepare(`INSERT INTO hosted_agent_sessions
         (id, user_id, consent_basis_json, started_at_ms, status)
         SELECT ?, user_id, ?, ?, 'active' FROM ${authority.table} WHERE ${authority.predicate}`)
-        .bind(
-          selection.id,
-          JSON.stringify(
-            Schema.encodeSync(Schema.toCodecJson(HostedAgentSessionConsentBasis))(selection.basis)
-          ),
-          now,
-          ...authority.bindings
-        )
-    : db
-        .prepare(
-          `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
-        )
-        .bind(selection.id, subject.userId);
-  const results = await db.batch([
-    createSession,
-    db
-      .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
+          .bind(selection.id, basisJson, now, ...authority.bindings)
+      : db
+          .prepare(
+            `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
+          )
+          .bind(selection.id, subject.userId);
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        createSession,
+        db
+          .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
       SELECT ?, user_id, ?, ?, 'pending' FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(id, selection.id, now, ...authority.bindings),
-    db
-      .prepare(`INSERT INTO transcript_entries
+          .bind(id, selection.id, now, ...authority.bindings),
+        db
+          .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
       SELECT ?, user_id, hosted_session_id, id, 'user', ?, ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(entryId, now, text, id, subject.userId),
-    db
-      .prepare(`UPDATE hosted_agent_sessions SET status = 'idle-ended'
+          .bind(entryId, now, text, id, subject.userId),
+        db
+          .prepare(`UPDATE hosted_agent_sessions SET status = 'idle-ended'
       WHERE user_id = ? AND id <> ? AND status = 'active'`)
-      .bind(subject.userId, selection.id),
-  ]);
-  return results[0]?.meta.changes === 1 &&
-    results[1]?.meta.changes === 1 &&
-    results[2]?.meta.changes === 1
-    ? Option.some(id)
-    : Option.none();
-};
+          .bind(subject.userId, selection.id),
+      ])
+    );
+    return results[0]?.meta.changes === 1 &&
+      results[1]?.meta.changes === 1 &&
+      results[2]?.meta.changes === 1
+      ? Option.some(id)
+      : Option.none();
+  });
 
-const receiptHash = (receipt: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(receipt))
-    .then((value) => new Uint8Array(value));
+const receiptHash = (
+  receipt: string
+): Effect.Effect<Uint8Array, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.tryPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(receipt))).pipe(
+    Effect.map((value) => new Uint8Array(value))
+  );
 
 /** Reserve one exact provider answer; this is not yet Transcript evidence. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const stageHostedDelivery = async ({
+export const stageHostedDelivery = ({
   db,
   userId,
   turnId,
@@ -607,23 +675,80 @@ export const stageHostedDelivery = async ({
   userId: UserId;
   turnId: TranscriptTurnId;
   text: TranscriptText;
-}>): Promise<string> => {
-  const receipt = Array.from(crypto.getRandomValues(new Uint8Array(receiptBytes)), (byte) =>
-    byte.toString(hexRadix).padStart(2, "0")
-  ).join("");
-  const digest = await receiptHash(receipt);
-  const write = await db
-    .prepare(`INSERT INTO hosted_delivery_proposals
+}>): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const receipt = Array.from(crypto.getRandomValues(new Uint8Array(receiptBytes)), (byte) =>
+      byte.toString(hexRadix).padStart(2, "0")
+    ).join("");
+    const digest = yield* receiptHash(receipt);
+    const write = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO hosted_delivery_proposals
     (turn_id, user_id, receipt_digest, proposed_at_ms, text)
     SELECT id, user_id, ?, ?, ? FROM hosted_turns
     WHERE id = ? AND user_id = ? AND status = 'pending'`)
-    .bind(digest, transactionNow(), text, turnId, userId)
-    .run();
-  if (write.meta.changes !== 1) {
-    throw new Error("Hosted Turn no longer pending");
-  }
-  return receipt;
-};
+        .bind(digest, transactionNow(), text, turnId, userId)
+        .run()
+    );
+    if (write.meta.changes !== 1) {
+      throw new Error("Hosted Turn no longer pending");
+    }
+    return receipt;
+  });
+
+/** Reissue only the receipt for a pending answer; never replay a bearer credential from storage. */
+export const refreshHostedDelivery = ({
+  db,
+  subject,
+  turnId,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionSubject;
+  turnId: TranscriptTurnId;
+}>): Effect.Effect<
+  Option.Option<Readonly<{ text: TranscriptText; receipt: string }>>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const snapshot = yield* readHostedSnapshot({ db, subject, now: transactionNow() });
+    if (
+      Option.isNone(snapshot) ||
+      !Option.exists(snapshot.value.pending, (pending) => pending.id === turnId)
+    ) {
+      return Option.none();
+    }
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT text FROM hosted_delivery_proposals
+    WHERE turn_id = ? AND user_id = ?`)
+        .bind(turnId, subject.userId)
+        .first()
+    );
+    if (row === null) return Option.none();
+    const text = (yield* Schema.decodeUnknownEffect(Schema.Struct({ text: TranscriptText }))(row))
+      .text;
+    const receipt = Array.from(crypto.getRandomValues(new Uint8Array(receiptBytes)), (byte) =>
+      byte.toString(hexRadix).padStart(2, "0")
+    ).join("");
+    const digest = yield* receiptHash(receipt);
+    const written = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`UPDATE hosted_delivery_proposals
+    SET receipt_digest = ?
+    WHERE turn_id = ? AND user_id = ? AND proposed_at_ms > ? AND EXISTS
+      (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending')`)
+        .bind(
+          digest,
+          turnId,
+          subject.userId,
+          transactionNow() - deliveryAcknowledgmentWindowMs,
+          turnId,
+          subject.userId
+        )
+        .run()
+    );
+    return written.meta.changes === 1 ? Option.some({ text, receipt }) : Option.none();
+  });
 
 const ProposalRow = Schema.Struct({
   text: TranscriptText,
@@ -631,8 +756,7 @@ const ProposalRow = Schema.Struct({
   proposed_at_ms: Schema.Int,
 });
 /** Acknowledgment promotes only an exact staged provider reply with a fresh User-owned WebSession. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const acknowledgeHostedDelivery = async ({
+export const acknowledgeHostedDelivery = ({
   db,
   subject,
   turnId,
@@ -642,112 +766,153 @@ export const acknowledgeHostedDelivery = async ({
   subject: TransactionSubject;
   turnId: TranscriptTurnId;
   receipt: string;
-}>): Promise<Option.Option<TranscriptText>> => {
-  const current = transactionNow();
-  const digest = await receiptHash(receipt);
-  const raw = await db
-    .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM hosted_delivery_proposals AS p
+}>): Effect.Effect<Option.Option<TranscriptText>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const current = transactionNow();
+    const digest = yield* receiptHash(receipt);
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM hosted_delivery_proposals AS p
     JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
     JOIN web_sessions AS w ON w.user_id = p.user_id
     WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
       AND t.status = 'pending' AND w.id = ? AND w.token_digest = ?
       AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?`)
-    .bind(subject.userId, turnId, digest, subject.id, subject.digest, current, current)
-    .first();
-  if (raw === null) {
-    return Option.none();
-  }
-  const proposal = Schema.decodeUnknownSync(ProposalRow)(raw);
-  if (current - proposal.proposed_at_ms >= deliveryAcknowledgmentWindowMs) {
-    const recovered = await recoverHostedTurn({
+        .bind(subject.userId, turnId, digest, subject.id, subject.digest, current, current)
+        .first()
+    );
+    if (raw === null) {
+      return Option.none();
+    }
+    const proposal = yield* Schema.decodeUnknownEffect(ProposalRow)(raw);
+    if (current - proposal.proposed_at_ms >= deliveryAcknowledgmentWindowMs) {
+      const recovered = yield* recoverHostedTurn({
+        db,
+        userId: UserId.make(subject.userId),
+        turn: {
+          id: turnId,
+          started_at_ms: proposal.started_at_ms,
+          proposed_at_ms: proposal.proposed_at_ms,
+        },
+        now: current,
+      });
+      if (!recovered) {
+        throw new Error("Hosted receipt recovery was not committed");
+      }
+      return Option.none();
+    }
+    const saved = yield* finishHostedTurn({
       db,
       userId: UserId.make(subject.userId),
-      turn: {
-        id: turnId,
-        started_at_ms: proposal.started_at_ms,
-        proposed_at_ms: proposal.proposed_at_ms,
-      },
+      turnId,
+      startedAtMs: proposal.started_at_ms,
+      result: { _tag: "Completed", text: proposal.text },
+      subject,
       now: current,
     });
-    if (!recovered) {
-      throw new Error("Hosted receipt recovery was not committed");
-    }
-    return Option.none();
-  }
-  const saved = await finishHostedTurn({
-    db,
-    userId: UserId.make(subject.userId),
-    turnId,
-    startedAtMs: proposal.started_at_ms,
-    result: { _tag: "Completed", text: proposal.text },
-    subject,
-    now: current,
+    return saved ? Option.some(proposal.text) : Option.none();
   });
-  return saved ? Option.some(proposal.text) : Option.none();
-};
 
 /** Retain exact Transcript content for at most thirty days after its terminal Turn. */
 export const hostedTranscriptRetentionMs = 2_592_000_000;
 
-// @effect-diagnostics-next-line asyncFunction:off
-const sweepHostedTranscript = async (
+const sweepHostedTranscript = (
   db: D1Database,
   userId: UserId,
   now: number
-): Promise<Option.Option<number>> => {
-  const cutoff = now - hostedTranscriptRetentionMs;
-  await db
-    .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND turn_id IN
+): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const cutoff = now - hostedTranscriptRetentionMs;
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare("DELETE FROM hosted_confirmations WHERE user_id = ? AND expires_at_ms < ?")
+        .bind(userId, now)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`DELETE FROM hosted_mutation_commits WHERE user_id = ? AND turn_id IN
     (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
       AND terminal_at_ms < ?)`)
-    .bind(userId, userId, cutoff)
-    .run();
-  await db
-    .prepare(`DELETE FROM hosted_compacted_conversations
+        .bind(userId, userId, cutoff)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND turn_id IN
+    (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
+      AND terminal_at_ms < ?)`)
+        .bind(userId, userId, cutoff)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`DELETE FROM hosted_compacted_conversations
     WHERE user_id = ? AND updated_at_ms < ?`)
-    .bind(userId, cutoff)
-    .run();
-  await db
-    .prepare(`DELETE FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?`)
-    .bind(userId, cutoff)
-    .run();
-  const compacted = await db
-    .prepare(`SELECT MIN(updated_at_ms) AS oldest
+        .bind(userId, cutoff)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`DELETE FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?`)
+        .bind(userId, cutoff)
+        .run()
+    );
+    const compacted = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT MIN(updated_at_ms) AS oldest
     FROM hosted_compacted_conversations WHERE user_id = ?`)
-    .bind(userId)
-    .first();
-  const compactedAge = Schema.decodeUnknownSync(
-    Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
-  )(compacted);
-  const oldest = await db
-    .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
+        .bind(userId)
+        .first()
+    );
+    const compactedAge = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
+    )(compacted);
+    const oldest = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
       AND status <> 'pending' AND EXISTS
       (SELECT 1 FROM transcript_entries AS e WHERE e.turn_id = t.id AND e.user_id = t.user_id)
       ORDER BY terminal_at_ms LIMIT 1`)
-    .bind(userId)
-    .first();
-  const transcriptDue = Option.map(
-    Option.map(
-      Option.fromNullishOr(oldest),
-      Schema.decodeUnknownSync(Schema.Struct({ terminal_at_ms: Schema.Int }))
-    ),
-    (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
-  );
-  const compactDue = Option.map(
-    Option.fromNullishOr(compactedAge.oldest),
-    (updated) => updated + hostedTranscriptRetentionMs + 1
-  );
-  return Option.orElse(
-    Option.map(compactDue, (due) =>
-      Option.isSome(transcriptDue) ? Math.min(due, transcriptDue.value) : due
-    ),
-    () => transcriptDue
-  );
-};
+        .bind(userId)
+        .first()
+    );
+    const oldestEntry =
+      oldest === null
+        ? Option.none()
+        : Option.some(
+            yield* Schema.decodeUnknownEffect(Schema.Struct({ terminal_at_ms: Schema.Int }))(oldest)
+          );
+    const transcriptDue = Option.map(
+      oldestEntry,
+      (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
+    );
+    const compactDue = Option.map(
+      Option.fromNullishOr(compactedAge.oldest),
+      (updated) => updated + hostedTranscriptRetentionMs + 1
+    );
+    const confirmation = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT MIN(expires_at_ms) AS oldest
+    FROM hosted_confirmations WHERE user_id = ?`)
+        .bind(userId)
+        .first()
+    );
+    const confirmationAge = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
+    )(confirmation);
+    const confirmationDue = Option.map(
+      Option.fromNullishOr(confirmationAge.oldest),
+      (at) => at + 1
+    );
+    const due = [transcriptDue, compactDue, confirmationDue]
+      .filter(Option.isSome)
+      .map((candidate) => candidate.value);
+    return due.length === 0 ? Option.none() : Option.some(Math.min(...due));
+  });
 
 /** DO alarm sweep: recover abandoned work and delete expired terminal content for this User. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const expireHostedPending = async ({
+export const expireHostedPending = ({
   db,
   userId,
   now,
@@ -755,27 +920,30 @@ export const expireHostedPending = async ({
   db: D1Database;
   userId: UserId;
   now: number;
-}>): Promise<Option.Option<number>> => {
-  const nextRetention = await sweepHostedTranscript(db, userId, now);
-  const raw = await db
-    .prepare(`SELECT id, started_at_ms,
+}>): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const nextRetention = yield* sweepHostedTranscript(db, userId, now);
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT id, started_at_ms,
     (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id) AS proposed_at_ms
     FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
-    .bind(userId)
-    .first();
-  if (raw === null) return nextRetention;
-  const pending = Schema.decodeUnknownSync(TurnRow)(raw);
-  const due =
-    pending.proposed_at_ms === null
-      ? pending.started_at_ms + pendingExecutionRecoveryMs
-      : pending.proposed_at_ms + deliveryAcknowledgmentWindowMs;
-  if (due > now) {
-    return Option.some(Option.isSome(nextRetention) ? Math.min(due, nextRetention.value) : due);
-  }
-  const recovered = await recoverHostedTurn({ db, userId, turn: pending, now });
-  if (!recovered) throw new Error("Hosted Turn alarm recovery was not committed");
-  return Option.some(Option.getOrElse(nextRetention, () => now + hostedTranscriptRetentionMs));
-};
+        .bind(userId)
+        .first()
+    );
+    if (raw === null) return nextRetention;
+    const pending = yield* Schema.decodeUnknownEffect(TurnRow)(raw);
+    const due =
+      pending.proposed_at_ms === null
+        ? pending.started_at_ms + pendingExecutionRecoveryMs
+        : pending.proposed_at_ms + deliveryAcknowledgmentWindowMs;
+    if (due > now) {
+      return Option.some(Option.isSome(nextRetention) ? Math.min(due, nextRetention.value) : due);
+    }
+    const recovered = yield* recoverHostedTurn({ db, userId, turn: pending, now });
+    if (!recovered) throw new Error("Hosted Turn alarm recovery was not committed");
+    return Option.some(Option.getOrElse(nextRetention, () => now + hostedTranscriptRetentionMs));
+  });
 
 /** Terminal outcome whose evidence must be stored in the same D1 batch. */
 export type HostedTurnOutcome =
@@ -847,8 +1015,10 @@ const hostedFinishStatements = ({
 };
 
 /** One terminal transition, with exact visible text or fixed metadata-only marker in the same batch. */
-// @effect-diagnostics-next-line asyncFunction:off missingPipeableSignature:off
-export const finishHostedTurn = async (input: HostedFinishInput): Promise<boolean> => {
-  const results = await input.db.batch(hostedFinishStatements(input));
-  return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;
-};
+export const finishHostedTurn = (
+  input: HostedFinishInput
+): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const results = yield* Effect.tryPromise(() => input.db.batch(hostedFinishStatements(input)));
+    return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;
+  });

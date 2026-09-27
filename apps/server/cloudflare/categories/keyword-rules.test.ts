@@ -5,6 +5,7 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 
 const instances: Array<Miniflare> = [];
 const userA = "10000000-0000-4000-8000-000000000001";
@@ -135,6 +136,7 @@ const setup = (): Promise<{
         "0018_batch_envelope_audit",
         "0019_canonical_child_guards",
         "0020_dashboard_projection",
+        ...hostedTurnTestMigrations,
       ];
       for (const name of migrationNames) {
         const sql = yield* awaitPromise(

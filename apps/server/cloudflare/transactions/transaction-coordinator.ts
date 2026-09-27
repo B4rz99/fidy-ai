@@ -1,27 +1,51 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
-import { UserId } from "@fidy/server/agent-runtime";
-import { expireHostedPending } from "../agent/turn-store";
+import {
+  type CanonicalToolEvidence,
+  type TranscriptTurnId,
+  UserId,
+} from "@fidy/server/agent-runtime";
+import { expireHostedPending, pendingExecutionRecoveryMs } from "../agent/turn-store";
 import {
   HostedDeliveryAdmission,
+  HostedProgressAdmission,
   HostedTurnAdmission,
   acknowledgeBrowserTurn,
   browserHostedDelivery,
-  completeHostedTurn,
+  completeHostedTurnWithAdmission,
+  readHostedProgress,
 } from "../agent/hosted-turn";
 import {
   CanonicalCapability,
   CanonicalOperationId,
+  atomicBatchOperation,
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
-import { Context, Data, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import {
+  Context,
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Schedule,
+  Schema,
+  type Scope,
+} from "effect";
 import {
   type WorkersAiEnvironment,
   cloudflareHostedInferenceLive,
   makeCloudflareHostedInference,
 } from "../ai/workers-ai";
-import { executeCanonicalBatch, rawOperation } from "../mutations/canonical-mutation-batch";
+import {
+  executeCanonicalBatch,
+  executeHostedCanonicalBatch,
+  rawOperation,
+} from "../mutations/canonical-mutation-batch";
 import { unavailableStatement } from "../ingestion/statement-ingestion";
 import {
   failStatementSubmission,
@@ -31,7 +55,10 @@ import { StatementCoordinatorActivity } from "../ingestion/statement-work";
 import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
 import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
-import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
+import {
+  type HostedCommitFence,
+  executeSingleCanonicalMutation,
+} from "../mutations/canonical-mutation-unit";
 import {
   type CanonicalMutationAdapter,
   canonicalMutationAdapter,
@@ -146,6 +173,7 @@ type WorkInput = Readonly<{
   work: CanonicalWork;
   subject: TransactionCaller;
   current: number;
+  hostedFence: Option.Option<HostedCommitFence>;
 }>;
 
 /** Reprepare only the statement whose identical material won a concurrent publication race. */
@@ -162,6 +190,7 @@ const executeCall = ({
   subject,
   current,
   bucket,
+  hostedFence,
 }: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>): Effect.Effect<
   Response,
   never,
@@ -185,6 +214,7 @@ const executeCall = ({
         ),
         present: adapter.value.present,
         retryStatement: Option.none(),
+        hostedFence,
       });
     }
     const ownerWork = { db, subject, current, input: input.value, bucket };
@@ -201,6 +231,7 @@ const executeCall = ({
         work.operation === "ingestion.submitForExtraction"
           ? Option.some(retryStatement)
           : Option.none(),
+      hostedFence,
     });
     return work.operation === "ingestion.submitForExtraction" &&
       response.status === httpServiceUnavailable
@@ -225,16 +256,28 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
     ) {
       return transactionUnavailable();
     }
-    const result =
-      input.work._tag === "Batch"
-        ? yield* executeCanonicalBatch({
-            db: input.db,
-            subject: input.subject,
-            calls: input.work.calls,
-            current: input.current,
-            bucket: input.bucket,
-          })
-        : yield* executeCall({ ...input, work: input.work });
+    const work = input.work;
+    const result = yield* work._tag === "Batch"
+      ? Option.match(input.hostedFence, {
+          onNone: () =>
+            executeCanonicalBatch({
+              db: input.db,
+              subject: input.subject,
+              calls: work.calls,
+              current: input.current,
+              bucket: input.bucket,
+            }),
+          onSome: (hostedFence) =>
+            executeHostedCanonicalBatch({
+              db: input.db,
+              subject: input.subject,
+              calls: work.calls,
+              current: input.current,
+              bucket: input.bucket,
+              hostedFence,
+            }),
+        })
+      : executeCall({ ...input, work });
     if (result.ok && budgetWork) {
       // Atomic D1 triggers retain versioned work even when this best-effort drain is interrupted.
       yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId });
@@ -343,7 +386,8 @@ const authorizedStatementActivity = (
 
 const executeCanonicalAdmission = (
   admission: CanonicalWorkAdmission,
-  environment: CoordinatorEnvironment
+  environment: CoordinatorEnvironment,
+  hostedFence: Option.Option<HostedCommitFence>
 ): Effect.Effect<Response, never, Scope.Scope> =>
   Effect.gen(function* () {
     const work = admission.work;
@@ -353,6 +397,7 @@ const executeCanonicalAdmission = (
       subject: admissionSubject(admission),
       current: transactionNow(),
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+      hostedFence,
     });
     if (!requiresHostedInference(work)) {
       return yield* execution.pipe(
@@ -417,6 +462,75 @@ const privateIngestionActivity = ({
   );
 };
 
+const hostedResponseDeadlineMs = 25_000;
+/** A soft response deadline; admission/preflight is interrupted, committed work is not. */
+const hostedDeadline = (
+  signal: AbortSignal
+): Readonly<{
+  signal: AbortSignal;
+  processing: Promise<Response>;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
+  cancel: () => void;
+}> => {
+  const preflight = new AbortController();
+  const pending = Deferred.makeUnsafe<Response>();
+  let timer = Effect.runFork(
+    Effect.sleep(Duration.millis(hostedResponseDeadlineMs)).pipe(
+      Effect.tap(() => Effect.sync(() => preflight.abort())),
+      Effect.flatMap(() => Deferred.succeed(pending, transactionUnavailable())),
+      Effect.asVoid
+    )
+  );
+  const cancel = (): void => {
+    Effect.runFork(Fiber.interrupt(timer));
+  };
+  const onAdmitted = (turnId: TranscriptTurnId): void => {
+    cancel();
+    timer = Effect.runFork(
+      Effect.sleep(Duration.millis(hostedResponseDeadlineMs)).pipe(
+        Effect.flatMap(() =>
+          Deferred.succeed(
+            pending,
+            Response.json(
+              { status: "processing", turnId },
+              { status: HTTP_ACCEPTED, headers: { "cache-control": "no-store" } }
+            )
+          )
+        ),
+        Effect.asVoid
+      )
+    );
+  };
+  return {
+    processing: Effect.runPromise(Deferred.await(pending)),
+    onAdmitted,
+    cancel,
+    signal: AbortSignal.any([signal, preflight.signal]),
+  };
+};
+
+/** Recover a stalled owner before freeing the per-User queue. A later canonical commit must pass
+ * the pending-Turn fence inside the same D1 batch, so it cannot commit after recovery.
+ */
+const boundedHostedOwner = ({
+  ownerSettled,
+  recover,
+}: Readonly<{ ownerSettled: Promise<void>; recover: () => Promise<void> }>): Promise<void> => {
+  const cancellation = new AbortController();
+  const recovered = Effect.runPromise(
+    Effect.sleep(Duration.millis(pendingExecutionRecoveryMs + hostedResponseDeadlineMs)).pipe(
+      Effect.flatMap(() =>
+        Effect.tryPromise(recover).pipe(Effect.retry(Schedule.spaced(Duration.seconds(1))))
+      )
+    ),
+    { signal: cancellation.signal }
+  ).then(
+    () => undefined,
+    () => ownerSettled
+  );
+  return Promise.race([ownerSettled, recovered]).finally(() => cancellation.abort());
+};
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
@@ -439,9 +553,17 @@ export class UserTransactionCoordinator {
   fetch(request: Request): Promise<Response> {
     const environment = this.env;
     const userId = this.state.id.name;
+    const path = new URL(request.url).pathname;
+    // A progress read has live session authority but does not start canonical work.
+    if (path === "/hosted-turn/progress") return this.runHostedProgress(request, userId);
+    const deadline =
+      path === "/hosted-turn"
+        ? Option.some(hostedDeadline(request.signal))
+        : Option.none<ReturnType<typeof hostedDeadline>>();
     const settledResponse = this.pending.then(() => {
-      const path = new URL(request.url).pathname;
-      if (path === "/hosted-turn") return this.runHostedTurn(request, userId);
+      if (Option.isSome(deadline)) {
+        return this.runHostedTurn(request, userId, deadline.value);
+      }
       if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
       return Effect.runPromise(
         Effect.scoped(
@@ -463,16 +585,24 @@ export class UserTransactionCoordinator {
             ) {
               return transactionUnavailable();
             }
-            return yield* executeCanonicalAdmission(admission.value, environment);
+            return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
           })
         )
       );
     });
-    this.pending = settledResponse.then(
+    const ownerSettled = settledResponse.then(
       () => undefined,
       () => undefined
     );
-    return settledResponse;
+    this.pending = Option.match(deadline, {
+      onNone: () => ownerSettled,
+      onSome: () =>
+        boundedHostedOwner({ ownerSettled, recover: () => this.recoverAbandonedWork() }),
+    });
+    return Option.match(deadline, {
+      onNone: () => settledResponse,
+      onSome: (soft) => Promise.race([settledResponse, soft.processing]).finally(soft.cancel),
+    });
   }
 
   /** Durable alarm recovers abandoned work even when its User never submits another Turn. */
@@ -489,13 +619,11 @@ export class UserTransactionCoordinator {
     const { env, state } = this;
     return Effect.runPromise(
       Effect.gen(function* () {
-        const next = yield* Effect.tryPromise(() =>
-          expireHostedPending({
-            db: env.DB,
-            userId: UserId.make(state.id.name),
-            now: transactionNow(),
-          })
-        );
+        const next = yield* expireHostedPending({
+          db: env.DB,
+          userId: UserId.make(state.id.name),
+          now: transactionNow(),
+        });
         if (Option.isSome(next)) {
           yield* Effect.tryPromise(() => state.storage.setAlarm(next.value));
         }
@@ -534,8 +662,82 @@ export class UserTransactionCoordinator {
     );
   }
 
-  private runHostedTurn(request: Request, userId: string): Promise<Response> {
+  private runHostedProgress(request: Request, userId: string): Promise<Response> {
     const { env, state } = this;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+          Effect.orElseSucceed(() => undefined)
+        );
+        const admission = Schema.decodeUnknownOption(HostedProgressAdmission)(candidate);
+        if (
+          Option.isNone(admission) ||
+          admission.value.userId !== userId ||
+          admission.value.digest.length !== digestBytes
+        ) {
+          return transactionUnavailable();
+        }
+        return yield* Effect.tryPromise(() =>
+          readHostedProgress({
+            db: env.DB,
+            subject: {
+              userId,
+              id: admission.value.sessionId,
+              digest: new Uint8Array(admission.value.digest),
+            },
+            turnId: admission.value.turnId,
+            scheduleRecovery: (due) => state.storage.setAlarm(due),
+          })
+        ).pipe(Effect.orElseSucceed(transactionUnavailable));
+      })
+    );
+  }
+
+  private executeHostedMutation({
+    admission,
+    operation,
+    input,
+    hostedFence,
+  }: Readonly<{
+    admission: typeof HostedTurnAdmission.Type;
+    operation: CanonicalOperationId;
+    input: CanonicalToolEvidence;
+    hostedFence: HostedCommitFence;
+  }>): Promise<Response> {
+    const batch = Schema.decodeUnknownOption(
+      Schema.Struct({ payload: Schema.Struct({ calls: BatchCalls }) })
+    )(input);
+    if (operation === atomicBatchOperation && Option.isNone(batch)) {
+      return Promise.resolve(transactionUnavailable());
+    }
+    const work: CanonicalWork =
+      operation === atomicBatchOperation && Option.isSome(batch)
+        ? { _tag: "Batch", calls: batch.value.payload.calls }
+        : { _tag: "Call", operation, input };
+    return Effect.runPromise(
+      Effect.scoped(
+        executeCanonicalAdmission(
+          {
+            _tag: "WebSessionWork",
+            userId: admission.userId,
+            sessionId: admission.sessionId,
+            digest: admission.digest,
+            work,
+          },
+          this.env,
+          Option.some(hostedFence)
+        )
+      )
+    );
+  }
+
+  private runHostedTurn(
+    request: Request,
+    userId: string,
+    deadline: ReturnType<typeof hostedDeadline>
+  ): Promise<Response> {
+    const { env, state } = this;
+    const executeMutation = this.executeHostedMutation.bind(this);
     return Effect.runPromise(
       Effect.gen(function* () {
         const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
@@ -552,20 +754,30 @@ export class UserTransactionCoordinator {
         const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
         if (Exit.isFailure(inference)) return transactionUnavailable();
         return yield* Effect.tryPromise(() =>
-          completeHostedTurn({
-            db: env.DB,
-            subject: {
-              userId: admission.value.userId,
-              id: admission.value.sessionId,
-              digest: new Uint8Array(admission.value.digest),
+          completeHostedTurnWithAdmission({
+            input: {
+              db: env.DB,
+              bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+              executeMutation: Option.some((operation, input, hostedFence) =>
+                executeMutation({ admission: admission.value, operation, input, hostedFence })
+              ),
+              subject: {
+                userId: admission.value.userId,
+                id: admission.value.sessionId,
+                digest: new Uint8Array(admission.value.digest),
+              },
+              text: admission.value.text,
+              inference: inference.value,
+              deliver: browserHostedDelivery,
+              signal: deadline.signal,
+              scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
             },
-            text: admission.value.text,
-            inference: inference.value,
-            deliver: browserHostedDelivery,
-            signal: request.signal,
-            scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+            onAdmitted: deadline.onAdmitted,
           })
-        ).pipe(Effect.orElseSucceed(transactionUnavailable));
+        ).pipe(
+          Effect.withSpan("agent.hostedTurn.execution"),
+          Effect.orElseSucceed(transactionUnavailable)
+        );
       })
     );
   }

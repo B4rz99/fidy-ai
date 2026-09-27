@@ -13,6 +13,8 @@ export {
   HostedTurnRequest,
   HostedTurnReceipt,
   HostedTurnProposal,
+  HostedTurnProcessing,
+  HostedTurnProgressRequest,
   type HostedTurnApiGroups,
 } from "~/shell/agent/hosted-turn-api";
 export { isHttpOrigin } from "~/shell/public-http/contract";

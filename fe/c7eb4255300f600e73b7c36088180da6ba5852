@@ -7,6 +7,7 @@ apps/web/src/features/dashboard/feature.test.tsx
 apps/server/tools/contracts/generate.ts
   s_59761da4435965::t_11cbbc8afe8221 84,86,117,119
   s_59761da4435965::t_3f6418de219bce 92-97,105
+  s_faf8a5df7be82b::t_b38ade101d986f 85,118
 apps/server/tools/contracts/digest-artifacts.ts
   s_59761da4435965::t_11cbbc8afe8221 13-15
 apps/web/scripts/release-metadata.ts
@@ -44,6 +45,14 @@ apps/server/tools/contracts/artifacts.test.ts
       "agent_id": {
         "tool": "pi",
         "id": "01a0e2f1-addf-702b-8244-48367007e486",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_faf8a5df7be82b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e168-5ff0-7659-a885-b549132ad908",
         "model": "gpt-6-sol"
       },
       "human_author": "obarbozaa <obarbozaa@gmail.com>"

@@ -1,0 +1,20 @@
+apps/web/scripts/build-preview.test.ts
+  s_672cb0b11117a0::t_6265dbbcf24b5c 2,34,36-37,39-40
+  s_672cb0b11117a0::t_2d5bff5beb71d9 1,8-20,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1ea1bd13a5f2ec9887726a65d1f94be0dd7a6829",
+  "prompts": {},
+  "sessions": {
+    "s_672cb0b11117a0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-dfc1-7155-b931-68aab92fe6d8",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

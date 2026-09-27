@@ -110,11 +110,12 @@ export const keywordRuleUnknownId = (): Response =>
  * create shape, and None means the request carried no decodable JSON body. The result is an
  * attempted input, never authority — nothing here authenticates or audits the request.
  */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const keywordRuleInput = (
-  request: Request,
-  update: boolean
-): Promise<Option.Option<CreateKeywordRuleInput>> => {
+export const keywordRuleInput = ({
+  request,
+  update,
+}: Readonly<{ request: Request; update: boolean }>): Promise<
+  Option.Option<CreateKeywordRuleInput>
+> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return Promise.resolve(Option.none());
   }

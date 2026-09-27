@@ -399,7 +399,11 @@ export const findDashboardValue = ({
     const now = DateTime.nowUnsafe();
     const facts = yield* loadDashboardFacts({ db, userId, document: found.value.document, now });
     if (Option.isNone(facts)) return Option.none();
-    const view = yield* renderDashboardView(found.value.document, facts.value, now);
+    const view = yield* renderDashboardView({
+      document: found.value.document,
+      facts: facts.value,
+      now,
+    });
     return Option.some({
       _tag: "Owner" as const,
       payload: view,

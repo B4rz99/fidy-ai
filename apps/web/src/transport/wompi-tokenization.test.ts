@@ -1,4 +1,5 @@
 import { Cause, Effect, Exit, Fiber } from "effect";
+import { it as effectIt } from "@effect/vitest";
 import { describe, expect, it, vi } from "vitest";
 import {
   CardTokenizationFailed,
@@ -15,7 +16,7 @@ const card = {
 };
 
 describe("Wompi browser tokenization", () => {
-  it("sends card details straight to Sandbox and retains only the returned token", async () => {
+  it("sends card details straight to Sandbox and retains only the returned token", () => {
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(JSON.stringify({ data: { id: "tok_test_browser_only", brand: "VISA" } }), {
         status: 200,
@@ -23,73 +24,76 @@ describe("Wompi browser tokenization", () => {
       })
     );
 
-    await expect(
-      Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
-    ).resolves.toBe("tok_test_browser_only");
-    expect(fetchStub).toHaveBeenCalledWith(
-      "https://sandbox.wompi.co/v1/tokens/cards",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          number: "4242424242424242",
-          cvc: "123",
-          exp_month: "08",
-          exp_year: "30",
-          card_holder: "Ada Lovelace",
-        }),
-      })
-    );
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub)))
+      .resolves.toBe("tok_test_browser_only")
+      .then(() => {
+        expect(fetchStub).toHaveBeenCalledWith(
+          "https://sandbox.wompi.co/v1/tokens/cards",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              number: "4242424242424242",
+              cvc: "123",
+              exp_month: "08",
+              exp_year: "30",
+              card_holder: "Ada Lovelace",
+            }),
+          })
+        );
+      });
   });
 
-  it("uses the production Wompi origin for production public keys", async () => {
+  it("uses the production Wompi origin for production public keys", () => {
     const fetchStub = vi
       .fn<WompiFetch>()
       .mockResolvedValue(
         new Response(JSON.stringify({ data: { id: "tok_prod_browser_only", brand: "VISA" } }))
       );
 
-    await expect(
-      Effect.runPromise(tokenizeCardWithWompi("pub_prod_12345678", card, fetchStub))
-    ).resolves.toBe("tok_prod_browser_only");
-    expect(fetchStub).toHaveBeenCalledWith(
-      "https://production.wompi.co/v1/tokens/cards",
-      expect.any(Object)
-    );
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_prod_12345678", card, fetchStub)))
+      .resolves.toBe("tok_prod_browser_only")
+      .then(() => {
+        expect(fetchStub).toHaveBeenCalledWith(
+          "https://production.wompi.co/v1/tokens/cards",
+          expect.any(Object)
+        );
+      });
   });
 
-  it("fails without calling Wompi when the public key has an unknown environment", async () => {
+  it("fails without calling Wompi when the public key has an unknown environment", () => {
     const fetchStub = vi.fn<WompiFetch>();
 
-    await expect(
-      Effect.runPromise(tokenizeCardWithWompi("pub_unknown_12345678", card, fetchStub))
-    ).rejects.toBeInstanceOf(CardTokenizationFailed);
-    expect(fetchStub).not.toHaveBeenCalled();
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_unknown_12345678", card, fetchStub)))
+      .rejects.toBeInstanceOf(CardTokenizationFailed)
+      .then(() => {
+        expect(fetchStub).not.toHaveBeenCalled();
+      });
   });
 
-  it("turns provider connection failures into one detail-free failure", async () => {
+  it("turns provider connection failures into one detail-free failure", () => {
     const fetchStub = vi.fn<WompiFetch>().mockRejectedValue(new Error("provider detail"));
 
-    await expect(
+    return expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
   });
 
-  it("rejects a successful provider response without a body", async () => {
+  it("rejects a successful provider response without a body", () => {
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(new Response(null, { status: 200 }));
 
-    await expect(
+    return expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
   });
 
-  it("rejects card networks outside the approved recurring launch set", async () => {
+  it("rejects card networks outside the approved recurring launch set", () => {
     const fetchStub = vi
       .fn<WompiFetch>()
       .mockResolvedValue(
         new Response(JSON.stringify({ data: { id: "tok_test_amex", brand: "AMEX" } }))
       );
 
-    await expect(
+    return expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
   });
@@ -97,7 +101,7 @@ describe("Wompi browser tokenization", () => {
   it.each([
     ["missing content length", {}],
     ["dishonest smaller content length", { "content-length": "1" }],
-  ])("stops a chunked %s response at the browser-owned byte limit", async (_label, headers) => {
+  ])("stops a chunked %s response at the browser-owned byte limit", (_label, headers) => {
     let cancelled = false;
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(
@@ -114,13 +118,14 @@ describe("Wompi browser tokenization", () => {
       )
     );
 
-    await expect(
-      Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
-    ).rejects.toBeInstanceOf(CardTokenizationFailed);
-    expect(cancelled).toBe(true);
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub)))
+      .rejects.toBeInstanceOf(CardTokenizationFailed)
+      .then(() => {
+        expect(cancelled).toBe(true);
+      });
   });
 
-  it("rejects a declared oversized response before buffering and cancels its reader", async () => {
+  it("rejects a declared oversized response before buffering and cancels its reader", () => {
     let cancelled = false;
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(
@@ -134,75 +139,86 @@ describe("Wompi browser tokenization", () => {
       )
     );
 
-    await expect(
-      Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
-    ).rejects.toBeInstanceOf(CardTokenizationFailed);
-    expect(cancelled).toBe(true);
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub)))
+      .rejects.toBeInstanceOf(CardTokenizationFailed)
+      .then(() => {
+        expect(cancelled).toBe(true);
+      });
   });
 
-  it("accepts a provider response exactly at the browser-owned byte limit", async () => {
+  it("accepts a provider response exactly at the browser-owned byte limit", () => {
     const body = JSON.stringify({ data: { id: "x".repeat(4_096), brand: "VISA" } });
     const padding = " ".repeat(16_384 - body.length);
     const fetchStub = vi
       .fn<WompiFetch>()
       .mockResolvedValue(new Response(`${body}${padding}`, { status: 200 }));
 
-    await expect(
+    return expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).resolves.toBe("x".repeat(4_096));
   });
 
-  it("cancels the provider reader when tokenization is interrupted", async () => {
-    const { promise: cancelled, resolve: resolveCancellation } = Promise.withResolvers<void>();
-    const { promise: neverPull } = Promise.withResolvers<void>();
-    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
-      new Response(
-        new ReadableStream<Uint8Array>({
-          start: (controller): void => controller.enqueue(new Uint8Array([1])),
-          pull: (): Promise<void> => neverPull,
-          cancel: (): void => resolveCancellation(),
-        }),
-        { status: 200 }
-      )
-    );
-    const fiber = Effect.runFork(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub));
-    await Promise.resolve();
+  effectIt.effect("cancels the provider reader when tokenization is interrupted", () =>
+    Effect.gen(function* () {
+      const { promise: cancelled, resolve: resolveCancellation } = Promise.withResolvers<void>();
+      const { promise: neverPull } = Promise.withResolvers<void>();
+      const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller): void => controller.enqueue(new Uint8Array([1])),
+            pull: (): Promise<void> => neverPull,
+            cancel: (): void => resolveCancellation(),
+          }),
+          { status: 200 }
+        )
+      );
+      const fiber = yield* Effect.forkChild(
+        tokenizeCardWithWompi("pub_test_12345678", card, fetchStub),
+        { startImmediately: true }
+      );
+      yield* Effect.tryPromise(() => Promise.resolve());
 
-    await Effect.runPromise(Fiber.interrupt(fiber));
-    await cancelled;
-    const exit = await Effect.runPromise(Fiber.await(fiber));
+      yield* Fiber.interrupt(fiber);
+      yield* Effect.tryPromise(() => cancelled);
+      const exit = yield* Fiber.await(fiber);
 
-    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-  });
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+    })
+  );
 
-  it("turns malformed provider responses into one detail-free failure", async () => {
+  it("turns malformed provider responses into one detail-free failure", () => {
     const fetchStub = vi
       .fn<WompiFetch>()
       .mockResolvedValue(new Response(JSON.stringify({ provider_secret: "unexpected" })));
 
-    await expect(
+    return expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
   });
 
-  it("cancels an owned response reader on interruption without cleanup defects", async () => {
-    const { promise: started, resolve: readingStarted } = Promise.withResolvers<void>();
-    const cancel = vi.fn(() => Promise.reject(new Error("reader already closed")));
-    const response = new Response(
-      new ReadableStream<Uint8Array>({
-        pull: (): void => readingStarted(),
-        cancel,
-      })
-    );
-    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(response);
-    const fiber = Effect.runFork(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub));
-    await started;
+  effectIt.effect("cancels an owned response reader on interruption without cleanup defects", () =>
+    Effect.gen(function* () {
+      const { promise: started, resolve: readingStarted } = Promise.withResolvers<void>();
+      const cancel = vi.fn(() => Promise.reject(new Error("reader already closed")));
+      const response = new Response(
+        new ReadableStream<Uint8Array>({
+          pull: (): void => readingStarted(),
+          cancel,
+        })
+      );
+      const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(response);
+      const fiber = yield* Effect.forkChild(
+        tokenizeCardWithWompi("pub_test_12345678", card, fetchStub),
+        { startImmediately: true }
+      );
+      yield* Effect.tryPromise(() => started);
 
-    await Effect.runPromise(Fiber.interrupt(fiber));
-    const exit = await Effect.runPromise(Fiber.await(fiber));
+      yield* Fiber.interrupt(fiber);
+      const exit = yield* Fiber.await(fiber);
 
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(false);
-  });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+      expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(false);
+    })
+  );
 });

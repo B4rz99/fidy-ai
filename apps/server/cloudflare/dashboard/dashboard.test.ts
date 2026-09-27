@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
-import { BigDecimal, DateTime, Effect, Schema } from "effect";
+import { BigDecimal, type Cause, DateTime, Effect, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/dashboard-repair";
 import { DashboardDocument } from "../../src/core/dashboard/model";
 import { Transaction } from "../../src/core/transactions/model";
@@ -22,27 +22,23 @@ const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
 
-// @effect-diagnostics-next-line asyncFunction:off
-const migrate = async (db: D1Database, name: string): Promise<void> => {
-  const sql = await Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text();
-  const statements = sql
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u);
-  await statements.reduce<Promise<void>>(
-    (previous, statement) =>
-      previous.then(() =>
-        db
-          .prepare(statement)
-          .run()
-          .then(() => undefined)
-      ),
-    Promise.resolve()
-  );
-};
+const migrate = (db: D1Database, name: string): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const sql = yield* Effect.tryPromise(() =>
+      Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text()
+    );
+    const statements = sql
+      .replace(/^--.*$/gmu, "")
+      .trim()
+      .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u);
+    yield* Effect.forEach(
+      statements,
+      (statement) => Effect.tryPromise(() => db.prepare(statement).run()),
+      { discard: true }
+    );
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const seedUser = async ({
+const seedUser = ({
   db,
   user,
   index,
@@ -52,127 +48,142 @@ const seedUser = async ({
   user: string;
   index: number;
   current: number;
-}>): Promise<void> => {
-  await db
-    .prepare(
-      "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-    )
-    .bind(user, current)
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-    )
-    .bind(
-      `10000000-0000-4000-8000-00000000007${index}`,
-      `ABCD-123${index}`,
-      await digest(`verifier${index}`),
-      user,
-      current,
-      current + 600000
-    )
-    .run();
-  await db
-    .prepare(
-      "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(
-      sessions[index],
-      `10000000-0000-4000-8000-00000000007${index}`,
-      user,
-      await digest(bearer(index)),
-      current,
-      current + 600000,
-      current + 3600000,
-      current + 7776000000
-    )
-    .run();
-};
+}>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+        )
+        .bind(user, current)
+        .run()
+    );
+    const credentialDigest1 = yield* Effect.tryPromise(() => digest(`verifier${index}`));
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
+        )
+        .bind(
+          `10000000-0000-4000-8000-00000000007${index}`,
+          `ABCD-123${index}`,
+          credentialDigest1,
+          user,
+          current,
+          current + 600000
+        )
+        .run()
+    );
+    const credentialDigest2 = yield* Effect.tryPromise(() => digest(bearer(index)));
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(
+          sessions[index],
+          `10000000-0000-4000-8000-00000000007${index}`,
+          user,
+          credentialDigest2,
+          current,
+          current + 600000,
+          current + 3600000,
+          current + 7776000000
+        )
+        .run()
+    );
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const setup = async (): Promise<D1Database> => {
-  const id = `dashboard-${++sequence}`;
-  const mf = new Miniflare({
-    workers: [
-      {
-        config: {
-          compatibilityDate: "2026-09-08",
-          env: { DB: { id, type: "d1" } },
-          manifest: {
-            mainModule: "index.mjs",
-            modules: {
-              "index.mjs": {
-                contents: "export default {fetch() {return new Response('ok')}}",
-                type: "esm",
+const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const id = `dashboard-${++sequence}`;
+    const mf = new Miniflare({
+      workers: [
+        {
+          config: {
+            compatibilityDate: "2026-09-08",
+            env: { DB: { id, type: "d1" } },
+            manifest: {
+              mainModule: "index.mjs",
+              modules: {
+                "index.mjs": {
+                  contents: "export default {fetch() {return new Response('ok')}}",
+                  type: "esm",
+                },
               },
             },
+            name: id,
+            type: "worker",
           },
-          name: id,
-          type: "worker",
         },
-      },
-    ],
+      ],
+    });
+    instances.push(mf);
+    yield* Effect.tryPromise(() => mf.ready);
+    const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
+    yield* Effect.forEach(
+      [
+        "0001_categories",
+        "0003_pending_consent",
+        "0004_onboarding_email",
+        "0005_verified_onboarding",
+        "0006_browser_login",
+        "0009_transactions",
+        "0010_pat_lifecycle",
+        "0011_transaction_corrections",
+        "0012_statement_staging",
+        "0012_transaction_search",
+        "0013_category_keyword_rules",
+        "0013_transaction_reconciliation",
+        "0014_memory",
+        "0015_statement_submission",
+        "0016_budgets",
+        "0017_statement_dispatch",
+        "0018_dashboard",
+        "0019_canonical_child_guards",
+        "0020_dashboard_projection",
+      ],
+      (name) => migrate(db, name),
+      { discard: true }
+    );
+    const current = DateTime.nowUnsafe().epochMilliseconds;
+    yield* Effect.forEach(users, (user, index) => seedUser({ db, user, index, current }), {
+      discard: true,
+    });
+    return db;
   });
-  instances.push(mf);
-  await mf.ready;
-  const db = await mf.getD1Database("DB");
-  await [
-    "0001_categories",
-    "0003_pending_consent",
-    "0004_onboarding_email",
-    "0005_verified_onboarding",
-    "0006_browser_login",
-    "0009_transactions",
-    "0010_pat_lifecycle",
-    "0011_transaction_corrections",
-    "0012_statement_staging",
-    "0012_transaction_search",
-    "0013_category_keyword_rules",
-    "0013_transaction_reconciliation",
-    "0014_memory",
-    "0015_statement_submission",
-    "0016_budgets",
-    "0017_statement_dispatch",
-    "0018_dashboard",
-    "0019_canonical_child_guards",
-    "0020_dashboard_projection",
-  ].reduce<Promise<void>>(
-    (previous, name) => previous.then(() => migrate(db, name)),
-    Promise.resolve()
-  );
-  const current = DateTime.nowUnsafe().epochMilliseconds;
-  await users.reduce<Promise<void>>(
-    (previous, user, index) => previous.then(() => seedUser({ db, user, index, current })),
-    Promise.resolve()
-  );
-  return db;
-};
 afterEach(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())));
 
-// @effect-diagnostics-next-line asyncFunction:off
-const seedPAT = async (
+const seedPAT = (
   db: D1Database,
   input: Readonly<{ token: string; scope: "read" | "write" | "dashboard"; id: string }>
-): Promise<void> => {
-  const { token, scope, id } = input;
-  const current = DateTime.nowUnsafe().epochMilliseconds;
-  await db
-    .prepare(`INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json, lifetime_days,
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const { token, scope, id } = input;
+    const current = DateTime.nowUnsafe().epochMilliseconds;
+    const credentialDigest3 = yield* Effect.tryPromise(() => digest(token));
+    const scopesJson = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.Array(Schema.String))
+    )([scope]);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json, lifetime_days,
     created_at_ms, issued_at_ms, expires_at_ms, request_id)
     VALUES (?, ?, ?, ?, 'Dashboard security fixture', ?, 7, ?, ?, ?, ?)`)
-    .bind(
-      id,
-      users[0],
-      token.slice(4, 12),
-      await digest(token),
-      JSON.stringify([scope]),
-      current,
-      current,
-      current + 7 * 86400000,
-      id.replace("8000", "9000")
-    )
-    .run();
-};
+        .bind(
+          id,
+          users[0],
+          token.slice(4, 12),
+          credentialDigest3,
+          scopesJson,
+          current,
+          current,
+          current + 7 * 86400000,
+          id.replace("8000", "9000")
+        )
+        .run()
+    );
+  });
 
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const send = (
@@ -279,880 +290,1179 @@ const count = (db: D1Database, table: "dashboard_documents" | "dashboard_audit")
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
 
-// @effect-diagnostics-next-line asyncFunction:off
-const metricTotals = async (response: Response): Promise<ReadonlyArray<string>> => {
-  expect(response.status).toBe(200);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await response.json()
-  ).data;
-  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const metric = leaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
-  );
-  if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
-    throw new Error("Expected custom metric");
-  }
-  return metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount));
-};
-
-// @effect-diagnostics-next-line asyncFunction:off
-const listIds = async (response: Response, widgetId: string): Promise<ReadonlyArray<string>> => {
-  expect(response.status).toBe(200);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await response.json()
-  ).data;
-  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const list = leaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.id === widgetId
-  );
-  if (list?.kind !== "leaf" || !("transactions" in list.widget.result)) {
-    throw new Error("Expected list results");
-  }
-  return list.widget.result.transactions.map((transaction) => transaction.id);
-};
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("a first invalid or missing Dashboard edit records only its refusal and never persists a document", async () => {
-  const db = await setup();
-  const invalid = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: { op: "set-title", title: "" },
+const metricTotals = (
+  response: Response
+): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    expect(response.status).toBe(200);
+    const view = (yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+    )(yield* Effect.tryPromise(() => response.json()))).data;
+    const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+      node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+    const metric = leaves(view.layout).find(
+      (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
+    );
+    if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
+      throw new Error("Expected custom metric");
+    }
+    return metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount));
   });
-  expect(invalid.status).toBe(400);
-  const missing = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "remove-widget",
-      widgetId: "30000000-0000-4000-8000-000000000099",
-    },
-  });
-  expect(missing.status).toBe(404);
-  expect(await count(db, "dashboard_documents")).toBe(0);
-  const rows = await db
-    .prepare("SELECT operation, outcome FROM dashboard_audit WHERE user_id = ? ORDER BY rowid")
-    .bind(users[0])
-    .all();
-  expect(rows.results).toEqual([
-    { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
-    { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
-  ]);
-}, 30_000);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("persists one Dashboard child through the public atomic batch and rolls back a failed sibling", async () => {
-  const db = await setup();
-  const rejected = await batch(db, [
-    batchCall("dashboard.getDashboard", {}, 1),
-    batchCall(
-      "dashboard.applyDashboardEdit",
-      {
-        payload: {
-          op: "remove-widget",
-          widgetId: "30000000-0000-4000-8000-000000000099",
-        },
-      },
-      2
+const listIds = (
+  response: Response,
+  widgetId: string
+): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    expect(response.status).toBe(200);
+    const view = (yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+    )(yield* Effect.tryPromise(() => response.json()))).data;
+    const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+      node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+    const list = leaves(view.layout).find(
+      (node) => node.kind === "leaf" && node.widget.widget.id === widgetId
+    );
+    if (list?.kind !== "leaf" || !("transactions" in list.widget.result)) {
+      throw new Error("Expected list results");
+    }
+    return list.widget.result.transactions.map((transaction) => transaction.id);
+  });
+
+it(
+  "a first invalid or missing Dashboard edit records only its refusal and never persists a document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const invalid = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: { op: "set-title", title: "" },
+          })
+        );
+        expect(invalid.status).toBe(400);
+        const missing = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "remove-widget",
+              widgetId: "30000000-0000-4000-8000-000000000099",
+            },
+          })
+        );
+        expect(missing.status).toBe(404);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        const rows = yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT operation, outcome FROM dashboard_audit WHERE user_id = ? ORDER BY rowid"
+            )
+            .bind(users[0])
+            .all()
+        );
+        expect(rows.results).toEqual([
+          { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
+          { operation: "dashboard.applyDashboardEdit", outcome: "rejected" },
+        ]);
+      })
     ),
-  ]);
-  expect(rejected.status).toBe(400);
-  expect(Schema.decodeUnknownSync(BatchFailure)(await rejected.json()).error).toMatchObject({
-    operation: "dashboard.applyDashboardEdit",
-    failedCallIndex: 1,
-    code: "not_found",
-  });
-  expect(await count(db, "dashboard_documents")).toBe(0);
-  expect(await count(db, "dashboard_audit")).toBe(1);
-  const accepted = await batch(db, [batchCall("dashboard.getDashboardView", {}, 3)]);
-  expect(accepted.status).toBe(200);
-  expect(
-    Schema.decodeUnknownSync(BatchDashboard)(await accepted.json()).data.results[0]?.output.data
-      .title
-  ).toBe("Tablero");
-  expect(await count(db, "dashboard_documents")).toBe(1);
-  const repeated = await batch(db, [
-    batchCall("dashboard.getDashboard", {}, 4),
-    batchCall("dashboard.getDashboardView", {}, 5),
-  ]);
-  expect(repeated.status).toBe(400);
-  expect(Schema.decodeUnknownSync(BatchFailure)(await repeated.json()).error).toMatchObject({
-    failedCallIndex: 1,
-    code: "validation_failed",
-  });
-  expect(await count(db, "dashboard_audit")).toBe(2);
-}, 30_000);
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("keeps Dashboard read and edit scopes distinct inside atomic batches", async () => {
-  const db = await setup();
-  const token = `fin_${"r".repeat(8)}_${"c".repeat(43)}`;
-  await seedPAT(db, { token, scope: "read", id: "30000000-0000-4000-8000-000000000071" });
-  const denied = await send(db, token, {
-    path: "/operations/atomic-batch",
-    method: "POST",
-    body: {
-      calls: [
-        batchCall(
-          "dashboard.applyDashboardEdit",
-          { payload: { op: "set-title", title: "Not allowed" } },
-          1
-        ),
-      ],
-    },
-  });
-  expect(denied.status).toBe(400);
-  expect(Schema.decodeUnknownSync(BatchFailure)(await denied.json()).error.code).toBe(
-    "scope_missing"
-  );
-  expect(await count(db, "dashboard_documents")).toBe(0);
-  expect(await count(db, "dashboard_audit")).toBe(0);
-  const allowed = await send(db, token, {
-    path: "/operations/atomic-batch",
-    method: "POST",
-    body: {
-      calls: [batchCall("dashboard.getDashboard", {}, 2)],
-    },
-  });
-  expect(allowed.status).toBe(200);
-  expect(await count(db, "dashboard_documents")).toBe(1);
-}, 30_000);
+it(
+  "persists one Dashboard child through the public atomic batch and rolls back a failed sibling",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const rejected = yield* Effect.tryPromise(() =>
+          batch(db, [
+            batchCall("dashboard.getDashboard", {}, 1),
+            batchCall(
+              "dashboard.applyDashboardEdit",
+              {
+                payload: {
+                  op: "remove-widget",
+                  widgetId: "30000000-0000-4000-8000-000000000099",
+                },
+              },
+              2
+            ),
+          ])
+        );
+        expect(rejected.status).toBe(400);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            yield* Effect.tryPromise(() => rejected.json())
+          )).error
+        ).toMatchObject({
+          operation: "dashboard.applyDashboardEdit",
+          failedCallIndex: 1,
+          code: "not_found",
+        });
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
+        const accepted = yield* Effect.tryPromise(() =>
+          batch(db, [batchCall("dashboard.getDashboardView", {}, 3)])
+        );
+        expect(accepted.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchDashboard)(
+            yield* Effect.tryPromise(() => accepted.json())
+          )).data.results[0]?.output.data.title
+        ).toBe("Tablero");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
+        const repeated = yield* Effect.tryPromise(() =>
+          batch(db, [
+            batchCall("dashboard.getDashboard", {}, 4),
+            batchCall("dashboard.getDashboardView", {}, 5),
+          ])
+        );
+        expect(repeated.status).toBe(400);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            yield* Effect.tryPromise(() => repeated.json())
+          )).error
+        ).toMatchObject({
+          failedCallIndex: 1,
+          code: "validation_failed",
+        });
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+      })
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("does not report a skipped Dashboard revision as a successful edit", async () => {
-  const db = await setup();
-  const created = await send(db, 0, "/dashboard");
-  expect(created.status).toBe(200);
-  await db
-    .prepare(`CREATE TRIGGER ignore_dashboard_update BEFORE UPDATE ON dashboard_documents
+it(
+  "keeps Dashboard read and edit scopes distinct inside atomic batches",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const token = `fin_${"r".repeat(8)}_${"c".repeat(43)}`;
+        yield* seedPAT(db, { token, scope: "read", id: "30000000-0000-4000-8000-000000000071" });
+        const denied = yield* Effect.tryPromise(() =>
+          send(db, token, {
+            path: "/operations/atomic-batch",
+            method: "POST",
+            body: {
+              calls: [
+                batchCall(
+                  "dashboard.applyDashboardEdit",
+                  { payload: { op: "set-title", title: "Not allowed" } },
+                  1
+                ),
+              ],
+            },
+          })
+        );
+        expect(denied.status).toBe(400);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            yield* Effect.tryPromise(() => denied.json())
+          )).error.code
+        ).toBe("scope_missing");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        const allowed = yield* Effect.tryPromise(() =>
+          send(db, token, {
+            path: "/operations/atomic-batch",
+            method: "POST",
+            body: {
+              calls: [batchCall("dashboard.getDashboard", {}, 2)],
+            },
+          })
+        );
+        expect(allowed.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
+      })
+    ),
+  30_000
+);
+
+it(
+  "does not report a skipped Dashboard revision as a successful edit",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const created = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        expect(created.status).toBe(200);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER ignore_dashboard_update BEFORE UPDATE ON dashboard_documents
     BEGIN SELECT RAISE(IGNORE); END`)
-    .run();
-  const response = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "set-title",
-      title: "Not written",
-    },
-  });
-  expect(response.status).not.toBe(200);
-  expect(
-    Schema.decodeUnknownSync(DocumentReply)(await (await send(db, 0, "/dashboard")).json()).data
-      .title
-  ).toBe("Tablero");
-  expect(await count(db, "dashboard_audit")).toBe(2);
-}, 30_000);
+            .run()
+        );
+        const response = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "set-title",
+              title: "Not written",
+            },
+          })
+        );
+        expect(response.status).not.toBe(200);
+        const documentResponse4 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        expect(
+          (yield* Schema.decodeUnknownEffect(DocumentReply)(
+            yield* Effect.tryPromise(() => documentResponse4.json())
+          )).data.title
+        ).toBe("Tablero");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+      })
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("rolls back a Dashboard child when a later owner's guarded audit aborts the D1 batch", async () => {
-  const db = await setup();
-  await db
-    .prepare(`CREATE TRIGGER reject_budget_success BEFORE INSERT ON budget_audit
+it(
+  "rolls back a Dashboard child when a later owner's guarded audit aborts the D1 batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER reject_budget_success BEFORE INSERT ON budget_audit
     WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_budget_unavailable'); END`)
-    .run();
-  const reply = await batch(db, [
-    batchCall("dashboard.getDashboard", {}, 8),
-    batchCall(
-      "budgets.createBudget",
-      {
-        payload: {
-          categoryId: "10000000-0000-4000-8000-000000000001",
-          cap: { amount: "50000", currency: "COP" },
-        },
-      },
-      9
+            .run()
+        );
+        const reply = yield* Effect.tryPromise(() =>
+          batch(db, [
+            batchCall("dashboard.getDashboard", {}, 8),
+            batchCall(
+              "budgets.createBudget",
+              {
+                payload: {
+                  categoryId: "10000000-0000-4000-8000-000000000001",
+                  cap: { amount: "50000", currency: "COP" },
+                },
+              },
+              9
+            ),
+          ])
+        );
+        expect(reply.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        const budget = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
+            .bind(users[0])
+            .first<{ count: number }>()
+        );
+        expect(budget?.count).toBe(0);
+      })
     ),
-  ]);
-  expect(reply.status).toBe(503);
-  expect(await count(db, "dashboard_documents")).toBe(0);
-  expect(await count(db, "dashboard_audit")).toBe(0);
-  const budget = await db
-    .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
-    .bind(users[0])
-    .first<{ count: number }>();
-  expect(budget?.count).toBe(0);
-}, 30_000);
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("rolls back first-use Dashboard persistence when its success Audit cannot commit", async () => {
-  const db = await setup();
-  await db
-    .prepare(`CREATE TRIGGER reject_dashboard_success BEFORE INSERT ON dashboard_audit
+it(
+  "rolls back first-use Dashboard persistence when its success Audit cannot commit",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER reject_dashboard_success BEFORE INSERT ON dashboard_audit
     WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_audit_unavailable'); END`)
-    .run();
-  const reply = await batch(db, [batchCall("dashboard.getDashboard", {}, 6)]);
-  expect(reply.status).toBe(503);
-  expect(await count(db, "dashboard_documents")).toBe(0);
-  expect(await count(db, "dashboard_audit")).toBe(0);
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("a first valid edit commits the default and edit in the same unit for individual and batch callers", async () => {
-  const db = await setup();
-  const edited = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "set-title",
-      title: "Individual",
-    },
-  });
-  expect(edited.status).toBe(200);
-  expect(Schema.decodeUnknownSync(DocumentReply)(await edited.json()).data.title).toBe(
-    "Individual"
-  );
-  const second = await batch(db, [
-    batchCall(
-      "dashboard.applyDashboardEdit",
-      {
-        payload: {
-          op: "set-title",
-          title: "Batch",
-        },
-      },
-      7
+            .run()
+        );
+        const reply = yield* Effect.tryPromise(() =>
+          batch(db, [batchCall("dashboard.getDashboard", {}, 6)])
+        );
+        expect(reply.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+      })
     ),
-  ]);
-  expect(second.status).toBe(200);
-  expect(
-    Schema.decodeUnknownSync(BatchDashboard)(await second.json()).data.results[0]?.output.data.title
-  ).toBe("Batch");
-  expect(
-    Schema.decodeUnknownSync(DocumentReply)(await (await send(db, 0, "/dashboard")).json()).data
-      .title
-  ).toBe("Batch");
-  expect(await count(db, "dashboard_documents")).toBe(1);
-}, 30_000);
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("creates a valid DashboardDocument for each User without sharing later edits", async () => {
-  const db = await setup();
-  const first = await send(db, 0, "/dashboard");
-  expect(first.status).toBe(200);
-  const body = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await first.json());
-  const document = body.data;
-  expect(document.title).toBe("Tablero");
-  const edited = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "set-title",
-      title: "Mi tablero",
-    },
-  });
-  expect(edited.status).toBe(200);
-  const other = await send(db, 1, "/dashboard");
-  expect(other.status).toBe(200);
-  const otherBody = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await other.json());
-  expect(otherBody.data.title).toBe("Tablero");
-  const after = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json());
-  expect(after.data.title).toBe("Mi tablero");
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("rejects a malformed layout edit without replacing the authenticated User's document", async () => {
-  const db = await setup();
-  const before = (await send(db, 0, "/dashboard")).status;
-  expect(before).toBe(200);
-  const invalid = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "add-widget",
-      at: "top",
-      widget: {
-        id: "10000000-0000-4000-8000-000000000081",
-        type: "transaction-list",
-        limit: 0,
-      },
-    },
-  });
-  expect(invalid.status).toBe(400);
-  const document = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json());
-  expect(document.data.title).toBe("Tablero");
-  expect(document.data.layout.kind).toBe("split");
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("does not treat a corrupt retained Dashboard as an absent document", async () => {
-  const db = await setup();
-  expect((await send(db, 0, "/dashboard")).status).toBe(200);
-  const before = await count(db, "dashboard_audit");
-  await db
-    .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
-    .bind("{}", users[0])
-    .run();
-  const edit = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: { op: "set-title", title: "Do not reset" },
-  });
-  expect(edit.status).toBe(503);
-  expect((await send(db, 0, "/dashboard")).status).toBe(503);
-  expect(await count(db, "dashboard_audit")).toBe(before);
-  expect(
-    await db
-      .prepare("SELECT document_json FROM dashboard_documents WHERE user_id = ?")
-      .bind(users[0])
-      .first<{ document_json: string }>()
-  ).toMatchObject({ document_json: "{}" });
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("cannot remove another User's Widget using a known WidgetId", async () => {
-  const db = await setup();
-  const owned = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json()).data;
-  const widgets = (node: DashboardDocument["layout"]): ReadonlyArray<string> =>
-    node.kind === "leaf" ? [node.widget.id] : node.children.flatMap((child) => widgets(child.node));
-  const foreignId = widgets(owned.layout)[0];
-  expect(foreignId).toBeDefined();
-  const refused = await send(db, 1, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "remove-widget",
-      widgetId: foreignId,
-    },
-  });
-  expect(refused.status).toBe(404);
-  const after = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json()).data;
-  expect(widgets(after.layout)).toEqual(widgets(owned.layout));
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("renders an empty validated DashboardView with current User context", async () => {
-  const db = await setup();
-  const result = await send(db, 0, "/dashboard/view");
-  expect(result.status).toBe(200);
-  const body = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await result.json()
-  );
-  expect(body.data.context).toMatchObject({
-    serviceMarket: "CO",
-    locale: "es-CO",
-    timeZone: "America/Bogota",
-  });
-  expect(body.data.layout.kind).toBe("split");
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("finds a recent Transaction by its captured notes in a configured list Widget", async () => {
-  const db = await setup();
-  const document = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json()).data;
-  const leaves = (node: DashboardDocument["layout"]): ReadonlyArray<DashboardDocument["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const list = leaves(document.layout).find(
-    (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
-  );
-  if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
-    throw new Error("Missing list");
-  }
-  const edited = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: {
-      op: "update-widget",
-      widget: { ...list.widget, search: "private note" },
-    },
-  });
-  expect(edited.status).toBe(200);
-  const created = await send(db, 0, {
-    path: "/transactions",
-    method: "POST",
-    body: {
-      money: { amount: "1.01", currency: "COP" },
-      categoryId: "10000000-0000-4000-8000-000000000001",
-      direction: "outflow",
-      occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-      notes: "private note Café",
-    },
-  });
-  expect(created.status).toBe(201);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await (await send(db, 0, "/dashboard/view")).json()
-  ).data;
-  const viewLeaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => viewLeaves(child.node));
-  const row = viewLeaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.id === list.widget.id
-  );
-  if (row?.kind !== "leaf" || !("transactions" in row.widget.result)) {
-    throw new Error("Missing list result");
-  }
-  expect(row.widget.result.transactions).toHaveLength(1);
-  const accented = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: { op: "update-widget", widget: { ...list.widget, search: "CAFÉ" } },
-  });
-  expect(accented.status).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
-  const twoCharacters = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: { op: "update-widget", widget: { ...list.widget, search: "fé" } },
-  });
-  expect(twoCharacters.status).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
-  const oneCharacter = await send(db, 0, {
-    path: "/dashboard/edits",
-    method: "POST",
-    body: { op: "update-widget", widget: { ...list.widget, search: "é" } },
-  });
-  expect(oneCharacter.status).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toHaveLength(1);
-  const captured = Schema.decodeUnknownSync(
-    Schema.Struct({
-      data: Schema.Struct({ id: Transaction.fields.id }),
-    })
-  )(await created.json()).data;
-  expect(
-    (
-      await send(db, 0, {
-        path: `/transactions/${captured.id}`,
-        method: "PUT",
-        body: { expectedRevision: 0, changes: { notes: "unrelated" } },
+it(
+  "a first valid edit commits the default and edit in the same unit for individual and batch callers",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const edited = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "set-title",
+              title: "Individual",
+            },
+          })
+        );
+        expect(edited.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(DocumentReply)(
+            yield* Effect.tryPromise(() => edited.json())
+          )).data.title
+        ).toBe("Individual");
+        const second = yield* Effect.tryPromise(() =>
+          batch(db, [
+            batchCall(
+              "dashboard.applyDashboardEdit",
+              {
+                payload: {
+                  op: "set-title",
+                  title: "Batch",
+                },
+              },
+              7
+            ),
+          ])
+        );
+        expect(second.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchDashboard)(
+            yield* Effect.tryPromise(() => second.json())
+          )).data.results[0]?.output.data.title
+        ).toBe("Batch");
+        const documentResponse5 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        expect(
+          (yield* Schema.decodeUnknownEffect(DocumentReply)(
+            yield* Effect.tryPromise(() => documentResponse5.json())
+          )).data.title
+        ).toBe("Batch");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
       })
-    ).status
-  ).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([]);
-}, 30_000);
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("projects the current User's Budget with exact outflow spend and remaining Money", async () => {
-  const db = await setup();
-  const budget = await send(db, 0, {
-    path: "/budgets",
-    method: "POST",
-    body: {
-      categoryId: "10000000-0000-4000-8000-000000000001",
-      cap: { amount: "100.00", currency: "COP" },
-    },
-  });
-  expect(budget.status).toBe(201);
-  const captured = await send(db, 0, {
-    path: "/transactions",
-    method: "POST",
-    body: {
-      money: { amount: "25.02", currency: "COP" },
-      categoryId: "10000000-0000-4000-8000-000000000001",
-      direction: "outflow",
-      occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-    },
-  });
-  expect(captured.status).toBe(201);
-  const viewResponse = await send(db, 0, "/dashboard/view");
-  expect(viewResponse.status).toBe(200);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await viewResponse.json()
-  ).data;
-  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const bar = leaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.type === "budget-bar"
-  );
-  if (
-    bar?.kind !== "leaf" ||
-    !("availability" in bar.widget.result) ||
-    bar.widget.result.availability !== "available"
-  ) {
-    throw new Error("Missing Budget bar");
-  }
-  expect(BigDecimal.format(bar.widget.result.spent.amount)).toBe("25.02");
-  if (bar.widget.result.status.type !== "under") throw new Error("Expected remaining Budget");
-  expect(BigDecimal.format(bar.widget.result.status.remaining.amount)).toBe("74.98");
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("denies under-scoped and revoked PAT Dashboard work without modifying a document", async () => {
-  const db = await setup();
-  const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
-  const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
-  const readId = "40000000-0000-4000-8000-000000000091";
-  await seedPAT(db, { token: readToken, scope: "read", id: readId });
-  await seedPAT(db, {
-    token: writeToken,
-    scope: "write",
-    id: "40000000-0000-4000-8000-000000000092",
-  });
-  expect((await send(db, writeToken, "/dashboard/view")).status).toBe(403);
-  expect(
-    (
-      await send(db, readToken, {
-        path: "/dashboard/edits",
-        method: "POST",
-        body: {
-          op: "set-title",
-          title: "Foreign title",
-        },
+it(
+  "creates a valid DashboardDocument for each User without sharing later edits",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const first = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        expect(first.status).toBe(200);
+        const body = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => first.json()));
+        const document = body.data;
+        expect(document.title).toBe("Tablero");
+        const edited = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "set-title",
+              title: "Mi tablero",
+            },
+          })
+        );
+        expect(edited.status).toBe(200);
+        const other = yield* Effect.tryPromise(() => send(db, 1, "/dashboard"));
+        expect(other.status).toBe(200);
+        const otherBody = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => other.json()));
+        expect(otherBody.data.title).toBe("Tablero");
+        const documentResponse6 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const after = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse6.json()));
+        expect(after.data.title).toBe("Mi tablero");
       })
-    ).status
-  ).toBe(403);
-  const before = await db
-    .prepare("SELECT COUNT(*) AS count FROM dashboard_documents WHERE user_id = ?")
-    .bind(users[0])
-    .first<{ count: number }>();
-  expect(before?.count).toBe(0);
-  expect((await send(db, readToken, "/dashboard/view")).status).toBe(200);
-  await db
-    .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
-    .bind(DateTime.nowUnsafe().epochMilliseconds, readId)
-    .run();
-  expect((await send(db, readToken, "/dashboard/view")).status).not.toBe(200);
-  const document = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-  )(await (await send(db, 0, "/dashboard")).json()).data;
-  expect(document.title).toBe("Tablero");
-}, 30_000);
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("a stale Dashboard read is replaced by current canonical facts after a Transaction correction", async () => {
-  const db = await setup();
-  const created = await send(db, 0, {
-    path: "/transactions",
-    method: "POST",
-    body: {
-      money: { amount: "10.01", currency: "COP" },
-      categoryId: "10000000-0000-4000-8000-000000000001",
-      direction: "outflow",
-      occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-    },
-  });
-  expect(created.status).toBe(201);
-  const { data: transaction } = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
-  )(await created.json());
-  const before = await send(db, 0, "/dashboard/view");
-  expect(before.status).toBe(200);
-  const correction = await send(db, 0, {
-    path: `/transactions/${transaction.id}`,
-    method: "PUT",
-    body: { expectedRevision: 0, changes: { money: { amount: "25.02", currency: "COP" } } },
-  });
-  expect(correction.status).toBe(200);
-  const after = await send(db, 0, "/dashboard/view");
-  expect(after.status).toBe(200);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await after.json()
-  ).data;
-  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const metric = leaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
-  );
-  expect(metric?.kind).toBe("leaf");
-  if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
-    throw new Error("Expected metric");
-  }
-  expect(
-    metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount))
-  ).toEqual(["25.02"]);
-}, 30_000);
-
-// @effect-diagnostics-next-line asyncFunction:off
-it("reinterprets maintained UTC contributions immediately after a User IANA time-zone change", async () => {
-  const db = await setup();
-  const now = DateTime.nowUnsafe();
-  const zones = ["Pacific/Kiritimati", "America/Bogota"]
-    .map((name) => ({
-      name,
-      from: resolveDashboardPeriod({
-        now,
-        period: "this-month",
-        timeZone: Schema.decodeSync(IanaTimeZone)(name),
-      }).from.epochMilliseconds,
-    }))
-    .sort((left, right) => left.from - right.from);
-  const earlier = zones[0];
-  const later = zones[1];
-  if (earlier === undefined || later === undefined || earlier.from === later.from) {
-    throw new Error("Expected distinct IANA month boundaries");
-  }
-  const occurredAt = DateTime.formatIso(DateTime.makeUnsafe(earlier.from + 60_000));
-  expect(
-    (
-      await send(db, 0, {
-        path: "/transactions",
-        method: "POST",
-        body: {
-          money: { amount: "3.04", currency: "COP" },
-          categoryId: "10000000-0000-4000-8000-000000000001",
-          direction: "outflow",
-          occurredAt,
-        },
+it(
+  "rejects a malformed layout edit without replacing the authenticated User's document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const before = (yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status;
+        expect(before).toBe(200);
+        const invalid = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "add-widget",
+              at: "top",
+              widget: {
+                id: "10000000-0000-4000-8000-000000000081",
+                type: "transaction-list",
+                limit: 0,
+              },
+            },
+          })
+        );
+        expect(invalid.status).toBe(400);
+        const documentResponse7 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const document = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse7.json()));
+        expect(document.data.title).toBe("Tablero");
+        expect(document.data.layout.kind).toBe("split");
       })
-    ).status
-  ).toBe(201);
-  // @effect-diagnostics-next-line asyncFunction:off
-  const projected = async (zone: string): Promise<ReadonlyArray<string>> => {
-    await db.prepare("UPDATE users SET time_zone = ? WHERE id = ?").bind(zone, users[0]).run();
-    return metricTotals(await send(db, 0, "/dashboard/view"));
-  };
-  expect(await projected(earlier.name)).toEqual(["3.04"]);
-  expect(await projected(later.name)).toEqual([]);
-  expect(await projected(earlier.name)).toEqual(["3.04"]);
-}, 30_000);
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("updates the next Dashboard view after linking, correcting, and unlinking effective Transactions", async () => {
-  const db = await setup();
-  const responses = await Promise.all(
-    [0, 1].map(() =>
-      send(db, 0, {
-        path: "/transactions",
-        method: "POST",
-        body: {
-          money: { amount: "7", currency: "COP" },
-          categoryId: "10000000-0000-4000-8000-000000000001",
-          direction: "outflow",
-          occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-        },
+it(
+  "does not treat a corrupt retained Dashboard as an absent document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(200);
+        const before = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
+            .bind("{}", users[0])
+            .run()
+        );
+        const edit = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: { op: "set-title", title: "Do not reset" },
+          })
+        );
+        expect(edit.status).toBe(503);
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(before);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT document_json FROM dashboard_documents WHERE user_id = ?")
+              .bind(users[0])
+              .first<{ document_json: string }>()
+          )
+        ).toMatchObject({ document_json: "{}" });
       })
-    )
-  );
-  expect(responses.map((response) => response.status)).toEqual([201, 201]);
-  const ids = (await Promise.all(responses.map((response) => response.json()))).map(
-    (body) =>
-      Schema.decodeUnknownSync(
-        Schema.Struct({
-          data: Schema.Struct({ id: Transaction.fields.id }),
-        })
-      )(body).data.id
-  );
-  const first = [...ids].sort()[0];
-  const second = [...ids].sort()[1];
-  if (first === undefined || second === undefined) throw new Error("Missing Transactions");
-  // @effect-diagnostics-next-line asyncFunction:off
-  const total = async (): Promise<string> =>
-    (await metricTotals(await send(db, 0, "/dashboard/view"))).join(",");
-  expect(await total()).toBe("14");
-  const pair = { firstTransactionId: first, secondTransactionId: second };
-  expect(
-    (await send(db, 0, { path: "/transactions/link", method: "POST", body: pair })).status
-  ).toBe(200);
-  expect(await total()).toBe("7");
-  expect(
-    (
-      await send(db, 0, {
-        path: `/transactions/${first}`,
-        method: "PUT",
-        body: { expectedRevision: 0, changes: { money: { amount: "9", currency: "COP" } } },
-      })
-    ).status
-  ).toBe(200);
-  expect(await total()).toBe("9");
-  expect(
-    (await send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })).status
-  ).toBe(200);
-  expect(await total()).toBe("16");
-}, 30_000);
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("retains exact decimal Money above SQLite's precise numeric range", async () => {
-  const db = await setup();
-  const time = DateTime.formatIso(DateTime.nowUnsafe());
-  await db
-    .prepare(`INSERT INTO transactions
+it(
+  "cannot remove another User's Widget using a known WidgetId",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const documentResponse8 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const owned = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse8.json()))).data;
+        const widgets = (node: DashboardDocument["layout"]): ReadonlyArray<string> =>
+          node.kind === "leaf"
+            ? [node.widget.id]
+            : node.children.flatMap((child) => widgets(child.node));
+        const foreignId = widgets(owned.layout)[0];
+        expect(foreignId).toBeDefined();
+        const refused = yield* Effect.tryPromise(() =>
+          send(db, 1, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "remove-widget",
+              widgetId: foreignId,
+            },
+          })
+        );
+        expect(refused.status).toBe(404);
+        const documentResponse9 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const after = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse9.json()))).data;
+        expect(widgets(after.layout)).toEqual(widgets(owned.layout));
+      })
+    ),
+  30_000
+);
+
+it(
+  "renders an empty validated DashboardView with current User context",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const result = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(result.status).toBe(200);
+        const body = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => result.json()));
+        expect(body.data.context).toMatchObject({
+          serviceMarket: "CO",
+          locale: "es-CO",
+          timeZone: "America/Bogota",
+        });
+        expect(body.data.layout.kind).toBe("split");
+      })
+    ),
+  30_000
+);
+
+it(
+  "finds a recent Transaction by its captured notes in a configured list Widget",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const documentResponse10 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const document = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse10.json()))).data;
+        const leaves = (
+          node: DashboardDocument["layout"]
+        ): ReadonlyArray<DashboardDocument["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+        const list = leaves(document.layout).find(
+          (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
+        );
+        if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
+          throw new Error("Missing list");
+        }
+        const edited = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: {
+              op: "update-widget",
+              widget: { ...list.widget, search: "private note" },
+            },
+          })
+        );
+        expect(edited.status).toBe(200);
+        const created = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "1.01", currency: "COP" },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              notes: "private note Café",
+            },
+          })
+        );
+        expect(created.status).toBe(201);
+        const viewResponse11 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        const view = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => viewResponse11.json()))).data;
+        const viewLeaves = (
+          node: DashboardView["layout"]
+        ): ReadonlyArray<DashboardView["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => viewLeaves(child.node));
+        const row = viewLeaves(view.layout).find(
+          (node) => node.kind === "leaf" && node.widget.widget.id === list.widget.id
+        );
+        if (row?.kind !== "leaf" || !("transactions" in row.widget.result)) {
+          throw new Error("Missing list result");
+        }
+        expect(row.widget.result.transactions).toHaveLength(1);
+        const accented = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: { op: "update-widget", widget: { ...list.widget, search: "CAFÉ" } },
+          })
+        );
+        expect(accented.status).toBe(200);
+        const viewResponse12 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse12, list.widget.id)).toHaveLength(1);
+        const twoCharacters = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: { op: "update-widget", widget: { ...list.widget, search: "fé" } },
+          })
+        );
+        expect(twoCharacters.status).toBe(200);
+        const viewResponse13 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse13, list.widget.id)).toHaveLength(1);
+        const oneCharacter = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/dashboard/edits",
+            method: "POST",
+            body: { op: "update-widget", widget: { ...list.widget, search: "é" } },
+          })
+        );
+        expect(oneCharacter.status).toBe(200);
+        const viewResponse14 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse14, list.widget.id)).toHaveLength(1);
+        const captured = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({ id: Transaction.fields.id }),
+          })
+        )(yield* Effect.tryPromise(() => created.json()))).data;
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: `/transactions/${captured.id}`,
+              method: "PUT",
+              body: { expectedRevision: 0, changes: { notes: "unrelated" } },
+            })
+          )).status
+        ).toBe(200);
+        const viewResponse15 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse15, list.widget.id)).toEqual([]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "projects the current User's Budget with exact outflow spend and remaining Money",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const budget = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/budgets",
+            method: "POST",
+            body: {
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              cap: { amount: "100.00", currency: "COP" },
+            },
+          })
+        );
+        expect(budget.status).toBe(201);
+        const captured = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "25.02", currency: "COP" },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            },
+          })
+        );
+        expect(captured.status).toBe(201);
+        const viewResponse = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(viewResponse.status).toBe(200);
+        const view = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => viewResponse.json()))).data;
+        const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+        const bar = leaves(view.layout).find(
+          (node) => node.kind === "leaf" && node.widget.widget.type === "budget-bar"
+        );
+        if (
+          bar?.kind !== "leaf" ||
+          !("availability" in bar.widget.result) ||
+          bar.widget.result.availability !== "available"
+        ) {
+          throw new Error("Missing Budget bar");
+        }
+        expect(BigDecimal.format(bar.widget.result.spent.amount)).toBe("25.02");
+        if (bar.widget.result.status.type !== "under") throw new Error("Expected remaining Budget");
+        expect(BigDecimal.format(bar.widget.result.status.remaining.amount)).toBe("74.98");
+      })
+    ),
+  30_000
+);
+
+it(
+  "denies under-scoped and revoked PAT Dashboard work without modifying a document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
+        const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
+        const readId = "40000000-0000-4000-8000-000000000091";
+        yield* seedPAT(db, { token: readToken, scope: "read", id: readId });
+        yield* seedPAT(db, {
+          token: writeToken,
+          scope: "write",
+          id: "40000000-0000-4000-8000-000000000092",
+        });
+        expect(
+          (yield* Effect.tryPromise(() => send(db, writeToken, "/dashboard/view"))).status
+        ).toBe(403);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, readToken, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: {
+                op: "set-title",
+                title: "Foreign title",
+              },
+            })
+          )).status
+        ).toBe(403);
+        const before = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM dashboard_documents WHERE user_id = ?")
+            .bind(users[0])
+            .first<{ count: number }>()
+        );
+        expect(before?.count).toBe(0);
+        expect(
+          (yield* Effect.tryPromise(() => send(db, readToken, "/dashboard/view"))).status
+        ).toBe(200);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
+            .bind(DateTime.nowUnsafe().epochMilliseconds, readId)
+            .run()
+        );
+        expect(
+          (yield* Effect.tryPromise(() => send(db, readToken, "/dashboard/view"))).status
+        ).not.toBe(200);
+        const documentResponse16 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const document = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+        )(yield* Effect.tryPromise(() => documentResponse16.json()))).data;
+        expect(document.title).toBe("Tablero");
+      })
+    ),
+  30_000
+);
+
+it(
+  "a stale Dashboard read is replaced by current canonical facts after a Transaction correction",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const created = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "10.01", currency: "COP" },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            },
+          })
+        );
+        expect(created.status).toBe(201);
+        const { data: transaction } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+        )(yield* Effect.tryPromise(() => created.json()));
+        const before = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(before.status).toBe(200);
+        const correction = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: `/transactions/${transaction.id}`,
+            method: "PUT",
+            body: { expectedRevision: 0, changes: { money: { amount: "25.02", currency: "COP" } } },
+          })
+        );
+        expect(correction.status).toBe(200);
+        const after = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(after.status).toBe(200);
+        const view = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => after.json()))).data;
+        const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+        const metric = leaves(view.layout).find(
+          (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
+        );
+        expect(metric?.kind).toBe("leaf");
+        if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
+          throw new Error("Expected metric");
+        }
+        expect(
+          metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount))
+        ).toEqual(["25.02"]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "reinterprets maintained UTC contributions immediately after a User IANA time-zone change",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const now = DateTime.nowUnsafe();
+        const zones = (yield* Effect.forEach(["Pacific/Kiritimati", "America/Bogota"], (name) =>
+          Effect.map(Schema.decodeEffect(IanaTimeZone)(name), (timeZone) => ({
+            name,
+            from: resolveDashboardPeriod({ now, period: "this-month", timeZone }).from
+              .epochMilliseconds,
+          }))
+        )).sort((left, right) => left.from - right.from);
+        const earlier = zones[0];
+        const later = zones[1];
+        if (earlier === undefined || later === undefined || earlier.from === later.from) {
+          throw new Error("Expected distinct IANA month boundaries");
+        }
+        const occurredAt = DateTime.formatIso(DateTime.makeUnsafe(earlier.from + 60_000));
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/transactions",
+              method: "POST",
+              body: {
+                money: { amount: "3.04", currency: "COP" },
+                categoryId: "10000000-0000-4000-8000-000000000001",
+                direction: "outflow",
+                occurredAt,
+              },
+            })
+          )).status
+        ).toBe(201);
+
+        const projected = (
+          zone: string
+        ): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
+          Effect.gen(function* () {
+            yield* Effect.tryPromise(() =>
+              db.prepare("UPDATE users SET time_zone = ? WHERE id = ?").bind(zone, users[0]).run()
+            );
+            return yield* metricTotals(
+              yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
+            );
+          });
+        expect(yield* projected(earlier.name)).toEqual(["3.04"]);
+        expect(yield* projected(later.name)).toEqual([]);
+        expect(yield* projected(earlier.name)).toEqual(["3.04"]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "updates the next Dashboard view after linking, correcting, and unlinking effective Transactions",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const responses = yield* Effect.tryPromise(() =>
+          Promise.all(
+            [0, 1].map(() =>
+              send(db, 0, {
+                path: "/transactions",
+                method: "POST",
+                body: {
+                  money: { amount: "7", currency: "COP" },
+                  categoryId: "10000000-0000-4000-8000-000000000001",
+                  direction: "outflow",
+                  occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+                },
+              })
+            )
+          )
+        );
+        expect(responses.map((response) => response.status)).toEqual([201, 201]);
+        const bodies = yield* Effect.tryPromise(() =>
+          Promise.all(responses.map((response) => response.json()))
+        );
+        const ids = yield* Effect.forEach(bodies, (body) =>
+          Effect.map(
+            Schema.decodeUnknownEffect(
+              Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+            )(body),
+            (decoded) => decoded.data.id
+          )
+        );
+        const first = [...ids].sort()[0];
+        const second = [...ids].sort()[1];
+        if (first === undefined || second === undefined) throw new Error("Missing Transactions");
+
+        const total = (): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
+          Effect.gen(function* () {
+            return (yield* metricTotals(
+              yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
+            )).join(",");
+          });
+        expect(yield* total()).toBe("14");
+        const pair = { firstTransactionId: first, secondTransactionId: second };
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, { path: "/transactions/link", method: "POST", body: pair })
+          )).status
+        ).toBe(200);
+        expect(yield* total()).toBe("7");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: `/transactions/${first}`,
+              method: "PUT",
+              body: { expectedRevision: 0, changes: { money: { amount: "9", currency: "COP" } } },
+            })
+          )).status
+        ).toBe(200);
+        expect(yield* total()).toBe("9");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })
+          )).status
+        ).toBe(200);
+        expect(yield* total()).toBe("16");
+      })
+    ),
+  30_000
+);
+
+it(
+  "retains exact decimal Money above SQLite's precise numeric range",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const time = DateTime.formatIso(DateTime.nowUnsafe());
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
     VALUES ('30000000-0000-4000-8000-000000000011', ?, '9007199254740993', 'COP', 'outflow', ?, ?, ?),
       ('30000000-0000-4000-8000-000000000012', ?, '9007199254740994', 'COP', 'outflow', ?, ?, ?)`)
-    .bind(
-      users[0],
-      "10000000-0000-4000-8000-000000000001",
-      time,
-      time,
-      users[0],
-      "10000000-0000-4000-8000-000000000001",
-      time,
-      time
-    )
-    .run();
-  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["18014398509481987"]);
-}, 30_000);
+            .bind(
+              users[0],
+              "10000000-0000-4000-8000-000000000001",
+              time,
+              time,
+              users[0],
+              "10000000-0000-4000-8000-000000000001",
+              time,
+              time
+            )
+            .run()
+        );
+        const viewResponse18 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* metricTotals(viewResponse18)).toEqual(["18014398509481987"]);
+      })
+    ),
+  30_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("keeps exact Currency totals beyond a small fixed Transaction window", async () => {
-  const db = await setup();
-  // Spread retained records over days to respect the canonical 100-writes-per-day limit.
-  await db
-    .prepare(`INSERT INTO transactions
+it(
+  "keeps exact Currency totals beyond a small fixed Transaction window",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        // Spread retained records over days to respect the canonical 100-writes-per-day limit.
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 4100)
     SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow', ?, ?,
       strftime('%Y-%m-%dT%H:%M:%fZ', date('now', '-' || CAST(number / 90 AS INTEGER) || ' days'))
     FROM sequence`)
-    .bind(
-      users[0],
-      "10000000-0000-4000-8000-000000000001",
-      DateTime.formatIso(DateTime.nowUnsafe())
-    )
-    .run();
-  const reply = await send(db, 0, "/dashboard/view");
-  expect(reply.status).toBe(200);
-  const view = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await reply.json()
-  ).data;
-  const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const metric = leaves(view.layout).find(
-    (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
-  );
-  if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
-    throw new Error("Missing metric");
-  }
-  expect(
-    BigDecimal.format(metric.widget.result.moneyGroups[0]?.outflow.amount ?? BigDecimal.make(0n, 0))
-  ).toBe("41");
-}, 60_000);
+            .bind(
+              users[0],
+              "10000000-0000-4000-8000-000000000001",
+              DateTime.formatIso(DateTime.nowUnsafe())
+            )
+            .run()
+        );
+        const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(reply.status).toBe(200);
+        const view = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => reply.json()))).data;
+        const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+        const metric = leaves(view.layout).find(
+          (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
+        );
+        if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
+          throw new Error("Missing metric");
+        }
+        expect(
+          BigDecimal.format(
+            metric.widget.result.moneyGroups[0]?.outflow.amount ?? BigDecimal.make(0n, 0)
+          )
+        ).toBe("41");
+      })
+    ),
+  60_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("returns exact totals beyond 8,192 effective Transactions", async () => {
-  const db = await setup();
-  expect((await send(db, 0, "/dashboard/view")).status).toBe(200);
-  // Bypass only the fixture's daily capture quota to exercise the read work budget.
-  await db.prepare("DROP TRIGGER transaction_manual_daily_budget").run();
-  await db
-    .prepare(`INSERT INTO transactions
+it(
+  "returns exact totals beyond 8,192 effective Transactions",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(200);
+        // Bypass only the fixture's daily capture quota to exercise the read work budget.
+        yield* Effect.tryPromise(() =>
+          db.prepare("DROP TRIGGER transaction_manual_daily_budget").run()
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
     WITH RECURSIVE sequence(number) AS (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < 8193)
     SELECT printf('30000000-0000-4000-8000-%012d', number), ?, '0.01', 'COP', 'outflow',
       CASE WHEN number = 1 THEN '10000000-0000-4000-8000-000000000002' ELSE ? END,
       CASE WHEN number = 1 THEN 'Rare Café note' ELSE NULL END, ?, ?
     FROM sequence`)
-    .bind(
-      users[0],
-      "10000000-0000-4000-8000-000000000001",
-      DateTime.formatIso(DateTime.nowUnsafe()),
-      DateTime.formatIso(DateTime.nowUnsafe())
-    )
-    .run();
-  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["81.93"]);
-  const document = Schema.decodeUnknownSync(
-    Schema.Struct({
-      data: Schema.toCodecJson(DashboardDocument),
-    })
-  )(await (await send(db, 0, "/dashboard")).json()).data;
-  const leaves = (node: DashboardDocument["layout"]): ReadonlyArray<DashboardDocument["layout"]> =>
-    node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-  const list = leaves(document.layout).find(
-    (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
-  );
-  if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
-    throw new Error("Expected list Widget");
-  }
-  const rareCategory = { ...list.widget, categories: ["10000000-0000-4000-8000-000000000002"] };
-  expect(
-    (
-      await send(db, 0, {
-        path: "/dashboard/edits",
-        method: "POST",
-        body: { op: "update-widget", widget: rareCategory },
-      })
-    ).status
-  ).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([
-    "30000000-0000-4000-8000-000000000001",
-  ]);
-  expect(
-    (
-      await send(db, 0, {
-        path: "/dashboard/edits",
-        method: "POST",
-        body: { op: "update-widget", widget: { ...rareCategory, search: "CAFÉ" } },
-      })
-    ).status
-  ).toBe(200);
-  expect(await listIds(await send(db, 0, "/dashboard/view"), list.widget.id)).toEqual([
-    "30000000-0000-4000-8000-000000000001",
-  ]);
-  // A damaged projection cannot become a stale financial view while its private repair proceeds.
-  await db
-    .prepare(
-      "UPDATE dashboard_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
-    )
-    .bind(users[0])
-    .run();
-  await db
-    .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
-    .bind(users[0])
-    .run();
-  expect((await send(db, 0, "/dashboard/view")).status).toBe(503);
-  const repair = (remaining: number): Promise<boolean> =>
-    remaining <= 0
-      ? Promise.resolve(false)
-      : Effect.runPromise(repairDashboardProjection({ db, userId: users[0] ?? "" })).then(
-          (status) => (status === "ready" ? true : repair(remaining - 1))
+            .bind(
+              users[0],
+              "10000000-0000-4000-8000-000000000001",
+              DateTime.formatIso(DateTime.nowUnsafe()),
+              DateTime.formatIso(DateTime.nowUnsafe())
+            )
+            .run()
         );
-  expect(await repair(35)).toBe(false);
-  // Bypass the fixture's daily capture admission limit to simulate a concurrent committed
-  // effective Transaction during the private rebuild; both use the same D1 maintenance triggers.
-  const time = DateTime.formatIso(DateTime.nowUnsafe());
-  await db
-    .prepare(`INSERT INTO transactions
+        const viewResponse19 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* metricTotals(viewResponse19)).toEqual(["81.93"]);
+        const documentResponse20 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const document = (yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.toCodecJson(DashboardDocument),
+          })
+        )(yield* Effect.tryPromise(() => documentResponse20.json()))).data;
+        const leaves = (
+          node: DashboardDocument["layout"]
+        ): ReadonlyArray<DashboardDocument["layout"]> =>
+          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
+        const list = leaves(document.layout).find(
+          (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
+        );
+        if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
+          throw new Error("Expected list Widget");
+        }
+        const rareCategory = {
+          ...list.widget,
+          categories: ["10000000-0000-4000-8000-000000000002"],
+        };
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: { op: "update-widget", widget: rareCategory },
+            })
+          )).status
+        ).toBe(200);
+        const viewResponse21 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse21, list.widget.id)).toEqual([
+          "30000000-0000-4000-8000-000000000001",
+        ]);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: { op: "update-widget", widget: { ...rareCategory, search: "CAFÉ" } },
+            })
+          )).status
+        ).toBe(200);
+        const viewResponse22 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* listIds(viewResponse22, list.widget.id)).toEqual([
+          "30000000-0000-4000-8000-000000000001",
+        ]);
+        // A damaged projection cannot become a stale financial view while its private repair proceeds.
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE dashboard_projection_digit SET digit_sum = digit_sum + 5 WHERE user_id = ? AND position = 0"
+            )
+            .bind(users[0])
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+            .bind(users[0])
+            .run()
+        );
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(503);
+        const repair = (
+          remaining: number
+        ): Effect.Effect<boolean, Effect.Error<ReturnType<typeof repairDashboardProjection>>> =>
+          remaining <= 0
+            ? Effect.succeed(false)
+            : Effect.flatMap(repairDashboardProjection({ db, userId: users[0] ?? "" }), (status) =>
+                status === "ready" ? Effect.succeed(true) : repair(remaining - 1)
+              );
+        expect(yield* repair(35)).toBe(false);
+        // Bypass the fixture's daily capture admission limit to simulate a concurrent committed
+        // effective Transaction during the private rebuild; both use the same D1 maintenance triggers.
+        const time = DateTime.formatIso(DateTime.nowUnsafe());
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
     VALUES ('30000000-0000-4000-8000-000000009999', ?, '0.02', 'COP', 'outflow', ?, ?, ?)`)
-    .bind(users[0], "10000000-0000-4000-8000-000000000001", time, time)
-    .run();
-  expect((await send(db, 0, "/dashboard/view")).status).toBe(503);
-  expect(await repair(80)).toBe(true);
-  expect(await metricTotals(await send(db, 0, "/dashboard/view"))).toEqual(["81.95"]);
-}, 60_000);
+            .bind(users[0], "10000000-0000-4000-8000-000000000001", time, time)
+            .run()
+        );
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(503);
+        expect(yield* repair(80)).toBe(true);
+        const viewResponse23 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(yield* metricTotals(viewResponse23)).toEqual(["81.95"]);
+      })
+    ),
+  60_000
+);
 
-// @effect-diagnostics-next-line asyncFunction:off
-it("reads newly committed Transactions as exact separate Currency groups without another User's facts", async () => {
-  const db = await setup();
-  const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
-  const capture = (index: number, amount: string, currency: string): Promise<Response> =>
-    send(db, index, {
-      path: "/transactions",
-      method: "POST",
-      body: {
-        money: { amount, currency },
-        categoryId: "10000000-0000-4000-8000-000000000001",
-        direction: "outflow",
-        occurredAt,
-      },
-    });
-  expect((await capture(0, "1.01", "COP")).status).toBe(201);
-  expect((await capture(0, "2.02", "COP")).status).toBe(201);
-  expect((await capture(0, "5.50", "USD")).status).toBe(201);
-  expect((await capture(1, "999", "COP")).status).toBe(201);
-  const reply = await send(db, 0, "/dashboard/view");
-  expect(reply.status).toBe(200);
-  const body = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
-    await reply.json()
-  );
-  const leaves = (
-    node: DashboardView["layout"]
-  ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
-    node.kind === "leaf" ? [node.widget] : node.children.flatMap((child) => leaves(child.node));
-  const metric = leaves(body.data.layout).find((leaf) => leaf.widget.type === "custom-metric");
-  if (metric === undefined || !("moneyGroups" in metric.result)) {
-    throw new Error("Expected a custom metric");
-  }
-  expect(
-    metric.result.moneyGroups.map((group) => [
-      group.currency,
-      BigDecimal.format(group.outflow.amount),
-    ])
-  ).toEqual([
-    ["COP", "3.03"],
-    ["USD", "5.5"],
-  ]);
-}, 30_000);
+it(
+  "reads newly committed Transactions as exact separate Currency groups without another User's facts",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+        const capture = (index: number, amount: string, currency: string): Promise<Response> =>
+          send(db, index, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount, currency },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt,
+            },
+          });
+        expect((yield* Effect.tryPromise(() => capture(0, "1.01", "COP"))).status).toBe(201);
+        expect((yield* Effect.tryPromise(() => capture(0, "2.02", "COP"))).status).toBe(201);
+        expect((yield* Effect.tryPromise(() => capture(0, "5.50", "USD"))).status).toBe(201);
+        expect((yield* Effect.tryPromise(() => capture(1, "999", "COP"))).status).toBe(201);
+        const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(reply.status).toBe(200);
+        const body = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => reply.json()));
+        const leaves = (
+          node: DashboardView["layout"]
+        ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
+          node.kind === "leaf"
+            ? [node.widget]
+            : node.children.flatMap((child) => leaves(child.node));
+        const metric = leaves(body.data.layout).find(
+          (leaf) => leaf.widget.type === "custom-metric"
+        );
+        if (metric === undefined || !("moneyGroups" in metric.result)) {
+          throw new Error("Expected a custom metric");
+        }
+        expect(
+          metric.result.moneyGroups.map((group) => [
+            group.currency,
+            BigDecimal.format(group.outflow.amount),
+          ])
+        ).toEqual([
+          ["COP", "3.03"],
+          ["USD", "5.5"],
+        ]);
+      })
+    ),
+  30_000
+);

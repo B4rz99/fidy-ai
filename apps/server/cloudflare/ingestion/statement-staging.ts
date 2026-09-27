@@ -28,6 +28,7 @@ import {
   DateTime,
   Effect,
   Encoding,
+  Function,
   Layer,
   Option,
   PlatformError,
@@ -1194,17 +1195,25 @@ const publicationPremise = (
  * A same-material idempotent replay returns the existing submission without rechecking its
  * retained R2 object; replay creates no new submission or outbox identity.
  */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const prepareStagedStatementPublication = (
-  config: StatementStagingConfig,
-  input: Readonly<{
-    readonly authority: TransactionAuthority;
-    readonly current: number;
-    readonly idempotencyKey: string;
-    readonly reference: StagedStatementReference;
-    readonly userId: string;
-  }>
-): Effect.Effect<StatementPublicationPreparation, StatementStagingUnavailable> =>
+type StagedPublicationInput = Readonly<{
+  readonly authority: TransactionAuthority;
+  readonly current: number;
+  readonly idempotencyKey: string;
+  readonly reference: StagedStatementReference;
+  readonly userId: string;
+}>;
+
+export const prepareStagedStatementPublication: {
+  (
+    input: StagedPublicationInput
+  ): (
+    config: StatementStagingConfig
+  ) => Effect.Effect<StatementPublicationPreparation, StatementStagingUnavailable>;
+  (
+    config: StatementStagingConfig,
+    input: StagedPublicationInput
+  ): Effect.Effect<StatementPublicationPreparation, StatementStagingUnavailable>;
+} = Function.dual(2, (config: StatementStagingConfig, input: StagedPublicationInput) =>
   Effect.gen(function* () {
     const row = yield* ownedStagingRow(config, input.userId, input.reference.stagingId);
     if (Option.isNone(row)) return { _tag: "Refused", reason: "not-found" } as const;
@@ -1240,7 +1249,8 @@ export const prepareStagedStatementPublication = (
         submissionId,
       }),
     } as const;
-  });
+  })
+);
 
 /**
  * Records one refused canonical statement call's metadata-only AuditLogEntry under the exact
@@ -1318,24 +1328,33 @@ const classifyLostPublication = (
   });
 
 /** Whether an aborted, previously fresh publication now has the exact same-key material committed. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const lostStatementReplay = (
-  config: StatementStagingConfig,
-  publication: PreparedStatementPublication
-): Effect.Effect<boolean> =>
+export const lostStatementReplay: {
+  (
+    publication: PreparedStatementPublication
+  ): (config: StatementStagingConfig) => Effect.Effect<boolean>;
+  (
+    config: StatementStagingConfig,
+    publication: PreparedStatementPublication
+  ): Effect.Effect<boolean>;
+} = Function.dual(2, (config: StatementStagingConfig, publication: PreparedStatementPublication) =>
   publication.replayed
     ? Effect.succeed(false)
     : classifyLostPublication(config, { attempt: publication.attempt }).pipe(
         Effect.map((lost) => lost._tag === "Replay"),
         Effect.orElseSucceed(() => false)
-      );
+      )
+);
 
 /** A changed publication premise that the durable state proves caused an aborted unit. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const statementAbortRefusal = (
-  config: StatementStagingConfig,
-  publication: PreparedStatementPublication
-): Effect.Effect<Option.Option<StatementPublicationRefusal>> =>
+export const statementAbortRefusal: {
+  (
+    publication: PreparedStatementPublication
+  ): (config: StatementStagingConfig) => Effect.Effect<Option.Option<StatementPublicationRefusal>>;
+  (
+    config: StatementStagingConfig,
+    publication: PreparedStatementPublication
+  ): Effect.Effect<Option.Option<StatementPublicationRefusal>>;
+} = Function.dual(2, (config: StatementStagingConfig, publication: PreparedStatementPublication) =>
   publication.replayed
     ? Effect.succeedNone
     : classifyLostPublication(config, { attempt: publication.attempt }).pipe(
@@ -1343,13 +1362,22 @@ export const statementAbortRefusal = (
           lost._tag === "Refused" ? Option.some(statementRefusal(lost.reason)) : Option.none()
         ),
         Effect.orElseSucceed(() => Option.none())
-      );
+      )
+);
 
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const readOwnedStatementSubmission = (
-  config: StatementStagingConfig,
-  input: Readonly<{ userId: string; submissionId: string }>
-): ReturnType<StatementStagingService["readOwnedStatementSubmission"]> =>
+type OwnedSubmissionInput = Readonly<{ userId: string; submissionId: string }>;
+
+export const readOwnedStatementSubmission: {
+  (
+    input: OwnedSubmissionInput
+  ): (
+    config: StatementStagingConfig
+  ) => ReturnType<StatementStagingService["readOwnedStatementSubmission"]>;
+  (
+    config: StatementStagingConfig,
+    input: OwnedSubmissionInput
+  ): ReturnType<StatementStagingService["readOwnedStatementSubmission"]>;
+} = Function.dual(2, (config: StatementStagingConfig, input: OwnedSubmissionInput) =>
   platformUnavailable(() =>
     config.database
       .prepare(
@@ -1378,7 +1406,8 @@ export const readOwnedStatementSubmission = (
         })
       )
     )
-  );
+  )
+);
 
 const expireStatementSubmissions = (
   config: StatementStagingConfig

@@ -1,12 +1,9 @@
-// Node crypto keeps this focused expected-value fixture synchronous and independent.
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import { CURRENT_DISCLOSURE_TEXT, currentDisclosure } from "./current-disclosure";
 
 const sha256 = (content: string | Uint8Array): string =>
-  createHash("sha256").update(content).digest("hex");
+  new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
 const TestPublicNamespace = ConfigProvider.fromEnv({
   env: {

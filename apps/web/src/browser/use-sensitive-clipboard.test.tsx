@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Option } from "effect";
-import { afterEach, expect, it, vi } from "vitest";
+import { type Cause, Effect, Option } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { afterEach, expect, vi } from "vitest";
 import { SessionRegistryProvider } from "@/session/session";
 import { useSession } from "@/session/session-context";
 import { SensitiveClipboardBoundary } from "./use-sensitive-clipboard";
@@ -74,54 +75,63 @@ const installDelayedClipboard = (denyReads = false): DelayedClipboard => {
   };
 };
 
-it("does not let a replaced same-value write clear the newer copy", async () => {
-  const clipboard = installDelayedClipboard();
-  const onCopied = vi.fn();
-  render(<ClipboardHarness onCopied={onCopied} value="secret" />);
+const expectEventually = (assertion: () => void): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => waitFor(assertion));
 
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(1));
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(2));
+effectIt.effect("does not let a replaced same-value write clear the newer copy", () =>
+  Effect.gen(function* () {
+    const clipboard = installDelayedClipboard();
+    const onCopied = vi.fn();
+    render(<ClipboardHarness onCopied={onCopied} value="secret" />);
 
-  clipboard.settleWriteAt(1);
-  await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
-  clipboard.settleWriteAt(0);
-  await waitFor(() => expect(clipboard.read()).toBe("secret"));
-});
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledTimes(2));
 
-it("reasserts a newer different value when a replaced write finishes late", async () => {
-  const clipboard = installDelayedClipboard();
-  const onCopied = vi.fn();
-  const mounted = render(<ClipboardHarness onCopied={onCopied} value="first" />);
+    clipboard.settleWriteAt(1);
+    yield* expectEventually(() => expect(onCopied).toHaveBeenCalledTimes(1));
+    clipboard.settleWriteAt(0);
+    yield* expectEventually(() => expect(clipboard.read()).toBe("secret"));
+  })
+);
 
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(1));
-  mounted.rerender(<ClipboardHarness onCopied={onCopied} value="second" />);
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(2));
+effectIt.effect("reasserts a newer different value when a replaced write finishes late", () =>
+  Effect.gen(function* () {
+    const clipboard = installDelayedClipboard();
+    const onCopied = vi.fn();
+    const mounted = render(<ClipboardHarness onCopied={onCopied} value="first" />);
 
-  clipboard.settleWriteAt(1);
-  await waitFor(() => expect(clipboard.read()).toBe("second"));
-  clipboard.settleWriteAt(0);
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(3));
-  clipboard.settleWriteAt(2);
-  await waitFor(() => expect(clipboard.read()).toBe("second"));
-});
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledTimes(1));
+    mounted.rerender(<ClipboardHarness onCopied={onCopied} value="second" />);
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledTimes(2));
 
-it("clears a late write after unmount even when clipboard reads are denied", async () => {
-  const clipboard = installDelayedClipboard(true);
-  const onCopied = vi.fn();
-  const mounted = render(<ClipboardHarness onCopied={onCopied} value="secret" />);
+    clipboard.settleWriteAt(1);
+    yield* expectEventually(() => expect(clipboard.read()).toBe("second"));
+    clipboard.settleWriteAt(0);
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledTimes(3));
+    clipboard.settleWriteAt(2);
+    yield* expectEventually(() => expect(clipboard.read()).toBe("second"));
+  })
+);
 
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("secret"));
-  mounted.unmount();
-  clipboard.settleWrite();
-  await waitFor(() => expect(clipboard.read()).toBe(""));
+effectIt.effect("clears a late write after unmount even when clipboard reads are denied", () =>
+  Effect.gen(function* () {
+    const clipboard = installDelayedClipboard(true);
+    const onCopied = vi.fn();
+    const mounted = render(<ClipboardHarness onCopied={onCopied} value="secret" />);
 
-  expect(onCopied).not.toHaveBeenCalled();
-});
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledWith("secret"));
+    mounted.unmount();
+    clipboard.settleWrite();
+    yield* expectEventually(() => expect(clipboard.read()).toBe(""));
+
+    expect(onCopied).not.toHaveBeenCalled();
+  })
+);
 
 const SessionHarness = ({ onCopied }: Readonly<{ onCopied: () => void }>): React.JSX.Element => {
   const { replaceAuthenticationLifetime } = useSession();
@@ -141,20 +151,24 @@ const SessionHarness = ({ onCopied }: Readonly<{ onCopied: () => void }>): React
   );
 };
 
-it("clears a late write and suppresses callbacks after authentication replacement", async () => {
-  const clipboard = installDelayedClipboard();
-  const onCopied = vi.fn();
-  render(
-    <SessionRegistryProvider>
-      <SessionHarness onCopied={onCopied} />
-    </SessionRegistryProvider>
-  );
+effectIt.effect(
+  "clears a late write and suppresses callbacks after authentication replacement",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installDelayedClipboard();
+      const onCopied = vi.fn();
+      render(
+        <SessionRegistryProvider>
+          <SessionHarness onCopied={onCopied} />
+        </SessionRegistryProvider>
+      );
 
-  fireEvent.click(screen.getByRole("button", { name: "copy" }));
-  await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("secret"));
-  fireEvent.click(screen.getByRole("button", { name: "replace principal" }));
-  clipboard.settleWrite();
-  await waitFor(() => expect(clipboard.read()).toBe(""));
+      fireEvent.click(screen.getByRole("button", { name: "copy" }));
+      yield* expectEventually(() => expect(clipboard.writeText).toHaveBeenCalledWith("secret"));
+      fireEvent.click(screen.getByRole("button", { name: "replace principal" }));
+      clipboard.settleWrite();
+      yield* expectEventually(() => expect(clipboard.read()).toBe(""));
 
-  expect(onCopied).not.toHaveBeenCalled();
-});
+      expect(onCopied).not.toHaveBeenCalled();
+    })
+);

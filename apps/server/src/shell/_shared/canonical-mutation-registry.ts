@@ -76,8 +76,14 @@ export const canonicalMutationImplementations = {
   "dashboard.getDashboard": unavailableMutation,
   "dashboard.getDashboardView": unavailableMutation,
   "dashboard.applyDashboardEdit": unavailableMutation,
-  "emailAuthentication.requestEmailReplacement": requestEmailReplacement,
-  "emailAuthentication.completeEmailReplacement": completeEmailReplacement,
+  "emailAuthentication.requestEmailReplacement": (
+    input: CanonicalInput<"emailAuthentication.requestEmailReplacement">,
+    caller: CanonicalImplementationCaller
+  ) => requestEmailReplacement({ input, caller }),
+  "emailAuthentication.completeEmailReplacement": (
+    input: CanonicalInput<"emailAuthentication.completeEmailReplacement">,
+    caller: CanonicalImplementationCaller
+  ) => completeEmailReplacement({ input, caller }),
   "transactions.createTransaction": unavailableMutation,
   "transactions.linkTransactions": unavailableMutation,
   "transactions.unlinkTransactions": unavailableMutation,

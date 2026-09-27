@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Option } from "effect";
+import { Data, Effect, Option } from "effect";
 import { decodeBuildMetafile } from "./build-metafile";
 
 const forbiddenDependencies = [
@@ -27,6 +27,11 @@ type Source = Readonly<{ sourceFile: string; source: string }>;
 type SourceImport = Readonly<{ importPath: string; sourceFile: string }>;
 type BrowserBuildPlugin = NonNullable<Parameters<typeof Bun.build>[0]["plugins"]>[number];
 
+class BrowserBundleFailure extends Data.TaggedError("BrowserBundleFailure")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
 const defaultOptions = (): BrowserBundleCheckOptions => ({
   entrypoint: "src/main.tsx",
   outdir: `/tmp/fidy-web-bundle-${process.pid}`,
@@ -51,24 +56,35 @@ const repositoryPath = (input: string, webRoot: string, workspaceRoot: string): 
     : absolute;
 };
 
-const resolveSourcePath = async (basePath: string): Promise<string> => {
-  for (const extension of ["", ".ts", ".tsx", ".js", ".jsx"]) {
+const resolveSourcePath = (basePath: string): Promise<string> => {
+  const extensions = ["", ".ts", ".tsx", ".js", ".jsx"];
+  const find = (index: number): Promise<string> => {
+    const extension = extensions[index];
+    if (extension === undefined) {
+      return Promise.reject(new Error(`Could not resolve browser source alias ${basePath}`));
+    }
     const candidate = `${basePath}${extension}`;
-    if (await Bun.file(candidate).exists()) return candidate;
-  }
-  throw new Error(`Could not resolve browser source alias ${basePath}`);
+    return Bun.file(candidate)
+      .exists()
+      .then((exists) => (exists ? candidate : find(index + 1)));
+  };
+  return find(0);
 };
 
 const browserBuildPlugins = (webRoot: string, workspaceRoot: string): Array<BrowserBuildPlugin> => [
   {
     name: "vite-source-loaders",
     setup(build): void {
-      build.onResolve({ filter: /^@\//u }, async ({ path }) => ({
-        path: await resolveSourcePath(`${webRoot}/src/${path.slice(2)}`),
-      }));
-      build.onResolve({ filter: /^~\//u }, async ({ path }) => ({
-        path: await resolveSourcePath(`${workspaceRoot}/apps/server/src/${path.slice(2)}`),
-      }));
+      build.onResolve({ filter: /^@\//u }, ({ path }) =>
+        resolveSourcePath(`${webRoot}/src/${path.slice(2)}`).then((resolved) => ({
+          path: resolved,
+        }))
+      );
+      build.onResolve({ filter: /^~\//u }, ({ path }) =>
+        resolveSourcePath(`${workspaceRoot}/apps/server/src/${path.slice(2)}`).then((resolved) => ({
+          path: resolved,
+        }))
+      );
       build.onResolve({ filter: /^@fidy\/server\/client$/u }, () => ({
         path: `${workspaceRoot}/apps/server/src/client.ts`,
       }));
@@ -82,21 +98,31 @@ const browserBuildPlugins = (webRoot: string, workspaceRoot: string): Array<Brow
   },
 ];
 
-const buildBrowserBundle = async (options: BrowserBundleCheckOptions): Promise<unknown> => {
-  const result = await Bun.build({
-    entrypoints: [`${options.webRoot}/${options.entrypoint}`],
-    outdir: options.outdir,
-    target: "browser",
-    metafile: true,
-    splitting: true,
-    loader: { ".html": "text" },
-    plugins: browserBuildPlugins(options.webRoot, options.workspaceRoot),
-  });
-  if (!result.success) {
-    throw new Error(result.logs.map((log) => JSON.stringify(log)).join("\n"));
-  }
-  return result.metafile;
-};
+const buildBrowserBundle = (options: BrowserBundleCheckOptions): Effect.Effect<unknown, Error> =>
+  Effect.tryPromise({
+    try: () =>
+      Bun.build({
+        entrypoints: [`${options.webRoot}/${options.entrypoint}`],
+        outdir: options.outdir,
+        target: "browser",
+        metafile: true,
+        splitting: true,
+        loader: { ".html": "text" },
+        plugins: browserBuildPlugins(options.webRoot, options.workspaceRoot),
+      }),
+    catch: (cause) => new BrowserBundleFailure({ message: "Browser bundle build failed", cause }),
+  }).pipe(
+    Effect.flatMap((result) =>
+      result.success
+        ? Effect.succeed(result.metafile)
+        : Effect.fail(
+            new BrowserBundleFailure({
+              message: result.logs.map((log) => JSON.stringify(log)).join("\n"),
+              cause: result.logs,
+            })
+          )
+    )
+  );
 
 const sourceImports = (sources: ReadonlyArray<Source>): ReadonlyArray<SourceImport> =>
   sources.flatMap(({ source, sourceFile }) =>
@@ -105,7 +131,7 @@ const sourceImports = (sources: ReadonlyArray<Source>): ReadonlyArray<SourceImpo
     )
   );
 
-const readWebSources = async (webRoot: string): Promise<ReadonlyArray<Source>> => {
+const readWebSources = (webRoot: string): Promise<ReadonlyArray<Source>> => {
   const sourceFiles = Array.from(new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: webRoot }));
   return Promise.all(
     sourceFiles.map((sourceFile) =>
@@ -286,22 +312,37 @@ const assertSourceBoundary = (
  * violations. The metafile check protects all reachable web dependencies; source checks protect
  * ownership rules that the module graph cannot express.
  */
-export const checkBrowserBundle = async (options: BrowserBundleCheckOptions): Promise<void> => {
-  removeOutput(options.outdir);
-  try {
-    const metafile = decodeBuildMetafile(await buildBrowserBundle(options));
-    const inputs = validateForbiddenInputs(metafile, options.webRoot, options.workspaceRoot);
-    assertSourceBoundary(
-      await readWebSources(options.webRoot),
-      options.webRoot,
-      options.workspaceRoot
-    );
-    assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
-    process.stdout.write(`web browser graph clean: ${inputs} bundled modules\n`);
-  } finally {
-    removeOutput(options.outdir);
-  }
-};
+export const checkBrowserBundle = (options: BrowserBundleCheckOptions): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.try({
+        try: () => removeOutput(options.outdir),
+        catch: (cause) =>
+          new BrowserBundleFailure({ message: "Removing browser output failed", cause }),
+      });
+      const metafile = decodeBuildMetafile(yield* buildBrowserBundle(options));
+      const inputs = validateForbiddenInputs(metafile, options.webRoot, options.workspaceRoot);
+      assertSourceBoundary(
+        yield* Effect.tryPromise({
+          try: () => readWebSources(options.webRoot),
+          catch: (cause) =>
+            new BrowserBundleFailure({ message: "Reading web sources failed", cause }),
+        }),
+        options.webRoot,
+        options.workspaceRoot
+      );
+      assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
+      process.stdout.write(`web browser graph clean: ${inputs} bundled modules\n`);
+    }).pipe(
+      Effect.ensuring(
+        Effect.try({
+          try: () => removeOutput(options.outdir),
+          catch: (cause) =>
+            new BrowserBundleFailure({ message: "Removing browser output failed", cause }),
+        }).pipe(Effect.orDie)
+      )
+    )
+  );
 
 if (import.meta.main) {
   await checkBrowserBundle(defaultOptions());

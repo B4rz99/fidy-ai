@@ -41,22 +41,24 @@ const filePath = (pathname: string): Option.Option<string> => {
   return Option.some(`${root}/${relativePath}`);
 };
 
-const responseFor = async (request: Request): Promise<Response> => {
+const responseFor = (request: Request): Promise<Response> => {
   const pathname = new URL(request.url).pathname;
   const candidate = filePath(pathname);
-  if (Option.isNone(candidate)) return new Response(null, { status: 400 });
+  if (Option.isNone(candidate)) return Promise.resolve(new Response(null, { status: 400 }));
 
   const file = Bun.file(candidate.value);
-  if (await file.exists()) {
-    const extension = candidate.value.slice(candidate.value.lastIndexOf(".")).toLowerCase();
-    return new Response(file, {
-      headers: { "content-type": contentTypes[extension] ?? "application/octet-stream" },
-    });
-  }
+  return file.exists().then((exists) => {
+    if (exists) {
+      const extension = candidate.value.slice(candidate.value.lastIndexOf(".")).toLowerCase();
+      return new Response(file, {
+        headers: { "content-type": contentTypes[extension] ?? "application/octet-stream" },
+      });
+    }
 
-  if (pathname.includes(".")) return new Response(null, { status: 404 });
-  const shell = Bun.file(`${root}/index.html`);
-  return new Response(shell, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (pathname.includes(".")) return new Response(null, { status: 404 });
+    const shell = Bun.file(`${root}/index.html`);
+    return new Response(shell, { headers: { "content-type": "text/html; charset=utf-8" } });
+  });
 };
 
 const server = Bun.serve({

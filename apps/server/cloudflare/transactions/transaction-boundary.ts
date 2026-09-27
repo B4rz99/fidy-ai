@@ -49,11 +49,13 @@ export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPA
 export const callerScope = (subject: TransactionCaller): Option.Option<CanonicalCapability> =>
   isPATCaller(subject) ? subject.requiredScope : Option.none();
 /** Restore the exact authority one canonical child is executed and audited under: a PAT scope. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const childCaller = (
-  subject: TransactionCaller,
-  requiredScope: Option.Option<CanonicalCapability>
-): TransactionCaller =>
+export const childCaller = ({
+  subject,
+  requiredScope,
+}: Readonly<{
+  subject: TransactionCaller;
+  requiredScope: Option.Option<CanonicalCapability>;
+}>): TransactionCaller =>
   isPATCaller(subject) && Option.isSome(requiredScope) ? { ...subject, requiredScope } : subject;
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();

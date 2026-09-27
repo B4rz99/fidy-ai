@@ -1,6 +1,6 @@
-/** Apply a checked-in statement test migration to local D1 in statement order. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const applyStatementTestMigration = (db: D1Database, name: string): Promise<void> =>
+import { Function } from "effect";
+
+const applyMigration = (db: D1Database, name: string): Promise<void> =>
   Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
     .text()
     .then((sql) =>
@@ -13,3 +13,9 @@ export const applyStatementTestMigration = (db: D1Database, name: string): Promi
           Promise.resolve()
         )
     );
+
+/** Apply a checked-in statement test migration to local D1 in statement order. */
+export const applyStatementTestMigration: {
+  (name: string): (db: D1Database) => Promise<void>;
+  (db: D1Database, name: string): Promise<void>;
+} = Function.dual(2, applyMigration);

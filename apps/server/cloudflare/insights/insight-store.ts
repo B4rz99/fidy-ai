@@ -79,12 +79,15 @@ const decodeEvent = (raw: unknown): Option.Option<InsightEvent> =>
   });
 
 /** Read the authoritative occurrence for one User; an opaque id alone grants no access. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const findInsight = (
-  db: D1Database,
-  userId: string,
-  id: InsightEventId
-): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError> =>
+export const findInsight = ({
+  db,
+  userId,
+  id,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  id: InsightEventId;
+}>): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
@@ -139,16 +142,15 @@ export const generateInsight = ({
     );
     const identity = Schema.decodeUnknownOption(Schema.Struct({ id: InsightEventId }))(row);
     return Option.isSome(identity)
-      ? yield* findInsight(db, userId, identity.value.id)
+      ? yield* findInsight({ db, userId, id: identity.value.id })
       : Option.none();
   });
 
 /** Global due lookup reveals only bounded identities; the User coordinator must re-read the event. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const discoverDueInsights = (
-  db: D1Database,
-  now: string
-): Effect.Effect<
+export const discoverDueInsights = ({
+  db,
+  now,
+}: Readonly<{ db: D1Database; now: string }>): Effect.Effect<
   Option.Option<
     ReadonlyArray<{
       userId: string;
@@ -433,7 +435,7 @@ const sendStatement = (
 const insightGuardRefusal =
   (input: TransitionInput) =>
   ({ db, subject, current }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> =>
-    findInsight(db, subject.userId, input.id).pipe(
+    findInsight({ db, userId: subject.userId, id: input.id }).pipe(
       Effect.map((event) =>
         insightRefusal({
           db,
@@ -489,7 +491,7 @@ const findCommittedInsight = ({
   attemptId: Option.Option<InsightDeliveryAttempt["id"]>;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
-    const event = yield* findInsight(db, userId, insightEventId);
+    const event = yield* findInsight({ db, userId, id: insightEventId });
     if (Option.isNone(event)) return Option.none<CommittedMutationValue>();
     if (Option.isNone(attemptId)) {
       const insight = event.value;
@@ -499,7 +501,7 @@ const findCommittedInsight = ({
         encode: () => Schema.encodeEffect(Schema.toCodecJson(InsightEvent))(insight),
       });
     }
-    const attempt = yield* findInsightAttempt(db, userId, insightEventId);
+    const attempt = yield* findInsightAttempt({ db, userId, id: insightEventId });
     return Option.map(
       Option.filter(attempt, (found) => found.id === attemptId.value),
       (deliveryAttempt) => {
@@ -597,7 +599,7 @@ export const prepareInsightTransition = (
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const { db, subject, operation, id, current } = input;
-    const event = yield* findInsight(db, subject.userId, id);
+    const event = yield* findInsight({ db, userId: subject.userId, id });
     if (Option.isNone(event)) {
       return refusedPreparation(
         insightRefusal({ db, subject, operation, current, code: "not_found" })
@@ -612,12 +614,15 @@ export const prepareInsightTransition = (
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Read send evidence by User and event identity; never infer it from provider identity. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const findInsightAttempt = (
-  db: D1Database,
-  userId: string,
-  id: InsightEventId
-): Effect.Effect<Option.Option<InsightDeliveryAttempt>, Cause.UnknownError> =>
+export const findInsightAttempt = ({
+  db,
+  userId,
+  id,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  id: InsightEventId;
+}>): Effect.Effect<Option.Option<InsightDeliveryAttempt>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, insight_event_id, sent_at, channel, provider,

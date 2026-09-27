@@ -6,7 +6,7 @@ import {
   SubmitForExtractionInput,
 } from "@fidy/server/statement-staging";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { Data, Effect, Option, Result, Schema } from "effect";
+import { Data, Effect, Function, Option, Result, Schema } from "effect";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "./statement-staging";
@@ -240,11 +240,10 @@ const stagingService = (
   );
 
 /** Encodes one stored submission into the canonical response body, or `None` for a broken row. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const submissionResponse = (
-  stored: StoredStatementSubmission,
-  status: number
-): Effect.Effect<Option.Option<Response>> =>
+export const submissionResponse: {
+  (status: number): (stored: StoredStatementSubmission) => Effect.Effect<Option.Option<Response>>;
+  (stored: StoredStatementSubmission, status: number): Effect.Effect<Option.Option<Response>>;
+} = Function.dual(2, (stored: StoredStatementSubmission, status: number) =>
   Option.match(submissionProjection(stored), {
     onNone: () => Effect.succeed(Option.none<Response>()),
     onSome: (value) =>
@@ -252,7 +251,8 @@ export const submissionResponse = (
         Effect.map((data) => Option.some(json({ data, next: [] }, status))),
         Effect.orElseSucceed(() => Option.none<Response>())
       ),
-  });
+  })
+);
 
 /** Every closed staging transport refusal, as its one bounded response. None echoes bytes. */
 const stagingFailureResponses: Record<StatementStagingFailureReason, () => Response> = {
@@ -338,7 +338,7 @@ const refusedCredential = ({
 export const submitForExtractionInput = (
   request: Request
 ): Promise<Option.Option<SubmitForExtractionInput>> =>
-  boundedJsonBody(request, submissionInputPolicy, SubmitForExtractionInput);
+  boundedJsonBody({ request, policy: submissionInputPolicy, schema: SubmitForExtractionInput });
 
 /**
  * One canonical read's attribution: a session caller commits one metadata-only read audit row, and
@@ -395,42 +395,59 @@ const readStatements = (
 
 /** Commits one read's attribution unit: `None` when it stands, or the refusal a dead authority
  * proves. A dead credential writes nothing, so a refused read leaves no audit row. */
-// @effect-diagnostics-next-line missingPipeableSignature:off
-export const commitReadAudit = (
-  environment: StatementIngestionEnvironment,
-  subject: TransactionCaller,
-  read: Readonly<{
-    submissionId: string;
-    operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
-  }>
-): Effect.Effect<Option.Option<Response>> =>
-  Effect.gen(function* () {
-    const isPAT = isPATCaller(subject);
-    const outcome = yield* Effect.result(
-      Effect.tryPromise({
-        try: () =>
-          environment.DB.batch([
-            ...readStatements({
-              current: currentMillis(),
-              database: environment.DB,
-              subject,
-              submissionId: read.submissionId,
-              operation: read.operation,
-            }),
-          ]),
-        catch: (cause) => new IngestionAuditFailed({ cause }),
-      })
-    );
-    if (Result.isFailure(outcome)) {
-      return Option.some(
-        refusedByAuditBudget(outcome.failure.cause) ? statementDailyBudgetResponse() : unavailable()
+type StatementAuditRead = Readonly<{
+  submissionId: string;
+  operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
+}>;
+
+export const commitReadAudit: {
+  (
+    subject: TransactionCaller,
+    read: StatementAuditRead
+  ): (environment: StatementIngestionEnvironment) => Effect.Effect<Option.Option<Response>>;
+  (
+    environment: StatementIngestionEnvironment,
+    subject: TransactionCaller,
+    read: StatementAuditRead
+  ): Effect.Effect<Option.Option<Response>>;
+} = Function.dual(
+  3,
+  (
+    environment: StatementIngestionEnvironment,
+    subject: TransactionCaller,
+    read: StatementAuditRead
+  ) =>
+    Effect.gen(function* () {
+      const isPAT = isPATCaller(subject);
+      const outcome = yield* Effect.result(
+        Effect.tryPromise({
+          try: () =>
+            environment.DB.batch([
+              ...readStatements({
+                current: currentMillis(),
+                database: environment.DB,
+                subject,
+                submissionId: read.submissionId,
+                operation: read.operation,
+              }),
+            ]),
+          catch: (cause) => new IngestionAuditFailed({ cause }),
+        })
       );
-    }
-    const results = outcome.success;
-    const committed = results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
-    if (committed) return Option.none<Response>();
-    return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
-  });
+      if (Result.isFailure(outcome)) {
+        return Option.some(
+          refusedByAuditBudget(outcome.failure.cause)
+            ? statementDailyBudgetResponse()
+            : unavailable()
+        );
+      }
+      const results = outcome.success;
+      const committed =
+        results[0]?.meta.changes === 1 && (!isPAT || results[1]?.meta.changes === 1);
+      if (committed) return Option.none<Response>();
+      return Option.some(yield* refusedCredential({ db: environment.DB, subject }));
+    })
+);
 
 /**
  * Reads one owned statement submission only after its canonical call committed a metadata-only

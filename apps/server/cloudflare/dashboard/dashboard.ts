@@ -115,7 +115,11 @@ export const browseDashboard = ({
     const edit =
       operation === "dashboard.applyDashboardEdit"
         ? yield* Effect.tryPromise(() =>
-            boundedJsonBody(request, editBodyPolicy, Schema.toCodecJson(DashboardEdit))
+            boundedJsonBody({
+              request,
+              policy: editBodyPolicy,
+              schema: Schema.toCodecJson(DashboardEdit),
+            })
           ).pipe(Effect.orElseSucceed(() => Option.none()))
         : Option.none<DashboardEdit>();
     const preparation = yield* prepareDashboard({

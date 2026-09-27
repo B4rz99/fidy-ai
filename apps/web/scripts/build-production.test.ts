@@ -1,33 +1,58 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { type Cause, Effect, Schema } from "effect";
+import { afterEach, describe, expect, it } from "@effect/vitest";
 import { validateProductionArtifact } from "../cloudflare/production-policy/artifact";
 import { releaseMetadata } from "./release-metadata";
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 const temporaryDirectories: Array<string> = [];
+const encodeMetadata = Schema.encodeSync(
+  Schema.fromJsonString(
+    Schema.Struct({ contractDigest: Schema.String, gitRevision: Schema.String })
+  )
+);
 
-afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
-});
+// Vitest owns teardown; keep every directory registered even when fixture construction fails.
+afterEach(() =>
+  Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })))
+);
 
-const productionOutput = async (assetName = "app-AbCd1234.js"): Promise<string> => {
-  const directory = await mkdtemp("/tmp/fidy-production-artifact-");
-  temporaryDirectories.push(directory);
-  await mkdir(join(directory, "assets"));
-  await Bun.write(
-    join(directory, "index.html"),
-    `<!doctype html><script type="module" src="/assets/${assetName}"></script>`
-  );
-  await Bun.write(join(directory, "_headers"), "/*\n  X-Frame-Options: DENY\n");
-  await Bun.write(
-    join(directory, "deployment-metadata.json"),
-    `${JSON.stringify({ contractDigest, gitRevision })}\n`
-  );
-  await Bun.write(join(directory, `assets/${assetName}`), "console.log('web')");
-  return directory;
-};
+const productionOutput = (
+  assetName = "app-AbCd1234.js"
+): Effect.Effect<string, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.tryPromise(() => mkdtemp("/tmp/fidy-production-artifact-"));
+    temporaryDirectories.push(directory);
+    yield* Effect.tryPromise(() => mkdir(join(directory, "assets")));
+    yield* Effect.tryPromise(() =>
+      Bun.write(
+        join(directory, "index.html"),
+        `<!doctype html><script type="module" src="/assets/${assetName}"></script>`
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      Bun.write(join(directory, "_headers"), "/*\n  X-Frame-Options: DENY\n")
+    );
+    yield* Effect.tryPromise(() =>
+      Bun.write(
+        join(directory, "deployment-metadata.json"),
+        `${encodeMetadata({ contractDigest, gitRevision })}\n`
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      Bun.write(join(directory, `assets/${assetName}`), "console.log('web')")
+    );
+    return directory;
+  });
+
+const validate = (directory: string): Promise<void> =>
+  validateProductionArtifact({
+    directory,
+    expectedDigest: contractDigest,
+    expectedSha: gitRevision,
+  });
 
 describe("production static release identity", () => {
   it("binds one static artifact to a full Git revision and canonical contract digest", () => {
@@ -46,66 +71,51 @@ describe("production static release identity", () => {
     );
   });
 
-  it("accepts only a static artifact with the expected release identity", async () => {
-    const directory = await productionOutput();
+  it.effect("accepts only a static artifact with the expected release identity", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());
+    })
+  );
 
-    await expect(
-      validateProductionArtifact({
-        directory,
-        expectedDigest: contractDigest,
-        expectedSha: gitRevision,
-      })
-    ).resolves.toBeUndefined();
-  });
+  it.effect("rejects an unhashed browser asset", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput("app.js");
+      yield* Effect.tryPromise(() => expect(validate(directory)).rejects.toThrow("content-hashed"));
+    })
+  );
 
-  it("rejects an unhashed browser asset", async () => {
-    const directory = await productionOutput("app.js");
+  it.effect("rejects a shell whose hashed entry asset is missing", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() => rm(join(directory, "assets"), { recursive: true }));
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow("missing hashed asset")
+      );
+    })
+  );
 
-    await expect(
-      validateProductionArtifact({
-        directory,
-        expectedDigest: contractDigest,
-        expectedSha: gitRevision,
-      })
-    ).rejects.toThrow("content-hashed");
-  });
+  it.effect("rejects server code from the production artifact", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() =>
+        Bun.write(join(directory, "assets/server.js"), "RESEND_API_KEY")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow("forbidden production artifact path")
+      );
+    })
+  );
 
-  it("rejects a shell whose hashed entry asset is missing", async () => {
-    const directory = await productionOutput();
-    await rm(join(directory, "assets"), { recursive: true });
-
-    await expect(
-      validateProductionArtifact({
-        directory,
-        expectedDigest: contractDigest,
-        expectedSha: gitRevision,
-      })
-    ).rejects.toThrow("missing hashed asset");
-  });
-
-  it("rejects server code from the production artifact", async () => {
-    const directory = await productionOutput();
-    await Bun.write(join(directory, "assets/server.js"), "RESEND_API_KEY");
-
-    await expect(
-      validateProductionArtifact({
-        directory,
-        expectedDigest: contractDigest,
-        expectedSha: gitRevision,
-      })
-    ).rejects.toThrow("forbidden production artifact path");
-  });
-
-  it("rejects source maps from the production artifact", async () => {
-    const directory = await productionOutput();
-    await Bun.write(join(directory, "assets/app-AbCd1234.js.map"), "{}");
-
-    await expect(
-      validateProductionArtifact({
-        directory,
-        expectedDigest: contractDigest,
-        expectedSha: gitRevision,
-      })
-    ).rejects.toThrow("forbidden production artifact path");
-  });
+  it.effect("rejects source maps from the production artifact", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() =>
+        Bun.write(join(directory, "assets/app-AbCd1234.js.map"), "{}")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow("forbidden production artifact path")
+      );
+    })
+  );
 });

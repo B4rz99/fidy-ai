@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import type { SchemaAST } from "effect";
+import { type Cause, Effect, type SchemaAST } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { PATPairingApi } from "~/pat-pairing-api";
@@ -121,31 +121,44 @@ const parseArguments = (
   return { check, outputDirectory };
 };
 
-const main = async (): Promise<void> => {
+const checkArtifact = (
+  { name, contents }: ContractArtifactFile,
+  outputDirectory: string,
+  check: boolean
+): Effect.Effect<boolean, Cause.UnknownError> => {
+  const path = `${outputDirectory}/${name}`;
+  if (!check) {
+    return Effect.tryPromise(() => Bun.write(path, contents, { createPath: true })).pipe(
+      Effect.as(false)
+    );
+  }
+  const file = Bun.file(path);
+  return Effect.gen(function* () {
+    if (!(yield* Effect.tryPromise(() => file.exists()))) return true;
+    return (yield* Effect.tryPromise(() => file.text())) !== contents;
+  });
+};
+
+const main = Effect.gen(function* () {
   const { check, outputDirectory } = parseArguments(Bun.argv.slice(2));
   const artifacts = makeContractArtifacts();
-  const stale: Array<string> = [];
-
-  await Promise.all(
-    artifactFiles(artifacts).map(async ({ name, contents }) => {
-      const path = `${outputDirectory}/${name}`;
-      if (check) {
-        const file = Bun.file(path);
-        if (!(await file.exists()) || (await file.text()) !== contents) stale.push(path);
-      } else {
-        await Bun.write(path, contents, { createPath: true });
-      }
-    })
+  const files = artifactFiles(artifacts);
+  const stale = yield* Effect.forEach(
+    files,
+    (file) => checkArtifact(file, outputDirectory, check),
+    { concurrency: "unbounded" }
   );
-
-  if (stale.length > 0) {
+  const stalePaths = files
+    .filter((_, index) => stale[index])
+    .map(({ name }) => `${outputDirectory}/${name}`);
+  if (stalePaths.length > 0) {
     throw new Error(
-      `Generated server contracts are stale:\n${stale.map((path) => `  - ${path}`).join("\n")}\nRun \`bun run contracts:generate\`.`
+      `Generated server contracts are stale:\n${stalePaths.map((path) => `  - ${path}`).join("\n")}\nRun \`bun run contracts:generate\`.`
     );
   }
   process.stdout.write(
     `${check ? "fresh" : "generated"} server contracts (${contractDigest(artifacts)})\n`
   );
-};
+});
 
-if (import.meta.main) await main();
+if (import.meta.main) await Effect.runPromise(main);

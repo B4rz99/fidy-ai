@@ -383,15 +383,16 @@ const presentHistory = (
   const last = visible.at(-1);
   const next =
     transactions.length > pageSize && last !== undefined
-      ? nextTransactionPage(
-          `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
-          Object.fromEntries(
+      ? nextTransactionPage({
+          cursor: `${DateTime.formatIso(last.occurredAt)}|${DateTime.formatIso(last.createdAt)}|${last.id}`,
+          filters: Object.fromEntries(
             [...new URL(request.url).searchParams].filter(([name]) => name !== "cursor")
           ),
-          selection.search === true
-            ? "transactions.searchTransactions"
-            : "transactions.listTransactions"
-        )
+          operation:
+            selection.search === true
+              ? "transactions.searchTransactions"
+              : "transactions.listTransactions",
+        })
       : [];
   return Response.json(
     { data: visible.map((transaction) => Schema.encodeSync(TransactionOutput)(transaction)), next },

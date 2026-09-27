@@ -108,56 +108,64 @@ const projectEmailRow = (
   });
 };
 
-// @effect-diagnostics-next-line asyncFunction:off
-const loadStatementItems = async (
+const loadStatementItems = (
   database: D1Database,
   userId: string,
   asOf: number
-): Promise<Option.Option<ReadonlyArray<NeedsReviewItem>>> => {
-  const rows = await database
-    .prepare(`SELECT id, submission_id, record_number, reason,
+): Effect.Effect<Option.Option<ReadonlyArray<NeedsReviewItem>>, ReviewReadUnavailable> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.tryPromise({
+      try: () =>
+        database
+          .prepare(`SELECT id, submission_id, record_number, reason,
     CASE WHEN evidence_expires_at_ms > ? THEN original_evidence ELSE NULL END AS original_evidence,
     issues, CASE WHEN evidence_expires_at_ms > ? THEN status ELSE 'expired' END AS status,
     created_at_ms, service_market, locale, time_zone,
     source_format, parser_revision, extractor_revision
     FROM statement_needs_review WHERE user_id = ?
     ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
-    .bind(asOf, asOf, userId, maximumOffset + pageSize)
-    .all();
-  const items: Array<NeedsReviewItem> = [];
-  for (const raw of rows.results) {
-    const row = Schema.decodeUnknownOption(reviewRow)(raw);
-    if (Option.isNone(row)) return Option.none();
-    const item = projectReviewRow(row.value);
-    if (Option.isNone(item)) return Option.none();
-    items.push(item.value);
-  }
-  return Option.some(items);
-};
+          .bind(asOf, asOf, userId, maximumOffset + pageSize)
+          .all(),
+      catch: () => new ReviewReadUnavailable(),
+    });
+    const items: Array<NeedsReviewItem> = [];
+    for (const raw of rows.results) {
+      const row = Schema.decodeUnknownOption(reviewRow)(raw);
+      if (Option.isNone(row)) return Option.none();
+      const item = projectReviewRow(row.value);
+      if (Option.isNone(item)) return Option.none();
+      items.push(item.value);
+    }
+    return Option.some(items);
+  });
 
-// @effect-diagnostics-next-line asyncFunction:off
-const loadEmailItems = async (
+const loadEmailItems = (
   database: D1Database,
   userId: string,
   asOf: number
-): Promise<Option.Option<ReadonlyArray<NeedsReviewItem>>> => {
-  const rows = await database
-    .prepare(`SELECT e.id, e.receipt_id, e.reason,
+): Effect.Effect<Option.Option<ReadonlyArray<NeedsReviewItem>>, ReviewReadUnavailable> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.tryPromise({
+      try: () =>
+        database
+          .prepare(`SELECT e.id, e.receipt_id, e.reason,
     e.created_at_ms, e.evidence_expires_at_ms, r.time_zone FROM forwarded_email_needs_review e
     JOIN forwarded_email_receipts r ON r.id = e.receipt_id AND r.user_id = e.user_id
     WHERE e.user_id = ? ORDER BY e.created_at_ms DESC, e.id DESC LIMIT ?`)
-    .bind(userId, maximumOffset + pageSize)
-    .all();
-  const items: Array<NeedsReviewItem> = [];
-  for (const raw of rows.results) {
-    const row = Schema.decodeUnknownOption(emailReviewRow)(raw);
-    if (Option.isNone(row)) return Option.none();
-    const item = projectEmailRow(row.value, asOf);
-    if (Option.isNone(item)) return Option.none();
-    items.push(item.value);
-  }
-  return Option.some(items);
-};
+          .bind(userId, maximumOffset + pageSize)
+          .all(),
+      catch: () => new ReviewReadUnavailable(),
+    });
+    const items: Array<NeedsReviewItem> = [];
+    for (const raw of rows.results) {
+      const row = Schema.decodeUnknownOption(emailReviewRow)(raw);
+      if (Option.isNone(row)) return Option.none();
+      const item = projectEmailRow(row.value, asOf);
+      if (Option.isNone(item)) return Option.none();
+      items.push(item.value);
+    }
+    return Option.some(items);
+  });
 
 const reviewPageOffset = (url: URL): Option.Option<number> =>
   Schema.decodeOption(ReviewPageOffset)(url.searchParams.get("offset") ?? "0");
@@ -181,14 +189,13 @@ export const listNeedsReviewItems = (
     if (Option.isSome(refusal)) return refusal.value;
     const asOf = currentMillis();
     const loaded = yield* Effect.result(
-      Effect.tryPromise({
-        try: () =>
-          Promise.all([
-            loadStatementItems(input.database, input.subject.userId, asOf),
-            loadEmailItems(input.database, input.subject.userId, asOf),
-          ]),
-        catch: () => new ReviewReadUnavailable(),
-      })
+      Effect.all(
+        [
+          loadStatementItems(input.database, input.subject.userId, asOf),
+          loadEmailItems(input.database, input.subject.userId, asOf),
+        ],
+        { concurrency: "unbounded" }
+      )
     );
     if (Result.isFailure(loaded)) return unavailableStatement();
     const [statement, email] = loaded.success;

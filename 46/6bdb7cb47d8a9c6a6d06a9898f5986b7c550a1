@@ -1,0 +1,105 @@
+apps/web/e2e/static-shell.spec.ts
+  s_60ae463805ce18::t_7899a89b832e23 113-114,133
+apps/web/e2e/browser-pairing.spec.ts
+  s_60ae463805ce18::t_efdcb1fa43f066 298-306,308,310-311,313,315,317-319,323-324,326,361,365,372,383
+  s_60ae463805ce18::t_126c3a73fe49ba 339
+  s_60ae463805ce18::t_d2f811aa585c23 337-338,347-348
+  s_60ae463805ce18::t_beb2aaa67a9cbc 349
+  s_60ae463805ce18::t_ae8d08f5ebb79c 350-351,357-359
+  s_60ae463805ce18::t_4e51b9f26f625e 9,314
+  s_60ae463805ce18::t_32d53be798ff87 11,360
+  s_60ae463805ce18::t_8214b9118c8fcf 12,327-332,370
+  s_60ae463805ce18::t_4f48010f66b3cc 376
+  s_60ae463805ce18::t_0b4334c8cc8dbb 352-356
+  s_60ae463805ce18::t_3902d294e354ed 341-346
+  s_60ae463805ce18::t_73bd229e7b5372 320-321
+  s_60ae463805ce18::t_154143485813f6 340
+  s_60ae463805ce18::t_f8cfbe469f71dd 316
+  s_60ae463805ce18::t_cfc207c6e95562 333-336
+  s_672cb0b11117a0::t_d3439a49e14fd6 297,312,325,363-364,366-369,378-382,384-385,387-388
+apps/web/e2e/real-core-fixture.ts
+  s_60ae463805ce18::t_eeff20b47e999f 9-16,22-23,29-31
+  s_60ae463805ce18::t_731004aefb1723 18-21
+  s_60ae463805ce18::t_8c3c4780c52d3a 4-6,28
+  s_60ae463805ce18::t_604e7fb09aa067 1-3,7-8,17,24-27,32
+.oxlintrc.json
+  s_60ae463805ce18::t_4a47c3d013c64b 223-224
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_60ae463805ce18::t_29e83c8e825d66 75,79,88,92
+  s_60ae463805ce18::t_b6092c3d6f47c3 290-291,298,303
+  s_60ae463805ce18::t_5339006e105634 205,209
+  s_60ae463805ce18::t_df55ea0a4fb756 174-175,185
+  s_60ae463805ce18::t_2702cc72ff951d 1,4,126,286-287
+  s_60ae463805ce18::t_1f32f8a777973e 172-173,176-184
+  s_60ae463805ce18::t_fc0fbffec88eb3 204,206-208,210-211
+  s_60ae463805ce18::t_47f4b42be0f8cf 67
+  s_60ae463805ce18::t_f1a90dec89774c 3,121-123,187-201,203,214,216-221,223-224,299-301,305,364-365
+  s_60ae463805ce18::t_07b7532af3db46 66,76,119-120,133-154
+  s_60ae463805ce18::t_6120f590f536b2 327-331,369-370
+  s_60ae463805ce18::t_49c69812e4e936 77-78,80-87,89-91,93-95,104
+  s_60ae463805ce18::t_ffb64e0ccc3fee 124-125,302
+  s_60ae463805ce18::t_b4f16b7df858b4 212-213,215,222
+  s_60ae463805ce18::t_32f47eb3021628 231-234,238-241,244-249,252-256,260-270,289
+  s_60ae463805ce18::t_55083c298f9fb3 236,251,257-259,271,307-310
+  s_60ae463805ce18::t_f21d8d4172cc4f 127,170
+  s_60ae463805ce18::t_aa79df6679feb4 116-118,128-132,155-169,171,186,277,280,282,285,292-296,312,314-317
+  s_60ae463805ce18::t_f09a9445260109 30,350-359
+  s_13a600a79f8f92::t_f6310b2bd16bd4 202,225-230,235,237,242-243,250,272-276,278-279,281,283-284,288,297,304,306,311,313
+apps/web/e2e/real-core-journeys.spec.ts
+  s_60ae463805ce18::t_f7b20deb8746d5 2,10-12,14-16,18,20-29,31-36,38-43
+  s_60ae463805ce18::t_b3c78800a7f019 88
+  s_60ae463805ce18::t_a0a67a9c4037c2 17,30
+  s_60ae463805ce18::t_e6a705adaf7daf 45-48
+  s_60ae463805ce18::t_fd78bfa33d5984 65-68
+  s_60ae463805ce18::t_eeff20b47e999f 84-87
+  s_60ae463805ce18::t_20492d03b10d67 6,19,37
+  s_60ae463805ce18::t_8812d4c4fab887 107-111
+  s_60ae463805ce18::t_af44e6800e2d1d 9,64,69-82
+  s_60ae463805ce18::t_b7001e84d17bac 1,4-5,7-8,83,89-106,112-118
+  s_60ae463805ce18::t_5852f4130f3cdd 3,44,49-63
+  s_60ae463805ce18::t_480b46325a24aa 13
+apps/server/package.json
+  s_3c5ba397386570::t_294cf16d151723 196
+bun.lock
+  s_3c5ba397386570::t_d8f470c809cc5e 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "466bdb7cb47d8a9c6a6d06a9898f5986b7c550a1",
+  "prompts": {},
+  "sessions": {
+    "s_13a600a79f8f92": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17b-9d94-73a8-b996-9e18f9f3e5a4",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_3c5ba397386570": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e17c-566a-72f1-99bf-41fef633aec2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_60ae463805ce18": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e0fa-4e3f-744e-a707-7491c09144a2",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_672cb0b11117a0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e190-dfc1-7155-b931-68aab92fe6d8",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -245,19 +245,6 @@ const installEmailLoginRoutes = async (page: Page): Promise<() => number> => {
     logoutCount: 0,
     redeemTimes: [],
   });
-  await page.route("**/web/pairings", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      status: successStatus,
-      body: JSON.stringify({
-        pairingId,
-        privateVerifier,
-        publicCode,
-        expiresAt,
-        pollingIntervalSeconds: 5,
-      }),
-    })
-  );
   const approval = await installEmailApprovalRoutes(page);
   await page.route("**/web/pairings/redeem", (route) =>
     route.fulfill({

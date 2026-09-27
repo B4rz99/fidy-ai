@@ -14,11 +14,9 @@ for await (const path of productionSources.scan({ cwd: serverRoot })) {
   }
 }
 
-type LintProbe = Readonly<{
-  name: string;
-  expectedRule: string;
-  source: string;
-}>;
+type LintProbe = Readonly<
+  { name: string; source: string } & ({ expectedRule: string } | { clean: true })
+>;
 
 const probes: ReadonlyArray<LintProbe> = [
   {
@@ -67,6 +65,16 @@ const probes: ReadonlyArray<LintProbe> = [
     source: `/** Negative probe: aliases may not conceal an open unestablished value contract. */\ntype Properties = Readonly<Record<string, unknown>>;\n\nexport const properties = (): Properties => ({});\n`,
   },
   {
+    name: "unsafe-generic-dictionary",
+    expectedRule: "effect-guards(no-unsafe-dictionary-type)",
+    source: `/** Negative probe: generic arguments must survive nested utility wrappers. */\ntype Box<Value> = Readonly<Record<string, Value>>;\n\nexport const properties = (): Box<unknown> => ({});\n`,
+  },
+  {
+    name: "shadowed-record",
+    clean: true,
+    source: `type Record<Key extends string, Value> = { key: Key; value: Value };\n\n/** A locally declared Record is not TypeScript's open dictionary. */\nexport const entry = (): Record<string, unknown> => ({ key: "id", value: "data" });\n`,
+  },
+  {
     name: "restricted-clock",
     expectedRule: "eslint(no-restricted-properties)",
     source: `/** Negative probe: core must not read the ambient clock. */\nexport const nowMillis = (): number => Date.now();\n`,
@@ -77,6 +85,18 @@ const probes: ReadonlyArray<LintProbe> = [
     source: `/** Negative probe: core must not read ambient process state. */\nexport const platform = (): string => process.platform;\n`,
   },
 ];
+
+const assertProbeResult = (probe: LintProbe, exitCode: number, report: string): void => {
+  if ("clean" in probe) {
+    if (exitCode !== 0) throw new Error(`Expected ${probe.name} to pass.\n${report}`);
+    return;
+  }
+  if (exitCode === 0 || !report.includes(probe.expectedRule)) {
+    throw new Error(
+      `Expected the ${probe.name} negative lint probe to fail with ${probe.expectedRule}.\n${report}`
+    );
+  }
+};
 
 const probeFiles = probes.map((probe) => ({
   ...probe,
@@ -105,11 +125,7 @@ try {
     );
     const report = `${decode(process.stdout)}\n${decode(process.stderr)}`;
 
-    if (process.exitCode === 0 || !report.includes(probe.expectedRule)) {
-      throw new Error(
-        `Expected the ${probe.name} negative lint probe to fail with ${probe.expectedRule}.\n${report}`
-      );
-    }
+    assertProbeResult(probe, process.exitCode, report);
   }
 } finally {
   await Promise.all(probeFiles.map(({ path }) => Bun.file(`${serverRoot}${path}`).delete()));

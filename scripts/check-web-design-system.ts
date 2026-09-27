@@ -43,6 +43,12 @@ const classFragments = (candidate: Option.Option<Babel.Node>): ReadonlyArray<Cla
       value: quasi.value.cooked ?? quasi.value.raw,
     }));
   }
+  return expressionFragments(node);
+};
+
+// Compound expressions may contribute classes from either branch or each item;
+// do not evaluate conditions or calls at inspection time.
+const expressionFragments = (node: Babel.Node): ReadonlyArray<ClassFragment> => {
   if (Babel.isConditionalExpression(node)) {
     return [
       ...classFragments(Option.some(node.consequent)),
@@ -111,6 +117,14 @@ const probes: ReadonlyArray<Readonly<{ expected: FindingReason; source: string }
   { expected: "arbitrary-color", source: `<div className="text-[#123456]" />` },
   { expected: "dark-color", source: `<div className="dark:hover:bg-card" />` },
   { expected: "space-layout", source: `<div className="space-y-4" />` },
+  {
+    expected: "palette-color",
+    source: `<div className={cn(active ? "text-card" : ["bg-blue-500", "flex"])} />`,
+  },
+  {
+    expected: "arbitrary-color",
+    source: `<div className={active && cn("flex", \`text-[#abcdef] \${extra}\`)} />`,
+  },
 ];
 for (const probe of probes) {
   const findings = inspectSource("negative-probe.tsx", probe.source);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { type Cause, Effect, Schema } from "effect";
 import { afterEach, describe, expect, it } from "@effect/vitest";
@@ -103,6 +103,30 @@ describe("production static release identity", () => {
       );
       yield* Effect.tryPromise(() =>
         expect(validate(directory)).rejects.toThrow("forbidden production artifact path")
+      );
+    })
+  );
+
+  it.effect("rejects a hidden file that the upload tree would otherwise conceal", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() => Bun.write(join(directory, ".env"), "RESEND_API_KEY"));
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow("forbidden production artifact path: .env")
+      );
+    })
+  );
+
+  it.effect("rejects symlinks instead of silently omitting them from validation", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() =>
+        symlink(join(directory, "index.html"), join(directory, "assets", "extra-AbCd1234.js"))
+      );
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow(
+          "forbidden production artifact path: assets/extra-AbCd1234.js"
+        )
       );
     })
   );

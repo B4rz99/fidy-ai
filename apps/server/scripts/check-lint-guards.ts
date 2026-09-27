@@ -4,13 +4,32 @@ const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url));
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
-const productionSources = new Bun.Glob("src/**/*.ts");
-for await (const path of productionSources.scan({ cwd: serverRoot })) {
-  if (path.endsWith(".test.ts")) continue;
-  const source = await Bun.file(`${serverRoot}${path}`).text();
-  const handwrittenSymbol = /\bSymbol\s*\(/u.test(source) || /\bunique\s+symbol\b/u.test(source);
-  if (handwrittenSymbol) {
-    throw new Error(`${path}: handwritten Symbol(...) and unique symbol are prohibited`);
+const productionDirectories = [
+  "apps/server/src",
+  "apps/server/cloudflare",
+  "apps/web/src",
+  "infra/cloudflare",
+] as const;
+const productionPaths = productionDirectories
+  .flatMap((directory) =>
+    Array.from(new Bun.Glob(`${directory}/**/*.{ts,tsx}`).scanSync({ cwd: workspaceRoot }))
+  )
+  .filter((path) => !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"));
+const productionFiles = await Promise.all(
+  productionPaths.map((path) =>
+    Bun.file(`${workspaceRoot}${path}`)
+      .text()
+      .then((source) => ({ path, source }))
+  )
+);
+for (const { path, source } of productionFiles) {
+  const handwrittenSymbol = /\b(?:Symbol\s*\(|unique\s+symbol\b)/u.exec(source);
+  if (handwrittenSymbol !== null) {
+    const line = source.slice(0, handwrittenSymbol.index).split("\n").length;
+    throw new Error(
+      `${path}:${line}: handwritten Symbol(...) and unique symbol are prohibited. ` +
+        "Use closure-backed behavior for one-shot capabilities. For domain ids, validate a scalar schema before Schema.brand(...); a brand alone adds no runtime checks. Built-in protocol symbols such as Symbol.iterator remain allowed."
+    );
   }
 }
 

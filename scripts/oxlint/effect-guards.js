@@ -57,7 +57,7 @@ const noOrdinaryInterface = {
     docs: { description: "Use type aliases except for the reviewed Router registration" },
     messages: {
       ordinaryInterface:
-        "Use a type alias for first-party shapes; only the reviewed Register interface in the TanStack Router module augmentation is permitted.",
+        "Use a type alias for first-party shapes: unlike interfaces, aliases cannot be reopened by declaration merging, and they also express unions, tuples, mapped types, and conditional types. Only TanStack Router's reviewed Register module augmentation needs an interface here; any new integration requiring merging needs its own reviewed exception.",
     },
     schema: [],
   },
@@ -226,7 +226,7 @@ const noEffectPromise = {
     docs: { description: "Disallow Effect.promise in production application source" },
     messages: {
       noEffectPromise:
-        "Do not use Effect.promise. A rejected Promise becomes a defect despite the Effect's `never` failure channel. Use Effect.tryPromise and deliberately map the rejection to a typed failure, contain it, or use orDie only when rejection is truly a defect.",
+        "Do not use Effect.promise. A rejected Promise becomes a defect despite the Effect's `never` failure channel. At the owning adapter, use Effect.tryPromise({ try, catch }) to map rejection to a closed typed failure; explicitly contain best-effort failures or use orDie only for genuine defects. The thunk-only tryPromise overload adds Cause.UnknownError to the failure channel.",
     },
     schema: [],
   },
@@ -259,7 +259,7 @@ const noTypeCast = {
     docs: { description: "Disallow type-only cast helpers" },
     messages: {
       noTypeCast:
-        "Do not call cast helpers. Preserve the type relationship in the module interface or validate the value at runtime.",
+        "Do not call cast helpers. Preserve assignability in the module interface or decode unknown input at its boundary with the owning Schema. A custom guard must actually check everything it claims to establish; renaming a cast is not validation.",
     },
     schema: [],
   },
@@ -497,7 +497,7 @@ const noReactUseEffect = {
     docs: { description: "Disallow direct use of React useEffect" },
     messages: {
       noReactUseEffect:
-        "Do not use React useEffect. Derive presentation during render, perform commands in event handlers, and use the owning query, router, or external-store API for synchronization.",
+        "Do not use React useEffect. Derive presentation during render, perform user-triggered commands in event handlers, and let the owning query, router, or external-store API synchronize. If a concrete imperative integration needs an effect, isolate it in a narrow adapter and request an explicit file-scoped exception; do not add a speculative one.",
     },
     schema: [],
   },
@@ -920,9 +920,9 @@ const noNullableType = {
     docs: { description: "Disallow undefined/null in types; absence is Option" },
     messages: {
       keyword:
-        '`{{name}}` in a type makes absence a value every read has to be talked out of, and `?? fallback` the cheapest way to do it. Use `Option.Option<T>`: `Option.fromNullable`/`Option.fromUndefinedOr` where a builtin hands one back, `Schema.OptionFromNullOr` or `Schema.optionalWith(…, { as: "Option" })` in a schema — the wire keeps its `null`, only the decoded type changes. Effect\'s own lookups (`Array.get`, `Array.findFirst`, `Array.last`, `String.match`, `HashMap.get`) return Options and never produce this.',
+        "`{{name}}` in a type makes absence a value every read has to be talked out of, and `?? fallback` the cheapest way to do it. Use `Option.Option<T>`: `Option.fromNullable`/`Option.fromUndefinedOr` where a builtin hands one back, `Schema.OptionFromNullOr(S)` for a present nullable field; decode missing keys at the owning boundary into a required Option field or a state union. The wire may remain nullish; only the decoded domain type changes. Effect's own lookups (`Array.get`, `Array.findFirst`, `Array.last`, `String.match`, `HashMap.get`) return Options and never produce this.",
       optional:
-        "An optional property makes absence a missing key, which reads back as `T | undefined` — the same defect one spelling further out. Make it required and `Option.Option<T>`, so the empty case is handled at the read rather than defaulted at it.",
+        "An optional property reads back as `T | undefined`. For independent absence, make the property required with `Option.Option<T>`; decode missing/null wire fields at the boundary. When fields appear or disappear together, use a discriminated union of valid states instead of a bag of optionals.",
     },
     schema: [],
   },

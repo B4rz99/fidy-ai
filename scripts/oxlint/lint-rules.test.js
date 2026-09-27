@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RuleTester } from "oxlint/plugins-dev";
 import effectGuards from "./effect-guards.js";
@@ -24,7 +26,7 @@ tester.run("effect-guards/no-ordinary-interface", effectGuards.rules["no-ordinar
     {
       code: "interface Status { readonly current: boolean }",
       filename: otherFile,
-      errors: [{ messageId: "ordinaryInterface" }],
+      errors: [{ message: /aliases cannot be reopened by declaration merging/u }],
     },
     {
       code: "interface Status { readonly current: boolean }",
@@ -55,6 +57,50 @@ tester.run("effect-guards/no-ordinary-interface", effectGuards.rules["no-ordinar
       code: 'export {}; declare module "@tanstack/react-router" { interface Register { router: string } }',
       filename: otherFile,
       errors: [{ messageId: "ordinaryInterface" }],
+    },
+  ],
+});
+
+tester.run("effect-guards/no-effect-promise", effectGuards.rules["no-effect-promise"], {
+  valid: [],
+  invalid: [
+    {
+      code: 'import { Effect } from "effect"; Effect.promise(() => Promise.resolve(1));',
+      errors: [{ message: /Effect.tryPromise\(\{ try, catch \}\).*Cause.UnknownError/u }],
+    },
+  ],
+});
+
+tester.run("effect-guards/no-type-cast", effectGuards.rules["no-type-cast"], {
+  valid: [],
+  invalid: [
+    {
+      code: "Function.cast<unknown, string>(value);",
+      errors: [{ message: /owning Schema.*custom guard must actually check/u }],
+    },
+  ],
+});
+
+tester.run("effect-guards/no-react-use-effect", effectGuards.rules["no-react-use-effect"], {
+  valid: [],
+  invalid: [
+    {
+      code: 'import { useEffect } from "react";',
+      errors: [{ message: /event handlers.*narrow adapter.*file-scoped exception/u }],
+    },
+  ],
+});
+
+tester.run("effect-guards/no-nullable-type", effectGuards.rules["no-nullable-type"], {
+  valid: [],
+  invalid: [
+    {
+      code: "type Draft = { merged?: boolean };",
+      errors: [{ message: /Option.Option<T>.*discriminated union of valid states/u }],
+    },
+    {
+      code: "type Value = string | null;",
+      errors: [{ message: /Option.fromNullable.*Schema.OptionFromNullOr/u }],
     },
   ],
 });
@@ -126,4 +172,34 @@ try {
   assert.notEqual(result.status, 0);
 } finally {
   unlinkSync(probeFile);
+}
+
+// Run the source guard in an isolated workspace so guidance is exercised without a probe file
+// racing the repository's other static checks.
+const isolatedRoot = mkdtempSync(join(tmpdir(), "fidy-symbol-guidance-"));
+try {
+  for (const directory of [
+    "apps/server/scripts",
+    "apps/server/src",
+    "apps/server/cloudflare",
+    "apps/web/src",
+    "infra/cloudflare",
+  ]) {
+    mkdirSync(join(isolatedRoot, directory), { recursive: true });
+  }
+  const guardPath = join(isolatedRoot, "apps/server/scripts/check-lint-guards.ts");
+  const sourcePath = join(isolatedRoot, "apps/web/src/symbol-probe.ts");
+  copyFileSync(
+    fileURLToPath(new URL("../../apps/server/scripts/check-lint-guards.ts", import.meta.url)),
+    guardPath
+  );
+  writeFileSync(sourcePath, 'export const nominal = Symbol("nominal");\n');
+  const result = spawnSync("bun", [guardPath], { cwd: isolatedRoot, encoding: "utf8" });
+  const report = `${result.stdout}\n${result.stderr}`;
+  assert.notEqual(result.status, 0);
+  assert.match(report, /symbol-probe\.ts:1: handwritten Symbol/u);
+  assert.match(report, /closure-backed behavior.*validate a scalar schema before Schema.brand/u);
+  assert.match(report, /brand alone adds no runtime checks.*Symbol.iterator remain allowed/u);
+} finally {
+  rmSync(isolatedRoot, { recursive: true, force: true });
 }

@@ -177,9 +177,9 @@ BEGIN
     maximum = CASE WHEN length(excluded.max_minor) > length(max_minor)
       OR (length(excluded.max_minor) = length(max_minor) AND excluded.max_minor > max_minor)
       THEN excluded.maximum ELSE maximum END,
-    max_minor = CASE WHEN length(excluded.max_minor) > length(max_minor)
+    max_minor = (CASE WHEN length(excluded.max_minor) > length(max_minor)
       OR (length(excluded.max_minor) = length(max_minor) AND excluded.max_minor > max_minor)
-      THEN excluded.max_minor ELSE max_minor END;
+      THEN excluded.max_minor ELSE max_minor END);
   INSERT INTO dashboard_projection_digit
     (user_id, size_seconds, bucket, currency, direction, category_id, position, digit_sum)
   WITH RECURSIVE

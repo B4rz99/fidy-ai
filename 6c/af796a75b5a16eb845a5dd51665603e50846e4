@@ -1,0 +1,21 @@
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_bad62b9e4f4eb3::t_ad0085da35b87e 295-299,387-389,409-410
+  s_bad62b9e4f4eb3::t_abe40c68b81333 280-294,300-302,336
+  s_bad62b9e4f4eb3::t_ff8348abb358b3 346-348,368,378,416,423,453,456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6caf796a75b5a16eb845a5dd51665603e50846e4",
+  "prompts": {},
+  "sessions": {
+    "s_bad62b9e4f4eb3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d3-ad52-7794-93a5-85ec39a87b24",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

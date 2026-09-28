@@ -1,0 +1,36 @@
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_faf3e4289f6ac3::t_30d17f309e50d3 849
+  s_faf3e4289f6ac3::t_15cabd8352a76e 850-852,905
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_faf3e4289f6ac3::t_633f7cdf7ff99d 148,152-153
+  s_faf3e4289f6ac3::t_c97133eb66e58a 229-232,237-243,273
+  s_faf3e4289f6ac3::t_a0a1aa39a3247c 348-359,370-396
+  s_faf3e4289f6ac3::t_85b9cb3e6d05b2 185-228
+  s_faf3e4289f6ac3::t_d72cba697b09bd 244
+  s_faf3e4289f6ac3::t_4216cd0f029224 233-236
+  s_faf3e4289f6ac3::t_6c0a1324f01aa3 144,147,154
+  s_faf3e4289f6ac3::t_4d26b1e6c667f2 149-151
+  s_faf3e4289f6ac3::t_079dd480d78cf0 360-369
+apps/server/cloudflare/migrations/0024_hosted_whatsapp.sql
+  s_faf3e4289f6ac3::t_646ccc03965598 1-5,8-54,61-111
+  s_faf3e4289f6ac3::t_b1b592cca42401 187-188
+  s_faf3e4289f6ac3::t_54bf1fed6be62a 6-7,55-60
+apps/server/cloudflare/migrations/0016_hosted_turn.sql
+  s_faf3e4289f6ac3::t_0d73d9ec57642c 20,60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "555b273c55cc53eb638a565efc32582f67c7d91b",
+  "prompts": {},
+  "sessions": {
+    "s_faf3e4289f6ac3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e5b8-ea37-763c-9f19-b0a1a9a86f0a",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

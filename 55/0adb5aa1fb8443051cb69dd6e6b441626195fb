@@ -1,0 +1,45 @@
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_4050e5a6ee9200::t_28ba6feb38e344 683
+apps/server/package.json
+  s_4050e5a6ee9200::t_2ed4b537bcfae2 204
+apps/server/src/shell/consent/current-disclosure.test.ts
+  s_4050e5a6ee9200::t_3989ab98efd1fe 2,5-6,26-33
+apps/server/src/shell/consent/current-disclosure.ts
+  s_4050e5a6ee9200::t_184122033193a3 9-10,23-24,28-29
+apps/web/package.json
+  s_4050e5a6ee9200::t_cba2ffe8ddad47 58
+apps/web/src/application.test.tsx
+  s_4050e5a6ee9200::t_472c8cec9ce4e7 249-251
+apps/web/src/features/public-site/legal/policy.html
+  s_4050e5a6ee9200::t_8a506de85e2c30 3-4,58-63,71-76
+bun.lock
+  s_4050e5a6ee9200::t_82be407504eac5 49,92,109,252,254,256,258,260,1734,1736,1964
+docs/operations/kapso-launch-evidence.json
+  s_4050e5a6ee9200::t_4d12068406083e 1-30
+docs/operations/kapso-launch-readiness.md
+  s_4050e5a6ee9200::t_7fe27df3f3a0c1 1-14
+docs/operations/production-releases.md
+  s_4050e5a6ee9200::t_61d8926131e6cd 47
+infra/cloudflare/package.json
+  s_4050e5a6ee9200::t_5e24817070a3e6 26
+infra/cloudflare/scripts/check-kapso-launch.sh
+  s_4050e5a6ee9200::t_92963382608c17 1-28
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_4050e5a6ee9200::t_b50ae519fd30ea 1-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "550adb5aa1fb8443051cb69dd6e6b441626195fb",
+  "prompts": {},
+  "sessions": {
+    "s_4050e5a6ee9200": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e843-acd8-738b-ae15-90217dc7b576",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

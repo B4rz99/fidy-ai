@@ -21,8 +21,6 @@ jobs:
     environment: production
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
-      RELEASE_SNAPSHOT_FILE: ${{ runner.temp }}/fidy-release.json
-      SMOKE_ATTESTATION_FILE: ${{ runner.temp }}/fidy-smoke-passed.json
       GITHUB_TOKEN: ${{ github.token }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -36,6 +34,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Configure release file paths
+        run: |
+          echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"
+          echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-smoke-passed.json" >> "$GITHUB_ENV"
 
       - name: Set up Bun for build tooling
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2

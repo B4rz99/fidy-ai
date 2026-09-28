@@ -17,6 +17,22 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("environment: production");
   });
 
+  it("initializes runner-local release files in a step before capture", () => {
+    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
+    const paths = workflow.indexOf("- name: Configure release file paths");
+    const capture = workflow.indexOf("- name: Capture stable Worker deployments");
+
+    expect(jobEnv).not.toContain("${{ runner.");
+    expect(paths).toBeGreaterThan(0);
+    expect(paths).toBeLessThan(capture);
+    expect(workflow).toContain(
+      'echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"'
+    );
+    expect(workflow).toContain(
+      'echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-smoke-passed.json" >> "$GITHUB_ENV"'
+    );
+  });
+
   it("builds exact release metadata before planning the Alchemy topology", () => {
     const metadata = workflow.indexOf("CONTRACT_DIGEST=");
     const webBuild = workflow.indexOf("build:production");

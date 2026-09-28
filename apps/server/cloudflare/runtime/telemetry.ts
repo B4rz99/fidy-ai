@@ -7,6 +7,7 @@ import {
   TelemetryWorkDescriptor,
   type TelemetryWorkRecord,
   type TelemetryWorkSuccess,
+  type TelemetryWorkDescriptor as WorkDescriptor,
   makeTelemetryService,
   projectHttpStatusClass,
 } from "@fidy/server/telemetry";
@@ -65,24 +66,61 @@ type WorkerObservation = Readonly<{
 const observeWorkerWork = <E, R>(
   work: Effect.Effect<Response, E, R>,
   observation: WorkerObservation
-): Effect.Effect<Response, E, R> => {
-  const release = Option.getOrElse(
-    Schema.decodeOption(TelemetryRelease)(observation.environment.RELEASE_GIT_SHA),
-    () => "unknown" as const
-  );
-  return observation.telemetry.observeWork(
+): Effect.Effect<Response, E, R> =>
+  observation.telemetry.observeWork(
     {
-      descriptor: TelemetryWorkDescriptor.make({
-        release,
-        operation: observation.operation,
-        provider: Option.some("cloudflare-workers"),
-        attempt: TelemetryAttempt.make(1),
-      }),
+      descriptor: workerDescriptor(observation.environment, observation.operation),
       projectSuccess: projectResponse,
     },
     work
   );
-};
+
+const workerDescriptor = (
+  environment: WorkerTelemetryEnvironment,
+  operation: WorkDescriptor["operation"]
+): WorkDescriptor =>
+  TelemetryWorkDescriptor.make({
+    release: Option.getOrElse(
+      Schema.decodeOption(TelemetryRelease)(environment.RELEASE_GIT_SHA),
+      () => "unknown" as const
+    ),
+    operation,
+    provider: Option.some("cloudflare-workers"),
+    attempt: TelemetryAttempt.make(1),
+  });
+
+type WorkerExecution = Readonly<{
+  environment: WorkerTelemetryEnvironment;
+  telemetry: TelemetryService;
+  operation:
+    | "worker.core.queue"
+    | "worker.core.scheduled"
+    | "worker.email.receive"
+    | "worker.email.scheduled";
+}>;
+
+/** Observes a durable or Email Worker invocation without changing its Effect exit or payload. */
+const observeWorkerExecutionWork = <E, R>(
+  work: Effect.Effect<void, E, R>,
+  observation: WorkerExecution
+): Effect.Effect<void, E, R> =>
+  observation.telemetry.observeWork(
+    {
+      descriptor: workerDescriptor(observation.environment, observation.operation),
+      projectSuccess: (): TelemetryWorkSuccess => ({
+        outcome: "succeeded",
+        statusClass: Option.none(),
+      }),
+    },
+    work
+  );
+
+export const observeWorkerExecution: {
+  (
+    observation: WorkerExecution
+  ): <E, R>(work: Effect.Effect<void, E, R>) => Effect.Effect<void, E, R>;
+  <E, R>(work: Effect.Effect<void, E, R>, observation: WorkerExecution): Effect.Effect<void, E, R>;
+} = dual(2, observeWorkerExecutionWork);
 
 /**
  * Gives one Worker invocation one owning Work span. Invalid release configuration is represented by

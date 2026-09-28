@@ -1,0 +1,23 @@
+infra/cloudflare/smoke-admission.test.ts
+  s_ccede3fef9ce61::t_c4048fd395813d 38-39
+  s_ccede3fef9ce61::t_582c9ca104258b 53-57
+  s_ccede3fef9ce61::t_00168e821742db 1-37,40-52,58-69
+apps/server/cloudflare/runtime/smoke-work.ts
+  s_ccede3fef9ce61::t_6ebd28257cedd7 45-49,128,142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7d3fc8e48fa2cab1d2266c0462fbd9476a74356e",
+  "prompts": {},
+  "sessions": {
+    "s_ccede3fef9ce61": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-7b17-751e-b033-9644b17b0742",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

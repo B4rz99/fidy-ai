@@ -187,7 +187,23 @@ describe("Production topology contract", () => {
     const rateLimits = edgeSecurityPolicy.rulesets.rateLimits.rules;
 
     expect(rateLimits).toHaveLength(1);
-    expect(rateLimits[0]?.expression).toContain('"/providers/kapso/callback"');
+    const expression = rateLimits[0]?.expression ?? "";
+    for (const path of [
+      "/providers/kapso/callback",
+      "/providers/wompi/billing-events",
+      "/web/hosted-turns",
+      "/web/hosted-turns/delivery",
+      "/web/subscription/card-enrollments/prepare",
+      "/web/subscription/card-enrollments/submit",
+    ]) {
+      expect(expression).toContain(`"${path}"`);
+    }
+    for (const prefix of [
+      "/web/subscription/card-enrollments/",
+      "/web/subscription/billing-attempts/",
+    ]) {
+      expect(expression).toContain(`starts_with(http.request.uri.path, "${prefix}")`);
+    }
     expect(rateLimits[0]).toMatchObject({
       action: "block",
       ratelimit: {

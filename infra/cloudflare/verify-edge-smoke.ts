@@ -1,0 +1,108 @@
+/// <reference types="bun-types" />
+
+import { type Cause, Context, Data, Effect, Layer } from "effect";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { productionTopology } from "../../apps/server/cloudflare/runtime/topology";
+
+const apiOrigin = `https://${productionTopology.ingress.hostname}`;
+const probes = [
+  { method: "GET", path: "/categories", expectedStatus: 401, headers: {} },
+  {
+    method: "POST",
+    path: "/providers/kapso/callback",
+    expectedStatus: 401,
+    headers: { "x-webhook-event": "whatsapp.message.delivered" },
+  },
+  { method: "POST", path: "/providers/wompi/billing-events", expectedStatus: 400, headers: {} },
+  { method: "POST", path: "/web/hosted-turns", expectedStatus: 403, headers: {} },
+] as const;
+
+type EdgeResponse = Readonly<{ status: number; headers: Headers }>;
+type EdgeRequest = Readonly<{
+  method: string;
+  path: string;
+  headers: Readonly<Record<string, string>>;
+}>;
+class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
+  readonly path: string;
+}> {}
+
+/** Probe only rejected, credential-free requests; never send a valid provider event or User request. */
+export const verifyEdgeSmoke = <E, R>(
+  probe: (input: EdgeRequest) => Effect.Effect<EdgeResponse, E, R>
+): Effect.Effect<void, EdgeSmokeFailure, R> =>
+  Effect.gen(function* () {
+    for (const entry of probes) {
+      const response = yield* probe({
+        method: entry.method,
+        path: entry.path,
+        headers: entry.headers,
+      }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
+      if (!isExpectedResponse(response, entry.expectedStatus)) {
+        return yield* new EdgeSmokeFailure({ path: entry.path });
+      }
+    }
+  });
+
+const isExpectedResponse = (response: EdgeResponse, status: number): boolean =>
+  response.status === status &&
+  response.headers.get("cf-mitigated") === null &&
+  Object.entries({
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  }).every(([name, expected]) => response.headers.get(name) === expected);
+
+const productionProbe = ({
+  method,
+  path,
+  headers,
+}: EdgeRequest): Effect.Effect<
+  EdgeResponse,
+  HttpClientError.HttpClientError | Cause.TimeoutError,
+  HttpClient.HttpClient
+> =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const request =
+      method === "GET"
+        ? HttpClientRequest.get(`${apiOrigin}${path}`)
+        : HttpClientRequest.post(`${apiOrigin}${path}`, {
+            headers: { "content-type": "application/json", ...headers },
+            body: HttpBody.text("{}", "application/json"),
+          });
+    const response = yield* client.execute(request);
+    return { status: response.status, headers: new Headers(response.headers) };
+  }).pipe(Effect.timeout("8 seconds"));
+
+if (import.meta.main) {
+  const result = await Effect.runPromiseExit(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const services = yield* Layer.build(FetchHttpClient.layer);
+        return yield* verifyEdgeSmoke(productionProbe).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" })
+        );
+      })
+    )
+  );
+  if (result._tag === "Failure") {
+    await Bun.write(
+      Bun.stderr,
+      "Safe production edge probes failed; inspect edge configuration.\n"
+    );
+    process.exitCode = 1;
+  } else {
+    await Bun.write(Bun.stdout, "Safe production edge probes passed.\n");
+  }
+}

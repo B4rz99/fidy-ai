@@ -28,6 +28,7 @@ import {
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
 import { EmailAddress } from "@fidy/server/client";
+import type { UserId } from "../../src/core/identity/reference";
 import { approveBrowserPairing } from "../identity/browser-login";
 import {
   type WhatsAppStatusAdmission,
@@ -930,6 +931,51 @@ const routeAcceptedInbound = (
       : yield* recordMailbox(environment, input, pending);
   });
 
+const refuseVoice = (
+  environment: Environment,
+  input: WebhookInbound,
+  userId: UserId
+): Effect.Effect<Response, void, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
+    const claimed = yield* attempt(() =>
+      environment.DB.prepare(`INSERT INTO hosted_voice_refusals
+        (portfolio_id, message_id, user_id, claimed_at_ms)
+        SELECT ?, ?, w.user_id, ? FROM whatsapp_identities AS w
+        WHERE w.user_id = ? AND w.portfolio_id = ? AND w.bsuid = ?
+          AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.user_id)
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.user_id)
+          AND (SELECT count(*) FROM hosted_voice_refusals
+            WHERE user_id = w.user_id AND claimed_at_ms > ?) < 5
+        ON CONFLICT (portfolio_id, message_id) DO NOTHING`)
+        .bind(
+          input.event.caller.businessPortfolioId,
+          input.event.messageEvidence.providerMessageId,
+          input.receivedAtMs,
+          userId,
+          input.event.caller.businessPortfolioId,
+          input.event.caller.businessScopedUserId,
+          input.receivedAtMs - hourMs
+        )
+        .run()
+    );
+    if (claimed.meta.changes !== 1) return answer(HTTP_OK);
+    const httpClient = yield* HttpClient.HttpClient;
+    const sent = yield* Effect.exit(
+      makeVoiceUnavailableSender({
+        apiKey: Redacted.make(environment.KAPSO_API_KEY),
+        httpClient,
+      })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
+    ).pipe(
+      Effect.tap((exit) =>
+        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
+      ),
+      Effect.withSpan("whatsapp.voice.refusal")
+    );
+    // An ambiguous send is never replayed: the claim precedes provider I/O.
+    return answer(Exit.isSuccess(sent) ? HTTP_OK : HTTP_UNAVAILABLE);
+  });
+
 const routeHostedInbound = (
   environment: Environment,
   input: WebhookInbound
@@ -942,38 +988,7 @@ const routeHostedInbound = (
     }).pipe(Effect.mapError(() => undefined));
     if (Option.isNone(known)) return Option.none();
     if (input.event.content._tag === "UnusableVoiceTranscript") {
-      if (environment.KAPSO_API_KEY.length === 0) return Option.some(answer(HTTP_UNAVAILABLE));
-      const claimed = yield* attempt(() =>
-        environment.DB.prepare(`INSERT INTO hosted_voice_refusals
-          (portfolio_id, message_id, user_id, claimed_at_ms)
-          SELECT ?, ?, w.user_id, ? FROM whatsapp_identities AS w
-          WHERE w.user_id = ? AND w.portfolio_id = ? AND w.bsuid = ?
-            AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.user_id)
-            AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.user_id)
-            AND (SELECT count(*) FROM hosted_voice_refusals
-              WHERE user_id = w.user_id AND claimed_at_ms > ?) < 5
-          ON CONFLICT (portfolio_id, message_id) DO NOTHING`)
-          .bind(
-            input.event.caller.businessPortfolioId,
-            input.event.messageEvidence.providerMessageId,
-            input.receivedAtMs,
-            known.value,
-            input.event.caller.businessPortfolioId,
-            input.event.caller.businessScopedUserId,
-            input.receivedAtMs - hourMs
-          )
-          .run()
-      );
-      if (claimed.meta.changes !== 1) return Option.some(answer(HTTP_OK));
-      const httpClient = yield* HttpClient.HttpClient;
-      const sent = yield* Effect.exit(
-        makeVoiceUnavailableSender({
-          apiKey: Redacted.make(environment.KAPSO_API_KEY),
-          httpClient,
-        })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
-      );
-      // An ambiguous send is never replayed: the claim precedes provider I/O.
-      return Option.some(answer(Exit.isSuccess(sent) ? HTTP_OK : HTTP_UNAVAILABLE));
+      return Option.some(yield* refuseVoice(environment, input, known.value));
     }
     const text = input.event.content.text;
     const response = yield* attempt(() =>

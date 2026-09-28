@@ -1,0 +1,24 @@
+apps/server/cloudflare/agent/turn-store.ts
+  s_faf3e4289f6ac3::t_b07658e220bc63 38,700-707,710,715,719-720,731-734,748,755,762,779
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_faf3e4289f6ac3::t_79de835225cd7b 494,548,670,833
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_faf3e4289f6ac3::t_ad1ca585ee2167 62,375,433
+  s_faf3e4289f6ac3::t_ce3a3b08f3a4b1 334-337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b1233cc01a6b2c2471992ed607dc3e778db4cafc",
+  "prompts": {},
+  "sessions": {
+    "s_faf3e4289f6ac3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e5b8-ea37-763c-9f19-b0a1a9a86f0a",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

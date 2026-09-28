@@ -5,6 +5,7 @@ CREATE TABLE hosted_voice_refusals (
   message_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   claimed_at_ms INTEGER NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'started' CHECK (outcome IN ('started', 'accepted', 'failed')),
   PRIMARY KEY (portfolio_id, message_id)
 );
 CREATE INDEX hosted_voice_refusals_user_window

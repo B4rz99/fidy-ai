@@ -395,7 +395,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       yield* Effect.tryPromise(() =>
         db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userId).run()
       );
-      expect((yield* Effect.tryPromise(() => send(voice("wamid.revoked")))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => send(voice("wamid.revoked")))).status).toBe(429);
       expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
         db.prepare("DELETE FROM consent_user_revocations WHERE user_id = ?").bind(userId).run()
@@ -423,7 +423,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
         (yield* Effect.tryPromise(() =>
           send(voice("wamid.malformed-kapso").replace('"kapso":{}', '"kapso":null'))
         )).status
-      ).toBe(200);
+      ).toBe(429);
       // The per-User refusal budget bounds repeated expensive provider attempts.
       expect(provider).toHaveBeenCalledTimes(5);
       expect(
@@ -449,6 +449,43 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
           .first()
       );
       expect(expired).toBeNull();
+    })
+  ));
+
+it("reports a failed voice reply truthfully without retrying its uncertain provider attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls = vi.fn(() => Promise.resolve(new Response(null, { status: 202 })));
+      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(calls)));
+      const userId = "10000000-0000-4000-8000-000000000071";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
+          )
+          .bind(userId, portfolio, bsuid)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
+      );
+      const provider = vi.fn(() => Promise.reject(new Error("provider may have accepted")));
+      vi.stubGlobal("fetch", provider);
+      const payload = encodeJson({
+        message: {
+          id: "wamid.ambiguous-voice",
+          timestamp: String(nowSeconds),
+          type: "audio",
+          from_user_id: bsuid,
+          audio: { id: "media-1" },
+        },
+        conversation: { business_scoped_user_id: bsuid },
+        phone_number_id: "123456789012345",
+      });
+      expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
+      expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(calls).not.toHaveBeenCalled();
     })
   ));
 

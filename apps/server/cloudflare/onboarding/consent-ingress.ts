@@ -81,6 +81,7 @@ const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_CONFLICT = 409;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
+const HTTP_RATE_LIMITED = 429;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_UNAVAILABLE = 503;
 const oneUnit = ResourceAdmissionUnits.make(1);
@@ -931,6 +932,39 @@ const routeAcceptedInbound = (
       : yield* recordMailbox(environment, input, pending);
   });
 
+const sendVoiceRefusal = (
+  environment: Environment,
+  input: WebhookInbound,
+  userId: UserId
+): Effect.Effect<Response, void, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient;
+    const sent = yield* Effect.exit(
+      makeVoiceUnavailableSender({
+        apiKey: Redacted.make(environment.KAPSO_API_KEY),
+        httpClient,
+      })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
+    ).pipe(
+      Effect.tap((exit) =>
+        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
+      ),
+      Effect.withSpan("whatsapp.voice.refusal")
+    );
+    // An ambiguous send is never replayed: the claim precedes provider I/O.
+    const settled = yield* attempt(() =>
+      environment.DB.prepare(`UPDATE hosted_voice_refusals SET outcome = ?
+        WHERE portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)
+        .bind(
+          Exit.isSuccess(sent) ? "accepted" : "failed",
+          input.event.caller.businessPortfolioId,
+          input.event.messageEvidence.providerMessageId,
+          userId
+        )
+        .run()
+    );
+    return answer(Exit.isSuccess(sent) && settled.meta.changes === 1 ? HTTP_OK : HTTP_UNAVAILABLE);
+  });
+
 const refuseVoice = (
   environment: Environment,
   input: WebhookInbound,
@@ -959,21 +993,24 @@ const refuseVoice = (
         )
         .run()
     );
-    if (claimed.meta.changes !== 1) return answer(HTTP_OK);
-    const httpClient = yield* HttpClient.HttpClient;
-    const sent = yield* Effect.exit(
-      makeVoiceUnavailableSender({
-        apiKey: Redacted.make(environment.KAPSO_API_KEY),
-        httpClient,
-      })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
-    ).pipe(
-      Effect.tap((exit) =>
-        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
-      ),
-      Effect.withSpan("whatsapp.voice.refusal")
-    );
-    // An ambiguous send is never replayed: the claim precedes provider I/O.
-    return answer(Exit.isSuccess(sent) ? HTTP_OK : HTTP_UNAVAILABLE);
+    if (claimed.meta.changes !== 1) {
+      const replay = yield* attempt(() =>
+        environment.DB.prepare(`SELECT outcome FROM hosted_voice_refusals
+          WHERE portfolio_id = ? AND message_id = ? AND user_id = ?`)
+          .bind(
+            input.event.caller.businessPortfolioId,
+            input.event.messageEvidence.providerMessageId,
+            userId
+          )
+          .first()
+      );
+      if (replay === null) return answer(HTTP_RATE_LIMITED);
+      const outcome = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ outcome: Schema.Literals(["started", "accepted", "failed"]) })
+      )(replay).pipe(Effect.mapError(() => undefined));
+      return answer(outcome.outcome === "accepted" ? HTTP_OK : HTTP_UNAVAILABLE);
+    }
+    return yield* sendVoiceRefusal(environment, input, userId);
   });
 
 const routeHostedInbound = (

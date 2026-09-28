@@ -21,6 +21,9 @@ const RunnerConfig = Schema.Struct({
   CONTRACT_DIGEST: SmokeIdentity.fields.contractDigest,
   PUBLIC_VERSION_ID: SmokeIdentity.fields.workerVersionId,
   CORE_VERSION_ID: SmokeIdentity.fields.workerVersionId,
+  STABLE_PUBLIC_VERSION_ID: SmokeIdentity.fields.workerVersionId,
+  STABLE_RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
+  STABLE_CONTRACT_DIGEST: SmokeIdentity.fields.contractDigest,
   PUBLIC_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
   CORE_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
   SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
@@ -37,8 +40,11 @@ const successStart = 200;
 const successEnd = 300;
 const probeEntropyBytes = 16;
 
-const candidateHeaders = (config: RunnerConfig): Readonly<Record<string, string>> => ({
-  "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${config.PUBLIC_VERSION_ID}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
+const candidateHeaders = (
+  config: RunnerConfig,
+  publicVersionId: string
+): Readonly<Record<string, string>> => ({
+  "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${publicVersionId}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
   "x-fidy-smoke-proof": config.SMOKE_PROOF,
 });
 
@@ -60,13 +66,14 @@ const call = Effect.fn(function* (
 
 const check = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse,
-  config: RunnerConfig
+  config: RunnerConfig,
+  expectedPublic: SmokeIdentity
 ) {
   if (
     response.status < successStart ||
     response.status >= successEnd ||
     response.headers["cache-control"] !== "no-store" ||
-    response.headers["x-fidy-smoke-worker-version"] !== config.PUBLIC_VERSION_ID
+    response.headers["x-fidy-smoke-worker-version"] !== expectedPublic.workerVersionId
   ) {
     return yield* new ReleaseSmokeFailed({
       reason: "Candidate request did not reach the expected public Worker",
@@ -80,7 +87,7 @@ const check = Effect.fn(function* (
   if (
     Option.isNone(result) ||
     !verifySmokeIdentity({
-      expected: { ...expected, workerVersionId: config.PUBLIC_VERSION_ID },
+      expected: expectedPublic,
       observed: result.value.public,
     }) ||
     !verifySmokeIdentity({
@@ -97,23 +104,29 @@ const check = Effect.fn(function* (
 
 const awaitSyntheticWork = Effect.fn(function* (
   config: RunnerConfig,
-  headers: Readonly<Record<string, string>>
+  headers: Readonly<Record<string, string>>,
+  expectedPublic: SmokeIdentity
 ) {
   const probeId = Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
   const request = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     protocolVersion: 1,
     probeId,
-    expectedPublicVersionId: config.PUBLIC_VERSION_ID,
+    expectedPublicVersionId: expectedPublic.workerVersionId,
     expectedCoreVersionId: config.CORE_VERSION_ID,
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  let status = yield* check(yield* call(smokePath, headers, Option.some(request)), config);
+  let status = yield* check(
+    yield* call(smokePath, headers, Option.some(request)),
+    config,
+    expectedPublic
+  );
   for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
     yield* Effect.sleep(`${pollDelayMs} millis`);
     status = yield* check(
       yield* call(`${smokePath}?probeId=${probeId}`, headers, Option.none()),
-      config
+      config,
+      expectedPublic
     );
   }
   if (status !== "passed") {
@@ -157,9 +170,20 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
     return yield* new ReleaseSmokeFailed({ reason: "Incomplete production smoke configuration" });
   }
   const config = decoded.value;
-  const headers = candidateHeaders(config);
-  yield* awaitSyntheticWork(config, headers);
+  const headers = candidateHeaders(config, config.PUBLIC_VERSION_ID);
+  yield* awaitSyntheticWork(config, headers, {
+    gitRevision: config.RELEASE_GIT_SHA,
+    contractDigest: config.CONTRACT_DIGEST,
+    workerVersionId: config.PUBLIC_VERSION_ID,
+  });
   yield* checkEdge(config, headers);
+  // The next promotion changes Core first. This exact old-public/new-Core pairing must work
+  // before normal traffic can see it; a healthy new/new pair is not sufficient evidence.
+  yield* awaitSyntheticWork(config, candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID), {
+    gitRevision: config.STABLE_RELEASE_GIT_SHA,
+    contractDigest: config.STABLE_CONTRACT_DIGEST,
+    workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
+  });
 });
 
 if (import.meta.main) {
@@ -178,6 +202,18 @@ if (import.meta.main) {
     )
   );
   const passed = Exit.isSuccess(result);
+  const smokeEnvironment = process.env;
+  const attestationFile = smokeEnvironment.SMOKE_ATTESTATION_FILE;
+  if (passed && attestationFile?.startsWith("/") === true) {
+    await Bun.write(
+      attestationFile,
+      JSON.stringify({
+        revision: smokeEnvironment.RELEASE_GIT_SHA,
+        publicVersionId: smokeEnvironment.PUBLIC_VERSION_ID,
+        coreVersionId: smokeEnvironment.CORE_VERSION_ID,
+      })
+    );
+  }
   await Bun.write(
     passed ? Bun.stdout : Bun.stderr,
     passed

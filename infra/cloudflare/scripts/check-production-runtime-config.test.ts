@@ -106,7 +106,7 @@ describe("Production runtime configuration gate", () => {
   it("passes the Wompi event secret to both Production planning and deployment", async () => {
     const mapping = "WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}";
     const planning = await workflowStep("Plan the complete Cloudflare topology");
-    const deployment = await workflowStep("Deploy the exact planned topology with Alchemy");
+    const deployment = await workflowStep("Upload zero-traffic Worker candidates with Alchemy");
 
     expect(planning).toContain(mapping);
     expect(deployment).toContain(mapping);

@@ -21,6 +21,9 @@ jobs:
     environment: production
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
+      RELEASE_SNAPSHOT_FILE: ${{ runner.temp }}/fidy-release.json
+      SMOKE_ATTESTATION_FILE: ${{ runner.temp }}/fidy-smoke-passed.json
+      GITHUB_TOKEN: ${{ github.token }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -108,7 +111,14 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy the exact planned topology with Alchemy
+      - name: Capture stable Worker deployments before candidate upload
+        id: capture
+        working-directory: infra/cloudflare
+        run: |
+          umask 077
+          bun production-release.ts capture
+
+      - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
         env:
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
@@ -126,6 +136,33 @@ jobs:
           bash scripts/check-production-runtime-config.sh
           alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
           alchemy deploy --stage production --yes --no-input
+
+      - name: Install zero-traffic candidate routing
+        working-directory: infra/cloudflare
+        run: bun production-release.ts stage
+
+      - name: Prove both candidate and intermediate Worker pairings
+        working-directory: infra/cloudflare
+        run: |
+          export PUBLIC_VERSION_ID CORE_VERSION_ID PUBLIC_WORKER_NAME CORE_WORKER_NAME
+          export STABLE_PUBLIC_VERSION_ID STABLE_RELEASE_GIT_SHA STABLE_CONTRACT_DIGEST
+          PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE")
+          CORE_VERSION_ID=$(jq -r .coreVersionId "$RELEASE_SNAPSHOT_FILE")
+          PUBLIC_WORKER_NAME=$(jq -r .snapshot.public.name "$RELEASE_SNAPSHOT_FILE")
+          CORE_WORKER_NAME=$(jq -r .snapshot.core.name "$RELEASE_SNAPSHOT_FILE")
+          STABLE_PUBLIC_VERSION_ID=$(jq -r .snapshot.public.stableVersionId "$RELEASE_SNAPSHOT_FILE")
+          STABLE_RELEASE_GIT_SHA=$(jq -r .snapshot.stableRevision "$RELEASE_SNAPSHOT_FILE")
+          STABLE_CONTRACT_DIGEST=$(jq -r .snapshot.stableContractDigest "$RELEASE_SNAPSHOT_FILE")
+          bun verify-production-smoke.ts
+
+      - name: Promote the exact smoke-tested Workers
+        working-directory: infra/cloudflare
+        run: bun production-release.ts promote
+
+      - name: Remove failed zero-traffic candidates when safe
+        if: ${{ failure() && steps.capture.outcome == 'success' }}
+        working-directory: infra/cloudflare
+        run: bun production-release.ts cleanup
 
       - name: Verify the migrated public topology
         run: |
@@ -171,9 +208,12 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
-          # No provider payload, token, exception, or application data enters this message.
+          # Only validated deployment IDs, version IDs and traffic percentages enter this alert.
+          traffic=$(bun infra/cloudflare/production-release.ts report 2>/dev/null || \
+            printf 'Worker traffic unavailable; inspect Cloudflare directly')
           jq -n --arg to "$OPERATOR_ALERT_EMAIL" --arg release "$RELEASE_GIT_SHA" \
-            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: critical deployment failure",text:("Production release " + $release + " failed. Inspect the private GitHub Actions run.")}' \
+            --arg traffic "$traffic" \
+            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: critical deployment failure",text:("Production release " + $release + " failed. Observed Worker traffic: " + $traffic + ". Inspect the private GitHub Actions run.")}' \
             > "$RUNNER_TEMP/operator-alert.json"
           curl --fail --silent --show-error --max-time 10 \
             --request POST 'https://api.resend.com/emails' \

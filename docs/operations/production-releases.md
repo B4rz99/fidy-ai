@@ -60,11 +60,23 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 7. Idempotently bootstrap the persistent Cloudflare state authority with
    `alchemy provider cloudflare bootstrap`, reject topology drift, and run
    `alchemy plan --stage production --no-input`.
-8. Read the current default-branch head immediately before deployment. If it differs from the release
-   SHA, fail closed without starting the deployment.
+8. Recheck trunk, then capture each active public/Core deployment and its sole stable 100% version;
+   prove both stable identities through the reserved smoke path. Refuse an ambiguous deployment.
 9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
-10. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
-11. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+   The capture step first requires existing Alchemy Worker hash state so the pinned provider cannot
+   fall back to a direct 100% PUT. Alchemy owns the complete topology and uploads the public/Core
+   immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment. The first release
+   installing #718 used the earlier direct deployment path to establish a smoke-capable stable pair.
+10. Read the exact candidate IDs from Alchemy's persisted Worker upload receipts. The checked-in
+    routing controller uses Wrangler's 0% deployment primitive to install each candidate alongside
+    its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
+    with a nonzero percentage to accommodate a differing API schema.
+11. Run `verify-production-smoke.ts` against the exact candidate pair **and** the old-public/new-Core
+    pairing using explicit version overrides. Both must succeed before any normal traffic changes.
+12. Recheck trunk and current deployment IDs before each promotion. Route the tested Core candidate
+    to 100%, then the tested public candidate to 100%. No mutable tag or latest-version selector
+    participates. Verify the redirect, static metadata, and bound health response afterward.
+13. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
 
 A superseded candidate reports:
 
@@ -138,8 +150,10 @@ production-environment `SMOKE_PROOF` secret. Provision the same independent, ran
 64-character lowercase hex secret to the public Worker and Core Worker as a secret binding.
 Never print it or add it to a URL, log, artifact, or summary. The controller must obtain the
 version IDs from Cloudflare's upload results, not a health response, and must stop without
-promotion if this command fails. The current deployment workflow still deploys directly;
-#719 owns candidate upload, 0% routing, invocation of this gate, and guarded promotion.
+promotion if this command fails. #719 uploads the candidates, installs 0% active routing, runs this gate, and guards promotion.
+The gate also checks old public against new Core; this is the normal-traffic intermediate pairing
+while Core is promoted first. The stable identity is captured before candidate upload, never inferred
+from an unversioned response after it.
 
 The runner sends a two-Worker version override, verifies each Worker's independently reported
 version metadata, Git revision, canonical contract digest, and shared smoke manifest, then waits
@@ -168,6 +182,18 @@ Alchemy adoption, so the first Alchemy release updates the old Wrangler-managed 
 reconciles its custom domains, and disables both workers.dev surfaces. Adoption is scoped to this
 known migration target; other resources retain Alchemy's fail-closed ownership checks. The post-deploy
 exact-release probes fail if traffic still reaches the legacy artifact.
+
+Candidate upload or smoke failure before promotion leaves both stable Worker versions at 100%.
+The workflow removes only its own staged 0% versions after a pre-promotion failure; an unexpected
+routing state refuses cleanup and alerts instead of overwriting another release. This also prevents
+a failed 0% candidate from blocking the next trunk release's stable-state capture.
+If public promotion fails after Core has changed, the controller checks that public still routes to
+its captured stable deployment and that Core still routes to the just-promoted deployment before
+restoring Core. An unknown result, racing change, or failed restoration requires operator inspection;
+there is no atomic two-Worker traffic transaction. A failed release must not be reported as a full
+rollback. In particular, D1 migrations, R2, Durable Object/Workflow state, Queue work, scripts other
+than public/Core, and the web artifact may already have changed under Alchemy. Keep these changes
+additive and compatible with stable Worker code, and fix forward through a reviewed trunk release.
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.

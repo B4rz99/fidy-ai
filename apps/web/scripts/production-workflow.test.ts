@@ -43,7 +43,9 @@ describe("Production release workflow policy", () => {
   it("provides complete production runtime config to Alchemy plan and deploy", () => {
     const planStart = workflow.indexOf("- name: Plan the complete Cloudflare topology");
     const trunkRecheck = workflow.indexOf("- name: Recheck trunk immediately before deployment");
-    const deployStart = workflow.indexOf("- name: Deploy the exact planned topology with Alchemy");
+    const deployStart = workflow.indexOf(
+      "- name: Upload zero-traffic Worker candidates with Alchemy"
+    );
     const verification = workflow.indexOf("- name: Verify the migrated public topology");
     const planStep = workflow.slice(planStart, trunkRecheck);
     const deployStep = workflow.slice(deployStart, verification);
@@ -112,7 +114,21 @@ describe("Production release workflow policy", () => {
     expect(policyGate).toBeLessThan(plan);
   });
 
-  it("makes Alchemy the only Cloudflare deployment authority", () => {
+  it("keeps Alchemy the topology authority and restricts the routing escape hatch", () => {
+    const capture = workflow.indexOf("bun production-release.ts capture");
+    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
+    const stage = workflow.indexOf("bun production-release.ts stage");
+    const smoke = workflow.indexOf("bun verify-production-smoke.ts");
+    const promotion = workflow.indexOf("bun production-release.ts promote");
+    expect(capture).toBeGreaterThan(0);
+    expect(capture).toBeLessThan(upload);
+    expect(upload).toBeLessThan(stage);
+    expect(stage).toBeLessThan(smoke);
+    expect(smoke).toBeLessThan(promotion);
+    expect(workflow).toContain("bun production-release.ts cleanup");
+    expect(workflow).toContain("bun infra/cloudflare/production-release.ts report");
+    expect(workflow).toContain("Observed Worker traffic:");
+    expect(workflow).toContain("failure() && steps.capture.outcome == 'success'");
     expect(workflow).toContain("alchemy plan --stage production --no-input");
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
     expect(workflow).not.toContain("wrangler");

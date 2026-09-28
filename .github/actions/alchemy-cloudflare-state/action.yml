@@ -1,0 +1,31 @@
+name: Alchemy Cloudflare state setup
+description: Configure the ephemeral profile and bootstrap the persistent Cloudflare state authority.
+inputs:
+  operation:
+    description: Setup phase to run (profile or bootstrap)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Configure ephemeral Alchemy storage
+      if: ${{ inputs.operation == 'profile' }}
+      shell: bash
+      run: echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"
+
+    - name: Configure Alchemy's ephemeral Cloudflare profile
+      if: ${{ inputs.operation == 'profile' }}
+      shell: bash
+      run: |
+        bunx alchemy profile create "$ALCHEMY_PROFILE" --no-input
+        bunx alchemy profile edit \
+          --profile "$ALCHEMY_PROFILE" \
+          --add Cloudflare \
+          --method stored \
+          --set apiToken=env:CLOUDFLARE_API_TOKEN \
+          --set accountId=env:CLOUDFLARE_ACCOUNT_ID \
+          --no-input
+
+    - name: Ensure Alchemy's Cloudflare state authority exists
+      if: ${{ inputs.operation == 'bootstrap' }}
+      shell: bash
+      run: bunx alchemy provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input

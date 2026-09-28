@@ -51,14 +51,18 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 3. Run the focused Worker-boundary tests.
 4. Build and validate the Production web artifact, including immutable release metadata, hashed
    assets, headers, and secret-free contents.
-5. Create an ephemeral local Alchemy profile and idempotently bootstrap the persistent Cloudflare
-   state authority with `alchemy provider cloudflare bootstrap`.
-6. Run `alchemy plan --stage production --no-input` from `infra/cloudflare`.
-7. Read the current default-branch head immediately before deployment. If it differs from the release
+5. Create an ephemeral local Alchemy profile.
+6. Compare Production's applied D1 migration names and hashes with checked-in SQL before bootstrapping
+   or planning; fail closed on any missing file, hash mismatch, incomplete history, or inability to
+   query the ledger.
+7. Idempotently bootstrap the persistent Cloudflare state authority with
+   `alchemy provider cloudflare bootstrap`, reject topology drift, and run
+   `alchemy plan --stage production --no-input`.
+8. Read the current default-branch head immediately before deployment. If it differs from the release
    SHA, fail closed without starting the deployment.
-8. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
-9. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
-10. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
+10. Verify that the apex redirect, static metadata, and bound health response expose that exact release.
+11. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
 
 A superseded candidate reports:
 
@@ -69,6 +73,31 @@ Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release
 metadata before creating resources.
+
+## D1 migration history
+
+Treat every SQL migration as immutable once its name appears in Alchemy's `__alchemy_migrations`
+ledger. PR validation rejects edits, deletions, and renames of existing migrations; add a new
+forward-only migration for an already-applied schema change. If a migration failed before being
+recorded and must be corrected in place, run **Verify unapplied D1 migration repair** from `trunk`
+with the PR number and the original migration filename. The protected `production` environment
+checks that exact migration against Production and issues a commit-status approval only while it is
+unapplied. PR workflows receive no Cloudflare credentials. PR validation accepts that approval
+only when its verification began after the latest Production workflow run completed; an overlapping
+or newer Production run makes the approval stale, so rerun the repair workflow after a release. The
+deploy workflow independently rechecks every applied migration hash before bootstrapping or
+planning, so an earlier approval cannot bypass current Production history.
+
+The GitHub `production` environment must use a custom deployment-branch policy that allows only the
+protected `trunk` branch. The dispatch workflow's YAML branch guard is defense in depth; the
+Environment restriction prevents a feature-branch workflow definition from accessing Production
+secrets.
+
+The applied-history check is observable through the Production workflow run: GitHub Actions records
+the step duration and its sanitized success or failure output, and a non-zero result blocks bootstrap,
+planning, and deployment. The check runs synchronously once per workflow, performs reads only, and has
+no retries or background continuation, so workflow status, step timing, and logs are sufficient
+without separate metrics or tracing. Never include raw provider output or credentials in those logs.
 
 ## Local parity and smoke checks
 

@@ -15,6 +15,10 @@ jobs:
   static:
     name: Workspace Gate
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Fetch base branch tip
@@ -31,6 +35,8 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: bun run verify -- --group static
 
   builds:

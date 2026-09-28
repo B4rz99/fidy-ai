@@ -1,0 +1,8 @@
+name: Bootstrap Alchemy Cloudflare state
+description: Ensure Alchemy's Cloudflare state authority exists before planning.
+runs:
+  using: composite
+  steps:
+    - name: Ensure Alchemy's Cloudflare state authority exists
+      shell: bash
+      run: bunx alchemy provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input

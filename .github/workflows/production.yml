@@ -58,18 +58,14 @@ jobs:
         run: bun run --cwd apps/web build:production
 
       - name: Configure Alchemy's ephemeral Cloudflare profile
-        uses: ./.github/actions/alchemy-cloudflare-state
-        with:
-          operation: profile
+        uses: ./.github/actions/configure-alchemy-cloudflare-profile
 
       - name: Reject drift in applied D1 migration history
         working-directory: infra/cloudflare
         run: bun scripts/check-applied-migration-drift.ts
 
       - name: Ensure Alchemy's Cloudflare state authority exists
-        uses: ./.github/actions/alchemy-cloudflare-state
-        with:
-          operation: bootstrap
+        uses: ./.github/actions/bootstrap-alchemy-cloudflare-state
 
       - name: Reject drift from the deployed Cloudflare topology
         working-directory: infra/cloudflare

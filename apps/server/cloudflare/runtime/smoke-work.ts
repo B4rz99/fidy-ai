@@ -42,7 +42,11 @@ const refused = (): Response => Response.json({}, { status: 404 });
 const markerKey = "_release-smoke/marker-v1";
 const maxBodyBytes = 512;
 const smokeWindowMs = 300_000;
-const maxActiveProbes = 8;
+export const maxActiveProbes = 8;
+export const smokeAdmissionSql =
+  "INSERT OR IGNORE INTO release_smoke_probes (probe_id, git_revision, expires_at_ms, status) SELECT ?, ?, ?, 'pending' WHERE (SELECT COUNT(*) FROM release_smoke_probes WHERE expires_at_ms > ?) < ?";
+export const smokeClaimSql =
+  "UPDATE release_smoke_probes SET status = 'queued' WHERE probe_id = ? AND status = 'pending' AND expires_at_ms > ?";
 const acceptedStatus = 202;
 const completedStatus = 200;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -121,9 +125,7 @@ const startProbe = async (request: Request, environment: SmokeEnvironment): Prom
   }
   // SQLite serializes this single admission statement: even concurrent distinct IDs cannot
   // create unbounded synthetic Work. Replays of an admitted probe remain idempotent.
-  await environment.DB.prepare(
-    "INSERT OR IGNORE INTO release_smoke_probes (probe_id, git_revision, expires_at_ms, status) SELECT ?, ?, ?, 'pending' WHERE (SELECT COUNT(*) FROM release_smoke_probes WHERE expires_at_ms > ?) < ?"
-  )
+  await environment.DB.prepare(smokeAdmissionSql)
     .bind(
       probe.probeId,
       environment.RELEASE_GIT_SHA,
@@ -137,9 +139,7 @@ const startProbe = async (request: Request, environment: SmokeEnvironment): Prom
   if (row.value.status === "pending") {
     // The claim is atomic. A replay of the same pending ID cannot repeat binding checks or
     // publish unbounded Queue messages; a failed claim or Queue send fails closed for this ID.
-    const claimed = await environment.DB.prepare(
-      "UPDATE release_smoke_probes SET status = 'queued' WHERE probe_id = ? AND status = 'pending' AND expires_at_ms > ?"
-    )
+    const claimed = await environment.DB.prepare(smokeClaimSql)
       .bind(probe.probeId, Date.now())
       .run();
     if (claimed.meta.changes === 1) {

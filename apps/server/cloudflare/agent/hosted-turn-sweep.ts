@@ -22,8 +22,10 @@ export const sweepHostedTurns = ({
     const due = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT user_id FROM (
-    SELECT user_id, started_at_ms AS due_ms FROM hosted_turns
-      WHERE status = 'pending' AND started_at_ms < ?
+    SELECT t.user_id, COALESCE(o.created_at_ms, t.started_at_ms) AS due_ms
+      FROM hosted_turns AS t LEFT JOIN hosted_whatsapp_outbox AS o
+        ON o.turn_id = t.id AND o.user_id = t.user_id
+      WHERE t.status = 'pending' AND t.started_at_ms < ?
     UNION ALL
     SELECT t.user_id, t.terminal_at_ms AS due_ms FROM hosted_turns AS t
       WHERE t.status <> 'pending' AND t.terminal_at_ms < ?

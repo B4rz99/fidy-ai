@@ -5,7 +5,14 @@ import type { WebSessionAuthority } from "~/shell/identity/session-guard";
 import type { PATAuthority } from "~/shell/tokens/pat-write";
 
 /** Live credential re-evaluated by D1 beside this owner-published Memory projection. */
-type MemoryAuthority = PATAuthority | WebSessionAuthority;
+type MemoryAuthority =
+  | PATAuthority
+  | WebSessionAuthority
+  | Readonly<{
+      table: "whatsapp_identities";
+      predicate: string;
+      bindings: ReadonlyArray<string>;
+    }>;
 
 /** The exact Memory row projection every owner query returns, kept in one place. */
 const memoryRowColumns = "id,text,created_at,updated_at";

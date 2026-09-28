@@ -1,6 +1,22 @@
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
+import { makeHostedSender } from "@fidy/server/whatsapp-hosted";
+import {
+  WhatsAppStatusAdmission as StatusAdmission,
+  WhatsAppTurnAdmission as TurnAdmission,
+  type WhatsAppTurnAdmission,
+  classifyWhatsAppAdmission,
+} from "../agent/whatsapp-turn";
+import { WhatsAppHostedSubject } from "../agent/hosted-authority";
+import { WhatsAppWork } from "../agent/whatsapp-work";
+import { reconcileWhatsAppStatus } from "../agent/whatsapp-delivery";
+import type {
+  HostedDeliveryCorrelationToken,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/model";
+
 import {
   type CanonicalToolEvidence,
+  type TranscriptText,
   type TranscriptTurnId,
   UserId,
 } from "@fidy/server/agent-runtime";
@@ -12,7 +28,9 @@ import {
   acknowledgeBrowserTurn,
   browserHostedDelivery,
   completeHostedTurnWithAdmission,
+  completeWhatsAppTurnWithAdmission,
   readHostedProgress,
+  resumeWhatsAppTurn,
 } from "../agent/hosted-turn";
 import {
   CanonicalCapability,
@@ -23,6 +41,7 @@ import {
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-runtime";
 import {
+  Cause,
   Context,
   Data,
   Deferred,
@@ -32,10 +51,12 @@ import {
   Fiber,
   Layer,
   Option,
+  Redacted,
   Schedule,
   Schema,
   type Scope,
 } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import {
   type WorkersAiEnvironment,
   cloudflareHostedInferenceLive,
@@ -310,7 +331,9 @@ type CoordinatorEnvironment = Readonly<{
   DB: D1Database;
 }> &
   /** Native optional binding, normalized to Option when work enters the application. */
-  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; EMAIL_BUCKET: R2Bucket }>> &
+  Partial<
+    Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; EMAIL_BUCKET: R2Bucket; KAPSO_API_KEY: string }>
+  > &
   WorkersAiEnvironment;
 
 /**
@@ -462,6 +485,110 @@ const privateIngestionActivity = ({
   );
 };
 
+const sendWhatsAppAttempt = ({
+  sender,
+  admission,
+  text,
+  correlationToken,
+}: Readonly<{
+  sender: ReturnType<typeof makeHostedSender>;
+  admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId">;
+  text: TranscriptText;
+  correlationToken: HostedDeliveryCorrelationToken;
+}>): Promise<
+  | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
+  | Readonly<{ kind: "ambiguous" | "rejected" }>
+> =>
+  Effect.runPromiseExit(
+    sender({
+      recipient: admission.bsuid,
+      businessPhoneNumberId: admission.businessPhoneNumberId,
+      text,
+      correlationToken,
+    })
+  ).then((outcome) =>
+    Exit.isSuccess(outcome)
+      ? { kind: "accepted" as const, messageId: outcome.value.messageEvidence.providerMessageId }
+      : {
+          kind: Option.match(Cause.findErrorOption(outcome.cause), {
+            onSome: (failure) => failure.deliveryCertainty,
+            onNone: () => "ambiguous" as const,
+          }),
+        }
+  );
+
+const prepareWhatsAppExecution = (
+  environment: CoordinatorEnvironment
+): Effect.Effect<
+  Option.Option<
+    Readonly<{
+      inference: HostedInferenceService;
+      sender: ReturnType<typeof makeHostedSender>;
+    }>
+  >,
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
+      return Option.none();
+    }
+    const inference = yield* Effect.exit(makeCloudflareHostedInference(environment));
+    if (Exit.isFailure(inference)) return Option.none();
+    const clients = yield* Layer.build(FetchHttpClient.layer);
+    const sender = makeHostedSender({
+      apiKey: Redacted.make(environment.KAPSO_API_KEY),
+      httpClient: Context.get(clients, HttpClient.HttpClient),
+    });
+    return Option.some({ inference: inference.value, sender });
+  });
+
+const startWhatsAppTurn = ({
+  db,
+  proof,
+  inference,
+  sender,
+  signal,
+  scheduleRecovery,
+  onAdmitted,
+}: Readonly<{
+  db: D1Database;
+  proof: WhatsAppTurnAdmission;
+  inference: HostedInferenceService;
+  sender: ReturnType<typeof makeHostedSender>;
+  signal: AbortSignal;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
+}>): Promise<Response> =>
+  completeWhatsAppTurnWithAdmission({
+    input: {
+      db,
+      subject: WhatsAppHostedSubject.make({
+        userId: proof.userId,
+        portfolioId: proof.portfolioId,
+        bsuid: proof.bsuid,
+      }),
+      inbound: {
+        messageId: proof.messageId,
+        businessPhoneNumberId: proof.businessPhoneNumberId,
+        occurredAtMs: proof.occurredAtMs,
+        receivedAtMs: proof.receivedAtMs,
+      },
+      text: proof.text,
+      inference,
+      bucket: Option.none(),
+      executeMutation: Option.none(),
+      deliver: {
+        _tag: "WhatsApp",
+        send: ({ text, correlationToken }) =>
+          sendWhatsAppAttempt({ sender, admission: proof, text, correlationToken }),
+      },
+      signal,
+      scheduleRecovery,
+    },
+    onAdmitted,
+  });
+
 const hostedResponseDeadlineMs = 25_000;
 /** A soft response deadline; admission/preflight is interrupted, committed work is not. */
 const hostedDeadline = (
@@ -557,13 +684,16 @@ export class UserTransactionCoordinator {
     // A progress read has live session authority but does not start canonical work.
     if (path === "/hosted-turn/progress") return this.runHostedProgress(request, userId);
     const deadline =
-      path === "/hosted-turn"
+      path === "/hosted-turn" ||
+      path === "/hosted-turn/whatsapp" ||
+      path === "/hosted-turn/whatsapp/work"
         ? Option.some(hostedDeadline(request.signal))
         : Option.none<ReturnType<typeof hostedDeadline>>();
     const settledResponse = this.pending.then(() => {
       if (Option.isSome(deadline)) {
-        return this.runHostedTurn(request, userId, deadline.value);
+        return this.runHostedRequest(request, userId, { path, deadline: deadline.value });
       }
+      if (path === "/hosted-turn/whatsapp/status") return this.runWhatsAppStatus(request, userId);
       if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
       return Effect.runPromise(
         Effect.scoped(
@@ -726,6 +856,133 @@ export class UserTransactionCoordinator {
           },
           this.env,
           Option.some(hostedFence)
+        )
+      )
+    );
+  }
+
+  private runWhatsAppStatus(request: Request, userId: string): Promise<Response> {
+    const { env } = this;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+          Effect.orElseSucceed(() => undefined)
+        );
+        const admission = Schema.decodeUnknownOption(StatusAdmission)(candidate);
+        if (Option.isNone(admission) || admission.value.userId !== userId) {
+          return transactionUnavailable();
+        }
+        const accepted = yield* reconcileWhatsAppStatus({ db: env.DB, admission: admission.value });
+        return accepted ? new Response(null, { status: 200 }) : transactionUnavailable();
+      }).pipe(
+        Effect.withSpan("agent.whatsappTurn.status"),
+        Effect.orElseSucceed(transactionUnavailable)
+      )
+    );
+  }
+
+  private runHostedRequest(
+    request: Request,
+    userId: string,
+    { path, deadline }: Readonly<{ path: string; deadline: ReturnType<typeof hostedDeadline> }>
+  ): Promise<Response> {
+    if (path === "/hosted-turn/whatsapp/work") {
+      return this.runWhatsAppWork(request, userId, deadline);
+    }
+    if (path === "/hosted-turn/whatsapp") {
+      return this.runWhatsAppTurn(request, userId, deadline);
+    }
+    return this.runHostedTurn(request, userId, deadline);
+  }
+
+  private runWhatsAppWork(
+    request: Request,
+    userId: string,
+    deadline: ReturnType<typeof hostedDeadline>
+  ): Promise<Response> {
+    const { env, state } = this;
+    return Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+            Effect.orElseSucceed(() => undefined)
+          );
+          const work = Schema.decodeUnknownOption(WhatsAppWork)(candidate);
+          if (Option.isNone(work) || work.value.userId !== userId) return transactionUnavailable();
+          const prepared = yield* prepareWhatsAppExecution(env);
+          if (Option.isNone(prepared)) return transactionUnavailable();
+          return yield* Effect.tryPromise(() =>
+            resumeWhatsAppTurn({
+              db: env.DB,
+              userId: UserId.make(userId),
+              turnId: work.value.turnId,
+              inference: prepared.value.inference,
+              signal: deadline.signal,
+              scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+              deliver: (admission) => ({
+                _tag: "WhatsApp",
+                send: ({ text, correlationToken }) =>
+                  sendWhatsAppAttempt({
+                    sender: prepared.value.sender,
+                    admission,
+                    text,
+                    correlationToken,
+                  }),
+              }),
+            })
+          );
+        }).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.withSpan("agent.whatsappTurn.resume"),
+          Effect.catchCause(() => Effect.succeed(transactionUnavailable()))
+        )
+      )
+    );
+  }
+
+  private runWhatsAppTurn(
+    request: Request,
+    userId: string,
+    deadline: ReturnType<typeof hostedDeadline>
+  ): Promise<Response> {
+    const { env, state } = this;
+    return Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+            Effect.orElseSucceed(() => undefined)
+          );
+          const admission = Schema.decodeUnknownOption(TurnAdmission)(candidate);
+          if (Option.isNone(admission) || admission.value.userId !== userId) {
+            return transactionUnavailable();
+          }
+          const proof = admission.value;
+          const replay = yield* classifyWhatsAppAdmission({
+            db: env.DB,
+            proof,
+            now: transactionNow(),
+          });
+          if (replay !== "fresh") {
+            const status = { expired: 422, replay: 200, conflict: 409 }[replay];
+            return new Response(null, { status });
+          }
+          const prepared = yield* prepareWhatsAppExecution(env);
+          if (Option.isNone(prepared)) return transactionUnavailable();
+          return yield* Effect.tryPromise(() =>
+            startWhatsAppTurn({
+              db: env.DB,
+              proof,
+              inference: prepared.value.inference,
+              sender: prepared.value.sender,
+              signal: deadline.signal,
+              scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+              onAdmitted: deadline.onAdmitted,
+            })
+          );
+        }).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.withSpan("agent.whatsappTurn.execution"),
+          Effect.orElseSucceed(transactionUnavailable)
         )
       )
     );

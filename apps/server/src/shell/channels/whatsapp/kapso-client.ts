@@ -20,6 +20,7 @@ import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
+  type HostedDeliveryCorrelationToken,
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppInboundEvent,
   type WhatsAppMessageEvidence,
@@ -75,8 +76,10 @@ export type KapsoClientService = {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
     readonly destination: KapsoDestination;
     readonly text: TranscriptText;
-    /** Opaque disclosure-attempt correlation forwarded unchanged to lifecycle webhooks. */
-    readonly opaqueCallbackData: Option.Option<DisclosureDeliveryCorrelationToken>;
+    /** Opaque attempt correlation forwarded unchanged to lifecycle webhooks. */
+    readonly opaqueCallbackData: Option.Option<
+      DisclosureDeliveryCorrelationToken | HostedDeliveryCorrelationToken
+    >;
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
 
@@ -184,7 +187,9 @@ const resolveRecipientAddress = (
 const encodeTextMessage = (
   address: KapsoRecipientAddress,
   text: TranscriptText,
-  opaqueCallbackData: Option.Option<DisclosureDeliveryCorrelationToken>
+  opaqueCallbackData: Option.Option<
+    DisclosureDeliveryCorrelationToken | HostedDeliveryCorrelationToken
+  >
 ): Effect.Effect<string> =>
   Schema.encodeEffect(UnknownJsonString)({
     messaging_product: "whatsapp",

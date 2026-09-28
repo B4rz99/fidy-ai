@@ -186,6 +186,7 @@ export default Alchemy.Stack(
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
     });
+    const hostedWhatsAppQueue = yield* Cloudflare.Queues.Queue("HostedWhatsAppQueue");
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
       className: "OnboardingEmailWorkflowV1",
@@ -214,6 +215,7 @@ export default Alchemy.Stack(
         EMAIL_BUCKET: emailBucket,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
+        HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
@@ -291,6 +293,13 @@ export default Alchemy.Stack(
     });
     yield* Cloudflare.Queues.Consumer("EmailReplacementConsumer", {
       queueId: emailReplacementQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 10, maxRetries: 3 },
+    });
+
+    yield* Cloudflare.Queues.Consumer("HostedWhatsAppConsumer", {
+      queueId: hostedWhatsAppQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },

@@ -14,7 +14,7 @@ import type { OutboundHttpService } from "~/shell/outbound-http/operations";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import { type KapsoClientService, KapsoSendFailed, makeKapsoClientService } from "./kapso-client";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
-import { WhatsAppBusinessPhoneNumberId } from "./model";
+import { HostedDeliveryCorrelationToken, WhatsAppBusinessPhoneNumberId } from "./model";
 
 const sendInput = (
   overrides: Partial<Parameters<KapsoClientService["sendText"]>[0]> = {}
@@ -107,6 +107,34 @@ it.effect("encodes the BSUID message for the published Kapso destination", () =>
       biz_opaque_callback_data: correlationToken,
     });
     expect(requestBody).not.toHaveProperty("to");
+  })
+);
+
+it.effect("forwards hosted Turn correlation without treating it as a recipient", () =>
+  Effect.gen(function* () {
+    let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+    const service = makeService({
+      execute: (request) => {
+        outboundRequest = Option.some(request);
+        return Effect.succeed({
+          status: 200,
+          headers: {},
+          body: new TextEncoder().encode(
+            JSON.stringify({ messaging_product: "whatsapp", messages: [{ id: "wamid.hosted" }] })
+          ),
+        });
+      },
+    });
+    const token = HostedDeliveryCorrelationToken.make("22222222-2222-4222-8222-222222222222");
+    yield* service.sendText(sendInput({ opaqueCallbackData: Option.some(token) }));
+    const request = Option.getOrThrow(outboundRequest);
+    if (request._tag !== "KapsoMessages") return yield* Effect.die("unexpected destination");
+    const body = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
+    expect(body).toMatchObject({
+      recipient: "CO.573001234567",
+      biz_opaque_callback_data: token,
+    });
+    expect(body).not.toHaveProperty("to");
   })
 );
 

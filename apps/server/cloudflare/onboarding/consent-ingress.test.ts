@@ -1,6 +1,7 @@
 import { Miniflare } from "miniflare";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
 import { sweepExpiredConsent } from "./consent-ingress";
+import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
 import {
   deliverOnboardingEmail,
   dispatchOnboardingEmail,
@@ -101,7 +102,11 @@ const seedSyntheticEnrollment = (
 
 const runSweep = (db: D1Database): Promise<void> => Effect.runPromise(sweepExpiredConsent(db)());
 
-const setup = (): Promise<{
+const setup = (
+  coordinator: Option.Option<
+    (userId: string, request: Request) => Promise<Response>
+  > = Option.none()
+): Promise<{
   readonly db: D1Database;
   readonly sweep: () => Promise<void>;
   readonly send: (body: string, signature?: string, eventName?: string) => Promise<Response>;
@@ -161,6 +166,19 @@ const setup = (): Promise<{
         applyMigration(new URL("../migrations/0002_resource_admission.sql", import.meta.url))
       );
       yield* Effect.tryPromise(() => applyMigration(migration));
+      // This pre-User fixture exercises Consent only; no verified association exists yet.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)")
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT)"
+          )
+          .run()
+      );
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0004_onboarding_email.sql", import.meta.url))
       );
@@ -202,7 +220,12 @@ const setup = (): Promise<{
                     WOMPI_PRIVATE_KEY: "",
                     WOMPI_INTEGRITY_SECRET: "",
                     USER_TRANSACTION_COORDINATOR: {
-                      getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+                      getByName: (name: string) => ({
+                        fetch: (request: Request) =>
+                          Option.isSome(coordinator)
+                            ? coordinator.value(name, request)
+                            : Promise.reject(new Error("unused")),
+                      }),
                     },
                     KAPSO_WEBHOOK_SECRET: secret,
                     CLOUDFLARE_ACCESS_ISSUER: "",
@@ -244,6 +267,116 @@ const inbound = (id: string, text: string, timestamp = String(nowSeconds)): stri
     conversation: { business_scoped_user_id: bsuid },
     phone_number_id: "123456789012345",
   });
+
+it("routes only authenticated text of a verified BSUID to the User coordinator", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls: Array<Readonly<{ userId: string; request: unknown }>> = [];
+      const coordinator = (userId: string, request: Request): Promise<Response> =>
+        request.json().then((body: unknown) => {
+          calls.push({ userId, request: body });
+          return new Response(null, { status: 202 });
+        });
+      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(coordinator)));
+      const userId = "10000000-0000-4000-8000-000000000071";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
+          )
+          .bind(userId, portfolio, bsuid)
+          .run()
+      );
+      const payload = inbound("wamid.verified", "Texto exacto");
+      expect((yield* Effect.tryPromise(() => send(payload, "invalid"))).status).toBe(401);
+      expect(calls).toHaveLength(0);
+      expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(202);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.userId).toBe(userId);
+      const forwarded = yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[0]?.request);
+      expect(forwarded).toMatchObject({
+        userId,
+        portfolioId: portfolio,
+        bsuid,
+        messageId: "wamid.verified",
+        text: "Texto exacto",
+      });
+      const voice = encodeJson({
+        message: {
+          id: "wamid.voice",
+          timestamp: String(nowSeconds),
+          type: "audio",
+          from_user_id: bsuid,
+          audio: { id: "audio-1" },
+          kapso: { transcript: { text: "Transcripción" } },
+        },
+        conversation: { business_scoped_user_id: bsuid },
+        phone_number_id: "123456789012345",
+      });
+      expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(422);
+      const sweptReplay = inbound("wamid.swept", "Texto exacto", String(nowSeconds - 31 * 86_400));
+      expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
+      expect(calls).toHaveLength(1);
+    })
+  ));
+
+it("routes only signed, correlated Kapso delivery evidence to the same User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls: Array<Readonly<{ userId: string; request: unknown }>> = [];
+      const coordinator = (userId: string, request: Request): Promise<Response> =>
+        request.json().then((body: unknown) => {
+          calls.push({ userId, request: body });
+          return new Response(null, { status: 200 });
+        });
+      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(coordinator)));
+      const userId = "10000000-0000-4000-8000-000000000071";
+      const token = "10000000-0000-4000-8000-000000000122";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO hosted_whatsapp_delivery
+      (user_id, correlation_token, business_phone_number_id) VALUES (?, ?, ?)`)
+          .bind(userId, token, "123456789012345")
+          .run()
+      );
+      const proof = encodeJson({
+        message: {
+          id: "wamid.disclosure-1",
+          kapso: {
+            statuses: [
+              {
+                id: "wamid.disclosure-1",
+                status: "delivered",
+                timestamp: String(nowSeconds),
+                biz_opaque_callback_data: token,
+              },
+            ],
+          },
+        },
+        phone_number_id: "123456789012345",
+      });
+      expect(
+        (yield* Effect.tryPromise(() => send(proof, "invalid", "whatsapp.message.delivered")))
+          .status
+      ).toBe(401);
+      expect(calls).toHaveLength(0);
+      expect(
+        (yield* Effect.tryPromise(() => send(proof, undefined, "whatsapp.message.delivered")))
+          .status
+      ).toBe(200);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.userId).toBe(userId);
+      const forwarded = yield* Schema.decodeUnknownEffect(WhatsAppStatusAdmission)(
+        calls[0]?.request
+      );
+      expect(forwarded).toMatchObject({
+        userId,
+        correlationToken: token,
+        providerMessageId: "wamid.disclosure-1",
+        outcome: "delivered",
+      });
+    })
+  ));
 
 const ProviderSend = Schema.Struct({
   biz_opaque_callback_data: Schema.String,

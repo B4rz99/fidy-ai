@@ -25,6 +25,7 @@ import {
 } from "./disclosure-model";
 import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 import {
+  HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
   type WhatsAppIdentityChangeEvent,
@@ -108,7 +109,7 @@ const RawDisclosureStatus = Schema.Struct({
   id: WhatsAppProviderMessageId,
   status: Schema.Literals(["sent", "delivered", "failed"]),
   timestamp: Schema.String.check(Schema.isPattern(/^[0-9]{1,16}$/u)),
-  biz_opaque_callback_data: DisclosureDeliveryCorrelationToken,
+  biz_opaque_callback_data: Schema.String.check(Schema.isUUID()),
   errors: Model.optionalOption(Schema.Array(Schema.Struct({ code: Schema.Int }))),
 });
 const RawDisclosureLifecycleEvent = Schema.Struct({
@@ -343,6 +344,18 @@ export const decodeKapsoWebhook = Effect.fn(function* (input: {
   return { deliveryKey, events: [first, ...rest] } satisfies WhatsAppWebhookReceipt;
 });
 
+/** Authenticated Kapso status for a hosted reply, not evidence of browser rendering. */
+export type KapsoHostedLifecycleEvidence = Readonly<{
+  correlationToken: HostedDeliveryCorrelationToken;
+  messageEvidence: WhatsAppMessageEvidence;
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  occurredAt: DateTime.Utc;
+}> &
+  (
+    | Readonly<{ outcome: "sent" | "delivered" }>
+    | Readonly<{ outcome: "failed"; reason: DisclosureDeliveryFailureReason }>
+  );
+
 /** Kapso event names routed through disclosure lifecycle reconciliation. */
 export const DisclosureLifecycleEventName = Schema.Literals([
   "whatsapp.message.sent",
@@ -364,7 +377,9 @@ const projectDecodedDisclosureLifecycleStatus = Effect.fn(function* (input: {
   const providerStatus = input.status;
   const occurredAt = yield* parseOccurredAt(providerStatus.timestamp, input.receivedAt);
   const evidence = {
-    correlationToken: providerStatus.biz_opaque_callback_data,
+    correlationToken: DisclosureDeliveryCorrelationToken.make(
+      providerStatus.biz_opaque_callback_data
+    ),
     messageEvidence: {
       channel: "whatsapp" as const,
       provider: "kapso" as const,
@@ -423,6 +438,61 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
   );
 });
 
+type KapsoLifecycleInput = Readonly<{
+  rawBody: Uint8Array;
+  secret: Redacted.Redacted<string>;
+  signature: string;
+  eventName: string;
+  receivedAt: DateTime.Utc;
+}>;
+
+/** One authenticated event and its latest chronological status, shared across delivery purposes. */
+const decodeLifecycleStatus = Effect.fn(function* (input: KapsoLifecycleInput) {
+  const unknown = yield* authenticateAndDecodeKapsoBody(input);
+  const eventName = yield* Schema.decodeUnknownEffect(DisclosureLifecycleEventName)(
+    input.eventName
+  ).pipe(Effect.mapError(invalidKapsoPayload));
+  const raw = yield* Schema.decodeUnknownEffect(RawDisclosureLifecycleEvent)(unknown).pipe(
+    Effect.mapError(invalidKapsoPayload)
+  );
+  const latest = yield* latestDisclosureLifecycleStatus(
+    raw.message.kapso.statuses,
+    input.receivedAt
+  );
+  if (Option.isNone(latest)) return yield* invalidKapsoInvariant("missing provider status");
+  if (
+    latest.value.status.status !== lifecycleStatus(eventName) ||
+    latest.value.status.id !== raw.message.id
+  ) {
+    return yield* invalidKapsoInvariant("event/status mismatch");
+  }
+  return { ...latest.value, businessPhoneNumberId: raw.phone_number_id };
+});
+
+/**
+ * Authenticates the exact raw Kapso status before projecting a hosted reply's provider evidence.
+ * `sent` and `delivered` remain distinct; only `delivered` can prove channel delivery. A callback
+ * must be correlated with an existing User-owned attempt before changing a Turn. No body or
+ * recipient evidence escapes this projection.
+ */
+export const decodeKapsoHostedLifecycleWebhook = Effect.fn(function* (input: KapsoLifecycleInput) {
+  const latest = yield* decodeLifecycleStatus(input);
+  const status = latest.status;
+  const evidence = {
+    correlationToken: HostedDeliveryCorrelationToken.make(status.biz_opaque_callback_data),
+    messageEvidence: latest.evidence.messageEvidence,
+    businessPhoneNumberId: latest.businessPhoneNumberId,
+    occurredAt: latest.evidence.occurredAt,
+  };
+  return status.status === "failed"
+    ? ({
+        ...evidence,
+        outcome: "failed",
+        reason: latest.evidence.outcome === "failed" ? latest.evidence.reason : "invalid_response",
+      } satisfies KapsoHostedLifecycleEvidence)
+    : ({ ...evidence, outcome: status.status } satisfies KapsoHostedLifecycleEvidence);
+});
+
 /**
  * Authenticates at most 1 MiB of exact raw bytes with the configured 16+-character secret and a
  * hexadecimal HMAC-SHA256 `signature` before parsing. `eventName` must be one supported disclosure
@@ -433,32 +503,11 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
  * event/status mismatch, timestamp, or body size fails with the corresponding Kapso boundary error
  * before any state change.
  */
-export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (input: {
-  readonly rawBody: Uint8Array;
-  readonly secret: Redacted.Redacted<string>;
-  readonly signature: string;
-  readonly eventName: string;
-  readonly receivedAt: DateTime.Utc;
-}) {
-  const unknown = yield* authenticateAndDecodeKapsoBody(input);
-  const eventName = yield* Schema.decodeUnknownEffect(DisclosureLifecycleEventName)(
-    input.eventName
-  ).pipe(Effect.mapError(invalidKapsoPayload));
-  const status = lifecycleStatus(eventName);
-  const raw = yield* Schema.decodeUnknownEffect(RawDisclosureLifecycleEvent)(unknown).pipe(
-    Effect.mapError(invalidKapsoPayload)
-  );
-  const latest = yield* latestDisclosureLifecycleStatus(
-    raw.message.kapso.statuses,
-    input.receivedAt
-  );
-  if (Option.isNone(latest)) {
-    return yield* new InvalidKapsoPayload({ cause: "missing provider status" });
-  }
-  if (latest.value.status.status !== status || latest.value.status.id !== raw.message.id) {
-    return yield* new InvalidKapsoPayload({ cause: "event/status mismatch" });
-  }
-  return { ...latest.value.evidence, businessPhoneNumberId: raw.phone_number_id };
+export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (
+  input: KapsoLifecycleInput
+) {
+  const latest = yield* decodeLifecycleStatus(input);
+  return { ...latest.evidence, businessPhoneNumberId: latest.businessPhoneNumberId };
 });
 
 const projectIdentityChange = Effect.fn(function* (

@@ -3,4 +3,5 @@ export const hostedTurnTestMigrations = [
   "0021_hosted_confirmation",
   "0022_hosted_mutation_fence",
   "0023_hosted_delivery_refresh",
+  "0024_hosted_whatsapp",
 ] as const;

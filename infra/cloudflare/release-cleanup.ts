@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
 import { type Deployment, type ReleasePort, type ReleaseSnapshot } from "./release-controller";
 
@@ -22,30 +22,33 @@ const isStaged = (deployment: Deployment, stableId: string, candidateId: string)
 };
 
 /** Remove only this run's 0%-traffic candidates, never another release's versions. */
-export const cleanRelease = async (
+const cleanRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
   candidate: { publicVersionId: string; coreVersionId: string }
-): Promise<void> => {
-  const verifyCandidate = Schema.decodeUnknownSync(SmokeIdentity.fields.workerVersionId);
-  const clean = async (name: string, stableId: string, candidateId: string): Promise<void> => {
-    const observed = await port.current(name);
+) {
+  const clean = Effect.fn(function* (name: string, stableId: string, candidateId: string) {
+    const observed = yield* port.current(name);
     if (isStable(observed, stableId)) {
       return;
     }
-    if (!isStaged(observed, stableId, verifyCandidate(candidateId))) {
-      throw Error("Cannot clean an unexpected Worker deployment; operator inspection required");
+    const verified = yield* Schema.decodeEffect(SmokeIdentity.fields.workerVersionId)(candidateId);
+    if (!isStaged(observed, stableId, verified)) {
+      return yield* Effect.fail(
+        Error("Cannot clean an unexpected Worker deployment; operator inspection required")
+      );
     }
-    const confirmed = await port.current(name);
+    const confirmed = yield* port.current(name);
     if (confirmed.id !== observed.id) {
-      throw Error("Worker deployment changed during cleanup");
+      return yield* Effect.fail(Error("Worker deployment changed during cleanup"));
     }
-    await port.deploy(name, [{ id: stableId, percentage: 100 }]);
-    const restored = await port.current(name);
+    yield* port.deploy(name, [{ id: stableId, percentage: 100 }]);
+    const restored = yield* port.current(name);
     if (!isStable(restored, stableId)) {
-      throw Error("Stable Worker traffic restoration not confirmed");
+      return yield* Effect.fail(Error("Stable Worker traffic restoration not confirmed"));
     }
-  };
-  await clean(snapshot.public.name, snapshot.public.stableVersionId, candidate.publicVersionId);
-  await clean(snapshot.core.name, snapshot.core.stableVersionId, candidate.coreVersionId);
-};
+  });
+  yield* clean(snapshot.public.name, snapshot.public.stableVersionId, candidate.publicVersionId);
+  yield* clean(snapshot.core.name, snapshot.core.stableVersionId, candidate.coreVersionId);
+});
+export const releaseCleanup = { cleanRelease };

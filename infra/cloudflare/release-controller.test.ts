@@ -1,14 +1,13 @@
-import { Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type Deployment,
   type ReleasePort,
   type ReleaseSnapshot,
-  captureRelease,
-  promoteRelease,
-  stageRelease,
+  type StagedRelease,
+  releaseController,
 } from "./release-controller";
-import { cleanRelease } from "./release-cleanup";
+import { releaseCleanup } from "./release-cleanup";
 
 const publicName = "fidy-ingress";
 const coreName = "fidy-core";
@@ -46,27 +45,25 @@ const harness = (): Harness => {
   let trunk = revision;
   let failOn = Option.none<string>();
   const port: ReleasePort = {
-    trunk: async () => trunk,
-    current: async (name) => {
-      const deployment = deployments.get(name);
-      if (deployment === undefined) {
-        throw Error("missing deployment");
-      }
-      return structuredClone(deployment);
-    },
-    deploy: async (name, entries) => {
-      const step = `${name}:${entries.map((version) => version.percentage).join("/")}`;
-      changes.push(step);
-      if (Option.contains(failOn, step)) {
-        throw Error("provider refused");
-      }
-      const result: Deployment = {
-        id: `${String(changes.length).padStart(8, "0")}-cccc-4ccc-8ccc-cccccccccccc`,
-        versions: [...entries],
-      };
-      deployments.set(name, result);
-      return result;
-    },
+    trunk: () => Effect.sync(() => trunk),
+    current: (name) =>
+      Effect.gen(function* () {
+        const deployment = deployments.get(name);
+        if (deployment === undefined) return yield* Effect.fail(Error("missing deployment"));
+        return structuredClone(deployment);
+      }),
+    deploy: (name, entries) =>
+      Effect.gen(function* () {
+        const step = `${name}:${entries.map((version) => version.percentage).join("/")}`;
+        changes.push(step);
+        if (Option.contains(failOn, step)) return yield* Effect.fail(Error("provider refused"));
+        const result: Deployment = {
+          id: `${String(changes.length).padStart(8, "0")}-cccc-4ccc-8ccc-cccccccccccc`,
+          versions: [...entries],
+        };
+        deployments.set(name, result);
+        return result;
+      }),
   };
   return {
     port,
@@ -83,169 +80,305 @@ const candidates = {
   publicVersionId: versions.publicCandidate,
   coreVersionId: versions.coreCandidate,
 };
-const captured = async (port: ReleasePort): Promise<ReleaseSnapshot> =>
-  captureRelease(port, {
+const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
+  releaseController.captureRelease(port, {
     revision,
     stableRevision: "b".repeat(40),
     stableContractDigest: "c".repeat(64),
     publicName,
     coreName,
   });
+const staged = (port: ReleasePort): Effect.Effect<StagedRelease, Error> =>
+  Effect.gen(function* () {
+    return yield* releaseController.stageRelease(port, yield* captured(port), candidates);
+  });
+const failure = (effect: Effect.Effect<unknown, Error>, message: string): Effect.Effect<void> =>
+  effect.pipe(
+    Effect.match({
+      onSuccess: () => {
+        throw Error(`Expected failure containing ${message}`);
+      },
+      onFailure: (error) => {
+        expect(error.message).toContain(message);
+      },
+    })
+  );
 
 describe("zero-traffic Worker release", () => {
-  it("keeps stable versions at 100% while staging exact candidates", async () => {
-    const fixture = harness();
-    await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    expect((await fixture.port.current(publicName)).versions).toEqual([
-      { id: versions.publicStable, percentage: 100 },
-      { id: versions.publicCandidate, percentage: 0 },
-    ]);
-    expect((await fixture.port.current(coreName)).versions).toEqual([
-      { id: versions.coreStable, percentage: 100 },
-      { id: versions.coreCandidate, percentage: 0 },
-    ]);
-  });
+  it("keeps stable versions at 100% while staging exact candidates", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        yield* staged(fixture.port);
+        expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicStable, percentage: 100 },
+          { id: versions.publicCandidate, percentage: 0 },
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+          { id: versions.coreCandidate, percentage: 0 },
+        ]);
+      })
+    ));
 
-  it("removes a failed smoke candidate without changing stable traffic", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    await cleanRelease(fixture.port, staged.snapshot, candidates);
-    expect((await fixture.port.current(publicName)).versions).toEqual([
-      { id: versions.publicStable, percentage: 100 },
-    ]);
-    expect((await fixture.port.current(coreName)).versions).toEqual([
-      { id: versions.coreStable, percentage: 100 },
-    ]);
-  });
+  it("removes a failed smoke candidate without changing stable traffic", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        yield* releaseCleanup.cleanRelease(fixture.port, release.snapshot, candidates);
+        expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicStable, percentage: 100 },
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+      })
+    ));
 
-  it("cleans only its own partially staged candidate after a Core staging failure", async () => {
-    const fixture = harness();
-    const snapshot = await captured(fixture.port);
-    fixture.fail(`${coreName}:100/0`);
-    await expect(stageRelease(fixture.port, snapshot, candidates)).rejects.toThrow(
-      "provider refused"
-    );
-    await cleanRelease(fixture.port, snapshot, candidates);
-    expect((await fixture.port.current(publicName)).versions).toEqual([
-      { id: versions.publicStable, percentage: 100 },
-    ]);
-    expect((await fixture.port.current(coreName)).versions).toEqual([
-      { id: versions.coreStable, percentage: 100 },
-    ]);
-  });
+  it("cleans only its own partially staged candidate after a Core staging failure", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const snapshot = yield* captured(fixture.port);
+        fixture.fail(`${coreName}:100/0`);
+        yield* failure(
+          releaseController.stageRelease(fixture.port, snapshot, candidates),
+          "provider refused"
+        );
+        yield* releaseCleanup.cleanRelease(fixture.port, snapshot, candidates);
+        expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicStable, percentage: 100 },
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+      })
+    ));
 
-  it("refuses to clean an unknown staged version", async () => {
-    const fixture = harness();
-    const snapshot = await captured(fixture.port);
-    await fixture.port.deploy(publicName, [
-      { id: versions.publicStable, percentage: 100 },
-      { id: versions.coreCandidate, percentage: 0 },
-    ]);
-    await expect(cleanRelease(fixture.port, snapshot, candidates)).rejects.toThrow("unexpected");
-    expect(fixture.changes).toHaveLength(1);
-  });
+  it("refuses to clean an unknown staged version", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const snapshot = yield* captured(fixture.port);
+        yield* fixture.port.deploy(publicName, [
+          { id: versions.publicStable, percentage: 100 },
+          { id: versions.coreCandidate, percentage: 0 },
+        ]);
+        yield* failure(
+          releaseCleanup.cleanRelease(fixture.port, snapshot, candidates),
+          "unexpected"
+        );
+        expect(fixture.changes).toHaveLength(1);
+      })
+    ));
 
-  it("refuses superseded work without changing traffic", async () => {
-    const fixture = harness();
-    const snapshot = await captured(fixture.port);
-    fixture.supersede();
-    await expect(stageRelease(fixture.port, snapshot, candidates)).rejects.toThrow("superseded");
-    expect(fixture.changes).toEqual([]);
-  });
+  it("refuses superseded work without changing traffic", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const snapshot = yield* captured(fixture.port);
+        fixture.supersede();
+        yield* failure(
+          releaseController.stageRelease(fixture.port, snapshot, candidates),
+          "superseded"
+        );
+        expect(fixture.changes).toEqual([]);
+      })
+    ));
 
-  it("refuses to overwrite a changed deployment", async () => {
-    const fixture = harness();
-    const snapshot = await captured(fixture.port);
-    await fixture.port.deploy(coreName, [{ id: versions.coreCandidate, percentage: 100 }]);
-    await expect(stageRelease(fixture.port, snapshot, candidates)).rejects.toThrow("changed");
-    expect(fixture.changes).toHaveLength(1);
-  });
+  it("refuses to overwrite a changed deployment", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const snapshot = yield* captured(fixture.port);
+        yield* fixture.port.deploy(coreName, [{ id: versions.coreCandidate, percentage: 100 }]);
+        yield* failure(
+          releaseController.stageRelease(fixture.port, snapshot, candidates),
+          "changed"
+        );
+        expect(fixture.changes).toHaveLength(1);
+      })
+    ));
 
-  it("promotes the tested pair in Core-first order", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    await promoteRelease(fixture.port, staged, { exactPairPassed: true, middlePairPassed: true });
-    expect(fixture.changes).toEqual([
-      `${publicName}:100/0`,
-      `${coreName}:100/0`,
-      `${coreName}:100`,
-      `${publicName}:100`,
-    ]);
-    expect((await fixture.port.current(publicName)).versions).toEqual([
-      { id: versions.publicCandidate, percentage: 100 },
-    ]);
-    expect((await fixture.port.current(coreName)).versions).toEqual([
-      { id: versions.coreCandidate, percentage: 100 },
-    ]);
-  });
+  it("promotes the tested pair in Core-first order", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        yield* releaseController.promoteRelease(fixture.port, release, {
+          exactPairPassed: true,
+          middlePairPassed: true,
+        });
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${coreName}:100`,
+          `${publicName}:100`,
+        ]);
+        expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicCandidate, percentage: 100 },
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreCandidate, percentage: 100 },
+        ]);
+      })
+    ));
 
-  it("does not promote if either pairing fails smoke", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    await expect(
-      promoteRelease(fixture.port, staged, { exactPairPassed: true, middlePairPassed: false })
-    ).rejects.toThrow("smoke");
-    expect(fixture.changes).toHaveLength(2);
-  });
+  it("does not promote if either pairing fails smoke", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        yield* failure(
+          releaseController.promoteRelease(fixture.port, release, {
+            exactPairPassed: true,
+            middlePairPassed: false,
+          }),
+          "smoke"
+        );
+        expect(fixture.changes).toHaveLength(2);
+      })
+    ));
 
-  it("leaves stable traffic untouched if trunk moves while smoke runs", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    fixture.supersede();
-    await expect(
-      promoteRelease(fixture.port, staged, { exactPairPassed: true, middlePairPassed: true })
-    ).rejects.toThrow("superseded");
-    expect(fixture.changes).toHaveLength(2);
-  });
+  it("leaves stable traffic untouched if trunk moves while smoke runs", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        fixture.supersede();
+        yield* failure(
+          releaseController.promoteRelease(fixture.port, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "superseded"
+        );
+        expect(fixture.changes).toHaveLength(2);
+      })
+    ));
 
-  it("refuses promotion if a staged deployment changed after smoke", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    await fixture.port.deploy(publicName, [{ id: versions.publicCandidate, percentage: 100 }]);
-    await expect(
-      promoteRelease(fixture.port, staged, { exactPairPassed: true, middlePairPassed: true })
-    ).rejects.toThrow("changed");
-    expect((await fixture.port.current(coreName)).versions[0]).toEqual({
-      id: versions.coreStable,
-      percentage: 100,
-    });
-  });
+  it("refuses promotion if a staged deployment changed after smoke", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        yield* fixture.port.deploy(publicName, [{ id: versions.publicCandidate, percentage: 100 }]);
+        yield* failure(
+          releaseController.promoteRelease(fixture.port, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "changed"
+        );
+        expect((yield* fixture.port.current(coreName)).versions[0]).toEqual({
+          id: versions.coreStable,
+          percentage: 100,
+        });
+      })
+    ));
 
-  it("refuses to restore Core if public promotion committed but the response was lost", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    const original = fixture.port;
-    const ambiguous: ReleasePort = {
-      ...original,
-      deploy: async (name, entries) => {
-        const result = await original.deploy(name, entries);
-        if (name === publicName && entries.length === 1) {
-          throw Error("response lost after commit");
-        }
-        return result;
-      },
-    };
-    await expect(
-      promoteRelease(ambiguous, staged, { exactPairPassed: true, middlePairPassed: true })
-    ).rejects.toThrow("restoration not confirmed");
-    expect((await original.current(coreName)).versions).toEqual([
-      { id: versions.coreCandidate, percentage: 100 },
-    ]);
-  });
+  it("refuses to restore Core if public promotion committed but the response was lost", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const original = fixture.port;
+        const ambiguous: ReleasePort = {
+          ...original,
+          deploy: (name, entries) =>
+            original.deploy(name, entries).pipe(
+              Effect.filterOrFail(
+                () => name !== publicName || entries.length !== 1,
+                () => Error("response lost after commit")
+              )
+            ),
+        };
+        yield* failure(
+          releaseController.promoteRelease(ambiguous, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "restoration not confirmed"
+        );
+        expect((yield* original.current(coreName)).versions).toEqual([
+          { id: versions.coreCandidate, percentage: 100 },
+        ]);
+      })
+    ));
 
-  it("restores stable Core when public promotion fails without committing", async () => {
-    const fixture = harness();
-    const staged = await stageRelease(fixture.port, await captured(fixture.port), candidates);
-    fixture.fail(`${publicName}:100`);
-    await expect(
-      promoteRelease(fixture.port, staged, { exactPairPassed: true, middlePairPassed: true })
-    ).rejects.toThrow("restored");
-    expect((await fixture.port.current(coreName)).versions).toEqual([
-      { id: versions.coreStable, percentage: 100 },
-    ]);
-    expect((await fixture.port.current(publicName)).versions[0]).toEqual({
-      id: versions.publicStable,
-      percentage: 100,
-    });
-  });
+  it("checks traffic and restores Core after an unexpected public adapter defect", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const defective: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            name === publicName && entries.length === 1
+              ? Effect.die(Error("unexpected adapter failure"))
+              : fixture.port.deploy(name, entries),
+        };
+        yield* failure(
+          releaseController.promoteRelease(defective, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "restored"
+        );
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+      })
+    ));
+
+  it("does not swallow interruption to attempt another traffic write", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const interrupted: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            name === publicName && entries.length === 1
+              ? Effect.interrupt
+              : fixture.port.deploy(name, entries),
+        };
+        const exit = yield* Effect.exit(
+          releaseController.promoteRelease(interrupted, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          })
+        );
+        expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${coreName}:100`,
+        ]);
+      })
+    ));
+
+  it("restores stable Core when public promotion fails without committing", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        fixture.fail(`${publicName}:100`);
+        yield* failure(
+          releaseController.promoteRelease(fixture.port, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "restored"
+        );
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+        expect((yield* fixture.port.current(publicName)).versions[0]).toEqual({
+          id: versions.publicStable,
+          percentage: 100,
+        });
+      })
+    ));
 });

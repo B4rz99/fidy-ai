@@ -1,22 +1,26 @@
 /// <reference types="bun-types" />
 
-import { Encoding, Option, Schema } from "effect";
+import { Context, Data, Effect, Encoding, Layer, Option, Schema, Stream } from "effect";
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/unstable/http";
 import {
   SmokeIdentity,
   SmokeRequest,
   SmokeResponse,
   smokePath,
 } from "../../apps/server/cloudflare/runtime/smoke";
-import { cleanRelease } from "./release-cleanup";
+import { releaseCleanup } from "./release-cleanup";
 import {
   type Deployment,
   type ReleasePort,
   type ReleaseSnapshot,
-  captureRelease,
-  decodeSnapshot,
-  decodeStaged,
-  promoteRelease,
-  stageRelease,
+  releaseController,
+  releaseSchemas,
 } from "./release-controller";
 
 const VersionId = SmokeIdentity.fields.workerVersionId;
@@ -48,10 +52,15 @@ const healthSchema = Schema.Struct({
   contractDigest: SmokeIdentity.fields.contractDigest,
 });
 const smokeResultSchema = Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity });
-const timeoutMs = 10_000;
 const responseLimit = 100_000;
+const successStatusStart = 200;
+const successStatusEnd = 300;
 const probeEntropyBytes = 16;
 const origin = "https://api.fidyapp.com";
+class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
+const Json = Schema.fromJsonString(Schema.Unknown);
+const decodeJson = Schema.decodeUnknownEffect(Json);
+const encodeJson = Schema.encodeSync(Json);
 
 type Config = Readonly<{
   account: string;
@@ -94,25 +103,26 @@ const config = (): Config => {
   };
 };
 
-// A streamed provider response must be counted before it is buffered or parsed.
-const boundedJson = async (response: Response): Promise<unknown> => {
-  if (!response.ok) {
-    throw Error("Provider rejected the release request");
+// Bound the stream before decoding; early termination releases the response stream's scope.
+const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
+  if (response.status < successStatusStart || response.status >= successStatusEnd) {
+    return yield* Effect.fail(Error("Provider rejected the release request"));
   }
-  if (Number(response.headers.get("content-length")) > responseLimit) {
-    throw Error("Provider response exceeded limit");
-  }
-  if (response.body === null) {
-    throw Error("Provider response body missing");
+  if (Number(response.headers["content-length"] ?? 0) > responseLimit) {
+    return yield* Effect.fail(Error("Provider response exceeded limit"));
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for await (const value of response.body) {
-    size += value.byteLength;
-    if (size > responseLimit) {
-      throw Error("Provider response exceeded limit");
-    }
-    chunks.push(value);
+  yield* Stream.runForEachWhile(response.stream, (value) =>
+    Effect.sync(() => {
+      size += value.byteLength;
+      if (size > responseLimit) return false;
+      chunks.push(value);
+      return true;
+    })
+  ).pipe(Effect.mapError(() => Error("Provider response could not be read within limit")));
+  if (size > responseLimit) {
+    return yield* Effect.fail(Error("Provider response exceeded limit"));
   }
   const bytes = new Uint8Array(size);
   let offset = 0;
@@ -120,32 +130,57 @@ const boundedJson = async (response: Response): Promise<unknown> => {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
-  return parsed;
-};
-const shell = async (args: ReadonlyArray<string>): Promise<string> => {
+  return yield* decodeJson(new TextDecoder().decode(bytes));
+});
+const providerJson = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client
+    .execute(request)
+    .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+  return yield* boundedJson(response);
+}, Effect.timeout("10 seconds"));
+const shell = Effect.fn(function* (args: ReadonlyArray<string>) {
   const child = Bun.spawn([...args], {
     cwd: import.meta.dir,
     stdout: "pipe",
     stderr: "ignore",
     env: process.env,
   });
-  const output = await new Response(child.stdout).text();
-  if ((await child.exited) !== 0) {
-    throw Error("Release tooling failed; inspect traffic state");
+  const [output, exitCode] = yield* Effect.all([
+    Effect.tryPromise({
+      try: () => new Response(child.stdout).text(),
+      catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
+    }),
+    Effect.tryPromise({
+      try: () => child.exited,
+      catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
+    }),
+  ]);
+  if (exitCode !== 0) {
+    return yield* Effect.fail(Error("Release tooling failed; inspect traffic state"));
   }
   return output;
-};
+});
+const readFile = (path: string): Effect.Effect<unknown, Error> =>
+  Effect.tryPromise({
+    try: () => Bun.file(path).text(),
+    catch: () => new ReleaseFailure({ message: "Release snapshot could not be read" }),
+  }).pipe(Effect.flatMap(decodeJson));
+const writeFile = (path: string | Bun.BunFile, content: string): Effect.Effect<void, Error> =>
+  Effect.tryPromise({
+    try: () => Bun.write(path, content),
+    catch: () => new ReleaseFailure({ message: "Release output could not be written" }),
+  }).pipe(Effect.asVoid);
 
 type WorkerReceipt = Readonly<{
   workerName: string;
   versionId: Option.Option<string>;
   hasRolloutBaseline: boolean;
 }>;
-const workersFromState = async (): Promise<{ public: WorkerReceipt; core: WorkerReceipt }> => {
+const workersFromState = Effect.fn(function* () {
   // Alchemy's persisted upload receipts, not a health response. Never print state: it also
   // contains other resources' binding metadata.
-  const rawState = await shell([
+  const rawState = yield* shell([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.ts",
     "state",
@@ -155,14 +190,11 @@ const workersFromState = async (): Promise<{ public: WorkerReceipt; core: Worker
     "--recursive",
     "FidyCloudflare/production",
   ]);
-  const parsed: unknown = JSON.parse(rawState);
-  const entries = Schema.decodeUnknownSync(StateMap)(parsed);
+  const entries = yield* Schema.decodeUnknownEffect(StateMap)(yield* decodeJson(rawState));
   const select = (logicalId: string): WorkerReceipt => {
     const matches = Object.values(entries).flatMap((value) => {
       const decoded = Schema.decodeUnknownOption(StateEntry)(value);
-      if (Option.isNone(decoded) || decoded.value.logicalId !== logicalId) {
-        return [];
-      }
+      if (Option.isNone(decoded) || decoded.value.logicalId !== logicalId) return [];
       const rawVersion = Schema.decodeUnknownOption(
         Schema.Struct({ attr: Schema.Struct({ versionId: VersionId }) })
       )(value);
@@ -184,23 +216,21 @@ const workersFromState = async (): Promise<{ public: WorkerReceipt; core: Worker
     }
     return matches[0] ?? { workerName: "", versionId: Option.none(), hasRolloutBaseline: false };
   };
-  return { public: select("Ingress"), core: select("Core") };
-};
+  return yield* Effect.try({
+    try: () => ({ public: select("Ingress"), core: select("Core") }),
+    catch: () => new ReleaseFailure({ message: "Missing or ambiguous Alchemy Worker receipt" }),
+  });
+});
 
-const stableIdentity = async (input: {
+const stableIdentity = Effect.fn(function* (input: {
   publicVersionId: string;
   coreVersionId: string;
   proof: string;
-}): Promise<{ stableRevision: string; stableContractDigest: string }> => {
-  const health = Schema.decodeUnknownSync(healthSchema)(
-    await boundedJson(
-      await fetch(`${origin}/health`, {
-        redirect: "error",
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-    )
+}) {
+  const health = yield* Schema.decodeUnknownEffect(healthSchema)(
+    yield* providerJson(HttpClientRequest.get(`${origin}/health`))
   );
-  const request = Schema.decodeSync(SmokeRequest)({
+  const request = yield* Schema.decodeEffect(SmokeRequest)({
     protocolVersion: 1,
     probeId: Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes))),
     expectedPublicVersionId: input.publicVersionId,
@@ -208,14 +238,13 @@ const stableIdentity = async (input: {
     expectedGitRevision: health.gitRevision,
     expectedContractDigest: health.contractDigest,
   });
-  const response = await fetch(`${origin}${smokePath}`, {
-    method: "POST",
-    headers: { "x-fidy-smoke-proof": input.proof, "content-type": "application/json" },
-    body: JSON.stringify(request),
-    redirect: "error",
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const observed = Schema.decodeUnknownSync(smokeResultSchema)(await boundedJson(response));
+  const raw = yield* providerJson(
+    HttpClientRequest.post(`${origin}${smokePath}`, {
+      headers: { "x-fidy-smoke-proof": input.proof, "content-type": "application/json" },
+      body: HttpBody.text(encodeJson(request), "application/json"),
+    })
+  );
+  const observed = yield* Schema.decodeUnknownEffect(smokeResultSchema)(raw);
   const identities = [observed.public, observed.core];
   if (
     observed.public.workerVersionId !== input.publicVersionId ||
@@ -226,10 +255,10 @@ const stableIdentity = async (input: {
         identity.contractDigest !== health.contractDigest
     )
   ) {
-    throw Error("Stable Worker release identities disagree");
+    return yield* Effect.fail(Error("Stable Worker release identities disagree"));
   }
   return { stableRevision: health.gitRevision, stableContractDigest: health.contractDigest };
-};
+});
 
 const asDeployment = (value: typeof ApiDeployment.Type): Deployment => ({
   id: value.id,
@@ -238,84 +267,81 @@ const asDeployment = (value: typeof ApiDeployment.Type): Deployment => ({
     percentage: version.percentage,
   })),
 });
-const promoteVersion = async (
-  env: Config,
-  url: string,
-  versions: Deployment["versions"]
-): Promise<Deployment> => {
-  const response = Schema.decodeUnknownSync(CreateResponse)(
-    await boundedJson(
-      await fetch(url, {
-        method: "POST",
-        headers: { authorization: `Bearer ${env.token}`, "content-type": "application/json" },
-        body: JSON.stringify({
+const createDeployment = Effect.fn(function* (
+  json: (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<unknown, Error>,
+  input: { url: string; token: string; versions: Deployment["versions"] }
+) {
+  const raw = yield* json(
+    HttpClientRequest.post(input.url, {
+      headers: { authorization: `Bearer ${input.token}`, "content-type": "application/json" },
+      body: HttpBody.text(
+        encodeJson({
           strategy: "percentage",
-          versions: versions.map((version) => ({
+          versions: input.versions.map((version) => ({
             version_id: version.id,
             percentage: version.percentage,
           })),
         }),
-        redirect: "error",
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-    )
+        "application/json"
+      ),
+    })
   );
+  const response = yield* Schema.decodeUnknownEffect(CreateResponse)(raw);
   return asDeployment(response.result);
-};
-const releasePort = (env: Config): ReleasePort => {
+});
+const releasePort = (env: Config, client: HttpClient.HttpClient): ReleasePort => {
+  const json = (request: HttpClientRequest.HttpClientRequest): Effect.Effect<unknown, Error> =>
+    providerJson(request).pipe(Effect.provideService(HttpClient.HttpClient, client));
   const url = (name: string): string =>
     `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`;
-  const current: ReleasePort["current"] = async (name) => {
-    const response = Schema.decodeUnknownSync(ListResponse)(
-      await boundedJson(
-        await fetch(url(name), {
+  const current: ReleasePort["current"] = (name) =>
+    Effect.gen(function* () {
+      const raw = yield* json(
+        HttpClientRequest.get(url(name), {
           headers: { authorization: `Bearer ${env.token}` },
-          redirect: "error",
-          signal: AbortSignal.timeout(timeoutMs),
-        })
-      )
-    );
-    const active = response.result.deployments[0];
-    if (active === undefined) {
-      throw Error(`No active deployment: ${name}`);
-    }
-    return asDeployment(active);
-  };
-  return {
-    trunk: async () => {
-      const response = await boundedJson(
-        await fetch(`https://api.github.com/repos/${env.repository}/commits/trunk`, {
-          headers: {
-            authorization: `Bearer ${env.githubToken}`,
-            accept: "application/vnd.github+json",
-          },
-          redirect: "error",
-          signal: AbortSignal.timeout(timeoutMs),
         })
       );
-      return Schema.decodeUnknownSync(Schema.Struct({ sha: SmokeIdentity.fields.gitRevision }))(
-        response
-      ).sha;
-    },
+      const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
+      const active = response.result.deployments[0];
+      if (active === undefined) return yield* Effect.fail(Error(`No active deployment: ${name}`));
+      return asDeployment(active);
+    });
+  return {
+    trunk: () =>
+      Effect.gen(function* () {
+        const raw = yield* json(
+          HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/commits/trunk`, {
+            headers: {
+              authorization: `Bearer ${env.githubToken}`,
+              accept: "application/vnd.github+json",
+            },
+          })
+        );
+        const response = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ sha: SmokeIdentity.fields.gitRevision })
+        )(raw);
+        return response.sha;
+      }),
     current,
-    deploy: async (name, versions) => {
-      if (versions.some((version) => version.percentage === 0)) {
-        // Cloudflare documents 0% through Wrangler, but its create-deployment API schema
-        // specifies a nonzero minimum. Never substitute 0.01%.
-        await shell([
-          "bun",
-          "../../node_modules/wrangler/bin/wrangler.js",
-          "versions",
-          "deploy",
-          ...versions.map((version) => `${version.id}@${version.percentage}`),
-          "--name",
-          name,
-          "--yes",
-        ]);
-        return current(name);
-      }
-      return promoteVersion(env, url(name), versions);
-    },
+    deploy: (name, versions) =>
+      Effect.gen(function* () {
+        if (versions.some((version) => version.percentage === 0)) {
+          // Cloudflare documents 0% through Wrangler, but its create-deployment API schema
+          // specifies a nonzero minimum. Never substitute 0.01%.
+          yield* shell([
+            "bun",
+            "../../node_modules/wrangler/bin/wrangler.js",
+            "versions",
+            "deploy",
+            ...versions.map((version) => `${version.id}@${version.percentage}`),
+            "--name",
+            name,
+            "--yes",
+          ]);
+          return yield* current(name);
+        }
+        return yield* createDeployment(json, { url: url(name), token: env.token, versions });
+      }),
   };
 };
 
@@ -325,23 +351,35 @@ const soleStableVersion = (deployment: Deployment): string => {
   }
   return deployment.versions[0].id;
 };
-const capture = async (port: ReleasePort, env: Config): Promise<void> => {
-  const workers = await workersFromState();
+const capture = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const workers = yield* workersFromState();
   // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
   // output has no hash. Never let that branch masquerade as a candidate upload.
   if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {
-    throw Error("Alchemy Worker rollout baseline missing; candidate upload is unsafe");
+    return yield* Effect.fail(
+      Error("Alchemy Worker rollout baseline missing; candidate upload is unsafe")
+    );
   }
-  const publicDeployment = await port.current(workers.public.workerName);
-  const coreDeployment = await port.current(workers.core.workerName);
-  const publicStable = soleStableVersion(publicDeployment);
-  const coreStable = soleStableVersion(coreDeployment);
-  const identity = await stableIdentity({
+  const publicDeployment = yield* port.current(workers.public.workerName);
+  const coreDeployment = yield* port.current(workers.core.workerName);
+  const publicStable = yield* Effect.try({
+    try: () => soleStableVersion(publicDeployment),
+    catch: () => new ReleaseFailure({ message: "Unstable public Worker" }),
+  });
+  const coreStable = yield* Effect.try({
+    try: () => soleStableVersion(coreDeployment),
+    catch: () => new ReleaseFailure({ message: "Unstable Core Worker" }),
+  });
+  const identity = yield* stableIdentity({
     publicVersionId: publicStable,
     coreVersionId: coreStable,
     proof: env.smokeProof,
-  });
-  const snapshot = await captureRelease(port, {
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const snapshot = yield* releaseController.captureRelease(port, {
     revision: env.revision,
     ...identity,
     publicName: workers.public.workerName,
@@ -351,125 +389,135 @@ const capture = async (port: ReleasePort, env: Config): Promise<void> => {
     snapshot.public.stableVersionId !== publicStable ||
     snapshot.core.stableVersionId !== coreStable
   ) {
-    throw Error("Stable deployments changed during capture");
+    return yield* Effect.fail(Error("Stable deployments changed during capture"));
   }
-  await Bun.write(env.file, JSON.stringify(snapshot));
-};
-const stage = async (port: ReleasePort, env: Config): Promise<void> => {
-  const raw: unknown = JSON.parse(await Bun.file(env.file).text());
-  const snapshot = decodeSnapshot(raw);
-  const workers = await workersFromState();
+  yield* writeFile(env.file, encodeJson(snapshot));
+});
+const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  const workers = yield* workersFromState();
   if (
     workers.public.workerName !== snapshot.public.name ||
     workers.core.workerName !== snapshot.core.name ||
     Option.isNone(workers.public.versionId) ||
     Option.isNone(workers.core.versionId)
   ) {
-    throw Error("Alchemy candidate receipts are incomplete");
+    return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
-  const result = await stageRelease(port, snapshot, {
+  const result = yield* releaseController.stageRelease(port, snapshot, {
     publicVersionId: workers.public.versionId.value,
     coreVersionId: workers.core.versionId.value,
   });
-  await Bun.write(env.file, JSON.stringify(result));
-};
-const stablePairUnchanged = async (
-  port: ReleasePort,
-  snapshot: ReleaseSnapshot
-): Promise<boolean> => {
-  const publicDeployment = await port.current(snapshot.public.name);
-  const coreDeployment = await port.current(snapshot.core.name);
+  yield* writeFile(env.file, encodeJson(result));
+});
+const stablePairUnchanged = Effect.fn(function* (port: ReleasePort, snapshot: ReleaseSnapshot) {
+  const publicDeployment = yield* port.current(snapshot.public.name);
+  const coreDeployment = yield* port.current(snapshot.core.name);
   return (
     soleStableVersion(publicDeployment) === snapshot.public.stableVersionId &&
     soleStableVersion(coreDeployment) === snapshot.core.stableVersionId
   );
-};
-const cleanup = async (port: ReleasePort, env: Config): Promise<void> => {
-  if (!(await Bun.file(env.file).exists())) {
-    return;
-  }
-  const raw: unknown = JSON.parse(await Bun.file(env.file).text());
+});
+const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
+  const exists = yield* Effect.tryPromise({
+    try: () => Bun.file(env.file).exists(),
+    catch: () => new ReleaseFailure({ message: "Release snapshot unavailable" }),
+  });
+  if (!exists) return;
+  const raw = yield* readFile(env.file);
   const snapshot = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
-  const original = Option.isSome(snapshot) ? decodeStaged(raw).snapshot : decodeSnapshot(raw);
-  const workers = await workersFromState();
+  const original = Option.isSome(snapshot)
+    ? (yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(raw)).snapshot
+    : yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(raw);
+  const workers = yield* workersFromState();
   if (
     workers.public.workerName !== original.public.name ||
     workers.core.workerName !== original.core.name
   ) {
-    throw Error("Worker identity changed during cleanup");
+    return yield* Effect.fail(Error("Worker identity changed during cleanup"));
   }
   if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
-    if (await stablePairUnchanged(port, original)) {
-      return;
-    }
-    throw Error("Candidate identity unavailable for guarded cleanup");
+    if (yield* stablePairUnchanged(port, original)) return;
+    return yield* Effect.fail(Error("Candidate identity unavailable for guarded cleanup"));
   }
-  await cleanRelease(port, original, {
+  yield* releaseCleanup.cleanRelease(port, original, {
     publicVersionId: workers.public.versionId.value,
     coreVersionId: workers.core.versionId.value,
   });
-};
-const reportTraffic = async (port: ReleasePort, env: Config): Promise<void> => {
-  if (!(await Bun.file(env.file).exists())) {
-    await Bun.write(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
+});
+const reportTraffic = Effect.fn(function* (port: ReleasePort, env: Config) {
+  const exists = yield* Effect.tryPromise({
+    try: () => Bun.file(env.file).exists(),
+    catch: () => new ReleaseFailure({ message: "Release snapshot unavailable" }),
+  });
+  if (!exists) {
+    yield* writeFile(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
     return;
   }
-  const raw: unknown = JSON.parse(await Bun.file(env.file).text());
+  const raw = yield* readFile(env.file);
   const isStaged = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
-  const snapshot = Option.isSome(isStaged) ? decodeStaged(raw).snapshot : decodeSnapshot(raw);
-  const describe = async (name: string): Promise<unknown> =>
-    port.current(name).catch(() => ({ status: "unavailable" }));
+  const snapshot = Option.isSome(isStaged)
+    ? (yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(raw)).snapshot
+    : yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(raw);
+  const describe = (name: string): Effect.Effect<Deployment | { readonly status: "unavailable" }> =>
+    port.current(name).pipe(Effect.orElseSucceed(() => ({ status: "unavailable" }) as const));
   const observed = {
-    public: await describe(snapshot.public.name),
-    core: await describe(snapshot.core.name),
+    public: yield* describe(snapshot.public.name),
+    core: yield* describe(snapshot.core.name),
   };
-  await Bun.write(Bun.stdout, `${JSON.stringify(observed)}\n`);
-};
-const promote = async (port: ReleasePort, env: Config): Promise<void> => {
-  const raw: unknown = JSON.parse(await Bun.file(env.file).text());
-  const staged = decodeStaged(raw);
-  const attestationPath = env.smokeAttestationFile;
-  if (!attestationPath.startsWith("/")) {
-    throw Error("Missing smoke attestation path");
-  }
-  const attestationRaw: unknown = JSON.parse(await Bun.file(attestationPath).text());
-  const attestation = Schema.decodeUnknownSync(SmokeAttestation)(attestationRaw);
+  yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
+});
+const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
+  const staged = yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(
+    yield* readFile(env.file)
+  );
+  const attestationRaw = yield* readFile(env.smokeAttestationFile);
+  const attestation = yield* Schema.decodeUnknownEffect(SmokeAttestation)(attestationRaw);
   if (
     attestation.revision !== staged.snapshot.revision ||
     attestation.publicVersionId !== staged.publicVersionId ||
     attestation.coreVersionId !== staged.coreVersionId
   ) {
-    throw Error("Smoke attestation does not match candidate uploads");
+    return yield* Effect.fail(Error("Smoke attestation does not match candidate uploads"));
   }
-  await promoteRelease(port, staged, { exactPairPassed: true, middlePairPassed: true });
-};
+  yield* releaseController.promoteRelease(port, staged, {
+    exactPairPassed: true,
+    middlePairPassed: true,
+  });
+});
 
 if (import.meta.main) {
-  try {
-    const command = Schema.decodeUnknownSync(Commands)(process.argv[2]);
+  const program = Effect.gen(function* () {
+    const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);
     const environment = config();
-    const port = releasePort(environment);
-    if (command === "capture") {
-      await capture(port, environment);
+    const services = yield* Layer.build(FetchHttpClient.layer);
+    const client = Context.get(services, HttpClient.HttpClient);
+    const port = releasePort(environment, client);
+    switch (command) {
+      case "capture":
+        yield* capture(port, environment, client);
+        break;
+      case "stage":
+        yield* stage(port, environment);
+        break;
+      case "promote":
+        yield* promote(port, environment);
+        break;
+      case "cleanup":
+        yield* cleanup(port, environment);
+        break;
+      case "report":
+        yield* reportTraffic(port, environment);
+        break;
     }
-    if (command === "stage") {
-      await stage(port, environment);
-    }
-    if (command === "promote") {
-      await promote(port, environment);
-    }
-    if (command === "cleanup") {
-      await cleanup(port, environment);
-    }
-    if (command === "report") {
-      await reportTraffic(port, environment);
-    }
-    await Bun.write(Bun.stdout, "Production release routing step passed.\n");
-  } catch {
-    await Bun.write(
-      Bun.stderr,
+    yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
+  }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
+  await Effect.runPromise(program).catch(() => {
+    process.stderr.write(
       "Production release routing failed; inspect Worker deployment state before recovery.\n"
     );
     process.exitCode = 1;
-  }
+  });
 }

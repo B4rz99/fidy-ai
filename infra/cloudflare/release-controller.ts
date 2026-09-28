@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/release-identity";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
 
@@ -31,30 +31,32 @@ const StagedReleaseSchema = Schema.Struct({
   coreDeploymentId: VersionId,
 });
 export type StagedRelease = typeof StagedReleaseSchema.Type;
-export const decodeSnapshot = Schema.decodeUnknownSync(ReleaseSnapshotSchema);
-export const decodeStaged = Schema.decodeUnknownSync(StagedReleaseSchema);
+export const releaseSchemas = {
+  snapshot: ReleaseSnapshotSchema,
+  staged: StagedReleaseSchema,
+};
 
 /** Cloudflare routing is the only replaceable adapter; no product Worker or Alchemy resource is constructed here. */
 export type ReleasePort = Readonly<{
-  trunk(): Promise<string>;
-  current(name: string): Promise<Deployment>;
+  trunk(): Effect.Effect<string, Error>;
+  current(name: string): Effect.Effect<Deployment, Error>;
   deploy(
     name: string,
     versions: ReadonlyArray<{ id: string; percentage: number }>
-  ): Promise<Deployment>;
+  ): Effect.Effect<Deployment, Error>;
 }>;
 
-const requireTrunk = async (port: ReleasePort, revision: string): Promise<void> => {
-  if ((await port.trunk()) !== revision) {
-    throw Error("Release superseded by trunk; traffic unchanged");
+const requireTrunk = Effect.fn(function* (port: ReleasePort, revision: string) {
+  if ((yield* port.trunk()) !== revision) {
+    return yield* Effect.fail(Error("Release superseded by trunk; traffic unchanged"));
   }
-};
-const requireDeployment = async (
+});
+const requireDeployment = Effect.fn(function* (
   port: ReleasePort,
   name: string,
   expected: Deployment
-): Promise<void> => {
-  const observed = await port.current(name);
+) {
+  const observed = yield* port.current(name);
   if (
     observed.id !== expected.id ||
     observed.versions.length !== expected.versions.length ||
@@ -65,9 +67,9 @@ const requireDeployment = async (
         )
     )
   ) {
-    throw Error(`Worker deployment changed: ${name}`);
+    return yield* Effect.fail(Error(`Worker deployment changed: ${name}`));
   }
-};
+});
 const stable = (snapshot: typeof WorkerSnapshot.Type): Deployment => ({
   id: snapshot.deploymentId,
   versions: [{ id: snapshot.stableVersionId, percentage: 100 }],
@@ -83,18 +85,18 @@ const staged = (
     { id: candidate, percentage: 0 },
   ],
 });
-const deployExact = async (
+const deployExact = Effect.fn(function* (
   port: ReleasePort,
   name: string,
   versions: Deployment["versions"]
-): Promise<Deployment> => {
-  const result = await port.deploy(name, versions);
-  await requireDeployment(port, name, { id: result.id, versions });
+) {
+  const result = yield* port.deploy(name, versions);
+  yield* requireDeployment(port, name, { id: result.id, versions });
   return result;
-};
+});
 
 /** Capture only unambiguous, fully stable Worker deployments before Alchemy changes anything. */
-export const captureRelease = async (
+const captureRelease = Effect.fn(function* (
   port: ReleasePort,
   input: {
     revision: string;
@@ -103,114 +105,134 @@ export const captureRelease = async (
     publicName: string;
     coreName: string;
   }
-): Promise<ReleaseSnapshot> => {
-  await requireTrunk(port, input.revision);
-  const get = async (name: string): Promise<typeof WorkerSnapshot.Type> => {
-    const current = await port.current(name);
+) {
+  yield* requireTrunk(port, input.revision);
+  const get = Effect.fn(function* (name: string) {
+    const current = yield* port.current(name);
     if (current.versions.length !== 1 || current.versions[0]?.percentage !== 100) {
-      throw Error(`Worker is not fully stable: ${name}`);
+      return yield* Effect.fail(Error(`Worker is not fully stable: ${name}`));
     }
     return { name, deploymentId: current.id, stableVersionId: current.versions[0].id };
-  };
-  const snapshot = decodeSnapshot({
+  });
+  const publicWorker = yield* get(input.publicName);
+  const coreWorker = yield* get(input.coreName);
+  const snapshot = yield* Schema.decodeEffect(ReleaseSnapshotSchema)({
     revision: input.revision,
     stableRevision: input.stableRevision,
     stableContractDigest: input.stableContractDigest,
-    public: await get(input.publicName),
-    core: await get(input.coreName),
+    public: publicWorker,
+    core: coreWorker,
   });
-  await requireTrunk(port, input.revision);
+  yield* requireTrunk(port, input.revision);
   return snapshot;
-};
+});
 
 /** After Alchemy uploads, install the exact receipt IDs without giving them normal traffic. */
-export const stageRelease = async (
+const stageRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
   candidate: { publicVersionId: string; coreVersionId: string }
-): Promise<StagedRelease> => {
+) {
   const versions = {
-    publicVersionId: Schema.decodeSync(VersionId)(candidate.publicVersionId),
-    coreVersionId: Schema.decodeSync(VersionId)(candidate.coreVersionId),
+    publicVersionId: yield* Schema.decodeEffect(VersionId)(candidate.publicVersionId),
+    coreVersionId: yield* Schema.decodeEffect(VersionId)(candidate.coreVersionId),
   };
   if (
     versions.publicVersionId === snapshot.public.stableVersionId ||
     versions.coreVersionId === snapshot.core.stableVersionId
   ) {
-    throw Error("Candidate upload did not produce new Worker versions");
+    return yield* Effect.fail(Error("Candidate upload did not produce new Worker versions"));
   }
-  await requireTrunk(port, snapshot.revision);
-  await requireDeployment(port, snapshot.public.name, stable(snapshot.public));
-  await requireDeployment(port, snapshot.core.name, stable(snapshot.core));
-  const publicDeployment = await deployExact(
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.public.name, stable(snapshot.public));
+  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  const publicDeployment = yield* deployExact(
     port,
     snapshot.public.name,
     staged(snapshot.public, versions.publicVersionId, snapshot.public.deploymentId).versions
   );
-  await requireTrunk(port, snapshot.revision);
-  await requireDeployment(port, snapshot.core.name, stable(snapshot.core));
-  const coreDeployment = await deployExact(
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  const coreDeployment = yield* deployExact(
     port,
     snapshot.core.name,
     staged(snapshot.core, versions.coreVersionId, snapshot.core.deploymentId).versions
   );
-  return decodeStaged({
+  return yield* Schema.decodeEffect(StagedReleaseSchema)({
     snapshot,
     ...versions,
     publicDeploymentId: publicDeployment.id,
     coreDeploymentId: coreDeployment.id,
   });
-};
+});
 
 /** Called only after both smoke pairings pass. Core goes first; a failed second write is compensated when safe. */
-const restoreCore = async (
+const restoreCore = Effect.fn(function* (
   port: ReleasePort,
   input: { release: StagedRelease; publicStaged: Deployment; corePromoted: Deployment }
-): Promise<never> => {
+) {
   const { snapshot } = input.release;
   // An ambiguous Cloudflare failure could have committed. Never restore Core below new public code.
-  const observedPublic = await port.current(snapshot.public.name).catch(() => undefined);
-  const observedCore = await port.current(snapshot.core.name).catch(() => undefined);
+  const observedPublic = yield* port
+    .current(snapshot.public.name)
+    .pipe(Effect.catch(() => Effect.void));
+  const observedCore = yield* port
+    .current(snapshot.core.name)
+    .pipe(Effect.catch(() => Effect.void));
   if (observedPublic?.id === input.publicStaged.id && observedCore?.id === input.corePromoted.id) {
-    try {
-      await deployExact(port, snapshot.core.name, stable(snapshot.core).versions);
-    } catch {
-      throw Error(
-        "Promotion incomplete; restoration not confirmed. Inspect both Worker deployments immediately"
+    const restored = yield* deployExact(
+      port,
+      snapshot.core.name,
+      stable(snapshot.core).versions
+    ).pipe(
+      Effect.match({
+        onFailure: () => false,
+        onSuccess: () => true,
+      })
+    );
+    if (restored) {
+      return yield* Effect.fail(
+        Error("Public promotion failed; stable Core restored; release failed")
       );
     }
-    throw Error("Public promotion failed; stable Core restored; release failed");
   }
-  throw Error(
-    "Promotion incomplete; restoration not confirmed. Inspect both Worker deployments immediately"
+  return yield* Effect.fail(
+    Error(
+      "Promotion incomplete; restoration not confirmed. Inspect both Worker deployments immediately"
+    )
   );
-};
+});
 
-export const promoteRelease = async (
+const promoteRelease = Effect.fn(function* (
   port: ReleasePort,
   release: StagedRelease,
   smoke: { exactPairPassed: boolean; middlePairPassed: boolean }
-): Promise<void> => {
+) {
   if (!smoke.exactPairPassed || !smoke.middlePairPassed) {
-    throw Error("Release smoke or compatibility check failed");
+    return yield* Effect.fail(Error("Release smoke or compatibility check failed"));
   }
   const { snapshot } = release;
   const publicStaged = staged(snapshot.public, release.publicVersionId, release.publicDeploymentId);
   const coreStaged = staged(snapshot.core, release.coreVersionId, release.coreDeploymentId);
-  await requireTrunk(port, snapshot.revision);
-  await requireDeployment(port, snapshot.public.name, publicStaged);
-  await requireDeployment(port, snapshot.core.name, coreStaged);
-  const corePromoted = await deployExact(port, snapshot.core.name, [
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.public.name, publicStaged);
+  yield* requireDeployment(port, snapshot.core.name, coreStaged);
+  const corePromoted = yield* deployExact(port, snapshot.core.name, [
     { id: release.coreVersionId, percentage: 100 },
   ]);
-  try {
-    await requireTrunk(port, snapshot.revision);
-    await requireDeployment(port, snapshot.public.name, publicStaged);
-    await requireDeployment(port, snapshot.core.name, corePromoted);
-    await deployExact(port, snapshot.public.name, [
+  yield* Effect.gen(function* () {
+    yield* requireTrunk(port, snapshot.revision);
+    yield* requireDeployment(port, snapshot.public.name, publicStaged);
+    yield* requireDeployment(port, snapshot.core.name, corePromoted);
+    yield* deployExact(port, snapshot.public.name, [
       { id: release.publicVersionId, percentage: 100 },
     ]);
-  } catch {
-    return restoreCore(port, { release, publicStaged, corePromoted });
-  }
-};
+  }).pipe(
+    Effect.catchCauseIf(
+      (cause) => !Cause.hasInterrupts(cause),
+      () => restoreCore(port, { release, publicStaged, corePromoted })
+    )
+  );
+});
+
+export const releaseController = { captureRelease, stageRelease, promoteRelease };

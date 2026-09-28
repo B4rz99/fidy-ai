@@ -1,0 +1,205 @@
+apps/server/cloudflare/runtime/operational-alerts.test.ts
+  s_0bc20f888e36bb::t_26f6d19a52e22e 55,67-68
+  s_0bc20f888e36bb::t_a58cf1b560a6a2 70-80
+  s_0bc20f888e36bb::t_1420d49f368976 101,135-142
+  s_0bc20f888e36bb::t_5d37f420957d65 102-134
+  s_0bc20f888e36bb::t_c3d96762427ce4 56-66
+  s_0bc20f888e36bb::t_c568ce45442d59 69,81-85
+apps/server/src/shell/observability/contract.ts
+  s_0bc20f888e36bb::t_c9caac028af949 96
+apps/server/cloudflare/runtime/telemetry.ts
+  s_0bc20f888e36bb::t_38f3cf17257477 103
+apps/server/cloudflare/runtime/operational-event-metrics.test.ts
+  s_0bc20f888e36bb::t_e29c7396679eff 79-85
+  s_0bc20f888e36bb::t_dfb508a1dec2b5 7-27,31-35,44-55,58-78
+  s_0bc20f888e36bb::t_373b0fd69abb9f 1-6,28-30,36-40,42-43,56-57,86,96-99
+  s_0bc20f888e36bb::t_543defed4242f3 41
+  s_0bc20f888e36bb::t_e3f9fb323013ad 87-95
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_0bc20f888e36bb::t_d29d27969db09e 84,698,705
+  s_0bc20f888e36bb::t_cea096c774253d 699-704
+apps/server/cloudflare/runtime/operational-workflow-failure.ts
+  s_0bc20f888e36bb::t_ef27aba35daa83 9-10,13-17
+  s_0bc20f888e36bb::t_498728755c8abc 1-8,11-12,18-19
+apps/server/cloudflare/runtime/operational-probes.test.ts
+  s_0bc20f888e36bb::t_5c32d9b498ae28 6-7,13,17-21,31-38,42-46
+  s_0bc20f888e36bb::t_74d6f57d12b4ec 8-12,14-16,39-41
+  s_0bc20f888e36bb::t_59061f6f2cb193 1-5,22-30,47-54
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_0bc20f888e36bb::t_c32ae44451f32d 3742,3767
+apps/server/cloudflare/runtime/operational-health-view.test.ts
+  s_0bc20f888e36bb::t_31cb709810d99a 1-5,27-29,52-58
+  s_0bc20f888e36bb::t_77085a75a39a0d 6-26,30-51
+apps/server/cloudflare/runtime/operational-alert-delivery.ts
+  s_0bc20f888e36bb::t_7813e0cc140430 2,88-89,96-101
+  s_0bc20f888e36bb::t_393765d72213d0 135
+  s_0bc20f888e36bb::t_b38a5b2298b23b 21-25,67-68,70-73,75-76,78-80,87,91,94-95,102-103,112-113,115-118,120-121,123-125,131-133
+  s_0bc20f888e36bb::t_7a81329aff012f 8,16-20,26-27,59-66,69,74,77,81,83-84,104-111,114,119,122,126-130,134,136
+  s_0bc20f888e36bb::t_fe3c71a8e4e57c 82
+apps/server/cloudflare/runtime/operational-alerts.ts
+  s_0bc20f888e36bb::t_a26643c8cb2cb7 138-140,142-146,148-151
+  s_0bc20f888e36bb::t_e79d2e851c7a1d 65-66
+  s_0bc20f888e36bb::t_7988337417302a 155-156,163,171-177,207
+  s_0bc20f888e36bb::t_393765d72213d0 11-51
+  s_0bc20f888e36bb::t_f1e5ea1598c244 5
+  s_0bc20f888e36bb::t_3337a40bcd435a 164-170
+  s_0bc20f888e36bb::t_57bff345d6aa82 3,61-64,211
+  s_0bc20f888e36bb::t_464b54645547c0 135-137,153-154,157,196-199
+  s_0bc20f888e36bb::t_0dcdcf3c5fcd72 109-112,120-125,133-134,141,147
+  s_0bc20f888e36bb::t_a63561b13064ff 4,200-206
+  s_0bc20f888e36bb::t_ba13190edb4039 7
+  s_0bc20f888e36bb::t_7acde1a9753667 1,10,52-54
+  s_0bc20f888e36bb::t_f9e57590f09695 113-119,126-132
+  s_0bc20f888e36bb::t_8c0e6c24c13f3d 6,208
+apps/server/cloudflare/identity/email-replacement-delivery.ts
+  s_0bc20f888e36bb::t_41772ab653e59c 11
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 238-273
+.oxlintrc.json
+  s_0bc20f888e36bb::t_8a0a438b83d973 218
+apps/server/cloudflare/runtime/operational-workflow-failure.test.ts
+  s_0bc20f888e36bb::t_4410c232de5b6c 1-5,27-29,35-36,40-43
+  s_0bc20f888e36bb::t_ef27aba35daa83 6-26,30-34,37-39
+apps/server/cloudflare/core-worker.ts
+  s_0bc20f888e36bb::t_a1040f062b9284 231,1990-1992,2075
+  s_0bc20f888e36bb::t_2e84250058eb15 2052-2067
+  s_0bc20f888e36bb::t_d775da36d2c1b0 2276-2286
+  s_0bc20f888e36bb::t_dfe9ce595ca702 230
+  s_0bc20f888e36bb::t_e3533ff387768a 2049-2050,2076
+  s_0bc20f888e36bb::t_1a692b243a7bf1 156,1939,2005,2030
+  s_0bc20f888e36bb::t_8a90aa38ba3a04 2079,2096-2097
+  s_0bc20f888e36bb::t_b07ed80e668240 2031-2048
+  s_0bc20f888e36bb::t_3337a40bcd435a 141-145,1969-1989
+  s_0bc20f888e36bb::t_67ad68d6fad68e 1954,1961-1962
+  s_0bc20f888e36bb::t_cea096c774253d 1993-2004,2006-2029,2098-2113
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 140,146-148
+  s_0bc20f888e36bb::t_7416b71786eebe 201,232-234
+  s_0bc20f888e36bb::t_0467cea4d1ec85 149,2051,2068,2114
+  s_0bc20f888e36bb::t_a58cf1b560a6a2 150-155,2080-2095
+  s_0bc20f888e36bb::t_7074bdb5fa5f51 157
+  s_0bc20f888e36bb::t_41777b579abf23 1867-1871,1874-1879,2159-2162,2164-2169
+  s_0bc20f888e36bb::t_c3a34f9e24edfa 1865-1866,1872-1873,1880-1881,2163,2170-2171,2187
+apps/server/cloudflare/operational-tail-worker.ts
+  s_0bc20f888e36bb::t_e3f9fb323013ad 30-33,35-46
+  s_0bc20f888e36bb::t_488f0cdcfb1e16 34
+  s_0bc20f888e36bb::t_5774772ca649cf 2-9
+  s_0bc20f888e36bb::t_f3ecf0e252d2d6 1,10-29,47-58
+apps/server/cloudflare/runtime/operational-probes.ts
+  s_0bc20f888e36bb::t_5c32d9b498ae28 15-32,34-48,52-59
+  s_0bc20f888e36bb::t_2e29b3501449d6 5,33
+  s_0bc20f888e36bb::t_d5379e6bd6e9d6 1-4,6-14
+  s_0bc20f888e36bb::t_74d6f57d12b4ec 49-51
+apps/server/cloudflare/runtime/operational-health.test.ts
+  s_0bc20f888e36bb::t_3530297628cbe3 61,64
+  s_0bc20f888e36bb::t_703549d22ffaa2 44-48,62-63
+apps/server/cloudflare/runtime/operator-email.test.ts
+  s_0bc20f888e36bb::t_393765d72213d0 4-6
+apps/server/cloudflare/runtime/operational-event-metrics.ts
+  s_0bc20f888e36bb::t_9fb5a5a630ca34 1-3,12-16,21-24,30-37,45-50,55-57,76-79,82,85-87
+  s_0bc20f888e36bb::t_f01f08022ffa51 17-20,44,67-68
+  s_0bc20f888e36bb::t_a26643c8cb2cb7 38-43,74
+  s_0bc20f888e36bb::t_e3f9fb323013ad 69-73
+  s_0bc20f888e36bb::t_dfb508a1dec2b5 4-5,7-11,25-29,51-54,58-66,80-81,83-84
+  s_0bc20f888e36bb::t_209287ae06fb14 75
+  s_0bc20f888e36bb::t_b675d68e81ba02 6
+apps/server/cloudflare/migrations/0028_operational_events.sql
+  s_0bc20f888e36bb::t_710c51bcd4a180 8-9,16-19
+  s_0bc20f888e36bb::t_d217cb58bf8383 3
+  s_0bc20f888e36bb::t_049df071ed1a7e 1-2,4-7
+  s_0bc20f888e36bb::t_d0378bfee0b5c2 10-15
+apps/server/cloudflare/runtime/operational-health-view.ts
+  s_0bc20f888e36bb::t_77085a75a39a0d 9-12,16-18
+  s_0bc20f888e36bb::t_118c537a961ecc 1-8,13-15,19
+docs/operations/cloudflare-background-work.md
+  s_0bc20f888e36bb::t_114e59f4124ebb 13-20,52,79-116
+  s_0bc20f888e36bb::t_37bebf74793e10 117
+apps/server/cloudflare/runtime/operator-email.ts
+  s_0bc20f888e36bb::t_393765d72213d0 50-53
+  s_0bc20f888e36bb::t_de9c5cffd43808 22,43
+infra/cloudflare/verify-edge-policy.ts
+  s_0bc20f888e36bb::t_a7ab210f44ceaf 5
+apps/server/cloudflare/runtime/operational-canary.test.ts
+  s_0bc20f888e36bb::t_bb7f4760e98fcf 1-2,4-5,27-29,35-40,54-55,62-63,71-74
+  s_0bc20f888e36bb::t_91c7a37d81d083 3,64-65,70
+  s_0bc20f888e36bb::t_a58cf1b560a6a2 42-47,66-69
+  s_0bc20f888e36bb::t_1298753f352edd 52-53
+  s_0bc20f888e36bb::t_addfa9e74fa9d4 6-26,30-34,41,48-51,56-61
+infra/cloudflare/workers.test.ts
+  s_0bc20f888e36bb::t_e5357b348934b4 432-452,456-460,485-488,490-492,496-501
+  s_0bc20f888e36bb::t_52466ca1093be1 462,475,481
+  s_0bc20f888e36bb::t_67f2408d9fbfbb 476,482,484
+  s_0bc20f888e36bb::t_6087082dc2636d 463-470,477-480
+  s_0bc20f888e36bb::t_5147ba8af09c0c 471-474,483
+  s_0bc20f888e36bb::t_376ecd5ddda4c7 431,453-455,461,489,493-495,502-503
+apps/server/cloudflare/billing/billing-collection.ts
+  s_0bc20f888e36bb::t_c38a19b3abe509 23
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 535-549
+apps/server/cloudflare/ingestion/statement-delivery.ts
+  s_0bc20f888e36bb::t_ff8241b3ab9399 10,338
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 342-356
+apps/server/cloudflare/runtime/operational-events.test.ts
+  s_0bc20f888e36bb::t_ed0706993473cb 6-37
+  s_0bc20f888e36bb::t_3c7f6883e34826 1-5,38-45
+apps/server/cloudflare/runtime/operational-alert-delivery.test.ts
+  s_0bc20f888e36bb::t_6918ea996a6a33 159-171,173-174,181,187
+  s_0bc20f888e36bb::t_11eb4d7f2a01e8 178,180
+  s_0bc20f888e36bb::t_393765d72213d0 175-177,179
+  s_0bc20f888e36bb::t_2e8f5a94016e8b 186
+  s_0bc20f888e36bb::t_cbb53bdc3f27df 172,185,188-190,194,196
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_0bc20f888e36bb::t_7b1491a4d28c21 1490
+infra/cloudflare/verify-edge-policy.test.ts
+  s_0bc20f888e36bb::t_3ac0fe8fece8bb 7
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_0bc20f888e36bb::t_aea49265d02efd 1817
+apps/server/cloudflare/runtime/operational-events.ts
+  s_0bc20f888e36bb::t_a26643c8cb2cb7 28
+  s_0bc20f888e36bb::t_6cd79219513321 40
+  s_0bc20f888e36bb::t_8d81f020e0088f 7,10,25-26,30-36,48
+  s_0bc20f888e36bb::t_c4468dac1a99c6 27,29
+  s_0bc20f888e36bb::t_38c1e25c9713e7 1-6,8-9,14-24,41-47,49
+  s_0bc20f888e36bb::t_ed0706993473cb 11-13,37-39
+apps/server/cloudflare/identity/browser-pairing-email-delivery.ts
+  s_0bc20f888e36bb::t_a19bdead79b0b1 11
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 270-284
+apps/server/cloudflare/runtime/operational-canary.ts
+  s_0bc20f888e36bb::t_729075e2a03169 55,70-75,79-81
+  s_0bc20f888e36bb::t_addfa9e74fa9d4 31-35,37-43,45-46,50-54,57-60,62-66,85-89,91-95,102-109,111-113,118-123,126-130
+  s_0bc20f888e36bb::t_77ebd9bbbe8ca8 1-9,23-30,36,44,47-49,61,67-69,82-84,90,96-101,110,114-117,124-125,131-138
+  s_0bc20f888e36bb::t_a58cf1b560a6a2 10-22,56,76-78
+infra/cloudflare/alchemy.run.ts
+  s_0bc20f888e36bb::t_89878ad3d4003c 168,170-173,179,222,343
+  s_0bc20f888e36bb::t_89ee16dd11ae9e 250
+  s_0bc20f888e36bb::t_d56b555503f930 199-202,247-249,288-293
+  s_0bc20f888e36bb::t_0073a1165e475c 261
+  s_0bc20f888e36bb::t_947acc9dabdae5 169
+apps/server/cloudflare/runtime/operational-tail-worker.test.ts
+  s_0bc20f888e36bb::t_226a0df2593ea4 3
+  s_0bc20f888e36bb::t_e3f9fb323013ad 75-83
+  s_0bc20f888e36bb::t_6807b03c8cc796 1-2,4-5,27-29,35,69-74,84-87
+  s_0bc20f888e36bb::t_83c58e58879cd1 6-26,30-34,36-68
+apps/server/cloudflare/runtime/operational-health.ts
+  s_0bc20f888e36bb::t_c3d96762427ce4 12-18,391-394
+  s_0bc20f888e36bb::t_8bc6446eaaf74d 11,19-20,70,95,113,294-295,299,306,309,390,395-396,398
+apps/server/cloudflare/onboarding/onboarding-email.ts
+  s_0bc20f888e36bb::t_28ebc33c732716 15
+  s_0bc20f888e36bb::t_e4ef97cfcdcf96 219-233
+apps/server/cloudflare/operational-canary-workflow.ts
+  s_0bc20f888e36bb::t_0369fea8bb7631 1-4,10-11,16,33-34
+  s_0bc20f888e36bb::t_a58cf1b560a6a2 5-9,12-15,17-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "cecf2e7731c2b3f97a70c6749a7a2bd698fa2238",
+  "prompts": {},
+  "sessions": {
+    "s_0bc20f888e36bb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-556f-7274-8064-e61d0852c03d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

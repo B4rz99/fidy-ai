@@ -26,3 +26,9 @@ CREATE TABLE hosted_whatsapp_windows (
  CHECK (closes_at_ms = last_verified_inbound_at_ms + 86400000)
 ) STRICT;
 CREATE INDEX hosted_whatsapp_windows_expiry ON hosted_whatsapp_windows(closes_at_ms);
+
+-- Preserve the ambiguity of attempts created by the previous release. New proposals remain
+-- pre-send until the irreversible boundary is explicitly claimed.
+ALTER TABLE hosted_whatsapp_delivery ADD COLUMN send_started_at_ms INTEGER;
+UPDATE hosted_whatsapp_delivery SET send_started_at_ms = proposed_at_ms
+  WHERE state IN ('sending', 'accepted', 'ambiguous', 'delivered', 'unconfirmed');

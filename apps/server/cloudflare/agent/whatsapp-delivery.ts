@@ -61,6 +61,68 @@ export const stageWhatsAppDelivery = ({
     return saved.meta.changes === 1 ? Option.some(token) : Option.none();
   });
 
+/** Claim the irreversible provider boundary only when the same verified window remains open. */
+export const startWhatsAppSend = ({
+  db,
+  userId,
+  turnId,
+  token,
+  now,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  token: HostedDeliveryCorrelationToken;
+  now: number;
+}>): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const saved = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`UPDATE hosted_whatsapp_delivery
+      SET send_started_at_ms = ?
+      WHERE turn_id = ? AND user_id = ? AND correlation_token = ?
+        AND state = 'sending' AND send_started_at_ms IS NULL
+        AND EXISTS (SELECT 1 FROM hosted_turns AS t
+          WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')
+        AND EXISTS (SELECT 1 FROM hosted_whatsapp_inbound AS i
+          JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
+            AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
+          JOIN whatsapp_identities AS identity ON identity.user_id = i.user_id
+            AND identity.portfolio_id = i.portfolio_id AND identity.bsuid = i.bsuid
+          WHERE i.turn_id = hosted_whatsapp_delivery.turn_id AND i.user_id = ?
+            AND w.closes_at_ms > ?)`)
+        .bind(now, turnId, userId, token, userId, userId, now)
+        .run()
+    );
+    return saved.meta.changes === 1;
+  });
+
+/** Refuse a prepared reply without ever claiming the provider boundary. */
+export const rejectUnstartedWhatsAppDelivery = ({
+  db,
+  userId,
+  turnId,
+  token,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  token: HostedDeliveryCorrelationToken;
+}>): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const saved = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`UPDATE hosted_whatsapp_delivery
+      SET state = 'rejected' WHERE turn_id = ? AND user_id = ? AND correlation_token = ?
+        AND state = 'sending' AND send_started_at_ms IS NULL
+        AND EXISTS (SELECT 1 FROM hosted_turns AS t
+          WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')`)
+        .bind(turnId, userId, token, userId)
+        .run()
+    );
+    return saved.meta.changes === 1;
+  });
+
 /** Send acceptance never means delivery; ambiguous outcomes are not automatically resent. */
 export const recordWhatsAppSend = ({
   db,
@@ -84,6 +146,7 @@ export const recordWhatsAppSend = ({
         .prepare(`UPDATE hosted_whatsapp_delivery
         SET state = ?, provider_message_id = COALESCE(provider_message_id, ?)
         WHERE turn_id = ? AND user_id = ? AND correlation_token = ? AND state = 'sending'
+          AND send_started_at_ms IS NOT NULL
           AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(outcome.kind, id, turnId, userId, token, id)
         .run()
@@ -118,7 +181,7 @@ const retainWhatsAppStatus = ({
       delivered_at_ms = CASE WHEN ? = 'delivered' AND ? <= proposed_at_ms + ?
         THEN ? ELSE delivered_at_ms END
       WHERE correlation_token = ? AND business_phone_number_id = ?
-        AND state IN ('sending','accepted','ambiguous')
+        AND state IN ('sending','accepted','ambiguous') AND send_started_at_ms IS NOT NULL
         AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(
           id,

@@ -806,6 +806,46 @@ const DisclosureRecoveryRow = Schema.Struct({
   disclosure_json: Schema.String,
 });
 
+/** One durable claim fences either synchronous or scheduled execution before provider I/O. */
+const runDisclosureAttempt = <R>({
+  db,
+  id,
+  send,
+}: Readonly<{
+  db: D1Database;
+  id: PendingConsentExchangeId;
+  send: Effect.Effect<KapsoSentMessage, KapsoSendFailed, R>;
+}>): Effect.Effect<boolean, void, R> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const claimed = yield* attempt(() =>
+      db
+        .prepare(`UPDATE pending_consent_exchanges
+      SET state = 'outbound_started' WHERE id = ? AND state = 'awaiting_delivery'
+        AND expires_at_ms > ?`)
+        .bind(id, now)
+        .run()
+    );
+    if (claimed.meta.changes !== 1) return false;
+    const result = yield* Effect.exit(send).pipe(
+      Effect.tap((exit) =>
+        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
+      ),
+      Effect.withSpan("consent.disclosure.send")
+    );
+    if (Exit.isSuccess(result)) {
+      yield* attempt(() =>
+        db
+          .prepare(`UPDATE pending_consent_exchanges
+        SET disclosure_message_id = ? WHERE id = ? AND state = 'outbound_started'
+          AND disclosure_message_id IS NULL`)
+          .bind(result.value.messageEvidence.providerMessageId, id)
+          .run()
+      );
+    }
+    return true;
+  });
+
 const sendRecoveredDisclosure = (
   db: D1Database,
   candidate: typeof DisclosureRecoveryRow.Type,
@@ -815,18 +855,10 @@ const sendRecoveredDisclosure = (
     const disclosure = yield* Schema.decodeEffect(PendingDisclosureJson)(
       candidate.disclosure_json
     ).pipe(Effect.mapError(() => undefined));
-    const claimTime = yield* Clock.currentTimeMillis;
-    const claimed = yield* attempt(() =>
-      db
-        .prepare(`UPDATE pending_consent_exchanges
-      SET state = 'outbound_started' WHERE id = ? AND state = 'awaiting_delivery'
-        AND expires_at_ms > ?`)
-        .bind(candidate.id, claimTime)
-        .run()
-    );
-    if (claimed.meta.changes !== 1) return;
-    const result = yield* Effect.exit(
-      send({
+    yield* runDisclosureAttempt({
+      db,
+      id: candidate.id,
+      send: send({
         caller: {
           businessPortfolioId: candidate.portfolio_id,
           businessScopedUserId: candidate.bsuid,
@@ -837,18 +869,8 @@ const sendRecoveredDisclosure = (
         phoneNumberId: candidate.phone_number_id,
         disclosure,
         correlationToken: candidate.correlation_token,
-      })
-    );
-    if (Exit.isSuccess(result)) {
-      yield* attempt(() =>
-        db
-          .prepare(`UPDATE pending_consent_exchanges
-        SET disclosure_message_id = ? WHERE id = ? AND state = 'outbound_started'
-          AND disclosure_message_id IS NULL`)
-          .bind(result.value.messageEvidence.providerMessageId, candidate.id)
-          .run()
-      );
-    }
+      }),
+    });
     // Once claimed, a callback may reconcile the attempt; this loop never resends it.
   });
 
@@ -886,34 +908,12 @@ const sendExchange = (
   { input, id, correlationToken, disclosure }: NewExchange
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    // Persist the irreversible provider boundary before the call; a crash must not resend it.
-    const claim = yield* attempt(() =>
-      environment.DB.prepare(
-        `UPDATE pending_consent_exchanges SET state = 'outbound_started'
-      WHERE id = ? AND state = 'awaiting_delivery'`
-      )
-        .bind(id)
-        .run()
-    );
-    if (claim.meta.changes !== 1) return answer(HTTP_UNAVAILABLE);
-    const result = yield* Effect.exit(
-      deliveryEffect(environment, { event: input.event, correlationToken, disclosure })
-    ).pipe(
-      Effect.tap((exit) =>
-        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
-      ),
-      Effect.withSpan("consent.disclosure.send")
-    );
-    if (Exit.isSuccess(result)) {
-      yield* attempt(() =>
-        environment.DB.prepare(
-          `UPDATE pending_consent_exchanges SET disclosure_message_id = ?
-        WHERE id = ? AND state = 'outbound_started' AND disclosure_message_id IS NULL`
-        )
-          .bind(result.value.messageEvidence.providerMessageId, id)
-          .run()
-      );
-    }
+    const claimed = yield* runDisclosureAttempt({
+      db: environment.DB,
+      id,
+      send: deliveryEffect(environment, { event: input.event, correlationToken, disclosure }),
+    });
+    if (!claimed) return answer(HTTP_UNAVAILABLE);
     // Synchronous send acceptance is never disclosure delivery. A lifecycle callback must prove it.
     return answer(HTTP_OK);
   }).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));

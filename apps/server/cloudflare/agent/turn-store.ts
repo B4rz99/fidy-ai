@@ -197,6 +197,7 @@ export const readHostedSnapshot = ({
 
 const RecoverableWhatsAppDelivery = Schema.Struct({
   text: TranscriptText,
+  send_started_at_ms: Schema.NullOr(Schema.Int),
   state: Schema.Literals([
     "sending",
     "accepted",
@@ -208,6 +209,9 @@ const RecoverableWhatsAppDelivery = Schema.Struct({
   portfolio_id: WhatsAppBusinessPortfolioId,
   bsuid: WhatsAppBusinessScopedUserId,
 });
+
+const isUnstartedWhatsAppSend = (delivery: typeof RecoverableWhatsAppDelivery.Type): boolean =>
+  delivery.state === "sending" && delivery.send_started_at_ms === null;
 
 /** Once a provider call might have begun, interruption is no longer an honest delivery outcome. */
 const recoverWhatsAppDelivery = ({
@@ -222,7 +226,7 @@ const recoverWhatsAppDelivery = ({
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT d.text, d.state, i.portfolio_id, i.bsuid
+        .prepare(`SELECT d.text, d.state, d.send_started_at_ms, i.portfolio_id, i.bsuid
         FROM hosted_whatsapp_delivery AS d JOIN hosted_whatsapp_inbound AS i
           ON i.turn_id = d.turn_id AND i.user_id = d.user_id
         WHERE d.turn_id = ? AND d.user_id = ?`)
@@ -231,6 +235,9 @@ const recoverWhatsAppDelivery = ({
     );
     if (raw === null) return Option.none();
     const delivery = yield* Schema.decodeUnknownEffect(RecoverableWhatsAppDelivery)(raw);
+    if (isUnstartedWhatsAppSend(delivery)) {
+      return Option.none(); // Pre-send abandonment: normal Pending Turn recovery writes Interrupted.
+    }
     if (
       delivery.state === "sending" ||
       delivery.state === "accepted" ||
@@ -309,11 +316,17 @@ export const recoverHostedTurn = ({
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
       SELECT ?, user_id, hosted_session_id, id, 'interrupted', ? FROM hosted_turns
-      WHERE id = ? AND user_id = ? AND status = 'pending'`)
+      WHERE id = ? AND user_id = ? AND status = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
+          WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
+            AND d.send_started_at_ms IS NOT NULL)`)
           .bind(marker, timestamp, turn.id, userId),
         db
           .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
-      WHERE id = ? AND user_id = ? AND status = 'pending'`)
+      WHERE id = ? AND user_id = ? AND status = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
+          WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
+            AND d.send_started_at_ms IS NOT NULL)`)
           .bind(timestamp, turn.id, userId),
         db
           .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)

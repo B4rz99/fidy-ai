@@ -156,7 +156,7 @@ const setup = (
             sql
               .replace(/^--.*$/gmu, "")
               .trim()
-              .split(/;\s*\n(?=CREATE |ALTER |DROP |$)/u)
+              .split(/;\s*\n(?=CREATE |ALTER |UPDATE |DROP |$)/u)
               .reduce<Promise<unknown>>(
                 (previous, statement) => previous.then(() => db.prepare(statement).run()),
                 Promise.resolve()
@@ -168,9 +168,6 @@ const setup = (
       yield* Effect.tryPromise(() => applyMigration(migration));
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0025_voice_refusal.sql", import.meta.url))
-      );
-      yield* Effect.tryPromise(() =>
-        applyMigration(new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url))
       );
       // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
@@ -187,9 +184,12 @@ const setup = (
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT)"
+            "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT)"
           )
           .run()
+      );
+      yield* Effect.tryPromise(() =>
+        applyMigration(new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url))
       );
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0004_onboarding_email.sql", import.meta.url))

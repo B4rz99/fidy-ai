@@ -1,0 +1,29 @@
+.github/workflows/production.yml
+  s_f8dbb486b6c236::t_c9387be9b999d5 63,70
+.github/actions/bootstrap-alchemy-cloudflare-state/action.yml
+  s_f8dbb486b6c236::t_a6a53edba6d870 1-8
+.github/workflows/verify-unapplied-d1-migration.yml
+  s_f8dbb486b6c236::t_0aa57a97b9e4e1 51,54
+.github/actions/configure-alchemy-cloudflare-profile/action.yml
+  s_f8dbb486b6c236::t_c9fdc22eb6ed86 1-20
+apps/web/scripts/production-workflow.test.ts
+  s_f8dbb486b6c236::t_2816399f4de4ea 87
+  s_f8dbb486b6c236::t_236c9ed64f3830 5-9,32,36-39,84-86,88-90
+  s_f8dbb486b6c236::t_d179511bd005fa 91-92,97-98,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "95bea75807bd55790fc6f9b31a3858103a79f30c",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

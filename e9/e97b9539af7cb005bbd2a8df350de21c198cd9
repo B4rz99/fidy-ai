@@ -1,0 +1,30 @@
+apps/web/scripts/production-workflow.test.ts
+  s_8365943da34952::t_f47cdef7730ab2 123
+  s_8365943da34952::t_223cafc55d514a 129-130
+infra/cloudflare/verify-production-smoke.test.ts
+  s_8365943da34952::t_bf023e9f2d7a5a 49
+  s_8365943da34952::t_7140e5a1ac6830 57-64,82-85
+  s_8365943da34952::t_05686302e7b21a 1-35,38-48,50-56,65-81,86-98
+  s_8365943da34952::t_5227066a134ce6 36-37
+.github/workflows/production.yml
+  s_8365943da34952::t_bcf36d14714b92 211-213,215-216
+infra/cloudflare/production-release.ts
+  s_8365943da34952::t_25eb7aca7a564c 39,429-444,481-482
+  s_8365943da34952::t_f64896e3e3f49d 483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e9e97b9539af7cb005bbd2a8df350de21c198cd9",
+  "prompts": {},
+  "sessions": {
+    "s_8365943da34952": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e9ce-a467-735d-afda-f9efed4986cf",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

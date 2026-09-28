@@ -1,0 +1,20 @@
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_faf3e4289f6ac3::t_4b91adacecbf25 161-163,359,406,465,1499,1509
+  s_faf3e4289f6ac3::t_51a379d3a2b49f 1399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ea48f616dc391c01fc60bebedd82656964a12de",
+  "prompts": {},
+  "sessions": {
+    "s_faf3e4289f6ac3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e5b8-ea37-763c-9f19-b0a1a9a86f0a",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+infra/cloudflare/d1-migrations.test.ts
+  s_f8dbb486b6c236::t_df3cad92e16233 31-50,127,130,157,160,177
+apps/server/cloudflare/d1-migration-test-worker.fixture.ts
+  s_f8dbb486b6c236::t_daa71976f60b1c 2,54-59,113-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "03beecac53a931b0033b5bcc0762fbb907cb8867",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

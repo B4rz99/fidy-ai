@@ -1,0 +1,27 @@
+infra/cloudflare/scripts/migration-history.ts
+  s_f8dbb486b6c236::t_0e99572b735ca7 89,275
+infra/cloudflare/scripts/check-applied-migration-drift.test.ts
+  s_f8dbb486b6c236::t_eb04ab616fca28 5-8,53
+infra/cloudflare/scripts/verify-unapplied-migration-repair.test.ts
+  s_f8dbb486b6c236::t_d2e9e2f23a3308 5-8,59,97-99
+infra/cloudflare/scripts/subprocess-test-fixture.ts
+  s_f8dbb486b6c236::t_8e7d3b8f8b8433 2,25-39,41-43
+  s_f8dbb486b6c236::t_65d0dcf142434e 40
+  s_f8dbb486b6c236::t_fa71028419db4e 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4ba05dde3094cd26472016bf693302c61ef82653",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

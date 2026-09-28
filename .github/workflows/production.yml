@@ -163,6 +163,10 @@ jobs:
             exit 1
           fi
 
+      - name: Probe production edge without valid User or provider authority
+        working-directory: infra/cloudflare
+        run: bun ./verify-edge-smoke.ts
+
       - name: Reject post-deployment Cloudflare drift
         working-directory: infra/cloudflare
         run: bash scripts/check-topology-drift.sh

@@ -8,7 +8,7 @@ import type * as Cloudflare from "alchemy/Cloudflare";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 
 const kapsoCallbackPath = "/providers/kapso/callback";
-const wompiCallbackPath = "/providers/wompi/callback";
+const wompiCallbackPath = "/providers/wompi/billing-events";
 const cloudflareFreeManagedRulesetId = "77454fe2d30c4220b5701f6fdfb893ba";
 const cloudflareHttpDdosRulesetId = "4d21379b4f9f4bb088e0729962c8b3cf";
 const freePlanRateLimitPeriod = 10;
@@ -103,6 +103,10 @@ const reservedRateLimitPaths = [
   "/web/pairings",
   "/web/pairings/redeem",
   "/web/session/logout",
+  "/web/hosted-turns",
+  "/web/hosted-turns/delivery",
+  "/web/subscription/card-enrollments/prepare",
+  "/web/subscription/card-enrollments/submit",
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
   emailReplacementPath,
@@ -119,11 +123,13 @@ const exactPaths = Array.from(
   new Set([...reservedRateLimitPaths, ...declaredRoutes.filter((route) => !route.includes(":"))])
 ).sort();
 const paramPrefixes = Array.from(
-  new Set(
-    declaredRoutes
+  new Set([
+    ...declaredRoutes
       .filter((route) => route.includes(":"))
-      .map((route) => route.slice(0, route.indexOf(":")))
-  )
+      .map((route) => route.slice(0, route.indexOf(":"))),
+    "/web/subscription/card-enrollments/",
+    "/web/subscription/billing-attempts/",
+  ])
 ).sort();
 const rateLimitExpression = `http.request.uri.path in {${exactPaths.map((path) => `"${path}"`).join(" ")}}${paramPrefixes
   .map((prefix) => ` or starts_with(http.request.uri.path, "${prefix}")`)

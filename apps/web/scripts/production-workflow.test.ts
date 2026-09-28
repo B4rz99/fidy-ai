@@ -124,6 +124,17 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("$CONTRACT_DIGEST");
   });
 
+  it("checks bounded, rejected machine requests only after the deployed topology is available", () => {
+    const deploy = workflow.indexOf("alchemy deploy --stage production");
+    const topology = workflow.indexOf("Verify the migrated public topology");
+    const smoke = workflow.indexOf("bun ./verify-edge-smoke.ts");
+    const record = workflow.indexOf("Record the release");
+
+    expect(deploy).toBeLessThan(topology);
+    expect(topology).toBeLessThan(smoke);
+    expect(smoke).toBeLessThan(record);
+  });
+
   it("rechecks trunk immediately before the Alchemy deployment", () => {
     const plan = workflow.indexOf("alchemy plan");
     const recheck = workflow.indexOf("Recheck trunk immediately before deployment");

@@ -7,6 +7,7 @@ import {
 } from "@fidy/server/hosted-inference";
 import type { Effect } from "effect";
 import { type Layer, Option } from "effect";
+import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
 
 /** Core bindings required to construct hosted inference without any external-model route. */
 export type WorkersAiEnvironment = Readonly<{
@@ -28,10 +29,14 @@ export const makeCloudflareHostedInference = (
     run: Option.map(
       binding,
       (ai) => (model, request, options) =>
-        ai.run(model, request, {
-          returnRawResponse: options.returnRawResponse,
-          signal: options.signal,
-        })
+        observeModelRun(
+          () =>
+            ai.run(model, request, {
+              returnRawResponse: options.returnRawResponse,
+              signal: options.signal,
+            }),
+          { environment, telemetry: cloudflareWorkerTelemetry }
+        )
     ),
   });
 };

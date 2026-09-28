@@ -44,6 +44,25 @@ threshold persistence, and a test alert to that channel remain part of
 Monitor native Workflow failures separately from Queue retries: Queue acknowledgment happens after
 instance creation, so a later Workflow failure never reaches the Queue dead-letter destination.
 
+## Telemetry ownership (#716)
+
+Each boundary records a closed Work outcome, not a propagated cross-application trace. Public HTTP
+and Core HTTP observe their own request handling; Core Queue reception observes handoff only, while
+each of the five Workflows observes execution independently. Cron and Email Worker reception/sweep
+observe their respective invocation. The User coordinator observes its serialized request and alarm;
+its soft HTTP deadline does not turn an unfinished owner into completed Work. D1 and R2 activity is
+covered by the surrounding owning Worker, Workflow, or coordinator Work, rather than exporting SQL,
+object keys, or a record per query. The Workers AI binding records one model invocation; Resend,
+Kapso, and Wompi record transport attempts beneath Outbound HTTP's policy, including only the
+provider code, response status class, outcome, release, attempt, and bounded latency. A transport
+response is not proof that a provider delivery or durable Work succeeded. Separate hops must be
+compared against authoritative D1 outcomes; no unapproved trace context is carried across them.
+
+Native Effect spans are not connected to a second exporter. The explicit Work projector is the
+Cloudflare export path, so an Effect error is not also reported as a separate native issue. Production
+Cloudflare code and deployment have no Sentry runtime, preload, secret, source-map upload, or build
+step. Alert delivery and test notification to an operator are owned by #717, not by these records.
+
 ## Safe recovery
 
 1. Find the owner using the closed operation name, then inspect the private Queue/Workflow and its

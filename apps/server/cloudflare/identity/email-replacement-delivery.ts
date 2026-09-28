@@ -1,5 +1,10 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "../onboarding/onboarding-email";
@@ -229,27 +234,39 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    const work = Schema.decodeUnknownOption(Work)(event.payload);
-    if (Option.isNone(work)) return Promise.resolve();
-    return step.do("send-email-replacement-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
-      Effect.tryPromise({
-        try: () =>
-          deliverEmailReplacement({
-            db: this.env.DB,
-            send: (to, code, id) =>
-              sendThroughResend({
-                purpose: "credential-replacement",
-                environment: this.env,
-                to,
-                combinedCode: code,
-                id,
-              }).then((result) => {
-                const outcome = deliveryState(result);
-                return outcome === "awaiting_proof" ? "succeeded" : outcome;
-              }),
-          })(work.value.id),
-        catch: () => undefined,
-      }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
+    return observeWorkerPromise(
+      () => {
+        const work = Schema.decodeUnknownOption(Work)(event.payload);
+        if (Option.isNone(work)) return Promise.resolve();
+        return step.do(
+          "send-email-replacement-v1",
+          { retries: { limit: 0, delay: "1 second" } },
+          () =>
+            Effect.tryPromise({
+              try: () =>
+                deliverEmailReplacement({
+                  db: this.env.DB,
+                  send: (to, code, id) =>
+                    sendThroughResend({
+                      purpose: "credential-replacement",
+                      environment: this.env,
+                      to,
+                      combinedCode: code,
+                      id,
+                    }).then((result) => {
+                      const outcome = deliveryState(result);
+                      return outcome === "awaiting_proof" ? "succeeded" : outcome;
+                    }),
+                })(work.value.id),
+              catch: () => undefined,
+            }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
+        );
+      },
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.emailReplacement",
+      }
     );
   }
 }

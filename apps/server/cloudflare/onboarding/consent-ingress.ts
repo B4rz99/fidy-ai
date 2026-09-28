@@ -52,6 +52,7 @@ import {
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { cloudflareWorkerTelemetry, observeProviderFetch } from "../runtime/telemetry";
 import {
   ResourceAdmissionAuthority,
   type ResourceAdmissionAuthorityService,
@@ -1362,6 +1363,13 @@ export const receiveConsentWebhook =
         );
       })
     ).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provideService(
+        FetchHttpClient.Fetch,
+        observeProviderFetch(globalThis.fetch, {
+          provider: "kapso",
+          environment,
+          telemetry: cloudflareWorkerTelemetry,
+        })
+      ),
       Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE)))
     );

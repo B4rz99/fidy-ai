@@ -122,6 +122,8 @@ import { verifyOnboarding } from "./onboarding/verified-onboarding";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import type { WorkersAiEnvironment } from "./ai/workers-ai";
@@ -2036,8 +2038,22 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       }),
       Effect.runPromise
     ),
-  scheduled: (_controller, environment) => scheduledWork(environment).pipe(Effect.runPromise),
-  queue: receiveWorkQueue,
+  scheduled: (_controller, environment) =>
+    scheduledWork(environment).pipe(
+      (work) =>
+        observeWorkerExecution(work, {
+          environment,
+          telemetry,
+          operation: "worker.core.scheduled",
+        }),
+      Effect.runPromise
+    ),
+  queue: (batch, environment) =>
+    observeWorkerPromise(() => receiveWorkQueue(batch, environment), {
+      environment,
+      telemetry,
+      operation: "worker.core.queue",
+    }),
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

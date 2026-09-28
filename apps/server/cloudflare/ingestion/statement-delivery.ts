@@ -1,4 +1,9 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
 import { StatementCoordinatorActivity, StatementWork } from "./statement-work";
@@ -333,10 +338,18 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return runStatementExtractionWorkflow({
-      payload: event.payload,
-      coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-      activity: (name, options, run) => step.do(name, options, run),
-    });
+    return observeWorkerPromise(
+      () =>
+        runStatementExtractionWorkflow({
+          payload: event.payload,
+          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          activity: (name, options, run) => step.do(name, options, run),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.statementExtraction",
+      }
+    );
   }
 }

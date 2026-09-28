@@ -1,8 +1,11 @@
+import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
+import { makeWorkerTelemetry } from "../runtime/telemetry";
 import { Clock, Data, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
-import emailWorker from "./email-worker";
+import { afterEach, expect } from "vitest";
+import emailWorker, { makeEmailWorker } from "./email-worker";
 import { processForwardedEmail } from "./forwarded-email-processing";
 import { receiveForwardedEmailWork } from "./forwarded-email-delivery";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
@@ -16,6 +19,72 @@ const raw = new TextEncoder().encode(
   "From: bank@example.test\r\nTo: other@example.test\r\nSubject: Compra\r\n\r\nPago confirmado"
 );
 const instances: Miniflare[] = [];
+
+it.effect("exports one bounded record for a successful Email schedule", () =>
+  Effect.gen(function* () {
+    const records: TelemetryWorkRecord[] = [];
+    const worker = makeEmailWorker(
+      makeWorkerTelemetry((record) => {
+        records.push(record);
+      })
+    );
+    const { env } = yield* setup();
+
+    yield* wait(() => worker.scheduled(undefined, env));
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      operation: "worker.email.scheduled",
+      outcome: "succeeded",
+      release: "unknown",
+      attempt: 1,
+    });
+    expect(Object.keys(records[0] ?? {}).sort()).toEqual([
+      "attempt",
+      "latencyMilliseconds",
+      "operation",
+      "outcome",
+      "provider",
+      "release",
+    ]);
+  })
+);
+
+it.effect("exports only closed metadata for received financial email", () =>
+  Effect.gen(function* () {
+    const records: TelemetryWorkRecord[] = [];
+    const worker = makeEmailWorker(
+      makeWorkerTelemetry((record) => {
+        records.push(record);
+      })
+    );
+    const { env } = yield* setup();
+
+    yield* wait(() => worker.email(delivery().message, env));
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ operation: "worker.email.receive", outcome: "succeeded" });
+    expect(Object.values(records[0] ?? {}).join(" ")).not.toContain("bank@example.test");
+    expect(Object.values(records[0] ?? {}).join(" ")).not.toContain("Pago confirmado");
+  })
+);
+
+it.effect("observes a failed Email schedule once without exposing authority errors", () =>
+  Effect.gen(function* () {
+    const records: TelemetryWorkRecord[] = [];
+    const worker = makeEmailWorker(
+      makeWorkerTelemetry((record) => {
+        records.push(record);
+      })
+    );
+    const { env, db } = yield* setup();
+    yield* wait(() => db.exec("DROP TABLE forwarded_email_receipts"));
+
+    const environment = { ...env, RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567" };
+    yield* wait(() => expect(worker.scheduled(undefined, environment)).rejects.toThrow());
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ operation: "worker.email.scheduled", outcome: "failed" });
+    expect(Object.values(records[0] ?? {}).join(" ")).not.toContain("forwarded_email_receipts");
+  })
+);
 class TestFailure extends Data.TaggedError("TestFailure")<{ readonly cause: unknown }> {}
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) }).pipe(Effect.orDie);

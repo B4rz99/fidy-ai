@@ -1,6 +1,7 @@
 import { type WompiEnvironment, makeWompiOutboundHttp } from "@fidy/server/subscription-runtime";
 import { Context, Crypto, Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { cloudflareWorkerTelemetry, observeProviderFetch } from "../runtime/telemetry";
 
 export const workerCrypto = Crypto.make({
   randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
@@ -27,7 +28,14 @@ export const wompiOutboundHttp = (
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
   Effect.scoped(
     Layer.build(FetchHttpClient.layer).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provideService(
+        FetchHttpClient.Fetch,
+        observeProviderFetch(globalThis.fetch, {
+          provider: "wompi",
+          environment,
+          telemetry: cloudflareWorkerTelemetry,
+        })
+      ),
       Effect.map((clients) =>
         makeWompiOutboundHttp({
           environment: environment.WOMPI_ENVIRONMENT,

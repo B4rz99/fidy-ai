@@ -170,7 +170,12 @@ export default Alchemy.Stack(
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
       compatibility: { date: "2026-09-08" },
       crons: ["*/5 * * * *"],
-      env: { DB: database, EMAIL_BUCKET: emailBucket, EMAIL_QUEUE: emailQueue },
+      env: {
+        DB: database,
+        EMAIL_BUCKET: emailBucket,
+        EMAIL_QUEUE: emailQueue,
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
+      },
       workersDev: false,
     });
     // Do not route inbound mail until institution Connection state and authenticated sender

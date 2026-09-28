@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
-import { Effect, Result } from "effect";
+import { DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect } from "vitest";
 import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
@@ -56,6 +56,29 @@ const coreEnvironment = {
   CLOUDFLARE_ACCESS_AUDIENCE: "",
   WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
   RELEASE_GIT_SHA: gitRevision,
+};
+
+const queueBatch = (body: unknown): MessageBatch<unknown> => ({
+  queue: "OnboardingEmailQueue",
+  messages: [
+    {
+      id: "opaque-test-message",
+      timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
+      body,
+      attempts: 1,
+      retry: () => {},
+      ack: () => {},
+    },
+  ],
+  metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+  retryAll: () => {},
+  ackAll: () => {},
+});
+
+const scheduledController: ScheduledController = {
+  scheduledTime: 0,
+  cron: "* * * * *",
+  noRetry: () => {},
 };
 
 const collectingTelemetry = (records: Array<TelemetryWorkRecord>): TelemetryService =>
@@ -358,6 +381,70 @@ describe("Cloudflare Worker topology", () => {
           "statusClass",
         ]);
       }
+    })
+  );
+
+  it.effect(
+    "reports an unavailable Queue invocation once without exposing its payload or changing rejection",
+    () =>
+      Effect.gen(function* () {
+        const records: Array<TelemetryWorkRecord> = [];
+        const worker = makeCoreWorker(collectingTelemetry(records));
+        const payload = "private-queue-payload-canary";
+        const batch = queueBatch(payload);
+
+        yield* Effect.tryPromise(() =>
+          expect(worker.queue(batch, coreEnvironment)).rejects.toThrow(
+            "Onboarding email unavailable"
+          )
+        );
+        expect(records).toHaveLength(1);
+        expect(records[0]).toMatchObject({
+          release: gitRevision,
+          operation: "worker.core.queue",
+          outcome: "failed",
+          attempt: 1,
+        });
+        const exported = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Array(Schema.Unknown))
+        )(records);
+        expect(exported).not.toContain(payload);
+      })
+  );
+
+  it.effect("does not let a throwing telemetry exporter acknowledge failed Queue Work", () =>
+    Effect.gen(function* () {
+      const worker = makeCoreWorker(
+        makeWorkerTelemetry(() => {
+          throw new Error("export unavailable");
+        })
+      );
+      const batch = queueBatch("no-provider-binding");
+
+      yield* Effect.tryPromise(() =>
+        expect(worker.queue(batch, coreEnvironment)).rejects.toThrow("Onboarding email unavailable")
+      );
+    })
+  );
+
+  it.effect("reports a failed cron invocation after attempting independent activities", () =>
+    Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      const worker = makeCoreWorker(collectingTelemetry(records));
+
+      yield* Effect.tryPromise(() =>
+        expect(worker.scheduled(scheduledController, coreEnvironment)).rejects.toThrow()
+      );
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        operation: "worker.core.scheduled",
+        outcome: "failed",
+        release: gitRevision,
+      });
+      const exported = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.Array(Schema.Unknown))
+      )(records);
+      expect(exported).not.toContain(privateFailureDetail);
     })
   );
 

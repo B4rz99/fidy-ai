@@ -14,6 +14,11 @@ import {
   paidPeriodFor,
 } from "@fidy/server/subscription-runtime";
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventHint } from "./wompi-event";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
@@ -526,11 +531,19 @@ export const runBillingCollectionWorkflow = (
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return runBillingCollectionWorkflow({
-      environment: this.env,
-      payload: event.payload,
-      activity: (name, options, activity) => step.do(name, options, activity),
-    });
+    return observeWorkerPromise(
+      () =>
+        runBillingCollectionWorkflow({
+          environment: this.env,
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.billingCollection",
+      }
+    );
   }
 }
 

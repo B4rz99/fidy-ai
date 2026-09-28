@@ -85,7 +85,7 @@ const RawVoiceMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("audio"),
   audio: Schema.Struct({ id: WhatsAppMediaId }),
-  kapso: Schema.Struct({ transcript: Schema.Struct({ text: TranscriptText }) }),
+  kapso: Schema.optional(Schema.Unknown),
 });
 const RawKapsoEvent = Schema.Struct({
   message: Schema.Union([RawTextMessage, RawVoiceMessage]),
@@ -244,6 +244,22 @@ const parseOccurredAt = Effect.fn(function* (timestamp: string, receivedAt: Date
   return occurredAt;
 });
 
+const projectInboundContent = (
+  message: typeof RawKapsoEvent.Type.message
+): WhatsAppInboundContent => {
+  if (message.type === "text") return { _tag: "Text", text: message.text.body };
+  const kapso = Schema.decodeUnknownOption(Schema.Struct({ transcript: Schema.Unknown }))(
+    message.kapso
+  );
+  const transcript = Schema.decodeUnknownOption(Schema.Struct({ text: TranscriptText }))(
+    Option.getOrUndefined(kapso)?.transcript
+  );
+  if (Option.isNone(transcript) || transcript.value.text.trim().length === 0) {
+    return { _tag: "UnusableVoiceTranscript" };
+  }
+  return { _tag: "VoiceTranscript", text: transcript.value.text, mediaId: message.audio.id };
+};
+
 const projectEvent = Effect.fn(function* (
   raw: typeof RawKapsoEvent.Type,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
@@ -269,14 +285,7 @@ const projectEvent = Effect.fn(function* (
     onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.asSome),
   });
   const occurredAt = yield* parseOccurredAt(raw.message.timestamp, receivedAt);
-  const content: WhatsAppInboundContent =
-    raw.message.type === "text"
-      ? { _tag: "Text", text: raw.message.text.body }
-      : {
-          _tag: "VoiceTranscript",
-          text: raw.message.kapso.transcript.text,
-          mediaId: raw.message.audio.id,
-        };
+  const content = projectInboundContent(raw.message);
   return {
     messageEvidence: {
       channel: "whatsapp",

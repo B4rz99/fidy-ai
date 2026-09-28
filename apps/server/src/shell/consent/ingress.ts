@@ -96,6 +96,31 @@ export const makeEmailStatusSender = (
     });
 };
 
+/** Send one fixed, non-secret voice failure reply without using transcript content. */
+export const makeVoiceUnavailableSender = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+) => {
+  const client = makeKapsoClientService({
+    deliveryMode: "bsuid",
+    outboundHttp: makeKapsoOutboundHttp(input),
+  });
+  return (
+    request: Readonly<{
+      caller: WhatsAppInboundEvent["caller"];
+      phoneNumberId: WhatsAppBusinessPhoneNumberId;
+    }>
+  ): ReturnType<KapsoClientService["sendText"]> =>
+    client.sendText({
+      businessPhoneNumberId: request.phoneNumberId,
+      destination: { recipient: request.caller.businessScopedUserId, sandboxPhone: Option.none() },
+      text: TranscriptText.make("No pude procesar la nota de voz. Envíala de nuevo o escríbeme."),
+      opaqueCallbackData: Option.none(),
+    });
+};
+
 /** Send a versioned disclosure to the authenticated WhatsApp caller, with a delivery correlation token. */
 export const makeDisclosureSender = (
   input: Readonly<{

@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = `${process.cwd()}/../..`;
 const workflow = await Bun.file(`${repositoryRoot}/.github/workflows/production.yml`).text();
+const profileAction = await Bun.file(
+  `${repositoryRoot}/.github/actions/configure-alchemy-cloudflare-profile/action.yml`
+).text();
+const bootstrapAction = await Bun.file(
+  `${repositoryRoot}/.github/actions/bootstrap-alchemy-cloudflare-state/action.yml`
+).text();
 
 describe("Production release workflow policy", () => {
   it("serializes trunk releases without cancelling an active deployment", () => {
@@ -23,12 +29,14 @@ describe("Production release workflow policy", () => {
   });
 
   it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
-    expect(workflow).toContain('echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"');
+    expect(profileAction).toContain('echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"');
     expect(workflow).toContain(
       "ALCHEMY_PROFILE: ci\n      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}\n      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}"
     );
-    expect(workflow).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
-    expect(workflow).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
+    expect(profileAction).toContain("bunx alchemy profile create");
+    expect(profileAction).toContain("bunx alchemy profile edit");
+    expect(profileAction).toContain("apiToken=env:CLOUDFLARE_API_TOKEN");
+    expect(profileAction).toContain("accountId=env:CLOUDFLARE_ACCOUNT_ID");
     expect(workflow).toContain("PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}");
   });
 
@@ -72,15 +80,27 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
   });
 
-  it("rejects provider drift before planning and approves the non-interactive deploy", () => {
-    const profile = workflow.indexOf("alchemy profile edit");
-    const bootstrap = workflow.indexOf("alchemy provider cloudflare bootstrap");
-    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
+  it("rejects migration and provider drift before planning and approves the non-interactive deploy", () => {
+    const profile = workflow.indexOf(
+      "uses: ./.github/actions/configure-alchemy-cloudflare-profile"
+    );
+    const migrationDriftGate = workflow.indexOf(
+      "run: bun scripts/check-applied-migration-drift.ts"
+    );
+    const bootstrap = workflow.indexOf(
+      "uses: ./.github/actions/bootstrap-alchemy-cloudflare-state"
+    );
+    const providerDriftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
     const plan = workflow.indexOf("alchemy plan");
 
-    expect(profile).toBeLessThan(bootstrap);
-    expect(bootstrap).toBeLessThan(driftGate);
-    expect(driftGate).toBeLessThan(plan);
+    expect(profile).toBeGreaterThan(0);
+    expect(workflow).toContain("name: Reject drift in applied D1 migration history");
+    expect(migrationDriftGate).toBeGreaterThan(0);
+    expect(profile).toBeLessThan(migrationDriftGate);
+    expect(migrationDriftGate).toBeLessThan(bootstrap);
+    expect(bootstrap).toBeLessThan(providerDriftGate);
+    expect(providerDriftGate).toBeLessThan(plan);
+    expect(bootstrapAction).toContain("alchemy provider cloudflare bootstrap");
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
   });
 

@@ -178,6 +178,17 @@ const checks: Array<Check> = [
 if (Bun.env.PR_TITLE !== undefined && groupIsSelected("static")) {
   checks.push(rootCheck("static", "PR title", ["bun", "scripts/check-pr-title.ts"]));
 }
+if (
+  groupIsSelected("static") &&
+  (Bun.env.GITHUB_ACTIONS === "true" || Bun.env.BASE_REF !== undefined)
+) {
+  checks.push(
+    rootCheck("static", "Applied D1 migration edit policy", [
+      "bun",
+      "scripts/check-migration-edit-policy.ts",
+    ])
+  );
+}
 
 const selectedChecks = checks.filter(({ group }) => groupIsSelected(group));
 if (Option.isSome(requestedGroup)) {

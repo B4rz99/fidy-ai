@@ -1,0 +1,20 @@
+name: Configure Alchemy Cloudflare profile
+description: Configure an ephemeral, environment-backed Alchemy Cloudflare profile.
+runs:
+  using: composite
+  steps:
+    - name: Configure ephemeral Alchemy storage
+      shell: bash
+      run: echo "ALCHEMY_HOME=$RUNNER_TEMP/alchemy" >> "$GITHUB_ENV"
+
+    - name: Configure Alchemy's ephemeral Cloudflare profile
+      shell: bash
+      run: |
+        bunx alchemy profile create "$ALCHEMY_PROFILE" --no-input
+        bunx alchemy profile edit \
+          --profile "$ALCHEMY_PROFILE" \
+          --add Cloudflare \
+          --method stored \
+          --set apiToken=env:CLOUDFLARE_API_TOKEN \
+          --set accountId=env:CLOUDFLARE_ACCOUNT_ID \
+          --no-input

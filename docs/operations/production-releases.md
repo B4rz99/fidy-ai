@@ -44,7 +44,7 @@ expose binding names, environment values, internal routes, exception text, or Se
 
 ## Release sequence
 
-The workflow allows one active release and does not cancel an active deployment.
+The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from ordinary MVP code deployments. The Free plan's indefinite WhatsApp retention is disclosed for the current MVP and must not be reported as a finite retention setting. Before broad real-user WhatsApp launch, run the check and complete the provider review; do not mistake a successful code deployment for launch approval. The workflow allows one active release and does not cancel an active deployment.
 
 1. Check out the exact `github.sha` revision and install the locked workspace.
 2. Calculate the canonical contract digest and bind it with `RELEASE_GIT_SHA` for later steps.

@@ -314,6 +314,8 @@ it("routes only authenticated text of a verified BSUID to the User coordinator",
         phone_number_id: "123456789012345",
       });
       expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(422);
+      const sweptReplay = inbound("wamid.swept", "Texto exacto", String(nowSeconds - 31 * 86_400));
+      expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
       expect(calls).toHaveLength(1);
     })
   ));

@@ -33,6 +33,14 @@ export const WhatsAppStatusAdmission = Schema.Struct({
 });
 export type WhatsAppStatusAdmission = typeof WhatsAppStatusAdmission.Type;
 
+/** Well inside the 30-day Turn evidence retention, even after delayed delivery. */
+export const hostedInboundReplayWindowMs = 604_800_000;
+export const withinHostedInboundWindow = ({
+  occurredAtMs,
+  receivedAtMs,
+}: Readonly<{ occurredAtMs: number; receivedAtMs: number }>): boolean =>
+  occurredAtMs >= receivedAtMs - hostedInboundReplayWindowMs;
+
 const UserRow = Schema.Struct({ user_id: UserId });
 /** Correlation is a lookup hint only; the User coordinator rechecks the exact persisted attempt. */
 export const findWhatsAppDeliveryUser = ({
@@ -57,10 +65,10 @@ export const findWhatsAppDeliveryUser = ({
 const ReplayRow = Schema.Struct({
   user_id: UserId,
   bsuid: WhatsAppBusinessScopedUserId,
-  text: TranscriptText,
+  text: Schema.NullOr(TranscriptText),
 });
 
-/** A signed replay has no new work. A changed body or identity is a conflict, never fresh admission. */
+/** After Compaction removes exact text, the same identity/provider id still cannot start new work. */
 export const findWhatsAppReplay = ({
   db,
   userId,
@@ -80,7 +88,7 @@ export const findWhatsAppReplay = ({
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT i.user_id, i.bsuid, e.text FROM hosted_whatsapp_inbound AS i
-        JOIN transcript_entries AS e ON e.turn_id = i.turn_id AND e.user_id = i.user_id
+        LEFT JOIN transcript_entries AS e ON e.turn_id = i.turn_id AND e.user_id = i.user_id
           AND e.kind = 'user'
         WHERE i.portfolio_id = ? AND i.message_id = ?`)
         .bind(portfolioId, messageId)
@@ -88,10 +96,29 @@ export const findWhatsAppReplay = ({
     );
     if (row === null) return "fresh";
     const prior = yield* Schema.decodeUnknownEffect(ReplayRow)(row);
-    return prior.user_id === userId && prior.bsuid === bsuid && prior.text === text
-      ? "replay"
-      : "conflict";
+    if (prior.user_id !== userId || prior.bsuid !== bsuid) return "conflict";
+    return prior.text === null || prior.text === text ? "replay" : "conflict";
   });
+
+export const classifyWhatsAppAdmission = ({
+  db,
+  proof,
+  now,
+}: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission; now: number }>): Effect.Effect<
+  "expired" | "fresh" | "replay" | "conflict",
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  withinHostedInboundWindow({ occurredAtMs: proof.occurredAtMs, receivedAtMs: now })
+    ? findWhatsAppReplay({
+        db,
+        userId: proof.userId,
+        portfolioId: proof.portfolioId,
+        bsuid: proof.bsuid,
+        messageId: proof.messageId,
+        text: proof.text,
+      })
+    : Effect.succeed("expired");
+
 /** Pre-coordination lookup, not authorization: the coordinator must recheck the association. */
 export const findWhatsAppUser = ({
   db,

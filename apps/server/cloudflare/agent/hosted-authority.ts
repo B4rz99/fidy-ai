@@ -11,7 +11,7 @@ import {
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 
-/** An authenticated channel observation, always rechecked against the stable User association. */
+/** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
   userId: UserId,
   portfolioId: WhatsAppBusinessPortfolioId,

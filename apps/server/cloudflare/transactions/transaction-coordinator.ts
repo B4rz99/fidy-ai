@@ -4,7 +4,7 @@ import {
   WhatsAppStatusAdmission as StatusAdmission,
   WhatsAppTurnAdmission as TurnAdmission,
   type WhatsAppTurnAdmission,
-  findWhatsAppReplay,
+  classifyWhatsAppAdmission,
 } from "../agent/whatsapp-turn";
 import { WhatsAppHostedSubject } from "../agent/hosted-authority";
 import { reconcileWhatsAppStatus } from "../agent/whatsapp-delivery";
@@ -867,16 +867,15 @@ export class UserTransactionCoordinator {
             return transactionUnavailable();
           }
           const proof = admission.value;
-          const replay = yield* findWhatsAppReplay({
+          const replay = yield* classifyWhatsAppAdmission({
             db: env.DB,
-            userId: proof.userId,
-            portfolioId: proof.portfolioId,
-            bsuid: proof.bsuid,
-            messageId: proof.messageId,
-            text: proof.text,
+            proof,
+            now: transactionNow(),
           });
-          if (replay === "replay") return new Response(null, { status: 200 });
-          if (replay === "conflict") return new Response(null, { status: 409 });
+          if (replay !== "fresh") {
+            const status = { expired: 422, replay: 200, conflict: 409 }[replay];
+            return new Response(null, { status });
+          }
           if (env.KAPSO_API_KEY === undefined || env.KAPSO_API_KEY.length === 0) {
             return transactionUnavailable();
           }

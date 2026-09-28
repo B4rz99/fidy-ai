@@ -789,6 +789,51 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         { status: "completed", kind: "user", text: "Hola" },
         { status: "completed", kind: "assistant", text: "Exacto" },
       ]);
+      const lookup = {
+        db,
+        userId: caller.userId,
+        portfolioId: caller.portfolioId,
+        bsuid: caller.bsuid,
+        messageId: inbound.messageId,
+        text: TranscriptText.make("Hola"),
+      };
+      expect(yield* findWhatsAppReplay(lookup)).toBe("replay");
+      const session = yield* Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT hosted_session_id FROM hosted_turns
+        WHERE id = ?`)
+          .bind(evidence.value.turn_id)
+          .first()
+      );
+      const storedSession = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          hosted_session_id: HostedAgentSessionId,
+        })
+      )(session);
+      const continuity = yield* readHostedContinuity({
+        db,
+        subject: caller,
+        sessionId: storedSession.hosted_session_id,
+        now: now(),
+      });
+      if (Option.isNone(continuity.terminalThroughSequence)) {
+        return yield* Effect.die("no compactable terminal prefix");
+      }
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: caller,
+          sessionId: storedSession.hosted_session_id,
+          continuity,
+          throughSequence: continuity.terminalThroughSequence.value,
+          signal: makeAbortController().signal,
+          text: "Resumen",
+        })
+      ).toBe(true);
+      expect(yield* findWhatsAppReplay(lookup)).toBe("replay");
+      expect(yield* findWhatsAppReplay({ ...lookup, text: TranscriptText.make("Distinto") })).toBe(
+        "replay"
+      );
     })
   ));
 
@@ -891,6 +936,20 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
         { status: "pending", kind: "user", text: "Hola" },
       ]);
+      const swept = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn/whatsapp", {
+            method: "POST",
+            body: encodeJson({
+              ...payload,
+              messageId: "wamid.swept",
+              occurredAtMs: now() - 31 * 86_400_000,
+            }),
+          })
+        )
+      );
+      expect(swept.status).toBe(422);
+      expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO consent_user_revocations

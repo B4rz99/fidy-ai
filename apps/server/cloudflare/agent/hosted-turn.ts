@@ -177,23 +177,28 @@ type HostedTurnInput = Readonly<{
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
 type AdmittedTurnInput = Omit<HostedTurnInput, "subject" | "deliver"> &
-  Readonly<{
-    subject: HostedSubject;
-    deliver: ChannelDelivery;
-    inbound: Option.Option<WhatsAppInboundEvidence>;
-    onAdmitted: Option.Option<(turnId: TranscriptTurnId) => void>;
-  }>;
+  Readonly<{ onAdmitted: Option.Option<(turnId: TranscriptTurnId) => void> }> &
+  (
+    | Readonly<{
+        subject: TransactionSubject;
+        deliver: HostedDelivery;
+      }>
+    | Readonly<{
+        subject: WhatsAppHostedSubject;
+        deliver: WhatsAppHostedDelivery;
+        inbound: WhatsAppInboundEvidence;
+      }>
+  );
 
 export const completeHostedTurn = (input: HostedTurnInput): Promise<Response> =>
-  executeHostedTurn({ ...input, inbound: Option.none(), onAdmitted: Option.none() });
+  executeHostedTurn({ ...input, onAdmitted: Option.none() });
 export const completeHostedTurnWithAdmission = ({
   input,
   onAdmitted,
 }: Readonly<{
   input: HostedTurnInput;
   onAdmitted: (turnId: TranscriptTurnId) => void;
-}>): Promise<Response> =>
-  executeHostedTurn({ ...input, inbound: Option.none(), onAdmitted: Option.some(onAdmitted) });
+}>): Promise<Response> => executeHostedTurn({ ...input, onAdmitted: Option.some(onAdmitted) });
 
 /** Verified inbound text shares the hosted lifecycle but never borrows a browser credential. */
 export const completeWhatsAppTurnWithAdmission = ({
@@ -210,7 +215,6 @@ export const completeWhatsAppTurnWithAdmission = ({
 }>): Promise<Response> =>
   executeHostedTurn({
     ...input,
-    inbound: Option.some(input.inbound),
     onAdmitted: Option.some(onAdmitted),
   });
 
@@ -219,20 +223,21 @@ export const completeWhatsAppTurnWithAdmission = ({
  * admission and exact evidence; the adapter owns bounded provider rounds and delivery. A lost
  * request after Pending is recovered by the next Turn, never silently reported Completed.
  */
-const executeHostedTurn = ({
-  db,
-  subject,
-  bucket,
-  executeMutation,
-  text,
-  inference,
-  deliver,
-  signal,
-  scheduleRecovery,
-  inbound,
-  onAdmitted,
-}: AdmittedTurnInput): Promise<Response> =>
-  Effect.runPromise(
+const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
+  const inbound = "inbound" in input ? Option.some(input.inbound) : Option.none();
+  const {
+    db,
+    subject,
+    bucket,
+    executeMutation,
+    text,
+    inference,
+    deliver,
+    signal,
+    scheduleRecovery,
+    onAdmitted,
+  } = input;
+  return Effect.runPromise(
     Effect.gen(function* () {
       const isAborted = (): boolean => signal.aborted;
       if (isAborted()) return unavailable();
@@ -358,6 +363,7 @@ const executeHostedTurn = ({
       );
     })
   );
+};
 
 const readAdmissibleSnapshot = ({
   db,

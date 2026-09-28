@@ -48,8 +48,9 @@ it.effect("projects release smoke telemetry without proof, probe ID, or User dat
     expect(records).toMatchObject([
       { operation: "workflow.releaseSmoke", outcome: "succeeded", release: "a".repeat(40) },
     ]);
-    expect(JSON.stringify(records)).not.toContain("proof-canary");
-    expect(JSON.stringify(records)).not.toContain("probe-canary");
+    const projected = records.flatMap((record) => Object.values(record)).join(" ");
+    expect(projected).not.toContain("proof-canary");
+    expect(projected).not.toContain("probe-canary");
   })
 );
 

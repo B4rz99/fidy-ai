@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
 import { verifyEdgeSmoke } from "./verify-edge-smoke";
@@ -36,9 +36,12 @@ describe("production edge smoke", () => {
           ["/providers/wompi/billing-events", 400],
           ["/web/hosted-turns", 403],
         ]);
-        yield* verifyEdgeSmoke((input) => {
-          observed.push(input);
-          return Effect.succeed(respond(statuses.get(input.path) ?? 404));
+        yield* verifyEdgeSmoke({
+          probe: (input) => {
+            observed.push(input);
+            return Effect.succeed(respond(statuses.get(input.path) ?? 404));
+          },
+          candidate: Option.none(),
         });
         expect(observed).toEqual([
           { path: "/health", method: "GET", headers: {} },
@@ -65,17 +68,20 @@ describe("production edge smoke", () => {
         };
         const healthHasNoProof: Array<boolean> = [];
         const result = yield* Effect.exit(
-          verifyEdgeSmoke(({ path, headers }) => {
-            if (path === "/health") {
-              healthHasNoProof.push(headers["x-fidy-smoke-proof"] === undefined);
-            }
-            return Effect.succeed(
-              respond(path === "/health" ? 200 : 401, {
-                ...safeHeaders,
-                "x-fidy-smoke-worker-version": "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
-              })
-            );
-          }, candidate)
+          verifyEdgeSmoke({
+            probe: ({ path, headers }) => {
+              if (path === "/health") {
+                healthHasNoProof.push(headers["x-fidy-smoke-proof"] === undefined);
+              }
+              return Effect.succeed(
+                respond(path === "/health" ? 200 : 401, {
+                  ...safeHeaders,
+                  "x-fidy-smoke-worker-version": "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
+                })
+              );
+            },
+            candidate: Option.some(candidate),
+          })
         );
         expect(healthHasNoProof).toEqual([true]);
         expect(result._tag).toBe("Failure");
@@ -98,19 +104,24 @@ describe("production edge smoke", () => {
         ["/web/hosted-turns", 403],
       ]);
       const result = yield* Effect.exit(
-        verifyEdgeSmoke(({ path, headers }) => {
-          if (path === "/health") {
-            healthHeaders.push(headers["x-fidy-smoke-proof"] === undefined);
-          }
-          const version =
-            path === "/health" ? "db7cd8d3-4425-4fe7-8c81-01bf963b6067" : candidate.publicVersionId;
-          return Effect.succeed(
-            respond(statuses.get(path) ?? 404, {
-              ...safeHeaders,
-              "x-fidy-smoke-worker-version": version,
-            })
-          );
-        }, candidate)
+        verifyEdgeSmoke({
+          probe: ({ path, headers }) => {
+            if (path === "/health") {
+              healthHeaders.push(headers["x-fidy-smoke-proof"] === undefined);
+            }
+            const version =
+              path === "/health"
+                ? "db7cd8d3-4425-4fe7-8c81-01bf963b6067"
+                : candidate.publicVersionId;
+            return Effect.succeed(
+              respond(statuses.get(path) ?? 404, {
+                ...safeHeaders,
+                "x-fidy-smoke-worker-version": version,
+              })
+            );
+          },
+          candidate: Option.some(candidate),
+        })
       );
       expect(healthHeaders).toEqual([true, false]);
       expect(result._tag).toBe("Failure");
@@ -119,7 +130,9 @@ describe("production edge smoke", () => {
 
   it.effect("rejects a broken unauthenticated health route", () =>
     Effect.gen(function* () {
-      const result = yield* Effect.exit(verifyEdgeSmoke(() => Effect.succeed(respond(503))));
+      const result = yield* Effect.exit(
+        verifyEdgeSmoke({ probe: () => Effect.succeed(respond(503)), candidate: Option.none() })
+      );
       expect(result._tag).toBe("Failure");
     })
   );
@@ -135,7 +148,9 @@ describe("production edge smoke", () => {
           respond(401, { "cache-control": "no-store" }),
         ];
         for (const response of challenges) {
-          const result = yield* Effect.exit(verifyEdgeSmoke(() => Effect.succeed(response)));
+          const result = yield* Effect.exit(
+            verifyEdgeSmoke({ probe: () => Effect.succeed(response), candidate: Option.none() })
+          );
           expect(result._tag).toBe("Failure");
         }
       })

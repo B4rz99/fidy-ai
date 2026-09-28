@@ -314,7 +314,17 @@ const browserForwardHeaders = (request: Request, path: string): Headers => {
   if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
   return headers;
 };
-// oxlint-disable-next-line eslint/complexity -- Each forwarding category has a distinct security projection.
+const fallbackHeaders = (request: Request, path: string): Headers => {
+  if (forwardsSession(request, path)) {
+    return new Headers({
+      cookie: request.headers.get("cookie") ?? "",
+      "content-type": request.headers.get("content-type") ?? "",
+    });
+  }
+  const headers = new Headers(request.headers);
+  headers.delete(smokeProofHeader);
+  return headers;
+};
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === smokePath) {
     return new Headers({
@@ -328,15 +338,7 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
-  if (forwardsSession(request, path)) {
-    return new Headers({
-      cookie: request.headers.get("cookie") ?? "",
-      "content-type": request.headers.get("content-type") ?? "",
-    });
-  }
-  const headers = new Headers(request.headers);
-  headers.delete(smokeProofHeader);
-  return headers;
+  return fallbackHeaders(request, path);
 };
 const pairingSource = (
   request: Request,
@@ -422,7 +424,15 @@ const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
   patBrowserRoute(path);
 
-// oxlint-disable-next-line eslint/complexity -- Every rejection precedes the private binding.
+const rejectsSmokeIngress = (
+  request: Request,
+  origin: Option.Option<string>,
+  environment: PublicEnvironment
+): boolean =>
+  new URL(request.url).pathname === smokePath &&
+  (Option.isSome(origin) ||
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
+
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -434,10 +444,7 @@ const gateOwnedRequest = (
   if (!ownedPath(path)) {
     return policy(Response.json({}, { status: 404 }));
   }
-  if (
-    path === smokePath &&
-    (Option.isSome(origin) || !smokeProofAccepted(request, environment.SMOKE_PROOF ?? ""))
-  ) {
+  if (rejectsSmokeIngress(request, origin, environment)) {
     return policy(Response.json({}, { status: 404 }));
   }
   if (disallowedSupportOrigin(path, origin)) {
@@ -493,7 +500,7 @@ const routeOwnedRequest = (
       return unavailable();
     }
     const decoded = yield* Effect.tryPromise({
-      try: async () => Schema.decodeUnknownOption(SmokeResponse)(await response.json()),
+      try: () => response.json().then(Schema.decodeUnknownOption(SmokeResponse)),
       catch: () => undefined,
     });
     if (Option.isNone(decoded)) {
@@ -545,7 +552,7 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
       onSuccess: (response) => response,
     }),
     Effect.map((response) => {
-      if (!smokeProofAccepted(request, environment.SMOKE_PROOF ?? "")) return response;
+      if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
       const version = environment.CF_VERSION_METADATA?.id;
       if (version === undefined) return response;
       const headers = new Headers(response.headers);

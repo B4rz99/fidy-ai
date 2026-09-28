@@ -15,7 +15,10 @@ export const SmokeIdentity = Schema.Struct({
 export type SmokeIdentity = typeof SmokeIdentity.Type;
 
 /** The runner must compare observed Worker identities with its upload receipts, never trust a 2xx alone. */
-export const verifySmokeIdentity = (expected: SmokeIdentity, observed: SmokeIdentity): boolean =>
+export const verifySmokeIdentity = ({
+  expected,
+  observed,
+}: Readonly<{ expected: SmokeIdentity; observed: SmokeIdentity }>): boolean =>
   expected.gitRevision === observed.gitRevision &&
   expected.contractDigest === observed.contractDigest &&
   expected.workerVersionId === observed.workerVersionId;
@@ -23,7 +26,10 @@ export const verifySmokeIdentity = (expected: SmokeIdentity, observed: SmokeIden
 const smokeSecretPattern = /^[0-9a-f]{64}$/u;
 
 /** A separate, randomly provisioned deployment-runner credential, never a User or provider grant. */
-export const smokeProofAccepted = (request: Request, secret: string): boolean => {
+export const smokeProofAccepted = ({
+  request,
+  secret,
+}: Readonly<{ request: Request; secret: string }>): boolean => {
   const offered = request.headers.get(smokeProofHeader) ?? "";
   if (!smokeSecretPattern.test(secret) || !smokeSecretPattern.test(offered)) return false;
   let difference = 0;

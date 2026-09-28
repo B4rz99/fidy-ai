@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { type Cause, Effect, Exit, Option, Schema } from "effect";
 
 const Canary = Schema.Struct({
   version: Schema.Literal(1),
@@ -34,20 +34,21 @@ export type CanaryHealth = Readonly<{
     | Readonly<{ state: "healthy" | "attention"; lastSucceededMs: number }>
   );
 
-const recordCanary = async (
+const recordCanary = (
   db: D1Database,
   kind: CanaryHealth["operation"],
   now: number
-): Promise<void> => {
-  await db
-    .prepare(`INSERT INTO operational_canary (kind, last_succeeded_ms) VALUES (?, ?)
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(`INSERT INTO operational_canary (kind, last_succeeded_ms) VALUES (?, ?)
     ON CONFLICT(kind) DO UPDATE SET last_succeeded_ms = MAX(last_succeeded_ms, excluded.last_succeeded_ms)`)
-    .bind(kind, now)
-    .run();
-};
+      .bind(kind, now)
+      .run()
+  ).pipe(Effect.asVoid);
 
 /** An actual Queue consumer, not queue.send(), proves Queue execution. */
-export const receiveCanary = async (
+export const receiveCanary = (
   input: Readonly<{
     DB: D1Database;
     workflow: Readonly<{
@@ -57,82 +58,120 @@ export const receiveCanary = async (
     payload: unknown;
     now: number;
   }>
-): Promise<void> => {
-  const decoded = Schema.decodeUnknownOption(Canary)(input.payload);
-  if (
-    Option.isNone(decoded) ||
-    decoded.value.sentAtMs > input.now ||
-    input.now - decoded.value.sentAtMs > staleMs
-  ) {
-    throw new Error("Invalid operational canary");
-  }
-  await recordCanary(input.DB, "queueExecution", input.now);
-  const id = `operational-canary-${Math.floor(decoded.value.sentAtMs / periodMs)}`;
-  try {
-    await input.workflow.create({ id, params: decoded.value });
-  } catch (original) {
-    // A Queue redelivery may race a prior successful Workflow handoff. Only a confirmed
-    // existing instance makes that retry safe to acknowledge; other failures still retry.
-    const instance = await input.workflow.get(id).catch((): never => {
-      throw original;
-    });
-    const status = Schema.decodeUnknownSync(WorkflowStatus)(await instance.status());
-    if (["errored", "terminated", "unknown"].includes(status.status)) throw original;
-  }
-};
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const decoded = Schema.decodeUnknownOption(Canary)(input.payload);
+      if (
+        Option.isNone(decoded) ||
+        decoded.value.sentAtMs > input.now ||
+        input.now - decoded.value.sentAtMs > staleMs
+      ) {
+        return yield* Effect.die(new Error("Invalid operational canary"));
+      }
+      yield* recordCanary(input.DB, "queueExecution", input.now);
+      const id = `operational-canary-${Math.floor(decoded.value.sentAtMs / periodMs)}`;
+      const created = yield* Effect.exit(
+        Effect.tryPromise(() => input.workflow.create({ id, params: decoded.value }))
+      );
+      if (Exit.isFailure(created)) {
+        // A redelivery may race a successful handoff; only a confirmed existing instance is safe.
+        const instance = yield* Effect.tryPromise(() => input.workflow.get(id)).pipe(
+          Effect.catch(() => Effect.failCause(created.cause))
+        );
+        const status = yield* Effect.tryPromise(() => instance.status()).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(WorkflowStatus))
+        );
+        if (
+          status.status === "errored" ||
+          status.status === "terminated" ||
+          status.status === "unknown"
+        ) {
+          return yield* Effect.failCause(created.cause);
+        }
+      }
+    })
+  );
 
 /** Only a completed Workflow step proves Workflow execution. */
-export const completeCanary = async (
-  db: D1Database,
-  payload: unknown,
-  now: number
-): Promise<void> => {
-  const decoded = Schema.decodeUnknownOption(Canary)(payload);
-  if (
-    Option.isNone(decoded) ||
-    decoded.value.sentAtMs > now ||
-    now - decoded.value.sentAtMs > staleMs
-  ) {
-    throw new Error("Invalid operational canary");
-  }
-  await recordCanary(db, "workflowExecution", now);
-};
+export const completeCanary = ({
+  db,
+  payload,
+  now,
+}: Readonly<{
+  db: D1Database;
+  payload: unknown;
+  now: number;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const decoded = Schema.decodeUnknownOption(Canary)(payload);
+      if (
+        Option.isNone(decoded) ||
+        decoded.value.sentAtMs > now ||
+        now - decoded.value.sentAtMs > staleMs
+      ) {
+        return yield* Effect.die(new Error("Invalid operational canary"));
+      }
+      yield* recordCanary(db, "workflowExecution", now);
+    })
+  );
 
 /** Inspect private D1 evidence; absent/invalid state never becomes a healthy measurement. */
-export const readCanaryHealth = async (
-  db: D1Database,
-  now: number
-): Promise<ReadonlyArray<CanaryHealth>> => {
-  const operations: ReadonlyArray<CanaryHealth["operation"]> = [
-    "queueExecution",
-    "workflowExecution",
-  ];
-  try {
-    const response = await db
-      .prepare("SELECT kind, last_succeeded_ms FROM operational_canary")
-      .all();
-    const rows = Schema.decodeUnknownSync(Schema.Array(Check))(response.results);
-    return operations.map((operation): CanaryHealth => {
-      const row = rows.find((item) => item.kind === operation);
-      if (row === undefined) return { component: "capability", operation, state: "unavailable" };
-      return {
-        component: "capability",
-        operation,
-        state: now - row.last_succeeded_ms <= staleMs ? "healthy" : "attention",
-        lastSucceededMs: row.last_succeeded_ms,
-      };
-    });
-  } catch {
-    return operations.map((operation) => ({
-      component: "capability",
-      operation,
-      state: "unavailable",
-    }));
-  }
-};
+export const readCanaryHealth = ({
+  db,
+  now,
+}: Readonly<{
+  db: D1Database;
+  now: number;
+}>): Promise<ReadonlyArray<CanaryHealth>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const operations: ReadonlyArray<CanaryHealth["operation"]> = [
+        "queueExecution",
+        "workflowExecution",
+      ];
+      const rows = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db.prepare("SELECT kind, last_succeeded_ms FROM operational_canary").all()
+        ).pipe(
+          Effect.flatMap((response) =>
+            Schema.decodeUnknownEffect(Schema.Array(Check))(response.results)
+          )
+        )
+      );
+      if (Exit.isFailure(rows)) {
+        return operations.map((operation): CanaryHealth => ({
+          component: "capability",
+          operation,
+          state: "unavailable",
+        }));
+      }
+      return operations.map((operation): CanaryHealth => {
+        const row = rows.value.find((item) => item.kind === operation);
+        if (row === undefined) return { component: "capability", operation, state: "unavailable" };
+        return {
+          component: "capability",
+          operation,
+          state: now - row.last_succeeded_ms <= staleMs ? "healthy" : "attention",
+          lastSucceededMs: row.last_succeeded_ms,
+        };
+      });
+    })
+  );
 
 /** Sending is not success; missing Workflows and Queue delivery remain visible until a real completion. */
-export const sendCanary = async (queue: Pick<Queue, "send">, now: number): Promise<void> => {
+export const sendCanary = ({
+  queue,
+  now,
+}: Readonly<{
+  queue: Pick<Queue, "send">;
+  now: number;
+}>): Promise<void> => {
   const sentAtMs = Math.floor(now / periodMs) * periodMs;
-  await queue.send({ version: 1, sentAtMs } satisfies CanaryPayload);
+  return Effect.runPromise(
+    Effect.tryPromise(() => queue.send({ version: 1, sentAtMs } satisfies CanaryPayload)).pipe(
+      Effect.asVoid
+    )
+  );
 };

@@ -1,5 +1,7 @@
 import { Miniflare } from "miniflare";
-import { afterEach, describe, expect, it } from "vitest";
+import { it } from "@effect/vitest";
+import { type Cause, Effect } from "effect";
+import { afterEach, describe, expect } from "vitest";
 import { runOperationalAlerts as deliverAlerts } from "./operational-alert-delivery";
 import type { OperationalAlert } from "./operational-alerts";
 
@@ -8,209 +10,271 @@ const runOperationalAlerts = (
 ): Promise<void> => deliverAlerts({ ...input, signal: new AbortController().signal });
 
 const instances: Miniflare[] = [];
-const database = async (): Promise<D1Database> => {
-  const instance = new Miniflare({
-    workers: [
-      {
-        config: {
-          name: "operational-alerts",
-          type: "worker",
-          compatibilityDate: "2026-09-08",
-          env: { DB: { id: "operational-alerts", type: "d1" } },
-          manifest: {
-            mainModule: "index.mjs",
-            modules: {
-              "index.mjs": {
-                contents: "export default {fetch() {return new Response('ok')}}",
-                type: "esm",
+const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const instance = new Miniflare({
+      workers: [
+        {
+          config: {
+            name: "operational-alerts",
+            type: "worker",
+            compatibilityDate: "2026-09-08",
+            env: { DB: { id: "operational-alerts", type: "d1" } },
+            manifest: {
+              mainModule: "index.mjs",
+              modules: {
+                "index.mjs": {
+                  contents: "export default {fetch() {return new Response('ok')}}",
+                  type: "esm",
+                },
               },
             },
           },
         },
-      },
-    ],
-  });
-  await instance.ready;
-  instances.push(instance);
-  const db = await instance.getD1Database("DB");
-  await db
-    .prepare(`CREATE TABLE operational_alerts (
+      ],
+    });
+    yield* Effect.tryPromise(() => instance.ready);
+    instances.push(instance);
+    const db = yield* Effect.tryPromise(() => instance.getD1Database("DB"));
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`CREATE TABLE operational_alerts (
     kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL,
     state TEXT NOT NULL, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL,
     last_attempt_ms INTEGER, attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
     next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
     acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
   )`)
-    .run();
-  return db;
-};
-afterEach(async () => {
-  await Promise.all(instances.splice(0).map((instance) => instance.dispose()));
-});
+        .run()
+    );
+    return db;
+  });
+afterEach(() =>
+  Effect.runPromise(
+    Effect.forEach(instances.splice(0), (instance) => Effect.tryPromise(() => instance.dispose()), {
+      discard: true,
+    })
+  )
+);
+
 const deadLetter: OperationalAlert = {
   kind: "dead_letters",
   owner: "deadLetters",
   severity: "critical",
 };
 
+// Assertions of rejected provider calls stay inside the Effect test, without a second async runner.
+const rejects = (promise: Promise<unknown>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => expect(promise).rejects.toThrow()).pipe(Effect.asVoid);
+
+const accepted = (): Promise<void> => Promise.resolve();
+
 describe("operator email notification", () => {
-  it("delivers a new critical alert once and repeats after thirty minutes without changing work state", async () => {
-    const db = await database();
-    const sent: string[] = [];
-    const send = async (_alert: OperationalAlert, key: string): Promise<void> => {
-      sent.push(key);
-    };
-    await runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send });
-    await runOperationalAlerts({ db, now: 1_060_000, alerts: [deadLetter], send });
-    await runOperationalAlerts({ db, now: 2_800_000, alerts: [deadLetter], send });
-    expect(sent).toHaveLength(2);
-    expect(sent[0]).not.toBe(sent[1]);
-  });
-
-  it("does not acknowledge or silently discard an alert when delivery fails", async () => {
-    const db = await database();
-    await expect(
-      runOperationalAlerts({
-        db,
-        now: 1_000_000,
-        alerts: [deadLetter],
-        send: async () => {
-          throw new Error("private delivery error");
-        },
-      })
-    ).rejects.toThrow();
-    const rows = await db
-      .prepare("SELECT state, acknowledged_ms, attempts FROM operational_alerts")
-      .all();
-    expect(rows.results).toEqual([{ state: "firing", acknowledged_ms: null, attempts: 1 }]);
-  });
-
-  it("reuses one idempotency key after an ambiguous attempt before starting another notification", async () => {
-    const db = await database();
-    const keys: string[] = [];
-    await expect(
-      runOperationalAlerts({
-        db,
-        now: 1_000_000,
-        alerts: [deadLetter],
-        send: async (_alert, key) => {
-          keys.push(key);
-          throw new Error("lost provider response");
-        },
-      })
-    ).rejects.toThrow();
-    await runOperationalAlerts({
-      db,
-      now: 2_800_000,
-      alerts: [deadLetter],
-      send: async (_alert, key) => {
-        keys.push(key);
-      },
-    });
-    expect(keys).toEqual([keys[0], keys[0]]);
-  });
-
-  it("does not send an email after the scheduled Work is cancelled", async () => {
-    const db = await database();
-    const cancellation = new AbortController();
-    cancellation.abort();
-    const sent: string[] = [];
-    await expect(
-      deliverAlerts({
-        db,
-        now: 1_000_000,
-        alerts: [deadLetter],
-        signal: cancellation.signal,
-        send: async (_alert, key) => {
+  it.effect(
+    "delivers a new critical alert once and repeats after thirty minutes without changing work state",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* database();
+        const sent: string[] = [];
+        const send = (_alert: OperationalAlert, key: string): Promise<void> => {
           sent.push(key);
-        },
+          return accepted();
+        };
+        yield* Effect.tryPromise(() =>
+          runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send })
+        );
+        yield* Effect.tryPromise(() =>
+          runOperationalAlerts({ db, now: 1_060_000, alerts: [deadLetter], send })
+        );
+        yield* Effect.tryPromise(() =>
+          runOperationalAlerts({ db, now: 2_800_000, alerts: [deadLetter], send })
+        );
+        expect(sent).toHaveLength(2);
+        expect(sent[0]).not.toBe(sent[1]);
       })
-    ).rejects.toThrow();
-    expect(sent).toEqual([]);
-  });
+  );
 
-  it("starts a new operator-email attempt after the provider idempotency window instead of falling permanently silent", async () => {
-    const db = await database();
-    const sent: string[] = [];
-    await expect(
-      runOperationalAlerts({
-        db,
-        now: 1_000_000,
-        alerts: [deadLetter],
-        send: async (_alert, key) => {
-          sent.push(key);
-          throw new Error("lost provider response");
-        },
+  it.effect("does not acknowledge or silently discard an alert when delivery fails", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      yield* rejects(
+        runOperationalAlerts({
+          db,
+          now: 1_000_000,
+          alerts: [deadLetter],
+          send: () => Promise.reject(new Error("private delivery error")),
+        })
+      );
+      const rows = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT state, acknowledged_ms, attempts FROM operational_alerts").all()
+      );
+      expect(rows.results).toEqual([{ state: "firing", acknowledged_ms: null, attempts: 1 }]);
+    })
+  );
+
+  it.effect(
+    "reuses one idempotency key after an ambiguous attempt before starting another notification",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* database();
+        const keys: string[] = [];
+        yield* rejects(
+          runOperationalAlerts({
+            db,
+            now: 1_000_000,
+            alerts: [deadLetter],
+            send: (_alert, key) => {
+              keys.push(key);
+              return Promise.reject(new Error("lost provider response"));
+            },
+          })
+        );
+        yield* Effect.tryPromise(() =>
+          runOperationalAlerts({
+            db,
+            now: 2_800_000,
+            alerts: [deadLetter],
+            send: (_alert, key) => {
+              keys.push(key);
+              return accepted();
+            },
+          })
+        );
+        expect(keys).toEqual([keys[0], keys[0]]);
       })
-    ).rejects.toThrow();
-    await runOperationalAlerts({
-      db,
-      now: 84_000_000,
-      alerts: [deadLetter],
-      send: async (_alert, key) => {
-        sent.push(key);
-      },
-    });
-    expect(sent).toHaveLength(2);
-    expect(sent[1]).not.toBe(sent[0]);
-  });
+  );
 
-  it("refuses an invalid alert kind/owner pair from corrupted private state", async () => {
-    const db = await database();
-    await db
-      .prepare(`INSERT INTO operational_alerts
+  it.effect("does not send an email after the scheduled Work is cancelled", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const sent: string[] = [];
+      yield* rejects(
+        deliverAlerts({
+          db,
+          now: 1_000_000,
+          alerts: [deadLetter],
+          signal: AbortSignal.abort(),
+          send: (_alert, key) => {
+            sent.push(key);
+            return accepted();
+          },
+        })
+      );
+      expect(sent).toEqual([]);
+    })
+  );
+
+  it.effect(
+    "starts a new operator-email attempt after the provider idempotency window instead of falling permanently silent",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* database();
+        const sent: string[] = [];
+        yield* rejects(
+          runOperationalAlerts({
+            db,
+            now: 1_000_000,
+            alerts: [deadLetter],
+            send: (_alert, key) => {
+              sent.push(key);
+              return Promise.reject(new Error("lost provider response"));
+            },
+          })
+        );
+        yield* Effect.tryPromise(() =>
+          runOperationalAlerts({
+            db,
+            now: 84_000_000,
+            alerts: [deadLetter],
+            send: (_alert, key) => {
+              sent.push(key);
+              return accepted();
+            },
+          })
+        );
+        expect(sent).toHaveLength(2);
+        expect(sent[1]).not.toBe(sent[0]);
+      })
+  );
+
+  it.effect("refuses an invalid alert kind/owner pair from corrupted private state", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO operational_alerts
       (kind, owner, severity, state, first_seen_ms, last_seen_ms, next_attempt_ms)
       VALUES ('callback_rejection', 'billingQueue', 'critical', 'resolved', 0, 0, 0)`)
-      .run();
-    await expect(
-      runOperationalAlerts({
-        db,
-        now: 1_000_000,
-        alerts: [],
-        send: async () => {
-          throw new Error("must not send");
-        },
-      })
-    ).rejects.toThrow();
-  });
+          .run()
+      );
+      yield* rejects(
+        runOperationalAlerts({
+          db,
+          now: 1_000_000,
+          alerts: [],
+          send: () => Promise.reject(new Error("must not send")),
+        })
+      );
+    })
+  );
 
-  it("cannot resolve authoritative incomplete work from a missing measurement", async () => {
-    const db = await database();
-    const sent: string[] = [];
-    const send = async (
-      _alert: OperationalAlert,
-      _key: string,
-      delivery: Readonly<{ phase: "firing" | "resolved" }>
-    ): Promise<void> => {
-      sent.push(delivery.phase);
-    };
-    await runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send });
-    await runOperationalAlerts({
-      db,
-      now: 1_100_000,
-      alerts: [{ kind: "inspection_unavailable", owner: "deadLetters", severity: "warning" }],
-      send,
-    });
-    expect(
-      await db.prepare("SELECT state FROM operational_alerts WHERE kind = 'dead_letters'").first()
-    ).toEqual({ state: "firing" });
-    expect(sent).toEqual(["firing", "firing"]);
-  });
+  it.effect("cannot resolve authoritative incomplete work from a missing measurement", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const sent: string[] = [];
+      const send = (
+        _alert: OperationalAlert,
+        _key: string,
+        delivery: Readonly<{ phase: "firing" | "resolved" }>
+      ): Promise<void> => {
+        sent.push(delivery.phase);
+        return accepted();
+      };
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send })
+      );
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({
+          db,
+          now: 1_100_000,
+          alerts: [{ kind: "inspection_unavailable", owner: "deadLetters", severity: "warning" }],
+          send,
+        })
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state FROM operational_alerts WHERE kind = 'dead_letters'").first()
+        )
+      ).toEqual({ state: "firing" });
+      expect(sent).toEqual(["firing", "firing"]);
+    })
+  );
 
-  it("resolves absent conditions, then notifies when the condition returns", async () => {
-    const db = await database();
-    const sent: string[] = [];
-    const send = async (
-      _alert: OperationalAlert,
-      key: string,
-      delivery: Readonly<{ signal: AbortSignal; phase: "firing" | "resolved" }>
-    ): Promise<void> => {
-      sent.push(`${delivery.phase}:${key}`);
-    };
-    await runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send });
-    await runOperationalAlerts({ db, now: 1_100_000, alerts: [], send });
-    await runOperationalAlerts({ db, now: 1_150_000, alerts: [], send });
-    await runOperationalAlerts({ db, now: 1_200_000, alerts: [deadLetter], send });
-    expect(sent.map((value) => value.split(":")[0])).toEqual(["firing", "resolved", "firing"]);
-  });
+  it.effect("resolves absent conditions, then notifies when the condition returns", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const sent: string[] = [];
+      const send = (
+        _alert: OperationalAlert,
+        key: string,
+        delivery: Readonly<{ phase: "firing" | "resolved" }>
+      ): Promise<void> => {
+        sent.push(`${delivery.phase}:${key}`);
+        return accepted();
+      };
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send })
+      );
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_100_000, alerts: [], send })
+      );
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_150_000, alerts: [], send })
+      );
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_200_000, alerts: [deadLetter], send })
+      );
+      expect(sent.map((value) => value.split(":")[0])).toEqual(["firing", "resolved", "firing"]);
+    })
+  );
 });

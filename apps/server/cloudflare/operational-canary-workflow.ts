@@ -1,4 +1,5 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import { Clock, Effect } from "effect";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { completeCanary } from "./runtime/operational-canary";
 import { captureWorkflowFailure } from "./runtime/operational-workflow-failure";
@@ -14,13 +15,18 @@ export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure(
-      observeWorkerPromise(
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
         () =>
           step.do(
             "record-operational-canary-v1",
             { retries: { limit: 0, delay: "1 second" } },
-            () => completeCanary(this.env.DB, event.payload, Date.now())
+            () =>
+              completeCanary({
+                db: this.env.DB,
+                payload: event.payload,
+                now: Effect.runSync(Clock.currentTimeMillis),
+              })
           ),
         {
           environment: workerRelease(this.env),
@@ -28,7 +34,7 @@ export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<
           operation: "workflow.operationalCanary",
         }
       ),
-      this.env.DB
-    );
+      db: this.env.DB,
+    });
   }
 }

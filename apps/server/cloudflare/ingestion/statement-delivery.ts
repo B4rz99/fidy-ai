@@ -339,8 +339,8 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure(
-      observeWorkerPromise(
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
         () =>
           runStatementExtractionWorkflow({
             payload: event.payload,
@@ -353,7 +353,7 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
           operation: "workflow.statementExtraction",
         }
       ),
-      this.env.DB
-    );
+      db: this.env.DB,
+    });
   }
 }

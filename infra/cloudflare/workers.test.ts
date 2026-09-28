@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
-import { DateTime, Effect, Result, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
 import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
@@ -13,6 +13,46 @@ import {
   localCanonicalReadBearer,
   productionTopology,
 } from "../../apps/server/cloudflare/runtime/topology";
+
+const withIsolatedD1 = <A, E, R>(
+  name: string,
+  use: (db: D1Database) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | Cause.UnknownError, R> =>
+  Effect.scoped(
+    Effect.acquireUseRelease(
+      Effect.sync(
+        () =>
+          new Miniflare({
+            workers: [
+              {
+                config: {
+                  name,
+                  type: "worker",
+                  compatibilityDate: "2026-09-08",
+                  env: { DB: { id: name, type: "d1" } },
+                  manifest: {
+                    mainModule: "index.mjs",
+                    modules: {
+                      "index.mjs": {
+                        contents: "export default { fetch() { return new Response('ok') } }",
+                        type: "esm",
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          })
+      ),
+      (instance) =>
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => instance.ready);
+          const db = yield* Effect.tryPromise(() => instance.getD1Database("DB"));
+          return yield* use(db);
+        }),
+      (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
+    )
+  );
 
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -427,80 +467,68 @@ describe("Cloudflare Worker topology", () => {
       );
     })
   );
+});
 
-  it("routes the private canary Queue to a real Workflow handoff, not to application work", async () => {
-    const instance = new Miniflare({
-      workers: [
-        {
-          config: {
-            name: "canary-queue-test",
-            type: "worker",
-            compatibilityDate: "2026-09-08",
-            env: { DB: { id: "canary-queue-test", type: "d1" } },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default { fetch() { return new Response('ok') } }",
-                  type: "esm",
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
-    try {
-      await instance.ready;
-      const db = await instance.getD1Database("DB");
-      await db
-        .prepare(
-          "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
-        )
-        .run();
+it.live("routes the private canary Queue to a real Workflow handoff, not to application work", () =>
+  withIsolatedD1("canary-queue-test", (db) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+          )
+          .run()
+      );
       let created = false;
+      const done = (): Promise<void> => Promise.resolve();
       const canaryInstance: WorkflowInstance = {
         id: "canary",
-        status: async () => ({ status: "complete" }),
-        pause: async () => {},
-        resume: async () => {},
-        restart: async () => {},
-        terminate: async () => {},
-        delete: async () => {},
-        sendEvent: async () => {},
-        subscribe: async () => ({
-          next: async () => ({ done: true, value: undefined }),
-          [Symbol.dispose]: () => {},
-        }),
+        status: () => Promise.resolve({ status: "complete" }),
+        pause: done,
+        resume: done,
+        restart: done,
+        terminate: done,
+        delete: done,
+        sendEvent: done,
+        subscribe: () =>
+          Promise.resolve({
+            next: () => Promise.resolve({ done: true as const, value: undefined }),
+            [Symbol.dispose]: () => {},
+          }),
       };
       const workflow: Workflow = {
-        create: async () => {
+        create: () => {
           created = true;
-          return canaryInstance;
+          return Promise.resolve(canaryInstance);
         },
-        get: async () => canaryInstance,
-        createBatch: async () => [],
-        deleteBatch: async () => ({ deleted: [], errors: [] }),
+        get: () => Promise.resolve(canaryInstance),
+        createBatch: () => Promise.resolve([]),
+        deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
       };
+      const now = yield* Clock.currentTimeMillis;
       const batch = {
-        ...queueBatch({ version: 1, sentAtMs: Math.floor(Date.now() / 300_000) * 300_000 }),
+        ...queueBatch({ version: 1, sentAtMs: Math.floor(now / 300_000) * 300_000 }),
         queue: "OperationalCanaryQueue",
       };
-      await makeCoreWorker(collectingTelemetry([])).queue(batch, {
-        ...coreEnvironment,
-        DB: db,
-        OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
-        OPERATIONAL_CANARY_WORKFLOW: workflow,
-      });
+      yield* Effect.tryPromise(() =>
+        makeCoreWorker(collectingTelemetry([])).queue(batch, {
+          ...coreEnvironment,
+          DB: db,
+          OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
+          OPERATIONAL_CANARY_WORKFLOW: workflow,
+        })
+      );
       expect(created).toBe(true);
-      expect(await db.prepare("SELECT kind FROM operational_canary").all()).toMatchObject({
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT kind FROM operational_canary").all())
+      ).toMatchObject({
         results: [{ kind: "queueExecution" }],
       });
-    } finally {
-      await instance.dispose();
-    }
-  });
+    })
+  )
+);
 
+describe("Cloudflare Worker topology (scheduled)", () => {
   it.effect("reports a failed cron invocation after attempting independent activities", () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
@@ -521,151 +549,136 @@ describe("Cloudflare Worker topology", () => {
       expect(exported).not.toContain(privateFailureDetail);
     })
   );
+});
 
-  it("bounds public Tail-event storage through successive Core schedules without deleting current evidence", async () => {
-    const instance = new Miniflare({
-      workers: [
-        {
-          config: {
-            name: "event-retention-test",
-            type: "worker",
-            compatibilityDate: "2026-09-08",
-            env: { DB: { id: "event-retention-test", type: "d1" } },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default { fetch() { return new Response('ok') } }",
-                  type: "esm",
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
-    try {
-      await instance.ready;
-      const db = await instance.getD1Database("DB");
-      await db
-        .prepare(
-          "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
-        )
-        .run();
-      const minuteMs = 60_000;
-      const current = Math.floor(Date.now() / minuteMs) * minuteMs;
-      const oldBuckets = Array.from({ length: 200 }, (_, index) =>
-        db
-          .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 1)")
-          .bind(current - 172_800_000 - index * minuteMs)
-      );
-      await db.batch(oldBuckets.slice(0, 100));
-      await db.batch(oldBuckets.slice(100));
-      await db
-        .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
-        .bind(current)
-        .run();
-      const worker = makeCoreWorker(collectingTelemetry([]));
-      const environment: Parameters<typeof coreWorker.scheduled>[1] = {
-        ...coreEnvironment,
-        DB: db,
-        ASYNC_HEALTH_ENABLED: "enabled",
-      };
-      await expect(worker.scheduled(scheduledController, environment)).rejects.toThrow();
-      expect(
-        await db
-          .prepare(
-            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
+it.live(
+  "bounds public Tail-event storage through successive Core schedules without deleting current evidence",
+  () =>
+    withIsolatedD1("event-retention-test", (db) =>
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
+            )
+            .run()
+        );
+        const minuteMs = 60_000;
+        const current = Math.floor((yield* Clock.currentTimeMillis) / minuteMs) * minuteMs;
+        const oldBuckets = Array.from({ length: 200 }, (_, index) =>
+          db
+            .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 1)")
+            .bind(current - 172_800_000 - index * minuteMs)
+        );
+        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(0, 100)));
+        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(100)));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+            .bind(current)
+            .run()
+        );
+        const worker = makeCoreWorker(collectingTelemetry([]));
+        const environment: Parameters<typeof coreWorker.scheduled>[1] = {
+          ...coreEnvironment,
+          DB: db,
+          ASYNC_HEALTH_ENABLED: "enabled",
+        };
+        yield* Effect.tryPromise(() =>
+          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
+        );
+        const exceptionCount = (): Promise<unknown> =>
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
+            )
+            .first();
+        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 72 });
+        yield* Effect.tryPromise(() =>
+          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
+        );
+        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'heartbeat'"
+              )
+              .first()
           )
-          .first()
-      ).toEqual({ count: 72 });
-      await expect(worker.scheduled(scheduledController, environment)).rejects.toThrow();
-      expect(
-        await db
-          .prepare(
-            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
-          )
-          .first()
-      ).toEqual({ count: 0 });
-      expect(
-        await db
-          .prepare(
-            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'heartbeat'"
-          )
-          .first()
-      ).toEqual({ count: 1 });
-    } finally {
-      await instance.dispose();
-    }
-  });
+        ).toEqual({ count: 1 });
+      })
+    )
+);
 
-  it("keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary", async () => {
-    const instance = new Miniflare({
-      workers: [
-        {
-          config: {
-            name: "operator-alert-worker",
-            type: "worker",
-            compatibilityDate: "2026-09-08",
-            env: { DB: { id: "operator-alert-worker", type: "d1" } },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default {fetch() {return new Response('ok')}}",
-                  type: "esm",
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => new Response('{"message":"rejected"}', { status: 400 }));
-    try {
-      await instance.ready;
-      const db = await instance.getD1Database("DB");
-      await db
+const rejectedOperatorFetch = (): Promise<Response> =>
+  Promise.resolve(new Response('{"message":"rejected"}', { status: 400 }));
+
+const inspectRejectedAlert = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      db
         .prepare(`CREATE TABLE operational_alerts (
-        kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL,
-        first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, last_attempt_ms INTEGER,
-        attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
-        next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
-        acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
-      )`)
-        .run();
-      const worker = makeCoreWorker(collectingTelemetry([]));
-      await expect(
+          kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL,
+          first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, last_attempt_ms INTEGER,
+          attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
+          next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+          acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
+        )`)
+        .run()
+    );
+    const worker = makeCoreWorker(collectingTelemetry([]));
+    yield* Effect.tryPromise(() =>
+      expect(
         worker.scheduled(scheduledController, {
           ...coreEnvironment,
           DB: db,
           ASYNC_HEALTH_ENABLED: "enabled",
-          ASYNC_DEAD_LETTERS: { metrics: async () => ({ backlogCount: 1, backlogBytes: 20 }) },
+          ASYNC_DEAD_LETTERS: {
+            metrics: () => Promise.resolve({ backlogCount: 1, backlogBytes: 20 }),
+          },
           OPERATOR_ALERT_EMAIL: "operator@example.com",
           RESEND_API_KEY: "fake-test-key",
         })
-      ).rejects.toThrow();
-      const states = await db
+      ).rejects.toThrow()
+    );
+    const states = yield* Effect.tryPromise(() =>
+      db
         .prepare(
           "SELECT kind, state, delivery_confirmed, acknowledged_ms FROM operational_alerts WHERE kind = 'dead_letters'"
         )
-        .all();
-      expect(states.results).toEqual([
-        { kind: "dead_letters", state: "firing", delivery_confirmed: 0, acknowledged_ms: null },
-      ]);
-      expect(
-        await db
+        .all()
+    );
+    expect(states.results).toEqual([
+      {
+        kind: "dead_letters",
+        state: "firing",
+        delivery_confirmed: 0,
+        acknowledged_ms: null,
+      },
+    ]);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
           .prepare("SELECT COUNT(*) AS count FROM operational_alerts WHERE delivery_confirmed = 1")
           .first()
-      ).toEqual({ count: 0 });
-    } finally {
-      fetch.mockRestore();
-      await instance.dispose();
-    }
+      )
+    ).toEqual({ count: 0 });
   });
 
+it.effect(
+  "keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary",
+  () =>
+    Effect.scoped(
+      Effect.acquireUseRelease(
+        Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(rejectedOperatorFetch)),
+        () => withIsolatedD1("operator-alert-worker", inspectRejectedAlert),
+        (fetch) => Effect.sync(() => fetch.mockRestore())
+      )
+    )
+);
+
+describe("Cloudflare Worker topology (continued)", () => {
   it.effect("retains one owning span when runtime release metadata is malformed", () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];

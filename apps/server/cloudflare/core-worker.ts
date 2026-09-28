@@ -1876,7 +1876,7 @@ const receiveCanaryBatch: CoreWorker["queue"] = (batch, environment) => {
     DB: environment.DB,
     workflow: environment.OPERATIONAL_CANARY_WORKFLOW,
     payload: message.body,
-    now: Date.now(),
+    now: Effect.runSync(Clock.currentTimeMillis),
   });
 };
 
@@ -1939,33 +1939,37 @@ const deliverOperationalSignals = (
   environment: CoreEnvironment,
   signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>
 ): Effect.Effect<void, void> =>
-  Effect.tryPromise({
-    try: (signal) => {
-      const recipient = Schema.decodeUnknownOption(EmailAddress)(environment.OPERATOR_ALERT_EMAIL);
-      if (Option.isNone(recipient) || !environment.RESEND_API_KEY) {
-        throw new Error("Operator email configuration unavailable");
-      }
-      const to = recipient.value;
-      const apiKey = environment.RESEND_API_KEY;
-      return runOperationalAlerts({
-        db: environment.DB,
-        now: Date.now(),
-        alerts: decideOperationalAlerts(signals),
-        signal,
-        send: (alert, idempotencyKey, delivery) =>
-          sendOperatorEmail({
-            alert,
-            idempotencyKey,
-            to,
-            apiKey,
-            release: environment.RELEASE_GIT_SHA,
-            signal: delivery.signal,
-            phase: delivery.phase,
-          }),
-      });
-    },
-    catch: () => undefined,
-  });
+  Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    Effect.tryPromise({
+      try: (signal) => {
+        const recipient = Schema.decodeUnknownOption(EmailAddress)(
+          environment.OPERATOR_ALERT_EMAIL
+        );
+        if (Option.isNone(recipient) || environment.RESEND_API_KEY === undefined) {
+          throw new Error("Operator email configuration unavailable");
+        }
+        const to = recipient.value;
+        const apiKey = environment.RESEND_API_KEY;
+        return runOperationalAlerts({
+          db: environment.DB,
+          now,
+          alerts: decideOperationalAlerts(signals),
+          signal,
+          send: (alert, idempotencyKey, delivery) =>
+            sendOperatorEmail({
+              alert,
+              idempotencyKey,
+              to,
+              apiKey,
+              release: environment.RELEASE_GIT_SHA,
+              signal: delivery.signal,
+              phase: delivery.phase,
+            }),
+        });
+      },
+      catch: () => undefined,
+    })
+  );
 
 const operationalWorkQueues = (
   environment: CoreEnvironment
@@ -2059,12 +2063,37 @@ const reportOperationalSignals = (
     { discard: true }
   ).pipe(
     Effect.andThen(
-      Effect.tryPromise({
-        try: () => recordOperationalHealth(environment.DB, signals, Date.now()),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(() => undefined))
+      Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
+        Effect.tryPromise({
+          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
+          catch: () => undefined,
+        })
+      ).pipe(Effect.orElseSucceed(() => undefined))
     ),
     Effect.andThen(deliverOperationalSignals(environment, signals))
+  );
+
+const observeAdditionalSignals = (
+  environment: CoreEnvironment,
+  signals: ReadonlyArray<OperationalSignal>
+): Effect.Effect<ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth>, void> =>
+  Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    observeOperationalEventMetrics({ db: environment.DB, now }).pipe(
+      Effect.flatMap((events) =>
+        Effect.tryPromise({
+          try: () => readCanaryHealth({ db: environment.DB, now }),
+          catch: () => undefined,
+        }).pipe(
+          Effect.map(
+            (canaries): ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth> => [
+              ...signals,
+              ...events,
+              ...canaries,
+            ]
+          )
+        )
+      )
+    )
   );
 
 const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void> =>
@@ -2076,26 +2105,7 @@ const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void
         workQueues: operationalWorkQueues(environment),
         workflows: operationalWorkflows(environment),
       }).pipe(
-        Effect.flatMap((signals) =>
-          observeOperationalEventMetrics(environment.DB, Date.now()).pipe(
-            Effect.flatMap((events) =>
-              Effect.tryPromise({
-                try: () => readCanaryHealth(environment.DB, Date.now()),
-                catch: () => undefined,
-              }).pipe(
-                Effect.map(
-                  (
-                    canaries
-                  ): ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth> => [
-                    ...signals,
-                    ...events,
-                    ...canaries,
-                  ]
-                )
-              )
-            )
-          )
-        ),
+        Effect.flatMap((signals) => observeAdditionalSignals(environment, signals)),
         Effect.flatMap((signals) =>
           inspectOperationalCapabilities({
             d1: environment.DB,
@@ -2166,7 +2176,7 @@ const canaryPublication = (
   return queue === undefined
     ? Effect.fail(undefined)
     : Effect.tryPromise({
-        try: () => sendCanary(queue, current),
+        try: () => sendCanary({ queue, now: current }),
         catch: () => undefined,
       });
 };
@@ -2176,7 +2186,7 @@ const eventBucketRetention = (
   current: number
 ): Effect.Effect<void, void> =>
   environment.ASYNC_HEALTH_ENABLED === "enabled"
-    ? sweepOperationalEventBuckets(environment.DB, current)
+    ? sweepOperationalEventBuckets({ db: environment.DB, now: current })
     : Effect.void;
 
 const scheduledActivities = (

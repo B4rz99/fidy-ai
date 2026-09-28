@@ -532,8 +532,8 @@ export const runBillingCollectionWorkflow = (
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure(
-      observeWorkerPromise(
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
         () =>
           runBillingCollectionWorkflow({
             environment: this.env,
@@ -546,8 +546,8 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
           operation: "workflow.billingCollection",
         }
       ),
-      this.env.DB
-    );
+      db: this.env.DB,
+    });
   }
 }
 

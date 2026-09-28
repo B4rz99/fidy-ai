@@ -216,8 +216,8 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure(
-      observeWorkerPromise(
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
         () =>
           runOnboardingEmailWorkflow({
             environment: this.env,
@@ -230,8 +230,8 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
           operation: "workflow.onboardingEmail",
         }
       ),
-      this.env.DB
-    );
+      db: this.env.DB,
+    });
   }
 }
 

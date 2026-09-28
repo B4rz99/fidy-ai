@@ -22,10 +22,13 @@ const bucketRetentionMs = 86_400_000;
 const maximumSweepRows = 128;
 
 /** Bounded expiry prevents unauthenticated request traffic from growing D1 metrics indefinitely. */
-export const sweepOperationalEventBuckets = (
-  db: D1Database,
-  now: number
-): Effect.Effect<void, void> =>
+export const sweepOperationalEventBuckets = ({
+  db,
+  now,
+}: Readonly<{
+  db: D1Database;
+  now: number;
+}>): Effect.Effect<void, void> =>
   Effect.tryPromise(() =>
     db
       .prepare(`DELETE FROM operational_event_buckets
@@ -62,10 +65,13 @@ const unavailableMetrics = (): ReadonlyArray<EventMetricSignal> =>
   }));
 
 /** Aggregate platform tails by finite kind; missing or stale heartbeat is unavailable, never zero. */
-export const observeOperationalEventMetrics = (
-  db: D1Database,
-  now: number
-): Effect.Effect<ReadonlyArray<EventMetricSignal>> =>
+export const observeOperationalEventMetrics = ({
+  db,
+  now,
+}: Readonly<{
+  db: D1Database;
+  now: number;
+}>): Effect.Effect<ReadonlyArray<EventMetricSignal>> =>
   Effect.gen(function* () {
     const rows = yield* Effect.exit(
       Effect.tryPromise(() =>

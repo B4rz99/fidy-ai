@@ -235,8 +235,8 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure(
-      observeWorkerPromise(
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
         () => {
           const work = Schema.decodeUnknownOption(Work)(event.payload);
           if (Option.isNone(work)) return Promise.resolve();
@@ -270,8 +270,8 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
           operation: "workflow.emailReplacement",
         }
       ),
-      this.env.DB
-    );
+      db: this.env.DB,
+    });
   }
 }
 

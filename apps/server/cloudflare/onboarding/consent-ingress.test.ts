@@ -1868,8 +1868,12 @@ it("recovers a committed pre-send disclosure once without resending a started at
           )
           .run()
       );
+      expect(
+        Exit.isFailure(yield* Effect.exit(recoverPendingDisclosures({ db, apiKey: "" })))
+      ).toBe(true);
       yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
       yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
+      yield* recoverPendingDisclosures({ db, apiKey: "" });
       expect(provider).toHaveBeenCalledTimes(1);
       const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(
         decodeJson(providerBody(provider.mock.calls[0]?.[1]))

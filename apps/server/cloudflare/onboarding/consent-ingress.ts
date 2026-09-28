@@ -881,7 +881,6 @@ export const recoverPendingDisclosures = ({
 }: Readonly<{ db: D1Database; apiKey: string }>): Effect.Effect<void, void> =>
   Effect.scoped(
     Effect.gen(function* () {
-      if (apiKey.length === 0) return yield* Effect.fail(undefined);
       const now = yield* Clock.currentTimeMillis;
       const raw = yield* attempt(() =>
         db
@@ -894,6 +893,8 @@ export const recoverPendingDisclosures = ({
       const candidates = yield* Schema.decodeUnknownEffect(Schema.Array(DisclosureRecoveryRow))(
         raw.results
       ).pipe(Effect.mapError(() => undefined));
+      if (candidates.length === 0) return;
+      if (apiKey.length === 0) return yield* Effect.fail(undefined);
       const clients = yield* Layer.build(FetchHttpClient.layer);
       const send = makeDisclosureSender({
         apiKey: Redacted.make(apiKey),

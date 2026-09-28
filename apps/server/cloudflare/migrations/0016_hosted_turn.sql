@@ -17,7 +17,7 @@ CREATE TABLE hosted_turns (
   started_at_ms INTEGER NOT NULL,
   terminal_at_ms INTEGER,
   status TEXT NOT NULL CHECK (status IN ('pending','completed','failed','interrupted')),
-  failure_reason TEXT CHECK (failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed')),
+  failure_reason TEXT CHECK (failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed','DeliveryUnconfirmed')),
   FOREIGN KEY (user_id, hosted_session_id) REFERENCES hosted_agent_sessions(user_id, id),
   UNIQUE (user_id, id),
   CHECK ((status = 'pending' AND terminal_at_ms IS NULL AND failure_reason IS NULL) OR
@@ -57,7 +57,7 @@ CREATE TABLE transcript_entries (
            AND tool_call_id IS NOT NULL AND operation IS NOT NULL AND input_json IS NOT NULL AND outcome_json IS NULL) OR
          (kind = 'tool_result' AND text IS NULL AND failure_reason IS NULL AND iteration BETWEEN 1 AND 32
            AND tool_call_id IS NOT NULL AND operation IS NOT NULL AND input_json IS NULL AND outcome_json IS NOT NULL) OR
-         (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed')) OR
+         (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed','DeliveryUnconfirmed')) OR
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
 CREATE INDEX transcript_entries_by_session ON transcript_entries(user_id, hosted_session_id, sequence);

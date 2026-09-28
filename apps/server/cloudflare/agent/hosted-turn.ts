@@ -44,6 +44,17 @@ import {
   HostedTurnRequest,
 } from "../../src/shell/agent/hosted-turn-api";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
+import {
+  type HostedSubject,
+  type WhatsAppHostedSubject,
+  type WhatsAppInboundEvidence,
+  isWhatsAppHosted,
+} from "./hosted-authority";
+import { recordWhatsAppSend, stageWhatsAppDelivery } from "./whatsapp-delivery";
+import type {
+  HostedDeliveryCorrelationToken,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/model";
 import { transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
 import {
@@ -133,6 +144,21 @@ export type HostedDelivery = (
 export const browserHostedDelivery: HostedDelivery = ({ text, turnId, receipt }) =>
   Promise.resolve(Response.json({ text, turnId, receipt }, { status: 202, headers: noStore }));
 
+type WhatsAppHostedDelivery = Readonly<{
+  _tag: "WhatsApp";
+  send: (
+    input: Readonly<{
+      text: TranscriptText;
+      turnId: TranscriptTurnId;
+      correlationToken: HostedDeliveryCorrelationToken;
+    }>
+  ) => Promise<
+    | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
+    | Readonly<{ kind: "ambiguous" | "rejected" }>
+  >;
+}>;
+type ChannelDelivery = HostedDelivery | WhatsAppHostedDelivery;
+
 type HostedMutationExecutor = (
   operation: (typeof operationCatalog.operations)[number]["id"],
   input: CanonicalToolEvidence,
@@ -150,20 +176,43 @@ type HostedTurnInput = Readonly<{
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
-type AdmittedTurnInput = HostedTurnInput &
+type AdmittedTurnInput = Omit<HostedTurnInput, "subject" | "deliver"> &
   Readonly<{
+    subject: HostedSubject;
+    deliver: ChannelDelivery;
+    inbound: Option.Option<WhatsAppInboundEvidence>;
     onAdmitted: Option.Option<(turnId: TranscriptTurnId) => void>;
   }>;
 
 export const completeHostedTurn = (input: HostedTurnInput): Promise<Response> =>
-  executeHostedTurn({ ...input, onAdmitted: Option.none() });
+  executeHostedTurn({ ...input, inbound: Option.none(), onAdmitted: Option.none() });
 export const completeHostedTurnWithAdmission = ({
   input,
   onAdmitted,
 }: Readonly<{
   input: HostedTurnInput;
   onAdmitted: (turnId: TranscriptTurnId) => void;
-}>): Promise<Response> => executeHostedTurn({ ...input, onAdmitted: Option.some(onAdmitted) });
+}>): Promise<Response> =>
+  executeHostedTurn({ ...input, inbound: Option.none(), onAdmitted: Option.some(onAdmitted) });
+
+/** Verified inbound text shares the hosted lifecycle but never borrows a browser credential. */
+export const completeWhatsAppTurnWithAdmission = ({
+  input,
+  onAdmitted,
+}: Readonly<{
+  input: Omit<HostedTurnInput, "subject" | "deliver"> &
+    Readonly<{
+      subject: WhatsAppHostedSubject;
+      inbound: WhatsAppInboundEvidence;
+      deliver: WhatsAppHostedDelivery;
+    }>;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
+}>): Promise<Response> =>
+  executeHostedTurn({
+    ...input,
+    inbound: Option.some(input.inbound),
+    onAdmitted: Option.some(onAdmitted),
+  });
 
 /**
  * Own one hosted Turn under the per-User Durable Object's serialized request. D1 owns
@@ -180,6 +229,7 @@ const executeHostedTurn = ({
   deliver,
   signal,
   scheduleRecovery,
+  inbound,
   onAdmitted,
 }: AdmittedTurnInput): Promise<Response> =>
   Effect.runPromise(
@@ -194,7 +244,11 @@ const executeHostedTurn = ({
       const startedAtMs = transactionNow();
       const selection = selectHostedSession({ snapshot, userId, now: startedAtMs });
       const activeTurnId = TranscriptTurnId.make(newId());
-      if (isHostedConfirmationAttempt(text)) {
+      if (
+        !isWhatsAppHosted(subject) &&
+        typeof deliver === "function" &&
+        isHostedConfirmationAttempt(text)
+      ) {
         const challenge = yield* findHostedConfirmation({
           db,
           userId,
@@ -207,6 +261,7 @@ const executeHostedTurn = ({
           subject,
           selection,
           text,
+          inbound,
           now: startedAtMs,
           id: activeTurnId,
         });
@@ -264,6 +319,7 @@ const executeHostedTurn = ({
         subject,
         selection,
         text,
+        inbound,
         now: startedAtMs,
         id: activeTurnId,
       });
@@ -309,7 +365,7 @@ const readAdmissibleSnapshot = ({
   userId,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   userId: UserId;
 }>): Promise<HostedTurnSnapshot | Response> =>
   Effect.runPromise(
@@ -339,7 +395,7 @@ const readAdmissibleSnapshot = ({
 
 type WorkPreflight = Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   selection: ReturnType<typeof selectHostedSession>;
   snapshot: HostedTurnSnapshot;
   userId: UserId;
@@ -401,9 +457,11 @@ const prepareHostedWork = ({
             context,
             toolChoice: "auto",
             maximumToolCalls: HostedToolCallMaximum.make(maximumToolCallsPerTurn),
-            availableOperations: hostedExecutableOperations
-              .filter(({ policy }) => policy.kind === "query" || Option.isSome(executeMutation))
-              .map(({ id }) => id),
+            availableOperations: isWhatsAppHosted(subject)
+              ? []
+              : hostedExecutableOperations
+                  .filter(({ policy }) => policy.kind === "query" || Option.isSome(executeMutation))
+                  .map(({ id }) => id),
           }),
           { signal }
         )
@@ -429,7 +487,7 @@ const compactHostedContinuity = ({
   signal,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   sessionId: ReturnType<typeof selectHostedSession>["id"];
   now: number;
   inference: HostedInferenceService;
@@ -547,13 +605,13 @@ const recoverPending = ({
 type AdmittedWork = Readonly<{
   db: D1Database;
   userId: UserId;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   bucket: Option.Option<R2Bucket>;
   executeMutation: HostedTurnInput["executeMutation"];
   turnId: TranscriptTurnId;
   startedAtMs: number;
   prepared: PreparedHostedText;
-  deliver: HostedDelivery;
+  deliver: ChannelDelivery;
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
@@ -958,7 +1016,7 @@ const executeHostedTool = ({
   deadlineMs,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   bucket: Option.Option<R2Bucket>;
   executeMutation: HostedTurnInput["executeMutation"];
   userId: UserId;
@@ -972,7 +1030,7 @@ const executeHostedTool = ({
   const isExpired = (): boolean => signal.aborted || transactionNow() >= deadlineMs;
   return Effect.runPromise(
     Effect.gen(function* () {
-      if (isExpired()) return Option.none();
+      if (isExpired() || isWhatsAppHosted(subject)) return Option.none();
       const operation = hostedExecutableOperations.find(({ id }) => id === call.operation);
       const evidence = Schema.decodeUnknownOption(CanonicalToolEvidence)(call.params);
       const toolCallId = Schema.decodeOption(ToolCallId)(call.id);
@@ -1243,6 +1301,59 @@ const approvedAnswer = (result: HostedTextResult): Option.Option<TranscriptText>
     ? Schema.decodeUnknownOption(TranscriptText)(result.text)
     : Option.none();
 
+const proposeWhatsAppDelivery = ({
+  db,
+  userId,
+  turnId,
+  answer,
+  deliver,
+  finish,
+  scheduleRecovery,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  answer: TranscriptText;
+  deliver: WhatsAppHostedDelivery;
+  finish: (outcome: HostedTurnOutcome) => ReturnType<typeof finishHostedTurn>;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const token = yield* stageWhatsAppDelivery({
+        db,
+        userId,
+        turnId,
+        text: answer,
+        now: transactionNow(),
+      });
+      if (Option.isNone(token)) return unavailable();
+      yield* Effect.tryPromise(() =>
+        scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
+      );
+      const sent = yield* Effect.tryPromise(() =>
+        deliver.send({ text: answer, turnId, correlationToken: token.value })
+      ).pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));
+      const recorded = yield* recordWhatsAppSend({
+        db,
+        userId,
+        turnId,
+        token: token.value,
+        outcome: sent,
+      });
+      if (sent.kind === "rejected" && recorded) {
+        yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
+      }
+      return Response.json(
+        { status: "awaiting_delivery", turnId },
+        {
+          status: 202,
+          headers: noStore,
+        }
+      );
+    })
+  );
+
 const proposeDelivery = ({
   db,
   userId,
@@ -1256,25 +1367,27 @@ const proposeDelivery = ({
   userId: UserId;
   turnId: TranscriptTurnId;
   answer: TranscriptText;
-  deliver: HostedDelivery;
+  deliver: ChannelDelivery;
   finish: (outcome: HostedTurnOutcome) => ReturnType<typeof finishHostedTurn>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: answer });
-      yield* Effect.tryPromise(() =>
-        scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
+  typeof deliver !== "function"
+    ? proposeWhatsAppDelivery({ db, userId, turnId, answer, deliver, finish, scheduleRecovery })
+    : Effect.runPromise(
+        Effect.gen(function* () {
+          const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: answer });
+          yield* Effect.tryPromise(() =>
+            scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
+          );
+          // The channel rejected the proposed reply. Nothing became visible.
+          const delivered = yield* Effect.tryPromise(() =>
+            deliver({ text: answer, turnId, receipt })
+          ).pipe(Effect.option);
+          if (Option.isSome(delivered) && delivered.value.ok) return delivered.value;
+          yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
+          return unavailable();
+        })
       );
-      // The channel rejected the proposed reply. Nothing became visible.
-      const delivered = yield* Effect.tryPromise(() =>
-        deliver({ text: answer, turnId, receipt })
-      ).pipe(Effect.option);
-      if (Option.isSome(delivered) && delivered.value.ok) return delivered.value;
-      yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
-      return unavailable();
-    })
-  );
 
 /** Complete only after the authenticated browser has rendered and acknowledged the staged reply. */
 export const acknowledgeBrowserTurn = ({

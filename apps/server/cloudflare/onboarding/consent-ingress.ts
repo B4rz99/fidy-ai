@@ -29,6 +29,13 @@ import {
 import { EmailAddress } from "@fidy/server/client";
 import { approveBrowserPairing } from "../identity/browser-login";
 import {
+  type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+  findWhatsAppDeliveryUser,
+  findWhatsAppUser,
+} from "../agent/whatsapp-turn";
+import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
+import {
   Context,
   Crypto,
   DateTime,
@@ -177,6 +184,8 @@ type Environment = Readonly<{
   readonly KAPSO_WEBHOOK_SECRET: string;
   readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
   readonly onAccepted: (id: string) => void;
+  readonly onHostedText: (admission: WhatsAppTurnAdmission) => Promise<Response>;
+  readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
 }>;
 type Inbound = Readonly<{
   readonly event: WhatsAppInboundEvent;
@@ -907,11 +916,40 @@ const routeAcceptedInbound = (
       : yield* recordMailbox(environment, input, pending);
   });
 
+const routeHostedInbound = (
+  environment: Environment,
+  input: Inbound
+): Effect.Effect<Option.Option<Response>, void> =>
+  Effect.gen(function* () {
+    const known = yield* findWhatsAppUser({
+      db: environment.DB,
+      portfolioId: input.event.caller.businessPortfolioId,
+      bsuid: input.event.caller.businessScopedUserId,
+    }).pipe(Effect.mapError(() => undefined));
+    if (Option.isNone(known)) return Option.none();
+    if (input.event.content._tag !== "Text") return Option.some(answer(HTTP_UNPROCESSABLE));
+    const response = yield* attempt(() =>
+      environment.onHostedText({
+        userId: known.value,
+        portfolioId: input.event.caller.businessPortfolioId,
+        bsuid: input.event.caller.businessScopedUserId,
+        messageId: input.event.messageEvidence.providerMessageId,
+        businessPhoneNumberId: input.event.businessPhoneNumberId,
+        occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
+        receivedAtMs: input.receivedAtMs,
+        text: input.event.content.text,
+      })
+    );
+    return Option.some(response);
+  });
+
 const routeConsentInbound = (
   environment: Environment,
   input: Inbound
 ): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
   Effect.gen(function* () {
+    const hosted = yield* routeHostedInbound(environment, input);
+    if (Option.isSome(hosted)) return hosted.value;
     const pending = yield* findExchange(environment.DB, input.event);
     if (Option.isSome(pending) && pending.value.state === "accepted") {
       return yield* routeAcceptedInbound(environment, input, pending.value);
@@ -983,6 +1021,42 @@ const handleInbound = (
     return yield* routeConsentInbound(environment, input);
   });
 
+const handleHostedLifecycle = (
+  base: WebhookBase,
+  eventName: string,
+  environment: Environment
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const hosted = yield* Effect.exit(decodeKapsoHostedLifecycleWebhook({ ...base, eventName }));
+    if (Exit.isFailure(hosted)) return answer(HTTP_UNAUTHORIZED);
+    const user = yield* findWhatsAppDeliveryUser({
+      db: environment.DB,
+      correlationToken: hosted.value.correlationToken,
+      businessPhoneNumberId: hosted.value.businessPhoneNumberId,
+    }).pipe(Effect.mapError(() => undefined));
+    if (Option.isSome(user)) {
+      return yield* attempt(() =>
+        environment.onHostedStatus({
+          userId: user.value,
+          correlationToken: hosted.value.correlationToken,
+          businessPhoneNumberId: hosted.value.businessPhoneNumberId,
+          providerMessageId: hosted.value.messageEvidence.providerMessageId,
+          outcome: hosted.value.outcome,
+          occurredAtMs: DateTime.toEpochMillis(hosted.value.occurredAt),
+          receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
+        })
+      );
+    }
+    return eventName === "whatsapp.message.delivered"
+      ? yield* handleDelivery(base, environment.DB)
+      : answer(HTTP_OK);
+  });
+
+const isLifecycleEvent = (name: string): boolean =>
+  name === "whatsapp.message.sent" ||
+  name === "whatsapp.message.delivered" ||
+  name === "whatsapp.message.failed";
+
 const handleWebhook = (
   request: Request,
   environment: Environment
@@ -1004,8 +1078,8 @@ const handleWebhook = (
       receivedAt,
     };
     const eventName = request.headers.get("x-webhook-event");
-    if (eventName === "whatsapp.message.delivered") {
-      return yield* handleDelivery(base, environment.DB);
+    if (eventName !== null && isLifecycleEvent(eventName)) {
+      return yield* handleHostedLifecycle(base, eventName, environment);
     }
     if (eventName !== "whatsapp.message.received") return answer(HTTP_UNPROCESSABLE);
     return yield* handleInbound(base, request, environment);

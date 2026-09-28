@@ -154,6 +154,7 @@ import {
 import { UserId } from "@fidy/server/agent-runtime";
 import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
 import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
+import type { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
@@ -327,15 +328,32 @@ const categoriesResponse = (
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("categories.listCategories"));
 
+const forwardHostedWhatsApp = (
+  environment: CoreEnvironment,
+  path: "whatsapp" | "whatsapp/status",
+  admission: WhatsAppTurnAdmission | WhatsAppStatusAdmission
+): Promise<Response> =>
+  environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
+    new Request(`https://coordinator.internal/hosted-turn/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(admission),
+    })
+  );
+
 const callbackEffect = (
   request: Request,
   environment: CoreEnvironment,
   publish: PublishAcceptedWork
 ): Effect.Effect<Response> =>
   request.method === "POST"
-    ? receiveConsentWebhook({ ...environment, onAccepted: (id) => publish("onboarding", id) })(
-        request
-      )
+    ? receiveConsentWebhook({
+        ...environment,
+        onAccepted: (id) => publish("onboarding", id),
+        onHostedText: (admission) => forwardHostedWhatsApp(environment, "whatsapp", admission),
+        onHostedStatus: (admission) =>
+          forwardHostedWhatsApp(environment, "whatsapp/status", admission),
+      })(request)
     : Effect.succeed(methodNotAllowed());
 
 const providerCallbackEffect = (

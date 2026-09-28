@@ -144,6 +144,7 @@ export const TurnFailureReason = Schema.Literals([
   "HostedInferenceFailed",
   "HostedInferenceTimedOut",
   "DeliveryFailed",
+  "DeliveryUnconfirmed",
 ]);
 export type TurnFailureReason = typeof TurnFailureReason.Type;
 

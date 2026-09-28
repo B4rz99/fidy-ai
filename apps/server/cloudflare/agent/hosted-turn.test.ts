@@ -1961,13 +1961,24 @@ it("retains an unavailable tool outcome when a canonical query stalls beyond the
       const db = yield* Effect.tryPromise(() => setup());
       const gate = promiseGate();
       const blocked = promiseGate();
-      let batches = 0;
+      let canonicalQueryPrepared = false;
       const delayedDb = new Proxy(db, {
         get(target, key): unknown {
+          if (key === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              if (
+                sql.includes("INSERT INTO category_audit") &&
+                sql.includes("categories.listCategories")
+              ) {
+                canonicalQueryPrepared = true;
+              }
+              return target.prepare(sql);
+            };
+          }
           if (key === "batch") {
             return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> => {
-              // Admission now charges attempt and spend before the Turn and query audit units.
-              if (++batches === 4) {
+              if (canonicalQueryPrepared) {
+                canonicalQueryPrepared = false;
                 blocked.release();
                 return gate.promise.then(() => target.batch(statements));
               }

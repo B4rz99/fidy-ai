@@ -1,6 +1,10 @@
-import { Crypto, Data, Effect, Exit, Option, Schema } from "effect";
+import { Crypto, Data, Effect, Exit } from "effect";
 import { type TelemetryService } from "@fidy/server/telemetry";
-import { cloudflareWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  workerRelease,
+} from "../runtime/telemetry";
 import {
   type ForwardedEmailEnvironment,
   type ForwardedEmailMessage,
@@ -11,13 +15,6 @@ import {
 } from "./forwarded-email";
 
 class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
-
-/** Dedicated Email Routing target: no fetch handler and no public HTTP ingress. */
-const releaseOf = (environment: ForwardedEmailEnvironment): string =>
-  Option.getOrElse(
-    Schema.decodeUnknownOption(Schema.Struct({ RELEASE_GIT_SHA: Schema.String }))(environment),
-    () => ({ RELEASE_GIT_SHA: "" })
-  ).RELEASE_GIT_SHA;
 
 type EmailWorker = Readonly<{
   email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment) => Promise<void>;
@@ -32,7 +29,7 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
         Effect.provideService(Crypto.Crypto, emailCrypto),
         observeWorkerExecution({
           telemetry,
-          environment: { RELEASE_GIT_SHA: releaseOf(environment) },
+          environment: workerRelease(environment),
           operation: "worker.email.receive",
         })
       )
@@ -52,7 +49,7 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
       }).pipe(
         observeWorkerExecution({
           telemetry,
-          environment: { RELEASE_GIT_SHA: releaseOf(environment) },
+          environment: workerRelease(environment),
           operation: "worker.email.scheduled",
         })
       )

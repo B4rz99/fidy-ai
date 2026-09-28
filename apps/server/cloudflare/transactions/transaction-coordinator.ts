@@ -77,6 +77,7 @@ import {
   cloudflareWorkerTelemetry,
   observeProviderFetch,
   observeWorkerPromise,
+  observeWorkerResponse,
   workerRelease,
 } from "../runtime/telemetry";
 import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
@@ -689,7 +690,7 @@ export class UserTransactionCoordinator {
     const path = new URL(request.url).pathname;
     // A progress read has live session authority but does not start canonical work.
     if (path === "/hosted-turn/progress") {
-      return observeWorkerPromise(() => this.runHostedProgress(request, userId), {
+      return observeWorkerResponse(() => this.runHostedProgress(request, userId), {
         environment: workerRelease(environment),
         telemetry: cloudflareWorkerTelemetry,
         operation: "worker.core.coordinator",
@@ -702,7 +703,7 @@ export class UserTransactionCoordinator {
         ? Option.some(hostedDeadline(request.signal))
         : Option.none<ReturnType<typeof hostedDeadline>>();
     const prior = this.pending;
-    const settledResponse = observeWorkerPromise(
+    const settledResponse = observeWorkerResponse(
       () => prior.then(() => this.runCoordinatedRequest({ request, userId, path, deadline })),
       {
         environment: workerRelease(environment),

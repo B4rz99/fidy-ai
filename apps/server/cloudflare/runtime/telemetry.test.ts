@@ -1,12 +1,14 @@
 import { it } from "@effect/vitest";
 import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { expect } from "vitest";
 import {
   makeWorkerTelemetry,
   observeModelRun,
   observeProviderFetch,
+  observeWorkerExecution,
   observeWorkerPromise,
+  observeWorkerResponse,
   workerRelease,
 } from "./telemetry";
 
@@ -36,6 +38,47 @@ it("extracts only a valid release from an environment containing secrets", () =>
     workerRelease({ RELEASE_GIT_SHA: "a".repeat(40), RESEND_API_KEY: "secret-canary" })
   ).toEqual({ RELEASE_GIT_SHA: "a".repeat(40) });
 });
+
+it.effect(
+  "reports unavailable coordinator responses as failures without changing the response",
+  () =>
+    Effect.gen(function* () {
+      const records: TelemetryWorkRecord[] = [];
+      const unavailable = new Response(null, { status: 503 });
+      const response = yield* Effect.tryPromise(() =>
+        observeWorkerResponse(() => Promise.resolve(unavailable), {
+          environment: { RELEASE_GIT_SHA: "invalid" },
+          telemetry: makeWorkerTelemetry((record) => {
+            records.push(record);
+          }),
+          operation: "worker.core.coordinator",
+        })
+      );
+      expect(response).toBe(unavailable);
+      expect(records).toMatchObject([
+        { operation: "worker.core.coordinator", outcome: "failed", statusClass: "5xx" },
+      ]);
+    })
+);
+
+it.effect("preserves an interrupted Effect exit and projects one interrupted record", () =>
+  Effect.gen(function* () {
+    const records: TelemetryWorkRecord[] = [];
+    const exit = yield* Effect.tryPromise(() =>
+      Effect.runPromiseExit(
+        observeWorkerExecution(Effect.interrupt, {
+          environment: { RELEASE_GIT_SHA: "invalid" },
+          telemetry: makeWorkerTelemetry((record) => {
+            records.push(record);
+          }),
+          operation: "worker.email.receive",
+        })
+      )
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(records).toMatchObject([{ operation: "worker.email.receive", outcome: "interrupted" }]);
+  })
+);
 
 it.effect("reports model response status without exporting its prompt or response", () =>
   Effect.gen(function* () {

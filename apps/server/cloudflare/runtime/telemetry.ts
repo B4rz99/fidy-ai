@@ -137,65 +137,63 @@ class ObservedPromiseFailure extends Data.TaggedError("ObservedPromiseFailure")<
 }> {}
 
 /** Gives a native Cloudflare Promise one closed Work record, preserving its exact resolution/rejection. */
-const observeWorkerPromiseWork = <A>(
+const observeNativePromise = <A>(
   work: () => Promise<A>,
-  observation: WorkerExecution
+  observation: Readonly<{
+    telemetry: TelemetryService;
+    descriptor: WorkDescriptor;
+    projectSuccess: (value: A) => TelemetryWorkSuccess;
+  }>
 ): Promise<A> =>
   Effect.tryPromise({
     try: work,
     catch: (original) => new ObservedPromiseFailure({ original }),
   })
-    .pipe(
-      (effect) =>
-        observation.telemetry.observeWork(
-          {
-            descriptor: workerDescriptor(observation.environment, observation.operation),
-            projectSuccess: (): TelemetryWorkSuccess => ({
-              outcome: "succeeded",
-              statusClass: Option.none(),
-            }),
-          },
-          effect
-        ),
-      Effect.runPromise
-    )
+    .pipe((effect) => observation.telemetry.observeWork(observation, effect), Effect.runPromise)
     .catch((failure: unknown) =>
       Promise.reject(failure instanceof ObservedPromiseFailure ? failure.original : failure)
     );
+
+const observeWorkerPromiseWork = <A>(
+  work: () => Promise<A>,
+  observation: WorkerExecution
+): Promise<A> =>
+  observeNativePromise(work, {
+    telemetry: observation.telemetry,
+    descriptor: workerDescriptor(observation.environment, observation.operation),
+    projectSuccess: (): TelemetryWorkSuccess => ({
+      outcome: "succeeded",
+      statusClass: Option.none(),
+    }),
+  });
 
 type ProviderName = "kapso" | "resend" | "wompi" | "cloudflare-access";
 type ResponseObservation = Readonly<{
   environment: unknown;
   telemetry: TelemetryService;
-  operation: "model.workersAi" | "provider.request";
-  provider: ProviderName | "cloudflare-workers-ai";
+  operation: WorkDescriptor["operation"];
+  provider: ProviderName | "cloudflare-workers-ai" | "cloudflare-workers";
 }>;
 
 const observeResponsePromise = (
   work: () => Promise<Response>,
   observation: ResponseObservation
 ): Promise<Response> =>
-  Effect.tryPromise({
-    try: work,
-    catch: (original) => new ObservedPromiseFailure({ original }),
-  })
-    .pipe(
-      (effect) =>
-        observation.telemetry.observeWork(
-          {
-            descriptor: TelemetryWorkDescriptor.make({
-              ...workerDescriptor(workerRelease(observation.environment), observation.operation),
-              provider: Option.some(observation.provider),
-            }),
-            projectSuccess: projectResponse,
-          },
-          effect
-        ),
-      Effect.runPromise
-    )
-    .catch((failure: unknown) =>
-      Promise.reject(failure instanceof ObservedPromiseFailure ? failure.original : failure)
-    );
+  observeNativePromise(work, {
+    telemetry: observation.telemetry,
+    descriptor: TelemetryWorkDescriptor.make({
+      ...workerDescriptor(workerRelease(observation.environment), observation.operation),
+      provider: Option.some(observation.provider),
+    }),
+    projectSuccess: projectResponse,
+  });
+
+/** Projects a coordinator HTTP result separately from durable invocation success. */
+const observeWorkerResponseWork = (
+  work: () => Promise<Response>,
+  observation: WorkerExecution
+): Promise<Response> =>
+  observeResponsePromise(work, { ...observation, provider: "cloudflare-workers" });
 
 /** Observes a direct Workers AI invocation without reading inference request or response content. */
 const observeModelRunWork = (
@@ -256,6 +254,11 @@ export const observeProviderFetch: {
     }>
   ): typeof globalThis.fetch;
 } = dual(2, observeProviderFetchWork);
+
+export const observeWorkerResponse: {
+  (observation: WorkerExecution): (work: () => Promise<Response>) => Promise<Response>;
+  (work: () => Promise<Response>, observation: WorkerExecution): Promise<Response>;
+} = dual(2, observeWorkerResponseWork);
 
 export const observeWorkerPromise: {
   (observation: WorkerExecution): <A>(work: () => Promise<A>) => Promise<A>;

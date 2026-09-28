@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import * as Schema from "effect/Schema";
 import {
   type AppliedMigration,
+  type MigrationSource,
   decodeWranglerMigrationRows,
   maximumAppliedMigrationRows,
 } from "./migration-history";
@@ -30,7 +31,7 @@ const DatabaseResourceState = Schema.Struct({
   }),
 });
 
-const run = (command: readonly [string, ...Array<string>]): string => {
+const runMigrationHistoryCommand = (command: readonly [string, ...Array<string>]): string => {
   const [executable, ...arguments_] = command;
   const result = spawnSync(executable, arguments_, {
     cwd: infrastructureDirectory,
@@ -53,7 +54,7 @@ const getProductionDatabaseName = (): string => {
     throw new Error("Production Cloudflare credentials are unavailable");
   }
 
-  const output = run([
+  const output = runMigrationHistoryCommand([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.ts",
     "state",
@@ -70,7 +71,7 @@ const getProductionDatabaseName = (): string => {
 
 export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration> => {
   const databaseName = getProductionDatabaseName();
-  const output = run([
+  const output = runMigrationHistoryCommand([
     "bun",
     "run",
     "wrangler",
@@ -85,8 +86,6 @@ export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration>
   ]);
   return decodeWranglerMigrationRows(output);
 };
-
-type MigrationSource = Readonly<{ name: string; source: string }>;
 
 const collectSqlFiles = async (
   directory: string,

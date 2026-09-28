@@ -19,7 +19,7 @@ const GitReference = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_./-]+$/u)
 const CommitSha = Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u));
 const Repository = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u));
 
-const run = (command: ReadonlyArray<string>): string => {
+const runMigrationEditPolicyCommand = (command: ReadonlyArray<string>): string => {
   const result = Bun.spawnSync([...command], {
     cwd: workspaceRoot,
     stderr: "pipe",
@@ -38,7 +38,7 @@ const readMigrationRepairEvidence = (
   readonly latestProductionRun: Option.Option<ProductionWorkflowRunSnapshot>;
 } => ({
   statuses: decodeMigrationRepairStatuses(
-    run([
+    runMigrationEditPolicyCommand([
       "gh",
       "api",
       "--paginate",
@@ -49,7 +49,11 @@ const readMigrationRepairEvidence = (
     ])
   ),
   latestProductionRun: decodeLatestProductionWorkflowRun(
-    run(["gh", "api", `repos/${repository}/actions/workflows/production.yml/runs?per_page=1`])
+    runMigrationEditPolicyCommand([
+      "gh",
+      "api",
+      `repos/${repository}/actions/workflows/production.yml/runs?per_page=1`,
+    ])
   ),
 });
 
@@ -61,7 +65,7 @@ const main = (): void => {
   }
   const base = Schema.decodeUnknownSync(GitReference)(baseRef);
   const changes = parseGitMigrationChanges(
-    run([
+    runMigrationEditPolicyCommand([
       "git",
       "diff",
       "--name-status",

@@ -34,7 +34,7 @@ const DatabaseResourceState = Schema.Struct({
 const runMigrationHistoryCommand = (command: readonly [string, ...Array<string>]): string =>
   runMigrationCommand(command, { cwd: infrastructureDirectory });
 
-const getProductionDatabaseName = (): string => {
+export const readProductionDatabaseName = (): string => {
   const profile = process.env.ALCHEMY_PROFILE;
   if (
     profile === undefined ||
@@ -60,8 +60,9 @@ const getProductionDatabaseName = (): string => {
   return Schema.decodeUnknownSync(DatabaseResourceState)(JSON.parse(output)).attr.databaseName;
 };
 
-export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration> => {
-  const databaseName = getProductionDatabaseName();
+export const queryProductionMigrationLedger = (
+  databaseName: string
+): ReadonlyArray<AppliedMigration> => {
   const output = runMigrationHistoryCommand([
     "bun",
     "run",
@@ -77,6 +78,9 @@ export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration>
   ]);
   return decodeWranglerMigrationRows(output);
 };
+
+export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration> =>
+  queryProductionMigrationLedger(readProductionDatabaseName());
 
 const collectSqlFiles = async (
   directory: string,

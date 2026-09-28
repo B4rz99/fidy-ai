@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
-import { sweepExpiredConsent } from "./consent-ingress";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent-ingress";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
 import {
   deliverOnboardingEmail,
@@ -156,7 +156,7 @@ const setup = (
             sql
               .replace(/^--.*$/gmu, "")
               .trim()
-              .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+              .split(/;\s*\n(?=CREATE |ALTER |DROP |$)/u)
               .reduce<Promise<unknown>>(
                 (previous, statement) => previous.then(() => db.prepare(statement).run()),
                 Promise.resolve()
@@ -168,6 +168,9 @@ const setup = (
       yield* Effect.tryPromise(() => applyMigration(migration));
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0025_voice_refusal.sql", import.meta.url))
+      );
+      yield* Effect.tryPromise(() =>
+        applyMigration(new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url))
       );
       // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
@@ -1846,7 +1849,41 @@ it("rejects forged, mismatched, and reordered delivery evidence without opening 
     })
   ));
 
-it("requires the provider-returned message ID before any delivery callback may open decisions", () =>
+it("recovers a committed pre-send disclosure once without resending a started attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      const token = yield* Effect.tryPromise(() => startDisclosure(send));
+      const provider = vi.fn((_url: string, _init: RequestInit) =>
+        Promise.resolve(
+          Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.recovered" }] })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      // Represent interruption after the exchange commit but before the send-start claim.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE pending_consent_exchanges SET state = 'awaiting_delivery', disclosure_message_id = NULL"
+          )
+          .run()
+      );
+      yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
+      yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
+      expect(provider).toHaveBeenCalledTimes(1);
+      const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(
+        decodeJson(providerBody(provider.mock.calls[0]?.[1]))
+      );
+      expect(payload.biz_opaque_callback_data).toBe(token);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state FROM pending_consent_exchanges").first()
+        ))?.state
+      ).toBe("outbound_started");
+    })
+  ));
+
+it("accepts an authenticated matching delivery even before the send response is retained", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, send } = yield* Effect.tryPromise(() => setup());
@@ -1863,11 +1900,11 @@ it("requires the provider-returned message ID before any delivery callback may o
         db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
       );
       const occurred = String(Math.ceil(Number(created?.created_at_ms) / 1000));
-      expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(409);
+      expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
       expect(
         (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM pending_consent_delivery").all()))
           .results
-      ).toEqual([]);
+      ).toHaveLength(1);
       pendingResponse.resolve(
         Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure-1" }] })
       );

@@ -67,6 +67,47 @@ export const findWhatsAppDeliveryUser = ({
     );
     return Option.map(Schema.decodeUnknownOption(UserRow)(row), ({ user_id }) => user_id);
   });
+/** Window evidence never authorizes the User or the Turn; it only refuses late free-form sends. */
+export const isWhatsAppWindowOpen = ({
+  db,
+  userId,
+  turnId,
+  now,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  now: number;
+}>): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT 1 AS open FROM hosted_whatsapp_inbound AS i
+      JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
+        AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
+      JOIN whatsapp_identities AS identity ON identity.user_id = i.user_id
+        AND identity.portfolio_id = i.portfolio_id AND identity.bsuid = i.bsuid
+      WHERE i.turn_id = ? AND i.user_id = ? AND w.closes_at_ms > ?`)
+        .bind(turnId, userId, now)
+        .first()
+    );
+    return row !== null;
+  });
+
+/** Bounded scheduled cleanup; no inbound webhook is needed to expire old windows. */
+export const sweepExpiredWhatsAppWindows = ({
+  db,
+  now,
+}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(`DELETE FROM hosted_whatsapp_windows WHERE rowid IN (
+    SELECT rowid FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
+    ORDER BY closes_at_ms LIMIT 128)`)
+      .bind(now)
+      .run()
+  ).pipe(Effect.asVoid);
+
 const ReplayRow = Schema.Struct({
   user_id: UserId,
   bsuid: WhatsAppBusinessScopedUserId,

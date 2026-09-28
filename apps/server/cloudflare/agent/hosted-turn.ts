@@ -51,7 +51,7 @@ import {
   isWhatsAppHosted,
 } from "./hosted-authority";
 import { recordWhatsAppSend, stageWhatsAppDelivery } from "./whatsapp-delivery";
-import { readWhatsAppPendingWork } from "./whatsapp-turn";
+import { isWhatsAppWindowOpen, readWhatsAppPendingWork } from "./whatsapp-turn";
 import type {
   HostedDeliveryCorrelationToken,
   WhatsAppProviderMessageId,
@@ -1447,6 +1447,10 @@ const proposeWhatsAppDelivery = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      if (!(yield* isWhatsAppWindowOpen({ db, userId, turnId, now: transactionNow() }))) {
+        yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
+        return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
+      }
       const token = yield* stageWhatsAppDelivery({
         db,
         userId,

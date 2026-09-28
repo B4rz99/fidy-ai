@@ -29,7 +29,8 @@ import {
 import { sweepHostedTurns } from "./hosted-turn-sweep";
 import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "./hosted-authority";
-import { findWhatsAppReplay, findWhatsAppUser } from "./whatsapp-turn";
+import { findWhatsAppReplay, findWhatsAppUser, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
+import { observeOperationalHealth } from "../runtime/operational-health";
 import {
   recordWhatsAppSend,
   recordWhatsAppStatus,
@@ -1350,6 +1351,73 @@ it("treats signed voice instructions as User text without granting identity or t
           db.prepare("SELECT id FROM transactions WHERE user_id = ?").bind(users[0]).all()
         )).results
       ).toHaveLength(0);
+    })
+  ));
+
+it("refuses a free-form reply when the verified inbound event is outside its 24-hour window", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+          )
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now() - 90_000_000)
+          .run()
+      );
+      const caller = WhatsAppHostedSubject.make({
+        userId: UserId.make(users[0]),
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+      });
+      const inferenceModel = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("No enviar")))
+      );
+      const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
+      const result = yield* Effect.tryPromise(() =>
+        completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: caller,
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.old"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now() - 86_400_001,
+              receivedAtMs: now(),
+            }),
+            text: TranscriptText.make("Hola"),
+            inference: inferenceModel,
+            bucket: Option.none(),
+            executeMutation: Option.none(),
+            deliver: { _tag: "WhatsApp", send: sends },
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => Promise.resolve(),
+          },
+          onAdmitted: () => {},
+        })
+      );
+      expect(result.status).toBe(202);
+      expect(sends).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user" },
+        { status: "failed", kind: "failed", marker: "DeliveryFailed" },
+      ]);
+      const inspect = (): ReturnType<typeof observeOperationalHealth> =>
+        observeOperationalHealth({
+          DB: db,
+          workflows: {},
+          deadLetters: Option.none(),
+        });
+      expect((yield* inspect()).find((signal) => signal.operation === "whatsapp")).toMatchObject({
+        state: "attention",
+        overdueCleanup: 1,
+      });
+      yield* sweepExpiredWhatsAppWindows({ db, now: now() });
+      expect((yield* inspect()).find((signal) => signal.operation === "whatsapp")).toMatchObject({
+        state: "healthy",
+        overdueCleanup: 0,
+      });
     })
   ));
 

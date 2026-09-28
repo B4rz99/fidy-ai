@@ -25,7 +25,11 @@ import { budgetRefusal } from "./budgets/budget-outcome";
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
 import { browseTransactions } from "./transactions/transaction-history";
-import { receiveConsentWebhook, sweepExpiredConsent } from "./onboarding/consent-ingress";
+import {
+  receiveConsentWebhook,
+  recoverPendingDisclosures,
+  sweepExpiredConsent,
+} from "./onboarding/consent-ingress";
 import {
   transactionInput,
   transactionSession,
@@ -155,7 +159,11 @@ import { UserId } from "@fidy/server/agent-runtime";
 import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
 import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
 import { WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./agent/whatsapp-work";
-import type { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "./agent/whatsapp-turn";
+import {
+  type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+  sweepExpiredWhatsAppWindows,
+} from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
@@ -1967,7 +1975,15 @@ const scheduledActivities = (
             BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
           }).pipe(Effect.mapError(() => undefined)),
     "consent.sweep": sweepExpiredConsent(environment.DB)(),
+    "consent.disclosureRecovery": recoverPendingDisclosures({
+      db: environment.DB,
+      apiKey: environment.KAPSO_API_KEY,
+    }),
     "hostedTurn.whatsapp.dispatch": publishers.whatsapp(),
+    "hostedTurn.whatsapp.windowSweep": sweepExpiredWhatsAppWindows({
+      db: environment.DB,
+      now: current,
+    }).pipe(Effect.mapError(() => undefined)),
     "hostedTurn.sweep": sweepHostedTurns({ db: environment.DB, now: current }).pipe(
       Effect.mapError(() => undefined)
     ),

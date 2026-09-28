@@ -5,4 +5,5 @@ export const hostedTurnTestMigrations = [
   "0023_hosted_delivery_refresh",
   "0024_hosted_whatsapp",
   "0025_voice_refusal",
+  "0026_whatsapp_recovery",
 ] as const;

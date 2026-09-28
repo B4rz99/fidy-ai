@@ -739,6 +739,20 @@ const hostedInboundStatements = ({
       .prepare(`INSERT INTO hosted_whatsapp_outbox (turn_id, user_id, created_at_ms)
       SELECT turn_id, user_id, ? FROM hosted_whatsapp_inbound WHERE turn_id = ? AND user_id = ?`)
       .bind(now, id, subject.userId),
+    db
+      .prepare(`INSERT INTO hosted_whatsapp_windows
+      (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
+      SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms),
+        MIN(i.occurred_at_ms, i.received_at_ms) + 86400000
+      FROM hosted_whatsapp_inbound AS i
+      JOIN whatsapp_identities AS w ON w.user_id = i.user_id AND w.portfolio_id = i.portfolio_id
+        AND w.bsuid = i.bsuid
+      WHERE i.turn_id = ? AND i.user_id = ?
+      ON CONFLICT (user_id, portfolio_id, bsuid) DO UPDATE SET
+        last_verified_inbound_at_ms = excluded.last_verified_inbound_at_ms,
+        closes_at_ms = excluded.closes_at_ms
+      WHERE excluded.last_verified_inbound_at_ms > hosted_whatsapp_windows.last_verified_inbound_at_ms`)
+      .bind(id, subject.userId),
   ];
 };
 

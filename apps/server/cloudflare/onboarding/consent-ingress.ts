@@ -38,6 +38,7 @@ import {
 } from "../agent/whatsapp-turn";
 import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
 import {
+  Clock,
   Context,
   Crypto,
   DateTime,
@@ -795,6 +796,90 @@ const admitExchange = (
     );
     return answer(Exit.isFailure(claim) ? HTTP_CONFLICT : HTTP_OK);
   }).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));
+
+const DisclosureRecoveryRow = Schema.Struct({
+  id: PendingConsentExchangeId,
+  portfolio_id: WhatsAppBusinessPortfolioId,
+  bsuid: WhatsAppBusinessScopedUserId,
+  phone_number_id: WhatsAppBusinessPhoneNumberId,
+  correlation_token: DisclosureDeliveryCorrelationToken,
+  disclosure_json: Schema.String,
+});
+
+const sendRecoveredDisclosure = (
+  db: D1Database,
+  candidate: typeof DisclosureRecoveryRow.Type,
+  send: ReturnType<typeof makeDisclosureSender>
+): Effect.Effect<void, void> =>
+  Effect.gen(function* () {
+    const disclosure = yield* Schema.decodeEffect(PendingDisclosureJson)(
+      candidate.disclosure_json
+    ).pipe(Effect.mapError(() => undefined));
+    const claimTime = yield* Clock.currentTimeMillis;
+    const claimed = yield* attempt(() =>
+      db
+        .prepare(`UPDATE pending_consent_exchanges
+      SET state = 'outbound_started' WHERE id = ? AND state = 'awaiting_delivery'
+        AND expires_at_ms > ?`)
+        .bind(candidate.id, claimTime)
+        .run()
+    );
+    if (claimed.meta.changes !== 1) return;
+    const result = yield* Effect.exit(
+      send({
+        caller: {
+          businessPortfolioId: candidate.portfolio_id,
+          businessScopedUserId: candidate.bsuid,
+          parentBusinessScopedUserId: Option.none(),
+          username: Option.none(),
+          phoneNumber: Option.none(),
+        },
+        phoneNumberId: candidate.phone_number_id,
+        disclosure,
+        correlationToken: candidate.correlation_token,
+      })
+    );
+    if (Exit.isSuccess(result)) {
+      yield* attempt(() =>
+        db
+          .prepare(`UPDATE pending_consent_exchanges
+        SET disclosure_message_id = ? WHERE id = ? AND state = 'outbound_started'
+          AND disclosure_message_id IS NULL`)
+          .bind(result.value.messageEvidence.providerMessageId, candidate.id)
+          .run()
+      );
+    }
+    // Once claimed, a callback may reconcile the attempt; this loop never resends it.
+  });
+
+/** Resume only exchanges whose irreversible provider boundary was never claimed. */
+export const recoverPendingDisclosures = ({
+  db,
+  apiKey,
+}: Readonly<{ db: D1Database; apiKey: string }>): Effect.Effect<void, void> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      if (apiKey.length === 0) return yield* Effect.fail(undefined);
+      const now = yield* Clock.currentTimeMillis;
+      const raw = yield* attempt(() =>
+        db
+          .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, correlation_token, disclosure_json
+            FROM pending_consent_exchanges WHERE state = 'awaiting_delivery' AND expires_at_ms > ?
+            ORDER BY created_at_ms LIMIT 16`)
+          .bind(now)
+          .all()
+      );
+      const candidates = yield* Schema.decodeUnknownEffect(Schema.Array(DisclosureRecoveryRow))(
+        raw.results
+      ).pipe(Effect.mapError(() => undefined));
+      const clients = yield* Layer.build(FetchHttpClient.layer);
+      const send = makeDisclosureSender({
+        apiKey: Redacted.make(apiKey),
+        httpClient: Context.get(clients, HttpClient.HttpClient),
+      });
+      for (const candidate of candidates) yield* sendRecoveredDisclosure(db, candidate, send);
+    })
+  ).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
 
 const sendExchange = (
   environment: Environment,

@@ -170,6 +170,7 @@ const applyMigration = (db: D1Database, name: string): Effect.Effect<void, Cause
   });
 const migrationNames = [
   "0001_categories",
+  "0002_resource_admission",
   "0003_pending_consent",
   "0004_onboarding_email",
   "0005_verified_onboarding",
@@ -791,6 +792,62 @@ afterEach(() =>
     )
   )
 );
+
+it("refuses an exhausted User spend budget before purchasing a hosted model round", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const current = now();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              `INSERT INTO resource_admission_events
+             (grant_id, policy_key, dimension, scope_key, policy_kind, units,
+              admitted_at_epoch_ms, window_start_epoch_ms, expires_at_epoch_ms)
+             VALUES ('prior-spend', 'workers-ai.spend.user.v1', 'spend', ?,
+                     'rolling_window', 31999999, ?, ?, ?)`
+            )
+            .bind(users[0], current, current - 86_400_000, current + 86_400_000),
+          db
+            .prepare(
+              "INSERT INTO resource_admission_grants (id, admitted_at_epoch_ms, claim_count) VALUES ('prior-spend', ?, 1)"
+            )
+            .bind(current),
+        ])
+      );
+      let providerCalls = 0;
+      const coordinator = coordinatorFor(db, () => {
+        providerCalls++;
+        return Promise.resolve(reply());
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const refused = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Hola",
+            }),
+          })
+        )
+      );
+      expect(refused.status).toBe(429);
+      expect(providerCalls).toBe(0);
+      const rows = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key = 'workers-ai.spend.user.v1' AND scope_key = ?"
+          )
+          .bind(users[0])
+          .first<{ total: number }>()
+      );
+      expect(rows?.total).toBe(1);
+    })
+  ));
 
 it("delivers a no-tool Workers AI reply and retains exact User and assistant evidence before completion", () =>
   Effect.runPromise(
@@ -1909,7 +1966,8 @@ it("retains an unavailable tool outcome when a canonical query stalls beyond the
         get(target, key): unknown {
           if (key === "batch") {
             return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> => {
-              if (++batches === 2) {
+              // Admission now charges attempt and spend before the Turn and query audit units.
+              if (++batches === 4) {
                 blocked.release();
                 return gate.promise.then(() => target.batch(statements));
               }

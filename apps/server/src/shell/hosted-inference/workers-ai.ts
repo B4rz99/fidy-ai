@@ -453,7 +453,8 @@ const invoke = ({
 }: InvokeInput): Effect.Effect<ProviderResponse, HostedInferenceError> =>
   Effect.tryPromise({
     try: (signal) => run(model, request, { returnRawResponse: true, signal }),
-    catch: () => providerUnavailable(true),
+    catch: (failure) =>
+      failure instanceof HostedInferenceError ? failure : providerUnavailable(true),
   }).pipe(
     Effect.flatMap((response) =>
       response.status >= HTTP_OK_MINIMUM && response.status < HTTP_REDIRECTION_MINIMUM

@@ -15,6 +15,10 @@ const invalidError = {
   code: "card_enrollment_invalid",
   message: "La inscripción ya no es válida. Revisa la oferta e intenta de nuevo.",
 } as const;
+const rateLimitedError = {
+  code: "card_enrollment_rate_limited",
+  message: "Demasiados intentos de inscripción. Intenta más tarde.",
+} as const;
 const unavailableError = {
   code: "card_enrollment_unavailable",
   message: "La inscripción no está disponible temporalmente. Intenta más tarde.",
@@ -50,6 +54,19 @@ export class CardEnrollmentPayloadTooLargeApi extends Schema.Error<CardEnrollmen
 export class CardEnrollmentUnsupportedMediaTypeApi extends Schema.Error<CardEnrollmentUnsupportedMediaTypeApi>(
   "CardEnrollmentUnsupportedMediaTypeApi"
 )(InvalidFields, { httpApiStatus: 415 }) {}
+
+/** Bounded preparation-attempt pressure refuses before provider work, not as an outage. */
+export class CardEnrollmentRateLimitedApi extends Schema.Error<CardEnrollmentRateLimitedApi>(
+  "CardEnrollmentRateLimitedApi"
+)(
+  {
+    error: Schema.Struct({
+      code: Schema.Literal(rateLimitedError.code),
+      message: Schema.Literal(rateLimitedError.message),
+    }),
+  },
+  { httpApiStatus: 429 }
+) {}
 
 /** Bounded provider/configuration outage response carrying no provider details. */
 export class CardEnrollmentUnavailableApi extends Schema.Error<CardEnrollmentUnavailableApi>(
@@ -96,6 +113,7 @@ const directErrors = [
   CardEnrollmentPayloadTooLargeApi,
   CardEnrollmentUnsupportedMediaTypeApi,
   CardEnrollmentUnavailableApi,
+  CardEnrollmentRateLimitedApi,
 ] as const;
 
 /** Dedicated first-party browser operations; none join canonical agent or PAT surfaces. */
@@ -144,3 +162,5 @@ export type SubscriptionEnrollmentApiGroups =
 export const cardEnrollmentInvalidBody = { error: invalidError } as const;
 /** Shared bounded provider/configuration outage response. */
 export const cardEnrollmentUnavailableBody = { error: unavailableError } as const;
+/** Shared bounded preparation-attempt refusal, distinct from provider/configuration outage. */
+export const cardEnrollmentRateLimitedBody = { error: rateLimitedError } as const;

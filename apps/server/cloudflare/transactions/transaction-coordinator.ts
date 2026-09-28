@@ -60,7 +60,7 @@ import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import {
   type WorkersAiEnvironment,
   cloudflareHostedInferenceLive,
-  makeCloudflareHostedInference,
+  makeUserCloudflareHostedInference,
 } from "../ai/workers-ai";
 import {
   executeCanonicalBatch,
@@ -342,10 +342,13 @@ type CoordinatorEnvironment = Readonly<{
  * missing or unsupported configuration never reaches the owners that decide without it.
  */
 const hostedInferenceFor = (
-  environment: CoordinatorEnvironment
+  environment: CoordinatorEnvironment,
+  userId: string
 ): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const built = yield* Effect.exit(Layer.build(cloudflareHostedInferenceLive(environment)));
+    const built = yield* Effect.exit(
+      Layer.build(cloudflareHostedInferenceLive({ environment, db: environment.DB, userId }))
+    );
     return Exit.isFailure(built)
       ? Option.none()
       : Option.some(Context.get(built.value, HostedInference));
@@ -427,7 +430,7 @@ const executeCanonicalAdmission = (
         Effect.provideService(HostedInference, unreachableHostedInference)
       );
     }
-    const inference = yield* hostedInferenceFor(environment);
+    const inference = yield* hostedInferenceFor(environment, admission.userId);
     if (Option.isNone(inference)) return transactionUnavailable();
     return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
   });
@@ -518,7 +521,8 @@ const sendWhatsAppAttempt = ({
   );
 
 const prepareWhatsAppExecution = (
-  environment: CoordinatorEnvironment
+  environment: CoordinatorEnvironment,
+  userId: string
 ): Effect.Effect<
   Option.Option<
     Readonly<{
@@ -533,7 +537,9 @@ const prepareWhatsAppExecution = (
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
       return Option.none();
     }
-    const inference = yield* Effect.exit(makeCloudflareHostedInference(environment));
+    const inference = yield* Effect.exit(
+      makeUserCloudflareHostedInference({ environment, db: environment.DB, userId })
+    );
     if (Exit.isFailure(inference)) return Option.none();
     const clients = yield* Layer.build(FetchHttpClient.layer);
     const sender = makeHostedSender({
@@ -909,7 +915,7 @@ export class UserTransactionCoordinator {
           );
           const work = Schema.decodeUnknownOption(WhatsAppWork)(candidate);
           if (Option.isNone(work) || work.value.userId !== userId) return transactionUnavailable();
-          const prepared = yield* prepareWhatsAppExecution(env);
+          const prepared = yield* prepareWhatsAppExecution(env, userId);
           if (Option.isNone(prepared)) return transactionUnavailable();
           return yield* Effect.tryPromise(() =>
             resumeWhatsAppTurn({
@@ -966,7 +972,7 @@ export class UserTransactionCoordinator {
             const status = { expired: 422, replay: 200, conflict: 409 }[replay];
             return new Response(null, { status });
           }
-          const prepared = yield* prepareWhatsAppExecution(env);
+          const prepared = yield* prepareWhatsAppExecution(env, userId);
           if (Option.isNone(prepared)) return transactionUnavailable();
           return yield* Effect.tryPromise(() =>
             startWhatsAppTurn({
@@ -1008,7 +1014,9 @@ export class UserTransactionCoordinator {
         ) {
           return transactionUnavailable();
         }
-        const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
+        const inference = yield* Effect.exit(
+          makeUserCloudflareHostedInference({ environment: env, db: env.DB, userId })
+        );
         if (Exit.isFailure(inference)) return transactionUnavailable();
         return yield* Effect.tryPromise(() =>
           completeHostedTurnWithAdmission({

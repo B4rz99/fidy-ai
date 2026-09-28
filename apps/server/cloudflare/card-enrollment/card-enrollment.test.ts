@@ -4,6 +4,7 @@ import { CardEnrollment, PaymentRequestId } from "@fidy/server/client";
 import { UserId } from "@fidy/server/identity-runtime";
 import { Clock, Data, Effect, Schema } from "effect";
 import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
+import { sweepExpiredCardPreparationAdmission } from "./card-preparation-admission";
 import { browserOrigins, localCanonicalReadBearer } from "../runtime/topology";
 import { makePublicWorker } from "../public-worker";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry";
@@ -161,6 +162,99 @@ it("derives the same BillingAttempt and checkout reference for one User action w
       expect(retry).toBe(first);
       expect(otherUser).not.toBe(first);
       expect(`fidy-${first}`).toMatch(/^fidy-[0-9a-f-]{36}$/u);
+    })
+  ));
+
+it("bounds rejected card preparation attempts without invoking Wompi", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(() => setup());
+      const now = yield* Clock.currentTimeMillis;
+      const prior = Array.from({ length: 12 }, (_, index) =>
+        db
+          .prepare(
+            `INSERT INTO card_enrollments
+           (id, user_id, price_id, billing_email, status, payment_source_mode,
+            contracts_json, disclosure_json, prepared_at_ms, expires_at_ms)
+           VALUES (?, ?, ?, 'payer@example.com', 'refused', 'create', '{}', '{}', ?, ?)`
+          )
+          .bind(
+            `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+            userA,
+            priceId,
+            now,
+            now + 900_000
+          )
+      );
+      yield* fromTestPromise(() => db.batch(prior));
+      const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+      vi.stubGlobal("fetch", provider);
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const refused = yield* fromTestPromise(() =>
+          handleCardEnrollment({
+            request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+            environment,
+          })
+        );
+        expect(refused.status).toBe(503);
+      }
+      const exhausted = yield* fromTestPromise(() =>
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment,
+        })
+      );
+      expect(exhausted.status).toBe(429);
+      expect(provider).not.toHaveBeenCalled();
+      const claims = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key = 'billing.card-preparation.attempt.user.v1' AND scope_key = ?"
+          )
+          .bind(userA)
+          .first<{ total: number }>()
+      );
+      expect(claims?.total).toBe(24);
+      yield* sweepExpiredCardPreparationAdmission({
+        db,
+        now: (yield* Clock.currentTimeMillis) + 3_600_001,
+      });
+      const expired = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key = 'billing.card-preparation.attempt.user.v1' AND scope_key = ?"
+          )
+          .bind(userA)
+          .first<{ total: number }>()
+      );
+      expect(expired?.total).toBe(0);
+    })
+  ));
+
+it("fails closed before card preparation when the admission authority is unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(() => setup());
+      const failedDb = new Proxy(db, {
+        get: (target, key): unknown =>
+          key === "batch"
+            ? (): Promise<never> => Promise.reject(new Error("D1 unavailable"))
+            : Reflect.get(target, key, target),
+      });
+      const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+      vi.stubGlobal("fetch", provider);
+      const refused = yield* fromTestPromise(() =>
+        handleCardEnrollment({
+          request: request("/web/subscription/card-enrollments/prepare", "POST", { priceId }),
+          environment: { ...environment, DB: failedDb },
+        })
+      );
+      expect(refused.status).toBe(503);
+      expect(provider).not.toHaveBeenCalled();
+      const rows = yield* fromTestPromise(() =>
+        db.prepare("SELECT count(*) AS total FROM card_enrollments").first<{ total: number }>()
+      );
+      expect(rows?.total).toBe(0);
     })
   ));
 

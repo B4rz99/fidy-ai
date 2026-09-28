@@ -1,8 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
-import { Data, Effect, Fiber, FileSystem, Result } from "effect";
+import { Data, Effect, Exit, Fiber, FileSystem, Result } from "effect";
 import { Miniflare } from "miniflare";
 import { rolldown } from "rolldown";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { makeAdmittedWorkersAiRun, sweepExpiredWorkersAiAdmission } from "../ai/workers-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ResourceAdmissionAuthority,
@@ -400,6 +402,136 @@ describe("Cloudflare resource admission", () => {
             pressureRefused.failure instanceof ResourceAdmissionRefused
         ).toBe(true);
         expect(rows.results).toEqual([{ id: "first" }]);
+      })
+    ));
+
+  it("reserves a conservative cross-Turn AI cost before provider work and never refunds failures", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const miniflare = yield* fromTestPromise(() => makeMiniflare());
+        const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
+        let calls = 0;
+        const run = makeAdmittedWorkersAiRun({
+          db: database,
+          userId: "user-one",
+          nowEpochMs: () => epochMs(10_000),
+          run: () => {
+            calls += 1;
+            return Promise.reject(new Error("provider failed after accepting request"));
+          },
+        });
+        const request = {
+          messages: [{ role: "user" as const, content: "Hola" }],
+          max_tokens: 16_000,
+          temperature: 0 as const,
+          stream: false as const,
+          chat_template_kwargs: { enable_thinking: false as const },
+        };
+        const result = yield* Effect.exit(
+          Effect.tryPromise(() =>
+            run(approvedWorkersAiModel, request, {
+              returnRawResponse: true,
+              signal: new AbortController().signal,
+            })
+          )
+        );
+        expect(Exit.isFailure(result)).toBe(true);
+        const charges = yield* fromTestPromise(() =>
+          database
+            .prepare(
+              "SELECT units FROM resource_admission_events WHERE policy_key = 'workers-ai.spend.user.v1'"
+            )
+            .all<{ readonly units: number }>()
+        );
+        expect(charges.results).toHaveLength(1);
+        expect(charges.results[0]?.units).toBeGreaterThan(16_000);
+        expect(charges.results[0]?.units).toBeLessThan(17_000);
+        expect(calls).toBe(1);
+      })
+    ));
+
+  it("fails closed when AI spend authority cannot commit, without invoking the provider", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const miniflare = yield* fromTestPromise(() => makeMiniflare());
+        const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
+        let providerCalls = 0;
+        const unavailableDb = new Proxy(database, {
+          get: (target, key): unknown =>
+            key === "batch"
+              ? (): Promise<never> => Promise.reject(new Error("D1 unavailable"))
+              : Reflect.get(target, key, target),
+        });
+        const run = makeAdmittedWorkersAiRun({
+          db: unavailableDb,
+          userId: "user-one",
+          nowEpochMs: () => epochMs(10_000),
+          run: () => {
+            providerCalls++;
+            return Promise.resolve(Response.json({}));
+          },
+        });
+        const failure = yield* Effect.exit(
+          Effect.tryPromise(() =>
+            run(
+              approvedWorkersAiModel,
+              {
+                messages: [{ role: "user", content: "Hola" }],
+                max_tokens: 16_000,
+                temperature: 0,
+                stream: false,
+                chat_template_kwargs: { enable_thinking: false },
+              },
+              { returnRawResponse: true, signal: new AbortController().signal }
+            )
+          )
+        );
+        expect(Exit.isFailure(failure)).toBe(true);
+        expect(providerCalls).toBe(0);
+        const rows = yield* fromTestPromise(() =>
+          database
+            .prepare("SELECT count(*) AS total FROM resource_admission_events")
+            .first<{ readonly total: number }>()
+        );
+        expect(rows?.total).toBe(0);
+      })
+    ));
+
+  it("retains spend until its window expires and sweeps only expired grants", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const miniflare = yield* fromTestPromise(() => makeMiniflare());
+        const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
+        const run = makeAdmittedWorkersAiRun({
+          db: database,
+          userId: "user-one",
+          nowEpochMs: () => epochMs(100_000_000),
+          run: () => Promise.resolve(Response.json({})),
+        });
+        yield* fromTestPromise(() =>
+          run(
+            approvedWorkersAiModel,
+            {
+              messages: [{ role: "user", content: "Hola" }],
+              max_tokens: 16_000,
+              temperature: 0,
+              stream: false,
+              chat_template_kwargs: { enable_thinking: false },
+            },
+            { returnRawResponse: true, signal: new AbortController().signal }
+          )
+        );
+        const count = (): Promise<number> =>
+          database
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_grants WHERE id LIKE 'workers-ai-%'"
+            )
+            .first<{ readonly total: number }>()
+            .then((row) => row?.total ?? 0);
+        yield* sweepExpiredWorkersAiAdmission({ db: database, now: 100_000_000 + 86_399_999 });
+        expect(yield* fromTestPromise(count)).toBe(2);
+        yield* sweepExpiredWorkersAiAdmission({ db: database, now: 100_000_000 + 86_400_000 });
+        expect(yield* fromTestPromise(count)).toBe(0);
       })
     ));
 

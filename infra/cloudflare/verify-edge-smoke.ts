@@ -27,22 +27,35 @@ type EdgeRequest = Readonly<{
   path: string;
   headers: Readonly<Record<string, string>>;
 }>;
+type Candidate = Readonly<{ proof: string; override: string; publicVersionId: string }>;
 class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
   readonly path: string;
 }> {}
 
 /** Probe only rejected, credential-free requests; never send a valid provider event or User request. */
 export const verifyEdgeSmoke = <E, R>(
-  probe: (input: EdgeRequest) => Effect.Effect<EdgeResponse, E, R>
+  probe: (input: EdgeRequest) => Effect.Effect<EdgeResponse, E, R>,
+  candidate?: Candidate
 ): Effect.Effect<void, EdgeSmokeFailure, R> =>
   Effect.gen(function* () {
     for (const entry of probes) {
       const response = yield* probe({
         method: entry.method,
         path: entry.path,
-        headers: entry.headers,
+        headers:
+          candidate === undefined
+            ? entry.headers
+            : {
+                ...entry.headers,
+                "x-fidy-smoke-proof": candidate.proof,
+                "cloudflare-workers-version-overrides": candidate.override,
+              },
       }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
-      if (!isExpectedResponse(response, entry.expectedStatus)) {
+      if (
+        !isExpectedResponse(response, entry.expectedStatus) ||
+        (candidate !== undefined &&
+          response.headers.get("x-fidy-smoke-worker-version") !== candidate.publicVersionId)
+      ) {
         return yield* new EdgeSmokeFailure({ path: entry.path });
       }
     }

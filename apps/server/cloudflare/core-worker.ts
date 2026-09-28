@@ -118,6 +118,13 @@ import {
   reconcileOnboardingEmail,
 } from "./onboarding/onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
+import { smokePath } from "./runtime/smoke";
+import {
+  ReleaseSmokeWorkflowV1,
+  type SmokeEnvironment,
+  handleSmoke,
+  receiveSmoke,
+} from "./runtime/smoke-work";
 import { verifyOnboarding } from "./onboarding/verified-onboarding";
 import {
   type WorkerTelemetryEnvironment,
@@ -177,7 +184,7 @@ export {
 } from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
-export { StatementExtractionWorkflowV1 };
+export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -205,6 +212,7 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
   } & Partial<
     Readonly<{ ASYNC_HEALTH_ENABLED: "enabled"; ASYNC_DEAD_LETTERS: Pick<Queue, "metrics"> }>
   > &
+  Partial<SmokeEnvironment> &
   Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
@@ -639,6 +647,7 @@ const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
   [
     "/health",
+    smokePath,
     listCategoriesPath,
     "/providers/kapso/callback",
     "/providers/wompi/billing-events",
@@ -1744,6 +1753,24 @@ type RequestExecution = Readonly<{
   publish: PublishAcceptedWork;
 }>;
 
+const smokeReady = (
+  environment: CoreEnvironment
+): environment is CoreEnvironment & SmokeEnvironment =>
+  environment.SMOKE_BUCKET !== undefined &&
+  environment.SMOKE_QUEUE !== undefined &&
+  environment.SMOKE_WORKFLOW !== undefined &&
+  environment.SMOKE_QUEUE_NAME !== undefined &&
+  environment.SMOKE_PROOF !== undefined &&
+  environment.CF_VERSION_METADATA !== undefined;
+
+const smokeResponse = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    try: () =>
+      smokeReady(environment) ? handleSmoke(request, environment) : Promise.resolve(unavailable()),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+// oxlint-disable-next-line eslint/complexity -- Dispatch is explicitly deny-by-default per path.
 const fetchEffect = ({
   request,
   environment,
@@ -1754,6 +1781,7 @@ const fetchEffect = ({
   if (!ownedCorePath(url.pathname)) {
     return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
   }
+  if (url.pathname === smokePath) return smokeResponse(request, environment);
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return providerCallbackEffect(request, environment, publish);
   }
@@ -1832,7 +1860,12 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
   })(batch).pipe(Effect.runPromise);
 };
 
+// oxlint-disable-next-line eslint/complexity -- The Queue identity selects exactly one consumer.
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (environment.SMOKE_QUEUE_NAME !== undefined && batch.queue === environment.SMOKE_QUEUE_NAME) {
+    if (!smokeReady(environment)) return Promise.reject(new Error("Smoke wiring unavailable"));
+    return receiveSmoke(batch, environment);
+  }
   if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
     return receiveWhatsAppWork({
       messages: batch.messages,
@@ -1961,6 +1994,11 @@ const admissionActivities = (
   "billing.cardPreparationAdmissionSweep": sweepExpiredCardPreparationAdmission({ db, now }).pipe(
     Effect.mapError(() => undefined)
   ),
+  "release.smoke.expiry": Effect.tryPromise({
+    try: () =>
+      db.prepare("DELETE FROM release_smoke_probes WHERE expires_at_ms < ?").bind(now).run(),
+    catch: () => undefined,
+  }),
 });
 
 const scheduledActivities = (

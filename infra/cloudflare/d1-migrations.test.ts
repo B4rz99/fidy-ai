@@ -167,7 +167,7 @@ test(
       expect(yield* readState(beforeUrl)).toMatchObject({
         appliedMigrationNames: [...predecessorNames].sort(),
         hostedVoiceRefusalsExists: true,
-        hostedWhatsAppWindowsExists: false,
+        hostedWhatsAppWindowsExists: true,
         transcriptEvidence: { _tag: "Empty" },
       });
 

@@ -27,6 +27,7 @@ const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
 const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
 const wompiEventSecret = Config.Redacted("WOMPI_EVENT_SECRET");
 const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
+const smokeProof = Config.Redacted("SMOKE_PROOF");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
@@ -187,6 +188,11 @@ export default Alchemy.Stack(
     });
 
     const asyncDeadLetters = yield* Cloudflare.Queues.Queue("AsyncDeadLetters");
+    const smokeBucket = yield* Cloudflare.R2.Bucket("ReleaseSmokeBucket");
+    const smokeQueue = yield* Cloudflare.Queues.Queue("ReleaseSmokeQueue");
+    const smokeWorkflow = Cloudflare.Workflow("ReleaseSmokeWorkflowV1", {
+      className: "ReleaseSmokeWorkflowV1",
+    });
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
@@ -215,6 +221,14 @@ export default Alchemy.Stack(
       },
       env: {
         AI: Cloudflare.Workers.AI(),
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_PROOF: yield* development
+          ? smokeProof.pipe(Config.withDefault(Redacted.make("")))
+          : smokeProof,
+        SMOKE_BUCKET: smokeBucket,
+        SMOKE_QUEUE: smokeQueue,
+        SMOKE_QUEUE_NAME: smokeQueue.queueName,
+        SMOKE_WORKFLOW: smokeWorkflow,
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
@@ -261,6 +275,13 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,
+    });
+
+    yield* Cloudflare.Queues.Consumer("ReleaseSmokeConsumer", {
+      queueId: smokeQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 1, maxRetries: 3 },
     });
 
     yield* Cloudflare.Queues.Consumer("ForwardedEmailConsumer", {
@@ -321,6 +342,10 @@ export default Alchemy.Stack(
       domain: production ? productionTopology.ingress.hostname : undefined,
       env: {
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_PROOF: yield* development
+          ? smokeProof.pipe(Config.withDefault(Redacted.make("")))
+          : smokeProof,
         [productionTopology.ingress.coreBinding]: core,
         LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
         PAT_ADMISSION_KEY: yield* resolvePatAdmissionKey(development),

@@ -694,6 +694,14 @@ export class UserTransactionCoordinator {
     const environment = this.env;
     const userId = this.state.id.name;
     const path = new URL(request.url).pathname;
+    // Reserved compatibility probe: never enter User coordination or access D1.
+    if (userId === "_release-smoke-v1") {
+      return Promise.resolve(
+        path === "/release-smoke" && request.method === "GET"
+          ? Response.json({ status: "compatible" })
+          : Response.json({}, { status: 404 })
+      );
+    }
     // A progress read has live session authority but does not start canonical work.
     if (path === "/hosted-turn/progress") {
       return observeWorkerResponse(() => this.runHostedProgress(request, userId), {

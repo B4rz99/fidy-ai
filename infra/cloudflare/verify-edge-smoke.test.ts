@@ -53,6 +53,31 @@ describe("production edge smoke", () => {
   );
 
   it.effect(
+    "rejects stable-version answers even when every protected route rejects correctly",
+    () =>
+      Effect.gen(function* () {
+        const candidate = {
+          proof: "a".repeat(64),
+          override: 'public="dc8dcd28-271b-4367-9840-6c244f84cb40"',
+          publicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+        };
+        const result = yield* Effect.exit(
+          verifyEdgeSmoke(
+            () =>
+              Effect.succeed(
+                respond(401, {
+                  ...safeHeaders,
+                  "x-fidy-smoke-worker-version": "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
+                })
+              ),
+            candidate
+          )
+        );
+        expect(result._tag).toBe("Failure");
+      })
+  );
+
+  it.effect(
     "refuses unavailable configuration, browser challenges, redirects, and missing security headers",
     () =>
       Effect.gen(function* () {

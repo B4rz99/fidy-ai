@@ -1,0 +1,61 @@
+apps/server/cloudflare/runtime/operational-alert-delivery.test.ts
+  s_0bc20f888e36bb::t_34442232131d60 158-159,162
+  s_0bc20f888e36bb::t_8dfb782309b58a 132,146-149,153-155
+  s_0bc20f888e36bb::t_34069b64d0e5ca 150-152
+  s_0bc20f888e36bb::t_e1c439345642d6 160-161,163-164,168-171,174
+  s_0bc20f888e36bb::t_4a256af7231e5b 156-157
+apps/server/cloudflare/core-worker.ts
+  s_0bc20f888e36bb::t_170ed8cc229924 148
+  s_0bc20f888e36bb::t_83387c88e57767 2178-2181,2197
+  s_0bc20f888e36bb::t_34069b64d0e5ca 2174-2177
+  s_0bc20f888e36bb::t_ce32db07bc30e1 2164
+docs/operations/cloudflare-background-work.md
+  s_0bc20f888e36bb::t_e1b56065a1d7d0 15-17,40-41,57-60,76-80
+apps/server/cloudflare/runtime/operational-workflow-failure.test.ts
+  s_0bc20f888e36bb::t_c30124706c0e64 40-42,57-60
+  s_0bc20f888e36bb::t_bbfcbb56039baa 43-56
+apps/server/cloudflare/runtime/operational-workflow-failure.ts
+  s_0bc20f888e36bb::t_2cbe6fafcc2604 1-2
+  s_0bc20f888e36bb::t_bbfcbb56039baa 10-13,16-19
+apps/server/cloudflare/runtime/operational-health.ts
+  s_0bc20f888e36bb::t_e1c439345642d6 328-333
+  s_0bc20f888e36bb::t_f45f29a11126b7 334-338,371
+  s_0bc20f888e36bb::t_4ceb4b6cdb3113 339-351
+  s_0bc20f888e36bb::t_b44a3afd983bae 352,370,384-385,389
+  s_0bc20f888e36bb::t_b64d0dc83abf9f 9,112,137-140,273-282
+apps/server/cloudflare/runtime/operational-alerts.ts
+  s_0bc20f888e36bb::t_e1c439345642d6 11-37,39-46,48-64,66-75,78-82,84-103,105-109
+  s_0bc20f888e36bb::t_7ea86cc5e7e006 125-129
+  s_0bc20f888e36bb::t_7fbdea5e196ff3 130-134,137
+  s_0bc20f888e36bb::t_19a12a21692c19 9-10,38,47,65,76-77,83,104,110
+  s_0bc20f888e36bb::t_d885c30dad42a2 138
+apps/server/cloudflare/runtime/operational-event-metrics.test.ts
+  s_0bc20f888e36bb::t_34069b64d0e5ca 4-7,99-106,108-118
+  s_0bc20f888e36bb::t_cd6e6afa203532 107
+apps/server/cloudflare/runtime/operational-event-metrics.ts
+  s_0bc20f888e36bb::t_e129d8359288c2 21-25,32,39
+  s_0bc20f888e36bb::t_34069b64d0e5ca 26-31,33-38
+apps/server/cloudflare/runtime/operational-alert-delivery.ts
+  s_0bc20f888e36bb::t_34069b64d0e5ca 54-63,109-118
+  s_0bc20f888e36bb::t_208c8166c95c75 125-126,129-130,136
+  s_0bc20f888e36bb::t_6d45a5643fe8f7 48-49,103-104
+apps/server/cloudflare/runtime/operational-health.test.ts
+  s_0bc20f888e36bb::t_deff98918f3f5d 46,49,80,85,88
+  s_0bc20f888e36bb::t_34069b64d0e5ca 32-34,36-45,50-53,56-63,86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d1fb12db8cfd1d296e24d82fafe16338093f7bb3",
+  "prompts": {},
+  "sessions": {
+    "s_0bc20f888e36bb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-556f-7274-8064-e61d0852c03d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

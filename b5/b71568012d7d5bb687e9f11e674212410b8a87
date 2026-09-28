@@ -1,0 +1,80 @@
+apps/server/src/shell/observability/contract.ts
+  s_03af13addf8666::t_64295120ddad2c 96
+  s_03af13addf8666::t_3cdc4a94616a0e 97-98
+  s_03af13addf8666::t_3aeaa69b6df68b 91-95
+  s_03af13addf8666::t_c1d3847d6d711c 129-136
+apps/server/cloudflare/ai/workers-ai.ts
+  s_03af13addf8666::t_e5c48f721e390b 10,32,39
+  s_03af13addf8666::t_c1d3847d6d711c 33-37
+  s_03af13addf8666::t_668d971aa8fdae 38
+apps/server/cloudflare/runtime/telemetry.test.ts
+  s_03af13addf8666::t_47d33ba144bf42 35-37
+  s_03af13addf8666::t_264d132f7281bb 95
+  s_03af13addf8666::t_6e3c53b78a4d7a 66-71,79,86-89
+  s_03af13addf8666::t_f251178f4bb8a5 10,33-34,38
+  s_03af13addf8666::t_076095a55ebb4d 1-4,12-16,24-25,30,111-115,123-125
+  s_03af13addf8666::t_c1d3847d6d711c 5-9,11,17-23,26-29,45-50,53-61,72-78,80-85,96-105,107-109,116-122
+  s_03af13addf8666::t_4bd868fc63e8a4 31-32,39-44,51-52,62-65,90-94,106,110
+apps/server/cloudflare/wompi/wompi-runtime.ts
+  s_03af13addf8666::t_c1d3847d6d711c 33-37
+  s_03af13addf8666::t_a050d5a06d83e1 4,31-32,38
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_03af13addf8666::t_c1d3847d6d711c 1280-1287
+  s_03af13addf8666::t_f1b1bb44bb609a 54
+apps/server/cloudflare/identity/browser-pairing-email-delivery.ts
+  s_03af13addf8666::t_c1d3847d6d711c 3-7,270-275
+  s_03af13addf8666::t_676bc2f80c8f56 269,276-278,280-281
+  s_03af13addf8666::t_f2ff4e16baaeb7 279
+apps/server/cloudflare/ingestion/statement-delivery.ts
+  s_03af13addf8666::t_c1d3847d6d711c 2-6,342-347
+  s_03af13addf8666::t_62a8a223c250e9 341,348-350,352-353
+  s_03af13addf8666::t_c002019ee122ee 351
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_03af13addf8666::t_c1d3847d6d711c 14-17
+apps/server/cloudflare/billing/billing-collection.ts
+  s_03af13addf8666::t_3ad6ad3d9b7fed 534,541-543,545-546
+  s_03af13addf8666::t_91c173e34bc4c4 544
+  s_03af13addf8666::t_c1d3847d6d711c 17-21,535-540
+apps/server/cloudflare/identity/email-replacement-delivery.ts
+  s_03af13addf8666::t_c1d3847d6d711c 3-7,237-269
+apps/server/cloudflare/core-worker.ts
+  s_03af13addf8666::t_db518c7a259c24 122,2036-2040
+apps/server/cloudflare/runtime/telemetry.ts
+  s_03af13addf8666::t_edb65051b0e4d9 201,212,220,229-232,241-242
+  s_03af13addf8666::t_5ab8aaf8ac7f24 174-175,177-180,199-200,202,204,210-211,213,219,259
+  s_03af13addf8666::t_1ff1f7eca2a0b3 98-102
+  s_03af13addf8666::t_dcff32804eb2e7 140,165,260-263
+  s_03af13addf8666::t_fe4ffb49dee117 14,103-104,125-139,141-148,160-164
+  s_03af13addf8666::t_c1d3847d6d711c 149-159,181-198,214-218,221-224,233-239,243-257
+  s_03af13addf8666::t_caa897b8c8d5c3 166-173,176,203,205-209,225-228,240,258
+  s_03af13addf8666::t_5c0f45c6c58cc0 264
+apps/server/cloudflare/onboarding/onboarding-email.ts
+  s_03af13addf8666::t_87612687b9bd52 247-248,254
+  s_03af13addf8666::t_b4c45d6ab507b3 228
+  s_03af13addf8666::t_c1d3847d6d711c 8-13,219-224,249-253
+  s_03af13addf8666::t_e230d55a7dde86 218,225-227,229-230
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_03af13addf8666::t_c1d3847d6d711c 76-81,706,728-735,970-977,1025-1032
+  s_03af13addf8666::t_4a00270e03b5eb 692-696,776-780
+  s_03af13addf8666::t_04ab428f89bfe3 691,697,704-705,707-710,712,737-766
+  s_03af13addf8666::t_25f41e97014523 736
+  s_03af13addf8666::t_d65e5491ba1a42 767-768
+docs/operations/cloudflare-background-work.md
+  s_03af13addf8666::t_65326abbc63cdc 47-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b5b71568012d7d5bb687e9f11e674212410b8a87",
+  "prompts": {},
+  "sessions": {
+    "s_03af13addf8666": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e844-9b03-70da-9ae2-a8dc4c55ef39",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

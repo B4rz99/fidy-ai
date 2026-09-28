@@ -1,0 +1,83 @@
+infra/cloudflare/scripts/check-applied-migration-drift.ts
+  s_f8dbb486b6c236::t_54b6fa06fd3c60 3-4,7-10,15,28-33
+  s_f8dbb486b6c236::t_c894fde219fe38 1-2,5,11-14,16-27,34-43,47-51
+  s_f8dbb486b6c236::t_00171b65af8000 6
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 44-46
+.github/workflows/verify-unapplied-d1-migration.yml
+  s_f8dbb486b6c236::t_aa79f6b18c68d6 1-68
+.github/workflows/ci.yml
+  s_f8dbb486b6c236::t_298c1679997bae 18-20,37-38
+scripts/check-migration-edit-policy.ts
+  s_f8dbb486b6c236::t_d653c12f6bc9a5 3,68
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 80-82,88-90
+  s_f8dbb486b6c236::t_4de1f8ee79e9ac 1-2,4-46,48-67,69-79,83-87,91-92
+  s_f8dbb486b6c236::t_d48537a5ac2fe6 47
+scripts/verify.ts
+  s_f8dbb486b6c236::t_76a8195b20d46c 181-191
+.github/workflows/production.yml
+  s_f8dbb486b6c236::t_5828e768b6baf5 77-80
+infra/cloudflare/scripts/migration-history.test.ts
+  s_f8dbb486b6c236::t_a09ea892604a91 6-7,93-102,144,151,186-189,191-201,203-204
+  s_f8dbb486b6c236::t_e8dbcf0a63a3fd 18
+  s_f8dbb486b6c236::t_54ba9099baabc2 131
+  s_f8dbb486b6c236::t_f92b16f1f5047a 74
+  s_f8dbb486b6c236::t_a2fa1299fe6fe3 72,85-90
+  s_f8dbb486b6c236::t_ccb399e632628c 3-5,8,10-17,19-23,32-37,46-54,63-71,73,75-80,82-84,91-92,103-113,123-125,130,132,136,143,152,161-170,174,185,208,216,218-219
+  s_f8dbb486b6c236::t_d48a23151e9595 1-2,9,24-31,38-45,55-62,114-122,133-135,137,142,145,150,153-160,171-173,175-184,205-207,209-215,217
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 81,126-129,138-141,146-149,190,202
+docs/operations/production-releases.md
+  s_f8dbb486b6c236::t_49d0b4651cb1af 56-59,61-63,75-85
+  s_f8dbb486b6c236::t_4234ed4609b706 86
+infra/cloudflare/scripts/check-migration-edit-policy.test.ts
+  s_f8dbb486b6c236::t_775b2b8c6c128d 18,33,85,90,95-98,106,109
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 122-125
+  s_f8dbb486b6c236::t_012226549e1a7e 1-17,19-32,34-84,86-89,91-94,99-105,107-108,110-121,126-135
+infra/cloudflare/scripts/verify-unapplied-migration-repair.ts
+  s_f8dbb486b6c236::t_cc5b872f3beafc 58,61-64,66,75-76,78,80,82-84
+  s_f8dbb486b6c236::t_19f3621b25c3b8 55-56,65
+  s_f8dbb486b6c236::t_bed4fc16cb2353 4,85
+  s_f8dbb486b6c236::t_7d57700a6cfe5a 1-2,5-7,9-23,27,30-54,59-60,67-74,86-88,91-130,134-135
+  s_f8dbb486b6c236::t_b9bc04a8c700dd 3,24-26,28-29,77,79,81,89-90
+  s_f8dbb486b6c236::t_2765c51ee388fd 8
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 57,131-133
+infra/cloudflare/scripts/check-applied-migration-drift.test.ts
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 8
+  s_f8dbb486b6c236::t_8772caaa5b2960 14-16,19-31,44,49,84,100,117,128,144,146
+  s_f8dbb486b6c236::t_62b97ed1bc695b 1-7,9-13,17-18,32-43,45-48,50-83,85-99,101-116,118-127,129-143,145,147-156
+infra/cloudflare/scripts/verify-unapplied-migration-repair.test.ts
+  s_f8dbb486b6c236::t_2d7961a226fd0f 24-26,29-34,36,52,119
+  s_f8dbb486b6c236::t_377fb7cc092ec4 1-23,27-28,35,37-51,53-56,58-84,86-118,120-135,137-146,150-158,160-177,179-192,194-200
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 57,85,147-149
+  s_f8dbb486b6c236::t_356326272e0e20 136,159,178,193
+infra/cloudflare/scripts/production-migration-ledger.ts
+  s_f8dbb486b6c236::t_880ecd60802089 1,34-35,37-39,41-42,46,50-51
+  s_f8dbb486b6c236::t_bc7cd10b47eb5d 33
+  s_f8dbb486b6c236::t_349864e3f5f5f0 2,7,17,27,93-105,110-113
+  s_f8dbb486b6c236::t_5b79f4ca62e244 3-5,11-16,18-26,28-32,36,40,43-45,47-49,52-70,72-92,106-109
+  s_f8dbb486b6c236::t_c7ebd1fb52f492 6,8-10,71
+infra/cloudflare/scripts/migration-history.ts
+  s_f8dbb486b6c236::t_4f835a0bb4cb8f 4-5,7-9,11-17,19,25-26,28-35,41-45,58-59,62,68,71-72,74,111-127,130-144,146-151,157,159,161-167,170,177-178,194-198,200-203
+  s_f8dbb486b6c236::t_67a8f4719e7470 60-61,128-129
+  s_f8dbb486b6c236::t_58e3e6bb86f31d 152-156
+  s_f8dbb486b6c236::t_e7dc111ad6ce03 80-82,87,180,210
+  s_f8dbb486b6c236::t_b7191909a28164 46-57,66
+  s_f8dbb486b6c236::t_5983af3c6bd470 18,145,199
+  s_f8dbb486b6c236::t_4ffd3a5786fe24 1-3,6,10,36-40,64,73,75-79,83-86,88-110,158,160,168-169,171-176,179,181-193,204-209,211-214
+  s_f8dbb486b6c236::t_9fc81f662fca9d 20-24,27,63,65,67,69-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2247d542211a846603614a02f61b0061292ec0db",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

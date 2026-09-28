@@ -95,7 +95,6 @@ const config = (): Config => {
 };
 
 // A streamed provider response must be counted before it is buffered or parsed.
-// oxlint-disable-next-line complexity -- streaming, overflow and cleanup are one owned lifetime
 const boundedJson = async (response: Response): Promise<unknown> => {
   if (!response.ok) {
     throw Error("Provider rejected the release request");
@@ -106,34 +105,14 @@ const boundedJson = async (response: Response): Promise<unknown> => {
   if (response.body === null) {
     throw Error("Provider response body missing");
   }
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  try {
-    for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- a stream reader must be consumed sequentially
-      const next: unknown = await reader.read();
-      const chunk = Schema.decodeUnknownSync(
-        Schema.Union([
-          Schema.Struct({ done: Schema.Literal(true) }),
-          Schema.Struct({ done: Schema.Literal(false), value: Schema.instanceOf(Uint8Array) }),
-        ])
-      )(next);
-      if (chunk.done) {
-        break;
-      }
-      const value = chunk.value;
-      size += value.byteLength;
-      if (size > responseLimit) {
-        throw Error("Provider response exceeded limit");
-      }
-      chunks.push(value);
+  for await (const value of response.body) {
+    size += value.byteLength;
+    if (size > responseLimit) {
+      throw Error("Provider response exceeded limit");
     }
-  } catch {
-    await reader.cancel().catch(() => undefined);
-    throw Error("Provider response could not be read within limit");
-  } finally {
-    reader.releaseLock();
+    chunks.push(value);
   }
   const bytes = new Uint8Array(size);
   let offset = 0;

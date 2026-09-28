@@ -142,42 +142,6 @@
             }
           },
           {
-            // The release CLI and routing controller are an imperative foreign-control-plane seam:
-            // Promise operations serialize Cloudflare writes and re-read external state after each write.
-            "include": [
-              "./infra/cloudflare/production-release.ts",
-              "./infra/cloudflare/release-controller.ts",
-              "./infra/cloudflare/release-cleanup.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "asyncFunction": "off",
-                "missingPipeableSignature": "off"
-              }
-            }
-          },
-          {
-            // Raw Cloudflare/GitHub responses are bounded before JSON parsing at this CLI-only boundary.
-            "include": ["./infra/cloudflare/production-release.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "globalFetch": "off"
-              }
-            }
-          },
-          {
-            // Stateful fake routing and intercepted fetches test the imperative control-plane seam.
-            "include": [
-              "./infra/cloudflare/release-controller.test.ts",
-              "./infra/cloudflare/verify-production-smoke.test.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "asyncFunction": "off"
-              }
-            }
-          },
-          {
             "include": ["./apps/web/playwright.config.ts"],
             "options": {
               "diagnosticSeverity": {

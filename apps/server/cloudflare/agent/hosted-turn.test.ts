@@ -491,9 +491,8 @@ it("does not retain User text when a verified WhatsApp association changes befor
       });
       const admitted = yield* admitHostedTurn({
         db,
-        subject: caller,
+        channel: { _tag: "WhatsApp", subject: caller, inbound },
         selection,
-        inbound: Option.some(inbound),
         text: TranscriptText.make("Privado"),
         now: now(),
         id: turnId,
@@ -546,8 +545,7 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       });
       const admitted = yield* admitHostedTurn({
         db,
-        subject: caller,
-        inbound: Option.some(inbound),
+        channel: { _tag: "WhatsApp", subject: caller, inbound },
         selection: selectHostedSession({
           snapshot: snapshot.value,
           userId: UserId.make(userId),
@@ -669,8 +667,7 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       const replay = yield* Effect.exit(
         admitHostedTurn({
           db,
-          subject: caller,
-          inbound: Option.some(inbound),
+          channel: { _tag: "WhatsApp", subject: caller, inbound },
           selection: selectHostedSession({
             snapshot: newSnapshot.value,
             userId: UserId.make(userId),
@@ -833,7 +830,7 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
       const turnId = TranscriptTurnId.make(newId());
       const admitted = yield* admitHostedTurn({
         db,
-        subject,
+        channel: { _tag: "WhatsApp", subject, inbound },
         selection: selectHostedSession({
           snapshot: snapshot.value,
           userId: subject.userId,
@@ -842,7 +839,6 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
         text: TranscriptText.make("Solo en Transcript"),
         now: now(),
         id: turnId,
-        inbound: Option.some(inbound),
       });
       expect(Option.isSome(admitted)).toBe(true);
       const offered: Array<WhatsAppWork> = [];

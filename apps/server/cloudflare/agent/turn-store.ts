@@ -35,6 +35,7 @@ import {
 } from "../../src/core/identity/reference";
 import {
   type HostedSubject,
+  type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
   hostedAuthority,
   hostedIdentity,
@@ -696,23 +697,27 @@ const decodeEntry = (row: EntryRow): TranscriptEntry => {
   }
 };
 
+export type HostedAdmissionChannel =
+  | Readonly<{ _tag: "Browser"; subject: TransactionSubject }>
+  | Readonly<{
+      _tag: "WhatsApp";
+      subject: WhatsAppHostedSubject;
+      inbound: WhatsAppInboundEvidence;
+    }>;
+
 const hostedInboundStatements = ({
   db,
-  subject,
-  inbound,
+  channel,
   id,
   now,
 }: Readonly<{
   db: D1Database;
-  subject: HostedSubject;
-  inbound: Option.Option<WhatsAppInboundEvidence>;
+  channel: HostedAdmissionChannel;
   id: TranscriptTurnId;
   now: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
-  if (!isWhatsAppHosted(subject) && Option.isNone(inbound)) return [];
-  if (!isWhatsAppHosted(subject) || Option.isNone(inbound)) {
-    throw new Error("Hosted admission channel mismatch");
-  }
+  if (channel._tag === "Browser") return [];
+  const { subject, inbound } = channel;
   return [
     db
       .prepare(`INSERT INTO hosted_whatsapp_inbound
@@ -723,10 +728,10 @@ const hostedInboundStatements = ({
       .bind(
         subject.portfolioId,
         subject.bsuid,
-        inbound.value.messageId,
-        inbound.value.businessPhoneNumberId,
-        inbound.value.occurredAtMs,
-        inbound.value.receivedAtMs,
+        inbound.messageId,
+        inbound.businessPhoneNumberId,
+        inbound.occurredAtMs,
+        inbound.receivedAtMs,
         id,
         subject.userId
       ),
@@ -740,22 +745,21 @@ const hostedInboundStatements = ({
 /** Append the exact User entry and Pending Turn atomically after the complete model preflight. */
 export const admitHostedTurn = ({
   db,
-  subject,
+  channel,
   selection,
   text,
   now,
   id,
-  inbound,
 }: Readonly<{
   db: D1Database;
-  subject: HostedSubject;
+  channel: HostedAdmissionChannel;
   selection: ReturnType<typeof selectHostedSession>;
   text: TranscriptText;
   now: number;
   id: TranscriptTurnId;
-  inbound: Option.Option<WhatsAppInboundEvidence>;
 }>): Effect.Effect<Option.Option<TranscriptTurnId>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const subject = channel.subject;
     const entryId = TranscriptEntryId.make(newId());
     const authority = hostedAuthority({ subject, current: now });
     const basisJson = yield* Schema.encodeEffect(
@@ -772,7 +776,7 @@ export const admitHostedTurn = ({
             `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
           )
           .bind(selection.id, subject.userId);
-    const channelStatements = hostedInboundStatements({ db, subject, inbound, id, now });
+    const channelStatements = hostedInboundStatements({ db, channel, id, now });
     const results = yield* Effect.tryPromise(() =>
       db.batch([
         createSession,

@@ -59,6 +59,7 @@ import type {
 import { transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
 import {
+  type HostedAdmissionChannel,
   type HostedTurnOutcome,
   type HostedTurnSnapshot,
   acknowledgeHostedDelivery,
@@ -330,7 +331,10 @@ export const resumeWhatsAppTurn = ({
  * request after Pending is recovered by the next Turn, never silently reported Completed.
  */
 const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
-  const inbound = "inbound" in input ? Option.some(input.inbound) : Option.none();
+  const channel: HostedAdmissionChannel =
+    "inbound" in input
+      ? { _tag: "WhatsApp", subject: input.subject, inbound: input.inbound }
+      : { _tag: "Browser", subject: input.subject };
   const {
     db,
     subject,
@@ -368,10 +372,9 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
         if (Option.isNone(challenge) || Option.isNone(executeMutation)) return unauthenticated();
         const turn = yield* admitHostedTurn({
           db,
-          subject,
+          channel,
           selection,
           text,
-          inbound,
           now: startedAtMs,
           id: activeTurnId,
         });
@@ -427,10 +430,9 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
       if (Option.isNone(prepared) || isAborted()) return unavailable();
       const turn = yield* admitHostedTurn({
         db,
-        subject,
+        channel,
         selection,
         text,
-        inbound,
         now: startedAtMs,
         id: activeTurnId,
       });

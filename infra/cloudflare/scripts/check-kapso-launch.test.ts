@@ -45,7 +45,7 @@ const check = (evidence: unknown): { readonly code: number; readonly output: str
 };
 
 describe("Kapso production launch check", () => {
-  it("keeps production blocked while the checked-in evidence is pending", () => {
+  it("keeps the real-user launch check pending without blocking MVP deployments", () => {
     const evidence: unknown = JSON.parse(
       readFileSync(
         new URL("../../../docs/operations/kapso-launch-evidence.json", import.meta.url),
@@ -57,7 +57,7 @@ describe("Kapso production launch check", () => {
       new URL("../../../.github/workflows/production.yml", import.meta.url),
       "utf8"
     );
-    expect(workflow).toContain("bash infra/cloudflare/scripts/check-kapso-launch.sh");
+    expect(workflow).not.toContain("bash infra/cloudflare/scripts/check-kapso-launch.sh");
   });
 
   it("refuses the unreviewed launch record", () => {

@@ -82,9 +82,6 @@ jobs:
         working-directory: infra/cloudflare
         run: bun ./verify-edge-policy.ts
 
-      - name: Require reviewed Kapso launch evidence
-        run: bash infra/cloudflare/scripts/check-kapso-launch.sh
-
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         env:

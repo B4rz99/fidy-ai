@@ -1,0 +1,27 @@
+apps/server/src/shell/consent/current-disclosure.ts
+  s_c1486795a55def::t_6748e65b9615b2 24,29
+  s_c1486795a55def::t_9fc33036844523 9,23,28
+apps/web/src/features/public-site/legal/policy.html
+  s_c1486795a55def::t_5d35a04f396f7f 73-76
+  s_c1486795a55def::t_3f13933cdbff5f 3,71-72
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_c1486795a55def::t_8813a069fa9cd5 31-32
+docs/operations/kapso-launch-evidence.json
+  s_c1486795a55def::t_57845253f7cb4b 28-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "05f98089f49d0c161fb0cddcc92fa7741f1db105",
+  "prompts": {},
+  "sessions": {
+    "s_c1486795a55def": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e82c-5a7a-70e6-b90d-820b4d678165",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

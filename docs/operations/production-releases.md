@@ -19,6 +19,7 @@ Create the GitHub `production` environment and configure:
 | Kind     | Name                    | Purpose                                                                             |
 | -------- | ----------------------- | ----------------------------------------------------------------------------------- |
 | Secret   | `CLOUDFLARE_API_TOKEN`  | Alchemy-managed Workers, D1, DNS, and edge security changes                         |
+| Secret   | `SMOKE_PROOF`           | Independent 32-byte random hex credential for the reserved release probe            |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account owning the Fidy resources                                        |
 | Variable | `OPERATOR_ALERT_EMAIL`  | Validated sole-operator destination for Production health and release-failure email |
 
@@ -96,6 +97,32 @@ curl --fail --silent https://api.fidyapp.com/health | jq
 The shell and SPA fallbacks use `no-cache`; hashed assets use the immutable cache policy. Confirm the
 checked-in CSP, opener/resource isolation, permissions, referrer, MIME-sniffing, and frame-denial
 headers on representative routes.
+
+## Exact-version smoke contract (#718)
+
+`bun infra/cloudflare/verify-production-smoke.ts` is the candidate-only gate consumed by the
+zero-traffic release controller (#719). It requires `PUBLIC_VERSION_ID`, `CORE_VERSION_ID`,
+`PUBLIC_WORKER_NAME`, `CORE_WORKER_NAME`, `RELEASE_GIT_SHA`, `CONTRACT_DIGEST`, and the
+production-environment `SMOKE_PROOF` secret. Provision the same independent, randomly generated
+64-character lowercase hex secret to the public Worker and Core Worker as a secret binding.
+Never print it or add it to a URL, log, artifact, or summary. The controller must obtain the
+version IDs from Cloudflare's upload results, not a health response, and must stop without
+promotion if this command fails. The current deployment workflow still deploys directly;
+#719 owns candidate upload, 0% routing, invocation of this gate, and guarded promotion.
+
+The runner sends a two-Worker version override, verifies each Worker's independently reported
+version metadata, Git revision, canonical contract digest, and shared smoke manifest, then waits
+for a dedicated no-op Queue/Workflow completion. It checks unauthenticated health and public
+rejection responses against the candidate public version, and smoke telemetry reports only the
+release identity and closed operation outcome. Admission is limited to eight active synthetic
+probes at a time; replays cannot publish the same probe twice. Allow five minutes for older
+probes to expire before retrying a saturated gate. Failed work for a claimed probe requires a
+fresh probe ID. The reserved Durable Object check establishes compatibility with whichever
+version Cloudflare assigned the object; Queue/Workflow completion establishes deployed wiring,
+**not that the candidate's async code ran**. The synthetic D1 row expires after five minutes and
+Core cron removes expired rows. The reserved R2 marker carries no User material. The first
+release installing the smoke protocol must use the existing direct deployment path before a
+stable version can answer the reserved Durable Object probe; later releases can use #719.
 
 ## Failure and recovery
 

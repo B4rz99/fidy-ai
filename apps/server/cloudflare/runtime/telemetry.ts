@@ -101,6 +101,7 @@ type WorkerExecution = Readonly<{
     | "workflow.billingCollection"
     | "workflow.statementExtraction"
     | "workflow.operationalCanary"
+    | "workflow.releaseSmoke"
     | "worker.core.coordinator"
     | "worker.core.alarm"
     | "worker.email.receive"

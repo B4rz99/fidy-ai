@@ -8,13 +8,21 @@ import {
 } from "@fidy/server/transaction-routes";
 import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Effect, Encoding, Option } from "effect";
+import { Effect, Encoding, Option, Schema } from "effect";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import { browserOrigins } from "./runtime/topology";
+import {
+  SmokeResponse,
+  smokeManifest,
+  smokePath,
+  smokeProofAccepted,
+  smokeProofHeader,
+  smokeVersionHeader,
+} from "./runtime/smoke";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/pat-routes";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 
@@ -24,7 +32,13 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly CORE: Pick<Fetcher, "fetch">;
   readonly LOCAL_CANONICAL_READ_BEARER: string;
   readonly PAT_ADMISSION_KEY: string;
-};
+} & Partial<
+    Readonly<{
+      SMOKE_PROOF: string;
+      CONTRACT_DIGEST: string;
+      CF_VERSION_METADATA: { readonly id: string };
+    }>
+  >;
 
 type PublicWorker = Readonly<{
   fetch: (request: Request, environment: PublicEnvironment) => Promise<Response>;
@@ -190,6 +204,7 @@ const postPaths = new Set<string>([
   enrollmentPreparePath,
   enrollmentSubmitPath,
   statementStagingPath,
+  smokePath,
   hostedTurnPath,
   hostedReceiptPath,
 ]);
@@ -220,6 +235,7 @@ const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
   if (enrollmentStatusPath.test(path)) return ["GET"];
+  if (path === smokePath) return ["GET", "POST"];
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
 };
@@ -298,18 +314,31 @@ const browserForwardHeaders = (request: Request, path: string): Headers => {
   if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
   return headers;
 };
+const fallbackHeaders = (request: Request, path: string): Headers => {
+  if (forwardsSession(request, path)) {
+    return new Headers({
+      cookie: request.headers.get("cookie") ?? "",
+      "content-type": request.headers.get("content-type") ?? "",
+    });
+  }
+  const headers = new Headers(request.headers);
+  headers.delete(smokeProofHeader);
+  return headers;
+};
 const forwardedHeaders = (request: Request, path: string): Headers => {
+  if (path === smokePath) {
+    return new Headers({
+      [smokeProofHeader]: request.headers.get(smokeProofHeader) ?? "",
+      [smokeVersionHeader]: request.headers.get(smokeVersionHeader) ?? "",
+      "content-type": "application/json",
+    });
+  }
   const direct = directHeaders(request, path);
   if (Option.isSome(direct)) return direct.value;
   const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
-  return forwardsSession(request, path)
-    ? new Headers({
-        cookie: request.headers.get("cookie") ?? "",
-        "content-type": request.headers.get("content-type") ?? "",
-      })
-    : request.headers;
+  return fallbackHeaders(request, path);
 };
 const pairingSource = (
   request: Request,
@@ -350,7 +379,7 @@ const coreRequest = (
       headers.set("x-pat-source", yield* pairingSource(request, environment));
     }
     return new Request(
-      `https://core.internal${path}${transactionPath(path) || canonicalRoute(path) ? new URL(request.url).search : ""}`,
+      `https://core.internal${path}${transactionPath(path) || canonicalRoute(path) || path === smokePath ? new URL(request.url).search : ""}`,
       {
         headers,
         method: request.method,
@@ -395,6 +424,15 @@ const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
   patBrowserRoute(path);
 
+const rejectsSmokeIngress = (
+  request: Request,
+  origin: Option.Option<string>,
+  environment: PublicEnvironment
+): boolean =>
+  new URL(request.url).pathname === smokePath &&
+  (Option.isSome(origin) ||
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
+
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -404,6 +442,9 @@ const gateOwnedRequest = (
   const policy = (response: Response): Option.Option<Response> =>
     Option.some(applyApiPolicy(response, environment.BROWSER_ORIGIN, origin));
   if (!ownedPath(path)) {
+    return policy(Response.json({}, { status: 404 }));
+  }
+  if (rejectsSmokeIngress(request, origin, environment)) {
     return policy(Response.json({}, { status: 404 }));
   }
   if (disallowedSupportOrigin(path, origin)) {
@@ -449,10 +490,34 @@ const routeOwnedRequest = (
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
-    return yield* Effect.tryPromise({
+    const response = yield* Effect.tryPromise({
       try: (signal) => environment.CORE.fetch(forwarded, { signal }),
       catch: () => undefined,
     });
+    if (new URL(request.url).pathname !== smokePath || !response.ok) return response;
+    const version = environment.CF_VERSION_METADATA?.id;
+    if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
+      return unavailable();
+    }
+    const decoded = yield* Effect.tryPromise({
+      try: () => response.json().then(Schema.decodeUnknownOption(SmokeResponse)),
+      catch: () => undefined,
+    });
+    if (Option.isNone(decoded)) {
+      return unavailable();
+    }
+    return Response.json(
+      {
+        ...decoded.value,
+        manifest: smokeManifest,
+        public: {
+          workerVersionId: version,
+          gitRevision: environment.RELEASE_GIT_SHA,
+          contractDigest: environment.CONTRACT_DIGEST,
+        },
+      },
+      { status: response.status }
+    );
   }).pipe(
     Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),
     Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),
@@ -485,6 +550,14 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     Effect.match({
       onFailure: () => applyApiPolicy(unavailable(), browserOrigins.production, Option.none()),
       onSuccess: (response) => response,
+    }),
+    Effect.map((response) => {
+      if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
+      const version = environment.CF_VERSION_METADATA?.id;
+      if (version === undefined) return response;
+      const headers = new Headers(response.headers);
+      headers.set("x-fidy-smoke-worker-version", version);
+      return new Response(response.body, { status: response.status, headers });
     })
   );
 

@@ -118,6 +118,13 @@ import {
   reconcileOnboardingEmail,
 } from "./onboarding/onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
+import { smokePath } from "./runtime/smoke";
+import {
+  ReleaseSmokeWorkflowV1,
+  type SmokeEnvironment,
+  handleSmoke,
+  receiveSmoke,
+} from "./runtime/smoke-work";
 import { verifyOnboarding } from "./onboarding/verified-onboarding";
 import {
   type WorkerTelemetryEnvironment,
@@ -198,7 +205,7 @@ export {
 } from "./billing/billing-collection";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
-export { StatementExtractionWorkflowV1 };
+export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 
 const ReleaseConfiguration = Schema.Struct({
@@ -236,6 +243,7 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
       OPERATOR_ALERT_EMAIL: string;
     }>
   > &
+  Partial<SmokeEnvironment> &
   Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
@@ -670,6 +678,7 @@ const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
   [
     "/health",
+    smokePath,
     listCategoriesPath,
     "/providers/kapso/callback",
     "/providers/wompi/billing-events",
@@ -1775,6 +1784,37 @@ type RequestExecution = Readonly<{
   publish: PublishAcceptedWork;
 }>;
 
+const smokeReady = (
+  environment: CoreEnvironment
+): environment is CoreEnvironment & SmokeEnvironment =>
+  environment.SMOKE_BUCKET !== undefined &&
+  environment.SMOKE_QUEUE !== undefined &&
+  environment.SMOKE_WORKFLOW !== undefined &&
+  environment.SMOKE_QUEUE_NAME !== undefined &&
+  environment.SMOKE_PROOF !== undefined &&
+  environment.CF_VERSION_METADATA !== undefined;
+
+const smokeResponse = (request: Request, environment: CoreEnvironment): Effect.Effect<Response> =>
+  Effect.tryPromise({
+    try: () =>
+      smokeReady(environment)
+        ? handleSmoke({ request, environment })
+        : Promise.resolve(unavailable()),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+const reservedCoreResponse = (
+  request: Request,
+  environment: CoreEnvironment,
+  path: string
+): Option.Option<Effect.Effect<Response>> => {
+  if (!ownedCorePath(path)) {
+    return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
+  }
+  if (path === smokePath) return Option.some(smokeResponse(request, environment));
+  return Option.none();
+};
+
 const fetchEffect = ({
   request,
   environment,
@@ -1782,9 +1822,8 @@ const fetchEffect = ({
   publish,
 }: RequestExecution): Effect.Effect<Response> => {
   const url = new URL(request.url);
-  if (!ownedCorePath(url.pathname)) {
-    return Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND));
-  }
+  const reserved = reservedCoreResponse(request, environment, url.pathname);
+  if (Option.isSome(reserved)) return reserved.value;
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return providerCallbackEffect(request, environment, publish);
   }
@@ -1880,7 +1919,40 @@ const receiveCanaryBatch: CoreWorker["queue"] = (batch, environment) => {
   });
 };
 
+const receiveReservedSmoke = (
+  batch: MessageBatch<unknown>,
+  environment: CoreEnvironment
+): Option.Option<Promise<void>> => {
+  if (environment.SMOKE_QUEUE_NAME === undefined || batch.queue !== environment.SMOKE_QUEUE_NAME) {
+    return Option.none();
+  }
+  return Option.some(
+    smokeReady(environment)
+      ? receiveSmoke({ batch, environment })
+      : Promise.reject(new Error("Smoke wiring unavailable"))
+  );
+};
+
+const receiveForwardedQueue = (
+  batch: MessageBatch<unknown>,
+  environment: CoreEnvironment
+): Promise<void> => {
+  if (environment.EMAIL_BUCKET === undefined) {
+    return Promise.reject(new Error("Email evidence unavailable"));
+  }
+  return Effect.tryPromise({
+    try: () =>
+      receiveForwardedEmailWork({
+        messages: batch.messages,
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+      }),
+    catch: () => new ForwardedEmailDeliveryUnavailable(),
+  }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
+};
+
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  const smoke = receiveReservedSmoke(batch, environment);
+  if (Option.isSome(smoke)) return smoke.value;
   if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
     return receiveWhatsAppWork({
       messages: batch.messages,
@@ -1888,17 +1960,7 @@ const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
     });
   }
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
-    if (environment.EMAIL_BUCKET === undefined) {
-      return Promise.reject(new Error("Email evidence unavailable"));
-    }
-    return Effect.tryPromise({
-      try: () =>
-        receiveForwardedEmailWork({
-          messages: batch.messages,
-          coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        }),
-      catch: () => new ForwardedEmailDeliveryUnavailable(),
-    }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
+    return receiveForwardedQueue(batch, environment);
   }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
@@ -2154,7 +2216,8 @@ const statementActivities = (
 
 const admissionActivities = (
   db: D1Database,
-  now: number
+  now: number,
+  smokeConfigured: boolean
 ): Record<string, Effect.Effect<unknown, void>> => ({
   "ingestion.uploadAdmissionSweep": sweepExpiredUploadAdmission({ db, now }).pipe(
     Effect.mapError(() => undefined)
@@ -2165,6 +2228,13 @@ const admissionActivities = (
   "billing.cardPreparationAdmissionSweep": sweepExpiredCardPreparationAdmission({ db, now }).pipe(
     Effect.mapError(() => undefined)
   ),
+  "release.smoke.expiry": smokeConfigured
+    ? Effect.tryPromise({
+        try: () =>
+          db.prepare("DELETE FROM release_smoke_probes WHERE expires_at_ms < ?").bind(now).run(),
+        catch: () => undefined,
+      })
+    : Effect.void,
 });
 
 const canaryPublication = (
@@ -2244,7 +2314,7 @@ const scheduledActivities = (
       staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":
       staging?.sweepExpiredStatementStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
-    ...admissionActivities(environment.DB, current),
+    ...admissionActivities(environment.DB, current, smokeReady(environment)),
     ...statementActivities(environment),
   };
 };

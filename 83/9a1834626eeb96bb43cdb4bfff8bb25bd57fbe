@@ -1,0 +1,23 @@
+docs/operations/production-releases.md
+  s_c1486795a55def::t_62c7c0500db727 47
+docs/operations/kapso-launch-readiness.md
+  s_c1486795a55def::t_e76cbe4024b783 3
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_c1486795a55def::t_40eaa8456bfdf4 48,60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "839a1834626eeb96bb43cdb4bfff8bb25bd57fbe",
+  "prompts": {},
+  "sessions": {
+    "s_c1486795a55def": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e82c-5a7a-70e6-b90d-820b4d678165",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

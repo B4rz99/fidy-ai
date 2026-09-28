@@ -3,6 +3,7 @@
   "publishedDpa": "https://kapso.com/dpa (effective 2026-09-17; account agreement not verified)",
   "publishedSubprocessors": "https://kapso.com/subprocessors (effective 2026-09-01; enabled routes not verified)",
   "cliObservation": "2026-09-28: fiidy project accessible; one WhatsApp number, sandbox kind; no production number observed",
+  "operatorReportedRetention": "Free plan keeps WhatsApp history indefinitely; Kapso requires an upgrade to set a retention window (operator-reported dashboard text; effective setting not independently verified)",
   "reviewedAt": "PENDING",
   "reviewer": "PENDING",
   "contractingEntity": "Kapso, Inc.",

@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -50,8 +51,12 @@ const legacySession = "10000000-0000-4000-8000-000000000733";
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
 const legacyTranscript = "10000000-0000-4000-8000-000000000735";
 
-const runD1 = <A>(execute: () => Promise<A>): Effect.Effect<A, string> =>
-  Effect.tryPromise({ try: execute, catch: (cause) => String(cause) });
+class D1MigrationTestFailure extends Data.TaggedError("D1MigrationTestFailure")<{
+  readonly cause: unknown;
+}> {}
+
+const runD1 = <A>(execute: () => Promise<A>): Effect.Effect<A, D1MigrationTestFailure> =>
+  Effect.tryPromise({ try: execute, catch: (cause) => new D1MigrationTestFailure({ cause }) });
 
 const seedExistingTranscript = Effect.fn(function* (db: D1Database) {
   const timestamp = yield* Clock.currentTimeMillis;
@@ -105,7 +110,10 @@ const seedExistingTranscript = Effect.fn(function* (db: D1Database) {
 
 const statementAttempt = Effect.fn(function* (statement: D1PreparedStatement) {
   const result = yield* Effect.result(runD1(() => statement.run()));
-  if (Result.isFailure(result)) return { _tag: "Failed", message: result.failure } as const;
+  if (Result.isFailure(result)) {
+    const cause = result.failure.cause;
+    return { _tag: "Failed", message: cause instanceof Error ? cause.message : "" } as const;
+  }
   return { _tag: "Succeeded" } as const;
 });
 

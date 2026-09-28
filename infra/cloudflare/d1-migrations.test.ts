@@ -28,6 +28,26 @@ const declareMigrationResources = Effect.fn(function* (migrations: string) {
   return { database, worker };
 });
 const { test, deploy, destroy } = Test.make({ providers: Cloudflare.providers(), dev: true });
+const createMigrationStack = Effect.fn(function* (name: string, migrations: string) {
+  return yield* Alchemy.Stack(
+    name,
+    { providers: Cloudflare.providers(), state: Alchemy.localState() },
+    declareMigrationResources(migrations)
+  );
+});
+const deployLocalMigrationStack = Effect.fn(function* (
+  stack: ReturnType<typeof createMigrationStack>
+) {
+  const deployed = yield* deploy(stack);
+  expect(deployed.database.databaseId).toMatch(/^dev:/u);
+  return deployed;
+});
+const resetAndDeployLocalMigrationStack = Effect.fn(function* (
+  stack: ReturnType<typeof createMigrationStack>
+) {
+  yield* destroy(stack);
+  return yield* deployLocalMigrationStack(stack);
+});
 
 const migrationPrefix = (name: string): number => Number.parseInt(name.split("_")[0] ?? "", 10);
 const compareMigrations = (left: string, right: string): number =>
@@ -104,16 +124,10 @@ test(
   "applies the complete Production D1 migration history to a clean local database",
   Effect.gen(function* () {
     const names = yield* migrationNames();
-    const migrationStack = Alchemy.Stack(
-      "D1MigrationCleanInstall",
-      { providers: Cloudflare.providers(), state: Alchemy.localState() },
-      declareMigrationResources(migrationsPath)
-    );
+    const migrationStack = createMigrationStack("D1MigrationCleanInstall", migrationsPath);
 
     const migrationCheck = Effect.gen(function* () {
-      yield* destroy(migrationStack);
-      const deployed = yield* deploy(migrationStack);
-      expect(deployed.database.databaseId).toMatch(/^dev:/u);
+      const deployed = yield* resetAndDeployLocalMigrationStack(migrationStack);
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(deployed.worker.url)));
       expect(state).toMatchObject({
@@ -140,16 +154,10 @@ test(
     const dir = yield* createMigrationDirectory(predecessorNames);
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const migrationStack = Alchemy.Stack(
-      "D1MigrationPopulatedUpgrade",
-      { providers: Cloudflare.providers(), state: Alchemy.localState() },
-      declareMigrationResources(dir)
-    );
+    const migrationStack = createMigrationStack("D1MigrationPopulatedUpgrade", dir);
 
     const migrationCheck = Effect.gen(function* () {
-      yield* destroy(migrationStack);
-      const before = yield* deploy(migrationStack);
-      expect(before.database.databaseId).toMatch(/^dev:/u);
+      const before = yield* resetAndDeployLocalMigrationStack(migrationStack);
       expect(Object.keys(before.database.migrationsHashes).sort()).toEqual(
         [...predecessorNames].sort()
       );
@@ -166,7 +174,7 @@ test(
       expect(yield* seedResponse.json).toEqual({ seeded: true });
 
       yield* fs.copyFile(path.join(migrationsPath, candidate), path.join(dir, candidate));
-      const after = yield* deploy(migrationStack);
+      const after = yield* deployLocalMigrationStack(migrationStack);
       expect(after.database.databaseId).toBe(before.database.databaseId);
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(after.worker.url)));

@@ -178,6 +178,7 @@ const setup = (platform = false): Promise<D1Database> =>
       yield* fromTestPromise(() =>
         [
           "0001_categories",
+          "0002_resource_admission",
           "0003_pending_consent",
           "0004_onboarding_email",
           "0005_verified_onboarding",

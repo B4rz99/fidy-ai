@@ -1,0 +1,51 @@
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_4050e5a6ee9200::t_ca4cbf0449452f 743-769,772,775,777,807-810
+  s_4050e5a6ee9200::t_3973133a91f863 52,67,785
+apps/server/cloudflare/resource-admission/authority.ts
+  s_4050e5a6ee9200::t_9193c47c3e432a 458-461
+  s_4050e5a6ee9200::t_08dc6221d44375 171-180,200-206,463
+  s_4050e5a6ee9200::t_112970a71458b4 462
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_4050e5a6ee9200::t_2129348d311ac6 86-87,327,332,362-369,373-381,387-388,391-393
+  s_4050e5a6ee9200::t_0477ce775ad9e0 82-84,97,99-110,141-153,329-331,333-336
+  s_4050e5a6ee9200::t_9193c47c3e432a 370-372,382-386,389-390
+  s_4050e5a6ee9200::t_e9e28ad1957d37 98,154,394
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_4050e5a6ee9200::t_1d3559ec91abf5 2034
+  s_4050e5a6ee9200::t_3f68d88a5a78b5 2093-2102
+  s_4050e5a6ee9200::t_9193c47c3e432a 2022-2024,2028-2031,2036-2039
+  s_4050e5a6ee9200::t_6039baa5d09d5b 32,2017-2020,2025-2027,2032-2033,2035,2040-2043
+  s_4050e5a6ee9200::t_8de5a680eea454 2021
+  s_4050e5a6ee9200::t_f83b29d135f250 2044
+docs/operations/admission-coverage.md
+  s_4050e5a6ee9200::t_951947522df338 11
+  s_4050e5a6ee9200::t_f882ef6c0fa5b5 1-8,20-22,24-28
+  s_4050e5a6ee9200::t_9193c47c3e432a 9-10,12-19,23
+apps/server/cloudflare/core-worker.ts
+  s_4050e5a6ee9200::t_6f266cc342b0c2 132
+  s_4050e5a6ee9200::t_0f013be92a6bbd 1953,1956
+  s_4050e5a6ee9200::t_ca095d71062fcd 2001-2004
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_4050e5a6ee9200::t_39754185cb1a83 1581-1584,1588-1589,1595-1597
+  s_4050e5a6ee9200::t_9193c47c3e432a 1585-1587,1590-1594
+apps/server/cloudflare/resource-admission/resource-admission.test.ts
+  s_4050e5a6ee9200::t_385cd439fc5706 358-373,377-378,380-394,402-405
+  s_4050e5a6ee9200::t_ebc0886e9f98cc 374-376
+  s_4050e5a6ee9200::t_9193c47c3e432a 379,395-401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "802a99cde18f1f1173d862dda545e3a4b1f7e0de",
+  "prompts": {},
+  "sessions": {
+    "s_4050e5a6ee9200": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e843-acd8-738b-ae15-90217dc7b576",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

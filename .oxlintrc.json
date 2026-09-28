@@ -456,6 +456,13 @@
         "no-magic-numbers": "off"
       }
     },
+    // Cloudflare Worker entrypoints are consumed through their default `fetch` export.
+    {
+      "files": ["infra/cloudflare/d1-migration-test-worker.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
     {
       "files": [
         "apps/server/vitest.config.ts",

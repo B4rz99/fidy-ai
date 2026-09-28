@@ -123,6 +123,7 @@ import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
+  observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import type { WorkersAiEnvironment } from "./ai/workers-ai";
@@ -2020,10 +2021,6 @@ const scheduledWork = (environment: CoreEnvironment): Effect.Effect<void, Schedu
   });
 
 /** Builds the private Core target with one telemetry service for each request Work span. */
-class QueueObservationFailure extends Data.TaggedError("QueueObservationFailure")<{
-  readonly original: unknown;
-}> {}
-
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: (request, environment, context) =>
     // The Core Worker runs no hosted inference: only the coordinator's Memory work builds the
@@ -2052,17 +2049,11 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       Effect.runPromise
     ),
   queue: (batch, environment) =>
-    Effect.tryPromise({
-      try: () => receiveWorkQueue(batch, environment),
-      catch: (original) => new QueueObservationFailure({ original }),
-    })
-      .pipe(
-        observeWorkerExecution({ environment, telemetry, operation: "worker.core.queue" }),
-        Effect.runPromise
-      )
-      .catch((failure: unknown) =>
-        Promise.reject(failure instanceof QueueObservationFailure ? failure.original : failure)
-      ),
+    observeWorkerPromise(() => receiveWorkQueue(batch, environment), {
+      environment,
+      telemetry,
+      operation: "worker.core.queue",
+    }),
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

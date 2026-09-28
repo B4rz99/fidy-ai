@@ -11,7 +11,7 @@ import {
   makeTelemetryService,
   projectHttpStatusClass,
 } from "@fidy/server/telemetry";
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import { dual } from "effect/Function";
 
 /** Runtime release metadata from which a Worker constructs a bounded telemetry descriptor. */
@@ -95,6 +95,13 @@ type WorkerExecution = Readonly<{
   operation:
     | "worker.core.queue"
     | "worker.core.scheduled"
+    | "workflow.onboardingEmail"
+    | "workflow.browserPairingEmail"
+    | "workflow.emailReplacement"
+    | "workflow.billingCollection"
+    | "workflow.statementExtraction"
+    | "worker.core.coordinator"
+    | "worker.core.alarm"
     | "worker.email.receive"
     | "worker.email.scheduled";
 }>;
@@ -114,6 +121,146 @@ const observeWorkerExecutionWork = <E, R>(
     },
     work
   );
+
+const ReleaseBinding = Schema.Struct({ RELEASE_GIT_SHA: Schema.String });
+
+/** Reads only the release binding from a platform environment; never exports another binding. */
+export const workerRelease = (environment: unknown): WorkerTelemetryEnvironment => ({
+  RELEASE_GIT_SHA: Option.match(Schema.decodeUnknownOption(ReleaseBinding)(environment), {
+    onNone: () => "",
+    onSome: (binding) => binding.RELEASE_GIT_SHA,
+  }),
+});
+
+class ObservedPromiseFailure extends Data.TaggedError("ObservedPromiseFailure")<{
+  readonly original: unknown;
+}> {}
+
+/** Gives a native Cloudflare Promise one closed Work record, preserving its exact resolution/rejection. */
+const observeWorkerPromiseWork = <A>(
+  work: () => Promise<A>,
+  observation: WorkerExecution
+): Promise<A> =>
+  Effect.tryPromise({
+    try: work,
+    catch: (original) => new ObservedPromiseFailure({ original }),
+  })
+    .pipe(
+      (effect) =>
+        observation.telemetry.observeWork(
+          {
+            descriptor: workerDescriptor(observation.environment, observation.operation),
+            projectSuccess: (): TelemetryWorkSuccess => ({
+              outcome: "succeeded",
+              statusClass: Option.none(),
+            }),
+          },
+          effect
+        ),
+      Effect.runPromise
+    )
+    .catch((failure: unknown) =>
+      Promise.reject(failure instanceof ObservedPromiseFailure ? failure.original : failure)
+    );
+
+type ProviderName = "kapso" | "resend" | "wompi" | "cloudflare-access";
+type ResponseObservation = Readonly<{
+  environment: unknown;
+  telemetry: TelemetryService;
+  operation: "model.workersAi" | "provider.request";
+  provider: ProviderName | "cloudflare-workers-ai";
+}>;
+
+const observeResponsePromise = (
+  work: () => Promise<Response>,
+  observation: ResponseObservation
+): Promise<Response> =>
+  Effect.tryPromise({
+    try: work,
+    catch: (original) => new ObservedPromiseFailure({ original }),
+  })
+    .pipe(
+      (effect) =>
+        observation.telemetry.observeWork(
+          {
+            descriptor: TelemetryWorkDescriptor.make({
+              ...workerDescriptor(workerRelease(observation.environment), observation.operation),
+              provider: Option.some(observation.provider),
+            }),
+            projectSuccess: projectResponse,
+          },
+          effect
+        ),
+      Effect.runPromise
+    )
+    .catch((failure: unknown) =>
+      Promise.reject(failure instanceof ObservedPromiseFailure ? failure.original : failure)
+    );
+
+/** Observes a direct Workers AI invocation without reading inference request or response content. */
+const observeModelRunWork = (
+  work: () => Promise<Response>,
+  observation: Readonly<{ environment: unknown; telemetry: TelemetryService }>
+): Promise<Response> =>
+  observeResponsePromise(work, {
+    ...observation,
+    operation: "model.workersAi",
+    provider: "cloudflare-workers-ai",
+  });
+
+/** Supplies only closed provider response metadata beneath Outbound HTTP's request policy. */
+const observeProviderFetchWork = (
+  fetcher: typeof globalThis.fetch,
+  observation: Readonly<{
+    environment: unknown;
+    telemetry: TelemetryService;
+    provider: ProviderName;
+  }>
+): typeof globalThis.fetch =>
+  Object.assign(
+    (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) =>
+      observeResponsePromise(() => fetcher(input, init), {
+        ...observation,
+        operation: "provider.request",
+      }),
+    { preconnect: fetcher.preconnect }
+  );
+
+export const observeModelRun: {
+  (
+    observation: Readonly<{ environment: unknown; telemetry: TelemetryService }>
+  ): (work: () => Promise<Response>) => Promise<Response>;
+  (
+    work: () => Promise<Response>,
+    observation: Readonly<{ environment: unknown; telemetry: TelemetryService }>
+  ): Promise<Response>;
+} = dual(2, observeModelRunWork);
+
+export const observeProviderFetch: {
+  (
+    observation: Readonly<{
+      environment: unknown;
+      telemetry: TelemetryService;
+      provider: ProviderName;
+    }>
+  ): (fetcher: typeof globalThis.fetch) => typeof globalThis.fetch;
+  (
+    fetcher: typeof globalThis.fetch,
+    observation: Readonly<{
+      environment: unknown;
+      telemetry: TelemetryService;
+      provider: ProviderName;
+    }>
+  ): typeof globalThis.fetch;
+} = dual(2, observeProviderFetchWork);
+
+export const observeWorkerPromise: {
+  (observation: WorkerExecution): <A>(work: () => Promise<A>) => Promise<A>;
+  <A>(work: () => Promise<A>, observation: WorkerExecution): Promise<A>;
+} = dual(2, observeWorkerPromiseWork);
 
 export const observeWorkerExecution: {
   (

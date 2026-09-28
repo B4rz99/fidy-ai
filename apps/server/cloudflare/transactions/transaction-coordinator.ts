@@ -73,6 +73,12 @@ import {
   processStatementSubmission,
 } from "../ingestion/statement-processing";
 import { StatementCoordinatorActivity } from "../ingestion/statement-work";
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
 import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
@@ -682,44 +688,28 @@ export class UserTransactionCoordinator {
     const userId = this.state.id.name;
     const path = new URL(request.url).pathname;
     // A progress read has live session authority but does not start canonical work.
-    if (path === "/hosted-turn/progress") return this.runHostedProgress(request, userId);
+    if (path === "/hosted-turn/progress") {
+      return observeWorkerPromise(() => this.runHostedProgress(request, userId), {
+        environment: workerRelease(environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "worker.core.coordinator",
+      });
+    }
     const deadline =
       path === "/hosted-turn" ||
       path === "/hosted-turn/whatsapp" ||
       path === "/hosted-turn/whatsapp/work"
         ? Option.some(hostedDeadline(request.signal))
         : Option.none<ReturnType<typeof hostedDeadline>>();
-    const settledResponse = this.pending.then(() => {
-      if (Option.isSome(deadline)) {
-        return this.runHostedRequest(request, userId, { path, deadline: deadline.value });
+    const prior = this.pending;
+    const settledResponse = observeWorkerPromise(
+      () => prior.then(() => this.runCoordinatedRequest({ request, userId, path, deadline })),
+      {
+        environment: workerRelease(environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "worker.core.coordinator",
       }
-      if (path === "/hosted-turn/whatsapp/status") return this.runWhatsAppStatus(request, userId);
-      if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
-      return Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
-            if (Option.isNone(candidate)) return transactionUnavailable();
-            const ingestion = privateIngestionActivity({
-              request,
-              candidate: candidate.value,
-              environment,
-              userId,
-            });
-            if (Option.isSome(ingestion)) return yield* ingestion.value;
-            const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
-            if (
-              Option.isNone(admission) ||
-              admission.value.digest.length !== digestBytes ||
-              admission.value.userId !== userId
-            ) {
-              return transactionUnavailable();
-            }
-            return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
-          })
-        )
-      );
-    });
+    );
     const ownerSettled = settledResponse.then(
       () => undefined,
       () => undefined
@@ -735,6 +725,47 @@ export class UserTransactionCoordinator {
     });
   }
 
+  private runCoordinatedRequest(
+    input: Readonly<{
+      request: Request;
+      userId: string;
+      path: string;
+      deadline: Option.Option<ReturnType<typeof hostedDeadline>>;
+    }>
+  ): Promise<Response> {
+    const { request, userId, path, deadline } = input;
+    if (Option.isSome(deadline)) {
+      return this.runHostedRequest(request, userId, { path, deadline: deadline.value });
+    }
+    if (path === "/hosted-turn/whatsapp/status") return this.runWhatsAppStatus(request, userId);
+    if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
+    const environment = this.env;
+    return Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
+          if (Option.isNone(candidate)) return transactionUnavailable();
+          const ingestion = privateIngestionActivity({
+            request,
+            candidate: candidate.value,
+            environment,
+            userId,
+          });
+          if (Option.isSome(ingestion)) return yield* ingestion.value;
+          const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
+          if (
+            Option.isNone(admission) ||
+            admission.value.digest.length !== digestBytes ||
+            admission.value.userId !== userId
+          ) {
+            return transactionUnavailable();
+          }
+          return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
+        })
+      )
+    );
+  }
+
   /** Durable alarm recovers abandoned work even when its User never submits another Turn. */
   alarm(): Promise<void> {
     const action = this.pending.then(() => this.recoverAbandonedWork());
@@ -742,7 +773,11 @@ export class UserTransactionCoordinator {
       () => undefined,
       () => undefined
     );
-    return action;
+    return observeWorkerPromise(() => action, {
+      environment: workerRelease(this.env),
+      telemetry: cloudflareWorkerTelemetry,
+      operation: "worker.core.alarm",
+    });
   }
 
   private recoverAbandonedWork(): Promise<void> {
@@ -932,7 +967,14 @@ export class UserTransactionCoordinator {
             })
           );
         }).pipe(
-          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            observeProviderFetch(globalThis.fetch, {
+              provider: "kapso",
+              environment: env,
+              telemetry: cloudflareWorkerTelemetry,
+            })
+          ),
           Effect.withSpan("agent.whatsappTurn.resume"),
           Effect.catchCause(() => Effect.succeed(transactionUnavailable()))
         )
@@ -980,7 +1022,14 @@ export class UserTransactionCoordinator {
             })
           );
         }).pipe(
-          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            observeProviderFetch(globalThis.fetch, {
+              provider: "kapso",
+              environment: env,
+              telemetry: cloudflareWorkerTelemetry,
+            })
+          ),
           Effect.withSpan("agent.whatsappTurn.execution"),
           Effect.orElseSucceed(transactionUnavailable)
         )

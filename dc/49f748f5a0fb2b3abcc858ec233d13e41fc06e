@@ -1,0 +1,108 @@
+apps/server/cloudflare/transactions/transaction-coordinator.ts
+  s_ccede3fef9ce61::t_8b58ca2870dc67 697,704
+  s_ccede3fef9ce61::t_7732a204717eaa 698
+  s_ccede3fef9ce61::t_31e78d8ee33b04 699-703
+apps/server/cloudflare/core-worker.ts
+  s_ccede3fef9ce61::t_65610b7421d99a 121,187,215,650,1865-1867
+  s_ccede3fef9ce61::t_31e78d8ee33b04 122-124,127,1756-1758
+  s_ccede3fef9ce61::t_61c2a0f075881f 1759-1764,1771
+  s_ccede3fef9ce61::t_d35b15e55a5ea1 125-126,1765-1770,1772,1997-2000
+  s_ccede3fef9ce61::t_4bd3ac8711b184 1773,1784,1863,1868,2001
+apps/server/cloudflare/runtime/smoke.ts
+  s_ccede3fef9ce61::t_c73215fe042a28 1-22,36-44
+  s_ccede3fef9ce61::t_3f97c6b09205ba 45,51,53,55
+  s_ccede3fef9ce61::t_bdf0148b64042b 52
+  s_ccede3fef9ce61::t_0ecbb4c58e81b2 23-35
+  s_ccede3fef9ce61::t_af503aa1ce7196 46-50,54
+apps/server/cloudflare/public-worker.ts
+  s_ccede3fef9ce61::t_3a0966094044ee 205
+  s_ccede3fef9ce61::t_9a21d638446313 315,329,334,423,440
+  s_ccede3fef9ce61::t_ff3f378ffb0887 34-37,317,323
+  s_ccede3fef9ce61::t_19905e6f496512 490-492,499
+  s_ccede3fef9ce61::t_7e2c092e14cd24 497
+  s_ccede3fef9ce61::t_50c70773f9b322 335-337
+  s_ccede3fef9ce61::t_145d4667bed519 11,236,484,488-489,493-496
+  s_ccede3fef9ce61::t_31e78d8ee33b04 18-24,318-322,330-333,378,435-438,498,500-510
+  s_ccede3fef9ce61::t_0a27cf5b8f4618 543-550
+  s_ccede3fef9ce61::t_3e8dc5325c20dd 38-39
+  s_ccede3fef9ce61::t_dab468471476c7 439
+apps/server/cloudflare/runtime/smoke-work.ts
+  s_ccede3fef9ce61::t_f5cd7a79384b77 2,12,18-19,21-43,53-56,146-147,152-153,156-161,187,192,194-197,217-218
+  s_ccede3fef9ce61::t_2013d4420afdb4 13-17,52
+  s_ccede3fef9ce61::t_c4583a150ce13c 51
+  s_ccede3fef9ce61::t_5d75cda5f8d77c 5,20,44,57-63,84-92,94-105,107-108,110-115,117,120-126,128-131,133-134,136-141,145,154-155,162-186,189-190,193,206-208,211-213,215
+  s_ccede3fef9ce61::t_8bd6d856735389 11,47-50,109
+  s_ccede3fef9ce61::t_dc6df38eded333 1
+  s_ccede3fef9ce61::t_87f2619c9476e0 65-66,68-74,77-78,142-144
+  s_ccede3fef9ce61::t_5b54299ed27b72 10,198-205,209-210,216
+  s_ccede3fef9ce61::t_81c0d1e0914340 45-46,64,67,75-76,79-83,106,116,118,127,135
+  s_ccede3fef9ce61::t_31e78d8ee33b04 3-4,6-9,148-151,188,191
+  s_ccede3fef9ce61::t_6ca933fd8b44a9 93
+  s_ccede3fef9ce61::t_2d5e920a72fa71 119
+  s_ccede3fef9ce61::t_ceac6ea331f792 132
+  s_ccede3fef9ce61::t_e61ed133808973 214
+apps/server/cloudflare/runtime/telemetry.ts
+  s_ccede3fef9ce61::t_5e125f5e9b5b1a 103
+infra/cloudflare/verify-edge-smoke.ts
+  s_ccede3fef9ce61::t_31e78d8ee33b04 30,45-52,54-58
+  s_ccede3fef9ce61::t_16cf0eb45dbd4b 37-38
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_ccede3fef9ce61::t_3edaca68ca897e 6
+  s_ccede3fef9ce61::t_5ca821f92de754 28-32
+.github/workflows/production.yml
+  s_ccede3fef9ce61::t_e07fdd9e8d2bbd 28
+apps/server/src/shell/observability/contract.ts
+  s_ccede3fef9ce61::t_4d8046135e4046 96
+infra/cloudflare/verify-production-smoke.ts
+  s_ccede3fef9ce61::t_08196ad13d1224 3,21,27-76,78-88,90,93-127,129-139
+  s_ccede3fef9ce61::t_61b356b05f4272 1-2,10-20,22-26,77,92,140-150
+  s_ccede3fef9ce61::t_0a2ed4d963fc5f 89,91
+  s_ccede3fef9ce61::t_31e78d8ee33b04 4-9,128
+apps/server/cloudflare/migrations/0027_release_smoke.sql
+  s_ccede3fef9ce61::t_4346f0e22f137e 1-8
+infra/cloudflare/d1-migrations.test.ts
+  s_ccede3fef9ce61::t_991d7347c5debd 170
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_ccede3fef9ce61::t_31e78d8ee33b04 57-77
+  s_ccede3fef9ce61::t_f7aed0ba5b8d7c 56,78-79
+  s_ccede3fef9ce61::t_afd27ab5db5856 55
+infra/cloudflare/smoke.test.ts
+  s_ccede3fef9ce61::t_822d98471487ee 78-79
+  s_ccede3fef9ce61::t_4956e3c78ba3ee 3,28-35,48-53,63-66,80-81
+  s_ccede3fef9ce61::t_e656e4ccaa2110 37,54-62
+  s_ccede3fef9ce61::t_31e78d8ee33b04 12-27,36,38-47,67-77
+  s_ccede3fef9ce61::t_c2c09ae554e6de 1-2,4-11,82-84
+docs/operations/production-releases.md
+  s_ccede3fef9ce61::t_10a0ac9660f945 100-121
+  s_ccede3fef9ce61::t_fd97742af7caac 19-21,23
+  s_ccede3fef9ce61::t_7a7d483726e370 22
+infra/cloudflare/alchemy.run.ts
+  s_ccede3fef9ce61::t_a7e406e7e70fb6 30,191-195,224-231,280-286,345-348
+infra/cloudflare/smoke-work.test.ts
+  s_ccede3fef9ce61::t_8abd01781d3755 2,8-12,21-24,29-39,56-59,184-185
+  s_ccede3fef9ce61::t_31e78d8ee33b04 3-4,7,13-20,26-28,40-45,48-50,55
+  s_ccede3fef9ce61::t_a95102f8ee7dec 128
+  s_ccede3fef9ce61::t_fe3f41697357ba 66-74,79-81,85,98,172-179
+  s_ccede3fef9ce61::t_294329cec48d38 5,25,47
+  s_ccede3fef9ce61::t_87f2619c9476e0 46
+  s_ccede3fef9ce61::t_8fc3354c4d6ad9 1
+  s_ccede3fef9ce61::t_f9b2d79643beb2 6,60-65,75-78,100-111,113-118,120-124,126-127,129-131,134-163,165-171,180-183
+  s_ccede3fef9ce61::t_32c37858d1f5fb 51-54
+  s_ccede3fef9ce61::t_805b7f36c47f4f 82-84,86-97,99,112,119,125,132-133,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dc49f748f5a0fb2b3abcc858ec233d13e41fc06e",
+  "prompts": {},
+  "sessions": {
+    "s_ccede3fef9ce61": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-7b17-751e-b033-9644b17b0742",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

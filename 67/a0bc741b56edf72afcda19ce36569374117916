@@ -1,0 +1,26 @@
+infra/cloudflare/scripts/check-applied-migration-drift.test.ts
+  s_f8dbb486b6c236::t_12bc7889f42c8e 115-118,130-137
+docs/operations/production-releases.md
+  s_f8dbb486b6c236::t_8b3f94050c7310 99-104
+infra/cloudflare/scripts/check-applied-migration-drift.ts
+  s_f8dbb486b6c236::t_6b446c3f8b9639 11,13,27-33,35,37-40,42,46,59
+infra/cloudflare/scripts/production-migration-ledger.ts
+  s_f8dbb486b6c236::t_5c917a87447f5f 37,63-65,82-83
+  s_f8dbb486b6c236::t_dbfe0dba6b9d3f 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "67a0bc741b56edf72afcda19ce36569374117916",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

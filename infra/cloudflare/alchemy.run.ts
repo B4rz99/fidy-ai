@@ -225,6 +225,7 @@ export default Alchemy.Stack(
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
+      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
       tailConsumers: [eventTail],
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
@@ -360,6 +361,7 @@ export default Alchemy.Stack(
 
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
+      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
       tailConsumers: [eventTail],
       compatibility: { date: "2026-09-08" },
       dev: {

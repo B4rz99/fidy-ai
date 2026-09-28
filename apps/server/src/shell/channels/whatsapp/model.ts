@@ -65,7 +65,8 @@ export type WhatsAppInboundContent =
       readonly _tag: "VoiceTranscript";
       readonly text: TranscriptText;
       readonly mediaId: WhatsAppMediaId;
-    }>;
+    }>
+  | Readonly<{ readonly _tag: "UnusableVoiceTranscript" }>;
 
 /** Opaque Turn-delivery correlation; the provider cannot supply User authority with this value. */
 export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID()).pipe(

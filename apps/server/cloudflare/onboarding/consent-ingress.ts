@@ -23,6 +23,7 @@ import {
   isConsentIngressDecisionPhase,
   makeDisclosureSender,
   makeEmailStatusSender,
+  makeVoiceUnavailableSender,
   maxKapsoFutureTimestampMinutes,
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
@@ -70,6 +71,7 @@ const dayMs = 86_400_000;
 const maxKapsoFutureSkewMs = Duration.toMillis(Duration.minutes(maxKapsoFutureTimestampMinutes));
 const maxInitiatingEventAgeMs = dayMs - maxKapsoFutureSkewMs;
 const hourMs = 3_600_000;
+const voiceRefusalRetentionMs = 604_800_000;
 const statusReplyCooldownMs = 60_000;
 const maximumHourlyDisclosures = 500;
 const expiredExchangeSweepLimit = 32;
@@ -187,12 +189,24 @@ type Environment = Readonly<{
   readonly onHostedText: (admission: WhatsAppTurnAdmission) => Promise<Response>;
   readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
 }>;
-type Inbound = Readonly<{
+type WebhookInbound = Readonly<{
   readonly event: WhatsAppInboundEvent;
   readonly deliveryKey: WhatsAppDeliveryKey;
   readonly digest: Sha256Digest;
   readonly receivedAtMs: number;
 }>;
+type Inbound = WebhookInbound &
+  Readonly<{
+    event: WhatsAppInboundEvent & {
+      content: Exclude<WhatsAppInboundEvent["content"], { _tag: "UnusableVoiceTranscript" }>;
+    };
+  }>;
+type TextInbound = Inbound &
+  Readonly<{
+    event: WhatsAppInboundEvent & {
+      content: Extract<WhatsAppInboundEvent["content"], { _tag: "Text" }>;
+    };
+  }>;
 
 const answer = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
@@ -918,8 +932,8 @@ const routeAcceptedInbound = (
 
 const routeHostedInbound = (
   environment: Environment,
-  input: Inbound
-): Effect.Effect<Option.Option<Response>, void> =>
+  input: WebhookInbound
+): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const known = yield* findWhatsAppUser({
       db: environment.DB,
@@ -927,7 +941,41 @@ const routeHostedInbound = (
       bsuid: input.event.caller.businessScopedUserId,
     }).pipe(Effect.mapError(() => undefined));
     if (Option.isNone(known)) return Option.none();
-    if (input.event.content._tag !== "Text") return Option.some(answer(HTTP_UNPROCESSABLE));
+    if (input.event.content._tag === "UnusableVoiceTranscript") {
+      if (environment.KAPSO_API_KEY.length === 0) return Option.some(answer(HTTP_UNAVAILABLE));
+      const claimed = yield* attempt(() =>
+        environment.DB.prepare(`INSERT INTO hosted_voice_refusals
+          (portfolio_id, message_id, user_id, claimed_at_ms)
+          SELECT ?, ?, w.user_id, ? FROM whatsapp_identities AS w
+          WHERE w.user_id = ? AND w.portfolio_id = ? AND w.bsuid = ?
+            AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.user_id)
+            AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.user_id)
+            AND (SELECT count(*) FROM hosted_voice_refusals
+              WHERE user_id = w.user_id AND claimed_at_ms > ?) < 5
+          ON CONFLICT (portfolio_id, message_id) DO NOTHING`)
+          .bind(
+            input.event.caller.businessPortfolioId,
+            input.event.messageEvidence.providerMessageId,
+            input.receivedAtMs,
+            known.value,
+            input.event.caller.businessPortfolioId,
+            input.event.caller.businessScopedUserId,
+            input.receivedAtMs - hourMs
+          )
+          .run()
+      );
+      if (claimed.meta.changes !== 1) return Option.some(answer(HTTP_OK));
+      const httpClient = yield* HttpClient.HttpClient;
+      const sent = yield* Effect.exit(
+        makeVoiceUnavailableSender({
+          apiKey: Redacted.make(environment.KAPSO_API_KEY),
+          httpClient,
+        })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
+      );
+      // An ambiguous send is never replayed: the claim precedes provider I/O.
+      return Option.some(answer(Exit.isSuccess(sent) ? HTTP_OK : HTTP_UNAVAILABLE));
+    }
+    const text = input.event.content.text;
     const response = yield* attempt(() =>
       environment.onHostedText({
         userId: known.value,
@@ -937,7 +985,7 @@ const routeHostedInbound = (
         businessPhoneNumberId: input.event.businessPhoneNumberId,
         occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
         receivedAtMs: input.receivedAtMs,
-        text: input.event.content.text,
+        text,
       })
     );
     return Option.some(response);
@@ -963,6 +1011,35 @@ const routeConsentInbound = (
     }
     if (requestsEmailStatus(input)) return answer(HTTP_CONFLICT);
     return yield* startExchange(environment, input);
+  });
+
+const routeTextInbound = (
+  environment: Environment,
+  input: TextInbound
+): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const approval =
+      /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
+        input.event.content.text.trim()
+      );
+    if (approval !== null) {
+      const code = approval[1];
+      if (code === undefined) return answer(HTTP_CONFLICT);
+      return yield* attempt(() =>
+        approveBrowserPairing({
+          db: environment.DB,
+          input: {
+            portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+            bsuid: input.event.caller.businessScopedUserId,
+            messageId: input.event.messageEvidence.providerMessageId,
+            publicCode: code,
+            occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
+            receivedAtMs: input.receivedAtMs,
+          },
+        })
+      );
+    }
+    return yield* routeConsentInbound(environment, input);
   });
 
 const handleInbound = (
@@ -997,28 +1074,15 @@ const handleInbound = (
       digest,
       receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
     };
-    const approval =
-      /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
-        input.event.content.text.trim()
-      );
-    if (approval !== null) {
-      const code = approval[1];
-      if (code === undefined) return answer(HTTP_CONFLICT);
-      return yield* attempt(() =>
-        approveBrowserPairing({
-          db: environment.DB,
-          input: {
-            portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-            bsuid: input.event.caller.businessScopedUserId,
-            messageId: input.event.messageEvidence.providerMessageId,
-            publicCode: code,
-            occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-            receivedAtMs: input.receivedAtMs,
-          },
-        })
-      );
+    // Only typed text may operate the pre-User Consent and credential control surface.
+    if (input.event.content._tag !== "Text") {
+      const hosted = yield* routeHostedInbound(environment, input);
+      return Option.isSome(hosted) ? hosted.value : answer(HTTP_UNPROCESSABLE);
     }
-    return yield* routeConsentInbound(environment, input);
+    return yield* routeTextInbound(environment, {
+      ...input,
+      event: { ...input.event, content: input.event.content },
+    });
   });
 
 const handleHostedLifecycle = (
@@ -1105,6 +1169,15 @@ export const sweepExpiredConsent = (db: D1Database) => (): Effect.Effect<void, v
         ORDER BY expires_at_ms LIMIT ?
       )`)
         .bind(nowMs, scheduledExchangeSweepLimit)
+        .run()
+    );
+    yield* attempt(() =>
+      db
+        .prepare(`DELETE FROM hosted_voice_refusals WHERE rowid IN (
+        SELECT rowid FROM hosted_voice_refusals WHERE claimed_at_ms < ?
+        ORDER BY claimed_at_ms LIMIT ?
+      )`)
+        .bind(nowMs - voiceRefusalRetentionMs, scheduledExchangeSweepLimit)
         .run()
     );
     const expired = yield* attempt(() =>

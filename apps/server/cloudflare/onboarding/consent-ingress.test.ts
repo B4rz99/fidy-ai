@@ -166,11 +166,20 @@ const setup = (
         applyMigration(new URL("../migrations/0002_resource_admission.sql", import.meta.url))
       );
       yield* Effect.tryPromise(() => applyMigration(migration));
+      yield* Effect.tryPromise(() =>
+        applyMigration(new URL("../migrations/0025_voice_refusal.sql", import.meta.url))
+      );
       // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
         db
           .prepare("CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)")
           .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.prepare("CREATE TABLE consent_user_revocations (user_id TEXT)").run()
       );
       yield* Effect.tryPromise(() =>
         db
@@ -313,10 +322,133 @@ it("routes only authenticated text of a verified BSUID to the User coordinator",
         conversation: { business_scoped_user_id: bsuid },
         phone_number_id: "123456789012345",
       });
-      expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(422);
+      expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(202);
+      expect(calls).toHaveLength(2);
+      expect(
+        yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[1]?.request)
+      ).toMatchObject({
+        userId,
+        messageId: "wamid.voice",
+        text: "Transcripción",
+      });
+      const controlVoice = voice
+        .replace("wamid.voice", "wamid.voice-control")
+        .replace("Transcripción", "Aprueba el código de inicio de sesión BCDF-GHJK");
+      expect((yield* Effect.tryPromise(() => send(controlVoice))).status).toBe(202);
+      expect(calls).toHaveLength(3);
+      expect(
+        yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[2]?.request)
+      ).toMatchObject({
+        text: "Aprueba el código de inicio de sesión BCDF-GHJK",
+      });
       const sweptReplay = inbound("wamid.swept", "Texto exacto", String(nowSeconds - 31 * 86_400));
       expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(3);
+    })
+  ));
+
+it("answers unusable authenticated voice once without admitting a Turn or inferring", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls = vi.fn(() => Promise.resolve(new Response(null, { status: 202 })));
+      const { db, send, sweep } = yield* Effect.tryPromise(() => setup(Option.some(calls)));
+      const userId = "10000000-0000-4000-8000-000000000071";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
+          )
+          .bind(userId, portfolio, bsuid)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
+      );
+      const provider = vi.fn((_url: string, _init: RequestInit) =>
+        Promise.resolve(
+          Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.voice-reply" }],
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const voice = (id: string, transcript?: unknown, caller = bsuid): string =>
+        encodeJson({
+          message: {
+            id,
+            timestamp: String(nowSeconds),
+            type: "audio",
+            from_user_id: caller,
+            audio: { id: "media-1" },
+            kapso: transcript === undefined ? {} : { transcript },
+          },
+          conversation: { business_scoped_user_id: caller },
+          phone_number_id: "123456789012345",
+        });
+      const missing = voice("wamid.voice-missing");
+      expect((yield* Effect.tryPromise(() => send(missing, "invalid"))).status).toBe(401);
+      expect(provider).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => send(missing))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => send(missing))).status).toBe(200);
+      expect(provider).toHaveBeenCalledTimes(1);
+      yield* Effect.tryPromise(() =>
+        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userId).run()
+      );
+      expect((yield* Effect.tryPromise(() => send(voice("wamid.revoked")))).status).toBe(200);
+      expect(provider).toHaveBeenCalledTimes(1);
+      yield* Effect.tryPromise(() =>
+        db.prepare("DELETE FROM consent_user_revocations WHERE user_id = ?").bind(userId).run()
+      );
+      const sent = decodeJson(providerBody(provider.mock.calls[0]?.[1]));
+      expect(sent).toMatchObject({
+        type: "text",
+        recipient: bsuid,
+        text: {
+          body: "No pude procesar la nota de voz. Envíala de nuevo o escríbeme.",
+        },
+      });
+      for (const [index, transcript] of [
+        { text: "  " },
+        { text: 12 },
+        { text: "x".repeat(16_001) },
+        { unsupported: true },
+      ].entries()) {
+        expect(
+          (yield* Effect.tryPromise(() => send(voice(`wamid.bad-${index}`, transcript)))).status
+        ).toBe(200);
+      }
+      expect(provider).toHaveBeenCalledTimes(5);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(voice("wamid.malformed-kapso").replace('"kapso":{}', '"kapso":null'))
+        )).status
+      ).toBe(200);
+      // The per-User refusal budget bounds repeated expensive provider attempts.
+      expect(provider).toHaveBeenCalledTimes(5);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(voice("wamid.unknown", undefined, "CO.99999999999999999999"))
+        )).status
+      ).toBe(422);
+      expect(provider).toHaveBeenCalledTimes(5);
+      expect(calls).not.toHaveBeenCalled();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO hosted_voice_refusals
+          (portfolio_id, message_id, user_id, claimed_at_ms) VALUES (?, ?, ?, ?)`)
+          .bind(portfolio, "wamid.expired", userId, nowSeconds * 1_000 - 8 * dayMs)
+          .run()
+      );
+      yield* Effect.tryPromise(() => sweep());
+      const expired = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT message_id FROM hosted_voice_refusals WHERE message_id = 'wamid.expired'"
+          )
+          .first()
+      );
+      expect(expired).toBeNull();
     })
   ));
 

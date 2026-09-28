@@ -8,8 +8,9 @@ import {
   hashMigrationSources,
 } from "./migration-history";
 import {
+  queryProductionMigrationLedger,
   readCheckedInMigrationSources,
-  readProductionMigrationLedger,
+  readProductionDatabaseName,
 } from "./production-migration-ledger";
 
 const driftDescription = (drift: AppliedMigrationDrift): string => {
@@ -23,13 +24,26 @@ const driftDescription = (drift: AppliedMigrationDrift): string => {
   }
 };
 
+type FailureStage =
+  | "read Alchemy's Production D1 resource state"
+  | "query the Production D1 migration ledger"
+  | "read checked-in D1 migration SQL"
+  | "hash checked-in D1 migration SQL"
+  | "compare applied migration history";
+
 const main = async (): Promise<void> => {
+  let failureStage: FailureStage = "read Alchemy's Production D1 resource state";
   try {
-    const applied = readProductionMigrationLedger();
+    const databaseName = readProductionDatabaseName();
+    failureStage = "query the Production D1 migration ledger";
+    const applied = queryProductionMigrationLedger(databaseName);
+    failureStage = "read checked-in D1 migration SQL";
     const sources = await readCheckedInMigrationSources();
+    failureStage = "hash checked-in D1 migration SQL";
     const checkedIn = await Effect.runPromise(
       hashMigrationSources(sources).pipe(Effect.provide(BunCrypto.layer))
     );
+    failureStage = "compare applied migration history";
     const drift = Effect.runSync(compareAppliedMigrationRows(applied, checkedIn));
     if (drift.length > 0) {
       for (const violation of drift) {
@@ -42,7 +56,7 @@ const main = async (): Promise<void> => {
     process.stdout.write("Production D1 applied migration hashes match checked-in SQL.\n");
   } catch {
     process.stderr.write(
-      "Production D1 migration history could not be verified; deployment is blocked.\n"
+      `Production D1 migration history could not be verified while attempting to ${failureStage}; deployment is blocked.\n`
     );
     process.exitCode = 1;
   }

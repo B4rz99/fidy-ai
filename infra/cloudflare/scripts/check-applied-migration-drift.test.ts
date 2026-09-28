@@ -112,7 +112,10 @@ describe("Production applied D1 migration check", () => {
     expect(result.exitCode).toBe(1);
     expect(result.args).toContain("state read FidyCloudflare/production/Database");
     expect(result.args).not.toContain("wrangler d1 execute");
-    expect(result.output).toContain("could not be verified; deployment is blocked");
+    expect(result.output).toContain(
+      "could not be verified while attempting to read Alchemy's Production D1 resource state"
+    );
+    expect(result.output).toContain("deployment is blocked");
   });
 
   it("fails closed when the remote ledger query rejects or returns an incomplete history", async () => {
@@ -124,8 +127,14 @@ describe("Production applied D1 migration check", () => {
 
     expect(rejected.exitCode).toBe(1);
     expect(incomplete.exitCode).toBe(1);
-    expect(rejected.output).toContain("could not be verified; deployment is blocked");
-    expect(incomplete.output).toContain("could not be verified; deployment is blocked");
+    expect(rejected.output).toContain(
+      "could not be verified while attempting to query the Production D1 migration ledger"
+    );
+    expect(incomplete.output).toContain(
+      "could not be verified while attempting to query the Production D1 migration ledger"
+    );
+    expect(rejected.output).toContain("deployment is blocked");
+    expect(incomplete.output).toContain("deployment is blocked");
     expect(rejected.output).not.toContain("local-only-migration-test-token");
   });
 });

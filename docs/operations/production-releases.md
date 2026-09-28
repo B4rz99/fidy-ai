@@ -96,10 +96,12 @@ Environment restriction prevents a feature-branch workflow definition from acces
 secrets.
 
 The applied-history check is observable through the Production workflow run: GitHub Actions records
-the step duration and its sanitized success or failure output, and a non-zero result blocks bootstrap,
-planning, and deployment. The check runs synchronously once per workflow, performs reads only, and has
-no retries or background continuation, so workflow status, step timing, and logs are sufficient
-without separate metrics or tracing. Never include raw provider output or credentials in those logs.
+the step duration and sanitized output. On failure, output identifies only the stage that could not be
+verified—Alchemy resource-state lookup, D1 ledger query, checked-in SQL read or hash, or history
+comparison—without provider output or resource values. A non-zero result blocks bootstrap, planning,
+and deployment. The check runs synchronously once per workflow, performs reads only, and has no
+retries or background continuation, so workflow status, step timing, and logs are sufficient without
+separate metrics or tracing. Never include raw provider output or credentials in those logs.
 
 ## Local parity and smoke checks
 

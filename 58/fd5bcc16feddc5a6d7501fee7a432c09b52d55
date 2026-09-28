@@ -1,0 +1,61 @@
+apps/server/cloudflare/agent/hosted-turn-test-migrations.ts
+  s_ec4039aa0a075f::t_aabc146aa9fb6e 7
+apps/server/cloudflare/agent/whatsapp-turn.ts
+  s_ec4039aa0a075f::t_2eb5f0f3e90047 97-101,105,110
+  s_ec4039aa0a075f::t_66e9b821673385 70-75,82,86-89,94-96
+  s_ec4039aa0a075f::t_bb7900d9854203 76-81,83-85,90-93,102-104,106-109
+apps/server/cloudflare/migrations/0025_whatsapp_recovery.sql
+  s_ec4039aa0a075f::t_9657b607a030e1 1-19
+  s_ec4039aa0a075f::t_250213d6a78c85 20-28
+research/010-kapso-ambiguous-whatsapp-send.md
+  s_ec4039aa0a075f::t_35c445956e0c68 1-14,16-19
+  s_ec4039aa0a075f::t_bb7900d9854203 15
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_ec4039aa0a075f::t_82c498663ebcec 3,1711-1715,1720-1723,1729,1732-1736
+  s_ec4039aa0a075f::t_a1a75afc4988ed 1730-1731
+  s_ec4039aa0a075f::t_bb7900d9854203 1717-1719,1724-1728,1737-1741
+  s_ec4039aa0a075f::t_b206fe39ba7267 1745,1762,1766
+  s_ec4039aa0a075f::t_315f1612a165e0 159,169-171
+  s_ec4039aa0a075f::t_41acbe7fbbf8fd 1716
+  s_ec4039aa0a075f::t_3292add3aa6294 1742-1744
+apps/server/cloudflare/core-worker.ts
+  s_ec4039aa0a075f::t_3b942e32568b1f 1983-1986
+  s_ec4039aa0a075f::t_bb7900d9854203 28-32,162-164,166
+  s_ec4039aa0a075f::t_ac011b7be9214d 1978-1981
+  s_ec4039aa0a075f::t_8b03ede9fbcc7d 165
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_ec4039aa0a075f::t_bb7900d9854203 1248-1255,1257-1258,1261-1263,1265-1286,1293-1298,1300-1301,1305-1306
+  s_ec4039aa0a075f::t_8e9c8ce5d5abb8 32-33,1299,1302-1304,1307
+  s_ec4039aa0a075f::t_0c395d22ec70ce 1244-1247,1256,1259-1260,1264,1287-1292,1308-1310
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_ec4039aa0a075f::t_0f4f71c82119b7 54,1450-1453
+apps/server/cloudflare/agent/turn-store.ts
+  s_ec4039aa0a075f::t_bb7900d9854203 742-743
+  s_ec4039aa0a075f::t_9f11f5631a40b4 744-755
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_ec4039aa0a075f::t_369e53164c9a65 784-802,806,811,826,830,835-838,856-858,864
+  s_ec4039aa0a075f::t_ec416b899e6123 39
+  s_ec4039aa0a075f::t_f982fdb55a72f5 839,851,867
+  s_ec4039aa0a075f::t_5801284c239bce 840-843
+  s_ec4039aa0a075f::t_dd9cce6ae389cb 803-805,807-810,812-825,827-829,831-834
+  s_ec4039aa0a075f::t_bb7900d9854203 844-850,852-855,859-863,865-866
+apps/server/cloudflare/runtime/operational-health.ts
+  s_ec4039aa0a075f::t_bb7900d9854203 170,172-175,184-192,198-201,205-210
+  s_ec4039aa0a075f::t_f9e27131a60cb2 29-32,68-78,169,171,176-183,193-197,202-204,211-218,310-313,315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "58fd5bcc16feddc5a6d7501fee7a432c09b52d55",
+  "prompts": {},
+  "sessions": {
+    "s_ec4039aa0a075f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d3-df43-709b-b709-fdf7195a9b2c",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

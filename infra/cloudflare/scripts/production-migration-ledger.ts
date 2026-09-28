@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +8,7 @@ import {
   decodeWranglerMigrationRows,
   maximumAppliedMigrationRows,
 } from "./migration-history";
+import { runMigrationCommand } from "./run-migration-command";
 
 const infrastructureDirectory = fileURLToPath(new URL("../", import.meta.url));
 const migrationDirectory = fileURLToPath(
@@ -31,17 +31,8 @@ const DatabaseResourceState = Schema.Struct({
   }),
 });
 
-const runMigrationHistoryCommand = (command: readonly [string, ...Array<string>]): string => {
-  const [executable, ...arguments_] = command;
-  const result = spawnSync(executable, arguments_, {
-    cwd: infrastructureDirectory,
-    encoding: "utf8",
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) throw new Error("External migration history command failed");
-  return result.stdout;
-};
+const runMigrationHistoryCommand = (command: readonly [string, ...Array<string>]): string =>
+  runMigrationCommand(command, { cwd: infrastructureDirectory });
 
 const getProductionDatabaseName = (): string => {
   const profile = process.env.ALCHEMY_PROFILE;

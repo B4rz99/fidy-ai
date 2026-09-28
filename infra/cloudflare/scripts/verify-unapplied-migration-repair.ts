@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
@@ -12,6 +11,7 @@ import {
   migrationRepairContext,
 } from "./migration-history";
 import { readProductionMigrationLedger } from "./production-migration-ledger";
+import { runMigrationCommand } from "./run-migration-command";
 
 const PullRequestNumber = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,7}$/u));
 const PullRequest = Schema.Struct({
@@ -20,14 +20,8 @@ const PullRequest = Schema.Struct({
   head: Schema.Struct({ sha: MigrationRepairCommitSha }),
 });
 
-const runGitHub = (arguments_: ReadonlyArray<string>): string => {
-  const result = spawnSync("gh", ["api", ...arguments_], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) throw new Error("GitHub migration approval request failed");
-  return result.stdout;
-};
+const runGitHub = (arguments_: ReadonlyArray<string>): string =>
+  runMigrationCommand(["gh", "api", ...arguments_], { cwd: process.cwd() });
 
 const postStatus = (options: {
   readonly repository: string;

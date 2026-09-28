@@ -9,17 +9,23 @@ cron can retry after the shared publication cooldown.
 ## Operational signals
 
 The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds `AsyncDeadLetters`.
-In Cloudflare Workers Logs, select the Core Worker and filter `component` to `async-health`.
-The private Tail Worker projects only closed platform categories into minute buckets in D1 (Worker
-exceptions, CPU/memory resource limits, rejected webhook/email callbacks, and Workflow failures);
-it does not copy URLs, message bodies, identifiers, or raw exception text. Core sweeps expired
-metric buckets after 24 hours with a bounded per-minute deletion; an oversized Tail batch marks
-all aggregate measurements unavailable instead of silently dropping unmatched events. The Tail Worker observes
-Core, Ingress, and ForwardedEmail Workers. Five application Workflows also record rejected executions
-at their entrypoints; the private Queue→Workflow canary distinguishes real consumer execution from a
-successful Queue send or Workflow instance creation. A delayed/missing canary completion is critical;
-an unavailable inspection is a warning, never proof of execution. These probes do not change any
-application Work outcome.
+The Core, Ingress, ForwardedEmail, and web asset Workers use Cloudflare Workers Logs with persistence
+enabled and automatic invocation logs disabled. On Workers Free, Cloudflare documents an allowance
+of 200,000 log events per day and three-day retention; check the current
+[Workers Logs limits](https://developers.cloudflare.com/workers/observability/logs/workers-logs/).
+In Cloudflare Workers Logs, select Core and filter `component` to `async-health`. Fidy-emitted log
+records are closed metadata; request URLs, bodies, identifiers, and raw exception text are not logged.
+These logs are for diagnosis, not an email-alert source.
+
+The paid-only Tail Worker has been removed. Worker exception, CPU/memory-limit, and rejected
+callback counters are no longer aggregated into D1 or delivered as operational email alerts; inspect
+native Worker metrics and Workers Logs manually for those conditions. The `workflow_failure` D1
+counter remains independent: each application Workflow records rejected executions at its entrypoint,
+and the scheduled Core health sweep continues to alert on them. Core sweeps event buckets after 24
+hours with a bounded per-minute deletion, including historical Tail-only counters. The private
+Queue→Workflow canary distinguishes real consumer execution from a successful Queue send or
+Workflow instance creation. A delayed/missing canary completion is critical; an unavailable inspection
+is a warning, never proof of execution. These probes do not change any application Work outcome.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -82,7 +88,9 @@ remain authoritative. The existing pending measurements are capped eight-record 
 is not a global backlog count. Current email-proof rejection samples are neither a historical callback-rejection
 rate nor an institutional webhook spike. Monitor native Workflow failures separately from Queue
 retries: Queue acknowledgment happens after instance creation, so a later Workflow failure never
-reaches the Queue dead-letter destination. Set Cloudflare's account-wide billing budget emails
+reaches the Queue dead-letter destination. Previous Tail-only alert rows are retired by the normal
+alert sweep when this source is removed; that reflects discontinued monitoring, not proof that a
+Worker condition was corrected. Set Cloudflare's account-wide billing budget emails
 at 50% and 80% of the approved monthly spend; they are informational, not hard caps.
 
 ## Private operational view and account usage alerts
@@ -99,8 +107,8 @@ SELECT kind, owner, severity, state, delivery_confirmed, acknowledged_ms,
 FROM operational_alerts ORDER BY severity, kind, owner;
 SELECT kind, datetime(last_succeeded_ms / 1000, 'unixepoch') AS last_succeeded_utc
 FROM operational_canary ORDER BY kind;
-SELECT kind, SUM(count) AS last_hour FROM operational_event_buckets
-WHERE bucket_ms >= (unixepoch() - 3600) * 1000 GROUP BY kind;
+SELECT SUM(count) AS workflow_failures_last_hour FROM operational_event_buckets
+WHERE kind = 'workflow_failure' AND bucket_ms >= (unixepoch() - 3600) * 1000;
 ```
 
 The view is a last-known observation, not an authoritative Queue total; use D1 owner records,

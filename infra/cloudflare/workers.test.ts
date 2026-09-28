@@ -734,7 +734,7 @@ describe("Cloudflare Worker topology (scheduled)", () => {
 });
 
 it.live(
-  "bounds public Tail-event storage through successive Core schedules without deleting current evidence",
+  "expires retired Tail-event buckets without deleting current Workflow-failure evidence",
   () =>
     withIsolatedD1("event-retention-test", (db) =>
       Effect.gen(function* () {
@@ -756,7 +756,7 @@ it.live(
         yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(100)));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+            .prepare("INSERT INTO operational_event_buckets VALUES ('workflow_failure', ?, 1)")
             .bind(current)
             .run()
         );
@@ -784,7 +784,7 @@ it.live(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'heartbeat'"
+                "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'workflow_failure'"
               )
               .first()
           )

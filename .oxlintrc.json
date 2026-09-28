@@ -215,7 +215,6 @@
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
-        "apps/server/cloudflare/operational-tail-worker.ts",
         "apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/documents/document-extraction-worker.ts",

@@ -250,6 +250,37 @@ describe("operator email notification", () => {
     })
   );
 
+  it.effect("resolves persisted Tail-only alerts after their monitoring source is removed", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO operational_alerts
+          (kind, owner, severity, state, first_seen_ms, last_seen_ms, delivery_confirmed, next_attempt_ms)
+          VALUES ('worker_exception', 'workerExceptions', 'warning', 'firing', 0, 0, 1, 0)`)
+          .run()
+      );
+      const delivered: Array<string> = [];
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({
+          db,
+          now: 1_000_000,
+          alerts: [],
+          send: (alert, _key, delivery) => {
+            delivered.push(`${alert.kind}:${delivery.phase}`);
+            return accepted();
+          },
+        })
+      );
+      expect(delivered).toEqual(["worker_exception:resolved"]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state FROM operational_alerts WHERE kind = 'worker_exception'").first()
+        )
+      ).toEqual({ state: "resolved" });
+    })
+  );
+
   it.effect("resolves absent conditions, then notifies when the condition returns", () =>
     Effect.gen(function* () {
       const db = yield* database();

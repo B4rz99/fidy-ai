@@ -98,45 +98,21 @@ describe("operator alert decisions", () => {
     ).toEqual([{ kind: "retention_lag", owner: "retention", severity: "critical" }]);
   });
 
-  it("classifies platform failures, callback spikes, and missing tail measurements independently", () => {
+  it("alerts on Workflow failures without relying on Tail Worker measurements", () => {
     expect(
       decideOperationalAlerts([
         {
-          component: "platform-events",
-          operation: "workerExceptions",
-          state: "attention",
-          recentCount: 6,
-          fiveMinuteCount: 2,
-        },
-        {
-          component: "platform-events",
-          operation: "resourceLimits",
-          state: "attention",
-          recentCount: 1,
-          fiveMinuteCount: 1,
-        },
-        {
-          component: "platform-events",
-          operation: "callbackRejections",
-          state: "attention",
-          recentCount: 22,
-          fiveMinuteCount: 22,
-        },
-        {
-          component: "platform-events",
+          component: "workflow-execution",
           operation: "workflowFailures",
           state: "attention",
           recentCount: 1,
           fiveMinuteCount: 1,
         },
-        { component: "platform-events", operation: "callbackRejections", state: "unavailable" },
+        { component: "workflow-execution", operation: "workflowFailures", state: "unavailable" },
       ])
     ).toEqual([
-      { kind: "worker_exception", owner: "workerExceptions", severity: "warning" },
-      { kind: "resource_limit", owner: "resourceLimits", severity: "critical" },
-      { kind: "callback_rejection", owner: "callbackRejections", severity: "critical" },
       { kind: "workflow_failure", owner: "workflowFailures", severity: "critical" },
-      { kind: "inspection_unavailable", owner: "callbackRejections", severity: "warning" },
+      { kind: "inspection_unavailable", owner: "workflowFailures", severity: "warning" },
     ]);
   });
 

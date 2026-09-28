@@ -10,6 +10,7 @@ import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { EmailAddress } from "@fidy/server/client";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
+import { freeTierWorkerObservability } from "./worker-observability";
 import {
   browserOrigins,
   productionTopology,
@@ -166,18 +167,12 @@ export default Alchemy.Stack(
     });
     // Private statement byte staging. The ingress never receives this binding; only the Core Worker
     // writes, verifies, and reclaims staged material through its authorized paths (#788, ADR 0028).
-    const eventTail = yield* Cloudflare.Worker("OperationalEventTail", {
-      main: "../../apps/server/cloudflare/operational-tail-worker.ts",
-      compatibility: { date: "2026-09-08" },
-      env: { DB: database },
-      workersDev: false,
-    });
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
     yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
-      tailConsumers: [eventTail],
+      observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       crons: ["*/5 * * * *"],
       env: {
@@ -226,7 +221,7 @@ export default Alchemy.Stack(
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
       version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
-      tailConsumers: [eventTail],
+      observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
       dev: {
@@ -362,7 +357,7 @@ export default Alchemy.Stack(
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
       version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
-      tailConsumers: [eventTail],
+      observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       dev: {
         host: "127.0.0.1",
@@ -387,6 +382,7 @@ export default Alchemy.Stack(
 
     const web = yield* Cloudflare.Website.StaticSite("Web", {
       name: productionTopology.web.workerName,
+      observability: freeTierWorkerObservability,
       command: "bun run build:production",
       cwd: "../../apps/web",
       outdir: "dist",

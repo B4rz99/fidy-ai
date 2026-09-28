@@ -517,6 +517,32 @@ const sendWhatsAppAttempt = ({
         }
   );
 
+const prepareWhatsAppExecution = (
+  environment: CoordinatorEnvironment
+): Effect.Effect<
+  Option.Option<
+    Readonly<{
+      inference: HostedInferenceService;
+      sender: ReturnType<typeof makeHostedSender>;
+    }>
+  >,
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
+      return Option.none();
+    }
+    const inference = yield* Effect.exit(makeCloudflareHostedInference(environment));
+    if (Exit.isFailure(inference)) return Option.none();
+    const clients = yield* Layer.build(FetchHttpClient.layer);
+    const sender = makeHostedSender({
+      apiKey: Redacted.make(environment.KAPSO_API_KEY),
+      httpClient: Context.get(clients, HttpClient.HttpClient),
+    });
+    return Option.some({ inference: inference.value, sender });
+  });
+
 const startWhatsAppTurn = ({
   db,
   proof,
@@ -883,32 +909,33 @@ export class UserTransactionCoordinator {
           );
           const work = Schema.decodeUnknownOption(WhatsAppWork)(candidate);
           if (Option.isNone(work) || work.value.userId !== userId) return transactionUnavailable();
-          if (env.KAPSO_API_KEY === undefined || env.KAPSO_API_KEY.length === 0) {
-            return transactionUnavailable();
-          }
-          const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
-          if (Exit.isFailure(inference)) return transactionUnavailable();
-          const clients = yield* Layer.build(FetchHttpClient.layer);
-          const sender = makeHostedSender({
-            apiKey: Redacted.make(env.KAPSO_API_KEY),
-            httpClient: Context.get(clients, HttpClient.HttpClient),
-          });
+          const prepared = yield* prepareWhatsAppExecution(env);
+          if (Option.isNone(prepared)) return transactionUnavailable();
           return yield* Effect.tryPromise(() =>
             resumeWhatsAppTurn({
               db: env.DB,
               userId: UserId.make(userId),
               turnId: work.value.turnId,
-              inference: inference.value,
+              inference: prepared.value.inference,
               signal: deadline.signal,
               scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
               deliver: (admission) => ({
                 _tag: "WhatsApp",
                 send: ({ text, correlationToken }) =>
-                  sendWhatsAppAttempt({ sender, admission, text, correlationToken }),
+                  sendWhatsAppAttempt({
+                    sender: prepared.value.sender,
+                    admission,
+                    text,
+                    correlationToken,
+                  }),
               }),
             })
           );
-        }).pipe(Effect.catchCause(() => Effect.succeed(transactionUnavailable())))
+        }).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.withSpan("agent.whatsappTurn.resume"),
+          Effect.catchCause(() => Effect.succeed(transactionUnavailable()))
+        )
       )
     );
   }
@@ -939,22 +966,14 @@ export class UserTransactionCoordinator {
             const status = { expired: 422, replay: 200, conflict: 409 }[replay];
             return new Response(null, { status });
           }
-          if (env.KAPSO_API_KEY === undefined || env.KAPSO_API_KEY.length === 0) {
-            return transactionUnavailable();
-          }
-          const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
-          if (Exit.isFailure(inference)) return transactionUnavailable();
-          const clients = yield* Layer.build(FetchHttpClient.layer);
-          const send = makeHostedSender({
-            apiKey: Redacted.make(env.KAPSO_API_KEY),
-            httpClient: Context.get(clients, HttpClient.HttpClient),
-          });
+          const prepared = yield* prepareWhatsAppExecution(env);
+          if (Option.isNone(prepared)) return transactionUnavailable();
           return yield* Effect.tryPromise(() =>
             startWhatsAppTurn({
               db: env.DB,
               proof,
-              inference: inference.value,
-              sender: send,
+              inference: prepared.value.inference,
+              sender: prepared.value.sender,
               signal: deadline.signal,
               scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
               onAdmitted: deadline.onAdmitted,

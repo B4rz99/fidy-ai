@@ -50,7 +50,6 @@ import {
   browserHostedDelivery,
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppTurnWithAdmission,
-  resumeWhatsAppTurn,
 } from "./hosted-turn";
 import { type WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./whatsapp-work";
 import type { HostedDelivery } from "./hosted-turn";
@@ -867,10 +866,15 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
       );
       yield* dispatch();
       expect(offered).toHaveLength(2);
-      const model = yield* Effect.tryPromise(() =>
-        inference(() => Promise.resolve(reply("Respuesta")))
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.queued.answer" }],
+          })
+        )
       );
-      const sends: Array<string> = [];
+      vi.stubGlobal("fetch", provider);
       const work = offered[0];
       if (work === undefined) return yield* Effect.die("missing queue work");
       const retry = vi.fn();
@@ -905,37 +909,12 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
           .bind(newId(), users[0], grants[0], sessions[0], now())
           .run()
       );
+      const owner = coordinatorFor(db, () => Promise.resolve(reply("Respuesta")));
       const coordinator = {
-        getByName: (
-          name: string
-        ): Readonly<{ fetch: (request: Request) => Promise<Response> }> => ({
-          fetch: (_request: Request): Promise<Response> => {
-            expect(name).toBe(users[0]);
-            return resumeWhatsAppTurn({
-              db,
-              userId: work.userId,
-              turnId: work.turnId,
-              inference: model,
-              signal: makeAbortController().signal,
-              scheduleRecovery: () => Promise.resolve(),
-              deliver: (): ReturnType<Parameters<typeof resumeWhatsAppTurn>[0]["deliver"]> => ({
-                _tag: "WhatsApp",
-                send: ({
-                  text,
-                }): Promise<{
-                  kind: "accepted";
-                  messageId: WhatsAppProviderMessageId;
-                }> => {
-                  sends.push(text);
-                  return Promise.resolve({
-                    kind: "accepted" as const,
-                    messageId: WhatsAppProviderMessageId.make("wamid.queued.answer"),
-                  });
-                },
-              }),
-            });
-          },
-        }),
+        getByName: (name: string): UserTransactionCoordinator => {
+          expect(name).toBe(users[0]);
+          return owner;
+        },
       };
       const ack = vi.fn();
       yield* Effect.tryPromise(() =>
@@ -945,7 +924,7 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
         })
       );
       expect(ack).toHaveBeenCalledOnce();
-      expect(sends).toEqual(["Respuesta"]);
+      expect(provider).toHaveBeenCalledTimes(1);
       const duplicateAck = vi.fn();
       yield* Effect.tryPromise(() =>
         receiveWhatsAppWork({
@@ -954,7 +933,7 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
         })
       );
       expect(duplicateAck).toHaveBeenCalledOnce();
-      expect(sends).toHaveLength(1);
+      expect(provider).toHaveBeenCalledTimes(1);
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
         { status: "pending", kind: "user", text: "Solo en Transcript" },
       ]);

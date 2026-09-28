@@ -1,0 +1,64 @@
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_ccede3fef9ce61::t_7abc810787c44b 69,71
+  s_ccede3fef9ce61::t_e428e130b9e5cc 33,44,73
+  s_ccede3fef9ce61::t_0f44bf5aaabcac 93-99,102-104,108,110
+  s_ccede3fef9ce61::t_9437d21c347ceb 68,72,77-78
+  s_ccede3fef9ce61::t_56e98e6116fab4 66,80
+  s_ccede3fef9ce61::t_15b98cc577360a 105-106
+  s_ccede3fef9ce61::t_21321454e7fe48 120-126
+  s_ccede3fef9ce61::t_8bf55af6614d39 70
+  s_ccede3fef9ce61::t_9cefa8bafe58d4 85-92,100-101,107,109,111-119
+  s_ccede3fef9ce61::t_0960b4e079ea37 74-76
+apps/server/cloudflare/runtime/smoke-work.ts
+  s_ccede3fef9ce61::t_e15ceb248b9602 138-152,232
+  s_ccede3fef9ce61::t_0fa6f0b06204ad 45,122-123,125,127-133
+  s_ccede3fef9ce61::t_8bf55af6614d39 84-86,154-158,166-170
+infra/cloudflare/smoke-work.test.ts
+  s_ccede3fef9ce61::t_e097638feef4a7 84,86,161
+  s_ccede3fef9ce61::t_0200c3e4d7728a 159-160
+  s_ccede3fef9ce61::t_e89c7dd9b3f9d8 65,85,96,170-180
+infra/cloudflare/smoke.test.ts
+  s_ccede3fef9ce61::t_2e17d51cd97e58 1,137
+  s_ccede3fef9ce61::t_c3647c806dd9f8 4-7,56,89-136,138-166,168-178
+  s_ccede3fef9ce61::t_5d0cfa580f6f85 167
+infra/cloudflare/workers.test.ts
+  s_ccede3fef9ce61::t_8b040c44e5315e 101-141,144-149,151,155-161,264-265
+  s_ccede3fef9ce61::t_f56234a3a0cc83 1,142-143,150
+  s_ccede3fef9ce61::t_b4e921417232f4 152-154
+  s_ccede3fef9ce61::t_25b1817851a89f 162-194,201-205,210-242,256-263
+  s_ccede3fef9ce61::t_8bf55af6614d39 195-200,206-209,243-255
+apps/server/cloudflare/public-worker.ts
+  s_ccede3fef9ce61::t_5f5c602ca5f586 20,38,492,505,509
+infra/cloudflare/alchemy.run.ts
+  s_ccede3fef9ce61::t_ce17a1013a9f8e 345
+docs/operations/production-releases.md
+  s_ccede3fef9ce61::t_91f0dce901911b 117-119
+  s_ccede3fef9ce61::t_403d0409828b56 112-116
+apps/server/cloudflare/migrations/0027_release_smoke.sql
+  s_ccede3fef9ce61::t_ccd2e8695fd028 6
+infra/cloudflare/verify-edge-smoke.ts
+  s_ccede3fef9ce61::t_d870aa99379740 53,60
+  s_ccede3fef9ce61::t_5d6f98e47a4974 66-77,79-83
+  s_ccede3fef9ce61::t_e03b813329b17b 12,14,78
+  s_ccede3fef9ce61::t_f523ad6f20c3b1 37
+  s_ccede3fef9ce61::t_1e97e0f69c6f0f 42
+apps/server/cloudflare/runtime/telemetry.test.ts
+  s_ccede3fef9ce61::t_06968f4e21fcf6 36-38,40,42-55
+  s_ccede3fef9ce61::t_3169a21e310ce2 39,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6557546861cb85007b225c8ac5c60052b8331f0d",
+  "prompts": {},
+  "sessions": {
+    "s_ccede3fef9ce61": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-7b17-751e-b033-9644b17b0742",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

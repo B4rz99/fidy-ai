@@ -1,0 +1,25 @@
+{
+  "reviewedAt": "PENDING",
+  "reviewer": "PENDING",
+  "contractingEntity": "PENDING",
+  "termsEvidence": "PENDING",
+  "dpaEvidence": "PENDING",
+  "subprocessorsEvidence": "PENDING",
+  "transcriptProvider": "PENDING",
+  "transcriptConfigurationEvidence": "PENDING",
+  "retentionDays": null,
+  "retentionEvidence": "PENDING",
+  "unusedFeaturesEvidence": "PENDING",
+  "unusedFeatures": {
+    "agents": "PENDING",
+    "models": "PENDING",
+    "workflows": "PENDING",
+    "replay": "PENDING",
+    "sandbox": "PENDING",
+    "mcp": "PENDING",
+    "analytics": "PENDING"
+  },
+  "deletionTestEvidence": "PENDING",
+  "policyRevision": "policy-2026-09-28-kapso",
+  "onboardingRevision": "onboarding-2026-09-28-kapso"
+}

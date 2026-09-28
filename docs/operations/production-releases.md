@@ -44,7 +44,7 @@ expose binding names, environment values, internal routes, exception text, or Se
 
 ## Release sequence
 
-The workflow allows one active release and does not cancel an active deployment.
+Production releases currently fail closed at the [Kapso launch check](kapso-launch-readiness.md) until provider contracts, retention, deletion, unused features, and disclosure are verified. This blocks unrelated releases too because production WhatsApp credentials are bound to the deployed Workers; do not bypass the check to ship another feature. The workflow allows one active release and does not cancel an active deployment.
 
 1. Check out the exact `github.sha` revision and install the locked workspace.
 2. Calculate the canonical contract digest and bind it with `RELEASE_GIT_SHA` for later steps.

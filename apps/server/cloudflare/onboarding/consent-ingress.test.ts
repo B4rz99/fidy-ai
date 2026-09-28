@@ -277,6 +277,29 @@ const inbound = (id: string, text: string, timestamp = String(nowSeconds)): stri
     phone_number_id: "123456789012345",
   });
 
+const voiceInbound = (id: string, transcript?: unknown, caller = bsuid): string =>
+  encodeJson({
+    message: {
+      id,
+      timestamp: String(nowSeconds),
+      type: "audio",
+      from_user_id: caller,
+      audio: { id: "media-1" },
+      kapso: transcript === undefined ? {} : { transcript },
+    },
+    conversation: { business_scoped_user_id: caller },
+    phone_number_id: "123456789012345",
+  });
+
+const seedVoiceUser = (db: D1Database, userId: string): Promise<unknown> =>
+  db
+    .prepare("INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)")
+    .bind(userId, portfolio, bsuid)
+    .run()
+    .then(() =>
+      db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
+    );
+
 it("routes only authenticated text of a verified BSUID to the User coordinator", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -310,18 +333,7 @@ it("routes only authenticated text of a verified BSUID to the User coordinator",
         messageId: "wamid.verified",
         text: "Texto exacto",
       });
-      const voice = encodeJson({
-        message: {
-          id: "wamid.voice",
-          timestamp: String(nowSeconds),
-          type: "audio",
-          from_user_id: bsuid,
-          audio: { id: "audio-1" },
-          kapso: { transcript: { text: "Transcripción" } },
-        },
-        conversation: { business_scoped_user_id: bsuid },
-        phone_number_id: "123456789012345",
-      });
+      const voice = voiceInbound("wamid.voice", { text: "Transcripción" });
       expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(202);
       expect(calls).toHaveLength(2);
       expect(
@@ -331,9 +343,9 @@ it("routes only authenticated text of a verified BSUID to the User coordinator",
         messageId: "wamid.voice",
         text: "Transcripción",
       });
-      const controlVoice = voice
-        .replace("wamid.voice", "wamid.voice-control")
-        .replace("Transcripción", "Aprueba el código de inicio de sesión BCDF-GHJK");
+      const controlVoice = voiceInbound("wamid.voice-control", {
+        text: "Aprueba el código de inicio de sesión BCDF-GHJK",
+      });
       expect((yield* Effect.tryPromise(() => send(controlVoice))).status).toBe(202);
       expect(calls).toHaveLength(3);
       expect(
@@ -353,17 +365,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       const calls = vi.fn(() => Promise.resolve(new Response(null, { status: 202 })));
       const { db, send, sweep } = yield* Effect.tryPromise(() => setup(Option.some(calls)));
       const userId = "10000000-0000-4000-8000-000000000071";
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
-          )
-          .bind(userId, portfolio, bsuid)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
-      );
+      yield* Effect.tryPromise(() => seedVoiceUser(db, userId));
       const provider = vi.fn((_url: string, _init: RequestInit) =>
         Promise.resolve(
           Response.json({
@@ -373,20 +375,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
         )
       );
       vi.stubGlobal("fetch", provider);
-      const voice = (id: string, transcript?: unknown, caller = bsuid): string =>
-        encodeJson({
-          message: {
-            id,
-            timestamp: String(nowSeconds),
-            type: "audio",
-            from_user_id: caller,
-            audio: { id: "media-1" },
-            kapso: transcript === undefined ? {} : { transcript },
-          },
-          conversation: { business_scoped_user_id: caller },
-          phone_number_id: "123456789012345",
-        });
-      const missing = voice("wamid.voice-missing");
+      const missing = voiceInbound("wamid.voice-missing");
       expect((yield* Effect.tryPromise(() => send(missing, "invalid"))).status).toBe(401);
       expect(provider).not.toHaveBeenCalled();
       expect((yield* Effect.tryPromise(() => send(missing))).status).toBe(200);
@@ -395,7 +384,9 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       yield* Effect.tryPromise(() =>
         db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userId).run()
       );
-      expect((yield* Effect.tryPromise(() => send(voice("wamid.revoked")))).status).toBe(429);
+      expect((yield* Effect.tryPromise(() => send(voiceInbound("wamid.revoked")))).status).toBe(
+        429
+      );
       expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
         db.prepare("DELETE FROM consent_user_revocations WHERE user_id = ?").bind(userId).run()
@@ -415,20 +406,21 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
         { unsupported: true },
       ].entries()) {
         expect(
-          (yield* Effect.tryPromise(() => send(voice(`wamid.bad-${index}`, transcript)))).status
+          (yield* Effect.tryPromise(() => send(voiceInbound(`wamid.bad-${index}`, transcript))))
+            .status
         ).toBe(200);
       }
       expect(provider).toHaveBeenCalledTimes(5);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(voice("wamid.malformed-kapso").replace('"kapso":{}', '"kapso":null'))
+          send(voiceInbound("wamid.malformed-kapso").replace('"kapso":{}', '"kapso":null'))
         )).status
       ).toBe(429);
       // The per-User refusal budget bounds repeated expensive provider attempts.
       expect(provider).toHaveBeenCalledTimes(5);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(voice("wamid.unknown", undefined, "CO.99999999999999999999"))
+          send(voiceInbound("wamid.unknown", undefined, "CO.99999999999999999999"))
         )).status
       ).toBe(422);
       expect(provider).toHaveBeenCalledTimes(5);
@@ -458,30 +450,10 @@ it("reports a failed voice reply truthfully without retrying its uncertain provi
       const calls = vi.fn(() => Promise.resolve(new Response(null, { status: 202 })));
       const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(calls)));
       const userId = "10000000-0000-4000-8000-000000000071";
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
-          )
-          .bind(userId, portfolio, bsuid)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
-      );
+      yield* Effect.tryPromise(() => seedVoiceUser(db, userId));
       const provider = vi.fn(() => Promise.reject(new Error("provider may have accepted")));
       vi.stubGlobal("fetch", provider);
-      const payload = encodeJson({
-        message: {
-          id: "wamid.ambiguous-voice",
-          timestamp: String(nowSeconds),
-          type: "audio",
-          from_user_id: bsuid,
-          audio: { id: "media-1" },
-        },
-        conversation: { business_scoped_user_id: bsuid },
-        phone_number_id: "123456789012345",
-      });
+      const payload = voiceInbound("wamid.ambiguous-voice");
       expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
       expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
       expect(provider).toHaveBeenCalledTimes(1);

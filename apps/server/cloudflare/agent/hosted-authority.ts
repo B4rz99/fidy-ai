@@ -9,7 +9,10 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import {
+  liveWebSessionAuthority,
+  webSessionCredentialAuthority,
+} from "@fidy/server/identity-runtime";
 
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
@@ -49,12 +52,7 @@ export const hostedIdentity = ({
         predicate: "user_id = ? AND portfolio_id = ? AND bsuid = ?",
         bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
       }
-    : {
-        table: "web_sessions" as const,
-        predicate: `user_id = ? AND id = ? AND token_digest = ? AND revoked_at_ms IS NULL
-          AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`,
-        bindings: [subject.userId, subject.id, subject.digest, current, current] as const,
-      };
+    : webSessionCredentialAuthority({ subject, current });
 
 /** Trusted SQL authority selection. Provider ids are evidence; the matching D1 association is authority. */
 export const hostedAuthority = ({

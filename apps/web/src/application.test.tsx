@@ -246,8 +246,9 @@ describe("public web application routes", () => {
             })
           )
         ).toBeVisible();
-        expect(screen.getByText("policy-2026-09-21")).toBeVisible();
-        expect(screen.getByText(/Cloudflare Workers AI/iu)).toBeVisible();
+        expect(screen.getByText("policy-2026-09-28-kapso-free")).toBeVisible();
+        expect(screen.getByText(/Fidy usa a Kapso y Meta/iu)).toBeVisible();
+        expect(screen.getByText(/sin un plazo de eliminación automática/iu)).toBeVisible();
         expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
         expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
         expect(

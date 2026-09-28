@@ -342,6 +342,7 @@ export default Alchemy.Stack(
       domain: production ? productionTopology.ingress.hostname : undefined,
       env: {
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
+        CONTRACT_DIGEST: releaseMetadata.contractDigest,
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_PROOF: yield* development
           ? smokeProof.pipe(Config.withDefault(Redacted.make("")))

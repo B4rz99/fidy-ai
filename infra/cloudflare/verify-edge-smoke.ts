@@ -9,7 +9,9 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;
+const healthyStatus = 200;
 const probes = [
+  { method: "GET", path: "/health", expectedStatus: healthyStatus, headers: {} },
   { method: "GET", path: "/categories", expectedStatus: 401, headers: {} },
   {
     method: "POST",
@@ -32,11 +34,12 @@ class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
   readonly path: string;
 }> {}
 
-/** Probe only rejected, credential-free requests; never send a valid provider event or User request. */
+/** Probe credential-free health and rejected operations; never send a valid provider event or User request. */
 export const verifyEdgeSmoke = <E, R>(
   probe: (input: EdgeRequest) => Effect.Effect<EdgeResponse, E, R>,
   candidate?: Candidate
 ): Effect.Effect<void, EdgeSmokeFailure, R> =>
+  // oxlint-disable-next-line eslint/complexity -- Each candidate-specific health and rejection check fails closed independently.
   Effect.gen(function* () {
     for (const entry of probes) {
       const response = yield* probe({
@@ -47,16 +50,35 @@ export const verifyEdgeSmoke = <E, R>(
             ? entry.headers
             : {
                 ...entry.headers,
-                "x-fidy-smoke-proof": candidate.proof,
+                ...(entry.path === "/health" ? {} : { "x-fidy-smoke-proof": candidate.proof }),
                 "cloudflare-workers-version-overrides": candidate.override,
               },
       }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
       if (
         !isExpectedResponse(response, entry.expectedStatus) ||
         (candidate !== undefined &&
+          entry.path !== "/health" &&
           response.headers.get("x-fidy-smoke-worker-version") !== candidate.publicVersionId)
       ) {
         return yield* new EdgeSmokeFailure({ path: entry.path });
+      }
+    }
+    if (candidate !== undefined) {
+      // Unauthenticated health above proves public availability; the reserved proof here
+      // only exposes version metadata so this second health response can be pinned.
+      const health = yield* probe({
+        method: "GET",
+        path: "/health",
+        headers: {
+          "x-fidy-smoke-proof": candidate.proof,
+          "cloudflare-workers-version-overrides": candidate.override,
+        },
+      }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: "/health" })));
+      if (
+        !isExpectedResponse(health, healthyStatus) ||
+        health.headers.get("x-fidy-smoke-worker-version") !== candidate.publicVersionId
+      ) {
+        return yield* new EdgeSmokeFailure({ path: "/health" });
       }
     }
   });

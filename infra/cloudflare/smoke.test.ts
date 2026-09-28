@@ -1,5 +1,10 @@
+// oxlint-disable typescript/consistent-type-assertions -- Deliberately incomplete Core fixture proves rejection before any synthetic binding.
 import { describe, expect, it } from "vitest";
 import { verifySmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import {
+  type SmokeEnvironment,
+  handleSmoke,
+} from "../../apps/server/cloudflare/runtime/smoke-work";
 import publicWorker from "../../apps/server/cloudflare/public-worker";
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
@@ -48,6 +53,7 @@ describe("production smoke ingress", () => {
       LOCAL_CANONICAL_READ_BEARER: "",
       PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
       RELEASE_GIT_SHA: revision,
+      CONTRACT_DIGEST: digest,
       SMOKE_PROOF: "a".repeat(64),
       CF_VERSION_METADATA: { id: version, tag: "", timestamp: "" },
     };
@@ -80,5 +86,95 @@ describe("production smoke ingress", () => {
     );
     expect(authorized.status).toBe(200);
     expect(coreCalls).toBe(1);
+    expect(await authorized.json()).toMatchObject({ public: candidate, core: candidate });
+  });
+
+  it("reports the public digest independently rather than copying the Core digest", async () => {
+    const response = await publicWorker.fetch(
+      new Request("https://api.fidyapp.com/internal/release-smoke", {
+        headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+      }),
+      {
+        BROWSER_ORIGIN: "https://app.fidyapp.com",
+        CORE: {
+          fetch: (): Promise<Response> =>
+            Promise.resolve(
+              Response.json({
+                status: "passed",
+                core: candidate,
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+              })
+            ),
+        },
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+        RELEASE_GIT_SHA: revision,
+        CONTRACT_DIGEST: "0".repeat(64),
+        SMOKE_PROOF: "a".repeat(64),
+        CF_VERSION_METADATA: { id: version },
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      core: { contractDigest: digest },
+      public: { contractDigest: "0".repeat(64) },
+    });
+  });
+
+  it("rejects excess authorized probes at the public-to-Core boundary before synthetic work", async () => {
+    const actions: string[] = [];
+    const blocked = (): never => {
+      actions.push("binding");
+      throw new Error("synthetic work should not run");
+    };
+    const coreEnvironment = {
+      DB: {
+        prepare: (sql: string): object => {
+          actions.push(sql.startsWith("INSERT") ? "admission" : "read");
+          return {
+            bind: (): object => ({
+              run: (): Promise<void> => Promise.resolve(),
+              first: (): Promise<unknown> => Promise.resolve(null),
+            }),
+          };
+        },
+      },
+      SMOKE_BUCKET: { put: blocked },
+      SMOKE_QUEUE: { send: blocked },
+      SMOKE_WORKFLOW: { create: blocked },
+      USER_TRANSACTION_COORDINATOR: { getByName: blocked },
+      CF_VERSION_METADATA: { id: version },
+      SMOKE_PROOF: "a".repeat(64),
+      RELEASE_GIT_SHA: revision,
+      CONTRACT_DIGEST: digest,
+    } as unknown as SmokeEnvironment;
+    const response = await publicWorker.fetch(
+      new Request("https://api.fidyapp.com/internal/release-smoke", {
+        method: "POST",
+        headers: { "x-fidy-smoke-proof": "a".repeat(64), "content-type": "application/json" },
+        body: JSON.stringify({
+          protocolVersion: 1,
+          probeId: "b".repeat(32),
+          expectedPublicVersionId: version,
+          expectedCoreVersionId: version,
+          expectedGitRevision: revision,
+          expectedContractDigest: digest,
+        }),
+      }),
+      {
+        BROWSER_ORIGIN: "https://app.fidyapp.com",
+        CORE: {
+          fetch: (request: Request): Promise<Response> => handleSmoke(request, coreEnvironment),
+        },
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+        RELEASE_GIT_SHA: revision,
+        CONTRACT_DIGEST: digest,
+        SMOKE_PROOF: "a".repeat(64),
+        CF_VERSION_METADATA: { id: version },
+      }
+    );
+    expect(response.status).toBe(503);
+    expect(actions).toEqual(["admission", "read"]);
   });
 });

@@ -109,10 +109,14 @@ version IDs from Cloudflare's upload results, not a health response, and must st
 promotion if this command fails. The current deployment workflow still deploys directly;
 #719 owns candidate upload, 0% routing, invocation of this gate, and guarded promotion.
 
-The runner sends a two-Worker version override, verifies each Worker's observed version metadata,
-Git revision, canonical contract digest, and shared smoke manifest, then waits for a dedicated
-no-op Queue/Workflow completion. It checks public rejection responses against the candidate
-public version. The reserved Durable Object check establishes compatibility with whichever
+The runner sends a two-Worker version override, verifies each Worker's independently reported
+version metadata, Git revision, canonical contract digest, and shared smoke manifest, then waits
+for a dedicated no-op Queue/Workflow completion. It checks unauthenticated health and public
+rejection responses against the candidate public version, and smoke telemetry reports only the
+release identity and closed operation outcome. Admission is limited to eight active synthetic
+probes at a time; replays cannot publish the same probe twice. Allow five minutes for older
+probes to expire before retrying a saturated gate. Failed work for a claimed probe requires a
+fresh probe ID. The reserved Durable Object check establishes compatibility with whichever
 version Cloudflare assigned the object; Queue/Workflow completion establishes deployed wiring,
 **not that the candidate's async code ran**. The synthetic D1 row expires after five minutes and
 Core cron removes expired rows. The reserved R2 marker carries no User material. The first

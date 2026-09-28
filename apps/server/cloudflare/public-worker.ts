@@ -17,6 +17,7 @@ import {
 import { browserOrigins } from "./runtime/topology";
 import {
   SmokeResponse,
+  smokeManifest,
   smokePath,
   smokeProofAccepted,
   smokeProofHeader,
@@ -34,6 +35,7 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
 } & Partial<
     Readonly<{
       SMOKE_PROOF: string;
+      CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
     }>
   >;
@@ -487,7 +489,7 @@ const routeOwnedRequest = (
     });
     if (new URL(request.url).pathname !== smokePath || !response.ok) return response;
     const version = environment.CF_VERSION_METADATA?.id;
-    if (version === undefined) {
+    if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
       return unavailable();
     }
     const decoded = yield* Effect.tryPromise({
@@ -500,10 +502,11 @@ const routeOwnedRequest = (
     return Response.json(
       {
         ...decoded.value,
+        manifest: smokeManifest,
         public: {
           workerVersionId: version,
           gitRevision: environment.RELEASE_GIT_SHA,
-          contractDigest: decoded.value.core.contractDigest,
+          contractDigest: environment.CONTRACT_DIGEST,
         },
       },
       { status: response.status }

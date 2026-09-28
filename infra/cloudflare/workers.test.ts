@@ -1,3 +1,4 @@
+// oxlint-disable typescript/consistent-type-assertions -- Incomplete platform fixture exercises only the reserved adapter paths.
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
@@ -95,6 +96,171 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
   RELEASE_GIT_SHA: gitRevision,
   ...overrides,
+});
+
+describe("Core smoke adapter", () => {
+  it("routes the reserved endpoint and dedicated Queue without touching User work", async () => {
+    const proof = "a".repeat(64);
+    const environment = {
+      ...coreEnvironment,
+      SMOKE_PROOF: proof,
+      CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
+      SMOKE_QUEUE_NAME: "SmokeQueue",
+      SMOKE_QUEUE: { send: failDatabaseOperation },
+      SMOKE_BUCKET: { put: failDatabaseOperation },
+      SMOKE_WORKFLOW: { create: failDatabaseOperation },
+    } as unknown as Parameters<typeof coreWorker.fetch>[1];
+    const response = await coreWorker.fetch(
+      new Request("https://core.internal/internal/release-smoke", {
+        method: "POST",
+        headers: { "x-fidy-smoke-proof": proof, "content-type": "application/json" },
+        body: JSON.stringify({
+          protocolVersion: 1,
+          probeId: "b".repeat(32),
+          expectedPublicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+          expectedCoreVersionId: "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
+          expectedGitRevision: gitRevision,
+          expectedContractDigest: contractDigest,
+        }),
+      }),
+      environment
+    );
+    expect(response.status).toBe(503);
+
+    let acked = false;
+    const queueEnvironment = {
+      ...environment,
+      DB: {
+        prepare: (): object => ({
+          bind: (): object => ({
+            first: (): Promise<{ expires_at_ms: number }> =>
+              Promise.resolve({ expires_at_ms: Date.now() - 1000 }),
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof coreWorker.queue>[1];
+    const fixtureMessage = queueBatch({}).messages.at(0);
+    if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
+    await coreWorker.queue(
+      {
+        ...queueBatch({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision }),
+        queue: "SmokeQueue",
+        messages: [
+          {
+            ...fixtureMessage,
+            body: { protocolVersion: 1, probeId: "b".repeat(32), gitRevision },
+            ack: (): void => {
+              acked = true;
+            },
+          },
+        ],
+      },
+      queueEnvironment
+    );
+    expect(acked).toBe(true);
+  });
+
+  it("publishes an admitted probe through Core fetch and hands it to the Workflow via Core Queue", async () => {
+    let work: unknown;
+    let started: unknown;
+    let acked = false;
+    let claimed = false;
+    const database = {
+      prepare: (sql: string): object => ({
+        all: (): Promise<object> => Promise.resolve({}),
+        bind: (): object => ({
+          run: (): Promise<object> => {
+            if (sql.startsWith("UPDATE")) claimed = true;
+            return Promise.resolve({ meta: { changes: 1 } });
+          },
+          first: (): Promise<unknown> =>
+            Promise.resolve(
+              sql.includes("expires_at_ms FROM")
+                ? { expires_at_ms: Date.now() + 100_000 }
+                : {
+                    git_revision: gitRevision,
+                    expires_at_ms: Date.now() + 100_000,
+                    status: claimed ? "queued" : "pending",
+                  }
+            ),
+        }),
+      }),
+    };
+    const environment = {
+      ...coreEnvironment,
+      DB: database,
+      SMOKE_PROOF: "a".repeat(64),
+      CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
+      SMOKE_QUEUE_NAME: "SmokeQueue",
+      SMOKE_QUEUE: {
+        send: (value: unknown): Promise<void> => {
+          work = value;
+          return Promise.resolve();
+        },
+      },
+      SMOKE_BUCKET: {
+        put: (): Promise<void> => Promise.resolve(),
+        get: (): Promise<object> => Promise.resolve({}),
+      },
+      SMOKE_WORKFLOW: {
+        create: (value: unknown): Promise<object> => {
+          started = value;
+          return Promise.resolve({});
+        },
+      },
+      USER_TRANSACTION_COORDINATOR: {
+        getByName: (): Pick<Fetcher, "fetch"> => ({
+          fetch: (): Promise<Response> => Promise.resolve(Response.json({ status: "compatible" })),
+        }),
+      },
+      KAPSO_API_KEY: "configured",
+      KAPSO_WEBHOOK_SECRET: "configured",
+      RESEND_API_KEY: "configured",
+      WOMPI_PRIVATE_KEY: "configured",
+      WOMPI_INTEGRITY_SECRET: "configured",
+      WOMPI_EVENT_SECRET: "configured",
+    } as unknown as Parameters<typeof coreWorker.fetch>[1];
+    const response = await coreWorker.fetch(
+      new Request("https://core.internal/internal/release-smoke", {
+        method: "POST",
+        headers: { "x-fidy-smoke-proof": "a".repeat(64), "content-type": "application/json" },
+        body: JSON.stringify({
+          protocolVersion: 1,
+          probeId: "b".repeat(32),
+          expectedPublicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+          expectedCoreVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+          expectedGitRevision: gitRevision,
+          expectedContractDigest: contractDigest,
+        }),
+      }),
+      environment
+    );
+    expect(response.status).toBe(202);
+    expect(work).toEqual({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision });
+    const fixtureMessage = queueBatch({}).messages.at(0);
+    if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
+    await coreWorker.queue(
+      {
+        ...queueBatch(work),
+        queue: "SmokeQueue",
+        messages: [
+          {
+            ...fixtureMessage,
+            body: work,
+            ack: (): void => {
+              acked = true;
+            },
+          },
+        ],
+      },
+      environment
+    );
+    expect(acked).toBe(true);
+    expect(started).toEqual({
+      id: `release-smoke-${"b".repeat(32)}`,
+      params: work,
+    });
+  });
 });
 
 describe("Deployment configuration", () => {

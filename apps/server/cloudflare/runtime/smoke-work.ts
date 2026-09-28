@@ -42,6 +42,7 @@ const refused = (): Response => Response.json({}, { status: 404 });
 const markerKey = "_release-smoke/marker-v1";
 const maxBodyBytes = 512;
 const smokeWindowMs = 300_000;
+const maxActiveProbes = 8;
 const acceptedStatus = 202;
 const completedStatus = 200;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -80,7 +81,9 @@ const validRow = (
   Option.isSome(row) &&
   row.value.git_revision === environment.RELEASE_GIT_SHA &&
   row.value.expires_at_ms > Date.now() &&
-  (row.value.status === "pending" || row.value.status === "passed");
+  (row.value.status === "pending" ||
+    row.value.status === "queued" ||
+    row.value.status === "passed");
 
 const checkBindings = async (environment: SmokeEnvironment): Promise<boolean> => {
   const secrets = [
@@ -116,23 +119,43 @@ const startProbe = async (request: Request, environment: SmokeEnvironment): Prom
   ) {
     return fail();
   }
-  if (!(await checkBindings(environment))) return fail();
+  // SQLite serializes this single admission statement: even concurrent distinct IDs cannot
+  // create unbounded synthetic Work. Replays of an admitted probe remain idempotent.
   await environment.DB.prepare(
-    "INSERT OR IGNORE INTO release_smoke_probes (probe_id, git_revision, expires_at_ms, status) VALUES (?, ?, ?, 'pending')"
+    "INSERT OR IGNORE INTO release_smoke_probes (probe_id, git_revision, expires_at_ms, status) SELECT ?, ?, ?, 'pending' WHERE (SELECT COUNT(*) FROM release_smoke_probes WHERE expires_at_ms > ?) < ?"
   )
-    .bind(probe.probeId, environment.RELEASE_GIT_SHA, Date.now() + smokeWindowMs)
+    .bind(
+      probe.probeId,
+      environment.RELEASE_GIT_SHA,
+      Date.now() + smokeWindowMs,
+      Date.now(),
+      maxActiveProbes
+    )
     .run();
   const row = await readProbe(environment, probe.probeId);
   if (!validRow(row, environment)) return fail();
   if (row.value.status === "pending") {
-    // At-least-once publication is harmless: Workflow identity and D1 completion are idempotent.
-    await environment.SMOKE_QUEUE.send({
-      protocolVersion: 1,
-      probeId: probe.probeId,
-      gitRevision: environment.RELEASE_GIT_SHA,
-    } satisfies SmokeWork);
+    // The claim is atomic. A replay of the same pending ID cannot repeat binding checks or
+    // publish unbounded Queue messages; a failed claim or Queue send fails closed for this ID.
+    const claimed = await environment.DB.prepare(
+      "UPDATE release_smoke_probes SET status = 'queued' WHERE probe_id = ? AND status = 'pending' AND expires_at_ms > ?"
+    )
+      .bind(probe.probeId, Date.now())
+      .run();
+    if (claimed.meta.changes === 1) {
+      if (!(await checkBindings(environment))) return fail();
+      await environment.SMOKE_QUEUE.send({
+        protocolVersion: 1,
+        probeId: probe.probeId,
+        gitRevision: environment.RELEASE_GIT_SHA,
+      } satisfies SmokeWork);
+    }
   }
-  return responseFor(environment, row.value.status, acceptedStatus);
+  return responseFor(
+    environment,
+    row.value.status === "passed" ? "passed" : "pending",
+    acceptedStatus
+  );
 };
 
 const getProbe = async (request: Request, environment: SmokeEnvironment): Promise<Response> => {
@@ -140,7 +163,11 @@ const getProbe = async (request: Request, environment: SmokeEnvironment): Promis
   if (probeId === null || !Schema.is(SmokeWork.fields.probeId)(probeId)) return refused();
   const row = await readProbe(environment, probeId);
   return validRow(row, environment)
-    ? responseFor(environment, row.value.status, completedStatus)
+    ? responseFor(
+        environment,
+        row.value.status === "passed" ? "passed" : "pending",
+        completedStatus
+      )
     : fail();
 };
 
@@ -202,7 +229,7 @@ export class ReleaseSmokeWorkflowV1 extends WorkflowEntrypoint<SmokeEnvironment,
         if (Option.isNone(decoded)) throw new Error("Invalid smoke workflow");
         await step.do("settle-synthetic-smoke-v1", async () => {
           await this.env.DB.prepare(
-            "UPDATE release_smoke_probes SET status = 'passed' WHERE probe_id = ? AND git_revision = ? AND expires_at_ms > ? AND status = 'pending'"
+            "UPDATE release_smoke_probes SET status = 'passed' WHERE probe_id = ? AND git_revision = ? AND expires_at_ms > ? AND status = 'queued'"
           )
             .bind(decoded.value.probeId, decoded.value.gitRevision, Date.now())
             .run();

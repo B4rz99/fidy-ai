@@ -33,6 +33,26 @@ it.effect("reports a durable attempt without replacing its rejection or exportin
   })
 );
 
+it.effect("projects release smoke telemetry without proof, probe ID, or User data", () =>
+  Effect.gen(function* () {
+    const records: TelemetryWorkRecord[] = [];
+    const environment = { RELEASE_GIT_SHA: "a".repeat(40), SMOKE_PROOF: "proof-canary" };
+    const result = observeWorkerPromise(() => Promise.resolve("probe-canary"), {
+      environment,
+      telemetry: makeWorkerTelemetry((record) => {
+        records.push(record);
+      }),
+      operation: "workflow.releaseSmoke",
+    });
+    expect(yield* Effect.tryPromise(() => result)).toBe("probe-canary");
+    expect(records).toMatchObject([
+      { operation: "workflow.releaseSmoke", outcome: "succeeded", release: "a".repeat(40) },
+    ]);
+    expect(JSON.stringify(records)).not.toContain("proof-canary");
+    expect(JSON.stringify(records)).not.toContain("probe-canary");
+  })
+);
+
 it("extracts only a valid release from an environment containing secrets", () => {
   expect(
     workerRelease({ RELEASE_GIT_SHA: "a".repeat(40), RESEND_API_KEY: "secret-canary" })

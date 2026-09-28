@@ -62,6 +62,7 @@ describe("private release smoke", () => {
   it("uses only reserved bindings and allows a stable consumer to hand off candidate synthetic work", async () => {
     const actions: Array<string> = [];
     let offered: unknown;
+    let claimed = false;
     const database = {
       prepare: (
         sql: string
@@ -80,8 +81,9 @@ describe("private release smoke", () => {
           ...values: ReadonlyArray<unknown>
         ): { run: () => Promise<unknown>; first: () => Promise<unknown> } => ({
           run: (): Promise<unknown> => {
-            actions.push("synthetic-insert");
-            return Promise.resolve({});
+            actions.push(sql.startsWith("UPDATE") ? "synthetic-claim" : "synthetic-insert");
+            if (sql.startsWith("UPDATE")) claimed = true;
+            return Promise.resolve({ meta: { changes: 1 } });
           },
           first: (): Promise<unknown> => {
             actions.push("synthetic-read");
@@ -91,7 +93,7 @@ describe("private release smoke", () => {
                 : {
                     git_revision: revision,
                     expires_at_ms: Date.now() + 100_000,
-                    status: "pending",
+                    status: claimed ? "queued" : "pending",
                     id: values[0],
                   }
             );
@@ -154,16 +156,28 @@ describe("private release smoke", () => {
     );
     expect(result.status).toBe(202);
     expect(actions).toEqual([
+      "synthetic-insert",
+      "synthetic-read",
+      "synthetic-claim",
       "schema",
       "schema",
       "marker-write",
       "marker-read",
       "_release-smoke-v1",
-      "synthetic-insert",
-      "synthetic-read",
       "queue",
     ]);
     expect(offered).toEqual({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision: revision });
+    const replay = await handleSmoke(
+      new Request("https://core.internal/internal/release-smoke", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-fidy-smoke-proof": proof },
+        body,
+      }),
+      environment
+    );
+    expect(replay.status).toBe(202);
+    expect(actions.filter((action) => action === "queue")).toHaveLength(1);
+    expect(actions.filter((action) => action === "marker-write")).toHaveLength(1);
     const candidateWork = offered;
     const stableConsumer = { ...environment, RELEASE_GIT_SHA: "0".repeat(40) };
     await receiveSmoke(

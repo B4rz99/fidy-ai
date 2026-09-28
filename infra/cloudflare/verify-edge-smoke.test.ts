@@ -30,6 +30,7 @@ describe("production edge smoke", () => {
           headers: Readonly<Record<string, string>>;
         }> = [];
         const statuses = new Map([
+          ["/health", 200],
           ["/categories", 401],
           ["/providers/kapso/callback", 401],
           ["/providers/wompi/billing-events", 400],
@@ -40,6 +41,7 @@ describe("production edge smoke", () => {
           return Effect.succeed(respond(statuses.get(input.path) ?? 404));
         });
         expect(observed).toEqual([
+          { path: "/health", method: "GET", headers: {} },
           { path: "/categories", method: "GET", headers: {} },
           {
             path: "/providers/kapso/callback",
@@ -61,20 +63,65 @@ describe("production edge smoke", () => {
           override: 'public="dc8dcd28-271b-4367-9840-6c244f84cb40"',
           publicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
         };
+        const healthHasNoProof: Array<boolean> = [];
         const result = yield* Effect.exit(
-          verifyEdgeSmoke(
-            () =>
-              Effect.succeed(
-                respond(401, {
-                  ...safeHeaders,
-                  "x-fidy-smoke-worker-version": "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
-                })
-              ),
-            candidate
-          )
+          verifyEdgeSmoke(({ path, headers }) => {
+            if (path === "/health") {
+              healthHasNoProof.push(headers["x-fidy-smoke-proof"] === undefined);
+            }
+            return Effect.succeed(
+              respond(path === "/health" ? 200 : 401, {
+                ...safeHeaders,
+                "x-fidy-smoke-worker-version": "db7cd8d3-4425-4fe7-8c81-01bf963b6067",
+              })
+            );
+          }, candidate)
         );
+        expect(healthHasNoProof).toEqual([true]);
         expect(result._tag).toBe("Failure");
       })
+  );
+
+  it.effect("pins candidate health independently after a credential-free health check", () =>
+    Effect.gen(function* () {
+      const candidate = {
+        proof: "a".repeat(64),
+        override: 'public="dc8dcd28-271b-4367-9840-6c244f84cb40"',
+        publicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+      };
+      const healthHeaders: Array<boolean> = [];
+      const statuses = new Map([
+        ["/health", 200],
+        ["/categories", 401],
+        ["/providers/kapso/callback", 401],
+        ["/providers/wompi/billing-events", 400],
+        ["/web/hosted-turns", 403],
+      ]);
+      const result = yield* Effect.exit(
+        verifyEdgeSmoke(({ path, headers }) => {
+          if (path === "/health") {
+            healthHeaders.push(headers["x-fidy-smoke-proof"] === undefined);
+          }
+          const version =
+            path === "/health" ? "db7cd8d3-4425-4fe7-8c81-01bf963b6067" : candidate.publicVersionId;
+          return Effect.succeed(
+            respond(statuses.get(path) ?? 404, {
+              ...safeHeaders,
+              "x-fidy-smoke-worker-version": version,
+            })
+          );
+        }, candidate)
+      );
+      expect(healthHeaders).toEqual([true, false]);
+      expect(result._tag).toBe("Failure");
+    })
+  );
+
+  it.effect("rejects a broken unauthenticated health route", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(verifyEdgeSmoke(() => Effect.succeed(respond(503))));
+      expect(result._tag).toBe("Failure");
+    })
   );
 
   it.effect(

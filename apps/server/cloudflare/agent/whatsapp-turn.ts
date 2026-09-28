@@ -1,5 +1,10 @@
 import { type Cause, Effect, Option, Schema } from "effect";
-import { TranscriptText, UserId } from "@fidy/server/agent-runtime";
+import {
+  HostedAgentSessionId,
+  TranscriptText,
+  type TranscriptTurnId,
+  UserId,
+} from "@fidy/server/agent-runtime";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
@@ -118,6 +123,44 @@ export const classifyWhatsAppAdmission = ({
         text: proof.text,
       })
     : Effect.succeed("expired");
+
+const PendingWork = Schema.Struct({
+  started_at_ms: Schema.Int,
+  hosted_session_id: HostedAgentSessionId,
+  portfolio_id: WhatsAppBusinessPortfolioId,
+  bsuid: WhatsAppBusinessScopedUserId,
+  business_phone_number_id: WhatsAppBusinessPhoneNumberId,
+  association_current: Schema.Literals([0, 1]),
+  text: TranscriptText,
+});
+/** A continuation reads only its own pending Turn and exact User Transcript, never Queue text. */
+export const readWhatsAppPendingWork = ({
+  db,
+  userId,
+  turnId,
+}: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>): Effect.Effect<
+  Option.Option<typeof PendingWork.Type>,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT
+      t.started_at_ms, t.hosted_session_id, i.portfolio_id, i.bsuid,
+      i.business_phone_number_id, e.text,
+      EXISTS (SELECT 1 FROM whatsapp_identities AS w
+        WHERE w.user_id = t.user_id AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid)
+        AS association_current
+      FROM hosted_turns AS t JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id
+      JOIN hosted_whatsapp_outbox AS o ON o.turn_id = t.id AND o.user_id = t.user_id
+      JOIN transcript_entries AS e ON e.turn_id = t.id AND e.user_id = t.user_id AND e.kind = 'user'
+      WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery WHERE turn_id = t.id)`)
+        .bind(turnId, userId)
+        .first()
+    );
+    return Schema.decodeUnknownOption(PendingWork)(raw);
+  });
 
 /** Pre-coordination lookup, not authorization: the coordinator must recheck the association. */
 export const findWhatsAppUser = ({

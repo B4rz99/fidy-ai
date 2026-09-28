@@ -50,7 +50,9 @@ import {
   browserHostedDelivery,
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppTurnWithAdmission,
+  resumeWhatsAppTurn,
 } from "./hosted-turn";
+import { type WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./whatsapp-work";
 import type { HostedDelivery } from "./hosted-turn";
 
 const completeHostedTurn = (
@@ -800,6 +802,153 @@ it("delivers a no-tool Workers AI reply and retains exact User and assistant evi
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
         { status: "completed", kind: "user", text: "Hola" },
         { status: "completed", kind: "assistant", text: "Respuesta exacta" },
+      ]);
+    })
+  ));
+
+it("reoffers identity-only WhatsApp work and resumes a committed Turn without a second send", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO whatsapp_identities
+      (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)`)
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+          .run()
+      );
+      const subject = yield* Schema.decodeEffect(WhatsAppHostedSubject)({
+        _tag: "WhatsAppHosted",
+        userId: users[0],
+        portfolioId: "portfolio-1",
+        bsuid: "CO.13491208655302741918",
+      });
+      const inbound = yield* Schema.decodeEffect(WhatsAppInboundEvidence)({
+        messageId: "wamid.queued",
+        businessPhoneNumberId: "123456789",
+        occurredAtMs: now(),
+        receivedAtMs: now(),
+      });
+      const snapshot = yield* readHostedSnapshot({ db, subject, now: now() });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing consent");
+      const turnId = TranscriptTurnId.make(newId());
+      const admitted = yield* admitHostedTurn({
+        db,
+        subject,
+        selection: selectHostedSession({
+          snapshot: snapshot.value,
+          userId: subject.userId,
+          now: now(),
+        }),
+        text: TranscriptText.make("Solo en Transcript"),
+        now: now(),
+        id: turnId,
+        inbound: Option.some(inbound),
+      });
+      expect(Option.isSome(admitted)).toBe(true);
+      const offered: Array<WhatsAppWork> = [];
+      const queue = {
+        send: (work: WhatsAppWork): Promise<void> => {
+          offered.push(work);
+          return Promise.resolve();
+        },
+      };
+      const dispatch = (): ReturnType<typeof dispatchWhatsAppWork> =>
+        dispatchWhatsAppWork({ db, queue, userId: Option.some(subject.userId) });
+      yield* dispatch();
+      yield* dispatch();
+      expect(offered).toEqual([{ _tag: "HostedWhatsAppWork", userId: users[0], turnId }]);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`UPDATE hosted_whatsapp_outbox
+      SET offered_at_ms = ? WHERE turn_id = ?`)
+          .bind(now() - 61_000, turnId)
+          .run()
+      );
+      yield* dispatch();
+      expect(offered).toHaveLength(2);
+      const model = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("Respuesta")))
+      );
+      const sends: Array<string> = [];
+      const work = offered[0];
+      if (work === undefined) return yield* Effect.die("missing queue work");
+      const retry = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [{ body: work, ack: vi.fn(), retry }],
+          coordinator: {
+            getByName: (): Readonly<{ fetch: () => Promise<Response> }> => ({
+              fetch: () => Promise.resolve(new Response(null, { status: 503 })),
+            }),
+          },
+        })
+      );
+      expect(retry).toHaveBeenCalledOnce();
+      const invalidAck = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [{ body: { text: "untrusted" }, ack: invalidAck, retry: vi.fn() }],
+          coordinator: {
+            getByName: (): Readonly<{ fetch: () => Promise<Response> }> => ({
+              fetch: () => Promise.reject(new Error("invalid work ran")),
+            }),
+          },
+        })
+      );
+      expect(invalidAck).toHaveBeenCalledOnce();
+      const coordinator = {
+        getByName: (
+          name: string
+        ): Readonly<{ fetch: (request: Request) => Promise<Response> }> => ({
+          fetch: (_request: Request): Promise<Response> => {
+            expect(name).toBe(users[0]);
+            return resumeWhatsAppTurn({
+              db,
+              userId: work.userId,
+              turnId: work.turnId,
+              inference: model,
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+              deliver: (): ReturnType<Parameters<typeof resumeWhatsAppTurn>[0]["deliver"]> => ({
+                _tag: "WhatsApp",
+                send: ({
+                  text,
+                }): Promise<{
+                  kind: "accepted";
+                  messageId: WhatsAppProviderMessageId;
+                }> => {
+                  sends.push(text);
+                  return Promise.resolve({
+                    kind: "accepted" as const,
+                    messageId: WhatsAppProviderMessageId.make("wamid.queued.answer"),
+                  });
+                },
+              }),
+            });
+          },
+        }),
+      };
+      const ack = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [{ body: work, ack, retry: vi.fn() }],
+          coordinator,
+        })
+      );
+      expect(ack).toHaveBeenCalledOnce();
+      expect(sends).toEqual(["Respuesta"]);
+      const duplicateAck = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [{ body: work, ack: duplicateAck, retry: vi.fn() }],
+          coordinator,
+        })
+      );
+      expect(duplicateAck).toHaveBeenCalledOnce();
+      expect(sends).toHaveLength(1);
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "pending", kind: "user", text: "Solo en Transcript" },
       ]);
     })
   ));

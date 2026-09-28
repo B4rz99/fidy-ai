@@ -154,6 +154,7 @@ import {
 import { UserId } from "@fidy/server/agent-runtime";
 import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
 import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
+import { WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./agent/whatsapp-work";
 import type { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
@@ -202,6 +203,7 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: Queue;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
+      HOSTED_WHATSAPP_QUEUE: Queue;
     }>
   > &
   Partial<
@@ -221,7 +223,12 @@ type CoreWorker = Readonly<{
   queue: (batch: MessageBatch<unknown>, environment: CoreEnvironment) => Promise<void>;
 }>;
 
-type PublicationKind = "onboarding" | "browserPairing" | "emailReplacement" | "billing";
+type PublicationKind =
+  | "onboarding"
+  | "browserPairing"
+  | "emailReplacement"
+  | "billing"
+  | "whatsapp";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -229,6 +236,14 @@ const publicationActivities = (
   identity: Option.Option<string>
 ): Record<PublicationKind, () => Effect.Effect<void, void>> => {
   const publishers: Record<PublicationKind, () => Effect.Effect<void, void>> = {
+    whatsapp: () =>
+      environment.HOSTED_WHATSAPP_QUEUE === undefined
+        ? Effect.void
+        : dispatchWhatsAppWork({
+            db: environment.DB,
+            queue: environment.HOSTED_WHATSAPP_QUEUE,
+            userId: Option.map(identity, (id) => UserId.make(id)),
+          }).pipe(Effect.mapError(() => undefined)),
     onboarding: () =>
       environment.ONBOARDING_EMAIL_QUEUE === undefined
         ? Effect.void
@@ -301,6 +316,7 @@ const jsonHeaders = {
 } as const;
 
 const HTTP_OK = 200;
+const HTTP_ACCEPTED = 202;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
@@ -350,7 +366,11 @@ const callbackEffect = (
     ? receiveConsentWebhook({
         ...environment,
         onAccepted: (id) => publish("onboarding", id),
-        onHostedText: (admission) => forwardHostedWhatsApp(environment, "whatsapp", admission),
+        onHostedText: (admission) =>
+          forwardHostedWhatsApp(environment, "whatsapp", admission).then((response) => {
+            if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);
+            return response;
+          }),
         onHostedStatus: (admission) =>
           forwardHostedWhatsApp(environment, "whatsapp/status", admission),
       })(request)
@@ -1801,6 +1821,12 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
 };
 
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
+  if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
+    return receiveWhatsAppWork({
+      messages: batch.messages,
+      coordinator: environment.USER_TRANSACTION_COORDINATOR,
+    });
+  }
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
     if (environment.EMAIL_BUCKET === undefined) {
       return Promise.reject(new Error("Email evidence unavailable"));
@@ -1941,6 +1967,7 @@ const scheduledActivities = (
             BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
           }).pipe(Effect.mapError(() => undefined)),
     "consent.sweep": sweepExpiredConsent(environment.DB)(),
+    "hostedTurn.whatsapp.dispatch": publishers.whatsapp(),
     "hostedTurn.sweep": sweepHostedTurns({ db: environment.DB, now: current }).pipe(
       Effect.mapError(() => undefined)
     ),

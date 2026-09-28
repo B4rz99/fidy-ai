@@ -7,6 +7,7 @@ import {
   classifyWhatsAppAdmission,
 } from "../agent/whatsapp-turn";
 import { WhatsAppHostedSubject } from "../agent/hosted-authority";
+import { WhatsAppWork } from "../agent/whatsapp-work";
 import { reconcileWhatsAppStatus } from "../agent/whatsapp-delivery";
 import type {
   HostedDeliveryCorrelationToken,
@@ -29,6 +30,7 @@ import {
   completeHostedTurnWithAdmission,
   completeWhatsAppTurnWithAdmission,
   readHostedProgress,
+  resumeWhatsAppTurn,
 } from "../agent/hosted-turn";
 import {
   CanonicalCapability,
@@ -490,7 +492,7 @@ const sendWhatsAppAttempt = ({
   correlationToken,
 }: Readonly<{
   sender: ReturnType<typeof makeHostedSender>;
-  admission: WhatsAppTurnAdmission;
+  admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId">;
   text: TranscriptText;
   correlationToken: HostedDeliveryCorrelationToken;
 }>): Promise<
@@ -656,14 +658,14 @@ export class UserTransactionCoordinator {
     // A progress read has live session authority but does not start canonical work.
     if (path === "/hosted-turn/progress") return this.runHostedProgress(request, userId);
     const deadline =
-      path === "/hosted-turn" || path === "/hosted-turn/whatsapp"
+      path === "/hosted-turn" ||
+      path === "/hosted-turn/whatsapp" ||
+      path === "/hosted-turn/whatsapp/work"
         ? Option.some(hostedDeadline(request.signal))
         : Option.none<ReturnType<typeof hostedDeadline>>();
     const settledResponse = this.pending.then(() => {
       if (Option.isSome(deadline)) {
-        return path === "/hosted-turn/whatsapp"
-          ? this.runWhatsAppTurn(request, userId, deadline.value)
-          : this.runHostedTurn(request, userId, deadline.value);
+        return this.runHostedRequest(request, userId, { path, deadline: deadline.value });
       }
       if (path === "/hosted-turn/whatsapp/status") return this.runWhatsAppStatus(request, userId);
       if (path === "/hosted-turn/receipt") return this.runHostedReceipt(request, userId);
@@ -849,6 +851,64 @@ export class UserTransactionCoordinator {
       }).pipe(
         Effect.withSpan("agent.whatsappTurn.status"),
         Effect.orElseSucceed(transactionUnavailable)
+      )
+    );
+  }
+
+  private runHostedRequest(
+    request: Request,
+    userId: string,
+    { path, deadline }: Readonly<{ path: string; deadline: ReturnType<typeof hostedDeadline> }>
+  ): Promise<Response> {
+    if (path === "/hosted-turn/whatsapp/work") {
+      return this.runWhatsAppWork(request, userId, deadline);
+    }
+    if (path === "/hosted-turn/whatsapp") {
+      return this.runWhatsAppTurn(request, userId, deadline);
+    }
+    return this.runHostedTurn(request, userId, deadline);
+  }
+
+  private runWhatsAppWork(
+    request: Request,
+    userId: string,
+    deadline: ReturnType<typeof hostedDeadline>
+  ): Promise<Response> {
+    const { env, state } = this;
+    return Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
+            Effect.orElseSucceed(() => undefined)
+          );
+          const work = Schema.decodeUnknownOption(WhatsAppWork)(candidate);
+          if (Option.isNone(work) || work.value.userId !== userId) return transactionUnavailable();
+          if (env.KAPSO_API_KEY === undefined || env.KAPSO_API_KEY.length === 0) {
+            return transactionUnavailable();
+          }
+          const inference = yield* Effect.exit(makeCloudflareHostedInference(env));
+          if (Exit.isFailure(inference)) return transactionUnavailable();
+          const clients = yield* Layer.build(FetchHttpClient.layer);
+          const sender = makeHostedSender({
+            apiKey: Redacted.make(env.KAPSO_API_KEY),
+            httpClient: Context.get(clients, HttpClient.HttpClient),
+          });
+          return yield* Effect.tryPromise(() =>
+            resumeWhatsAppTurn({
+              db: env.DB,
+              userId: UserId.make(userId),
+              turnId: work.value.turnId,
+              inference: inference.value,
+              signal: deadline.signal,
+              scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+              deliver: (admission) => ({
+                _tag: "WhatsApp",
+                send: ({ text, correlationToken }) =>
+                  sendWhatsAppAttempt({ sender, admission, text, correlationToken }),
+              }),
+            })
+          );
+        }).pipe(Effect.catchCause(() => Effect.succeed(transactionUnavailable())))
       )
     );
   }

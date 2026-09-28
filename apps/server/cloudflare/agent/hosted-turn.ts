@@ -51,6 +51,7 @@ import {
   isWhatsAppHosted,
 } from "./hosted-authority";
 import { recordWhatsAppSend, stageWhatsAppDelivery } from "./whatsapp-delivery";
+import { readWhatsAppPendingWork } from "./whatsapp-turn";
 import type {
   HostedDeliveryCorrelationToken,
   WhatsAppProviderMessageId,
@@ -217,6 +218,112 @@ export const completeWhatsAppTurnWithAdmission = ({
     ...input,
     onAdmitted: Option.some(onAdmitted),
   });
+
+/** Continue only an admitted, still-pending User Turn; Queue contains no User content. */
+export const resumeWhatsAppTurn = ({
+  db,
+  userId,
+  turnId,
+  inference,
+  deliver,
+  signal,
+  scheduleRecovery,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  inference: HostedInferenceService;
+  deliver: (
+    recipient: Readonly<{
+      bsuid: WhatsAppHostedSubject["bsuid"];
+      businessPhoneNumberId: WhatsAppInboundEvidence["businessPhoneNumberId"];
+    }>
+  ) => WhatsAppHostedDelivery;
+  signal: AbortSignal;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const work = yield* readWhatsAppPendingWork({ db, userId, turnId });
+      if (Option.isNone(work)) return new Response(null, { status: 200 });
+      const {
+        started_at_ms,
+        hosted_session_id,
+        portfolio_id,
+        bsuid,
+        business_phone_number_id,
+        text,
+      } = work.value;
+      const subject: WhatsAppHostedSubject = {
+        _tag: "WhatsAppHosted",
+        userId,
+        portfolioId: portfolio_id,
+        bsuid,
+      };
+      const now = transactionNow();
+      const snapshot = yield* readHostedSnapshot({ db, subject, now });
+      if (
+        Option.isNone(snapshot) ||
+        snapshot.value.revoked ||
+        work.value.association_current !== 1
+      ) {
+        yield* finishHostedTurn({
+          db,
+          userId,
+          turnId,
+          startedAtMs: started_at_ms,
+          result: { _tag: "Interrupted" },
+          subject,
+          now,
+        });
+        return interrupted();
+      }
+      const prepared = yield* Effect.tryPromise(() =>
+        prepareHostedWork({
+          db,
+          subject,
+          selection: { id: hosted_session_id },
+          snapshot: snapshot.value,
+          userId,
+          activeTurnId: turnId,
+          startedAtMs: started_at_ms,
+          text,
+          inference,
+          signal,
+          executeMutation: Option.none(),
+        })
+      );
+      if (Option.isNone(prepared)) {
+        if (!signal.aborted) {
+          yield* finishHostedTurn({
+            db,
+            userId,
+            turnId,
+            startedAtMs: started_at_ms,
+            result: { _tag: "Failed", reason: "HostedInferenceFailed" },
+            subject,
+            now: transactionNow(),
+          });
+        }
+        return unavailable();
+      }
+      return yield* Effect.tryPromise(() =>
+        executeAdmittedTurn({
+          db,
+          userId,
+          turnId,
+          subject,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          startedAtMs: started_at_ms,
+          prepared: prepared.value,
+          deliver: deliver({ bsuid, businessPhoneNumberId: business_phone_number_id }),
+          signal,
+          scheduleRecovery,
+        })
+      );
+    })
+  );
 
 /**
  * Own one hosted Turn under the per-User Durable Object's serialized request. D1 owns
@@ -402,7 +509,7 @@ const readAdmissibleSnapshot = ({
 type WorkPreflight = Readonly<{
   db: D1Database;
   subject: HostedSubject;
-  selection: ReturnType<typeof selectHostedSession>;
+  selection: Pick<ReturnType<typeof selectHostedSession>, "id">;
   snapshot: HostedTurnSnapshot;
   userId: UserId;
   activeTurnId: TranscriptTurnId;
@@ -454,7 +561,7 @@ const prepareHostedWork = ({
         startedAt: DateTime.makeUnsafe(startedAtMs),
         memories: continuity.memories,
         compactedConversation: continuity.compactedConversation,
-        transcript: continuity.transcript,
+        transcript: continuity.transcript.filter(({ entry }) => entry.turnId !== activeTurnId),
         activeRequest: text,
       });
       const prepared = yield* Effect.tryPromise(() =>

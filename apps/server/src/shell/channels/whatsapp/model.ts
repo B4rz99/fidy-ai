@@ -67,6 +67,12 @@ export type WhatsAppInboundContent =
       readonly mediaId: WhatsAppMediaId;
     }>;
 
+/** Opaque Turn-delivery correlation; the provider cannot supply User authority with this value. */
+export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("HostedDeliveryCorrelationToken")
+);
+export type HostedDeliveryCorrelationToken = typeof HostedDeliveryCorrelationToken.Type;
+
 /** Provider-independent input for one authenticated WhatsApp event. */
 export type WhatsAppInboundEvent = Readonly<{
   readonly messageEvidence: WhatsAppMessageEvidence;

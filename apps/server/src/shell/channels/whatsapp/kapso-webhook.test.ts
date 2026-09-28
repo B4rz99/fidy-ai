@@ -6,6 +6,7 @@ import { expectNotInspected } from "~/shell/testing/credential-failure";
 import {
   InvalidKapsoSignature,
   decodeKapsoDisclosureLifecycleWebhook,
+  decodeKapsoHostedLifecycleWebhook,
   maxKapsoWebhookBytes,
 } from "./kapso-webhook";
 
@@ -61,6 +62,53 @@ const decode = (
     receivedAt,
   });
 };
+
+it.effect(
+  "projects an authenticated hosted delivered status without treating a sent status as delivery",
+  () =>
+    Effect.gen(function* () {
+      const body = encodedBody([status("delivered", "1775217960")]);
+      const evidence = yield* decodeKapsoHostedLifecycleWebhook({
+        rawBody: body,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+        eventName: "whatsapp.message.delivered",
+        receivedAt,
+      });
+      expect(evidence.outcome).toBe("delivered");
+      expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
+      expect(evidence.correlationToken).toBe(correlationToken);
+      const forged = yield* Effect.exit(
+        decodeKapsoHostedLifecycleWebhook({
+          rawBody: body,
+          secret: Redacted.make(secret),
+          signature: "00".repeat(32),
+          eventName: "whatsapp.message.delivered",
+          receivedAt,
+        })
+      );
+      expect(Exit.isFailure(forged)).toBe(true);
+      const sent = encodedBody([status("sent", "1775217960")]);
+      const sentEvidence = yield* decodeKapsoHostedLifecycleWebhook({
+        rawBody: sent,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
+        eventName: "whatsapp.message.sent",
+        receivedAt,
+      });
+      expect(sentEvidence.outcome).toBe("sent");
+      const mismatchedEvent = yield* Effect.exit(
+        decodeKapsoHostedLifecycleWebhook({
+          rawBody: sent,
+          secret: Redacted.make(secret),
+          signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
+          eventName: "whatsapp.message.delivered",
+          receivedAt,
+        })
+      );
+      expect(Exit.isFailure(mismatchedEvent)).toBe(true);
+    })
+);
 
 it.effect("selects the latest chronological lifecycle status rather than array position", () =>
   Effect.gen(function* () {

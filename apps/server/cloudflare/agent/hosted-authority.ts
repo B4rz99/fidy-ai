@@ -38,7 +38,7 @@ type HostedSqlAuthority =
       bindings: ReadonlyArray<string | number | Uint8Array>;
     }>;
 
-/** Verify an established channel credential even when Consent was revoked, so refusal can be classified. */
+/** Build the established channel credential check, including after Consent revocation, so callers can classify refusal. */
 export const hostedIdentity = ({
   subject,
   current,

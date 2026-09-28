@@ -897,6 +897,14 @@ it("reoffers identity-only WhatsApp work and resumes a committed Turn without a 
         })
       );
       expect(invalidAck).toHaveBeenCalledOnce();
+      // Revocation closes the next admission, not this already-committed Turn.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO consent_user_revocations
+        (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .bind(newId(), users[0], grants[0], sessions[0], now())
+          .run()
+      );
       const coordinator = {
         getByName: (
           name: string
@@ -1079,6 +1087,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         subject: caller,
         sessionId: storedSession.hosted_session_id,
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       if (Option.isNone(continuity.terminalThroughSequence)) {
         return yield* Effect.die("no compactable terminal prefix");
@@ -2521,6 +2530,7 @@ it("replaces only a terminal prefix and preserves exact Failed evidence when a s
         subject: credential,
         sessionId: yield* Schema.decodeEffect(HostedAgentSessionId)(session.id),
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       expect(initial.transcript.map(({ entry }) => entry._tag)).toEqual([
         "UserTranscriptEntry",
@@ -2561,6 +2571,7 @@ it("replaces only a terminal prefix and preserves exact Failed evidence when a s
         subject: credential,
         sessionId: input.sessionId,
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       expect(after.transcript).toHaveLength(0);
       expect(Option.map(after.compactedConversation, ({ text }) => text)).toEqual(
@@ -2688,6 +2699,7 @@ it("rejects malformed Compaction output without removing exact evidence or prior
         subject: credential,
         sessionId,
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       const firstCursor = firstEvidence.terminalThroughSequence;
       if (Option.isNone(firstCursor)) throw Error("missing prefix");
@@ -2739,7 +2751,13 @@ it("rejects malformed Compaction output without removing exact evidence or prior
       expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, third))).toBe(
         "Third answer"
       );
-      const after = yield* readHostedContinuity({ db, subject: credential, sessionId, now: now() });
+      const after = yield* readHostedContinuity({
+        db,
+        subject: credential,
+        sessionId,
+        now: now(),
+        admittedWhatsAppTurn: Option.none(),
+      });
       expect(Option.map(after.compactedConversation, ({ text }) => text)).toEqual(
         Option.some("Prior continuity")
       );
@@ -2991,6 +3009,7 @@ it("expires old CompactedConversation content without exposing it in a later Wor
         subject: credential,
         sessionId,
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       const cursor = initial.terminalThroughSequence;
       if (Option.isNone(cursor)) throw Error("missing prefix");
@@ -3017,6 +3036,7 @@ it("expires old CompactedConversation content without exposing it in a later Wor
         subject: credential,
         sessionId,
         now: now(),
+        admittedWhatsAppTurn: Option.none(),
       });
       expect(Option.isNone(before.compactedConversation)).toBe(true);
       yield* sweepHostedTurns({ db, now: now() });

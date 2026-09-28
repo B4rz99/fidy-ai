@@ -262,11 +262,7 @@ export const resumeWhatsAppTurn = ({
       };
       const now = transactionNow();
       const snapshot = yield* readHostedSnapshot({ db, subject, now });
-      if (
-        Option.isNone(snapshot) ||
-        snapshot.value.revoked ||
-        work.value.association_current !== 1
-      ) {
+      if (Option.isNone(snapshot) || work.value.association_current !== 1) {
         yield* finishHostedTurn({
           db,
           userId,
@@ -291,6 +287,7 @@ export const resumeWhatsAppTurn = ({
           inference,
           signal,
           executeMutation: Option.none(),
+          admittedWhatsAppTurn: Option.some(turnId),
         })
       );
       if (Option.isNone(prepared)) {
@@ -423,6 +420,7 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
           inference,
           signal,
           executeMutation,
+          admittedWhatsAppTurn: Option.none(),
         })
       );
       if (Option.isNone(prepared) || isAborted()) return unavailable();
@@ -518,6 +516,7 @@ type WorkPreflight = Readonly<{
   inference: HostedInferenceService;
   signal: AbortSignal;
   executeMutation: HostedTurnInput["executeMutation"];
+  admittedWhatsAppTurn: Option.Option<TranscriptTurnId>;
 }>;
 
 /** Check the complete semantic request before any Pending or User evidence can be written. */
@@ -533,6 +532,7 @@ const prepareHostedWork = ({
   inference,
   signal,
   executeMutation,
+  admittedWhatsAppTurn,
 }: WorkPreflight): Promise<Option.Option<PreparedHostedText>> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -541,18 +541,21 @@ const prepareHostedWork = ({
         subject,
         sessionId: selection.id,
         now: startedAtMs,
+        admittedWhatsAppTurn,
       });
-      const continuity = yield* Effect.tryPromise(() =>
-        compactHostedContinuity({
-          db,
-          subject,
-          sessionId: selection.id,
-          now: startedAtMs,
-          inference,
-          initial,
-          signal,
-        })
-      );
+      const continuity = snapshot.revoked
+        ? initial
+        : yield* Effect.tryPromise(() =>
+            compactHostedContinuity({
+              db,
+              subject,
+              sessionId: selection.id,
+              now: startedAtMs,
+              inference,
+              initial,
+              signal,
+            })
+          );
       const context = assembleWorkingContext({
         sessionId: selection.id,
         userId,
@@ -688,7 +691,15 @@ const compactHostedContinuity = ({
         text: generated.value.compactedConversation,
         signal,
       });
-      return saved ? yield* readHostedContinuity({ db, subject, sessionId, now }) : initial;
+      return saved
+        ? yield* readHostedContinuity({
+            db,
+            subject,
+            sessionId,
+            now,
+            admittedWhatsAppTurn: Option.none(),
+          })
+        : initial;
     })
   );
 

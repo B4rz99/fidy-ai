@@ -376,17 +376,19 @@ export const selectHostedSession = ({
   return { id: HostedAgentSessionId.make(newId()), create: true, basis: decision.consentBasis };
 };
 
-/** Read current Memories, CompactedConversation, and exact retained entries for one User and session. */
+/** Read retained continuity; an admitted WhatsApp Turn keeps its admission-time Consent basis through revocation, while new work requires current Consent. */
 export const readHostedContinuity = ({
   db,
   subject,
   sessionId,
   now,
+  admittedWhatsAppTurn,
 }: Readonly<{
   db: D1Database;
   subject: HostedSubject;
   sessionId: HostedAgentSessionId;
   now: number;
+  admittedWhatsAppTurn: Option.Option<TranscriptTurnId>;
 }>): Effect.Effect<
   Readonly<{
     memories: ReadonlyArray<Readonly<{ text: string }>>;
@@ -405,7 +407,11 @@ export const readHostedContinuity = ({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const authority = hostedAuthority({ subject, current: now });
+    // Explicit revocation forbids the next admission, not continuity of an admitted Turn.
+    const authority =
+      Option.isSome(admittedWhatsAppTurn) && isWhatsAppHosted(subject)
+        ? hostedIdentity({ subject, current: now })
+        : hostedAuthority({ subject, current: now });
     const query = memoryRowsQuery({ userId: subject.userId, authority });
     const memoryRows = yield* Effect.tryPromise(() =>
       db

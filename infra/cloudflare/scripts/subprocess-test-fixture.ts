@@ -29,6 +29,7 @@ export const installFakeMigrationHistoryBun = async (fakeBin: string): Promise<v
       "#!/usr/bin/env bash",
       'printf "bun %s\\n" "$*" >> "$MIGRATION_COMMANDS"',
       'if [[ "$*" == *"alchemy.ts state read"* ]]; then',
+      '  if [[ -n "${MIGRATION_STATE_LOGS:-}" ]]; then cat "$MIGRATION_STATE_LOGS"; fi',
       '  cat "$MIGRATION_STATE"',
       'elif [[ "$*" == *"run wrangler d1 execute"* ]]; then',
       '  cat "$MIGRATION_ROWS"',

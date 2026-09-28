@@ -31,6 +31,22 @@ const DatabaseResourceState = Schema.Struct({
   }),
 });
 
+const decodeProductionDatabaseName = (output: string): string => {
+  const objectStarts = [...output.matchAll(/^\{/gmu)].map((match) => match.index);
+
+  for (const index of objectStarts.reverse()) {
+    try {
+      return Schema.decodeUnknownSync(DatabaseResourceState)(JSON.parse(output.slice(index).trim()))
+        .attr.databaseName;
+    } catch {
+      // Alchemy's non-interactive credential refresh can write progress before the JSON state.
+      // Only a complete JSON object matching the expected resource schema is accepted.
+    }
+  }
+
+  throw new Error("Alchemy Production D1 state output is invalid");
+};
+
 const runMigrationHistoryCommand = (command: readonly [string, ...Array<string>]): string =>
   runMigrationCommand(command, { cwd: infrastructureDirectory });
 
@@ -56,8 +72,10 @@ export const readProductionDatabaseName = (): string => {
     "--profile",
     profile,
     "--no-input",
+    "--log-level",
+    "error",
   ]);
-  return Schema.decodeUnknownSync(DatabaseResourceState)(JSON.parse(output)).attr.databaseName;
+  return decodeProductionDatabaseName(output);
 };
 
 export const queryProductionMigrationLedger = (

@@ -49,7 +49,7 @@ const harness = (): Harness => {
     trunk: async () => trunk,
     current: async (name) => {
       const deployment = deployments.get(name);
-      if (!deployment) {
+      if (deployment === undefined) {
         throw Error("missing deployment");
       }
       return structuredClone(deployment);

@@ -202,13 +202,15 @@ if (import.meta.main) {
     )
   );
   const passed = Exit.isSuccess(result);
-  if (passed && process.env.SMOKE_ATTESTATION_FILE?.startsWith("/")) {
+  const smokeEnvironment = process.env;
+  const attestationFile = smokeEnvironment.SMOKE_ATTESTATION_FILE;
+  if (passed && attestationFile?.startsWith("/") === true) {
     await Bun.write(
-      process.env.SMOKE_ATTESTATION_FILE,
+      attestationFile,
       JSON.stringify({
-        revision: process.env.RELEASE_GIT_SHA,
-        publicVersionId: process.env.PUBLIC_VERSION_ID,
-        coreVersionId: process.env.CORE_VERSION_ID,
+        revision: smokeEnvironment.RELEASE_GIT_SHA,
+        publicVersionId: smokeEnvironment.PUBLIC_VERSION_ID,
+        coreVersionId: smokeEnvironment.CORE_VERSION_ID,
       })
     );
   }

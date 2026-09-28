@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Option, Schema } from "effect";
+import { Encoding, Option, Schema } from "effect";
 import {
   SmokeIdentity,
   SmokeRequest,
@@ -23,7 +23,7 @@ const VersionId = SmokeIdentity.fields.workerVersionId;
 const WorkerName = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u));
 const ApiDeployment = Schema.Struct({
   id: VersionId,
-  versions: Schema.Array(Schema.Struct({ version_id: VersionId, percentage: Schema.Number })),
+  versions: Schema.Array(Schema.Struct({ version_id: VersionId, percentage: Schema.Finite })),
 });
 const ListResponse = Schema.Struct({
   success: Schema.Literal(true),
@@ -50,6 +50,7 @@ const healthSchema = Schema.Struct({
 const smokeResultSchema = Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity });
 const timeoutMs = 10_000;
 const responseLimit = 100_000;
+const probeEntropyBytes = 16;
 const origin = "https://api.fidyapp.com";
 
 type Config = Readonly<{
@@ -60,6 +61,7 @@ type Config = Readonly<{
   githubToken: string;
   file: string;
   smokeProof: string;
+  smokeAttestationFile: string;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -73,6 +75,7 @@ const config = (): Config => {
       ),
       GITHUB_TOKEN: Schema.NonEmptyString,
       RELEASE_SNAPSHOT_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
+      SMOKE_ATTESTATION_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
     })
   )(environment);
@@ -87,6 +90,7 @@ const config = (): Config => {
     githubToken: decoded.value.GITHUB_TOKEN,
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
+    smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
   };
 };
 
@@ -99,7 +103,7 @@ const boundedJson = async (response: Response): Promise<unknown> => {
   if (Number(response.headers.get("content-length")) > responseLimit) {
     throw Error("Provider response exceeded limit");
   }
-  if (!response.body) {
+  if (response.body === null) {
     throw Error("Provider response body missing");
   }
   const reader = response.body.getReader();
@@ -217,9 +221,9 @@ const stableIdentity = async (input: {
       })
     )
   );
-  const request = Schema.decodeUnknownSync(SmokeRequest)({
+  const request = Schema.decodeSync(SmokeRequest)({
     protocolVersion: 1,
-    probeId: crypto.randomUUID().replaceAll("-", ""),
+    probeId: Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes))),
     expectedPublicVersionId: input.publicVersionId,
     expectedCoreVersionId: input.coreVersionId,
     expectedGitRevision: health.gitRevision,
@@ -293,7 +297,7 @@ const releasePort = (env: Config): ReleasePort => {
       )
     );
     const active = response.result.deployments[0];
-    if (!active) {
+    if (active === undefined) {
       throw Error(`No active deployment: ${name}`);
     }
     return asDeployment(active);
@@ -445,7 +449,7 @@ const reportTraffic = async (port: ReleasePort, env: Config): Promise<void> => {
 const promote = async (port: ReleasePort, env: Config): Promise<void> => {
   const raw: unknown = JSON.parse(await Bun.file(env.file).text());
   const staged = decodeStaged(raw);
-  const attestationPath = process.env.SMOKE_ATTESTATION_FILE ?? "";
+  const attestationPath = env.smokeAttestationFile;
   if (!attestationPath.startsWith("/")) {
     throw Error("Missing smoke attestation path");
   }

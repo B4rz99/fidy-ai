@@ -7,7 +7,7 @@ const Revision = Schema.String.check(Schema.isPattern(gitRevisionPattern));
 const WorkerName = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u));
 const Deployment = Schema.Struct({
   id: VersionId,
-  versions: Schema.Array(Schema.Struct({ id: VersionId, percentage: Schema.Number })),
+  versions: Schema.Array(Schema.Struct({ id: VersionId, percentage: Schema.Finite })),
 });
 export type Deployment = typeof Deployment.Type;
 const WorkerSnapshot = Schema.Struct({
@@ -130,8 +130,8 @@ export const stageRelease = async (
   candidate: { publicVersionId: string; coreVersionId: string }
 ): Promise<StagedRelease> => {
   const versions = {
-    publicVersionId: Schema.decodeUnknownSync(VersionId)(candidate.publicVersionId),
-    coreVersionId: Schema.decodeUnknownSync(VersionId)(candidate.coreVersionId),
+    publicVersionId: Schema.decodeSync(VersionId)(candidate.publicVersionId),
+    coreVersionId: Schema.decodeSync(VersionId)(candidate.coreVersionId),
   };
   if (
     versions.publicVersionId === snapshot.public.stableVersionId ||

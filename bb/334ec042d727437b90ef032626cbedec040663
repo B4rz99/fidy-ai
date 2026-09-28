@@ -1,0 +1,22 @@
+apps/server/cloudflare/migrations/0016_hosted_turn.sql
+  s_f8dbb486b6c236::t_618055a1ced132 43,49
+apps/server/cloudflare/migrations/0024_hosted_whatsapp.sql
+  s_f8dbb486b6c236::t_c1ecf93e93a5b8 88
+  s_f8dbb486b6c236::t_4186999d02bf97 90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb334ec042d727437b90ef032626cbedec040663",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+docs/operations/kapso-launch-evidence.json
+  s_c1486795a55def::t_aeea3448572f86 2-5,8
+docs/operations/kapso-launch-readiness.md
+  s_c1486795a55def::t_3881a978b38feb 3
+  s_c1486795a55def::t_92d8f50a0efd2e 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "030e03673afa59adbf31dac3e63ecabcf8987332",
+  "prompts": {},
+  "sessions": {
+    "s_c1486795a55def": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e82c-5a7a-70e6-b90d-820b4d678165",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

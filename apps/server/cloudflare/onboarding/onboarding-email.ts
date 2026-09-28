@@ -5,6 +5,12 @@ import {
   makeOnboardingEmailDelivery,
 } from "@fidy/server/onboarding-email-delivery";
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
@@ -209,11 +215,19 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return runOnboardingEmailWorkflow({
-      environment: this.env,
-      payload: event.payload,
-      activity: (name, options, activity) => step.do(name, options, activity),
-    });
+    return observeWorkerPromise(
+      () =>
+        runOnboardingEmailWorkflow({
+          environment: this.env,
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.onboardingEmail",
+      }
+    );
   }
 }
 
@@ -230,7 +244,14 @@ export const sendThroughResend = (
     Effect.scoped(
       Effect.gen(function* () {
         const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
-          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            observeProviderFetch(globalThis.fetch, {
+              provider: "resend",
+              environment: input.environment,
+              telemetry: cloudflareWorkerTelemetry,
+            })
+          )
         );
         return yield* makeOnboardingEmailDelivery({
           apiKey: Redacted.make(input.environment.RESEND_API_KEY),

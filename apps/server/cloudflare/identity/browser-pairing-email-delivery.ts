@@ -1,5 +1,10 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "../onboarding/onboarding-email";
@@ -261,11 +266,19 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return runBrowserPairingEmailWorkflow({
-      environment: this.env,
-      payload: event.payload,
-      activity: (name, options, activity) => step.do(name, options, activity),
-    });
+    return observeWorkerPromise(
+      () =>
+        runBrowserPairingEmailWorkflow({
+          environment: this.env,
+          payload: event.payload,
+          activity: (name, options, activity) => step.do(name, options, activity),
+        }),
+      {
+        environment: workerRelease(this.env),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.browserPairingEmail",
+      }
+    );
   }
 }
 

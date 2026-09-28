@@ -6,6 +6,7 @@ import {
   makeWorkersAiHostedInference,
 } from "@fidy/server/hosted-inference";
 import { type Cause, Effect, type Layer, Option } from "effect";
+import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
 import { newId } from "../pats/pat-shared";
 import {
   type ResourceAdmissionAttempt,
@@ -182,10 +183,14 @@ const constructInference = (
     model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
     run: Option.map(binding, (ai) => {
       const run: WorkersAiBindingRun = (model, request, options) =>
-        ai.run(model, request, {
-          returnRawResponse: options.returnRawResponse,
-          signal: options.signal,
-        });
+        observeModelRun(
+          () =>
+            ai.run(model, request, {
+              returnRawResponse: options.returnRawResponse,
+              signal: options.signal,
+            }),
+          { environment, telemetry: cloudflareWorkerTelemetry }
+        );
       return admission === undefined
         ? run
         : makeAdmittedWorkersAiRun({ ...admission, run, nowEpochMs: Date.now });

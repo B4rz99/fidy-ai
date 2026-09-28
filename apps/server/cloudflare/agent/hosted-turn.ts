@@ -158,7 +158,9 @@ type WhatsAppHostedDelivery = Readonly<{
     | Readonly<{ kind: "ambiguous" | "rejected" }>
   >;
 }>;
-type ChannelDelivery = HostedDelivery | WhatsAppHostedDelivery;
+type ChannelDelivery =
+  | Readonly<{ _tag: "Browser"; propose: HostedDelivery }>
+  | WhatsAppHostedDelivery;
 
 type HostedMutationExecutor = (
   operation: (typeof operationCatalog.operations)[number]["id"],
@@ -336,7 +338,6 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
     executeMutation,
     text,
     inference,
-    deliver,
     signal,
     scheduleRecovery,
     onAdmitted,
@@ -355,7 +356,7 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
       const activeTurnId = TranscriptTurnId.make(newId());
       if (
         !isWhatsAppHosted(subject) &&
-        typeof deliver === "function" &&
+        !("inbound" in input) &&
         isHostedConfirmationAttempt(text)
       ) {
         const challenge = yield* findHostedConfirmation({
@@ -402,7 +403,7 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
             challenge: challenge.value,
             executeMutation: executeMutation.value,
             signal,
-            deliver,
+            deliver: input.deliver,
             scheduleRecovery,
           })
         );
@@ -461,7 +462,7 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
           executeMutation,
           startedAtMs,
           prepared: prepared.value,
-          deliver,
+          deliver: "inbound" in input ? input.deliver : { _tag: "Browser", propose: input.deliver },
           signal,
           scheduleRecovery,
         })
@@ -1395,7 +1396,7 @@ const executeConfirmedHostedTurn = ({
                 ? "Operación confirmada."
                 : "No se pudo completar la operación."
             ),
-            deliver,
+            deliver: { _tag: "Browser", propose: deliver },
             finish,
             scheduleRecovery,
           })
@@ -1495,7 +1496,7 @@ const proposeDelivery = ({
   finish: (outcome: HostedTurnOutcome) => ReturnType<typeof finishHostedTurn>;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>): Promise<Response> =>
-  typeof deliver !== "function"
+  deliver._tag === "WhatsApp"
     ? proposeWhatsAppDelivery({ db, userId, turnId, answer, deliver, finish, scheduleRecovery })
     : Effect.runPromise(
         Effect.gen(function* () {
@@ -1505,7 +1506,7 @@ const proposeDelivery = ({
           );
           // The channel rejected the proposed reply. Nothing became visible.
           const delivered = yield* Effect.tryPromise(() =>
-            deliver({ text: answer, turnId, receipt })
+            deliver.propose({ text: answer, turnId, receipt })
           ).pipe(Effect.option);
           if (Option.isSome(delivered) && delivered.value.ok) return delivered.value;
           yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });

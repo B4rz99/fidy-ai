@@ -6,8 +6,19 @@ const WorkKind = Schema.Literals([
   "emailReplacement",
   "billing",
   "statement",
+  "forwardedEmail",
 ]);
 type WorkKind = typeof WorkKind.Type;
+const QueueKind = Schema.Literals([
+  "onboardingQueue",
+  "browserPairingQueue",
+  "emailReplacementQueue",
+  "billingQueue",
+  "statementQueue",
+  "forwardedEmailQueue",
+  "whatsappQueue",
+]);
+type QueueKind = typeof QueueKind.Type;
 const Pending = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   created: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -27,16 +38,18 @@ const Status = Schema.Struct({
   ]),
 });
 const WhatsAppAge = Schema.Struct({ created: Schema.Int });
+const Retained = Schema.Struct({ expires: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) });
 const Backlog = Schema.Struct({
   backlogCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   backlogBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 const sampleLimit = 8;
 const staleAfterMilliseconds = 120_000;
+const retentionWarningAgeMs = 3_600_000;
 const rejectedWindowMilliseconds = 86_400_000;
 
 /** Closed operational evidence. No identity, provider detail, proof, or financial value is exported. */
-type PendingSignal = Readonly<{
+export type PendingSignal = Readonly<{
   component: "async-health";
   operation: WorkKind;
   state: "healthy" | "attention";
@@ -55,7 +68,7 @@ export type OperationalSignal =
   | PendingSignal
   | Readonly<{
       component: "async-health";
-      operation: "deadLetters";
+      operation: "deadLetters" | QueueKind;
       state: "healthy" | "attention";
       backlogCount: number;
       backlogBytes: number;
@@ -72,7 +85,15 @@ export type OperationalSignal =
     }>
   | Readonly<{
       component: "async-health";
-      operation: WorkKind | "whatsapp" | "deadLetters";
+      operation: "retention";
+      state: "healthy" | "attention";
+      sampledOverdue: number;
+      sampleLimited: boolean;
+      oldestOverdueAgeMilliseconds: number;
+    }>
+  | Readonly<{
+      component: "async-health";
+      operation: WorkKind | QueueKind | "whatsapp" | "deadLetters" | "retention";
       state: "unavailable";
     }>;
 
@@ -88,8 +109,9 @@ type WorkflowStatusBinding = Readonly<{
 /** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
 export type OperationalHealthEnvironment = Readonly<{
   DB: D1Database;
-  workflows: Partial<Record<WorkKind, WorkflowStatusBinding>>;
+  workflows: Partial<Record<Exclude<WorkKind, "forwardedEmail">, WorkflowStatusBinding>>;
   deadLetters: Option.Option<Pick<Queue, "metrics">>;
+  workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
 
 const emptySignal = (operation: WorkKind): PendingSignal => ({
@@ -112,6 +134,10 @@ const pendingQueries: Record<WorkKind, string> = {
   emailReplacement: `SELECT work_id AS id, created_at_ms AS created, expires_at_ms AS deadline FROM email_replacements WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
   billing: `SELECT id, created_at_ms AS created, NULL AS deadline FROM billing_attempts WHERE status = 'pending' ORDER BY created_at_ms LIMIT ?`,
   statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
+  forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
+    FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
+    AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes AS o WHERE o.receipt_id = r.id)
+    ORDER BY r.received_at_ms LIMIT ?`,
 };
 
 const rejectedQueries: Partial<Record<WorkKind, string>> = {
@@ -239,21 +265,61 @@ const inspectWhatsApp = (db: D1Database, current: number): Effect.Effect<Operati
     };
   });
 
-const inspectDeadLetters = (
+const inspectRetention = (db: D1Database, now: number): Effect.Effect<OperationalSignal> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT expires FROM (
+          SELECT expires_at_ms AS expires FROM statement_staging_objects
+          WHERE status IN ('pending', 'available', 'deleting') AND object_deleted_at_ms IS NULL AND expires_at_ms <= ?
+          UNION ALL SELECT s.retention_expires_at_ms AS expires FROM statement_staging_objects AS o
+          JOIN statement_submissions AS s ON s.staging_id = o.id
+          WHERE o.status = 'published' AND o.object_deleted_at_ms IS NULL AND s.retention_expires_at_ms <= ?
+          UNION ALL SELECT expires_at_ms AS expires FROM forwarded_email_receipts
+          WHERE state IN ('storing', 'queued') AND expires_at_ms <= ?
+          UNION ALL SELECT evidence_expires_at_ms AS expires FROM statement_needs_review
+          WHERE status = 'pending' AND evidence_expires_at_ms <= ?
+            AND (original_evidence IS NOT NULL OR known_money IS NOT NULL)
+        ) ORDER BY expires LIMIT ?`)
+          .bind(now, now, now, now, sampleLimit)
+          .all()
+      ).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Retained))(rows.results))
+      )
+    );
+    if (Exit.isFailure(result)) return unavailableSignal("retention");
+    const oldestOverdueAgeMilliseconds = Math.max(
+      0,
+      ...result.value.map((row) => now - row.expires)
+    );
+    return {
+      component: "async-health",
+      operation: "retention",
+      state: oldestOverdueAgeMilliseconds >= retentionWarningAgeMs ? "attention" : "healthy",
+      sampledOverdue: result.value.length,
+      sampleLimited: result.value.length === sampleLimit,
+      oldestOverdueAgeMilliseconds,
+    };
+  });
+
+const inspectQueue = (
+  operation: QueueKind | "deadLetters",
   queue: Option.Option<Pick<Queue, "metrics">>
 ): Effect.Effect<OperationalSignal> =>
   Effect.gen(function* () {
-    if (Option.isNone(queue)) return unavailableSignal("deadLetters");
+    if (Option.isNone(queue)) return unavailableSignal(operation);
     const backlog = yield* Effect.exit(
       Effect.tryPromise(() => queue.value.metrics()).pipe(
         Effect.timeout("2 seconds"),
         Effect.flatMap(Schema.decodeUnknownEffect(Backlog))
       )
     );
-    if (Exit.isFailure(backlog)) return unavailableSignal("deadLetters");
+    if (Exit.isFailure(backlog)) return unavailableSignal(operation);
     return {
       component: "async-health",
-      operation: "deadLetters",
+      operation,
       ...backlog.value,
       state: backlog.value.backlogCount > 0 ? "attention" : "healthy",
     };
@@ -261,6 +327,31 @@ const inspectDeadLetters = (
 
 const pendingState = (age: number, expired: number, failed: number): "attention" | "healthy" =>
   age >= staleAfterMilliseconds || expired > 0 || failed > 0 ? "attention" : "healthy";
+
+const inspectPendingWorkflow = ({
+  environment,
+  operation,
+  rows,
+  current,
+}: Readonly<{
+  environment: OperationalHealthEnvironment;
+  operation: WorkKind;
+  rows: ReadonlyArray<typeof Pending.Type>;
+  current: number;
+}>): Effect.Effect<Readonly<{ failed: number; unavailable: number }>> =>
+  Effect.gen(function* () {
+    if (operation === "forwardedEmail") return { failed: 0, unavailable: 0 };
+    const workflow = Option.fromUndefinedOr(environment.workflows[operation]);
+    let failed = 0;
+    let unavailable = 0;
+    for (const row of rows) {
+      if (current - row.created < staleAfterMilliseconds) continue;
+      const status = yield* inspectWorkflow(workflow, row.id);
+      if (status === "unavailable") unavailable += 1;
+      if (status === "failed") failed += 1;
+    }
+    return { failed, unavailable };
+  });
 
 const inspectPending = (
   environment: OperationalHealthEnvironment,
@@ -279,16 +370,8 @@ const inspectPending = (
     const rejected = yield* Effect.exit(rejectedEmailWork(environment, operation, current));
     if (Exit.isFailure(rejected)) return unavailableSignal(operation);
     const rows = fetched.value;
-    const workflow = Option.fromUndefinedOr(environment.workflows[operation]);
-    let failedWorkflows = 0;
-    let unavailableWorkflows = 0;
-    for (const row of rows) {
-      // Fresh work may not have reached a Workflow yet; only inspect stalled identities.
-      if (current - row.created < staleAfterMilliseconds) continue;
-      const status = yield* inspectWorkflow(workflow, row.id);
-      if (status === "unavailable") unavailableWorkflows += 1;
-      if (status === "failed") failedWorkflows += 1;
-    }
+    // Fresh work may not have reached a Workflow yet; inspect only stalled instances.
+    const workflowStates = yield* inspectPendingWorkflow({ environment, operation, rows, current });
     const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => current - row.created));
     const expiredUndelivered = rows.filter(
       (row) => Option.isSome(row.deadline) && row.deadline.value <= current
@@ -301,12 +384,12 @@ const inspectPending = (
       sampleLimited: rows.length === sampleLimit,
       oldestPendingAgeMilliseconds,
       expiredUndelivered,
-      failedWorkflows,
-      unavailableWorkflows,
+      failedWorkflows: workflowStates.failed,
+      unavailableWorkflows: workflowStates.unavailable,
       state: pendingState(
         oldestPendingAgeMilliseconds,
         expiredUndelivered,
-        failedWorkflows + rejected.value
+        workflowStates.failed + rejected.value
       ),
     };
   });
@@ -334,6 +417,13 @@ export const observeOperationalHealth = (
       Effect.timeout("3 seconds"),
       Effect.orElseSucceed((): OperationalSignal => unavailableSignal("whatsapp"))
     );
-    const deadLetters = yield* inspectDeadLetters(environment.deadLetters);
-    return [...signals, whatsapp, deadLetters];
+    const deadLetters = yield* inspectQueue("deadLetters", environment.deadLetters);
+    const workQueues = yield* Effect.forEach(
+      QueueKind.literals,
+      (operation) =>
+        inspectQueue(operation, Option.fromUndefinedOr(environment.workQueues[operation])),
+      { concurrency: 2 }
+    );
+    const retention = yield* inspectRetention(environment.DB, current);
+    return [...signals, whatsapp, deadLetters, ...workQueues, retention];
   });

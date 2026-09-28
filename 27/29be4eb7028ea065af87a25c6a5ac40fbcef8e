@@ -1,0 +1,38 @@
+apps/server/cloudflare/runtime/operator-email.test.ts
+  s_0bc20f888e36bb::t_4cd016c116640b 3-4
+  s_0bc20f888e36bb::t_69eed39f2ca032 2,5
+apps/server/cloudflare/runtime/operational-alert-delivery.ts
+  s_0bc20f888e36bb::t_33053d323b1572 52-53,58,63
+  s_0bc20f888e36bb::t_058348ce994e91 67-68
+infra/cloudflare/workers.test.ts
+  s_0bc20f888e36bb::t_896ab45e70d2e9 5-6,452,477-479,482-486,489,513-517
+  s_0bc20f888e36bb::t_af6200e3fd460d 453-476,480-481,487-488,490-512
+  s_0bc20f888e36bb::t_b5802b72b276f8 518
+apps/server/cloudflare/runtime/operational-alert-delivery.test.ts
+  s_0bc20f888e36bb::t_e0283df3ca73fc 3,119
+  s_0bc20f888e36bb::t_17ce93e30f8759 6-8
+  s_0bc20f888e36bb::t_fc5d546c1f67e8 113-117,129-131
+  s_0bc20f888e36bb::t_cda35ec3efdaa1 118,120-128
+  s_0bc20f888e36bb::t_dc2e68adf88385 9
+apps/server/cloudflare/core-worker.ts
+  s_0bc20f888e36bb::t_5a0e1fb81bbf5d 1903,1914-1915,1922
+apps/server/cloudflare/runtime/operator-email.ts
+  s_0bc20f888e36bb::t_4b13f27f019269 22
+  s_0bc20f888e36bb::t_2e5ff07d29f8f9 54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2729be4eb7028ea065af87a25c6a5ac40fbcef8e",
+  "prompts": {},
+  "sessions": {
+    "s_0bc20f888e36bb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-556f-7274-8064-e61d0852c03d",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

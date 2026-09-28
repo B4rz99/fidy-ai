@@ -1,0 +1,19 @@
+apps/server/cloudflare/agent/hosted-turn-test-migrations.ts
+  s_bad62b9e4f4eb3::t_6202e02cc0ccf5 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b4a0e073bf7833a3c587ab43e34f22c53f0bf973",
+  "prompts": {},
+  "sessions": {
+    "s_bad62b9e4f4eb3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d3-ad52-7794-93a5-85ec39a87b24",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

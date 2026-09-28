@@ -29,6 +29,7 @@ import {
   runStatementExtractionWorkflow,
 } from "./statement-delivery";
 import coreWorker from "../core-worker";
+import { sweepExpiredUploadAdmission } from "./statement-ingestion";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import publicWorker from "../public-worker";
 
@@ -2013,6 +2014,34 @@ it(
   30_000
 );
 
+it("removes expired upload attempt and work claims without clearing live admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const before = yield* Clock.currentTimeMillis;
+      const uploaded = yield* fromTestPromise(() =>
+        upload(runtime, { body: statementBytes(), index: 0 })
+      );
+      expect(uploaded.status).toBe(201);
+      yield* sweepExpiredUploadAdmission({ db: runtime.db, now: before + 1_000 });
+      const live = yield* fromTestPromise(() =>
+        scalar<{ total: number }>(
+          runtime.db,
+          "SELECT count(*) AS total FROM resource_admission_grants WHERE id LIKE 'ingestion-upload-%'"
+        )
+      );
+      expect(live.total).toBe(2);
+      yield* sweepExpiredUploadAdmission({ db: runtime.db, now: before + 3_610_000 });
+      const expired = yield* fromTestPromise(() =>
+        scalar<{ total: number }>(
+          runtime.db,
+          "SELECT count(*) AS total FROM resource_admission_grants WHERE id LIKE 'ingestion-upload-%'"
+        )
+      );
+      expect(expired.total).toBe(0);
+    })
+  ));
+
 it(
   "bounds concurrent uploads with a released outstanding-work lease",
   () =>
@@ -2055,12 +2084,43 @@ it(
         expect(refused.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
 
+        // A flood of refused uploads consumes attempt pressure, not R2 work capacity.
+        for (let attempted = 3; attempted < 40; attempted += 1) {
+          const denied = yield* fromTestPromise(() =>
+            upload(runtime, { body: statementBytes(), index: 0 })
+          );
+          expect(denied.status).toBe(429);
+        }
+        const exhausted = yield* fromTestPromise(() =>
+          upload(runtime, { body: statementBytes(), index: 0 })
+        );
+        expect(exhausted.status).toBe(429);
+        expect(yield* fromTestPromise(() => failureCode(exhausted))).toBe("rate_limited");
         for (const release of held) release.resolve();
         const settled = yield* fromTestPromise(() => Promise.all([first, second]));
         expect(settled.map(({ status }) => status)).toEqual([201, 201]);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_staging_objects"))).toBe(
           2
         );
+        // The refused request is durable pressure, but has no R2 work grant or staged bytes.
+        const pressure = yield* fromTestPromise(() =>
+          scalar<{ total: number }>(
+            runtime.db,
+            `SELECT count(*) AS total FROM resource_admission_events
+             WHERE policy_key = 'ingestion.upload.attempt.user.v1' AND scope_key = ?`,
+            userA
+          )
+        );
+        expect(pressure.total).toBe(40);
+        const work = yield* fromTestPromise(() =>
+          scalar<{ total: number }>(
+            runtime.db,
+            `SELECT count(*) AS total FROM resource_admission_events
+             WHERE policy_key = 'ingestion.upload.user.v1' AND scope_key = ?`,
+            userA
+          )
+        );
+        expect(work.total).toBe(2);
       })
     ),
   30_000

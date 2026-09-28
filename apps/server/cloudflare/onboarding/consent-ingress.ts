@@ -49,6 +49,7 @@ import {
   Layer,
   Option,
   Redacted,
+  Result,
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
@@ -64,6 +65,7 @@ import {
   ResourceAdmissionLimit,
   ResourceAdmissionPolicies,
   ResourceAdmissionPolicyKey,
+  ResourceAdmissionRefused,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
 } from "../resource-admission/authority";
@@ -739,33 +741,41 @@ type NewExchange = Readonly<{
   disclosure: ReturnType<typeof currentDisclosureFor>;
 }>;
 
+const exchangeStatement = (
+  db: D1Database,
+  { input, id, correlationToken }: NewExchange,
+  disclosureJson: string
+): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO pending_consent_exchanges
+    (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
+     correlation_token, disclosure_json, created_at_ms, expires_at_ms,
+     email_preaccept_latest_occurred_ms, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+    .bind(
+      id,
+      input.event.caller.businessPortfolioId,
+      input.event.caller.businessScopedUserId,
+      input.event.businessPhoneNumberId,
+      input.event.messageEvidence.providerMessageId,
+      input.digest,
+      correlationToken,
+      disclosureJson,
+      input.receivedAtMs,
+      input.receivedAtMs + dayMs,
+      Option.isSome(Schema.decodeOption(EmailAddress)(input.event.content.text))
+        ? DateTime.toEpochMillis(input.event.occurredAt)
+        : null
+    );
+
 const admitExchange = (
   db: D1Database,
-  { input, id, correlationToken, disclosure }: NewExchange
+  exchange: NewExchange
 ): Effect.Effect<Response, never, Crypto.Crypto> =>
   Effect.gen(function* () {
+    const { input, id, disclosure } = exchange;
     const disclosureJson = yield* Schema.encodeEffect(PendingDisclosureJson)(disclosure);
-    const statement = db
-      .prepare(`INSERT INTO pending_consent_exchanges
-      (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
-       correlation_token, disclosure_json, created_at_ms, expires_at_ms,
-       email_preaccept_latest_occurred_ms, state)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
-      .bind(
-        id,
-        input.event.caller.businessPortfolioId,
-        input.event.caller.businessScopedUserId,
-        input.event.businessPhoneNumberId,
-        input.event.messageEvidence.providerMessageId,
-        input.digest,
-        correlationToken,
-        disclosureJson,
-        input.receivedAtMs,
-        input.receivedAtMs + dayMs,
-        Option.isSome(Schema.decodeOption(EmailAddress)(input.event.content.text))
-          ? DateTime.toEpochMillis(input.event.occurredAt)
-          : null
-      );
+    const statement = exchangeStatement(db, exchange, disclosureJson);
     const portfolio = input.event.caller.businessPortfolioId;
     const bsuid = input.event.caller.businessScopedUserId;
     const caller = `${portfolio.length}:${portfolio}${bsuid.length}:${bsuid}`;
@@ -773,7 +783,7 @@ const admitExchange = (
     const sourceHash = Encoding.encodeHex(
       yield* cryptoService.digest("SHA-256", new TextEncoder().encode(caller))
     );
-    const claim = yield* Effect.exit(
+    const claim = yield* Effect.result(
       admission(db, input.receivedAtMs).admit({
         charges: consentCharges(sourceHash),
         grantId: ResourceAdmissionGrantId.make(id),
@@ -795,7 +805,10 @@ const admitExchange = (
         ],
       })
     );
-    return answer(Exit.isFailure(claim) ? HTTP_CONFLICT : HTTP_OK);
+    if (Result.isSuccess(claim)) return answer(HTTP_OK);
+    return answer(
+      claim.failure instanceof ResourceAdmissionRefused ? HTTP_CONFLICT : HTTP_UNAVAILABLE
+    );
   }).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));
 
 const DisclosureRecoveryRow = Schema.Struct({

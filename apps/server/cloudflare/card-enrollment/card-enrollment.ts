@@ -15,12 +15,15 @@ import {
   type WompiEnrollmentClientService,
   WompiSourceId,
   cardEnrollmentInvalidBody,
+  cardEnrollmentRateLimitedBody,
   cardEnrollmentUnavailableBody,
   makeWompiEnrollmentClient,
 } from "@fidy/server/subscription-runtime";
-import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserId } from "@fidy/server/identity-runtime";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
+import { admitCardPreparationAttempt } from "./card-preparation-admission";
+import { ResourceAdmissionRefused } from "../resource-admission/authority";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { browserOrigins } from "../runtime/topology";
 import { wompiOutboundHttp, workerCrypto } from "../wompi/wompi-runtime";
@@ -127,6 +130,8 @@ const invalid = (status = 400): Response =>
   Response.json(cardEnrollmentInvalidBody, { status, headers: noStore });
 const unavailable = (): Response =>
   Response.json(cardEnrollmentUnavailableBody, { status: 503, headers: noStore });
+const rateLimited = (): Response =>
+  Response.json(cardEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
 const id = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
@@ -358,13 +363,17 @@ const prepare = ({
           );
           return json(presented);
         }
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'expired' WHERE id = ? AND user_id = ? AND status IN ('prepared', 'preparing')"
-          )
-            .bind(activeId.value.id, session.user_id)
-            .run()
-        );
+      }
+      const attempt = yield* Effect.exit(
+        admitCardPreparationAttempt({ db: environment.DB, userId: session.user_id, now })
+      );
+      if (Exit.isFailure(attempt)) {
+        return Option.exists(
+          Cause.findErrorOption(attempt.cause),
+          (error) => error instanceof ResourceAdmissionRefused
+        )
+          ? rateLimited()
+          : unavailable();
       }
       const capacity = yield* waitFor(() =>
         environment.DB.prepare(
@@ -378,6 +387,15 @@ const prepare = ({
         capacity.count >= maximumPreparationsPerHour
       ) {
         return unavailable();
+      }
+      if (Option.isSome(activeId)) {
+        yield* waitFor(() =>
+          environment.DB.prepare(
+            "UPDATE card_enrollments SET status = 'expired' WHERE id = ? AND user_id = ? AND status IN ('prepared', 'preparing')"
+          )
+            .bind(activeId.value.id, session.user_id)
+            .run()
+        );
       }
       const enrollmentId = CardEnrollmentId.make(id());
       const reserved = yield* waitFor(() =>

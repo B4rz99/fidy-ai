@@ -126,11 +126,13 @@ import {
   observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
-import type { WorkersAiEnvironment } from "./ai/workers-ai";
+import { type WorkersAiEnvironment, sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
+import { sweepExpiredCardPreparationAdmission } from "./card-enrollment/card-preparation-admission";
 import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   readStatementSubmission,
   submitForExtractionInput,
+  sweepExpiredUploadAdmission,
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/statement-ingestion";
@@ -1946,16 +1948,30 @@ const statementActivities = (
         }).pipe(Effect.mapError(() => undefined)),
 });
 
+const admissionActivities = (
+  db: D1Database,
+  now: number
+): Record<string, Effect.Effect<unknown, void>> => ({
+  "ingestion.uploadAdmissionSweep": sweepExpiredUploadAdmission({ db, now }).pipe(
+    Effect.mapError(() => undefined)
+  ),
+  "agent.workersAiAdmissionSweep": sweepExpiredWorkersAiAdmission({ db, now }).pipe(
+    Effect.mapError(() => undefined)
+  ),
+  "billing.cardPreparationAdmissionSweep": sweepExpiredCardPreparationAdmission({ db, now }).pipe(
+    Effect.mapError(() => undefined)
+  ),
+});
+
 const scheduledActivities = (
   environment: CoreEnvironment,
   current: number
 ): Record<string, Effect.Effect<unknown, void>> => {
-  const bucket = environment.STATEMENT_STAGING_BUCKET;
   const staging =
-    bucket === undefined
+    environment.STATEMENT_STAGING_BUCKET === undefined
       ? undefined
       : StatementStaging.make({
-          bucket,
+          bucket: environment.STATEMENT_STAGING_BUCKET,
           database: environment.DB,
           nowEpochMs: () => current,
         });
@@ -2000,6 +2016,7 @@ const scheduledActivities = (
       staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":
       staging?.sweepExpiredStatementStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+    ...admissionActivities(environment.DB, current),
     ...statementActivities(environment),
   };
 };

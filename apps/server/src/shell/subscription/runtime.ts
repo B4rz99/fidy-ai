@@ -43,6 +43,7 @@ export {
   PrepareCardEnrollmentPayload,
   SubmitCardEnrollmentPayload,
   cardEnrollmentInvalidBody,
+  cardEnrollmentRateLimitedBody,
   cardEnrollmentUnavailableBody,
 } from "~/subscription-enrollment-api";
 export { encodeMoneyAmount, Money } from "~/core/_shared/money";

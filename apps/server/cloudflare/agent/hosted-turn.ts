@@ -14,14 +14,15 @@ import {
   defaultCompactionMaximumTokens,
   shouldCompactConversation,
 } from "@fidy/server/agent-runtime";
-import type {
-  HostedInferenceService,
-  HostedTextResult,
-  PreparedHostedText,
+import {
+  HostedInferenceError,
+  type HostedInferenceService,
+  type HostedTextResult,
+  HostedToolCallMaximum,
+  type PreparedHostedText,
 } from "@fidy/server/hosted-inference";
 import { Cause, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
 import { atomicBatchOperation, operationCatalog } from "@fidy/server/canonical-runtime";
-import { HostedToolCallMaximum } from "@fidy/server/hosted-inference";
 import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
 import {
   maximumHostedTurnIterations,
@@ -137,6 +138,8 @@ const invalid = (): Response =>
   Response.json({ status: "validation_failed" }, { status: 400, headers: noStore });
 const interrupted = (): Response =>
   Response.json({ status: "interrupted" }, { status: 503, headers: noStore });
+const resourceRefused = (): Response =>
+  Response.json({ status: "capacity_exceeded" }, { status: 429, headers: noStore });
 
 /** Construct a proposed reply. Only a separate browser-visible receipt permits completion. */
 export type HostedDelivery = (
@@ -804,15 +807,18 @@ const executeAdmittedTurn = ({
             return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
           }
           if (Exit.isFailure(generated)) {
-            const timedOut = Option.exists(
-              Cause.findErrorOption(generated.cause),
-              Cause.isTimeoutError
+            const error = Cause.findErrorOption(generated.cause);
+            const timedOut = Option.exists(error, Cause.isTimeoutError);
+            const refused = Option.exists(
+              error,
+              (failure) =>
+                failure instanceof HostedInferenceError && failure.reason._tag === "ResourceLimit"
             );
             yield* finish({
               _tag: "Failed",
               reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
             });
-            return unavailable();
+            return refused ? resourceRefused() : unavailable();
           }
           if (generated.value.toolCalls.length > 0) {
             const nextCount = usedCalls + generated.value.toolCalls.length;

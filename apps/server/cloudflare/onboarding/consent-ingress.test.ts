@@ -1578,6 +1578,23 @@ it("rejects replay of a pre-delivery reply with a future-dated Kapso timestamp",
     })
   ));
 
+it("reports unavailable when the disclosure admission store fails without contacting Kapso", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => db.prepare("DROP TABLE resource_admission_grants").run());
+      const response = yield* Effect.tryPromise(() =>
+        send(inbound("wamid.admission-down", "Hola"))
+      );
+      expect(response.status).toBe(503);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM pending_consent_exchanges").all()
+        )).results
+      ).toEqual([]);
+    })
+  ));
+
 it("does not treat a malformed stored exchange as missing consent evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {

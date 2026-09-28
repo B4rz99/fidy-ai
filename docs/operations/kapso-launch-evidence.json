@@ -1,7 +1,11 @@
 {
+  "publishedTerms": "https://kapso.com/terms (effective 2026-09-17; acceptance in account not verified)",
+  "publishedDpa": "https://kapso.com/dpa (effective 2026-09-17; account agreement not verified)",
+  "publishedSubprocessors": "https://kapso.com/subprocessors (effective 2026-09-01; enabled routes not verified)",
+  "cliObservation": "2026-09-28: fiidy project accessible; one WhatsApp number, sandbox kind; no production number observed",
   "reviewedAt": "PENDING",
   "reviewer": "PENDING",
-  "contractingEntity": "PENDING",
+  "contractingEntity": "Kapso, Inc.",
   "termsEvidence": "PENDING",
   "dpaEvidence": "PENDING",
   "subprocessorsEvidence": "PENDING",

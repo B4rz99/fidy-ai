@@ -1,0 +1,48 @@
+apps/web/scripts/production-workflow.test.ts
+  s_52cf8a25d50295::t_496b83f640500d 127-137
+infra/cloudflare/verify-edge-policy.test.ts
+  s_52cf8a25d50295::t_23de4312a843f1 7
+infra/cloudflare/workers.test.ts
+  s_52cf8a25d50295::t_88c9530ae9433d 190-206
+infra/cloudflare/edge-security.ts
+  s_52cf8a25d50295::t_afb1b711abd78f 11,106-109,126-127,129-132
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_52cf8a25d50295::t_d48983eb3249bf 60
+  s_52cf8a25d50295::t_a946e8294ccbeb 61
+  s_52cf8a25d50295::t_1d0ccd873027ed 1,18-20,23-26,32-42,44-48,51-53,58-59,62-70
+  s_52cf8a25d50295::t_49161ca7fc0245 4-13,21-22,54,71
+  s_52cf8a25d50295::t_0165c3e8ab1a29 2-3,27-29,31
+  s_52cf8a25d50295::t_620531d891a723 14-17,30,43,49-50
+  s_52cf8a25d50295::t_4044c9e4f07a0f 55-57
+infra/cloudflare/verify-edge-smoke.ts
+  s_52cf8a25d50295::t_49942fbd1887c1 25-27,29-32,35-37,82,85,98
+  s_52cf8a25d50295::t_10dc79b470b060 40-42,44
+  s_52cf8a25d50295::t_96a9914925deef 5-8,24,38-39,47,49,71-81,83,99-103,105-106
+  s_52cf8a25d50295::t_0b208069fffbbc 46
+  s_52cf8a25d50295::t_c5e44551dd2b8d 3
+  s_52cf8a25d50295::t_af3a12365f6b3c 4,13,20-21,28,43,45,51-70
+  s_52cf8a25d50295::t_44d7109fda4121 86-89,95-96
+  s_52cf8a25d50295::t_bef64f4dee9b54 1-2,9-12,14-19,22-23,33-34,48,50,84,104,107-108
+  s_52cf8a25d50295::t_5e9e4d47068c00 90-94
+  s_52cf8a25d50295::t_62a420e1acae8d 97
+.github/workflows/production.yml
+  s_52cf8a25d50295::t_1d1c0d64193579 166-169
+infra/cloudflare/verify-edge-policy.ts
+  s_52cf8a25d50295::t_644e5922581be4 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5e86ddb9f50e254afe8060f56cd5f24e5af38726",
+  "prompts": {},
+  "sessions": {
+    "s_52cf8a25d50295": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d4-25ed-721c-ab6e-215b67ce993c",
+        "model": "gpt-6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

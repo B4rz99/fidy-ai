@@ -1,0 +1,35 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_8365943da34952::t_5a6544a78d7111 7
+infra/cloudflare/verify-production-smoke.ts
+  s_8365943da34952::t_d5b22bce2e1b24 207
+  s_8365943da34952::t_014f0fa1aebcb9 205-206,209,211-213
+tsconfig.base.json
+  s_8365943da34952::t_9338f2871b8b32 144-179
+infra/cloudflare/verify-edge-policy.ts
+  s_8365943da34952::t_8d17a887a8fc0b 5
+infra/cloudflare/release-controller.ts
+  s_8365943da34952::t_a0dd66829ac25e 133-134
+  s_8365943da34952::t_7b24a8f3c4f990 10
+infra/cloudflare/production-release.ts
+  s_8365943da34952::t_8581d155f27e03 53,226
+  s_8365943da34952::t_7c04128332984e 3,26,106,300
+  s_8365943da34952::t_5e496090a8e874 64,78,93,224,452
+infra/cloudflare/release-controller.test.ts
+  s_8365943da34952::t_91cfadd63a97aa 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9dd71ec97095de9e5ac14e6a3e1cbb34562da898",
+  "prompts": {},
+  "sessions": {
+    "s_8365943da34952": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e9ce-a467-735d-afda-f9efed4986cf",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -24,6 +24,7 @@ type Snapshot = {
   readonly transcriptHasIteration: boolean;
   readonly hostedWhatsAppInboundExists: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
+  readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly preservedEvidence: Option.Option<TranscriptEvidence>;
 };
@@ -33,6 +34,8 @@ type ConstraintChecks = {
   readonly transcriptAppendOnlyEnforced: boolean;
   readonly hostedVoiceRefusalPrimaryKeyEnforced: boolean;
   readonly hostedVoiceRefusalOutcomeCheckEnforced: boolean;
+  readonly hostedWhatsAppWindowPrimaryKeyEnforced: boolean;
+  readonly hostedWhatsAppWindowBoundsCheckEnforced: boolean;
 };
 
 type MigrationState = {
@@ -40,6 +43,7 @@ type MigrationState = {
   readonly transcriptHasIteration: boolean;
   readonly hostedWhatsAppInboundExists: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
+  readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly transcriptEvidence:
     | { readonly _tag: "Empty" }
@@ -50,6 +54,7 @@ const legacyUser = "10000000-0000-4000-8000-000000000732";
 const legacySession = "10000000-0000-4000-8000-000000000733";
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
 const legacyTranscript = "10000000-0000-4000-8000-000000000735";
+const whatsappWindowDurationMilliseconds = 86_400_000;
 
 class D1MigrationTestFailure extends Data.TaggedError("D1MigrationTestFailure")<{
   readonly cause: unknown;
@@ -153,6 +158,9 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
     hostedVoiceRefusalsExists: tables.results.some(
       (table) => table.name === "hosted_voice_refusals"
     ),
+    hostedWhatsAppWindowsExists: tables.results.some(
+      (table) => table.name === "hosted_whatsapp_windows"
+    ),
     foreignKeyViolationCount: foreignKeys.results.length,
     preservedEvidence: Option.fromNullishOr(evidence),
   } satisfies Snapshot;
@@ -229,12 +237,50 @@ const checkVoiceRefusalConstraints = Effect.fn(function* (db: D1Database) {
   };
 });
 
+const checkWhatsAppWindowConstraints = Effect.fn(function* (db: D1Database) {
+  const timestamp = yield* Clock.currentTimeMillis;
+  const portfolioId = `migration-${timestamp}-portfolio`;
+  const bsuid = `migration-${timestamp}-bsuid`;
+  const closesAt = timestamp + whatsappWindowDurationMilliseconds;
+  const insertWindow = (portfolio: string, subject: string, closes: number): D1PreparedStatement =>
+    db
+      .prepare(
+        `INSERT INTO hosted_whatsapp_windows
+         (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(legacyUser, portfolio, subject, timestamp, closes);
+  const insert = yield* statementAttempt(insertWindow(portfolioId, bsuid, closesAt));
+  const duplicate = yield* statementAttempt(insertWindow(portfolioId, bsuid, closesAt));
+  const differentPortfolio = yield* statementAttempt(
+    insertWindow(`${portfolioId}-other`, bsuid, closesAt)
+  );
+  const differentBsuid = yield* statementAttempt(
+    insertWindow(portfolioId, `${bsuid}-other`, closesAt)
+  );
+  const invalidBounds = yield* statementAttempt(
+    insertWindow(portfolioId, `${bsuid}-invalid`, closesAt + 1)
+  );
+
+  return {
+    hostedWhatsAppWindowPrimaryKeyEnforced:
+      insert._tag === "Succeeded" &&
+      duplicate._tag === "Failed" &&
+      differentPortfolio._tag === "Succeeded" &&
+      differentBsuid._tag === "Succeeded",
+    hostedWhatsAppWindowBoundsCheckEnforced:
+      invalidBounds._tag === "Failed" &&
+      invalidBounds.message.toLowerCase().includes("check constraint failed"),
+  };
+});
+
 const checkConstraints = Effect.fn(function* (db: D1Database) {
-  const [existing, voiceRefusal] = yield* Effect.all([
+  const [existing, voiceRefusal, whatsAppWindow] = yield* Effect.all([
     checkExistingConstraints(db),
     checkVoiceRefusalConstraints(db),
+    checkWhatsAppWindowConstraints(db),
   ] as const);
-  return { ...existing, ...voiceRefusal } satisfies ConstraintChecks;
+  return { ...existing, ...voiceRefusal, ...whatsAppWindow } satisfies ConstraintChecks;
 });
 
 const readMigrationState = Effect.fn(function* (db: D1Database) {
@@ -246,6 +292,8 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
         transcriptAppendOnlyEnforced: false,
         hostedVoiceRefusalPrimaryKeyEnforced: false,
         hostedVoiceRefusalOutcomeCheckEnforced: false,
+        hostedWhatsAppWindowPrimaryKeyEnforced: false,
+        hostedWhatsAppWindowBoundsCheckEnforced: false,
       };
 
   return {
@@ -253,6 +301,7 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
     transcriptHasIteration: snapshot.transcriptHasIteration,
     hostedWhatsAppInboundExists: snapshot.hostedWhatsAppInboundExists,
     hostedVoiceRefusalsExists: snapshot.hostedVoiceRefusalsExists,
+    hostedWhatsAppWindowsExists: snapshot.hostedWhatsAppWindowsExists,
     foreignKeyViolationCount: snapshot.foreignKeyViolationCount,
     transcriptEvidence: Option.match(snapshot.preservedEvidence, {
       onNone: () => ({ _tag: "Empty" as const }),

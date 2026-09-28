@@ -129,6 +129,7 @@ import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   readStatementSubmission,
   submitForExtractionInput,
+  sweepExpiredUploadAdmission,
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/statement-ingestion";
@@ -1948,12 +1949,11 @@ const scheduledActivities = (
   environment: CoreEnvironment,
   current: number
 ): Record<string, Effect.Effect<unknown, void>> => {
-  const bucket = environment.STATEMENT_STAGING_BUCKET;
   const staging =
-    bucket === undefined
+    environment.STATEMENT_STAGING_BUCKET === undefined
       ? undefined
       : StatementStaging.make({
-          bucket,
+          bucket: environment.STATEMENT_STAGING_BUCKET,
           database: environment.DB,
           nowEpochMs: () => current,
         });
@@ -1998,6 +1998,10 @@ const scheduledActivities = (
       staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":
       staging?.sweepExpiredStatementStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+    "ingestion.uploadAdmissionSweep": sweepExpiredUploadAdmission({
+      db: environment.DB,
+      now: current,
+    }).pipe(Effect.mapError(() => undefined)),
     ...statementActivities(environment),
   };
 };

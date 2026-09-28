@@ -168,6 +168,16 @@ export type ResourceAdmissionRequest = Readonly<{
   readonly statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 
+/**
+ * One bounded attempt before an expensive work claim. The attempt is charged even when work is
+ * refused; neither its grant nor its units can be reused for a retry. Work still commits atomically
+ * with its own proof/replay and publication statements. Callers check replay before this interface.
+ */
+export type ResourceAdmissionAttempt = Readonly<{
+  readonly attempt: ResourceAdmissionRequest;
+  readonly work: ResourceAdmissionRequest;
+}>;
+
 /** Atomic completion transition for a previously admitted outstanding-work grant. */
 export type ReleaseOutstandingWorkRequest = Readonly<{
   readonly grantId: ResourceAdmissionGrantId;
@@ -183,6 +193,13 @@ export type ResourceAdmissionAuthorityService = Readonly<{
   /** Atomically claims every policy and commits the caller-owned statements. */
   readonly admit: (
     request: ResourceAdmissionRequest
+  ) => Effect.Effect<
+    ResourceAdmissionGrant,
+    ResourceAdmissionRefused | ResourceAdmissionUnavailable
+  >;
+  /** Charges bounded attempt pressure first, then atomically claims work and its publication. */
+  readonly admitWithAttemptPressure: (
+    request: ResourceAdmissionAttempt
   ) => Effect.Effect<
     ResourceAdmissionGrant,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
@@ -438,7 +455,12 @@ const makeResourceAdmissionAuthorityService = (
     );
   };
 
-  return { admit, releaseOutstandingWork };
+  const admitWithAttemptPressure: ResourceAdmissionAuthorityService["admitWithAttemptPressure"] = ({
+    attempt,
+    work,
+  }) => admit(attempt).pipe(Effect.flatMap(() => admit(work)));
+
+  return { admit, admitWithAttemptPressure, releaseOutstandingWork };
 };
 
 /** Substitutable D1 resource-admission authority assembled by the private Core Worker. */

@@ -355,6 +355,54 @@ describe("Cloudflare resource admission", () => {
       })
     ));
 
+  it("counts refused work against a separate durable attempt limit without publishing work", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const miniflare = yield* fromTestPromise(() => makeMiniflare());
+        const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
+        yield* fromTestPromise(() =>
+          database.exec("CREATE TABLE test_outbox (id TEXT PRIMARY KEY NOT NULL) STRICT;")
+        );
+        const authority = makeAuthority(
+          database,
+          [
+            rollingPolicy("upload:attempt:v1", "stable_user", 2),
+            rollingPolicy("upload:work:v1", "operation", 1),
+          ],
+          { read: () => epochMs(10_000) }
+        );
+        const attempt = (
+          id: string
+        ): ReturnType<ResourceAdmissionAuthorityService["admitWithAttemptPressure"]> =>
+          authority.admitWithAttemptPressure({
+            attempt: {
+              charges: ResourceAdmissionCharges.make([charge("upload:attempt:v1", "user:one")]),
+              grantId: grantId(`attempt-${id}`),
+              statements: [],
+            },
+            work: {
+              charges: ResourceAdmissionCharges.make([charge("upload:work:v1", "upload")]),
+              grantId: grantId(`work-${id}`),
+              statements: [database.prepare("INSERT INTO test_outbox (id) VALUES (?)").bind(id)],
+            },
+          });
+        yield* attempt("first");
+        const refused = yield* Effect.result(attempt("second"));
+        const pressureRefused = yield* Effect.result(attempt("third"));
+        const rows = yield* fromTestPromise(() =>
+          database.prepare("SELECT id FROM test_outbox").all<{ readonly id: string }>()
+        );
+        expect(
+          Result.isFailure(refused) && refused.failure instanceof ResourceAdmissionRefused
+        ).toBe(true);
+        expect(
+          Result.isFailure(pressureRefused) &&
+            pressureRefused.failure instanceof ResourceAdmissionRefused
+        ).toBe(true);
+        expect(rows.results).toEqual([{ id: "first" }]);
+      })
+    ));
+
   it("makes a grant and its proof or outbox publication one atomic D1 commit", () =>
     Effect.runPromise(
       Effect.gen(function* () {

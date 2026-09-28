@@ -79,7 +79,12 @@ const uploadWindowMilliseconds = 3_600_000;
 const uploadLeaseMilliseconds = 600_000;
 const maximumUploadsPerUserPerHour = 20;
 const maximumUploadsPerHour = 500;
+// Attempts include refused uploads; the smaller work limits still govern R2 writes.
+const maximumUploadAttemptsPerUserPerHour = 40;
+const maximumUploadAttemptsPerHour = 1000;
 const maximumConcurrentUploads = 2;
+const maximumAdmissionSweep = 128;
+const uploadGrantPrefix = "ingestion-upload-";
 const oneUnit = ResourceAdmissionUnits.make(1);
 const noStore = { "cache-control": "no-store" } as const;
 
@@ -89,6 +94,20 @@ const noStore = { "cache-control": "no-store" } as const;
  * transient material all Users may create per hour before any staging row or object exists.
  */
 const ingestionPolicies = ResourceAdmissionPolicies.make([
+  {
+    dimension: "stable_user",
+    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
+    key: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.user.v1"),
+    kind: "rolling_window",
+    limit: ResourceAdmissionLimit.make(maximumUploadAttemptsPerUserPerHour),
+  },
+  {
+    dimension: "operation",
+    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
+    key: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.global.v1"),
+    kind: "rolling_window",
+    limit: ResourceAdmissionLimit.make(maximumUploadAttemptsPerHour),
+  },
   {
     dimension: "stable_user",
     durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
@@ -118,6 +137,20 @@ const ingestionPolicies = ResourceAdmissionPolicies.make([
     limit: ResourceAdmissionLimit.make(maximumConcurrentUploads),
   },
 ]);
+
+const uploadAttemptCharges = (userId: string): ResourceAdmissionChargesType =>
+  ResourceAdmissionCharges.make([
+    {
+      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.user.v1"),
+      scopeKey: ResourceAdmissionScopeKey.make(userId),
+      units: oneUnit,
+    },
+    {
+      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.global.v1"),
+      scopeKey: ResourceAdmissionScopeKey.make("statement-staging"),
+      units: oneUnit,
+    },
+  ]);
 
 const ingestionCharges = (userId: string): ResourceAdmissionChargesType =>
   ResourceAdmissionCharges.make([
@@ -291,9 +324,16 @@ export const uploadStagedStatement = ({
       nowEpochMs: () => ResourceAdmissionEpochMs.make(nowEpochMs),
       policies: ingestionPolicies,
     });
-    const grantId = ResourceAdmissionGrantId.make(newIngestionId());
+    const grantId = ResourceAdmissionGrantId.make(`${uploadGrantPrefix}work-${newIngestionId()}`);
     const admitted = yield* Effect.result(
-      admission.admit({ charges: ingestionCharges(subject.userId), grantId, statements: [] })
+      admission.admitWithAttemptPressure({
+        attempt: {
+          charges: uploadAttemptCharges(subject.userId),
+          grantId: ResourceAdmissionGrantId.make(`${uploadGrantPrefix}attempt-${newIngestionId()}`),
+          statements: [],
+        },
+        work: { charges: ingestionCharges(subject.userId), grantId, statements: [] },
+      })
     );
     if (Result.isFailure(admitted)) {
       return admitted.failure instanceof ResourceAdmissionRefused ? rateLimited() : unavailable();
@@ -318,6 +358,39 @@ export const uploadStagedStatement = ({
     ).pipe(Effect.orElseSucceed(() => undefined));
     return encoded === undefined ? unavailable() : json({ data: encoded, next: [] }, HTTP_CREATED);
   });
+
+/** Sweep only expired upload admission grants, not proof/outbox grants belonging to other owners. */
+export const sweepExpiredUploadAdmission = ({
+  db,
+  now,
+}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, IngestionAuditFailed> =>
+  Effect.tryPromise({
+    try: () =>
+      db.batch([
+        db
+          .prepare(
+            `DELETE FROM resource_admission_events WHERE grant_id IN (
+            SELECT g.id FROM resource_admission_grants g
+            WHERE g.id LIKE 'ingestion-upload-%'
+              AND g.admitted_at_epoch_ms <= ?
+              AND NOT EXISTS (
+                SELECT 1 FROM resource_admission_events e
+                WHERE e.grant_id = g.id AND e.expires_at_epoch_ms > ?
+              )
+            ORDER BY g.admitted_at_epoch_ms LIMIT ?
+          )`
+          )
+          .bind(now - uploadWindowMilliseconds, now, maximumAdmissionSweep),
+        db
+          .prepare(
+            `DELETE FROM resource_admission_grants
+           WHERE id LIKE 'ingestion-upload-%' AND admitted_at_epoch_ms <= ?
+             AND NOT EXISTS (SELECT 1 FROM resource_admission_events e WHERE e.grant_id = id)`
+          )
+          .bind(now - uploadWindowMilliseconds),
+      ]),
+    catch: (cause) => new IngestionAuditFailed({ cause }),
+  }).pipe(Effect.asVoid);
 
 /**
  * The one answer to a refusal the caller's own live credential decides: the credential refusal,

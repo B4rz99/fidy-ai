@@ -1,0 +1,19 @@
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_4050e5a6ee9200::t_05de644d9cc94a 181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7a3417489f99eb87d874549e940f31d784e95c71",
+  "prompts": {},
+  "sessions": {
+    "s_4050e5a6ee9200": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e843-acd8-738b-ae15-90217dc7b576",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

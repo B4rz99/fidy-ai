@@ -14,7 +14,19 @@ import { expect } from "vitest";
 
 const migrationsPath = new URL("../../apps/server/cloudflare/migrations/", import.meta.url)
   .pathname;
-const workerPath = new URL("./d1-migration-test-worker.ts", import.meta.url).pathname;
+const workerPath = new URL(
+  "../../apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
+  import.meta.url
+).pathname;
+const declareMigrationResources = Effect.fn(function* (migrations: string) {
+  const database = yield* Cloudflare.D1.Database("MigrationValidationDatabase", { migrations });
+  const worker = yield* Cloudflare.Worker("d1-migration-validation-worker", {
+    main: workerPath,
+    compatibility: { date: "2026-09-08" },
+    env: { DB: database },
+  });
+  return { database, worker };
+});
 const { test, deploy, destroy } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
 const migrationPrefix = (name: string): number => Number.parseInt(name.split("_")[0] ?? "", 10);
@@ -95,17 +107,7 @@ test(
     const migrationStack = Alchemy.Stack(
       "D1MigrationCleanInstall",
       { providers: Cloudflare.providers(), state: Alchemy.localState() },
-      Effect.gen(function* () {
-        const database = yield* Cloudflare.D1.Database("MigrationValidationDatabase", {
-          migrations: migrationsPath,
-        });
-        const worker = yield* Cloudflare.Worker("d1-migration-validation-worker", {
-          main: workerPath,
-          compatibility: { date: "2026-09-08" },
-          env: { DB: database },
-        });
-        return { database, worker };
-      })
+      declareMigrationResources(migrationsPath)
     );
 
     const migrationCheck = Effect.gen(function* () {
@@ -118,6 +120,7 @@ test(
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         hostedWhatsAppInboundExists: true,
+        hostedVoiceRefusalsExists: true,
         foreignKeyViolationCount: 0,
         transcriptEvidence: { _tag: "Empty" },
       });
@@ -140,17 +143,7 @@ test(
     const migrationStack = Alchemy.Stack(
       "D1MigrationPopulatedUpgrade",
       { providers: Cloudflare.providers(), state: Alchemy.localState() },
-      Effect.gen(function* () {
-        const database = yield* Cloudflare.D1.Database("MigrationValidationDatabase", {
-          migrations: dir,
-        });
-        const worker = yield* Cloudflare.Worker("d1-migration-validation-worker", {
-          main: workerPath,
-          compatibility: { date: "2026-09-08" },
-          env: { DB: database },
-        });
-        return { database, worker };
-      })
+      declareMigrationResources(dir)
     );
 
     const migrationCheck = Effect.gen(function* () {
@@ -164,6 +157,7 @@ test(
       const beforeUrl = yield* workerUrl(Option.fromUndefinedOr(before.worker.url));
       expect(yield* readState(beforeUrl)).toMatchObject({
         appliedMigrationNames: [...predecessorNames].sort(),
+        hostedVoiceRefusalsExists: false,
         transcriptEvidence: { _tag: "Empty" },
       });
 
@@ -180,9 +174,12 @@ test(
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         hostedWhatsAppInboundExists: true,
+        hostedVoiceRefusalsExists: true,
         foreignKeyViolationCount: 0,
         pendingTurnUniquenessEnforced: true,
         transcriptAppendOnlyEnforced: true,
+        hostedVoiceRefusalPrimaryKeyEnforced: true,
+        hostedVoiceRefusalOutcomeCheckEnforced: true,
         transcriptEvidence: {
           _tag: "Preserved",
           value: {

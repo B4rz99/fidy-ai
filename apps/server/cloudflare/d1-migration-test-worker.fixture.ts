@@ -22,6 +22,7 @@ type Snapshot = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly hostedWhatsAppInboundExists: boolean;
+  readonly hostedVoiceRefusalsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly preservedEvidence: Option.Option<TranscriptEvidence>;
 };
@@ -29,12 +30,15 @@ type Snapshot = {
 type ConstraintChecks = {
   readonly pendingTurnUniquenessEnforced: boolean;
   readonly transcriptAppendOnlyEnforced: boolean;
+  readonly hostedVoiceRefusalPrimaryKeyEnforced: boolean;
+  readonly hostedVoiceRefusalOutcomeCheckEnforced: boolean;
 };
 
 type MigrationState = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly hostedWhatsAppInboundExists: boolean;
+  readonly hostedVoiceRefusalsExists: boolean;
   readonly foreignKeyViolationCount: number;
   readonly transcriptEvidence:
     | { readonly _tag: "Empty" }
@@ -138,12 +142,15 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
     hostedWhatsAppInboundExists: tables.results.some(
       (table) => table.name === "hosted_whatsapp_inbound"
     ),
+    hostedVoiceRefusalsExists: tables.results.some(
+      (table) => table.name === "hosted_voice_refusals"
+    ),
     foreignKeyViolationCount: foreignKeys.results.length,
     preservedEvidence: Option.fromNullishOr(evidence),
   } satisfies Snapshot;
 });
 
-const checkConstraints = Effect.fn(function* (db: D1Database) {
+const checkExistingConstraints = Effect.fn(function* (db: D1Database) {
   const pendingTurn = yield* statementAttempt(
     db
       .prepare(
@@ -171,7 +178,55 @@ const checkConstraints = Effect.fn(function* (db: D1Database) {
     transcriptAppendOnlyEnforced:
       transcriptUpdate._tag === "Failed" &&
       transcriptUpdate.message.includes("transcript_append_only"),
-  } satisfies ConstraintChecks;
+  };
+});
+
+const checkVoiceRefusalConstraints = Effect.fn(function* (db: D1Database) {
+  const timestamp = yield* Clock.currentTimeMillis;
+  const portfolioId = `migration-${timestamp}-portfolio`;
+  const messageId = `migration-${timestamp}-message`;
+  const insertRefusal = (
+    portfolio: string,
+    message: string,
+    outcome: string
+  ): D1PreparedStatement =>
+    db
+      .prepare(
+        `INSERT INTO hosted_voice_refusals
+         (portfolio_id, message_id, user_id, claimed_at_ms, outcome)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(portfolio, message, legacyUser, timestamp, outcome);
+  const insert = yield* statementAttempt(insertRefusal(portfolioId, messageId, "started"));
+  const duplicate = yield* statementAttempt(insertRefusal(portfolioId, messageId, "started"));
+  const differentPortfolio = yield* statementAttempt(
+    insertRefusal(`${portfolioId}-other`, messageId, "started")
+  );
+  const differentMessage = yield* statementAttempt(
+    insertRefusal(portfolioId, `${messageId}-other`, "started")
+  );
+  const invalidOutcome = yield* statementAttempt(
+    insertRefusal(portfolioId, `${messageId}-invalid`, "invalid")
+  );
+
+  return {
+    hostedVoiceRefusalPrimaryKeyEnforced:
+      insert._tag === "Succeeded" &&
+      duplicate._tag === "Failed" &&
+      differentPortfolio._tag === "Succeeded" &&
+      differentMessage._tag === "Succeeded",
+    hostedVoiceRefusalOutcomeCheckEnforced:
+      invalidOutcome._tag === "Failed" &&
+      invalidOutcome.message.toLowerCase().includes("check constraint failed"),
+  };
+});
+
+const checkConstraints = Effect.fn(function* (db: D1Database) {
+  const [existing, voiceRefusal] = yield* Effect.all([
+    checkExistingConstraints(db),
+    checkVoiceRefusalConstraints(db),
+  ] as const);
+  return { ...existing, ...voiceRefusal } satisfies ConstraintChecks;
 });
 
 const readMigrationState = Effect.fn(function* (db: D1Database) {
@@ -181,12 +236,15 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
     : {
         pendingTurnUniquenessEnforced: false,
         transcriptAppendOnlyEnforced: false,
+        hostedVoiceRefusalPrimaryKeyEnforced: false,
+        hostedVoiceRefusalOutcomeCheckEnforced: false,
       };
 
   return {
     appliedMigrationNames: snapshot.appliedMigrationNames,
     transcriptHasIteration: snapshot.transcriptHasIteration,
     hostedWhatsAppInboundExists: snapshot.hostedWhatsAppInboundExists,
+    hostedVoiceRefusalsExists: snapshot.hostedVoiceRefusalsExists,
     foreignKeyViolationCount: snapshot.foreignKeyViolationCount,
     transcriptEvidence: Option.match(snapshot.preservedEvidence, {
       onNone: () => ({ _tag: "Empty" as const }),

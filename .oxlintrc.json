@@ -215,6 +215,7 @@
         "infra/cloudflare/alchemy.run.ts",
         "infra/cloudflare/alchemy-drift.run.ts",
         "apps/server/cloudflare/core-worker.ts",
+        "apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/documents/document-extraction-worker.ts",
         "apps/server/cloudflare/documents/document-parsing-worker.ts",
@@ -454,13 +455,6 @@
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",
         "no-magic-numbers": "off"
-      }
-    },
-    // Cloudflare Worker entrypoints are consumed through their default `fetch` export.
-    {
-      "files": ["infra/cloudflare/d1-migration-test-worker.ts"],
-      "rules": {
-        "import/no-default-export": "off"
       }
     },
     {

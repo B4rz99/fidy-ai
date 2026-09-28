@@ -25,6 +25,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       PAT_ADMISSION_KEY: ${{ secrets.PAT_ADMISSION_KEY }}
+      OPERATOR_ALERT_EMAIL: ${{ vars.OPERATOR_ALERT_EMAIL }}
+      SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -163,6 +165,22 @@ jobs:
       - name: Reject post-deployment Cloudflare drift
         working-directory: infra/cloudflare
         run: bash scripts/check-topology-drift.sh
+
+      - name: Email operator if deployment failed
+        if: ${{ failure() }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          # No provider payload, token, exception, or application data enters this message.
+          jq -n --arg to "$OPERATOR_ALERT_EMAIL" --arg release "$RELEASE_GIT_SHA" \
+            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: critical deployment failure",text:("Production release " + $release + " failed. Inspect the private GitHub Actions run.")}' \
+            > "$RUNNER_TEMP/operator-alert.json"
+          curl --fail --silent --show-error --max-time 10 \
+            --request POST 'https://api.resend.com/emails' \
+            --header "Authorization: Bearer $RESEND_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --header "Idempotency-Key: fidy-deploy-${RELEASE_GIT_SHA}" \
+            --data-binary "@$RUNNER_TEMP/operator-alert.json" >/dev/null
 
       - name: Record the release
         if: ${{ always() }}

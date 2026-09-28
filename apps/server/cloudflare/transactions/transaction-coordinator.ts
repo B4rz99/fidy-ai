@@ -81,6 +81,7 @@ import {
   workerRelease,
 } from "../runtime/telemetry";
 import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
+import { coordinatorProbeName } from "../runtime/operational-probes";
 import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import {
@@ -671,6 +672,39 @@ const boundedHostedOwner = ({
   return Promise.race([ownerSettled, recovered]).finally(() => cancellation.abort());
 };
 
+const reservedCoordinatorProbe = ({
+  db,
+  userId,
+  path,
+  method,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  path: string;
+  method: string;
+}>): Option.Option<Promise<Response>> => {
+  if (path === "/operational/probe" && userId === coordinatorProbeName) {
+    return Option.some(
+      db
+        .prepare("SELECT 1 AS usable")
+        .first()
+        .then(
+          () => new Response(null, { status: 204 }),
+          () => new Response(null, { status: 503 })
+        )
+    );
+  }
+  // Reserved smoke compatibility never enters User coordination or reads D1.
+  if (userId !== "_release-smoke-v1") return Option.none();
+  return Option.some(
+    Promise.resolve(
+      path === "/release-smoke" && method === "GET"
+        ? Response.json({ status: "compatible" })
+        : Response.json({}, { status: 404 })
+    )
+  );
+};
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
@@ -694,6 +728,13 @@ export class UserTransactionCoordinator {
     const environment = this.env;
     const userId = this.state.id.name;
     const path = new URL(request.url).pathname;
+    const probe = reservedCoordinatorProbe({
+      db: environment.DB,
+      userId,
+      path,
+      method: request.method,
+    });
+    if (Option.isSome(probe)) return probe.value;
     // A progress read has live session authority but does not start canonical work.
     if (path === "/hosted-turn/progress") {
       return observeWorkerResponse(() => this.runHostedProgress(request, userId), {

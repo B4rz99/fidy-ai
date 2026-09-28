@@ -1,0 +1,188 @@
+/// <reference types="bun-types" />
+
+import { Context, Data, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/unstable/http";
+import {
+  SmokeIdentity,
+  SmokeResponse,
+  smokePath,
+  verifySmokeIdentity,
+} from "../../apps/server/cloudflare/runtime/smoke";
+import { verifyEdgeSmoke } from "./verify-edge-smoke";
+
+const RunnerConfig = Schema.Struct({
+  RELEASE_GIT_SHA: SmokeIdentity.fields.gitRevision,
+  CONTRACT_DIGEST: SmokeIdentity.fields.contractDigest,
+  PUBLIC_VERSION_ID: SmokeIdentity.fields.workerVersionId,
+  CORE_VERSION_ID: SmokeIdentity.fields.workerVersionId,
+  PUBLIC_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
+  CORE_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
+  SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+type RunnerConfig = typeof RunnerConfig.Type;
+class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
+  readonly reason: string;
+}> {}
+
+const apiOrigin = "https://api.fidyapp.com";
+const maxAttempts = 20;
+const pollDelayMs = 1500;
+const successStart = 200;
+const successEnd = 300;
+const probeEntropyBytes = 16;
+
+const candidateHeaders = (config: RunnerConfig): Readonly<Record<string, string>> => ({
+  "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${config.PUBLIC_VERSION_ID}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
+  "x-fidy-smoke-proof": config.SMOKE_PROOF,
+});
+
+const call = Effect.fn(function* (
+  path: string,
+  headers: Readonly<Record<string, string>>,
+  body: Option.Option<string>
+) {
+  const client = yield* HttpClient.HttpClient;
+  const url = `${apiOrigin}${path}`;
+  const request = Option.isSome(body)
+    ? HttpClientRequest.post(url, {
+        headers: { ...headers, "content-type": "application/json" },
+        body: HttpBody.text(body.value, "application/json"),
+      })
+    : HttpClientRequest.get(url, { headers });
+  return yield* client.execute(request).pipe(Effect.timeout("8 seconds"));
+});
+
+const check = Effect.fn(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  config: RunnerConfig
+) {
+  if (
+    response.status < successStart ||
+    response.status >= successEnd ||
+    response.headers["cache-control"] !== "no-store" ||
+    response.headers["x-fidy-smoke-worker-version"] !== config.PUBLIC_VERSION_ID
+  ) {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Candidate request did not reach the expected public Worker",
+    });
+  }
+  const raw = yield* response.json;
+  const result = Schema.decodeUnknownOption(
+    Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity })
+  )(raw);
+  const expected = { gitRevision: config.RELEASE_GIT_SHA, contractDigest: config.CONTRACT_DIGEST };
+  if (
+    Option.isNone(result) ||
+    !verifySmokeIdentity({
+      expected: { ...expected, workerVersionId: config.PUBLIC_VERSION_ID },
+      observed: result.value.public,
+    }) ||
+    !verifySmokeIdentity({
+      expected: { ...expected, workerVersionId: config.CORE_VERSION_ID },
+      observed: result.value.core,
+    })
+  ) {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Candidate smoke did not prove the compatible public and Core release",
+    });
+  }
+  return result.value.status;
+});
+
+const awaitSyntheticWork = Effect.fn(function* (
+  config: RunnerConfig,
+  headers: Readonly<Record<string, string>>
+) {
+  const probeId = Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
+  const request = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    protocolVersion: 1,
+    probeId,
+    expectedPublicVersionId: config.PUBLIC_VERSION_ID,
+    expectedCoreVersionId: config.CORE_VERSION_ID,
+    expectedGitRevision: config.RELEASE_GIT_SHA,
+    expectedContractDigest: config.CONTRACT_DIGEST,
+  });
+  let status = yield* check(yield* call(smokePath, headers, Option.some(request)), config);
+  for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
+    yield* Effect.sleep(`${pollDelayMs} millis`);
+    status = yield* check(
+      yield* call(`${smokePath}?probeId=${probeId}`, headers, Option.none()),
+      config
+    );
+  }
+  if (status !== "passed") {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Synthetic Queue and Workflow probe did not complete",
+    });
+  }
+});
+
+const checkEdge = Effect.fn(function* (
+  config: RunnerConfig,
+  headers: Readonly<Record<string, string>>
+) {
+  const result = yield* verifyEdgeSmoke({
+    probe: ({ method, path, headers: probeHeaders }) =>
+      Effect.gen(function* () {
+        const response = yield* call(
+          path,
+          { ...headers, ...probeHeaders },
+          method === "POST" ? Option.some("{}") : Option.none()
+        );
+        return { status: response.status, headers: new Headers(response.headers) };
+      }),
+    candidate: Option.some({
+      proof: config.SMOKE_PROOF,
+      override: headers["cloudflare-workers-version-overrides"] ?? "",
+      publicVersionId: config.PUBLIC_VERSION_ID,
+    }),
+  }).pipe(Effect.exit);
+  if (Exit.isFailure(result)) {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Candidate edge rejections or headers were not verified",
+    });
+  }
+});
+
+/** Explicitly pinned HTTP invocations; a fallback to stable always fails identity comparison. */
+export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
+  const decoded = Schema.decodeUnknownOption(RunnerConfig)(env);
+  if (Option.isNone(decoded)) {
+    return yield* new ReleaseSmokeFailed({ reason: "Incomplete production smoke configuration" });
+  }
+  const config = decoded.value;
+  const headers = candidateHeaders(config);
+  yield* awaitSyntheticWork(config, headers);
+  yield* checkEdge(config, headers);
+});
+
+if (import.meta.main) {
+  const result = await Effect.runPromiseExit(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const services = yield* Layer.build(FetchHttpClient.layer);
+        return yield* verifyProductionSmoke(process.env).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" })
+        );
+      })
+    )
+  );
+  const passed = Exit.isSuccess(result);
+  await Bun.write(
+    passed ? Bun.stdout : Bun.stderr,
+    passed
+      ? "Exact-version production smoke passed.\n"
+      : "Exact-version production smoke failed; do not promote.\n"
+  );
+  if (!passed) process.exitCode = 1;
+}

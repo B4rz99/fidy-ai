@@ -1,11 +1,18 @@
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
-import { DateTime, Effect, Result, Schema } from "effect";
-import { describe, expect } from "vitest";
+import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
+import { describe, expect, vi } from "vitest";
+import { Miniflare } from "miniflare";
 import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
+import {
+  SyntheticBindings,
+  unavailableBucket,
+  unavailableQueue,
+  unavailableWorkflow,
+} from "./incomplete-platform-fixture";
 import publicWorker, { makePublicWorker } from "../../apps/server/cloudflare/public-worker";
 import { makeWorkerTelemetry } from "../../apps/server/cloudflare/runtime/telemetry";
 import {
@@ -13,8 +20,58 @@ import {
   productionTopology,
 } from "../../apps/server/cloudflare/runtime/topology";
 
+const withIsolatedD1 = <A, E, R>(
+  name: string,
+  use: (db: D1Database) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | Cause.UnknownError, R> =>
+  Effect.scoped(
+    Effect.acquireUseRelease(
+      Effect.sync(
+        () =>
+          new Miniflare({
+            workers: [
+              {
+                config: {
+                  name,
+                  type: "worker",
+                  compatibilityDate: "2026-09-08",
+                  env: { DB: { id: name, type: "d1" } },
+                  manifest: {
+                    mainModule: "index.mjs",
+                    modules: {
+                      "index.mjs": {
+                        contents: "export default { fetch() { return new Response('ok') } }",
+                        type: "esm",
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          })
+      ),
+      (instance) =>
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() => instance.ready);
+          const db = yield* Effect.tryPromise(() => instance.getD1Database("DB"));
+          return yield* use(db);
+        }),
+      (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
+    )
+  );
+
+const withMethods = SyntheticBindings.withMethods;
 const gitRevision = "0123456789abcdef0123456789abcdef01234567";
 const contractDigest = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+const smokeBody = (coreVersion: string): string =>
+  JSON.stringify({
+    protocolVersion: 1,
+    probeId: "b".repeat(32),
+    expectedPublicVersionId: "dc8dcd28-271b-4367-9840-6c244f84cb40",
+    expectedCoreVersionId: coreVersion,
+    expectedGitRevision: gitRevision,
+    expectedContractDigest: contractDigest,
+  });
 
 const privateFailureDetail =
   "D1_ERROR: no such table: categories; SELECT secret_value FROM internal_topology";
@@ -35,7 +92,7 @@ const unusedAiBinding = {
   run: (): Promise<never> => Promise.reject(new Error("Unused Workers AI binding")),
 };
 
-const coreEnvironment = {
+const coreEnvironment: Parameters<typeof coreWorker.fetch>[1] = {
   AI: unusedAiBinding,
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
@@ -95,6 +152,172 @@ const makePublicEnvironment = (overrides: Partial<PublicEnvironment> = {}): Publ
   PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
   RELEASE_GIT_SHA: gitRevision,
   ...overrides,
+});
+
+describe("Core smoke adapter", () => {
+  it.effect("routes the reserved endpoint and dedicated Queue without touching User work", () =>
+    Effect.gen(function* () {
+      const proof = "a".repeat(64);
+      const environment: Parameters<typeof coreWorker.fetch>[1] = {
+        ...coreEnvironment,
+        SMOKE_PROOF: proof,
+        CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
+        SMOKE_QUEUE_NAME: "SmokeQueue",
+        SMOKE_QUEUE: withMethods(unavailableQueue, { send: failDatabaseOperation }),
+        SMOKE_BUCKET: withMethods(unavailableBucket, { put: failDatabaseOperation }),
+        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: failDatabaseOperation }),
+      };
+      const response = yield* Effect.tryPromise(() =>
+        coreWorker.fetch(
+          new Request("https://core.internal/internal/release-smoke", {
+            method: "POST",
+            headers: { "x-fidy-smoke-proof": proof, "content-type": "application/json" },
+            body: smokeBody("db7cd8d3-4425-4fe7-8c81-01bf963b6067"),
+          }),
+          environment
+        )
+      );
+      expect(response.status).toBe(503);
+
+      let acked = false;
+      const queueEnvironment: Parameters<typeof coreWorker.queue>[1] = {
+        ...environment,
+        DB: withMethods(failingDatabase, {
+          prepare: (): object => ({
+            bind: (): object => ({
+              first: (): Promise<{ expires_at_ms: number }> =>
+                Promise.resolve({ expires_at_ms: 0 }),
+            }),
+          }),
+        }),
+      };
+      const fixtureMessage = queueBatch({}).messages.at(0);
+      if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
+      yield* Effect.tryPromise(() =>
+        coreWorker.queue(
+          {
+            ...queueBatch({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision }),
+            queue: "SmokeQueue",
+            messages: [
+              {
+                ...fixtureMessage,
+                body: { protocolVersion: 1, probeId: "b".repeat(32), gitRevision },
+                ack: (): void => {
+                  acked = true;
+                },
+              },
+            ],
+          },
+          queueEnvironment
+        )
+      );
+      expect(acked).toBe(true);
+    })
+  );
+
+  it.effect(
+    "publishes an admitted probe through Core fetch and hands it to the Workflow via Core Queue",
+    () =>
+      Effect.gen(function* () {
+        let work: unknown;
+        let started: unknown;
+        let acked = false;
+        let claimed = false;
+        const database = {
+          prepare: (sql: string): object => ({
+            all: (): Promise<object> => Promise.resolve({}),
+            bind: (): object => ({
+              run: (): Promise<object> => {
+                if (sql.startsWith("UPDATE")) claimed = true;
+                return Promise.resolve({ meta: { changes: 1 } });
+              },
+              first: (): Promise<unknown> =>
+                Promise.resolve(
+                  sql.includes("expires_at_ms FROM")
+                    ? { expires_at_ms: Number.MAX_SAFE_INTEGER }
+                    : {
+                        git_revision: gitRevision,
+                        expires_at_ms: Number.MAX_SAFE_INTEGER,
+                        status: claimed ? "queued" : "pending",
+                      }
+                ),
+            }),
+          }),
+        };
+        const environment: Parameters<typeof coreWorker.fetch>[1] = {
+          ...coreEnvironment,
+          DB: withMethods(failingDatabase, { prepare: database.prepare }),
+          SMOKE_PROOF: "a".repeat(64),
+          CF_VERSION_METADATA: { id: "dc8dcd28-271b-4367-9840-6c244f84cb40" },
+          SMOKE_QUEUE_NAME: "SmokeQueue",
+          SMOKE_QUEUE: withMethods(unavailableQueue, {
+            send: (value: unknown): Promise<void> => {
+              work = value;
+              return Promise.resolve();
+            },
+          }),
+          SMOKE_BUCKET: withMethods(unavailableBucket, {
+            put: (): Promise<void> => Promise.resolve(),
+            get: (): Promise<object> => Promise.resolve({}),
+          }),
+          SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
+            create: (value: unknown): Promise<object> => {
+              started = value;
+              return Promise.resolve({});
+            },
+          }),
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: (): Promise<Response> =>
+                Promise.resolve(Response.json({ status: "compatible" })),
+            }),
+          },
+          KAPSO_API_KEY: "configured",
+          KAPSO_WEBHOOK_SECRET: "configured",
+          RESEND_API_KEY: "configured",
+          WOMPI_PRIVATE_KEY: "configured",
+          WOMPI_INTEGRITY_SECRET: "configured",
+          WOMPI_EVENT_SECRET: "configured",
+        };
+        const response = yield* Effect.tryPromise(() =>
+          coreWorker.fetch(
+            new Request("https://core.internal/internal/release-smoke", {
+              method: "POST",
+              headers: { "x-fidy-smoke-proof": "a".repeat(64), "content-type": "application/json" },
+              body: smokeBody("dc8dcd28-271b-4367-9840-6c244f84cb40"),
+            }),
+            environment
+          )
+        );
+        expect(response.status).toBe(202);
+        expect(work).toEqual({ protocolVersion: 1, probeId: "b".repeat(32), gitRevision });
+        const fixtureMessage = queueBatch({}).messages.at(0);
+        if (fixtureMessage === undefined) throw new Error("Missing Queue fixture message");
+        yield* Effect.tryPromise(() =>
+          coreWorker.queue(
+            {
+              ...queueBatch(work),
+              queue: "SmokeQueue",
+              messages: [
+                {
+                  ...fixtureMessage,
+                  body: work,
+                  ack: (): void => {
+                    acked = true;
+                  },
+                },
+              ],
+            },
+            environment
+          )
+        );
+        expect(acked).toBe(true);
+        expect(started).toEqual({
+          id: `release-smoke-${"b".repeat(32)}`,
+          params: work,
+        });
+      })
+  );
 });
 
 describe("Deployment configuration", () => {
@@ -426,7 +649,68 @@ describe("Cloudflare Worker topology", () => {
       );
     })
   );
+});
 
+it.live("routes the private canary Queue to a real Workflow handoff, not to application work", () =>
+  withIsolatedD1("canary-queue-test", (db) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+          )
+          .run()
+      );
+      let created = false;
+      const done = (): Promise<void> => Promise.resolve();
+      const canaryInstance: WorkflowInstance = {
+        id: "canary",
+        status: () => Promise.resolve({ status: "complete" }),
+        pause: done,
+        resume: done,
+        restart: done,
+        terminate: done,
+        delete: done,
+        sendEvent: done,
+        subscribe: () =>
+          Promise.resolve({
+            next: () => Promise.resolve({ done: true as const, value: undefined }),
+            [Symbol.dispose]: () => {},
+          }),
+      };
+      const workflow: Workflow = {
+        create: () => {
+          created = true;
+          return Promise.resolve(canaryInstance);
+        },
+        get: () => Promise.resolve(canaryInstance),
+        createBatch: () => Promise.resolve([]),
+        deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
+      };
+      const now = yield* Clock.currentTimeMillis;
+      const batch = {
+        ...queueBatch({ version: 1, sentAtMs: Math.floor(now / 300_000) * 300_000 }),
+        queue: "OperationalCanaryQueue",
+      };
+      yield* Effect.tryPromise(() =>
+        makeCoreWorker(collectingTelemetry([])).queue(batch, {
+          ...coreEnvironment,
+          DB: db,
+          OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
+          OPERATIONAL_CANARY_WORKFLOW: workflow,
+        })
+      );
+      expect(created).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT kind FROM operational_canary").all())
+      ).toMatchObject({
+        results: [{ kind: "queueExecution" }],
+      });
+    })
+  )
+);
+
+describe("Cloudflare Worker topology (scheduled)", () => {
   it.effect("reports a failed cron invocation after attempting independent activities", () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
@@ -447,7 +731,136 @@ describe("Cloudflare Worker topology", () => {
       expect(exported).not.toContain(privateFailureDetail);
     })
   );
+});
 
+it.live(
+  "bounds public Tail-event storage through successive Core schedules without deleting current evidence",
+  () =>
+    withIsolatedD1("event-retention-test", (db) =>
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
+            )
+            .run()
+        );
+        const minuteMs = 60_000;
+        const current = Math.floor((yield* Clock.currentTimeMillis) / minuteMs) * minuteMs;
+        const oldBuckets = Array.from({ length: 200 }, (_, index) =>
+          db
+            .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 1)")
+            .bind(current - 172_800_000 - index * minuteMs)
+        );
+        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(0, 100)));
+        yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(100)));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+            .bind(current)
+            .run()
+        );
+        const worker = makeCoreWorker(collectingTelemetry([]));
+        const environment: Parameters<typeof coreWorker.scheduled>[1] = {
+          ...coreEnvironment,
+          DB: db,
+          ASYNC_HEALTH_ENABLED: "enabled",
+        };
+        yield* Effect.tryPromise(() =>
+          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
+        );
+        const exceptionCount = (): Promise<unknown> =>
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
+            )
+            .first();
+        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 72 });
+        yield* Effect.tryPromise(() =>
+          expect(worker.scheduled(scheduledController, environment)).rejects.toThrow()
+        );
+        expect(yield* Effect.tryPromise(exceptionCount)).toEqual({ count: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'heartbeat'"
+              )
+              .first()
+          )
+        ).toEqual({ count: 1 });
+      })
+    )
+);
+
+const rejectedOperatorFetch = (): Promise<Response> =>
+  Promise.resolve(new Response('{"message":"rejected"}', { status: 400 }));
+
+const inspectRejectedAlert = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`CREATE TABLE operational_alerts (
+          kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL,
+          first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, last_attempt_ms INTEGER,
+          attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
+          next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+          acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
+        )`)
+        .run()
+    );
+    const worker = makeCoreWorker(collectingTelemetry([]));
+    yield* Effect.tryPromise(() =>
+      expect(
+        worker.scheduled(scheduledController, {
+          ...coreEnvironment,
+          DB: db,
+          ASYNC_HEALTH_ENABLED: "enabled",
+          ASYNC_DEAD_LETTERS: {
+            metrics: () => Promise.resolve({ backlogCount: 1, backlogBytes: 20 }),
+          },
+          OPERATOR_ALERT_EMAIL: "operator@example.com",
+          RESEND_API_KEY: "fake-test-key",
+        })
+      ).rejects.toThrow()
+    );
+    const states = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT kind, state, delivery_confirmed, acknowledged_ms FROM operational_alerts WHERE kind = 'dead_letters'"
+        )
+        .all()
+    );
+    expect(states.results).toEqual([
+      {
+        kind: "dead_letters",
+        state: "firing",
+        delivery_confirmed: 0,
+        acknowledged_ms: null,
+      },
+    ]);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT COUNT(*) AS count FROM operational_alerts WHERE delivery_confirmed = 1")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+  });
+
+it.effect(
+  "keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary",
+  () =>
+    Effect.scoped(
+      Effect.acquireUseRelease(
+        Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(rejectedOperatorFetch)),
+        () => withIsolatedD1("operator-alert-worker", inspectRejectedAlert),
+        (fetch) => Effect.sync(() => fetch.mockRestore())
+      )
+    )
+);
+
+describe("Cloudflare Worker topology (continued)", () => {
   it.effect("retains one owning span when runtime release metadata is malformed", () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];

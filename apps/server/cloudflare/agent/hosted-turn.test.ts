@@ -1487,6 +1487,7 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
           DB: db,
           workflows: {},
           deadLetters: Option.none(),
+          workQueues: {},
         });
       expect((yield* inspect()).find((signal) => signal.operation === "whatsapp")).toMatchObject({
         state: "attention",

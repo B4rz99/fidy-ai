@@ -12,6 +12,7 @@ import {
   workerRelease,
 } from "../runtime/telemetry";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
+import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
@@ -215,19 +216,22 @@ export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runOnboardingEmailWorkflow({
-          environment: this.env,
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.onboardingEmail",
-      }
-    );
+    return captureWorkflowFailure({
+      work: observeWorkerPromise(
+        () =>
+          runOnboardingEmailWorkflow({
+            environment: this.env,
+            payload: event.payload,
+            activity: (name, options, activity) => step.do(name, options, activity),
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.onboardingEmail",
+        }
+      ),
+      db: this.env.DB,
+    });
   }
 }
 

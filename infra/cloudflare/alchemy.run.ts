@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { EmailAddress } from "@fidy/server/client";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import {
@@ -21,12 +22,14 @@ const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
+const operatorAlertEmail = Config.schema(EmailAddress, "OPERATOR_ALERT_EMAIL");
 const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
 const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
 const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
 const wompiEventSecret = Config.Redacted("WOMPI_EVENT_SECRET");
 const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
+const smokeProof = Config.Redacted("SMOKE_PROOF");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
@@ -163,11 +166,18 @@ export default Alchemy.Stack(
     });
     // Private statement byte staging. The ingress never receives this binding; only the Core Worker
     // writes, verifies, and reclaims staged material through its authorized paths (#788, ADR 0028).
+    const eventTail = yield* Cloudflare.Worker("OperationalEventTail", {
+      main: "../../apps/server/cloudflare/operational-tail-worker.ts",
+      compatibility: { date: "2026-09-08" },
+      env: { DB: database },
+      workersDev: false,
+    });
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
     yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
+      tailConsumers: [eventTail],
       compatibility: { date: "2026-09-08" },
       crons: ["*/5 * * * *"],
       env: {
@@ -187,6 +197,15 @@ export default Alchemy.Stack(
     });
 
     const asyncDeadLetters = yield* Cloudflare.Queues.Queue("AsyncDeadLetters");
+    const operationalCanaryQueue = yield* Cloudflare.Queues.Queue("OperationalCanaryQueue");
+    const operationalCanaryWorkflow = Cloudflare.Workflow("OperationalCanaryWorkflowV1", {
+      className: "OperationalCanaryWorkflowV1",
+    });
+    const smokeBucket = yield* Cloudflare.R2.Bucket("ReleaseSmokeBucket");
+    const smokeQueue = yield* Cloudflare.Queues.Queue("ReleaseSmokeQueue");
+    const smokeWorkflow = Cloudflare.Workflow("ReleaseSmokeWorkflowV1", {
+      className: "ReleaseSmokeWorkflowV1",
+    });
     const billingCollectionQueue = yield* Cloudflare.Queues.Queue("BillingCollectionQueue");
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
@@ -206,6 +225,7 @@ export default Alchemy.Stack(
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
+      tailConsumers: [eventTail],
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
       dev: {
@@ -215,6 +235,14 @@ export default Alchemy.Stack(
       },
       env: {
         AI: Cloudflare.Workers.AI(),
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_PROOF: yield* development
+          ? smokeProof.pipe(Config.withDefault(Redacted.make("")))
+          : smokeProof,
+        SMOKE_BUCKET: smokeBucket,
+        SMOKE_QUEUE: smokeQueue,
+        SMOKE_QUEUE_NAME: smokeQueue.queueName,
+        SMOKE_WORKFLOW: smokeWorkflow,
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
@@ -230,6 +258,13 @@ export default Alchemy.Stack(
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
         ASYNC_HEALTH_ENABLED: "enabled",
         ASYNC_DEAD_LETTERS: asyncDeadLetters,
+        OPERATIONAL_CANARY_QUEUE: operationalCanaryQueue,
+        OPERATIONAL_CANARY_QUEUE_NAME: operationalCanaryQueue.queueName,
+        OPERATIONAL_CANARY_WORKFLOW: operationalCanaryWorkflow,
+        FORWARDED_EMAIL_QUEUE: emailQueue,
+        OPERATOR_ALERT_EMAIL: yield* development
+          ? Config.String("OPERATOR_ALERT_EMAIL").pipe(Config.withDefault(""))
+          : operatorAlertEmail,
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
@@ -237,6 +272,7 @@ export default Alchemy.Stack(
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
         BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
         EMAIL_REPLACEMENT_QUEUE: emailReplacementQueue,
+        EMAIL_REPLACEMENT_HEALTH_QUEUE: emailReplacementQueue,
         EMAIL_REPLACEMENT_WORKFLOW: emailReplacementWorkflow,
         RESEND_API_KEY: yield* resolveResendKey(development),
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
@@ -263,6 +299,18 @@ export default Alchemy.Stack(
       workersDev: productionTopology.core.workersDev,
     });
 
+    yield* Cloudflare.Queues.Consumer("OperationalCanaryConsumer", {
+      queueId: operationalCanaryQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 1, maxRetries: 3 },
+    });
+    yield* Cloudflare.Queues.Consumer("ReleaseSmokeConsumer", {
+      queueId: smokeQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 1, maxRetries: 3 },
+    });
     yield* Cloudflare.Queues.Consumer("ForwardedEmailConsumer", {
       queueId: emailQueue.queueId,
       scriptName: core.workerName,
@@ -312,6 +360,7 @@ export default Alchemy.Stack(
 
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
+      tailConsumers: [eventTail],
       compatibility: { date: "2026-09-08" },
       dev: {
         host: "127.0.0.1",
@@ -321,6 +370,11 @@ export default Alchemy.Stack(
       domain: production ? productionTopology.ingress.hostname : undefined,
       env: {
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
+        CONTRACT_DIGEST: releaseMetadata.contractDigest,
+        CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
+        SMOKE_PROOF: yield* development
+          ? smokeProof.pipe(Config.withDefault(Redacted.make("")))
+          : smokeProof,
         [productionTopology.ingress.coreBinding]: core,
         LOCAL_CANONICAL_READ_BEARER: resolveLocalCanonicalReadBearer(development),
         PAT_ADMISSION_KEY: yield* resolvePatAdmissionKey(development),

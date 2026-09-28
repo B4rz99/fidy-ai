@@ -680,7 +680,7 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
       expect(results).toHaveLength(1);
       expect(
         yield* Schema.decodeUnknownEffect(Schema.String)(results[0]?.disclosure_json)
-      ).toContain("onboarding-2026-09-22");
+      ).toContain("onboarding-2026-09-28-kapso-free");
       expect(results).toMatchObject([
         {
           decision: "accepted",

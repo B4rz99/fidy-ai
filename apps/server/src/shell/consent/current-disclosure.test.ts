@@ -1,6 +1,8 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Data, Effect } from "effect";
 import { CURRENT_DISCLOSURE_TEXT, currentDisclosure } from "./current-disclosure";
+
+class PolicyFixtureUnavailable extends Data.TaggedError("PolicyFixtureUnavailable")<{}> {}
 
 const sha256 = (content: string | Uint8Array): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
@@ -21,7 +23,14 @@ it.effect("pins the exact chat disclosure and web-owned policy metadata", () =>
     const disclosure = yield* loadCurrentDisclosure;
 
     expect(sha256(CURRENT_DISCLOSURE_TEXT)).toBe(disclosure.contentSha256);
-    expect(disclosure.policy.contentSha256).toMatch(/^[a-f0-9]{64}$/u);
+    const policy = yield* Effect.tryPromise({
+      try: () =>
+        Bun.file(
+          new URL("../../../../web/src/features/public-site/legal/policy.html", import.meta.url)
+        ).bytes(),
+      catch: () => new PolicyFixtureUnavailable(),
+    });
+    expect(sha256(policy)).toBe(disclosure.policy.contentSha256);
   })
 );
 

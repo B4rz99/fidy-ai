@@ -9,7 +9,7 @@
     "check:document-parsing": "bun ../../scripts/document-parsing/check.ts",
     "check:document-parsing:remote": "bun ../../scripts/document-parsing/check.ts --remote",
     "typecheck": "tsc --noEmit",
-    "test": "bun --bun vitest run",
+    "test": "CLOUDFLARE_ACCOUNT_ID=00000000000000000000000000000000 CLOUDFLARE_API_TOKEN=local-only-d1-migration-test-token bun --bun vitest run",
     "test:workers-ai-conformance": "bash scripts/check-workers-ai-conformance.sh"
   },
   "dependencies": {

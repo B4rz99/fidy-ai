@@ -1,0 +1,25 @@
+apps/server/src/shell/identity/browser-runtime.ts
+  s_faf3e4289f6ac3::t_83a841c2bb8b90 8-13
+apps/server/cloudflare/agent/hosted-authority.ts
+  s_faf3e4289f6ac3::t_19a6d75f82e1b2 12-15
+  s_faf3e4289f6ac3::t_17b8c8c7523173 55
+apps/server/src/shell/identity/session-guard.ts
+  s_faf3e4289f6ac3::t_dbfa93ded1ab9a 14-15,21,25-35
+  s_faf3e4289f6ac3::t_a9f887f67ed855 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3337e42111b16539f0d731e27baa5104e5a5a12c",
+  "prompts": {},
+  "sessions": {
+    "s_faf3e4289f6ac3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e5b8-ea37-763c-9f19-b0a1a9a86f0a",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

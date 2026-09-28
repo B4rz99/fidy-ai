@@ -8,6 +8,8 @@ import type {
   ProductionWorkflowRunSnapshot,
 } from "../infra/cloudflare/scripts/migration-history";
 import {
+  MigrationRepairCommitSha,
+  MigrationRepairRepository,
   decodeLatestProductionWorkflowRun,
   decodeMigrationRepairStatuses,
   parseGitMigrationChanges,
@@ -16,10 +18,8 @@ import {
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const GitReference = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_./-]+$/u));
-const CommitSha = Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u));
-const Repository = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u));
 
-const runMigrationEditPolicyCommand = (command: ReadonlyArray<string>): string => {
+const runMigrationEditPolicyCommand = (command: readonly [string, ...Array<string>]): string => {
   const result = Bun.spawnSync([...command], {
     cwd: workspaceRoot,
     stderr: "pipe",
@@ -82,8 +82,8 @@ const main = (): void => {
     return;
   }
 
-  const headSha = Schema.decodeUnknownSync(CommitSha)(Bun.env.PR_HEAD_SHA);
-  const repository = Schema.decodeUnknownSync(Repository)(Bun.env.GITHUB_REPOSITORY);
+  const headSha = Schema.decodeUnknownSync(MigrationRepairCommitSha)(Bun.env.PR_HEAD_SHA);
+  const repository = Schema.decodeUnknownSync(MigrationRepairRepository)(Bun.env.GITHUB_REPOSITORY);
   if (Bun.env.GH_TOKEN === undefined || Bun.env.GH_TOKEN.length === 0) {
     throw new Error("GitHub status access is unavailable");
   }

@@ -1,8 +1,11 @@
 import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vitest";
 import {
+  MigrationRepairCommitSha,
+  MigrationRepairRepository,
   compareAppliedMigrationRows,
   containsRepairableMigrationChange,
   decodeLatestProductionWorkflowRun,
@@ -43,6 +46,18 @@ const approvedRepairStatuses = [
 ] as const;
 
 describe("D1 migration history policy", () => {
+  it("validates repair commit and repository identities", () => {
+    expect(Schema.decodeUnknownSync(MigrationRepairCommitSha)("a".repeat(40))).toBe("a".repeat(40));
+    expect(Schema.decodeUnknownSync(MigrationRepairCommitSha)("b".repeat(64))).toBe("b".repeat(64));
+    expect(Schema.decodeUnknownSync(MigrationRepairRepository)("owner/repository")).toBe(
+      "owner/repository"
+    );
+    expect(() => Schema.decodeUnknownSync(MigrationRepairCommitSha)("a".repeat(39))).toThrow();
+    expect(() =>
+      Schema.decodeUnknownSync(MigrationRepairRepository)("owner/repository/extra")
+    ).toThrow();
+  });
+
   it("accepts applied hashes and leaves a newly checked-in migration pending", () => {
     expect(
       Effect.runSync(
@@ -101,6 +116,15 @@ describe("D1 migration history policy", () => {
       )
     ).toEqual([{ name: firstMigration, hash: firstMigrationHash }]);
 
+    expect(() => decodeWranglerMigrationRows("[]")).toThrow();
+    expect(() =>
+      decodeWranglerMigrationRows(
+        JSON.stringify([
+          { results: [], success: true },
+          { results: [], success: true },
+        ])
+      )
+    ).toThrow();
     expect(() =>
       decodeWranglerMigrationRows(JSON.stringify([{ results: [], success: false }]))
     ).toThrow();

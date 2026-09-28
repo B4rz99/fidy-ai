@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
+  MigrationRepairCommitSha,
+  MigrationRepairRepository,
   containsRepairableMigrationChange,
   decodeMigrationRepairName,
   decodePullRequestFiles,
@@ -12,12 +14,10 @@ import {
 import { readProductionMigrationLedger } from "./production-migration-ledger";
 
 const PullRequestNumber = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,7}$/u));
-const CommitSha = Schema.String.check(Schema.isPattern(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u));
-const Repository = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u));
 const PullRequest = Schema.Struct({
   state: Schema.Literal("open"),
   base: Schema.Struct({ ref: Schema.Literal("trunk") }),
-  head: Schema.Struct({ sha: CommitSha }),
+  head: Schema.Struct({ sha: MigrationRepairCommitSha }),
 });
 
 const runGitHub = (arguments_: ReadonlyArray<string>): string => {
@@ -74,7 +74,9 @@ const readChangedFiles = (
   );
 
 const main = (): void => {
-  const repository = Schema.decodeUnknownSync(Repository)(process.env.GITHUB_REPOSITORY);
+  const repository = Schema.decodeUnknownSync(MigrationRepairRepository)(
+    process.env.GITHUB_REPOSITORY
+  );
   const pullRequestNumber = Schema.decodeUnknownSync(PullRequestNumber)(
     process.env.MIGRATION_REPAIR_PR_NUMBER
   );

@@ -11,6 +11,12 @@ const MigrationName = Schema.String.check(
   Schema.isMaxLength(migrationNameMaximumCharacters)
 );
 const MigrationHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+export const MigrationRepairCommitSha = Schema.String.check(
+  Schema.isPattern(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u)
+);
+export const MigrationRepairRepository = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u)
+);
 
 export const AppliedMigration = Schema.Struct({
   name: MigrationName,
@@ -27,7 +33,7 @@ const WranglerQueryResult = Schema.Struct({
   success: Schema.Literal(true),
   results: Schema.Array(WranglerLedgerRow),
 });
-const WranglerQueryOutput = Schema.Array(WranglerQueryResult);
+const WranglerQueryOutput = Schema.Tuple([WranglerQueryResult]);
 
 export type MigrationSource = {
   readonly name: string;
@@ -57,11 +63,7 @@ const hasCompleteMigrationRowCount = (
 };
 
 export const decodeWranglerMigrationRows = (json: string): ReadonlyArray<AppliedMigration> => {
-  const decoded = Schema.decodeUnknownSync(WranglerQueryOutput)(JSON.parse(json));
-  const statement = decoded.at(0);
-  if (decoded.length !== 1 || statement === undefined) {
-    throw new Error("Expected exactly one D1 migration ledger query result");
-  }
+  const [statement] = Schema.decodeUnknownSync(WranglerQueryOutput)(JSON.parse(json));
   const rows = statement.results;
   if (rows.length === 0) return [];
   if (!hasCompleteMigrationRowCount(rows)) {

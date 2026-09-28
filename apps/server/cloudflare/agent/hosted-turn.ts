@@ -50,8 +50,13 @@ import {
   type WhatsAppInboundEvidence,
   isWhatsAppHosted,
 } from "./hosted-authority";
-import { recordWhatsAppSend, stageWhatsAppDelivery } from "./whatsapp-delivery";
-import { readWhatsAppPendingWork } from "./whatsapp-turn";
+import {
+  recordWhatsAppSend,
+  rejectUnstartedWhatsAppDelivery,
+  stageWhatsAppDelivery,
+  startWhatsAppSend,
+} from "./whatsapp-delivery";
+import { isWhatsAppWindowOpen, readWhatsAppPendingWork } from "./whatsapp-turn";
 import type {
   HostedDeliveryCorrelationToken,
   WhatsAppProviderMessageId,
@@ -1447,6 +1452,10 @@ const proposeWhatsAppDelivery = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      if (!(yield* isWhatsAppWindowOpen({ db, userId, turnId, now: transactionNow() }))) {
+        yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
+        return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
+      }
       const token = yield* stageWhatsAppDelivery({
         db,
         userId,
@@ -1458,6 +1467,18 @@ const proposeWhatsAppDelivery = ({
       yield* Effect.tryPromise(() =>
         scheduleRecovery(transactionNow() + deliveryAcknowledgmentWindowMs)
       );
+      const started = yield* startWhatsAppSend({
+        db,
+        userId,
+        turnId,
+        token: token.value,
+        now: transactionNow(),
+      });
+      if (!started) {
+        yield* rejectUnstartedWhatsAppDelivery({ db, userId, turnId, token: token.value });
+        yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
+        return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
+      }
       const sent = yield* Effect.tryPromise(() =>
         deliver.send({ text: answer, turnId, correlationToken: token.value })
       ).pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));

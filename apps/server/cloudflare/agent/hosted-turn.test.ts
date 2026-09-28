@@ -29,11 +29,13 @@ import {
 import { sweepHostedTurns } from "./hosted-turn-sweep";
 import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "./hosted-authority";
-import { findWhatsAppReplay, findWhatsAppUser } from "./whatsapp-turn";
+import { findWhatsAppReplay, findWhatsAppUser, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
+import { observeOperationalHealth } from "../runtime/operational-health";
 import {
   recordWhatsAppSend,
   recordWhatsAppStatus,
   stageWhatsAppDelivery,
+  startWhatsAppSend,
 } from "./whatsapp-delivery";
 import {
   HostedDeliveryCorrelationToken,
@@ -155,7 +157,7 @@ const applyMigration = (db: D1Database, name: string): Effect.Effect<void, Cause
     const statements = sql
       .replace(/^--.*$/gmu, "")
       .trim()
-      .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |INSERT |DROP |$)/u);
+      .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u);
     if (name === "0024_hosted_whatsapp") {
       yield* Effect.tryPromise(() =>
         db.batch(statements.map((statement) => db.prepare(statement)))
@@ -610,6 +612,15 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
         now: now(),
       });
       if (Option.isNone(staged)) return yield* Effect.die("missing delivery proposal");
+      expect(
+        yield* startWhatsAppSend({
+          db,
+          userId: UserId.make(userId),
+          turnId: id,
+          token: staged.value,
+          now: now(),
+        })
+      ).toBe(true);
       const accepted = yield* recordWhatsAppSend({
         db,
         userId: UserId.make(userId),
@@ -1350,6 +1361,307 @@ it("treats signed voice instructions as User text without granting identity or t
           db.prepare("SELECT id FROM transactions WHERE user_id = ?").bind(users[0]).all()
         )).results
       ).toHaveLength(0);
+    })
+  ));
+
+it("refuses a free-form reply when the verified inbound event is outside its 24-hour window", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+          )
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now() - 90_000_000)
+          .run()
+      );
+      const caller = WhatsAppHostedSubject.make({
+        userId: UserId.make(users[0]),
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+      });
+      const inferenceModel = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("No enviar")))
+      );
+      const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
+      const result = yield* Effect.tryPromise(() =>
+        completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: caller,
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.old"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now() - 86_400_001,
+              receivedAtMs: now(),
+            }),
+            text: TranscriptText.make("Hola"),
+            inference: inferenceModel,
+            bucket: Option.none(),
+            executeMutation: Option.none(),
+            deliver: { _tag: "WhatsApp", send: sends },
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => Promise.resolve(),
+          },
+          onAdmitted: () => {},
+        })
+      );
+      expect(result.status).toBe(202);
+      expect(sends).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user" },
+        { status: "failed", kind: "failed", marker: "DeliveryFailed" },
+      ]);
+      // Older overdue rows must not hide the failed reply in a shared sample.
+      for (let index = 0; index < 8; index++) {
+        const last = now() - 172_800_000;
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO hosted_whatsapp_windows
+          (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
+          VALUES (?, ?, ?, ?, ?)`)
+            .bind(users[1], "portfolio-1", `CO.test-${index}`, last, last + 86_400_000)
+            .run()
+        );
+      }
+      const inspect = (): ReturnType<typeof observeOperationalHealth> =>
+        observeOperationalHealth({
+          DB: db,
+          workflows: {},
+          deadLetters: Option.none(),
+        });
+      expect((yield* inspect()).find((signal) => signal.operation === "whatsapp")).toMatchObject({
+        state: "attention",
+        overdueCleanup: 8,
+        sampledFailed: 1,
+      });
+      yield* sweepExpiredWhatsAppWindows({ db, now: now() });
+      expect((yield* inspect()).find((signal) => signal.operation === "whatsapp")).toMatchObject({
+        state: "attention",
+        overdueCleanup: 0,
+        sampledFailed: 1,
+      });
+    })
+  ));
+
+it("interrupts a staged reply once if recovery finds no provider send started", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+          )
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+          .run()
+      );
+      const subject = WhatsAppHostedSubject.make({
+        userId: UserId.make(users[0]),
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+      });
+      const inbound = WhatsAppInboundEvidence.make({
+        messageId: WhatsAppProviderMessageId.make("wamid.abandoned"),
+        businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+        occurredAtMs: now(),
+        receivedAtMs: now(),
+      });
+      const snapshot = yield* readHostedSnapshot({ db, subject, now: now() });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing subject");
+      const selection = selectHostedSession({
+        snapshot: snapshot.value,
+        userId: subject.userId,
+        now: now(),
+      });
+      const id = TranscriptTurnId.make(newId());
+      const admitted = yield* admitHostedTurn({
+        db,
+        channel: { _tag: "WhatsApp", subject, inbound },
+        selection,
+        text: TranscriptText.make("Hola"),
+        now: now(),
+        id,
+      });
+      expect(Option.isSome(admitted)).toBe(true);
+      const token = yield* stageWhatsAppDelivery({
+        db,
+        userId: subject.userId,
+        turnId: id,
+        text: TranscriptText.make("Propuesta"),
+        now: now(),
+      });
+      expect(Option.isSome(token)).toBe(true);
+      const recovered = yield* recoverHostedTurn({
+        db,
+        userId: subject.userId,
+        turn: { id, started_at_ms: now(), proposed_at_ms: now() },
+        now: now() + deliveryAcknowledgmentWindowMs + 1,
+      });
+      expect(recovered).toBe(true);
+      if (Option.isSome(token)) {
+        expect(
+          yield* startWhatsAppSend({
+            db,
+            userId: subject.userId,
+            turnId: id,
+            token: token.value,
+            now: now(),
+          })
+        ).toBe(false);
+      }
+      expect(
+        yield* recoverHostedTurn({
+          db,
+          userId: subject.userId,
+          turn: { id, started_at_ms: now(), proposed_at_ms: now() },
+          now: now() + deliveryAcknowledgmentWindowMs + 2,
+        })
+      ).toBe(false);
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "interrupted", kind: "user" },
+        { status: "interrupted", kind: "interrupted" },
+      ]);
+    })
+  ));
+
+it("does not send when recovery interrupts a staged reply during scheduling", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+          )
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+          .run()
+      );
+      const sends = vi.fn(() =>
+        Promise.resolve({
+          kind: "accepted" as const,
+          messageId: WhatsAppProviderMessageId.make("wamid.should-not-send"),
+        })
+      );
+      const model = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("Todavía aquí")))
+      );
+      const result = yield* Effect.tryPromise(() =>
+        completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: WhatsAppHostedSubject.make({
+              userId: UserId.make(users[0]),
+              portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+              bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+            }),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.recovery-race"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+            }),
+            text: TranscriptText.make("Hola"),
+            inference: model,
+            bucket: Option.none(),
+            executeMutation: Option.none(),
+            deliver: { _tag: "WhatsApp", send: sends },
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => {
+              const timestamp = now();
+              return db
+                .batch([
+                  db
+                    .prepare(`INSERT INTO transcript_entries
+                  (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
+                  SELECT ?, t.user_id, t.hosted_session_id, t.id, 'interrupted', ?
+                  FROM hosted_turns AS t JOIN hosted_whatsapp_delivery AS d ON d.turn_id = t.id
+                  WHERE t.user_id = ? AND t.status = 'pending'`)
+                    .bind(newId(), timestamp, users[0]),
+                  db
+                    .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
+                  WHERE user_id = ? AND status = 'pending' AND EXISTS
+                    (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = hosted_turns.id)`)
+                    .bind(timestamp, users[0]),
+                ])
+                .then(() => undefined);
+            },
+          },
+          onAdmitted: () => {},
+        })
+      );
+      expect(result.status).toBe(202);
+      expect(sends).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "interrupted", kind: "user" },
+        { status: "interrupted", kind: "interrupted" },
+      ]);
+    })
+  ));
+
+it("does not send when a window closes while a prepared reply waits for recovery scheduling", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+          )
+          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+          .run()
+      );
+      const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
+      const model = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("Todavía aquí")))
+      );
+      const response = yield* Effect.tryPromise(() =>
+        completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: WhatsAppHostedSubject.make({
+              userId: UserId.make(users[0]),
+              portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+              bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+            }),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+            }),
+            text: TranscriptText.make("Hola"),
+            inference: model,
+            bucket: Option.none(),
+            executeMutation: Option.none(),
+            deliver: { _tag: "WhatsApp", send: sends },
+            signal: makeAbortController().signal,
+            scheduleRecovery: () =>
+              db
+                .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id = ?")
+                .bind(users[0])
+                .first()
+                .then((staged) => {
+                  if (staged === null) return;
+                  const last = now() - 86_400_001;
+                  return db
+                    .prepare(`UPDATE hosted_whatsapp_windows
+                    SET last_verified_inbound_at_ms = ?, closes_at_ms = ? WHERE user_id = ?`)
+                    .bind(last, last + 86_400_000, users[0])
+                    .run();
+                })
+                .then(() => undefined),
+          },
+          onAdmitted: () => {},
+        })
+      );
+      expect(response.status).toBe(202);
+      expect(sends).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user" },
+        { status: "failed", kind: "failed", marker: "DeliveryFailed" },
+      ]);
     })
   ));
 

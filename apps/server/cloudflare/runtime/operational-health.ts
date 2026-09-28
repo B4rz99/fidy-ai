@@ -26,6 +26,7 @@ const Status = Schema.Struct({
     "unknown",
   ]),
 });
+const WhatsAppAge = Schema.Struct({ created: Schema.Int });
 const Backlog = Schema.Struct({
   backlogCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   backlogBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -61,7 +62,17 @@ export type OperationalSignal =
     }>
   | Readonly<{
       component: "async-health";
-      operation: WorkKind | "deadLetters";
+      operation: "whatsapp";
+      state: "healthy" | "attention";
+      sampledPending: number;
+      sampledFailed: number;
+      overdueCleanup: number;
+      sampleLimited: boolean;
+      oldestPendingAgeMilliseconds: number;
+    }>
+  | Readonly<{
+      component: "async-health";
+      operation: WorkKind | "whatsapp" | "deadLetters";
       state: "unavailable";
     }>;
 
@@ -150,6 +161,82 @@ const inspectWorkflow = (
     return ["errored", "terminated", "paused"].includes(status.value.status)
       ? "failed"
       : "available";
+  });
+
+const readWhatsAppSample = (
+  db: D1Database,
+  sql: string,
+  bindings: ReadonlyArray<number> = []
+): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(sql)
+      .bind(...bindings, sampleLimit)
+      .all()
+  ).pipe(
+    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(WhatsAppAge))(rows.results)),
+    Effect.mapError(() => undefined)
+  );
+
+/** Each condition has its own bounded sample; old pending work cannot mask failed delivery. */
+const inspectWhatsApp = (db: D1Database, current: number): Effect.Effect<OperationalSignal> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      Effect.all({
+        pending: readWhatsAppSample(
+          db,
+          `SELECT created FROM (
+        SELECT created_at_ms AS created FROM pending_consent_exchanges
+          WHERE state IN ('awaiting_delivery', 'outbound_started')
+        UNION ALL SELECT d.proposed_at_ms FROM hosted_whatsapp_delivery AS d
+          JOIN hosted_turns AS t ON t.id = d.turn_id AND t.user_id = d.user_id
+          WHERE t.status = 'pending' AND d.state IN ('sending', 'accepted', 'ambiguous')
+      ) ORDER BY created LIMIT ?`
+        ),
+        failed: readWhatsAppSample(
+          db,
+          `SELECT created FROM (
+        SELECT proposed_at_ms AS created FROM hosted_whatsapp_delivery
+          WHERE state IN ('rejected', 'unconfirmed') AND proposed_at_ms >= ?
+        UNION ALL SELECT t.terminal_at_ms FROM hosted_turns AS t
+          JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id AND i.user_id = t.user_id
+          WHERE t.status = 'failed' AND t.failure_reason = 'DeliveryFailed'
+            AND t.terminal_at_ms >= ? AND NOT EXISTS
+              (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = t.id)
+      ) ORDER BY created LIMIT ?`,
+          [current - rejectedWindowMilliseconds, current - rejectedWindowMilliseconds]
+        ),
+        cleanup: readWhatsAppSample(
+          db,
+          `SELECT created FROM (
+        SELECT closes_at_ms AS created FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
+        UNION ALL SELECT expires_at_ms FROM pending_consent_exchanges WHERE expires_at_ms <= ?
+      ) ORDER BY created LIMIT ?`,
+          [current, current]
+        ),
+      })
+    );
+    if (Exit.isFailure(result)) return unavailableSignal("whatsapp");
+    const { pending, failed, cleanup } = result.value;
+    const oldestPendingAgeMilliseconds = Math.max(
+      0,
+      ...pending.map((row) => current - row.created)
+    );
+    return {
+      component: "async-health",
+      operation: "whatsapp",
+      state:
+        failed.length > 0 ||
+        cleanup.length > 0 ||
+        oldestPendingAgeMilliseconds >= staleAfterMilliseconds
+          ? "attention"
+          : "healthy",
+      sampledPending: pending.length,
+      sampledFailed: failed.length,
+      overdueCleanup: cleanup.length,
+      sampleLimited: [pending, failed, cleanup].some((rows) => rows.length === sampleLimit),
+      oldestPendingAgeMilliseconds,
+    };
   });
 
 const inspectDeadLetters = (
@@ -243,6 +330,10 @@ export const observeOperationalHealth = (
         ),
       { concurrency: 2 }
     );
+    const whatsapp = yield* inspectWhatsApp(environment.DB, current).pipe(
+      Effect.timeout("3 seconds"),
+      Effect.orElseSucceed((): OperationalSignal => unavailableSignal("whatsapp"))
+    );
     const deadLetters = yield* inspectDeadLetters(environment.deadLetters);
-    return [...signals, deadLetters];
+    return [...signals, whatsapp, deadLetters];
   });

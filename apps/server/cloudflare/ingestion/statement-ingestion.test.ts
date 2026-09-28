@@ -2084,6 +2084,18 @@ it(
         expect(refused.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
 
+        // A flood of refused uploads consumes attempt pressure, not R2 work capacity.
+        for (let attempted = 3; attempted < 40; attempted += 1) {
+          const denied = yield* fromTestPromise(() =>
+            upload(runtime, { body: statementBytes(), index: 0 })
+          );
+          expect(denied.status).toBe(429);
+        }
+        const exhausted = yield* fromTestPromise(() =>
+          upload(runtime, { body: statementBytes(), index: 0 })
+        );
+        expect(exhausted.status).toBe(429);
+        expect(yield* fromTestPromise(() => failureCode(exhausted))).toBe("rate_limited");
         for (const release of held) release.resolve();
         const settled = yield* fromTestPromise(() => Promise.all([first, second]));
         expect(settled.map(({ status }) => status)).toEqual([201, 201]);
@@ -2099,7 +2111,16 @@ it(
             userA
           )
         );
-        expect(pressure.total).toBe(3);
+        expect(pressure.total).toBe(40);
+        const work = yield* fromTestPromise(() =>
+          scalar<{ total: number }>(
+            runtime.db,
+            `SELECT count(*) AS total FROM resource_admission_events
+             WHERE policy_key = 'ingestion.upload.user.v1' AND scope_key = ?`,
+            userA
+          )
+        );
+        expect(work.total).toBe(2);
       })
     ),
   30_000

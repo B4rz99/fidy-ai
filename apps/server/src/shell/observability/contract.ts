@@ -93,6 +93,7 @@ export const TelemetryRegistry = {
     "workflow.emailReplacement",
     "workflow.billingCollection",
     "workflow.statementExtraction",
+    "workflow.operationalCanary",
     "model.workersAi",
     "worker.core.coordinator",
     "worker.core.alarm",

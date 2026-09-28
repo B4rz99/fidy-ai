@@ -10,6 +10,14 @@ cron can retry after the shared publication cooldown.
 
 The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds `AsyncDeadLetters`.
 In Cloudflare Workers Logs, select the Core Worker and filter `component` to `async-health`.
+The private Tail Worker projects only closed platform categories into minute buckets in D1 (Worker
+exceptions, CPU/memory resource limits, rejected webhook/email callbacks, and Workflow failures);
+it does not copy URLs, message bodies, identifiers, or raw exception text. The Tail Worker observes
+Core, Ingress, and ForwardedEmail Workers. Five application Workflows also record rejected executions
+at their entrypoints; the private Queue→Workflow canary distinguishes real consumer execution from a
+successful Queue send or Workflow instance creation. A delayed/missing canary completion is critical;
+an unavailable inspection is a warning, never proof of execution. These probes do not change any
+application Work outcome.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -41,7 +49,7 @@ identifies failed prompt publication; check subsequent cron recovery before trea
 The Core minute schedule classifies these bounded signals and stores notification attempts in
 `operational_alerts` (metadata only: fixed alert kind and owner, severity, timestamps, acknowledgement,
 and attempt count). A critical condition emails the operator immediately and repeats no more often
-than every 30 minutes; warnings repeat no more often than every four hours. Resolved conditions stop
+than every 30 minutes; warnings repeat no more often than every four hours. Resolved conditions send one resolution email and stop
 repeats. A failed send remains firing and unacknowledged; the scheduled activity reports a closed
 failure while other activities continue. A measurement failure is `inspection_unavailable`, never
 zero; until all measurements recover the alert sweep does not resolve an existing firing condition.
@@ -67,6 +75,45 @@ rate nor an institutional webhook spike. Monitor native Workflow failures separa
 retries: Queue acknowledgment happens after instance creation, so a later Workflow failure never
 reaches the Queue dead-letter destination. Set Cloudflare's account-wide billing budget emails
 at 50% and 80% of the approved monthly spend; they are informational, not hard caps.
+
+## Private operational view and account usage alerts
+
+Use Cloudflare's authenticated D1 console (never a public endpoint) to query the latest
+metadata-only inspection. **Stale observations are unavailable**, not healthy; compare
+`observed_at_ms` with the present time. This is an inspection snapshot, not a work ledger:
+
+```sql
+SELECT operation, state, datetime(observed_at_ms / 1000, 'unixepoch') AS observed_utc
+FROM operational_health_view ORDER BY operation;
+SELECT kind, owner, severity, state, delivery_confirmed, acknowledged_ms,
+       datetime(last_seen_ms / 1000, 'unixepoch') AS last_seen_utc
+FROM operational_alerts ORDER BY severity, kind, owner;
+SELECT kind, datetime(last_succeeded_ms / 1000, 'unixepoch') AS last_succeeded_utc
+FROM operational_canary ORDER BY kind;
+SELECT kind, SUM(count) AS last_hour FROM operational_event_buckets
+WHERE bucket_ms >= (unixepoch() - 3600) * 1000 GROUP BY kind;
+```
+
+The view is a last-known observation, not an authoritative Queue total; use D1 owner records,
+Queue metrics and Workflow instances to confirm unfinished work. If snapshot writes fail, the
+alert delivery still runs independently and the stale timestamp stays visible. D1 down means the
+view and Worker-backed email may both fail; check the Cloudflare console and the independent
+GitHub deployment-failure email. Neither a dashboard query nor missing telemetry rewrites domain
+state or marks incomplete work successful. Provider configuration checks only presence of required
+Kapso, Resend, Wompi and AI settings; they do not prove provider availability or receipt.
+
+**Account setup required before #717 can be closed:** in Cloudflare **Manage Account → Billing →
+Billable Usage → Create budget alert**, create two account-wide USD alerts at 50% and 80% of the
+approved monthly spend, each with `OPERATOR_ALERT_EMAIL` as the sole recipient. Under
+**Notifications → Add → Billable Usage**, enable a Workers request or CPU usage notification at
+an explicitly approved threshold (choose against observed baseline). Verify the recipient and
+thresholds in the account console after each deployment and at the start of each billing period.
+Budget alerts are one-time notifications each billing period, not spending caps; the invoice is
+authoritative. Per-product usage alerts and budget alerts are native Cloudflare email, not a
+second vendor. These account settings are **not provisioned by this repository** and have not
+been verified on the Production account. Record the approved USD budget and Workers baseline in
+the operator's private release checklist, not in alert dimensions or logs. [Budget alert
+instructions](https://developers.cloudflare.com/billing/manage/budget-alerts/).
 
 ## Telemetry ownership (#716)
 

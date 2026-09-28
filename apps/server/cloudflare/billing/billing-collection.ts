@@ -20,6 +20,7 @@ import {
   workerRelease,
 } from "../runtime/telemetry";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
+import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 import { verifiedWompiEventHint } from "./wompi-event";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Data, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
@@ -531,18 +532,21 @@ export const runBillingCollectionWorkflow = (
 
 export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runBillingCollectionWorkflow({
-          environment: this.env,
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.billingCollection",
-      }
+    return captureWorkflowFailure(
+      observeWorkerPromise(
+        () =>
+          runBillingCollectionWorkflow({
+            environment: this.env,
+            payload: event.payload,
+            activity: (name, options, activity) => step.do(name, options, activity),
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.billingCollection",
+        }
+      ),
+      this.env.DB
     );
   }
 }

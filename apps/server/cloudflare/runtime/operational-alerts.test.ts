@@ -52,6 +52,37 @@ describe("operator alert decisions", () => {
     ]);
   });
 
+  it("alerts when a primary Queue accumulates work even before a D1 outbox ages", () => {
+    expect(
+      decideOperationalAlerts([
+        {
+          component: "async-health",
+          operation: "billingQueue",
+          state: "attention",
+          backlogCount: 150,
+          backlogBytes: 3_000,
+        },
+      ])
+    ).toEqual([{ kind: "queue_backlog", owner: "billingQueue", severity: "warning" }]);
+  });
+
+  it("does not treat a successful send as Queue or Workflow execution", () => {
+    expect(
+      decideOperationalAlerts([
+        { component: "capability", operation: "queueExecution", state: "unavailable" },
+        {
+          component: "capability",
+          operation: "workflowExecution",
+          state: "attention",
+          lastSucceededMs: 100,
+        },
+      ])
+    ).toEqual([
+      { kind: "inspection_unavailable", owner: "queueExecution", severity: "warning" },
+      { kind: "capability_unusable", owner: "workflowExecution", severity: "critical" },
+    ]);
+  });
+
   it("alerts on overdue statement-byte retention without exposing object keys", () => {
     expect(
       decideOperationalAlerts([
@@ -65,6 +96,48 @@ describe("operator alert decisions", () => {
         },
       ])
     ).toEqual([{ kind: "retention_lag", owner: "retention", severity: "critical" }]);
+  });
+
+  it("classifies platform failures, callback spikes, and missing tail measurements independently", () => {
+    expect(
+      decideOperationalAlerts([
+        {
+          component: "platform-events",
+          operation: "workerExceptions",
+          state: "attention",
+          recentCount: 6,
+          fiveMinuteCount: 2,
+        },
+        {
+          component: "platform-events",
+          operation: "resourceLimits",
+          state: "attention",
+          recentCount: 1,
+          fiveMinuteCount: 1,
+        },
+        {
+          component: "platform-events",
+          operation: "callbackRejections",
+          state: "attention",
+          recentCount: 22,
+          fiveMinuteCount: 22,
+        },
+        {
+          component: "platform-events",
+          operation: "workflowFailures",
+          state: "attention",
+          recentCount: 1,
+          fiveMinuteCount: 1,
+        },
+        { component: "platform-events", operation: "callbackRejections", state: "unavailable" },
+      ])
+    ).toEqual([
+      { kind: "worker_exception", owner: "workerExceptions", severity: "warning" },
+      { kind: "resource_limit", owner: "resourceLimits", severity: "critical" },
+      { kind: "callback_rejection", owner: "callbackRejections", severity: "critical" },
+      { kind: "workflow_failure", owner: "workflowFailures", severity: "critical" },
+      { kind: "inspection_unavailable", owner: "callbackRejections", severity: "warning" },
+    ]);
   });
 
   it("does not call a single rejected email proof a callback rejection spike", () => {

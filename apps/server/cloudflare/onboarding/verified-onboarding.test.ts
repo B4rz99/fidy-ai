@@ -1814,6 +1814,7 @@ it(
           deadLetters: Option.some({
             metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
           }),
+          workQueues: {},
         });
         expect(signals.find((signal) => signal.operation === "browserPairing")).toMatchObject({
           state: "attention",

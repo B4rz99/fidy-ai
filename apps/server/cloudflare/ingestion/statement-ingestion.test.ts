@@ -3739,6 +3739,7 @@ it(
           deadLetters: Option.some({
             metrics: () => Promise.resolve({ backlogCount: 3, backlogBytes: 300 }),
           }),
+          workQueues: {},
         });
         expect(signals.find((signal) => signal.operation === "statement")).toMatchObject({
           state: "attention",
@@ -3763,6 +3764,7 @@ it(
           DB: runtime.db,
           workflows: { statement: { get: () => Promise.reject(new Error(secretSentinel)) } },
           deadLetters: Option.some({ metrics: () => Promise.reject(new Error(secretSentinel)) }),
+          workQueues: {},
         });
         expect(unavailableSignals.find((signal) => signal.operation === "statement")).toMatchObject(
           { state: "attention", unavailableWorkflows: 1 }

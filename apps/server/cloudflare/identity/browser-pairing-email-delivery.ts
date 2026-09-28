@@ -8,6 +8,7 @@ import {
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "../onboarding/onboarding-email";
+import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 
 const Work = Schema.Struct({
   kind: Schema.Literal("browser-pairing-email"),
@@ -266,18 +267,21 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runBrowserPairingEmailWorkflow({
-          environment: this.env,
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.browserPairingEmail",
-      }
+    return captureWorkflowFailure(
+      observeWorkerPromise(
+        () =>
+          runBrowserPairingEmailWorkflow({
+            environment: this.env,
+            payload: event.payload,
+            activity: (name, options, activity) => step.do(name, options, activity),
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.browserPairingEmail",
+        }
+      ),
+      this.env.DB
     );
   }
 }

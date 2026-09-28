@@ -156,15 +156,43 @@ describe("operator email notification", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("cannot resolve authoritative incomplete work from a missing measurement", async () => {
+    const db = await database();
+    const sent: string[] = [];
+    const send = async (
+      _alert: OperationalAlert,
+      _key: string,
+      delivery: Readonly<{ phase: "firing" | "resolved" }>
+    ): Promise<void> => {
+      sent.push(delivery.phase);
+    };
+    await runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send });
+    await runOperationalAlerts({
+      db,
+      now: 1_100_000,
+      alerts: [{ kind: "inspection_unavailable", owner: "deadLetters", severity: "warning" }],
+      send,
+    });
+    expect(
+      await db.prepare("SELECT state FROM operational_alerts WHERE kind = 'dead_letters'").first()
+    ).toEqual({ state: "firing" });
+    expect(sent).toEqual(["firing", "firing"]);
+  });
+
   it("resolves absent conditions, then notifies when the condition returns", async () => {
     const db = await database();
     const sent: string[] = [];
-    const send = async (_alert: OperationalAlert, key: string): Promise<void> => {
-      sent.push(key);
+    const send = async (
+      _alert: OperationalAlert,
+      key: string,
+      delivery: Readonly<{ signal: AbortSignal; phase: "firing" | "resolved" }>
+    ): Promise<void> => {
+      sent.push(`${delivery.phase}:${key}`);
     };
     await runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter], send });
     await runOperationalAlerts({ db, now: 1_100_000, alerts: [], send });
+    await runOperationalAlerts({ db, now: 1_150_000, alerts: [], send });
     await runOperationalAlerts({ db, now: 1_200_000, alerts: [deadLetter], send });
-    expect(sent).toHaveLength(2);
+    expect(sent.map((value) => value.split(":")[0])).toEqual(["firing", "resolved", "firing"]);
   });
 });

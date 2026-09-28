@@ -41,6 +41,11 @@ it("reports expired statement staging separately when other background measureme
         DB: db,
         workflows: {},
         deadLetters: Option.none(),
+        workQueues: {
+          billingQueue: {
+            metrics: () => Promise.resolve({ backlogCount: 150, backlogBytes: 3_000 }),
+          },
+        },
       })
     );
     const retention = signals.find((signal) => signal.operation === "retention");
@@ -53,6 +58,10 @@ it("reports expired statement staging separately when other background measureme
       expect(retention.oldestOverdueAgeMilliseconds).toBeGreaterThanOrEqual(86_400_000);
     }
     expect(signals.find((signal) => signal.operation === "billing")?.state).toBe("unavailable");
+    expect(signals.find((signal) => signal.operation === "billingQueue")).toMatchObject({
+      state: "attention",
+      backlogCount: 150,
+    });
   } finally {
     await instance.dispose();
   }

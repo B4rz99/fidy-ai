@@ -19,6 +19,7 @@ export const sendOperatorEmail = async (
     to: string;
     apiKey: string;
     release: string;
+    phase: "firing" | "resolved";
     signal: AbortSignal;
   }>
 ): Promise<void> => {
@@ -39,14 +40,17 @@ export const sendOperatorEmail = async (
           apiKey: Redacted.make(input.apiKey),
           httpClient: Context.get(clients, HttpClient.HttpClient),
         });
-        const text = `Fidy operational alert: ${input.alert.kind} / ${input.alert.owner} (${input.alert.severity}). Inspect private Cloudflare operational state. No work identity is included.`;
+        const text = `Fidy operational alert ${input.phase}: ${input.alert.kind} / ${input.alert.owner} (${input.alert.severity}). Inspect private Cloudflare operational state. No work identity is included.`;
         return yield* outbound.execute({
           _tag: "ResendEmailDelivery",
           idempotencyKey: input.idempotencyKey,
           body: JSON.stringify({
             from: "Fidy <obarboza@fidyapp.com>",
             to: [input.to],
-            subject: `Fidy: ${input.alert.severity} operational alert`,
+            subject:
+              input.phase === "resolved"
+                ? "Fidy: operational alert resolved"
+                : `Fidy: ${input.alert.severity} operational alert`,
             text,
           }),
         });

@@ -8,6 +8,16 @@ const WorkKind = Schema.Literals([
   "statement",
 ]);
 type WorkKind = typeof WorkKind.Type;
+const QueueKind = Schema.Literals([
+  "onboardingQueue",
+  "browserPairingQueue",
+  "emailReplacementQueue",
+  "billingQueue",
+  "statementQueue",
+  "forwardedEmailQueue",
+  "whatsappQueue",
+]);
+type QueueKind = typeof QueueKind.Type;
 const Pending = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   created: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -57,7 +67,7 @@ export type OperationalSignal =
   | PendingSignal
   | Readonly<{
       component: "async-health";
-      operation: "deadLetters";
+      operation: "deadLetters" | QueueKind;
       state: "healthy" | "attention";
       backlogCount: number;
       backlogBytes: number;
@@ -82,7 +92,7 @@ export type OperationalSignal =
     }>
   | Readonly<{
       component: "async-health";
-      operation: WorkKind | "whatsapp" | "deadLetters" | "retention";
+      operation: WorkKind | QueueKind | "whatsapp" | "deadLetters" | "retention";
       state: "unavailable";
     }>;
 
@@ -100,6 +110,7 @@ export type OperationalHealthEnvironment = Readonly<{
   DB: D1Database;
   workflows: Partial<Record<WorkKind, WorkflowStatusBinding>>;
   deadLetters: Option.Option<Pick<Queue, "metrics">>;
+  workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
 
 const emptySignal = (operation: WorkKind): PendingSignal => ({
@@ -280,21 +291,22 @@ const inspectRetention = (db: D1Database, now: number): Effect.Effect<Operationa
     };
   });
 
-const inspectDeadLetters = (
+const inspectQueue = (
+  operation: QueueKind | "deadLetters",
   queue: Option.Option<Pick<Queue, "metrics">>
 ): Effect.Effect<OperationalSignal> =>
   Effect.gen(function* () {
-    if (Option.isNone(queue)) return unavailableSignal("deadLetters");
+    if (Option.isNone(queue)) return unavailableSignal(operation);
     const backlog = yield* Effect.exit(
       Effect.tryPromise(() => queue.value.metrics()).pipe(
         Effect.timeout("2 seconds"),
         Effect.flatMap(Schema.decodeUnknownEffect(Backlog))
       )
     );
-    if (Exit.isFailure(backlog)) return unavailableSignal("deadLetters");
+    if (Exit.isFailure(backlog)) return unavailableSignal(operation);
     return {
       component: "async-health",
-      operation: "deadLetters",
+      operation,
       ...backlog.value,
       state: backlog.value.backlogCount > 0 ? "attention" : "healthy",
     };
@@ -375,7 +387,13 @@ export const observeOperationalHealth = (
       Effect.timeout("3 seconds"),
       Effect.orElseSucceed((): OperationalSignal => unavailableSignal("whatsapp"))
     );
-    const deadLetters = yield* inspectDeadLetters(environment.deadLetters);
+    const deadLetters = yield* inspectQueue("deadLetters", environment.deadLetters);
+    const workQueues = yield* Effect.forEach(
+      QueueKind.literals,
+      (operation) =>
+        inspectQueue(operation, Option.fromUndefinedOr(environment.workQueues[operation])),
+      { concurrency: 2 }
+    );
     const retention = yield* inspectRetention(environment.DB, current);
-    return [...signals, whatsapp, deadLetters, retention];
+    return [...signals, whatsapp, deadLetters, ...workQueues, retention];
   });

@@ -428,6 +428,79 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
+  it("routes the private canary Queue to a real Workflow handoff, not to application work", async () => {
+    const instance = new Miniflare({
+      workers: [
+        {
+          config: {
+            name: "canary-queue-test",
+            type: "worker",
+            compatibilityDate: "2026-09-08",
+            env: { DB: { id: "canary-queue-test", type: "d1" } },
+            manifest: {
+              mainModule: "index.mjs",
+              modules: {
+                "index.mjs": {
+                  contents: "export default { fetch() { return new Response('ok') } }",
+                  type: "esm",
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+    try {
+      await instance.ready;
+      const db = await instance.getD1Database("DB");
+      await db
+        .prepare(
+          "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+        )
+        .run();
+      let created = false;
+      const canaryInstance: WorkflowInstance = {
+        id: "canary",
+        status: async () => ({ status: "complete" }),
+        pause: async () => {},
+        resume: async () => {},
+        restart: async () => {},
+        terminate: async () => {},
+        delete: async () => {},
+        sendEvent: async () => {},
+        subscribe: async () => ({
+          next: async () => ({ done: true, value: undefined }),
+          [Symbol.dispose]: () => {},
+        }),
+      };
+      const workflow: Workflow = {
+        create: async () => {
+          created = true;
+          return canaryInstance;
+        },
+        get: async () => canaryInstance,
+        createBatch: async () => [],
+        deleteBatch: async () => ({ deleted: [], errors: [] }),
+      };
+      const batch = {
+        ...queueBatch({ version: 1, sentAtMs: Math.floor(Date.now() / 300_000) * 300_000 }),
+        queue: "OperationalCanaryQueue",
+      };
+      await makeCoreWorker(collectingTelemetry([])).queue(batch, {
+        ...coreEnvironment,
+        DB: db,
+        OPERATIONAL_CANARY_QUEUE_NAME: "OperationalCanaryQueue",
+        OPERATIONAL_CANARY_WORKFLOW: workflow,
+      });
+      expect(created).toBe(true);
+      expect(await db.prepare("SELECT kind FROM operational_canary").all()).toMatchObject({
+        results: [{ kind: "queueExecution" }],
+      });
+    } finally {
+      await instance.dispose();
+    }
+  });
+
   it.effect("reports a failed cron invocation after attempting independent activities", () =>
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];

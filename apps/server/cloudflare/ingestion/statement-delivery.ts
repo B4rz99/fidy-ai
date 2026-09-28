@@ -7,6 +7,7 @@ import {
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
 import { StatementCoordinatorActivity, StatementWork } from "./statement-work";
+import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
 /** Version 1 has no earlier history to migrate; old instances drain before changing activity names. */
@@ -334,22 +335,25 @@ export const runStatementExtractionWorkflow = (
 
 /** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
-  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator }>,
+  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator; DB: D1Database }>,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runStatementExtractionWorkflow({
-          payload: event.payload,
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-          activity: (name, options, run) => step.do(name, options, run),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.statementExtraction",
-      }
+    return captureWorkflowFailure(
+      observeWorkerPromise(
+        () =>
+          runStatementExtractionWorkflow({
+            payload: event.payload,
+            coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+            activity: (name, options, run) => step.do(name, options, run),
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.statementExtraction",
+        }
+      ),
+      this.env.DB
     );
   }
 }

@@ -1,8 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { sendOperatorEmail as sendEmail } from "./operator-email";
 
-const sendOperatorEmail = (input: Omit<Parameters<typeof sendEmail>[0], "signal">): Promise<void> =>
-  sendEmail({ ...input, signal: new AbortController().signal });
+const sendOperatorEmail = (
+  input: Omit<Parameters<typeof sendEmail>[0], "signal" | "phase">
+): Promise<void> => sendEmail({ ...input, phase: "firing", signal: new AbortController().signal });
 
 it("sends only closed operational coordinates to the operator email", async () => {
   let body = "";

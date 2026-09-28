@@ -137,8 +137,24 @@ import {
   validationFailed,
 } from "./ingestion/statement-ingestion";
 import { EmailAddress } from "@fidy/server/client";
-import { type OperationalSignal, observeOperationalHealth } from "./runtime/operational-health";
-import { decideOperationalAlerts } from "./runtime/operational-alerts";
+import {
+  type OperationalHealthEnvironment,
+  type OperationalSignal,
+  observeOperationalHealth,
+} from "./runtime/operational-health";
+import {
+  type EventMetricSignal,
+  observeOperationalEventMetrics,
+} from "./runtime/operational-event-metrics";
+import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
+import {
+  type CanaryHealth,
+  readCanaryHealth,
+  receiveCanary,
+  sendCanary,
+} from "./runtime/operational-canary";
+import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
+import { recordOperationalHealth } from "./runtime/operational-health-view";
 import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
 import { sendOperatorEmail } from "./runtime/operator-email";
 import { StatementStaging } from "./ingestion/statement-staging";
@@ -182,6 +198,7 @@ export {
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 export { StatementExtractionWorkflowV1 };
+export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -210,6 +227,11 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     Readonly<{
       ASYNC_HEALTH_ENABLED: "enabled";
       ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
+      FORWARDED_EMAIL_QUEUE: Pick<Queue, "metrics">;
+      EMAIL_REPLACEMENT_HEALTH_QUEUE: Pick<Queue, "metrics">;
+      OPERATIONAL_CANARY_QUEUE: Queue;
+      OPERATIONAL_CANARY_QUEUE_NAME: string;
+      OPERATIONAL_CANARY_WORKFLOW: Workflow;
       OPERATOR_ALERT_EMAIL: string;
     }>
   > &
@@ -1840,6 +1862,23 @@ const receiveEmailQueue: CoreWorker["queue"] = (batch, environment) => {
   })(batch).pipe(Effect.runPromise);
 };
 
+const receiveCanaryBatch: CoreWorker["queue"] = (batch, environment) => {
+  const message = batch.messages[0];
+  if (
+    batch.messages.length !== 1 ||
+    message === undefined ||
+    environment.OPERATIONAL_CANARY_WORKFLOW === undefined
+  ) {
+    return Promise.reject(new Error("Operational canary unavailable"));
+  }
+  return receiveCanary({
+    DB: environment.DB,
+    workflow: environment.OPERATIONAL_CANARY_WORKFLOW,
+    payload: message.body,
+    now: Date.now(),
+  });
+};
+
 const receiveWorkQueue: CoreWorker["queue"] = (batch, environment) => {
   if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
     return receiveWhatsAppWork({
@@ -1897,7 +1936,7 @@ class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
 
 const deliverOperationalSignals = (
   environment: CoreEnvironment,
-  signals: ReadonlyArray<OperationalSignal>
+  signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>
 ): Effect.Effect<void, void> =>
   Effect.tryPromise({
     try: (signal) => {
@@ -1912,19 +1951,120 @@ const deliverOperationalSignals = (
         now: Date.now(),
         alerts: decideOperationalAlerts(signals),
         signal,
-        send: (alert, idempotencyKey, cancellation) =>
+        send: (alert, idempotencyKey, delivery) =>
           sendOperatorEmail({
             alert,
             idempotencyKey,
             to,
             apiKey,
             release: environment.RELEASE_GIT_SHA,
-            signal: cancellation,
+            signal: delivery.signal,
+            phase: delivery.phase,
           }),
       });
     },
     catch: () => undefined,
   });
+
+const operationalWorkQueues = (
+  environment: CoreEnvironment
+): OperationalHealthEnvironment["workQueues"] => ({
+  ...(environment.ONBOARDING_EMAIL_QUEUE && {
+    onboardingQueue: environment.ONBOARDING_EMAIL_QUEUE,
+  }),
+  ...(environment.BROWSER_PAIRING_EMAIL_QUEUE && {
+    browserPairingQueue: environment.BROWSER_PAIRING_EMAIL_QUEUE,
+  }),
+  ...(environment.EMAIL_REPLACEMENT_HEALTH_QUEUE && {
+    emailReplacementQueue: environment.EMAIL_REPLACEMENT_HEALTH_QUEUE,
+  }),
+  ...(environment.BILLING_COLLECTION_QUEUE && {
+    billingQueue: environment.BILLING_COLLECTION_QUEUE,
+  }),
+  ...(environment.STATEMENT_EXTRACTION_QUEUE && {
+    statementQueue: environment.STATEMENT_EXTRACTION_QUEUE,
+  }),
+  ...(environment.FORWARDED_EMAIL_QUEUE && {
+    forwardedEmailQueue: environment.FORWARDED_EMAIL_QUEUE,
+  }),
+  ...(environment.HOSTED_WHATSAPP_QUEUE && { whatsappQueue: environment.HOSTED_WHATSAPP_QUEUE }),
+});
+
+const providerConfigured = (environment: CoreEnvironment): boolean =>
+  [
+    environment.KAPSO_API_KEY,
+    environment.KAPSO_WEBHOOK_SECRET,
+    environment.RESEND_API_KEY,
+    environment.HOSTED_AI_MODEL,
+    environment.WOMPI_ENVIRONMENT,
+    environment.WOMPI_PUBLIC_KEY,
+    environment.WOMPI_PRIVATE_KEY,
+    environment.WOMPI_INTEGRITY_SECRET,
+    environment.WOMPI_EVENT_SECRET,
+  ].every((value) => typeof value === "string" && value.trim().length > 0);
+
+const requiredBindings = (environment: CoreEnvironment): ReadonlyArray<boolean> =>
+  [
+    environment.DB,
+    environment.AI,
+    environment.USER_TRANSACTION_COORDINATOR,
+    environment.ASYNC_DEAD_LETTERS,
+    environment.OPERATIONAL_CANARY_QUEUE,
+    environment.OPERATIONAL_CANARY_WORKFLOW,
+    environment.EMAIL_BUCKET,
+    environment.STATEMENT_STAGING_BUCKET,
+    environment.STATEMENT_EXTRACTION_QUEUE,
+    environment.STATEMENT_EXTRACTION_WORKFLOW,
+    environment.ONBOARDING_EMAIL_QUEUE,
+    environment.ONBOARDING_EMAIL_WORKFLOW,
+    environment.BROWSER_PAIRING_EMAIL_QUEUE,
+    environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
+    environment.EMAIL_REPLACEMENT_QUEUE,
+    environment.EMAIL_REPLACEMENT_WORKFLOW,
+    environment.BILLING_COLLECTION_QUEUE,
+    environment.BILLING_COLLECTION_WORKFLOW,
+    environment.HOSTED_WHATSAPP_QUEUE,
+    environment.FORWARDED_EMAIL_QUEUE,
+    environment.EMAIL_REPLACEMENT_HEALTH_QUEUE,
+  ].map((binding) => binding !== undefined);
+
+const operationalWorkflows = (
+  environment: CoreEnvironment
+): OperationalHealthEnvironment["workflows"] => ({
+  ...(environment.STATEMENT_EXTRACTION_WORKFLOW && {
+    statement: environment.STATEMENT_EXTRACTION_WORKFLOW,
+  }),
+  ...(environment.ONBOARDING_EMAIL_WORKFLOW && {
+    onboarding: environment.ONBOARDING_EMAIL_WORKFLOW,
+  }),
+  ...(environment.BROWSER_PAIRING_EMAIL_WORKFLOW && {
+    browserPairing: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
+  }),
+  ...(environment.EMAIL_REPLACEMENT_WORKFLOW && {
+    emailReplacement: environment.EMAIL_REPLACEMENT_WORKFLOW,
+  }),
+  ...(environment.BILLING_COLLECTION_WORKFLOW && {
+    billing: environment.BILLING_COLLECTION_WORKFLOW,
+  }),
+});
+
+const reportOperationalSignals = (
+  environment: CoreEnvironment,
+  signals: ReadonlyArray<AlertSignal>
+): Effect.Effect<void, void> =>
+  Effect.forEach(
+    signals,
+    (signal) => (signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal)),
+    { discard: true }
+  ).pipe(
+    Effect.andThen(
+      Effect.tryPromise({
+        try: () => recordOperationalHealth(environment.DB, signals, Date.now()),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined))
+    ),
+    Effect.andThen(deliverOperationalSignals(environment, signals))
+  );
 
 const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void> =>
   environment.ASYNC_HEALTH_ENABLED !== "enabled"
@@ -1932,32 +2072,46 @@ const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void
     : observeOperationalHealth({
         DB: environment.DB,
         deadLetters: Option.fromUndefinedOr(environment.ASYNC_DEAD_LETTERS),
-        workflows: {
-          ...(environment.STATEMENT_EXTRACTION_WORKFLOW === undefined
-            ? {}
-            : { statement: environment.STATEMENT_EXTRACTION_WORKFLOW }),
-          ...(environment.ONBOARDING_EMAIL_WORKFLOW === undefined
-            ? {}
-            : { onboarding: environment.ONBOARDING_EMAIL_WORKFLOW }),
-          ...(environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined
-            ? {}
-            : { browserPairing: environment.BROWSER_PAIRING_EMAIL_WORKFLOW }),
-          ...(environment.EMAIL_REPLACEMENT_WORKFLOW === undefined
-            ? {}
-            : { emailReplacement: environment.EMAIL_REPLACEMENT_WORKFLOW }),
-          ...(environment.BILLING_COLLECTION_WORKFLOW === undefined
-            ? {}
-            : { billing: environment.BILLING_COLLECTION_WORKFLOW }),
-        },
+        workQueues: operationalWorkQueues(environment),
+        workflows: operationalWorkflows(environment),
       }).pipe(
         Effect.flatMap((signals) =>
-          Effect.forEach(
-            signals,
-            (signal) =>
-              signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal),
-            { discard: true }
-          ).pipe(Effect.andThen(deliverOperationalSignals(environment, signals)))
-        )
+          observeOperationalEventMetrics(environment.DB, Date.now()).pipe(
+            Effect.flatMap((events) =>
+              Effect.tryPromise({
+                try: () => readCanaryHealth(environment.DB, Date.now()),
+                catch: () => undefined,
+              }).pipe(
+                Effect.map(
+                  (
+                    canaries
+                  ): ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth> => [
+                    ...signals,
+                    ...events,
+                    ...canaries,
+                  ]
+                )
+              )
+            )
+          )
+        ),
+        Effect.flatMap((signals) =>
+          inspectOperationalCapabilities({
+            d1: environment.DB,
+            coordinator: environment.USER_TRANSACTION_COORDINATOR,
+            requiredBindings: requiredBindings(environment),
+            providerConfigured: providerConfigured(environment),
+          }).pipe(
+            Effect.map(
+              (
+                capabilities
+              ): ReadonlyArray<
+                OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe
+              > => [...signals, ...capabilities]
+            )
+          )
+        ),
+        Effect.flatMap((signals) => reportOperationalSignals(environment, signals))
       );
 
 const statementActivities = (
@@ -2002,6 +2156,19 @@ const admissionActivities = (
   ),
 });
 
+const canaryPublication = (
+  environment: CoreEnvironment,
+  current: number
+): Effect.Effect<void, void> => {
+  const queue = environment.OPERATIONAL_CANARY_QUEUE;
+  return queue === undefined
+    ? Effect.fail(undefined)
+    : Effect.tryPromise({
+        try: () => sendCanary(queue, current),
+        catch: () => undefined,
+      });
+};
+
 const scheduledActivities = (
   environment: CoreEnvironment,
   current: number
@@ -2017,6 +2184,7 @@ const scheduledActivities = (
   const publishers = publicationActivities(environment, Option.none());
   return {
     "async.health": scheduledHealth(environment),
+    "operational.canary.publish": canaryPublication(environment, current),
     "onboarding.email.dispatch": publishers.onboarding(),
     "onboarding.email.reconcile": reconcileOnboardingEmail(environment.DB),
     "browserPairing.email.dispatch": publishers.browserPairing(),
@@ -2105,11 +2273,17 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       Effect.runPromise
     ),
   queue: (batch, environment) =>
-    observeWorkerPromise(() => receiveWorkQueue(batch, environment), {
-      environment,
-      telemetry,
-      operation: "worker.core.queue",
-    }),
+    observeWorkerPromise(
+      () =>
+        batch.queue === environment.OPERATIONAL_CANARY_QUEUE_NAME
+          ? receiveCanaryBatch(batch, environment)
+          : receiveWorkQueue(batch, environment),
+      {
+        environment,
+        telemetry,
+        operation: "worker.core.queue",
+      }
+    ),
 });
 
 /** Private service-binding target for canonical execution and bounded topology health evidence. */

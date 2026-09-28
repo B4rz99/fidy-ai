@@ -1,0 +1,22 @@
+apps/server/cloudflare/agent/turn-store.ts
+  s_faf3e4289f6ac3::t_b808a3072a4eb8 127
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_faf3e4289f6ac3::t_16234f2b48a52d 463-466,491,506-508
+  s_faf3e4289f6ac3::t_e9f6ff41bbc2c6 441-450,469-480,483-485,509-510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aa6c256f786338b1527bf42302e9d73595d32212",
+  "prompts": {},
+  "sessions": {
+    "s_faf3e4289f6ac3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e5b8-ea37-763c-9f19-b0a1a9a86f0a",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

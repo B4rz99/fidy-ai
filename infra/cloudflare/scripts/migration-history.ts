@@ -86,7 +86,7 @@ export const hashMigrationSources = Effect.fn("hashMigrationSources")(function* 
 
 export const compareAppliedMigrationRows = Effect.fn("compareAppliedMigrationRows")(
   (applied: ReadonlyArray<AppliedMigration>, checkedIn: ReadonlyArray<HashedMigrationSource>) =>
-    Effect.sync(() => {
+    Effect.sync((): ReadonlyArray<AppliedMigrationDrift> => {
       const checkedInByName = new Map(checkedIn.map(({ name, hash }) => [name, hash]));
       const seenNames = new Set<string>();
       const drift: Array<AppliedMigrationDrift> = [];
@@ -272,7 +272,7 @@ export const unapprovedMigrationChanges = Effect.fn("unapprovedMigrationChanges"
     statuses: ReadonlyArray<MigrationRepairStatus>,
     latestProductionRun: Option.Option<ProductionWorkflowRunSnapshot>
   ) =>
-    Effect.sync(() => {
+    Effect.sync((): ReadonlyArray<string> => {
       const evidence = {
         statusesByContext: latestStatusesByContext(statuses),
         statuses,

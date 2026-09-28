@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,6 +21,26 @@ type SubprocessTestFixture = Readonly<{
   readonly fakeBin: string;
   readonly runScript: (invocation: ScriptInvocation) => ScriptResult;
 }>;
+
+export const installFakeMigrationHistoryBun = async (fakeBin: string): Promise<void> => {
+  await writeFile(
+    join(fakeBin, "bun"),
+    [
+      "#!/usr/bin/env bash",
+      'printf "bun %s\\n" "$*" >> "$MIGRATION_COMMANDS"',
+      'if [[ "$*" == *"alchemy.ts state read"* ]]; then',
+      '  cat "$MIGRATION_STATE"',
+      'elif [[ "$*" == *"run wrangler d1 execute"* ]]; then',
+      '  cat "$MIGRATION_ROWS"',
+      '  exit "${WRANGLER_EXIT_CODE:-0}"',
+      "else",
+      "  exit 97",
+      "fi",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+};
 
 /**
  * Runs a script with a temporary fake-command directory prepended to PATH.

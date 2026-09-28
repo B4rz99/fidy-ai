@@ -2,7 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { withSubprocessTestFixture } from "./subprocess-test-fixture";
+import {
+  installFakeMigrationHistoryBun,
+  withSubprocessTestFixture,
+} from "./subprocess-test-fixture";
 
 const scriptPath = fileURLToPath(new URL("./check-applied-migration-drift.ts", import.meta.url));
 const infrastructureDirectory = fileURLToPath(new URL("../", import.meta.url));
@@ -37,8 +40,6 @@ const runGate = async (
       const argsPath = join(temporaryDirectory, "commands.txt");
       const statePath = join(temporaryDirectory, "state.json");
       const rowsPath = join(temporaryDirectory, "rows.json");
-      const fakeBun = join(fakeBin, "bun");
-
       await writeFile(statePath, JSON.stringify(fixture.state));
       await writeFile(
         rowsPath,
@@ -49,23 +50,7 @@ const runGate = async (
           },
         ])
       );
-      await writeFile(
-        fakeBun,
-        [
-          "#!/usr/bin/env bash",
-          'printf "%s\\n" "$*" >> "$MIGRATION_COMMANDS"',
-          'if [[ "$*" == *"alchemy.ts state read"* ]]; then',
-          '  cat "$MIGRATION_STATE"',
-          'elif [[ "$*" == *"run wrangler d1 execute"* ]]; then',
-          '  cat "$MIGRATION_ROWS"',
-          '  exit "${WRANGLER_EXIT_CODE:-0}"',
-          "else",
-          "  exit 97",
-          "fi",
-          "",
-        ].join("\n"),
-        { mode: 0o755 }
-      );
+      await installFakeMigrationHistoryBun(fakeBin);
 
       const result = runScript({
         scriptPath,

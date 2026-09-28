@@ -2,7 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { withSubprocessTestFixture } from "./subprocess-test-fixture";
+import {
+  installFakeMigrationHistoryBun,
+  withSubprocessTestFixture,
+} from "./subprocess-test-fixture";
 
 const scriptPath = fileURLToPath(
   new URL("./verify-unapplied-migration-repair.ts", import.meta.url)
@@ -53,23 +56,7 @@ const runRepair = async (
         ])
       );
       await writeFile(filesPath, JSON.stringify(fixture.changedFiles));
-      await writeFile(
-        join(fakeBin, "bun"),
-        [
-          "#!/usr/bin/env bash",
-          'printf "bun %s\\n" "$*" >> "$REPAIR_COMMANDS"',
-          'if [[ "$*" == *"alchemy.ts state read"* ]]; then',
-          '  cat "$REPAIR_STATE"',
-          'elif [[ "$*" == *"run wrangler d1 execute"* ]]; then',
-          '  cat "$REPAIR_ROWS"',
-          '  exit "${WRANGLER_EXIT_CODE:-0}"',
-          "else",
-          "  exit 97",
-          "fi",
-          "",
-        ].join("\n"),
-        { mode: 0o755 }
-      );
+      await installFakeMigrationHistoryBun(fakeBin);
       await writeFile(
         join(fakeBin, "gh"),
         [
@@ -107,11 +94,12 @@ const runRepair = async (
           GH_TOKEN: "local-only-github-status-token",
           MIGRATION_REPAIR_NAME: migrationName,
           MIGRATION_REPAIR_PR_NUMBER: pullRequestNumber,
+          MIGRATION_COMMANDS: argsPath,
+          MIGRATION_ROWS: rowsPath,
+          MIGRATION_STATE: statePath,
           REPAIR_COMMANDS: argsPath,
           REPAIR_FILES: filesPath,
           REPAIR_PR: pullRequest,
-          REPAIR_ROWS: rowsPath,
-          REPAIR_STATE: statePath,
           WRANGLER_EXIT_CODE: String(fixture.wranglerExitCode),
         },
       });

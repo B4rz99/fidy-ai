@@ -1,0 +1,54 @@
+infra/cloudflare/scripts/check-kapso-launch.sh
+  s_c1486795a55def::t_27c90f2c4164d5 1-6,9-28
+  s_c1486795a55def::t_96291b3c647396 7
+  s_c1486795a55def::t_c2b6b57a51f471 8
+apps/web/src/features/public-site/legal/policy.html
+  s_c1486795a55def::t_9daa1207fca87b 58-60
+  s_c1486795a55def::t_e591e5a66bc74a 61-63
+  s_c1486795a55def::t_145b721c34309f 3-4
+  s_c1486795a55def::t_148c900cf4c101 71
+  s_c1486795a55def::t_c61ff3642e15ba 72-76
+docs/operations/production-releases.md
+  s_c1486795a55def::t_29048d7cc85ba4 47
+.github/workflows/production.yml
+  s_c1486795a55def::t_4396a7e55b5dce 85-87
+docs/operations/kapso-launch-evidence.json
+  s_c1486795a55def::t_44e25830b28303 1-25
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_c1486795a55def::t_216bbd4d4567f2 31-32
+  s_c1486795a55def::t_005430e88ece97 2,48,55,60-62,72-74
+  s_c1486795a55def::t_9093f21a7bd9a6 18,71
+  s_c1486795a55def::t_eb99ce2281fb43 35,41
+  s_c1486795a55def::t_d312e8a636f002 10-11,16,21,29
+  s_c1486795a55def::t_0066cd8f596fc3 1,3-9,12-15,17,19-20,30,33-34,36-40,42-47,63-70,78-89
+  s_c1486795a55def::t_21908c1df2e7f2 49
+  s_c1486795a55def::t_e591e5a66bc74a 22-28,50-54,56-59,75-77
+apps/server/src/shell/consent/current-disclosure.ts
+  s_c1486795a55def::t_77e95356582177 24
+  s_c1486795a55def::t_a5db61b2ede893 29
+  s_c1486795a55def::t_b6f8ca13c8dafe 10,23,28
+  s_c1486795a55def::t_7c8da0619bc652 9
+apps/server/src/shell/consent/current-disclosure.test.ts
+  s_c1486795a55def::t_979874cba868f8 33
+  s_c1486795a55def::t_6aa921d35849fc 26-30,32
+  s_c1486795a55def::t_b254c068e5f9ea 2,5-6,31
+docs/operations/kapso-launch-readiness.md
+  s_c1486795a55def::t_13bd68a8407c9c 1-5,7,9-11
+  s_c1486795a55def::t_e591e5a66bc74a 6,8,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "10a01ac55e4ddec6f03b62cb37b4b6b63431e8a1",
+  "prompts": {},
+  "sessions": {
+    "s_c1486795a55def": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e82c-5a7a-70e6-b90d-820b4d678165",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

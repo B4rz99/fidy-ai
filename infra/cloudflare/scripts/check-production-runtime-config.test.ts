@@ -9,6 +9,7 @@ const productionWorkflowPath = fileURLToPath(
   new URL("../../../.github/workflows/production.yml", import.meta.url)
 );
 const testValue = "runtime-config-test-value";
+const smokeProof = "a".repeat(64);
 
 const workflowStep = async (stepName: string): Promise<string> => {
   const workflow = await readFile(productionWorkflowPath, "utf8");
@@ -40,6 +41,7 @@ const runConfigurationGate = (
 ): { readonly exitCode: number; readonly output: string } => {
   const env = { ...process.env };
   for (const name of requiredConfiguration) env[name] = testValue;
+  env.SMOKE_PROOF = smokeProof;
   if (missing !== undefined) env[missing] = "";
 
   const result = spawnSync("bash", [scriptPath], {
@@ -61,6 +63,21 @@ describe("Production runtime configuration gate", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("Production runtime configuration is present.");
     expect(result.output).not.toContain(testValue);
+  });
+
+  it("rejects a malformed smoke proof without printing its value", () => {
+    const env = { ...process.env, SMOKE_PROOF: "not-a-valid-proof" };
+    for (const name of requiredConfiguration) env[name] = testValue;
+    const result = spawnSync("bash", [scriptPath], {
+      cwd: workingDirectory,
+      encoding: "utf8",
+      env,
+    });
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      "check=production_runtime_configuration category=smoke_proof_invalid"
+    );
+    expect(`${result.stdout}${result.stderr}`).not.toContain("not-a-valid-proof");
   });
 
   it("rejects missing configuration with only a closed category", () => {
@@ -97,6 +114,7 @@ describe("Production runtime configuration gate", () => {
   it("rejects whitespace-only configuration", () => {
     const whitespaceEnv = { ...process.env };
     for (const name of requiredConfiguration) whitespaceEnv[name] = testValue;
+    whitespaceEnv.SMOKE_PROOF = smokeProof;
     whitespaceEnv.WOMPI_PUBLIC_KEY = " \t\n";
 
     const whitespaceResult = spawnSync("bash", [scriptPath], {

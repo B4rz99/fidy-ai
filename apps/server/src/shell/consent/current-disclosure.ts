@@ -6,7 +6,7 @@ export const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta neces
 
 Política completa: https://app.fidyapp.com/politica
 
-Usamos Kapso y Meta para atenderte por WhatsApp. Si envías una nota de voz, Kapso puede convertirla en texto con ayuda de otras empresas. Tus datos pueden tratarse fuera de Colombia. Consulta en la política cuánto tiempo pueden conservarse y cómo pedir su eliminación.
+Usamos Kapso y Meta para atenderte por WhatsApp. Si envías una nota de voz, Kapso puede convertirla en texto con ayuda de otras empresas. Tus datos pueden tratarse fuera de Colombia. En el plan gratuito, Kapso guarda el historial de WhatsApp sin borrarlo automáticamente. Consulta en la política cómo pedir su eliminación.
 
 Si activas el reenvío de correos financieros, Fidy procesa su texto, HTML e imágenes integradas para registrar movimientos. Conserva el correo original hasta 90 días. Una muestra estructural solo puede conservarse indefinidamente después de anonimización automática y aprobación humana.
 
@@ -20,13 +20,13 @@ export const currentDisclosureFor = (): DisclosureSnapshot =>
   Schema.decodeSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
-    revision: "onboarding-2026-09-28-kapso",
-    contentSha256: "1dab7152fe6b87ab035a3c7a91c679a357a89eda2909ea7c3cb588913aaf1b47",
+    revision: "onboarding-2026-09-28-kapso-free",
+    contentSha256: "c9d0a1ab1eed45936c661a96170dfcc10ac8323937b43a4412eaabf0db455df0",
     text: CURRENT_DISCLOSURE_TEXT,
     policy: {
       publicUrl: "https://app.fidyapp.com/politica",
-      revision: "policy-2026-09-28-kapso",
-      contentSha256: "dd6192d91817affa541eeec914ad1b9be836d2690a2dc15c003bab79727e3536",
+      revision: "policy-2026-09-28-kapso-free",
+      contentSha256: "5eda3483a389e5c88b8e52fe9cdf6ca2b40dd16618e52c8ef95f8a1c414cb261",
     },
     purposes: [
       "Crear, autenticar, administrar y proteger la cuenta",

@@ -28,8 +28,8 @@ const ready = {
     analytics: "disabled",
   },
   deletionTestEvidence: "restricted/deletion-test",
-  policyRevision: "policy-2026-09-28-kapso",
-  onboardingRevision: "onboarding-2026-09-28-kapso",
+  policyRevision: "policy-2026-09-28-kapso-free",
+  onboardingRevision: "onboarding-2026-09-28-kapso-free",
 };
 
 const check = (evidence: unknown): { readonly code: number; readonly output: string } => {

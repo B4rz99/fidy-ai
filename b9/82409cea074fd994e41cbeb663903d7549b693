@@ -1,0 +1,19 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_4050e5a6ee9200::t_36196793e5d980 2087-2098,2114-2123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b982409cea074fd994e41cbeb663903d7549b693",
+  "prompts": {},
+  "sessions": {
+    "s_4050e5a6ee9200": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e843-acd8-738b-ae15-90217dc7b576",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

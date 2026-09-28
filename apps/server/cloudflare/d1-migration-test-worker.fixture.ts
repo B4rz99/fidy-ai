@@ -3,21 +3,31 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 type Env = { readonly DB: D1Database };
+type RawD1Rows = { readonly results: unknown };
 
-type TranscriptEvidence = {
-  readonly sequence: number;
-  readonly entryId: string;
-  readonly userId: string;
-  readonly hostedSessionId: string;
-  readonly turnId: string;
-  readonly text: string;
-  readonly toolCallId: string;
-  readonly mutationUserId: string;
-  readonly turnStatus: string;
-  readonly turnSessionId: string;
-};
+const SqlNameProjection = Schema.Struct({ name: Schema.String });
+const ForeignKeyViolation = Schema.Struct({
+  table: Schema.String,
+  rowid: Schema.Union([Schema.Finite, Schema.Null]),
+  parent: Schema.String,
+  fkid: Schema.Finite,
+});
+const TranscriptEvidenceSchema = Schema.Struct({
+  sequence: Schema.Finite,
+  entryId: Schema.String,
+  userId: Schema.String,
+  hostedSessionId: Schema.String,
+  turnId: Schema.String,
+  text: Schema.String,
+  toolCallId: Schema.String,
+  mutationUserId: Schema.String,
+  turnStatus: Schema.String,
+  turnSessionId: Schema.String,
+});
+type TranscriptEvidence = typeof TranscriptEvidenceSchema.Type;
 
 type Snapshot = {
   readonly appliedMigrationNames: ReadonlyArray<string>;
@@ -123,16 +133,12 @@ const statementAttempt = Effect.fn(function* (statement: D1PreparedStatement) {
 });
 
 const readSnapshot = Effect.fn(function* (db: D1Database) {
-  const [migrations, columns, tables, foreignKeys, evidence] = yield* Effect.all([
-    runD1(() =>
-      db.prepare("SELECT name FROM __alchemy_migrations ORDER BY name").all<{ name: string }>()
-    ),
-    runD1(() => db.prepare("PRAGMA table_info(transcript_entries)").all<{ name: string }>()),
-    runD1(() =>
-      db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all<{ name: string }>()
-    ),
-    runD1(() => db.prepare("PRAGMA foreign_key_check").all()),
-    runD1(() =>
+  const [migrationRows, columnRows, tableRows, foreignKeyRows, evidenceRow] = yield* Effect.all([
+    runD1<RawD1Rows>(() => db.prepare("SELECT name FROM __alchemy_migrations ORDER BY name").all()),
+    runD1<RawD1Rows>(() => db.prepare("PRAGMA table_info(transcript_entries)").all()),
+    runD1<RawD1Rows>(() => db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()),
+    runD1<RawD1Rows>(() => db.prepare("PRAGMA foreign_key_check").all()),
+    runD1<unknown>(() =>
       db
         .prepare(
           `SELECT e.sequence, e.id AS entryId, e.user_id AS userId,
@@ -145,24 +151,25 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
            WHERE e.turn_id = ?`
         )
         .bind(legacyTurn)
-        .first<TranscriptEvidence>()
+        .first()
     ),
+  ] as const);
+  const [migrations, columns, tables, foreignKeys, evidence] = yield* Effect.all([
+    Schema.decodeUnknownEffect(Schema.Array(SqlNameProjection))(migrationRows.results),
+    Schema.decodeUnknownEffect(Schema.Array(SqlNameProjection))(columnRows.results),
+    Schema.decodeUnknownEffect(Schema.Array(SqlNameProjection))(tableRows.results),
+    Schema.decodeUnknownEffect(Schema.Array(ForeignKeyViolation))(foreignKeyRows.results),
+    Schema.decodeUnknownEffect(Schema.OptionFromNullOr(TranscriptEvidenceSchema))(evidenceRow),
   ] as const);
 
   return {
-    appliedMigrationNames: migrations.results.map((migration) => migration.name),
-    transcriptHasIteration: columns.results.some((column) => column.name === "iteration"),
-    hostedWhatsAppInboundExists: tables.results.some(
-      (table) => table.name === "hosted_whatsapp_inbound"
-    ),
-    hostedVoiceRefusalsExists: tables.results.some(
-      (table) => table.name === "hosted_voice_refusals"
-    ),
-    hostedWhatsAppWindowsExists: tables.results.some(
-      (table) => table.name === "hosted_whatsapp_windows"
-    ),
-    foreignKeyViolationCount: foreignKeys.results.length,
-    preservedEvidence: Option.fromNullishOr(evidence),
+    appliedMigrationNames: migrations.map((migration) => migration.name),
+    transcriptHasIteration: columns.some((column) => column.name === "iteration"),
+    hostedWhatsAppInboundExists: tables.some((table) => table.name === "hosted_whatsapp_inbound"),
+    hostedVoiceRefusalsExists: tables.some((table) => table.name === "hosted_voice_refusals"),
+    hostedWhatsAppWindowsExists: tables.some((table) => table.name === "hosted_whatsapp_windows"),
+    foreignKeyViolationCount: foreignKeys.length,
+    preservedEvidence: evidence,
   } satisfies Snapshot;
 });
 

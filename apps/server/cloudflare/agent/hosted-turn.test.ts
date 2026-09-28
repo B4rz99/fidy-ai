@@ -141,10 +141,17 @@ const applyMigration = (db: D1Database, name: string): Effect.Effect<void, Cause
     const sql = yield* Effect.tryPromise(() =>
       Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text()
     );
-    for (const statement of sql
+    const statements = sql
       .replace(/^--.*$/gmu, "")
       .trim()
-      .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)) {
+      .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |INSERT |DROP |$)/u);
+    if (name === "0024_hosted_whatsapp") {
+      yield* Effect.tryPromise(() =>
+        db.batch(statements.map((statement) => db.prepare(statement)))
+      );
+      return;
+    }
+    for (const statement of statements) {
       yield* Effect.tryPromise(() => db.prepare(statement).run());
     }
   });
@@ -175,7 +182,66 @@ const migrationNames = [
   "0020_restore_audit_budgets",
   ...hostedTurnTestMigrations,
 ] as const;
-const setup = (): Promise<D1Database> =>
+const legacyTurn = "10000000-0000-4000-8000-000000000731";
+const legacyUser = "10000000-0000-4000-8000-000000000732";
+const legacySession = "10000000-0000-4000-8000-000000000733";
+const seedTurnBeforeWhatsAppMigration = (db: D1Database): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const timestamp = now();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(`INSERT INTO users
+        (id, service_market, locale, time_zone, created_at_ms)
+        VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)`)
+            .bind(legacyUser, timestamp),
+          db
+            .prepare(`INSERT INTO onboarding_consent_records
+        (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+          decision_received_at_ms, accepted_at_ms)
+        VALUES (?, ?, '{}', 'disclosed', 'accepted', ?, ?)`)
+            .bind(newId(), legacyUser, timestamp, timestamp),
+          db
+            .prepare(`INSERT INTO hosted_agent_sessions
+        (id, user_id, consent_basis_json, started_at_ms, status)
+        VALUES (?, ?, '{}', ?, 'active')`)
+            .bind(legacySession, legacyUser, timestamp),
+          db
+            .prepare(`INSERT INTO hosted_turns
+        (id, user_id, hosted_session_id, started_at_ms, status)
+        VALUES (?, ?, ?, ?, 'pending')`)
+            .bind(legacyTurn, legacyUser, legacySession, timestamp),
+          db
+            .prepare(`INSERT INTO transcript_entries
+        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
+        VALUES (?, ?, ?, ?, 'user', ?, 'Antes')`)
+            .bind(newId(), legacyUser, legacySession, legacyTurn, timestamp),
+          db
+            .prepare(`INSERT INTO hosted_mutation_commits
+        (turn_id, tool_call_id, user_id, committed_at_ms, valid) VALUES (?, ?, ?, ?, 1)`)
+            .bind(legacyTurn, "legacy-call", legacyUser, timestamp),
+        ])
+      );
+    })
+  );
+
+const applySeededMigration = ({
+  db,
+  migration,
+  seedLegacyTurn,
+}: Readonly<{ db: D1Database; migration: string; seedLegacyTurn: boolean }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    if (seedLegacyTurn && migration === "0024_hosted_whatsapp") {
+      yield* Effect.tryPromise(() => seedTurnBeforeWhatsAppMigration(db));
+    }
+    yield* applyMigration(db, migration);
+  });
+
+const setup = (seedLegacyTurn = false): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const name = `hosted-turn-${++sequence}`;
@@ -204,7 +270,7 @@ const setup = (): Promise<D1Database> =>
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       for (const migration of migrationNames) {
-        yield* applyMigration(db, migration);
+        yield* applySeededMigration({ db, migration, seedLegacyTurn });
       }
       // The stored disclosure is generated from the same canonical snapshot onboarding retains.
       const snapshot = yield* Schema.encodeEffect(
@@ -278,6 +344,55 @@ const setup = (): Promise<D1Database> =>
       return db;
     })
   );
+
+it("migrates existing hosted evidence and can persist DeliveryUnconfirmed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup(true));
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+      ).toHaveLength(0);
+      const preserved = yield* Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT
+      e.sequence, e.text, m.tool_call_id FROM transcript_entries AS e
+      JOIN hosted_mutation_commits AS m ON m.turn_id = e.turn_id
+      WHERE e.turn_id = ?`)
+          .bind(legacyTurn)
+          .first()
+      );
+      expect(preserved).toMatchObject({ text: "Antes", tool_call_id: "legacy-call" });
+      const terminalAt = now();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(`INSERT INTO transcript_entries
+        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason)
+        VALUES (?, ?, ?, ?, 'failed', ?, 'DeliveryUnconfirmed')`)
+            .bind(newId(), legacyUser, legacySession, legacyTurn, terminalAt),
+          db
+            .prepare(`UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?,
+        failure_reason = 'DeliveryUnconfirmed' WHERE id = ?`)
+            .bind(terminalAt, legacyTurn),
+        ])
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT status, failure_reason
+      FROM hosted_turns WHERE id = ?`)
+            .bind(legacyTurn)
+            .first()
+        )
+      ).toMatchObject({
+        status: "failed",
+        failure_reason: "DeliveryUnconfirmed",
+      });
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+      ).toHaveLength(0);
+    })
+  ));
 
 it("resolves hosted WhatsApp authority only for the verified portfolio and BSUID", () =>
   Effect.runPromise(

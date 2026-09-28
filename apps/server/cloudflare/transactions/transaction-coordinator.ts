@@ -846,7 +846,10 @@ export class UserTransactionCoordinator {
         }
         const accepted = yield* reconcileWhatsAppStatus({ db: env.DB, admission: admission.value });
         return accepted ? new Response(null, { status: 200 }) : transactionUnavailable();
-      }).pipe(Effect.orElseSucceed(transactionUnavailable))
+      }).pipe(
+        Effect.withSpan("agent.whatsappTurn.status"),
+        Effect.orElseSucceed(transactionUnavailable)
+      )
     );
   }
 
@@ -899,6 +902,7 @@ export class UserTransactionCoordinator {
           );
         }).pipe(
           Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+          Effect.withSpan("agent.whatsappTurn.execution"),
           Effect.orElseSucceed(transactionUnavailable)
         )
       )

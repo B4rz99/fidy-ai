@@ -124,7 +124,7 @@ const decodeConsent = (row: ConsentUserRow): HostedAgentSessionConsentBasis => {
   });
 };
 
-/** Read a live WebSession's current Consent and the latest hosted lifecycle, for one explicit User. */
+/** Recheck the supplied WebSession or verified WhatsApp association and read the User's hosted lifecycle; revoked Consent remains visible for refusal. */
 export const readHostedSnapshot = ({
   db,
   subject,

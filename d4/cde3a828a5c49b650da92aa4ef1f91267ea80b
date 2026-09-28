@@ -1,0 +1,23 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_ccede3fef9ce61::t_ed524f1c7776b4 5
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_ccede3fef9ce61::t_671bcb281927e5 12,44,68-82,117
+infra/cloudflare/verify-edge-policy.test.ts
+  s_ccede3fef9ce61::t_ab74359ee95fcc 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d4cde3a828a5c49b650da92aa4ef1f91267ea80b",
+  "prompts": {},
+  "sessions": {
+    "s_ccede3fef9ce61": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e8e4-7b17-751e-b033-9644b17b0742",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

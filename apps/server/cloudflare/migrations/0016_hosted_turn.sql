@@ -40,23 +40,13 @@ CREATE TABLE transcript_entries (
   user_id TEXT NOT NULL,
   hosted_session_id TEXT NOT NULL,
   turn_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('user','assistant','tool_call','tool_result','failed','interrupted')),
+  kind TEXT NOT NULL CHECK (kind IN ('user','assistant','failed','interrupted')),
   occurred_at_ms INTEGER NOT NULL,
   text TEXT,
   failure_reason TEXT,
-  iteration INTEGER,
-  tool_call_id TEXT,
-  operation TEXT,
-  input_json TEXT,
-  outcome_json TEXT,
   FOREIGN KEY (user_id, hosted_session_id) REFERENCES hosted_agent_sessions(user_id, id),
   FOREIGN KEY (user_id, turn_id) REFERENCES hosted_turns(user_id, id),
-  CHECK ((kind IN ('user','assistant') AND text IS NOT NULL AND failure_reason IS NULL
-           AND tool_call_id IS NULL AND operation IS NULL AND input_json IS NULL AND outcome_json IS NULL) OR
-         (kind = 'tool_call' AND text IS NULL AND failure_reason IS NULL AND iteration BETWEEN 1 AND 32
-           AND tool_call_id IS NOT NULL AND operation IS NOT NULL AND input_json IS NOT NULL AND outcome_json IS NULL) OR
-         (kind = 'tool_result' AND text IS NULL AND failure_reason IS NULL AND iteration BETWEEN 1 AND 32
-           AND tool_call_id IS NOT NULL AND operation IS NOT NULL AND input_json IS NULL AND outcome_json IS NOT NULL) OR
+  CHECK ((kind IN ('user','assistant') AND text IS NOT NULL AND failure_reason IS NULL) OR
          (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed')) OR
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
@@ -74,8 +64,6 @@ CREATE TABLE hosted_delivery_proposals (
 CREATE TRIGGER hosted_delivery_proposals_no_update BEFORE UPDATE ON hosted_delivery_proposals
 BEGIN SELECT RAISE(ABORT, 'hosted_delivery_immutable'); END;
 CREATE UNIQUE INDEX transcript_one_user ON transcript_entries(turn_id) WHERE kind = 'user';
-CREATE UNIQUE INDEX transcript_tool_call ON transcript_entries(turn_id, tool_call_id) WHERE kind = 'tool_call';
-CREATE UNIQUE INDEX transcript_tool_result ON transcript_entries(turn_id, tool_call_id) WHERE kind = 'tool_result';
 CREATE UNIQUE INDEX transcript_one_terminal ON transcript_entries(turn_id) WHERE kind IN ('assistant','failed','interrupted');
 -- A terminal status cannot be committed without its matching exact or metadata-only marker.
 CREATE TRIGGER hosted_turns_terminal_evidence BEFORE UPDATE ON hosted_turns

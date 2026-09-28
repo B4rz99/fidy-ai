@@ -2,7 +2,8 @@ import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { DateTime, Effect, Result, Schema } from "effect";
-import { describe, expect } from "vitest";
+import { describe, expect, vi } from "vitest";
+import { Miniflare } from "miniflare";
 import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
@@ -447,6 +448,73 @@ describe("Cloudflare Worker topology", () => {
       expect(exported).not.toContain(privateFailureDetail);
     })
   );
+
+  it("keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary", async () => {
+    const instance = new Miniflare({
+      workers: [
+        {
+          config: {
+            name: "operator-alert-worker",
+            type: "worker",
+            compatibilityDate: "2026-09-08",
+            env: { DB: { id: "operator-alert-worker", type: "d1" } },
+            manifest: {
+              mainModule: "index.mjs",
+              modules: {
+                "index.mjs": {
+                  contents: "export default {fetch() {return new Response('ok')}}",
+                  type: "esm",
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response('{"message":"rejected"}', { status: 400 }));
+    try {
+      await instance.ready;
+      const db = await instance.getD1Database("DB");
+      await db
+        .prepare(`CREATE TABLE operational_alerts (
+        kind TEXT NOT NULL, owner TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL,
+        first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, last_attempt_ms INTEGER,
+        attempt_started_ms INTEGER, delivery_confirmed INTEGER NOT NULL DEFAULT 0,
+        next_attempt_ms INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+        acknowledged_ms INTEGER, PRIMARY KEY (kind, owner)
+      )`)
+        .run();
+      const worker = makeCoreWorker(collectingTelemetry([]));
+      await expect(
+        worker.scheduled(scheduledController, {
+          ...coreEnvironment,
+          DB: db,
+          ASYNC_HEALTH_ENABLED: "enabled",
+          ASYNC_DEAD_LETTERS: { metrics: async () => ({ backlogCount: 1, backlogBytes: 20 }) },
+          OPERATOR_ALERT_EMAIL: "operator@example.com",
+          RESEND_API_KEY: "fake-test-key",
+        })
+      ).rejects.toThrow();
+      const states = await db
+        .prepare(
+          "SELECT kind, state, delivery_confirmed, acknowledged_ms FROM operational_alerts WHERE kind = 'dead_letters'"
+        )
+        .all();
+      expect(states.results).toEqual([
+        { kind: "dead_letters", state: "firing", delivery_confirmed: 0, acknowledged_ms: null },
+      ]);
+      expect(
+        await db
+          .prepare("SELECT COUNT(*) AS count FROM operational_alerts WHERE delivery_confirmed = 1")
+          .first()
+      ).toEqual({ count: 0 });
+    } finally {
+      fetch.mockRestore();
+      await instance.dispose();
+    }
+  });
 
   it.effect("retains one owning span when runtime release metadata is malformed", () =>
     Effect.gen(function* () {

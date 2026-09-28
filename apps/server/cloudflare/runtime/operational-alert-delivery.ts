@@ -49,19 +49,23 @@ export const runOperationalAlerts = async (
     db: D1Database;
     now: number;
     alerts: ReadonlyArray<OperationalAlert>;
-    send: (alert: OperationalAlert, idempotencyKey: string) => Promise<void>;
+    signal: AbortSignal;
+    send: (alert: OperationalAlert, idempotencyKey: string, signal: AbortSignal) => Promise<void>;
   }>
 ): Promise<void> => {
   const attempts = await Promise.all(
     input.alerts.map(async (alert): Promise<boolean> => {
+      input.signal.throwIfAborted();
       const claimed = await claimOperationalAlert(input.db, alert, input.now);
       if (claimed === null) return true;
       const attempt = Schema.decodeUnknownSync(Claimed)(claimed);
       if (input.now - attempt.started >= maximumSafeRetryMs) return false;
+      input.signal.throwIfAborted();
       try {
         await input.send(
           alert,
-          `fidy-operational-${alert.kind}-${alert.owner}-${attempt.started}-${attempt.attempts}`
+          `fidy-operational-${alert.kind}-${alert.owner}-${attempt.started}-${attempt.attempts}`,
+          input.signal
         );
         await input.db
           .prepare(`UPDATE operational_alerts SET delivery_confirmed = 1

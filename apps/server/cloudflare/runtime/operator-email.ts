@@ -19,6 +19,7 @@ export const sendOperatorEmail = async (
     to: string;
     apiKey: string;
     release: string;
+    signal: AbortSignal;
   }>
 ): Promise<void> => {
   const result = await Effect.runPromiseExit(
@@ -50,7 +51,8 @@ export const sendOperatorEmail = async (
           }),
         });
       })
-    )
+    ),
+    { signal: input.signal }
   );
   if (result._tag === "Failure") throw new Error("Operator email delivery unavailable");
   const response = result.value;

@@ -1,7 +1,11 @@
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
-import { runOperationalAlerts } from "./operational-alert-delivery";
+import { runOperationalAlerts as deliverAlerts } from "./operational-alert-delivery";
 import type { OperationalAlert } from "./operational-alerts";
+
+const runOperationalAlerts = (
+  input: Omit<Parameters<typeof deliverAlerts>[0], "signal">
+): Promise<void> => deliverAlerts({ ...input, signal: new AbortController().signal });
 
 const instances: Miniflare[] = [];
 const database = async (): Promise<D1Database> => {
@@ -104,6 +108,25 @@ describe("operator email notification", () => {
       },
     });
     expect(keys).toEqual([keys[0], keys[0]]);
+  });
+
+  it("does not send an email after the scheduled Work is cancelled", async () => {
+    const db = await database();
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const sent: string[] = [];
+    await expect(
+      deliverAlerts({
+        db,
+        now: 1_000_000,
+        alerts: [deadLetter],
+        signal: cancellation.signal,
+        send: async (_alert, key) => {
+          sent.push(key);
+        },
+      })
+    ).rejects.toThrow();
+    expect(sent).toEqual([]);
   });
 
   it("does not replay an unconfirmed provider send after its idempotency window expires", async () => {

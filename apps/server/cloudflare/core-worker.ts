@@ -1900,7 +1900,7 @@ const deliverOperationalSignals = (
   signals: ReadonlyArray<OperationalSignal>
 ): Effect.Effect<void, void> =>
   Effect.tryPromise({
-    try: () => {
+    try: (signal) => {
       const recipient = Schema.decodeUnknownOption(EmailAddress)(environment.OPERATOR_ALERT_EMAIL);
       if (Option.isNone(recipient) || !environment.RESEND_API_KEY) {
         throw new Error("Operator email configuration unavailable");
@@ -1911,13 +1911,15 @@ const deliverOperationalSignals = (
         db: environment.DB,
         now: Date.now(),
         alerts: decideOperationalAlerts(signals),
-        send: (alert, idempotencyKey) =>
+        signal,
+        send: (alert, idempotencyKey, cancellation) =>
           sendOperatorEmail({
             alert,
             idempotencyKey,
             to,
             apiKey,
             release: environment.RELEASE_GIT_SHA,
+            signal: cancellation,
           }),
       });
     },

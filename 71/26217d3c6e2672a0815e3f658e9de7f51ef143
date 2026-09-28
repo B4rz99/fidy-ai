@@ -1,0 +1,56 @@
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_bad62b9e4f4eb3::t_4a71a525f4ba0f 88,251-253,255
+  s_bad62b9e4f4eb3::t_79eac39992609e 247-250,254,256-262,288
+apps/server/src/shell/consent/ingress.ts
+  s_bad62b9e4f4eb3::t_604f816d3ca5d6 99-121
+  s_bad62b9e4f4eb3::t_bd260d812291aa 122-123
+apps/server/cloudflare/migrations/0025_voice_refusal.sql
+  s_bad62b9e4f4eb3::t_3b3ac0e1ad59d4 1-11
+apps/server/src/shell/channels/whatsapp/model.ts
+  s_bad62b9e4f4eb3::t_e83dc18aa730ec 68-69
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_bad62b9e4f4eb3::t_03c2c405082faf 434
+  s_bad62b9e4f4eb3::t_eda7a0cfa21190 395-402
+  s_bad62b9e4f4eb3::t_48de32abcaec81 350-353,355-362,366,370-394,403-408,410-421,429-433,435
+  s_bad62b9e4f4eb3::t_2ec3201fc0919c 437-438,440-441,445-449
+  s_bad62b9e4f4eb3::t_1f28fa68411c5d 367-369
+  s_bad62b9e4f4eb3::t_f72e4e300fc3a5 169-171
+  s_bad62b9e4f4eb3::t_623ebb9233cad5 427-428
+  s_bad62b9e4f4eb3::t_1516efb474e291 325-333
+  s_bad62b9e4f4eb3::t_9635082bf2fdc4 334-343,346
+  s_bad62b9e4f4eb3::t_55f850f1258fd0 178,354,436,439,442-444,450-451
+  s_bad62b9e4f4eb3::t_6026f7a37985f9 179-183,363-365
+  s_bad62b9e4f4eb3::t_037ee927c9bb66 422-426
+  s_bad62b9e4f4eb3::t_6c00738acd7e9f 347-349,409
+apps/server/cloudflare/onboarding/consent-ingress.ts
+  s_bad62b9e4f4eb3::t_def49860c879f3 26,944-948,955-960,963-964,966-968,970-974,977,1077-1080
+  s_bad62b9e4f4eb3::t_ad712e2f8befd0 192,198-200,202-203,935,1083-1085
+  s_bad62b9e4f4eb3::t_7ec191bb2db68f 936
+  s_bad62b9e4f4eb3::t_cb311c58750b20 74
+  s_bad62b9e4f4eb3::t_d9421bf4f6714e 949-954,961-962
+  s_bad62b9e4f4eb3::t_5e8b15c160a56d 204-206,208-209,1016-1042,1082
+  s_bad62b9e4f4eb3::t_0956c8f52ce96b 978,988
+  s_bad62b9e4f4eb3::t_2ec3201fc0919c 1175-1176,1179-1181
+  s_bad62b9e4f4eb3::t_c2c0d37defb058 1174,1177-1178,1182
+  s_bad62b9e4f4eb3::t_b81a228fb1692b 969,975-976
+  s_bad62b9e4f4eb3::t_06d8b1532ec41d 965
+  s_bad62b9e4f4eb3::t_4b8bb2a8cadfdd 201
+  s_bad62b9e4f4eb3::t_2e83c216f56d39 207
+  s_bad62b9e4f4eb3::t_39996809361cfe 1043-1044
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7126217d3c6e2672a0815e3f658e9de7f51ef143",
+  "prompts": {},
+  "sessions": {
+    "s_bad62b9e4f4eb3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d3-ad52-7794-93a5-85ec39a87b24",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

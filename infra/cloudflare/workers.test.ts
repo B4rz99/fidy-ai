@@ -522,6 +522,83 @@ describe("Cloudflare Worker topology", () => {
     })
   );
 
+  it("bounds public Tail-event storage through successive Core schedules without deleting current evidence", async () => {
+    const instance = new Miniflare({
+      workers: [
+        {
+          config: {
+            name: "event-retention-test",
+            type: "worker",
+            compatibilityDate: "2026-09-08",
+            env: { DB: { id: "event-retention-test", type: "d1" } },
+            manifest: {
+              mainModule: "index.mjs",
+              modules: {
+                "index.mjs": {
+                  contents: "export default { fetch() { return new Response('ok') } }",
+                  type: "esm",
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+    try {
+      await instance.ready;
+      const db = await instance.getD1Database("DB");
+      await db
+        .prepare(
+          "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
+        )
+        .run();
+      const minuteMs = 60_000;
+      const current = Math.floor(Date.now() / minuteMs) * minuteMs;
+      const oldBuckets = Array.from({ length: 200 }, (_, index) =>
+        db
+          .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 1)")
+          .bind(current - 172_800_000 - index * minuteMs)
+      );
+      await db.batch(oldBuckets.slice(0, 100));
+      await db.batch(oldBuckets.slice(100));
+      await db
+        .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+        .bind(current)
+        .run();
+      const worker = makeCoreWorker(collectingTelemetry([]));
+      const environment: Parameters<typeof coreWorker.scheduled>[1] = {
+        ...coreEnvironment,
+        DB: db,
+        ASYNC_HEALTH_ENABLED: "enabled",
+      };
+      await expect(worker.scheduled(scheduledController, environment)).rejects.toThrow();
+      expect(
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
+          )
+          .first()
+      ).toEqual({ count: 72 });
+      await expect(worker.scheduled(scheduledController, environment)).rejects.toThrow();
+      expect(
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'worker_exception'"
+          )
+          .first()
+      ).toEqual({ count: 0 });
+      expect(
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM operational_event_buckets WHERE kind = 'heartbeat'"
+          )
+          .first()
+      ).toEqual({ count: 1 });
+    } finally {
+      await instance.dispose();
+    }
+  });
+
   it("keeps alerts unconfirmed after a rejected provider response at the scheduled Worker boundary", async () => {
     const instance = new Miniflare({
       workers: [

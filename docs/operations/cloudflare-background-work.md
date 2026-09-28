@@ -74,8 +74,9 @@ operations or disable new ingress by reviewed release changes rather than manufa
 on-call owner. Confirm resolution against D1/Queue/Workflow before deleting or replaying any work.
 
 The `retention` signal inspects expired unpublished statement staging rows, published statement
-bytes awaiting deletion beyond their submission retention deadline, and forwarded-email receipts
-whose bytes are overdue for deletion: one hour overdue is a warning and 24 hours overdue is critical.
+bytes awaiting deletion beyond their submission retention deadline, forwarded-email receipts
+whose bytes are overdue for deletion, and statement NeedsReviewItem evidence that remains past its
+evidence deadline: one hour overdue is a warning and 24 hours overdue is critical.
 This is an eight-row sample, not an R2 inventory; byte deletion and durable receipt/submission state
 remain authoritative. The existing pending measurements are capped eight-record samples; `sampleLimited`
 is not a global backlog count. Current email-proof rejection samples are neither a historical callback-rejection

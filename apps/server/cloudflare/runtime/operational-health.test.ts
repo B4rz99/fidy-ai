@@ -44,6 +44,11 @@ it("reports expired statement staging separately when other background measureme
       )
       .run();
     await db.prepare("CREATE TABLE forwarded_email_outcomes (receipt_id TEXT)").run();
+    await db
+      .prepare(
+        "CREATE TABLE statement_needs_review (evidence_expires_at_ms INTEGER, status TEXT, original_evidence TEXT, known_money TEXT)"
+      )
+      .run();
     const now = Date.now();
     await db
       .prepare("INSERT INTO statement_staging_objects VALUES ('pending', ?, 'pending', NULL)")
@@ -61,6 +66,12 @@ it("reports expired statement staging separately when other background measureme
       .prepare("INSERT INTO forwarded_email_receipts VALUES (?, ?, ?, 'queued')")
       .bind("00000000-0000-4000-8000-000000000000", now - 600_000, now - 86_400_000)
       .run();
+    await db
+      .prepare(
+        "INSERT INTO statement_needs_review VALUES (?, 'pending', 'private-financial-evidence', NULL)"
+      )
+      .bind(now - 86_400_000)
+      .run();
     const signals = await Effect.runPromise(
       observeOperationalHealth({
         DB: db,
@@ -77,8 +88,9 @@ it("reports expired statement staging separately when other background measureme
     expect(retention).toMatchObject({
       operation: "retention",
       state: "attention",
-      sampledOverdue: 3,
+      sampledOverdue: 4,
     });
+    expect(JSON.stringify(signals)).not.toContain("private-financial-evidence");
     if (retention?.state === "attention" && retention.operation === "retention") {
       expect(retention.oldestOverdueAgeMilliseconds).toBeGreaterThanOrEqual(86_400_000);
     }

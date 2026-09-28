@@ -85,11 +85,10 @@ CREATE TABLE transcript_entries_next (
          (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed','DeliveryUnconfirmed')) OR
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
+-- The deployed 0016 schema predates tool evidence; the new metadata columns remain NULL for prior entries.
 INSERT INTO transcript_entries_next
-  (sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text,
-    failure_reason, iteration, tool_call_id, operation, input_json, outcome_json)
-SELECT sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text,
-    failure_reason, iteration, tool_call_id, operation, input_json, outcome_json
+  (sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
+SELECT sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason
 FROM transcript_entries;
 DROP TABLE transcript_entries;
 ALTER TABLE transcript_entries_next RENAME TO transcript_entries;

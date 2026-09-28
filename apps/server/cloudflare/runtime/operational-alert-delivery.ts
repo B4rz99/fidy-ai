@@ -5,7 +5,6 @@ const Claimed = Schema.Struct({
   attempts: Schema.Int.check(Schema.isGreaterThan(0)),
   started: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
-const ResolvedClaim = Schema.Struct({ ...OperationalAlert.fields, ...Claimed.fields });
 const maximumSafeRetryMs = 82_800_000;
 const minuteMs = 60_000;
 const warningRepeatMinutes = 240;
@@ -46,13 +45,22 @@ const claimOperationalAlert = async (
   const repeatMs = alert.severity === "critical" ? criticalRepeatMs : warningRepeatMs;
   return db
     .prepare(`UPDATE operational_alerts
-      SET attempts = attempts + CASE WHEN delivery_confirmed = 1 OR attempt_started_ms IS NULL THEN 1 ELSE 0 END,
-          attempt_started_ms = CASE WHEN delivery_confirmed = 1 OR attempt_started_ms IS NULL THEN ? ELSE attempt_started_ms END,
+      SET attempts = attempts + CASE WHEN delivery_confirmed = 1 OR attempt_started_ms IS NULL OR attempt_started_ms <= ? THEN 1 ELSE 0 END,
+          attempt_started_ms = CASE WHEN delivery_confirmed = 1 OR attempt_started_ms IS NULL OR attempt_started_ms <= ? THEN ? ELSE attempt_started_ms END,
           delivery_confirmed = 0, last_attempt_ms = ?, next_attempt_ms = ?
       WHERE kind = ? AND owner = ? AND state = 'firing'
         AND acknowledged_ms IS NULL AND next_attempt_ms <= ?
       RETURNING attempts, attempt_started_ms AS started`)
-    .bind(now, now, now + repeatMs, alert.kind, alert.owner, now)
+    .bind(
+      now - maximumSafeRetryMs,
+      now - maximumSafeRetryMs,
+      now,
+      now,
+      now + repeatMs,
+      alert.kind,
+      alert.owner,
+      now
+    )
     .first();
 };
 
@@ -61,7 +69,6 @@ const deliverFiring = async (input: Delivery, alert: OperationalAlert): Promise<
   const claimed = await claimOperationalAlert(input.db, alert, input.now);
   if (claimed === null) return true;
   const attempt = Schema.decodeUnknownSync(Claimed)(claimed);
-  if (input.now - attempt.started >= maximumSafeRetryMs) return false;
   input.signal.throwIfAborted();
   try {
     await input.send(
@@ -93,31 +100,40 @@ const claimResolutions = async (input: Delivery): Promise<ReadonlyArray<unknown>
   }
   const claimed = await input.db
     .prepare(`UPDATE operational_alerts
-    SET attempts = attempts + CASE WHEN attempt_started_ms IS NULL THEN 1 ELSE 0 END,
-        attempt_started_ms = COALESCE(attempt_started_ms, ?),
+    SET attempts = attempts + CASE WHEN attempt_started_ms IS NULL OR attempt_started_ms <= ? THEN 1 ELSE 0 END,
+        attempt_started_ms = CASE WHEN attempt_started_ms IS NULL OR attempt_started_ms <= ? THEN ? ELSE attempt_started_ms END,
         last_attempt_ms = ?, next_attempt_ms = ? + CASE WHEN severity = 'critical' THEN ? ELSE ? END
     WHERE rowid IN (SELECT rowid FROM operational_alerts
       WHERE state = 'resolved' AND delivery_confirmed = 0 AND next_attempt_ms <= ? LIMIT 16)
     RETURNING kind, owner, severity, attempts, attempt_started_ms AS started`)
-    .bind(input.now, input.now, input.now, criticalRepeatMs, warningRepeatMs, input.now)
+    .bind(
+      input.now - maximumSafeRetryMs,
+      input.now - maximumSafeRetryMs,
+      input.now,
+      input.now,
+      input.now,
+      criticalRepeatMs,
+      warningRepeatMs,
+      input.now
+    )
     .all();
   return claimed.results;
 };
 
 const deliverResolution = async (input: Delivery, row: unknown): Promise<boolean> => {
   input.signal.throwIfAborted();
-  const claim = Schema.decodeUnknownSync(ResolvedClaim)(row);
-  if (input.now - claim.started >= maximumSafeRetryMs) return false;
+  const alert = Schema.decodeUnknownSync(OperationalAlert)(row);
+  const claim = Schema.decodeUnknownSync(Claimed)(row);
   try {
     await input.send(
-      claim,
-      `fidy-operational-resolved-${claim.kind}-${claim.owner}-${claim.started}-${claim.attempts}`,
+      alert,
+      `fidy-operational-resolved-${alert.kind}-${alert.owner}-${claim.started}-${claim.attempts}`,
       { signal: input.signal, phase: "resolved" }
     );
     await input.db
       .prepare(`UPDATE operational_alerts SET delivery_confirmed = 1
       WHERE kind = ? AND owner = ? AND state = 'resolved' AND attempts = ? AND attempt_started_ms = ?`)
-      .bind(claim.kind, claim.owner, claim.attempts, claim.started)
+      .bind(alert.kind, alert.owner, claim.attempts, claim.started)
       .run();
     return true;
   } catch {

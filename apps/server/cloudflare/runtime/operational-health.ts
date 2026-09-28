@@ -6,6 +6,7 @@ const WorkKind = Schema.Literals([
   "emailReplacement",
   "billing",
   "statement",
+  "forwardedEmail",
 ]);
 type WorkKind = typeof WorkKind.Type;
 const QueueKind = Schema.Literals([
@@ -108,7 +109,7 @@ type WorkflowStatusBinding = Readonly<{
 /** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
 export type OperationalHealthEnvironment = Readonly<{
   DB: D1Database;
-  workflows: Partial<Record<WorkKind, WorkflowStatusBinding>>;
+  workflows: Partial<Record<Exclude<WorkKind, "forwardedEmail">, WorkflowStatusBinding>>;
   deadLetters: Option.Option<Pick<Queue, "metrics">>;
   workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
@@ -133,6 +134,10 @@ const pendingQueries: Record<WorkKind, string> = {
   emailReplacement: `SELECT work_id AS id, created_at_ms AS created, expires_at_ms AS deadline FROM email_replacements WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
   billing: `SELECT id, created_at_ms AS created, NULL AS deadline FROM billing_attempts WHERE status = 'pending' ORDER BY created_at_ms LIMIT ?`,
   statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
+  forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
+    FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
+    AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes AS o WHERE o.receipt_id = r.id)
+    ORDER BY r.received_at_ms LIMIT ?`,
 };
 
 const rejectedQueries: Partial<Record<WorkKind, string>> = {
@@ -265,11 +270,16 @@ const inspectRetention = (db: D1Database, now: number): Effect.Effect<Operationa
     const result = yield* Effect.exit(
       Effect.tryPromise(() =>
         db
-          .prepare(`SELECT expires_at_ms AS expires
-        FROM statement_staging_objects
-        WHERE status IN ('pending', 'available', 'deleting') AND expires_at_ms <= ?
-        ORDER BY expires_at_ms LIMIT ?`)
-          .bind(now, sampleLimit)
+          .prepare(`SELECT expires FROM (
+          SELECT expires_at_ms AS expires FROM statement_staging_objects
+          WHERE status IN ('pending', 'available', 'deleting') AND object_deleted_at_ms IS NULL AND expires_at_ms <= ?
+          UNION ALL SELECT s.retention_expires_at_ms AS expires FROM statement_staging_objects AS o
+          JOIN statement_submissions AS s ON s.staging_id = o.id
+          WHERE o.status = 'published' AND o.object_deleted_at_ms IS NULL AND s.retention_expires_at_ms <= ?
+          UNION ALL SELECT expires_at_ms AS expires FROM forwarded_email_receipts
+          WHERE state IN ('storing', 'queued') AND expires_at_ms <= ?
+        ) ORDER BY expires LIMIT ?`)
+          .bind(now, now, now, sampleLimit)
           .all()
       ).pipe(
         Effect.timeout("2 seconds"),
@@ -315,6 +325,31 @@ const inspectQueue = (
 const pendingState = (age: number, expired: number, failed: number): "attention" | "healthy" =>
   age >= staleAfterMilliseconds || expired > 0 || failed > 0 ? "attention" : "healthy";
 
+const inspectPendingWorkflow = ({
+  environment,
+  operation,
+  rows,
+  current,
+}: Readonly<{
+  environment: OperationalHealthEnvironment;
+  operation: WorkKind;
+  rows: ReadonlyArray<typeof Pending.Type>;
+  current: number;
+}>): Effect.Effect<Readonly<{ failed: number; unavailable: number }>> =>
+  Effect.gen(function* () {
+    if (operation === "forwardedEmail") return { failed: 0, unavailable: 0 };
+    const workflow = Option.fromUndefinedOr(environment.workflows[operation]);
+    let failed = 0;
+    let unavailable = 0;
+    for (const row of rows) {
+      if (current - row.created < staleAfterMilliseconds) continue;
+      const status = yield* inspectWorkflow(workflow, row.id);
+      if (status === "unavailable") unavailable += 1;
+      if (status === "failed") failed += 1;
+    }
+    return { failed, unavailable };
+  });
+
 const inspectPending = (
   environment: OperationalHealthEnvironment,
   operation: WorkKind,
@@ -332,16 +367,8 @@ const inspectPending = (
     const rejected = yield* Effect.exit(rejectedEmailWork(environment, operation, current));
     if (Exit.isFailure(rejected)) return unavailableSignal(operation);
     const rows = fetched.value;
-    const workflow = Option.fromUndefinedOr(environment.workflows[operation]);
-    let failedWorkflows = 0;
-    let unavailableWorkflows = 0;
-    for (const row of rows) {
-      // Fresh work may not have reached a Workflow yet; only inspect stalled identities.
-      if (current - row.created < staleAfterMilliseconds) continue;
-      const status = yield* inspectWorkflow(workflow, row.id);
-      if (status === "unavailable") unavailableWorkflows += 1;
-      if (status === "failed") failedWorkflows += 1;
-    }
+    // Fresh work may not have reached a Workflow yet; inspect only stalled instances.
+    const workflowStates = yield* inspectPendingWorkflow({ environment, operation, rows, current });
     const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => current - row.created));
     const expiredUndelivered = rows.filter(
       (row) => Option.isSome(row.deadline) && row.deadline.value <= current
@@ -354,12 +381,12 @@ const inspectPending = (
       sampleLimited: rows.length === sampleLimit,
       oldestPendingAgeMilliseconds,
       expiredUndelivered,
-      failedWorkflows,
-      unavailableWorkflows,
+      failedWorkflows: workflowStates.failed,
+      unavailableWorkflows: workflowStates.unavailable,
       state: pendingState(
         oldestPendingAgeMilliseconds,
         expiredUndelivered,
-        failedWorkflows + rejected.value
+        workflowStates.failed + rejected.value
       ),
     };
   });

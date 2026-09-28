@@ -145,6 +145,7 @@ import {
 import {
   type EventMetricSignal,
   observeOperationalEventMetrics,
+  sweepOperationalEventBuckets,
 } from "./runtime/operational-event-metrics";
 import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
 import {
@@ -2160,6 +2161,7 @@ const canaryPublication = (
   environment: CoreEnvironment,
   current: number
 ): Effect.Effect<void, void> => {
+  if (environment.ASYNC_HEALTH_ENABLED !== "enabled") return Effect.void;
   const queue = environment.OPERATIONAL_CANARY_QUEUE;
   return queue === undefined
     ? Effect.fail(undefined)
@@ -2168,6 +2170,14 @@ const canaryPublication = (
         catch: () => undefined,
       });
 };
+
+const eventBucketRetention = (
+  environment: CoreEnvironment,
+  current: number
+): Effect.Effect<void, void> =>
+  environment.ASYNC_HEALTH_ENABLED === "enabled"
+    ? sweepOperationalEventBuckets(environment.DB, current)
+    : Effect.void;
 
 const scheduledActivities = (
   environment: CoreEnvironment,
@@ -2184,6 +2194,7 @@ const scheduledActivities = (
   const publishers = publicationActivities(environment, Option.none());
   return {
     "async.health": scheduledHealth(environment),
+    "operational.events.retention": eventBucketRetention(environment, current),
     "operational.canary.publish": canaryPublication(environment, current),
     "onboarding.email.dispatch": publishers.onboarding(),
     "onboarding.email.reconcile": reconcileOnboardingEmail(environment.DB),

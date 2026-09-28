@@ -1,7 +1,10 @@
 import { Miniflare } from "miniflare";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
-import { observeOperationalEventMetrics } from "./operational-event-metrics";
+import {
+  observeOperationalEventMetrics,
+  sweepOperationalEventBuckets,
+} from "./operational-event-metrics";
 
 it("reports missing tail telemetry as unavailable instead of zero and classifies recent bounded counts", async () => {
   const instance = new Miniflare({
@@ -93,6 +96,26 @@ it("reports missing tail telemetry as unavailable instead of zero and classifies
         (metric) => metric.state === "unavailable"
       )
     ).toBe(true);
+    await db
+      .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+      .bind(0)
+      .run();
+    await db
+      .prepare("INSERT INTO operational_event_buckets VALUES ('heartbeat', ?, 1)")
+      .bind(172_800_000)
+      .run();
+    await Effect.runPromise(sweepOperationalEventBuckets(db, 172_800_000));
+    expect(
+      await db
+        .prepare("SELECT count(*) AS count FROM operational_event_buckets WHERE bucket_ms = 0")
+        .first()
+    ).toEqual({ count: 0 });
+    expect(
+      await db
+        .prepare("SELECT count(*) AS count FROM operational_event_buckets WHERE bucket_ms = ?")
+        .bind(172_800_000)
+        .first()
+    ).toEqual({ count: 1 });
   } finally {
     await instance.dispose();
   }

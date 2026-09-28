@@ -129,7 +129,7 @@ describe("operator email notification", () => {
     expect(sent).toEqual([]);
   });
 
-  it("does not replay an unconfirmed provider send after its idempotency window expires", async () => {
+  it("starts a new operator-email attempt after the provider idempotency window instead of falling permanently silent", async () => {
     const db = await database();
     const sent: string[] = [];
     await expect(
@@ -143,17 +143,35 @@ describe("operator email notification", () => {
         },
       })
     ).rejects.toThrow();
+    await runOperationalAlerts({
+      db,
+      now: 84_000_000,
+      alerts: [deadLetter],
+      send: async (_alert, key) => {
+        sent.push(key);
+      },
+    });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).not.toBe(sent[0]);
+  });
+
+  it("refuses an invalid alert kind/owner pair from corrupted private state", async () => {
+    const db = await database();
+    await db
+      .prepare(`INSERT INTO operational_alerts
+      (kind, owner, severity, state, first_seen_ms, last_seen_ms, next_attempt_ms)
+      VALUES ('callback_rejection', 'billingQueue', 'critical', 'resolved', 0, 0, 0)`)
+      .run();
     await expect(
       runOperationalAlerts({
         db,
-        now: 84_000_000,
-        alerts: [deadLetter],
-        send: async (_alert, key) => {
-          sent.push(key);
+        now: 1_000_000,
+        alerts: [],
+        send: async () => {
+          throw new Error("must not send");
         },
       })
-    ).rejects.toThrow("Operator alert email unavailable");
-    expect(sent).toHaveLength(1);
+    ).rejects.toThrow();
   });
 
   it("cannot resolve authoritative incomplete work from a missing measurement", async () => {

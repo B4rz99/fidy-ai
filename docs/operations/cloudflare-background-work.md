@@ -12,7 +12,9 @@ The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds 
 In Cloudflare Workers Logs, select the Core Worker and filter `component` to `async-health`.
 The private Tail Worker projects only closed platform categories into minute buckets in D1 (Worker
 exceptions, CPU/memory resource limits, rejected webhook/email callbacks, and Workflow failures);
-it does not copy URLs, message bodies, identifiers, or raw exception text. The Tail Worker observes
+it does not copy URLs, message bodies, identifiers, or raw exception text. Core sweeps expired
+metric buckets after 24 hours with a bounded per-minute deletion; an oversized Tail batch marks
+all aggregate measurements unavailable instead of silently dropping unmatched events. The Tail Worker observes
 Core, Ingress, and ForwardedEmail Workers. Five application Workflows also record rejected executions
 at their entrypoints; the private Queue→Workflow canary distinguishes real consumer execution from a
 successful Queue send or Workflow instance creation. A delayed/missing canary completion is critical;
@@ -35,7 +37,8 @@ successfully. This is a current-state sample, not a historical rejection rate; s
 records leave it. Rejection can mean provider refusal or exhausted proof attempts, so inspect the
 owning lifecycle before attributing a cause. It never authorizes a resend.
 
-D1 pending figures describe the oldest **eight-record sample per owner**, not global totals. `sampleLimited`
+D1 pending figures describe the oldest **eight-record sample per owner**, including incomplete
+forwarded-email receipts without a terminal outcome, not global totals. `sampleLimited`
 means more work may exist. Ages, sampled counts, status counts, Queue counts, and Queue bytes are the
 only exported values. User ids, work ids, mailboxes, financial content, and Workflow errors/outputs
 never enter these signals. Each owner inspection has a three-second budget; at most two run together.
@@ -51,7 +54,10 @@ The Core minute schedule classifies these bounded signals and stores notificatio
 and attempt count). A critical condition emails the operator immediately and repeats no more often
 than every 30 minutes; warnings repeat no more often than every four hours. Resolved conditions send one resolution email and stop
 repeats. A failed send remains firing and unacknowledged; the scheduled activity reports a closed
-failure while other activities continue. A measurement failure is `inspection_unavailable`, never
+failure while other activities continue. An ambiguous send reuses the same idempotency key within
+the provider window; afterward a new operator-only email attempt uses a fresh key rather than
+falling permanently silent. This may produce a duplicate alert email, never duplicate application
+Work. A measurement failure is `inspection_unavailable`, never
 zero; until all measurements recover the alert sweep does not resolve an existing firing condition.
 These records represent **notification state**, not the authoritative status of background work.
 
@@ -67,9 +73,11 @@ unacknowledged critical alert continues to repeat every 30 minutes; if unavailab
 operations or disable new ingress by reviewed release changes rather than manufacturing a second
 on-call owner. Confirm resolution against D1/Queue/Workflow before deleting or replaying any work.
 
-The `retention` signal inspects expired, unpublished statement staging rows: one hour overdue is a
-warning and 24 hours overdue is critical. It does not claim that every other retained object has
-been inspected. The existing pending measurements are capped eight-record samples; `sampleLimited`
+The `retention` signal inspects expired unpublished statement staging rows, published statement
+bytes awaiting deletion beyond their submission retention deadline, and forwarded-email receipts
+whose bytes are overdue for deletion: one hour overdue is a warning and 24 hours overdue is critical.
+This is an eight-row sample, not an R2 inventory; byte deletion and durable receipt/submission state
+remain authoritative. The existing pending measurements are capped eight-record samples; `sampleLimited`
 is not a global backlog count. Current email-proof rejection samples are neither a historical callback-rejection
 rate nor an institutional webhook spike. Monitor native Workflow failures separately from Queue
 retries: Queue acknowledgment happens after instance creation, so a later Workflow failure never

@@ -18,6 +18,25 @@ const recentWindowMinutes = 15;
 const freshWindowMinutes = 5;
 const recentWindowMs = recentWindowMinutes * minuteMs;
 const fiveMinuteWindowMs = freshWindowMinutes * minuteMs;
+const bucketRetentionMs = 86_400_000;
+const maximumSweepRows = 128;
+
+/** Bounded expiry prevents unauthenticated request traffic from growing D1 metrics indefinitely. */
+export const sweepOperationalEventBuckets = (
+  db: D1Database,
+  now: number
+): Effect.Effect<void, void> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(`DELETE FROM operational_event_buckets
+  WHERE rowid IN (SELECT rowid FROM operational_event_buckets WHERE bucket_ms < ? LIMIT ?)`)
+      .bind(now - bucketRetentionMs, maximumSweepRows)
+      .run()
+  ).pipe(
+    Effect.timeout("2 seconds"),
+    Effect.asVoid,
+    Effect.mapError(() => undefined)
+  );
 
 export type EventMetricSignal = Readonly<{
   component: "platform-events";

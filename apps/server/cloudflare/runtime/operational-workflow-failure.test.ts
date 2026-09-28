@@ -37,6 +37,27 @@ it("records a Workflow execution failure without changing its rejection or retai
     expect(
       (await db.prepare("SELECT kind, count FROM operational_event_buckets").all()).results
     ).toEqual([{ kind: "workflow_failure", count: 1 }]);
+    const stalled: D1Database = new Proxy(db, {
+      get(target, key, receiver): unknown {
+        if (key !== "prepare") return Reflect.get(target, key, receiver);
+        return (sql: string): D1PreparedStatement =>
+          new Proxy(db.prepare(sql), {
+            get(statement, method, context): unknown {
+              if (method !== "bind") return Reflect.get(statement, method, context);
+              return (...args: Parameters<D1PreparedStatement["bind"]>): D1PreparedStatement =>
+                new Proxy(statement.bind(...args), {
+                  get(bound, operation, boundContext): unknown {
+                    return operation === "run"
+                      ? () => new Promise<never>(() => {})
+                      : Reflect.get(bound, operation, boundContext);
+                  },
+                });
+            },
+          });
+      },
+    });
+    const original = new Error("must preserve original rejection");
+    await expect(captureWorkflowFailure(Promise.reject(original), stalled)).rejects.toBe(original);
   } finally {
     await instance.dispose();
   }

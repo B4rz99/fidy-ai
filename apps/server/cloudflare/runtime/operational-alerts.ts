@@ -6,51 +6,108 @@ import type { CapabilityProbe } from "./operational-probes";
 
 export type AlertSignal = OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe;
 
-/** Alert coordinates are a finite vocabulary; sampled counts and work identities never become dimensions. */
-export const OperationalAlert = Schema.Struct({
-  kind: Schema.Literals([
-    "pending_work",
-    "dead_letters",
-    "workflow_failure",
-    "rejected_email_work",
-    "whatsapp_delivery",
-    "inspection_unavailable",
-    "retention_lag",
-    "worker_exception",
-    "resource_limit",
-    "callback_rejection",
-    "queue_backlog",
-    "capability_unusable",
-  ]),
-  owner: Schema.Literals([
-    "onboarding",
-    "browserPairing",
-    "emailReplacement",
-    "billing",
-    "statement",
-    "whatsapp",
-    "deadLetters",
-    "retention",
-    "onboardingQueue",
-    "browserPairingQueue",
-    "emailReplacementQueue",
-    "billingQueue",
-    "statementQueue",
-    "forwardedEmailQueue",
-    "whatsappQueue",
-    "workerExceptions",
-    "resourceLimits",
-    "callbackRejections",
-    "workflowFailures",
-    "queueExecution",
-    "workflowExecution",
-    "d1",
-    "requiredBindings",
-    "coordination",
-    "providerConfig",
-  ]),
-  severity: Schema.Literals(["warning", "critical"]),
-});
+/** Alert coordinates are finite kind/owner pairs; invalid cross-products cannot be delivered. */
+const anyOwner = Schema.Literals([
+  "onboarding",
+  "browserPairing",
+  "emailReplacement",
+  "billing",
+  "statement",
+  "forwardedEmail",
+  "whatsapp",
+  "deadLetters",
+  "retention",
+  "onboardingQueue",
+  "browserPairingQueue",
+  "emailReplacementQueue",
+  "billingQueue",
+  "statementQueue",
+  "forwardedEmailQueue",
+  "whatsappQueue",
+  "workerExceptions",
+  "resourceLimits",
+  "callbackRejections",
+  "workflowFailures",
+  "queueExecution",
+  "workflowExecution",
+  "d1",
+  "requiredBindings",
+  "coordination",
+  "providerConfig",
+]);
+const severity = Schema.Literals(["warning", "critical"]);
+const workOwner = Schema.Literals([
+  "onboarding",
+  "browserPairing",
+  "emailReplacement",
+  "billing",
+  "statement",
+  "forwardedEmail",
+]);
+const emailProofOwner = Schema.Literals(["onboarding", "browserPairing", "emailReplacement"]);
+const workflowOwner = Schema.Literals([
+  "onboarding",
+  "browserPairing",
+  "emailReplacement",
+  "billing",
+  "statement",
+  "workflowFailures",
+]);
+const queueOwner = Schema.Literals([
+  "onboardingQueue",
+  "browserPairingQueue",
+  "emailReplacementQueue",
+  "billingQueue",
+  "statementQueue",
+  "forwardedEmailQueue",
+  "whatsappQueue",
+]);
+export const OperationalAlert = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("pending_work"),
+    owner: Schema.Union([workOwner, Schema.Literal("whatsapp")]),
+    severity,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("dead_letters"),
+    owner: Schema.Literal("deadLetters"),
+    severity,
+  }),
+  Schema.Struct({ kind: Schema.Literal("workflow_failure"), owner: workflowOwner, severity }),
+  Schema.Struct({ kind: Schema.Literal("rejected_email_work"), owner: emailProofOwner, severity }),
+  Schema.Struct({
+    kind: Schema.Literal("whatsapp_delivery"),
+    owner: Schema.Literal("whatsapp"),
+    severity,
+  }),
+  Schema.Struct({ kind: Schema.Literal("inspection_unavailable"), owner: anyOwner, severity }),
+  Schema.Struct({
+    kind: Schema.Literal("retention_lag"),
+    owner: Schema.Literal("retention"),
+    severity,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("worker_exception"),
+    owner: Schema.Literal("workerExceptions"),
+    severity,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("resource_limit"),
+    owner: Schema.Literal("resourceLimits"),
+    severity,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("callback_rejection"),
+    owner: Schema.Literal("callbackRejections"),
+    severity,
+  }),
+  Schema.Struct({ kind: Schema.Literal("queue_backlog"), owner: queueOwner, severity }),
+  Schema.Struct({
+    kind: Schema.Literal("capability_unusable"),
+    owner: Schema.Literals(["queueExecution", "workflowExecution"]),
+    severity,
+  }),
+]);
 export type OperationalAlert = typeof OperationalAlert.Type;
 
 const warningAgeMs = 120_000;
@@ -65,13 +122,20 @@ const callbackCriticalCount = 20;
 const queueWarningCount = 100;
 const queueCriticalCount = 1_000;
 
+const isEmailProofOwner = (
+  owner: PendingSignal["operation"]
+): owner is "onboarding" | "browserPairing" | "emailReplacement" =>
+  owner === "onboarding" || owner === "browserPairing" || owner === "emailReplacement";
+
+const pendingWorkflowAlerts = (signal: PendingSignal): ReadonlyArray<OperationalAlert> =>
+  signal.operation !== "forwardedEmail" && signal.failedWorkflows > 0
+    ? [{ kind: "workflow_failure", owner: signal.operation, severity: "critical" }]
+    : [];
+
 const pendingAlerts = (signal: PendingSignal): ReadonlyArray<OperationalAlert> => {
   const owner = signal.operation;
-  const alerts: OperationalAlert[] = [];
-  if (signal.failedWorkflows > 0) {
-    alerts.push({ kind: "workflow_failure", owner, severity: "critical" });
-  }
-  if (signal.sampledRejectedEmailWork >= rejectedEmailWarningCount) {
+  const alerts: OperationalAlert[] = [...pendingWorkflowAlerts(signal)];
+  if (isEmailProofOwner(owner) && signal.sampledRejectedEmailWork >= rejectedEmailWarningCount) {
     alerts.push({ kind: "rejected_email_work", owner, severity: "warning" });
   }
   if (signal.oldestPendingAgeMilliseconds >= warningAgeMs || signal.expiredUndelivered > 0) {

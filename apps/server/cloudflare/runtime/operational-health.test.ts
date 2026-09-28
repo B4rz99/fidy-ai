@@ -29,12 +29,37 @@ it("reports expired statement staging separately when other background measureme
     await instance.ready;
     const db = await instance.getD1Database("DB");
     await db
-      .prepare("CREATE TABLE statement_staging_objects (expires_at_ms INTEGER, status TEXT)")
+      .prepare(
+        "CREATE TABLE statement_staging_objects (id TEXT, expires_at_ms INTEGER, status TEXT, object_deleted_at_ms INTEGER)"
+      )
       .run();
+    await db
+      .prepare(
+        "CREATE TABLE statement_submissions (staging_id TEXT, retention_expires_at_ms INTEGER)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE TABLE forwarded_email_receipts (id TEXT, received_at_ms INTEGER, expires_at_ms INTEGER, state TEXT)"
+      )
+      .run();
+    await db.prepare("CREATE TABLE forwarded_email_outcomes (receipt_id TEXT)").run();
     const now = Date.now();
     await db
-      .prepare("INSERT INTO statement_staging_objects VALUES (?, 'pending')")
+      .prepare("INSERT INTO statement_staging_objects VALUES ('pending', ?, 'pending', NULL)")
       .bind(now - 86_400_000)
+      .run();
+    await db
+      .prepare("INSERT INTO statement_staging_objects VALUES ('published', ?, 'published', NULL)")
+      .bind(now - 86_400_000)
+      .run();
+    await db
+      .prepare("INSERT INTO statement_submissions VALUES ('published', ?)")
+      .bind(now - 86_400_000)
+      .run();
+    await db
+      .prepare("INSERT INTO forwarded_email_receipts VALUES (?, ?, ?, 'queued')")
+      .bind("00000000-0000-4000-8000-000000000000", now - 600_000, now - 86_400_000)
       .run();
     const signals = await Effect.runPromise(
       observeOperationalHealth({
@@ -52,11 +77,15 @@ it("reports expired statement staging separately when other background measureme
     expect(retention).toMatchObject({
       operation: "retention",
       state: "attention",
-      sampledOverdue: 1,
+      sampledOverdue: 3,
     });
     if (retention?.state === "attention" && retention.operation === "retention") {
       expect(retention.oldestOverdueAgeMilliseconds).toBeGreaterThanOrEqual(86_400_000);
     }
+    expect(signals.find((signal) => signal.operation === "forwardedEmail")).toMatchObject({
+      state: "attention",
+      sampledPending: 1,
+    });
     expect(signals.find((signal) => signal.operation === "billing")?.state).toBe("unavailable");
     expect(signals.find((signal) => signal.operation === "billingQueue")).toMatchObject({
       state: "attention",

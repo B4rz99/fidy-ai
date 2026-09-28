@@ -1,0 +1,19 @@
+infra/cloudflare/production-release.ts
+  s_8365943da34952::t_6a55053d41837f 110-113,115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4bda77367e84bf0aabe64b4611ae19bc72189a9a",
+  "prompts": {},
+  "sessions": {
+    "s_8365943da34952": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e9ce-a467-735d-afda-f9efed4986cf",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

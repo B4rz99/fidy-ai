@@ -120,11 +120,14 @@ describe("Production release workflow policy", () => {
     const stage = workflow.indexOf("bun production-release.ts stage");
     const smoke = workflow.indexOf("bun verify-production-smoke.ts");
     const promotion = workflow.indexOf("bun production-release.ts promote");
+    expect(capture).toBeGreaterThan(0);
     expect(capture).toBeLessThan(upload);
     expect(upload).toBeLessThan(stage);
     expect(stage).toBeLessThan(smoke);
     expect(smoke).toBeLessThan(promotion);
     expect(workflow).toContain("bun production-release.ts cleanup");
+    expect(workflow).toContain("bun infra/cloudflare/production-release.ts report");
+    expect(workflow).toContain("Observed Worker traffic:");
     expect(workflow).toContain("failure() && steps.capture.outcome == 'success'");
     expect(workflow).toContain("alchemy plan --stage production --no-input");
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");

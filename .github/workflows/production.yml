@@ -208,9 +208,12 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
-          # No provider payload, token, exception, or application data enters this message.
+          # Only validated deployment IDs, version IDs and traffic percentages enter this alert.
+          traffic=$(bun infra/cloudflare/production-release.ts report 2>/dev/null || \
+            printf 'Worker traffic unavailable; inspect Cloudflare directly')
           jq -n --arg to "$OPERATOR_ALERT_EMAIL" --arg release "$RELEASE_GIT_SHA" \
-            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: critical deployment failure",text:("Production release " + $release + " failed. Inspect the private GitHub Actions run.")}' \
+            --arg traffic "$traffic" \
+            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: critical deployment failure",text:("Production release " + $release + " failed. Observed Worker traffic: " + $traffic + ". Inspect the private GitHub Actions run.")}' \
             > "$RUNNER_TEMP/operator-alert.json"
           curl --fail --silent --show-error --max-time 10 \
             --request POST 'https://api.resend.com/emails' \

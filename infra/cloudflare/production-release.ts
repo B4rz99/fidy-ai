@@ -36,7 +36,7 @@ const StateEntry = Schema.Struct({
   attr: Schema.Struct({ workerName: WorkerName }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
-const Commands = Schema.Literals(["capture", "stage", "promote", "cleanup"]);
+const Commands = Schema.Literals(["capture", "stage", "promote", "cleanup", "report"]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
   publicVersionId: VersionId,
@@ -426,6 +426,22 @@ const cleanup = async (port: ReleasePort, env: Config): Promise<void> => {
     coreVersionId: workers.core.versionId.value,
   });
 };
+const reportTraffic = async (port: ReleasePort, env: Config): Promise<void> => {
+  if (!(await Bun.file(env.file).exists())) {
+    await Bun.write(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
+    return;
+  }
+  const raw: unknown = JSON.parse(await Bun.file(env.file).text());
+  const isStaged = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
+  const snapshot = Option.isSome(isStaged) ? decodeStaged(raw).snapshot : decodeSnapshot(raw);
+  const describe = async (name: string): Promise<unknown> =>
+    port.current(name).catch(() => ({ status: "unavailable" }));
+  const observed = {
+    public: await describe(snapshot.public.name),
+    core: await describe(snapshot.core.name),
+  };
+  await Bun.write(Bun.stdout, `${JSON.stringify(observed)}\n`);
+};
 const promote = async (port: ReleasePort, env: Config): Promise<void> => {
   const raw: unknown = JSON.parse(await Bun.file(env.file).text());
   const staged = decodeStaged(raw);
@@ -461,6 +477,9 @@ if (import.meta.main) {
     }
     if (command === "cleanup") {
       await cleanup(port, environment);
+    }
+    if (command === "report") {
+      await reportTraffic(port, environment);
     }
     await Bun.write(Bun.stdout, "Production release routing step passed.\n");
   } catch {

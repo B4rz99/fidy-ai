@@ -56,8 +56,8 @@
     "effect": "4.0.0-rc.115",
     "istanbul-lib-coverage": "3.2.2",
     "lefthook": "2.1.14",
-    "oxfmt": "0.68.0",
-    "oxlint": "1.83.0",
+    "oxfmt": "0.69.0",
+    "oxlint": "1.84.0",
     "oxlint-tsgolint": "7.0.2002",
     "typescript": "7.0.2"
   },

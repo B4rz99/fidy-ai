@@ -1,0 +1,51 @@
+infra/cloudflare/workers.test.ts
+  s_03af13addf8666::t_0ba948f9947437 430-435,437-450
+  s_03af13addf8666::t_c62ab22bd5ff3f 61-62,73-83,422,436
+  s_03af13addf8666::t_288934a79b4092 4
+  s_03af13addf8666::t_4af2d8f1d7055e 63-72,387-412,417-421
+  s_03af13addf8666::t_6bbe423cd999ff 413-414
+  s_03af13addf8666::t_a9dc05a816ce02 415-416,423-429
+apps/server/cloudflare/ingestion/email-worker.ts
+  s_03af13addf8666::t_b47f6cf8a97879 1,16-27,35,55
+  s_03af13addf8666::t_dc1869e50b1cec 2-3,32-34,36-37,52-54,56-58,60-62
+apps/server/cloudflare/core-worker.ts
+  s_03af13addf8666::t_4af2d8f1d7055e 2030-2035,2042-2046
+  s_03af13addf8666::t_301aa359540f49 121,2028-2029,2036-2038
+  s_03af13addf8666::t_3a95d4b4340bc0 2007-2010,2039-2041
+  s_03af13addf8666::t_5fcbafec35c017 2047-2049
+apps/server/cloudflare/runtime/telemetry.ts
+  s_03af13addf8666::t_4af2d8f1d7055e 119-121
+  s_03af13addf8666::t_18a88536a03b6a 69-74,103,110-112,117-118,122-123
+  s_03af13addf8666::t_970b63878e0d15 75,77-102,104-107,109
+  s_03af13addf8666::t_d3c0349df380c5 10
+apps/server/src/shell/observability/contract.ts
+  s_03af13addf8666::t_43b62b08c6db90 89-92
+infra/cloudflare/alchemy.run.ts
+  s_03af13addf8666::t_2a6e2a912dc9ef 173-178
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_03af13addf8666::t_5e7e39f514e047 78-79,85
+  s_03af13addf8666::t_b7e1e7d5469b73 1,7
+  s_03af13addf8666::t_a4b20e727bcdf7 3-4,8,22,80
+  s_03af13addf8666::t_6f740b3923284c 26-30,42-47,55-59
+  s_03af13addf8666::t_1403640505e3b8 70-72,83-84,86-87
+  s_03af13addf8666::t_3f308cd57d9f4c 81-82
+  s_03af13addf8666::t_d67433da17bbac 52-54,60-69
+  s_03af13addf8666::t_d23c6fcaada649 23-25,31-41,48-51
+  s_03af13addf8666::t_4af2d8f1d7055e 73-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fe982e556458b9fb4c7c977f33e40f2aad4c188c",
+  "prompts": {},
+  "sessions": {
+    "s_03af13addf8666": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e844-9b03-70da-9ae2-a8dc4c55ef39",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

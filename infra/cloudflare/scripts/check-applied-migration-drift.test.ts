@@ -14,6 +14,7 @@ const appliedHash = "5c14f7a6901179f89f5ee798c2ff69c36873f2de52316a08478a1fbff92
 
 type GateFixture = {
   readonly state: unknown;
+  readonly stateLogs: string;
   readonly rows: ReadonlyArray<Readonly<Record<string, unknown>>>;
   readonly wranglerExitCode: number;
 };
@@ -27,6 +28,8 @@ const validState = {
 const validRows = [{ name: appliedName, hash: appliedHash, ledger_count: 1 }];
 const validFixture: GateFixture = {
   state: validState,
+  stateLogs:
+    "• Refreshing Cloudflare State Store credentials\n✓ Refreshing Cloudflare State Store credentials\n",
   rows: validRows,
   wranglerExitCode: 0,
 };
@@ -39,8 +42,10 @@ const runGate = async (
     async ({ temporaryDirectory, fakeBin, runScript }) => {
       const argsPath = join(temporaryDirectory, "commands.txt");
       const statePath = join(temporaryDirectory, "state.json");
+      const stateLogsPath = join(temporaryDirectory, "state-logs.txt");
       const rowsPath = join(temporaryDirectory, "rows.json");
       await writeFile(statePath, JSON.stringify(fixture.state));
+      await writeFile(stateLogsPath, fixture.stateLogs);
       await writeFile(
         rowsPath,
         JSON.stringify([
@@ -62,6 +67,7 @@ const runGate = async (
           MIGRATION_COMMANDS: argsPath,
           MIGRATION_ROWS: rowsPath,
           MIGRATION_STATE: statePath,
+          MIGRATION_STATE_LOGS: stateLogsPath,
           WRANGLER_EXIT_CODE: String(fixture.wranglerExitCode),
         },
       });
@@ -77,13 +83,14 @@ describe("Production applied D1 migration check", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("Production D1 applied migration hashes match checked-in SQL.");
     expect(result.args).toContain(
-      "state read FidyCloudflare/production/Database --backend cloudflare --profile ci --no-input"
+      "state read FidyCloudflare/production/Database --backend cloudflare --profile ci --no-input --log-level error"
     );
     expect(result.args).toContain(
       "wrangler d1 execute FidyCloudflare-Database-production-test --remote --yes"
     );
     expect(result.args).toContain("FROM __alchemy_migrations ORDER BY id LIMIT 1001");
     expect(result.args).toContain("--json");
+    expect(result.output).not.toContain("Refreshing Cloudflare State Store credentials");
     expect(result.output).not.toContain("local-only-migration-test-token");
   });
 

@@ -16,10 +16,11 @@ Worker separately after confirming Production `fidy-web` remains untouched.
 
 Create the GitHub `production` environment and configure:
 
-| Kind     | Name                    | Purpose                                                     |
-| -------- | ----------------------- | ----------------------------------------------------------- |
-| Secret   | `CLOUDFLARE_API_TOKEN`  | Alchemy-managed Workers, D1, DNS, and edge security changes |
-| Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account owning the Fidy resources                |
+| Kind     | Name                    | Purpose                                                                             |
+| -------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | Alchemy-managed Workers, D1, DNS, and edge security changes                         |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account owning the Fidy resources                                        |
+| Variable | `OPERATOR_ALERT_EMAIL`  | Validated sole-operator destination for Production health and release-failure email |
 
 Scope the token to that account and the `fidyapp.com` zone, with only the permissions needed by the
 declared resources, including Worker, D1, DNS, Zone WAF, and HTTP DDoS Managed Ruleset writes. Branch

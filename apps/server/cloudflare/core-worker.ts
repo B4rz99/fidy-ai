@@ -136,7 +136,11 @@ import {
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/statement-ingestion";
-import { observeOperationalHealth } from "./runtime/operational-health";
+import { EmailAddress } from "@fidy/server/client";
+import { type OperationalSignal, observeOperationalHealth } from "./runtime/operational-health";
+import { decideOperationalAlerts } from "./runtime/operational-alerts";
+import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
+import { sendOperatorEmail } from "./runtime/operator-email";
 import { StatementStaging } from "./ingestion/statement-staging";
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
 import {
@@ -203,7 +207,11 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_PRIVATE_KEY: string;
     readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<
-    Readonly<{ ASYNC_HEALTH_ENABLED: "enabled"; ASYNC_DEAD_LETTERS: Pick<Queue, "metrics"> }>
+    Readonly<{
+      ASYNC_HEALTH_ENABLED: "enabled";
+      ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
+      OPERATOR_ALERT_EMAIL: string;
+    }>
   > &
   Partial<Omit<OnboardingEmailEnvironment, "DB">> &
   Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
@@ -1887,7 +1895,36 @@ class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
 /** A failed schedule reports only a closed classification, never database or provider details. */
 class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
 
-const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void> =>
+const deliverOperationalSignals = (
+  environment: CoreEnvironment,
+  signals: ReadonlyArray<OperationalSignal>
+): Effect.Effect<void, void> =>
+  Effect.tryPromise({
+    try: () => {
+      const recipient = Schema.decodeUnknownOption(EmailAddress)(environment.OPERATOR_ALERT_EMAIL);
+      if (Option.isNone(recipient) || !environment.RESEND_API_KEY) {
+        throw new Error("Operator email configuration unavailable");
+      }
+      const to = recipient.value;
+      const apiKey = environment.RESEND_API_KEY;
+      return runOperationalAlerts({
+        db: environment.DB,
+        now: Date.now(),
+        alerts: decideOperationalAlerts(signals),
+        send: (alert, idempotencyKey) =>
+          sendOperatorEmail({
+            alert,
+            idempotencyKey,
+            to,
+            apiKey,
+            release: environment.RELEASE_GIT_SHA,
+          }),
+      });
+    },
+    catch: () => undefined,
+  });
+
+const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void> =>
   environment.ASYNC_HEALTH_ENABLED !== "enabled"
     ? Effect.void
     : observeOperationalHealth({
@@ -1917,7 +1954,7 @@ const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void> =>
             (signal) =>
               signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal),
             { discard: true }
-          )
+          ).pipe(Effect.andThen(deliverOperationalSignals(environment, signals)))
         )
       );
 

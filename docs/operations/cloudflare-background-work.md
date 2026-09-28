@@ -38,11 +38,35 @@ The dead-letter Queue's count and byte figures are platform backlog measurements
 all other activities and then reports a closed invocation failure. `component=outbox-publication`
 identifies failed prompt publication; check subsequent cron recovery before treating it as lost work.
 
-The stack provides queryable warning signals. Delivery to a configured operator channel, notification
-threshold persistence, and a test alert to that channel remain part of
-[#717](https://github.com/B4rz99/fidy-ai/issues/717); logs alone do not prove operator notification.
-Monitor native Workflow failures separately from Queue retries: Queue acknowledgment happens after
-instance creation, so a later Workflow failure never reaches the Queue dead-letter destination.
+The Core minute schedule classifies these bounded signals and stores notification attempts in
+`operational_alerts` (metadata only: fixed alert kind and owner, severity, timestamps, acknowledgement,
+and attempt count). A critical condition emails the operator immediately and repeats no more often
+than every 30 minutes; warnings repeat no more often than every four hours. Resolved conditions stop
+repeats. A failed send remains firing and unacknowledged; the scheduled activity reports a closed
+failure while other activities continue. A measurement failure is `inspection_unavailable`, never
+zero; until all measurements recover the alert sweep does not resolve an existing firing condition.
+These records represent **notification state**, not the authoritative status of background work.
+
+Configure `OPERATOR_ALERT_EMAIL` as a Production GitHub environment variable, alongside the existing
+`RESEND_API_KEY` secret. GitHub Actions sends deployment-failure email independently of the newly
+released Worker. To verify delivery, manually run **Test operator alert email** in GitHub Actions
+and confirm that the configured inbox actually received it; provider acceptance alone is not receipt.
+No public health or admin endpoint exposes these records. The sole operator acknowledges a firing
+alert in private operational state only after reading it, recording UTC `acknowledged_ms` for the
+specific `(kind, owner)` row; acknowledgement suppresses repeats but does not change domain state.
+Investigate critical alerts within 30 minutes and warnings within one Bogota working day. An
+unacknowledged critical alert continues to repeat every 30 minutes; if unavailable, pause risky
+operations or disable new ingress by reviewed release changes rather than manufacturing a second
+on-call owner. Confirm resolution against D1/Queue/Workflow before deleting or replaying any work.
+
+The `retention` signal inspects expired, unpublished statement staging rows: one hour overdue is a
+warning and 24 hours overdue is critical. It does not claim that every other retained object has
+been inspected. The existing pending measurements are capped eight-record samples; `sampleLimited`
+is not a global backlog count. Current email-proof rejection samples are neither a historical callback-rejection
+rate nor an institutional webhook spike. Monitor native Workflow failures separately from Queue
+retries: Queue acknowledgment happens after instance creation, so a later Workflow failure never
+reaches the Queue dead-letter destination. Set Cloudflare's account-wide billing budget emails
+at 50% and 80% of the approved monthly spend; they are informational, not hard caps.
 
 ## Telemetry ownership (#716)
 

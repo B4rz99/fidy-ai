@@ -27,16 +27,18 @@ const Status = Schema.Struct({
   ]),
 });
 const WhatsAppAge = Schema.Struct({ created: Schema.Int });
+const Retained = Schema.Struct({ expires: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) });
 const Backlog = Schema.Struct({
   backlogCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   backlogBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 const sampleLimit = 8;
 const staleAfterMilliseconds = 120_000;
+const retentionWarningAgeMs = 3_600_000;
 const rejectedWindowMilliseconds = 86_400_000;
 
 /** Closed operational evidence. No identity, provider detail, proof, or financial value is exported. */
-type PendingSignal = Readonly<{
+export type PendingSignal = Readonly<{
   component: "async-health";
   operation: WorkKind;
   state: "healthy" | "attention";
@@ -72,7 +74,15 @@ export type OperationalSignal =
     }>
   | Readonly<{
       component: "async-health";
-      operation: WorkKind | "whatsapp" | "deadLetters";
+      operation: "retention";
+      state: "healthy" | "attention";
+      sampledOverdue: number;
+      sampleLimited: boolean;
+      oldestOverdueAgeMilliseconds: number;
+    }>
+  | Readonly<{
+      component: "async-health";
+      operation: WorkKind | "whatsapp" | "deadLetters" | "retention";
       state: "unavailable";
     }>;
 
@@ -239,6 +249,37 @@ const inspectWhatsApp = (db: D1Database, current: number): Effect.Effect<Operati
     };
   });
 
+const inspectRetention = (db: D1Database, now: number): Effect.Effect<OperationalSignal> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT expires_at_ms AS expires
+        FROM statement_staging_objects
+        WHERE status IN ('pending', 'available', 'deleting') AND expires_at_ms <= ?
+        ORDER BY expires_at_ms LIMIT ?`)
+          .bind(now, sampleLimit)
+          .all()
+      ).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Retained))(rows.results))
+      )
+    );
+    if (Exit.isFailure(result)) return unavailableSignal("retention");
+    const oldestOverdueAgeMilliseconds = Math.max(
+      0,
+      ...result.value.map((row) => now - row.expires)
+    );
+    return {
+      component: "async-health",
+      operation: "retention",
+      state: oldestOverdueAgeMilliseconds >= retentionWarningAgeMs ? "attention" : "healthy",
+      sampledOverdue: result.value.length,
+      sampleLimited: result.value.length === sampleLimit,
+      oldestOverdueAgeMilliseconds,
+    };
+  });
+
 const inspectDeadLetters = (
   queue: Option.Option<Pick<Queue, "metrics">>
 ): Effect.Effect<OperationalSignal> =>
@@ -335,5 +376,6 @@ export const observeOperationalHealth = (
       Effect.orElseSucceed((): OperationalSignal => unavailableSignal("whatsapp"))
     );
     const deadLetters = yield* inspectDeadLetters(environment.deadLetters);
-    return [...signals, whatsapp, deadLetters];
+    const retention = yield* inspectRetention(environment.DB, current);
+    return [...signals, whatsapp, deadLetters, retention];
   });

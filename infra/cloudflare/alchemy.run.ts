@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { EmailAddress } from "@fidy/server/client";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import {
@@ -21,6 +22,7 @@ const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
+const operatorAlertEmail = Config.schema(EmailAddress, "OPERATOR_ALERT_EMAIL");
 const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
 const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
@@ -230,6 +232,9 @@ export default Alchemy.Stack(
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,
         ASYNC_HEALTH_ENABLED: "enabled",
         ASYNC_DEAD_LETTERS: asyncDeadLetters,
+        OPERATOR_ALERT_EMAIL: yield* development
+          ? Config.String("OPERATOR_ALERT_EMAIL").pipe(Config.withDefault(""))
+          : operatorAlertEmail,
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,

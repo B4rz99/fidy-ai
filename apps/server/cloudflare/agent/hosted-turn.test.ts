@@ -1961,24 +1961,13 @@ it("retains an unavailable tool outcome when a canonical query stalls beyond the
       const db = yield* Effect.tryPromise(() => setup());
       const gate = promiseGate();
       const blocked = promiseGate();
-      let canonicalQueryPrepared = false;
+      let modelReturnedToolCall = false;
       const delayedDb = new Proxy(db, {
         get(target, key): unknown {
-          if (key === "prepare") {
-            return (sql: string): D1PreparedStatement => {
-              if (
-                sql.includes("INSERT INTO category_audit") &&
-                sql.includes("categories.listCategories")
-              ) {
-                canonicalQueryPrepared = true;
-              }
-              return target.prepare(sql);
-            };
-          }
           if (key === "batch") {
             return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> => {
-              if (canonicalQueryPrepared) {
-                canonicalQueryPrepared = false;
+              if (modelReturnedToolCall) {
+                modelReturnedToolCall = false;
                 blocked.release();
                 return gate.promise.then(() => target.batch(statements));
               }
@@ -1988,8 +1977,9 @@ it("retains an unavailable tool outcome when a canonical query stalls beyond the
           return Reflect.get(target, key, target);
         },
       });
-      const coordinator = coordinatorFor(delayedDb, () =>
-        Promise.resolve(
+      const coordinator = coordinatorFor(delayedDb, () => {
+        modelReturnedToolCall = true;
+        return Promise.resolve(
           Response.json({
             choices: [
               {
@@ -2009,8 +1999,8 @@ it("retains an unavailable tool outcome when a canonical query stalls beyond the
             ],
             usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
           })
-        )
-      );
+        );
+      });
       const credential = yield* Effect.tryPromise(() => subject(0));
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
       try {

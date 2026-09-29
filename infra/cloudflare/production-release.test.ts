@@ -5,7 +5,53 @@ import { decodeWorkerReceipts } from "./production-release";
 describe("Production release Worker receipts", () => {
   it("reports a missing Worker receipt without echoing state values", () => {
     expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrow(
-      "Alchemy Worker state lacks a unique required Worker receipt"
+      "Alchemy Worker state lacks the required Worker resource"
+    );
+  });
+
+  it("refuses a replaced Worker resource state as an unstable release baseline", () => {
+    const state = {
+      ingress: { logicalId: "Ingress", status: "replaced", attr: { workerName: "prod-ingress" } },
+      core: { logicalId: "Core", status: "updated", attr: { workerName: "prod-core" } },
+    };
+
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
+      "Alchemy Worker state has an unstable required Worker receipt"
+    );
+  });
+
+  it("classifies an incomplete Worker receipt without echoing persisted values", () => {
+    const state = {
+      ingress: {
+        logicalId: "Ingress",
+        status: "updated",
+        attr: { secret: "not-for-logs" },
+      },
+      core: {
+        logicalId: "Core",
+        status: "updated",
+        attr: { workerName: "prod-core" },
+      },
+    };
+
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
+      "Alchemy Worker state has an incomplete required Worker receipt"
+    );
+  });
+
+  it("refuses ambiguous Worker identities", () => {
+    const state = {
+      ingress: { logicalId: "Ingress", status: "updated", attr: { workerName: "prod-ingress" } },
+      duplicateIngress: {
+        logicalId: "Ingress",
+        status: "updated",
+        attr: { workerName: "other-ingress" },
+      },
+      core: { logicalId: "Core", status: "updated", attr: { workerName: "prod-core" } },
+    };
+
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
+      "Alchemy Worker state has an ambiguous required Worker receipt"
     );
   });
 

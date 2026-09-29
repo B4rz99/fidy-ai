@@ -1,0 +1,42 @@
+infra/cloudflare/rollback-compatibility.test.ts
+  s_d81eeca08a60b9::t_0868903fd3242d 7-11,44-53
+  s_d81eeca08a60b9::t_4f2043d26db2a2 14
+infra/cloudflare/verify-rollback-receipt.ts
+  s_d81eeca08a60b9::t_8b8018983da54d 27,37-43
+  s_d81eeca08a60b9::t_2d41e43cce91eb 1-17,19-21,23-26,28-36,44-50
+  s_d81eeca08a60b9::t_e1a3c241de8469 18
+  s_d81eeca08a60b9::t_52dee1f4f35b5c 22
+infra/cloudflare/verify-rollback-receipt.test.ts
+  s_d81eeca08a60b9::t_80efc04fec44d8 1-3,29-35,41-48
+  s_d81eeca08a60b9::t_c4dcb332cde118 4-28,49-56
+  s_d81eeca08a60b9::t_c97413a6129105 36-40
+.github/workflows/production-rollback.yml
+  s_d81eeca08a60b9::t_3c0b59c5379989 53,59-61
+  s_d81eeca08a60b9::t_de3a867ba3bc44 67,69-85
+.github/workflows/production.yml
+  s_d81eeca08a60b9::t_38c00fb78ca592 148-159,162
+apps/web/scripts/production-workflow.test.ts
+  s_d81eeca08a60b9::t_deb323fda2a69c 172-175
+infra/cloudflare/rollback-compatibility.ts
+  s_d81eeca08a60b9::t_9f736cddcca214 4,18
+docs/operations/production-releases.md
+  s_d81eeca08a60b9::t_6ad5bd7fba636f 214-216,239-241
+infra/cloudflare/production-release.ts
+  s_d81eeca08a60b9::t_fe8cbf517b1886 49-52,539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "44684ca1d65c9f754736ad4072ea92c4c7da42d2",
+  "prompts": {},
+  "sessions": {
+    "s_d81eeca08a60b9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ea67-7ec2-73ea-8c2d-8947557052dd",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

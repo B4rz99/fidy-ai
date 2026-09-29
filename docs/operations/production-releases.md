@@ -4,6 +4,10 @@ GitHub Actions coordinates every Production release through
 [`.github/workflows/production.yml`](../../.github/workflows/production.yml). Do not deploy from a
 provider repository integration or from a workstation.
 
+Before enabling real onboarding, complete the [Production launch proof](production-launch.md).
+An ordinary passing release is not launch approval; that checklist records live evidence, synthetic
+cleanup, and the explicit operator decision without relaxing applied-migration guards.
+
 ## Authority and provider setup
 
 `infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. It declares the static

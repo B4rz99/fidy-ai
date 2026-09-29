@@ -112,6 +112,10 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "nodeBuiltinImport:./scripts/document-parsing/extraction-proof.ts",
           "nodeBuiltinImport:./scripts/document-parsing/protected-document-proof.ts",
           "processEnv:./apps/web/playwright.config.ts",
+          // Alchemy exposes an any-typed failure channel; the isolated SDK entrypoint
+          // contains all failures and Schema-decodes the read-only plan before reporting.
+          "anyUnknownInErrorContext:./infra/cloudflare/inspect-worker-drift.ts",
+          "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
         ].toSorted()
       );
     }));

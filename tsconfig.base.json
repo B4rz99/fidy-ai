@@ -142,6 +142,15 @@
             }
           },
           {
+            "include": ["./infra/cloudflare/inspect-worker-drift.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "anyUnknownInErrorContext": "off",
+                "strictEffectProvide": "off"
+              }
+            }
+          },
+          {
             "include": ["./apps/web/playwright.config.ts"],
             "options": {
               "diagnosticSeverity": {

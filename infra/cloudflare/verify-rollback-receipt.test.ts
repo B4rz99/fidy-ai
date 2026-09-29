@@ -1,5 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { verifyRollbackReceipt } from "./verify-rollback-receipt";
 
@@ -25,24 +23,18 @@ const receipt = {
 };
 
 describe("manual rollback receipt admission", () => {
-  it("refuses an invalid manual source run before running any Cloudflare command", async () => {
-    const id = crypto.randomUUID();
-    const runFile = join(tmpdir(), `fidy-run-${id}.json`);
-    const receiptFile = join(tmpdir(), `fidy-receipt-${id}.json`);
-    try {
-      await Bun.write(runFile, JSON.stringify({ ...run, head_branch: "untrusted" }));
-      await Bun.write(receiptFile, JSON.stringify(receipt));
-      const child = Bun.spawn(["bun", "verify-rollback-receipt.ts", runFile, receiptFile], {
+  it("refuses an unavailable manual source run before running any Cloudflare command", () => {
+    const child = Bun.spawnSync(
+      ["bun", "verify-rollback-receipt.ts", "missing-source-run.json", "missing-receipt.json"],
+      {
         cwd: import.meta.dir,
         stdout: "pipe",
         stderr: "pipe",
-      });
-      expect(await child.exited).toBe(1);
-      expect(await new Response(child.stdout).text()).toBe("");
-      expect(await new Response(child.stderr).text()).toContain("Worker traffic unchanged");
-    } finally {
-      await Promise.allSettled([Bun.file(runFile).delete(), Bun.file(receiptFile).delete()]);
-    }
+      }
+    );
+    expect(child.exitCode).toBe(1);
+    expect(new TextDecoder().decode(child.stdout)).toBe("");
+    expect(new TextDecoder().decode(child.stderr)).toContain("Worker traffic unchanged");
   });
 
   it("admits only a trunk production push receipt matching its run revision", () => {

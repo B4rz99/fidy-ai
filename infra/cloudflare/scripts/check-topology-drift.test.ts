@@ -28,7 +28,7 @@ const runDriftCheck = (plan: string, mode?: string): SpawnSyncReturns<string> =>
   }
 };
 
-describe("interrupted-release drift gate", () => {
+describe("Production drift gate", () => {
   const expectedWorkerDrift =
     "[0] INFO: Plan: 2 to update\n[0] INFO: [Core] update\n[0] INFO: [Ingress] update\nsecret-attribute-do-not-print";
 
@@ -39,11 +39,12 @@ describe("interrupted-release drift gate", () => {
     expect(result.stderr).not.toContain("secret-attribute-do-not-print");
   });
 
-  it("accepts only the two known Worker updates after guarded resume capture", () => {
+  it("never exempts Worker drift even with an obsolete recovery argument", () => {
     const result = runDriftCheck(expectedWorkerDrift, "resume");
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("verified interrupted Worker pair");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("category=drift_detected");
     expect(result.stdout).not.toContain("secret-attribute-do-not-print");
+    expect(result.stderr).not.toContain("secret-attribute-do-not-print");
   });
 
   it("refuses another drifted resource or unexpected plan shape", () => {

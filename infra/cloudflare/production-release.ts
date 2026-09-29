@@ -86,17 +86,12 @@ const UpdatingStateEntry = Schema.Struct({
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
 const Commands = Schema.Literals([
   "capture",
-  "bootstrap-capture",
-  "bootstrap-verify",
   "stage",
   "promote",
   "rollback",
   "cleanup",
   "report",
   "inspect",
-  "recover-core",
-  "resume-capture",
-  "verify-staged",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -115,30 +110,6 @@ const successStatusEnd = 300;
 const probeEntropyBytes = 16;
 const inspectionHistoryLimit = 5;
 const origin = "https://api.fidyapp.com";
-const preSmokeRevision = "b71c2248e4667ffa042fd00c286a2c2240436475";
-const preSmokeDigest = "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f";
-// One-time recovery receipt from inspected Production runs 36588418380 and 36594005666.
-const interruptedPromotion = {
-  revision: "2d65bde42f81b5c4af377e433100a7500bec0a5b",
-  publicDeployment: "e1f796e7-ccb4-41f0-96b2-8d0d3d74feb0",
-  publicVersion: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0",
-  coreDeployment: "0d731332-605d-47bf-976d-69963275b40e",
-  coreCandidate: "deee8a6c-ace3-4f50-b589-7729605031df",
-  coreStable: "28ffd738-508a-4d00-a3e1-31911f86ce01",
-} as const;
-const interruptedUpload = {
-  ...interruptedPromotion,
-  publicDeployment: "4eae3224-b347-4ccc-8715-17389919e0f6",
-  coreRecoveredDeployment: "8cd6309b-859a-424a-bc05-e206e5c24922",
-  publicCandidate: "7b83226f-3fbe-4d2f-99e8-72d7f818375f",
-  coreCandidate: "89a2da14-0f1b-4c8a-8eba-ed39b19d6b62",
-} as const;
-
-/** The one-time direct bootstrap must never use a later, unverified Production baseline. */
-export const isPreSmokeBaseline = (health: {
-  gitRevision: string;
-  contractDigest: string;
-}): boolean => health.gitRevision === preSmokeRevision && health.contractDigest === preSmokeDigest;
 class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
 /** CLI failures report only owned release messages, never foreign errors or provider values. */
@@ -149,16 +120,6 @@ export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
     : "Production release routing failed; inspect Worker deployment state before recovery.";
 };
 
-type ResumeStage = "receipts" | "routing" | "identity" | "drift" | "trunk" | "recapture";
-const resumeStage = <A, E, R>(
-  stage: ResumeStage,
-  work: Effect.Effect<A, E, R>
-): Effect.Effect<A, ReleaseFailure, R> =>
-  work.pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: `Production reconciliation failed: stage=${stage}` })
-    )
-  );
 const Json = Schema.fromJsonString(Schema.Unknown);
 const decodeJson = Schema.decodeUnknownEffect(Json);
 const encodeJson = Schema.encodeSync(Json);
@@ -172,9 +133,6 @@ type Config = Readonly<{
   file: string;
   smokeProof: string;
   smokeAttestationFile: string;
-  contractDigest: Option.Option<string>;
-  bootstrapRelease: boolean;
-  resumeRelease: boolean;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -190,9 +148,6 @@ const config = (): Config => {
       RELEASE_SNAPSHOT_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_ATTESTATION_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
-      CONTRACT_DIGEST: Schema.optional(SmokeIdentity.fields.contractDigest),
-      BOOTSTRAP_RELEASE: Schema.optional(Schema.Literals(["true", "false"])),
-      RESUME_RELEASE: Schema.optional(Schema.Literals(["true", "false"])),
     })
   )(environment);
   if (Option.isNone(decoded)) {
@@ -207,9 +162,6 @@ const config = (): Config => {
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
-    contractDigest: Option.fromUndefinedOr(decoded.value.CONTRACT_DIGEST),
-    bootstrapRelease: decoded.value.BOOTSTRAP_RELEASE === "true",
-    resumeRelease: decoded.value.RESUME_RELEASE === "true",
   };
 };
 
@@ -603,89 +555,6 @@ const readStablePair = Effect.fn(function* ({
   return { publicStable, coreStable, identity };
 });
 
-const bootstrapCapture = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const workers = yield* workersFromState("capture");
-  const health = yield* Schema.decodeUnknownEffect(healthSchema)(
-    yield* providerJson(HttpClientRequest.get(`${origin}/health`)).pipe(
-      Effect.provideService(HttpClient.HttpClient, client)
-    )
-  );
-  if (!isPreSmokeBaseline(health)) {
-    return yield* new ReleaseFailure({
-      message: "Production is not the approved pre-smoke baseline",
-    });
-  }
-  const publicDeployment = yield* port.current(workers.public.workerName);
-  const coreDeployment = yield* port.current(workers.core.workerName);
-  const publicStable = yield* Effect.try(() => soleStableVersion(publicDeployment));
-  const coreStable = yield* Effect.try(() => soleStableVersion(coreDeployment));
-  const snapshot = yield* releaseController.captureRelease(port, {
-    revision: env.revision,
-    stableRevision: health.gitRevision,
-    stableContractDigest: health.contractDigest,
-    publicName: workers.public.workerName,
-    coreName: workers.core.workerName,
-  });
-  if (
-    snapshot.public.stableVersionId !== publicStable ||
-    snapshot.core.stableVersionId !== coreStable
-  ) {
-    return yield* new ReleaseFailure({
-      message: "Stable Worker deployments changed during bootstrap capture",
-    });
-  }
-  yield* writeFile(env.file, encodeJson(snapshot));
-});
-
-const bootstrapVerify = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
-    yield* readFile(env.file)
-  );
-  if (
-    !isPreSmokeBaseline({
-      gitRevision: snapshot.stableRevision,
-      contractDigest: snapshot.stableContractDigest,
-    })
-  ) {
-    return yield* new ReleaseFailure({ message: "Bootstrap baseline receipt is invalid" });
-  }
-  const workers = yield* workersFromState();
-  if (
-    workers.public.workerName !== snapshot.public.name ||
-    workers.core.workerName !== snapshot.core.name
-  ) {
-    return yield* new ReleaseFailure({ message: "Bootstrap Worker identity changed" });
-  }
-  const pair = yield* readStablePair({ port, workers, proof: env.smokeProof, client });
-  if (
-    pair.publicStable === snapshot.public.stableVersionId ||
-    pair.coreStable === snapshot.core.stableVersionId ||
-    pair.identity.stableRevision !== env.revision ||
-    pair.identity.stableContractDigest !== Option.getOrElse(env.contractDigest, () => "")
-  ) {
-    return yield* new ReleaseFailure({
-      message: "Bootstrap did not deploy the exact smoke-capable pair",
-    });
-  }
-  yield* writeFile(
-    `${env.file}.bootstrap`,
-    encodeJson({
-      publicName: workers.public.workerName,
-      coreName: workers.core.workerName,
-      publicVersionId: pair.publicStable,
-      coreVersionId: pair.coreStable,
-    })
-  );
-});
-
 const capture = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -726,118 +595,6 @@ const capture = Effect.fn(function* (
     });
   }
   yield* writeFile(env.file, encodeJson(snapshot));
-});
-export const isInterruptedStableSnapshot = (snapshot: ReleaseSnapshot): boolean => {
-  const expected = interruptedUpload;
-  return (
-    snapshot.stableRevision === expected.revision &&
-    snapshot.stableContractDigest === preSmokeDigest &&
-    snapshot.public.deploymentId === expected.publicDeployment &&
-    snapshot.public.stableVersionId === expected.publicVersion &&
-    snapshot.core.deploymentId === expected.coreRecoveredDeployment &&
-    snapshot.core.stableVersionId === expected.coreStable
-  );
-};
-export const isInterruptedAlchemyReceipt = (input: {
-  workers: WorkerReceipts;
-  snapshot: ReleaseSnapshot;
-}): boolean => {
-  const { workers, snapshot } = input;
-  const expected = interruptedUpload;
-  return (
-    workers.public.workerName === snapshot.public.name &&
-    workers.core.workerName === snapshot.core.name &&
-    Option.contains(workers.public.versionId, expected.publicCandidate) &&
-    Option.contains(workers.core.versionId, expected.coreCandidate) &&
-    workers.public.hasRolloutBaseline &&
-    workers.core.hasRolloutBaseline
-  );
-};
-export const isInspectedResumePair = (input: {
-  publicDeployment: Deployment;
-  coreDeployment: Deployment;
-}): boolean => {
-  const { publicDeployment, coreDeployment } = input;
-  return (
-    matchesRecoveryVersion({
-      deployment: publicDeployment,
-      id: interruptedUpload.publicDeployment,
-      version: interruptedUpload.publicVersion,
-    }) &&
-    matchesRecoveryVersion({
-      deployment: coreDeployment,
-      id: interruptedUpload.coreRecoveredDeployment,
-      version: interruptedUpload.coreStable,
-    })
-  );
-};
-
-const readResumePair = Effect.fn(function* (port: ReleasePort, workers: WorkerReceipts) {
-  const pair = {
-    publicDeployment: yield* port.current(workers.public.workerName),
-    coreDeployment: yield* port.current(workers.core.workerName),
-  };
-  if (!isInspectedResumePair(pair)) {
-    return yield* new ReleaseFailure({
-      message: "Interrupted-upload routing changed; no recovery write",
-    });
-  }
-  return pair;
-});
-
-const resumeCapture = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  if (!env.resumeRelease || env.bootstrapRelease) {
-    return yield* new ReleaseFailure({
-      message: "Resume requires protected dispatch",
-    });
-  }
-  const workers = yield* resumeStage("receipts", workersFromState());
-  const { publicDeployment, coreDeployment } = yield* resumeStage(
-    "routing",
-    readResumePair(port, workers)
-  );
-  const identity = yield* resumeStage(
-    "identity",
-    stableIdentity({
-      publicVersionId: interruptedUpload.publicVersion,
-      coreVersionId: interruptedUpload.coreStable,
-      proof: env.smokeProof,
-    }).pipe(Effect.provideService(HttpClient.HttpClient, client))
-  );
-  const snapshot = yield* Schema.decodeEffect(releaseSchemas.snapshot)({
-    revision: env.revision,
-    ...identity,
-    public: {
-      name: workers.public.workerName,
-      deploymentId: publicDeployment.id,
-      stableVersionId: interruptedUpload.publicVersion,
-    },
-    core: {
-      name: workers.core.workerName,
-      deploymentId: coreDeployment.id,
-      stableVersionId: interruptedUpload.coreStable,
-    },
-  });
-  if (!isInterruptedStableSnapshot(snapshot)) {
-    return yield* new ReleaseFailure({ message: "Interrupted-upload stable Worker pair changed" });
-  }
-  if (!isInterruptedAlchemyReceipt({ workers, snapshot })) {
-    return yield* new ReleaseFailure({ message: "Interrupted-upload Alchemy receipts changed" });
-  }
-  yield* resumeStage("drift", shell(["bash", "scripts/check-topology-drift.sh", "resume"]));
-  if ((yield* resumeStage("trunk", port.trunk())) !== env.revision) {
-    return yield* new ReleaseFailure({
-      message: "Interrupted-upload baseline changed; no recovery write",
-    });
-  }
-  yield* resumeStage("routing", readResumePair(port, workers));
-  // Cleanup committed in run 36631716949; inspection 36632237904 proves this sole-stable pair.
-  // Reconcile receipts without another traffic write.
-  yield* resumeStage("recapture", capture(port, env, client));
 });
 const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
@@ -893,129 +650,6 @@ const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
     coreVersionId: workers.core.versionId.value,
   });
 });
-const isSoleRecoveryVersion = (deployment: Deployment, version: string): boolean =>
-  deployment.versions.length === 1 &&
-  deployment.versions[0]?.id === version &&
-  deployment.versions[0].percentage === 100;
-export const matchesRecoveryVersion = (input: {
-  deployment: Deployment;
-  id: string;
-  version: string;
-}): boolean =>
-  input.deployment.id === input.id && isSoleRecoveryVersion(input.deployment, input.version);
-const requireRecoveryPair = Effect.fn(function* (
-  port: ReleasePort,
-  workers: WorkerReceipts,
-  core: { id: string; version: string }
-) {
-  const currentPublic = yield* port.current(workers.public.workerName);
-  const currentCore = yield* port.current(workers.core.workerName);
-  if (
-    !matchesRecoveryVersion({
-      deployment: currentPublic,
-      id: interruptedPromotion.publicDeployment,
-      version: interruptedPromotion.publicVersion,
-    }) ||
-    !matchesRecoveryVersion({ deployment: currentCore, id: core.id, version: core.version })
-  ) {
-    return yield* new ReleaseFailure({
-      message: "Interrupted promotion identity changed; no recovery write",
-    });
-  }
-});
-const recoverInterruptedCore = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const workers = yield* workersFromState("capture");
-  const expected = interruptedPromotion;
-  yield* requireRecoveryPair(port, workers, {
-    id: expected.coreDeployment,
-    version: expected.coreCandidate,
-  });
-  const health = yield* Schema.decodeUnknownEffect(healthSchema)(
-    yield* providerJson(HttpClientRequest.get(`${origin}/health`)).pipe(
-      Effect.provideService(HttpClient.HttpClient, client)
-    )
-  );
-  if (health.gitRevision !== expected.revision || health.contractDigest !== preSmokeDigest) {
-    return yield* new ReleaseFailure({
-      message: "Interrupted promotion revision changed; no recovery write",
-    });
-  }
-  yield* stableIdentity({
-    publicVersionId: expected.publicVersion,
-    coreVersionId: expected.coreCandidate,
-    proof: env.smokeProof,
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  if ((yield* port.trunk()) !== env.revision) {
-    return yield* new ReleaseFailure({
-      message: "Recovery superseded by trunk; no recovery write",
-    });
-  }
-  // A provider response may be lost after a committed write. Observe exact routing even if
-  // the response is rejected; do not issue a second, ambiguous traffic change.
-  yield* port
-    .deploy(workers.core.workerName, [{ id: expected.coreStable, percentage: 100 }])
-    .pipe(Effect.catch(() => Effect.void));
-  const core = yield* port.current(workers.core.workerName);
-  if (!isSoleRecoveryVersion(core, expected.coreStable)) {
-    return yield* new ReleaseFailure({
-      message: "Core recovery not confirmed; inspect both Workers",
-    });
-  }
-  const publicDeployment = yield* port.current(workers.public.workerName);
-  if (
-    !matchesRecoveryVersion({
-      deployment: publicDeployment,
-      id: expected.publicDeployment,
-      version: expected.publicVersion,
-    })
-  ) {
-    return yield* new ReleaseFailure({ message: "Public routing changed during Core recovery" });
-  }
-  yield* stableIdentity({
-    publicVersionId: expected.publicVersion,
-    coreVersionId: expected.coreStable,
-    proof: env.smokeProof,
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
-});
-export const verifyInspectedStaging = Effect.fn(function* (
-  port: ReleasePort,
-  workers: WorkerReceipts
-) {
-  const inspected = {
-    public: {
-      stable: interruptedPromotion.publicVersion,
-      candidate: "18489858-358b-4986-9d60-98a686052c85",
-    },
-    core: {
-      stable: interruptedPromotion.coreStable,
-      candidate: "2216c932-4dc6-4195-baad-8944aa28bf07",
-    },
-  };
-  for (const role of ["public", "core"] as const) {
-    const worker = workers[role];
-    const expected = inspected[role];
-    const deployment = yield* port.current(worker.workerName);
-    if (
-      !Option.contains(worker.versionId, expected.candidate) ||
-      deployment.versions.length !== 2 ||
-      !deployment.versions.some(
-        (version) => version.id === expected.stable && version.percentage === 100
-      ) ||
-      !deployment.versions.some(
-        (version) => version.id === expected.candidate && version.percentage === 0
-      )
-    ) {
-      return yield* new ReleaseFailure({
-        message: "Inspected candidate pair is no longer staged; no synthetic probe",
-      });
-    }
-  }
-});
-
 const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const workers = yield* workersFromState("capture");
   const deployments = Effect.fn(function* (name: string) {
@@ -1209,24 +843,6 @@ const rollback = Effect.fn(function* (
   yield* releaseRollback.restore(guarded, { release, promoted, compatible });
 });
 
-const runBootstrap = Effect.fn(function* ({
-  command,
-  port,
-  env,
-  client,
-}: {
-  command: "bootstrap-capture" | "bootstrap-verify";
-  port: ReleasePort;
-  env: Config;
-  client: HttpClient.HttpClient;
-}) {
-  if (!env.bootstrapRelease) {
-    return yield* new ReleaseFailure({ message: "Direct bootstrap requires protected dispatch" });
-  }
-  if (command === "bootstrap-capture") return yield* bootstrapCapture(port, env, client);
-  return yield* bootstrapVerify(port, env, client);
-});
-
 const runRouting = Effect.fn(function* ({
   command,
   port,
@@ -1270,17 +886,7 @@ if (import.meta.main) {
     const services = yield* Layer.build(FetchHttpClient.layer);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort(environment, client);
-    if (command === "bootstrap-capture" || command === "bootstrap-verify") {
-      yield* runBootstrap({ command, port, env: environment, client });
-    } else if (command === "recover-core") {
-      yield* recoverInterruptedCore(port, environment, client);
-    } else if (command === "resume-capture") {
-      yield* resumeCapture(port, environment, client);
-    } else if (command === "verify-staged") {
-      yield* verifyInspectedStaging(port, yield* workersFromState());
-    } else {
-      yield* runRouting({ command, port, env: environment, client });
-    }
+    yield* runRouting({ command, port, env: environment, client });
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(

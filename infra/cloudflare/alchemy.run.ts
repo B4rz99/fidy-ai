@@ -6,7 +6,6 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { EmailAddress } from "@fidy/server/client";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
@@ -157,12 +156,6 @@ export default Alchemy.Stack(
       })
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
-    // Only the protected, explicitly dispatched smoke bootstrap takes direct traffic.
-    const bootstrapRelease =
-      production &&
-      (yield* Config.schema(Schema.Literals(["true", "false"]), "BOOTSTRAP_RELEASE").pipe(
-        Config.withDefault("false" as const)
-      )) === "true";
     const kapsoBindings = yield* resolveKapsoBindings(development);
     const accessConfig = yield* resolveAccessConfig(development);
 
@@ -227,10 +220,7 @@ export default Alchemy.Stack(
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
-      version:
-        production && !bootstrapRelease
-          ? { traffic: 0, tag: releaseMetadata.gitRevision }
-          : undefined,
+      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
@@ -366,10 +356,7 @@ export default Alchemy.Stack(
 
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
-      version:
-        production && !bootstrapRelease
-          ? { traffic: 0, tag: releaseMetadata.gitRevision }
-          : undefined,
+      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       dev: {

@@ -4,17 +4,6 @@ on:
   push:
     branches: [trunk]
   workflow_dispatch:
-    inputs:
-      bootstrap:
-        description: "One-time direct smoke bootstrap from the verified pre-smoke release"
-        required: true
-        type: boolean
-        default: false
-      resume:
-        description: "One-time smoke-gated reconciliation of the inspected interrupted Worker upload"
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -33,8 +22,6 @@ jobs:
     environment: production
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
-      BOOTSTRAP_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
-      RESUME_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.resume && !inputs.bootstrap }}
       GITHUB_TOKEN: ${{ github.token }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -90,21 +77,9 @@ jobs:
       - name: Ensure Alchemy's Cloudflare state authority exists
         uses: ./.github/actions/bootstrap-alchemy-cloudflare-state
 
-      - name: Verify the inspected stable pair before interrupted-upload reconciliation
-        if: ${{ env.RESUME_RELEASE == 'true' }}
-        working-directory: infra/cloudflare
-        run: |
-          umask 077
-          bun production-release.ts resume-capture
-
       - name: Reject drift from the deployed Cloudflare topology
         working-directory: infra/cloudflare
-        run: |
-          if [[ "$RESUME_RELEASE" == true ]]; then
-            bash scripts/check-topology-drift.sh resume
-          else
-            bash scripts/check-topology-drift.sh
-          fi
+        run: bash scripts/check-topology-drift.sh
 
       - name: Require the reviewed Cloudflare security policy
         working-directory: infra/cloudflare
@@ -142,19 +117,11 @@ jobs:
           fi
 
       - name: Capture stable Worker deployments before candidate upload
-        if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}
         id: capture
         working-directory: infra/cloudflare
         run: |
           umask 077
           bun production-release.ts capture
-
-      - name: Require the pre-smoke Production baseline for the one-time bootstrap
-        if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}
-        working-directory: infra/cloudflare
-        run: |
-          umask 077
-          bun production-release.ts bootstrap-capture
 
       - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
@@ -176,12 +143,10 @@ jobs:
           alchemy deploy --stage production --yes --no-input
 
       - name: Install zero-traffic candidate routing
-        if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}
         working-directory: infra/cloudflare
         run: bun production-release.ts stage
 
       - name: Export captured smoke identities for both gates
-        if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}
         run: |
           {
             echo "PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE")"
@@ -194,12 +159,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Prove both candidate and intermediate Worker pairings
-        if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
 
       - name: Promote the exact smoke-tested Workers
-        if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}
         id: promote
         working-directory: infra/cloudflare
         run: bun production-release.ts promote
@@ -212,27 +175,6 @@ jobs:
           path: ${{ env.RELEASE_SNAPSHOT_FILE }}.promoted
           if-no-files-found: error
           retention-days: 7
-
-      - name: Prove the direct bootstrap deployed the exact smoke-capable pair
-        if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}
-        working-directory: infra/cloudflare
-        run: |
-          umask 077
-          bun production-release.ts bootstrap-verify
-          {
-            echo "PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE.bootstrap")"
-            echo "CORE_VERSION_ID=$(jq -r .coreVersionId "$RELEASE_SNAPSHOT_FILE.bootstrap")"
-            echo "PUBLIC_WORKER_NAME=$(jq -r .publicName "$RELEASE_SNAPSHOT_FILE.bootstrap")"
-            echo "CORE_WORKER_NAME=$(jq -r .coreName "$RELEASE_SNAPSHOT_FILE.bootstrap")"
-            echo "STABLE_PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE.bootstrap")"
-            echo "STABLE_RELEASE_GIT_SHA=$RELEASE_GIT_SHA"
-            echo "STABLE_CONTRACT_DIGEST=$CONTRACT_DIGEST"
-          } >> "$GITHUB_ENV"
-
-      - name: Probe normal smoke work after the bootstrap
-        if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}
-        working-directory: infra/cloudflare
-        run: bun verify-production-smoke.ts promoted
 
       - name: Probe normal Worker traffic after promotion
         id: post_smoke

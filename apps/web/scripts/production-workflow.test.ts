@@ -13,32 +13,17 @@ const bootstrapAction = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
-  it("limits the direct smoke bootstrap to an explicit protected dispatch", () => {
+  it("does not offer an incident dispatch that bypasses candidate smoke or drift", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("environment: production");
-    expect(workflow).toContain(
-      "BOOTSTRAP_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}"
+    expect(workflow).not.toMatch(
+      /BOOTSTRAP_RELEASE|RESUME_RELEASE|bootstrap-capture|bootstrap-verify|resume-capture/u
     );
-    const legacyCapture = workflow.indexOf("bun production-release.ts bootstrap-capture");
+    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
     const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
-    const smoke = workflow.indexOf("bun production-release.ts bootstrap-verify");
-    expect(legacyCapture).toBeGreaterThan(0);
-    expect(legacyCapture).toBeLessThan(upload);
-    expect(smoke).toBeGreaterThan(upload);
-    expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}");
-    expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}");
-  });
-  it("requires protected stable-pair capture before accepting only inspected Worker drift", () => {
-    expect(workflow).toContain(
-      "RESUME_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.resume && !inputs.bootstrap }}"
-    );
-    const resumeCapture = workflow.indexOf("bun production-release.ts resume-capture");
-    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh resume");
-    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
-    expect(resumeCapture).toBeGreaterThan(0);
-    expect(resumeCapture).toBeLessThan(driftGate);
+    expect(driftGate).toBeGreaterThan(0);
     expect(driftGate).toBeLessThan(upload);
-    expect(workflow).toContain("bash scripts/check-topology-drift.sh\n");
+    expect(workflow).not.toContain("check-topology-drift.sh resume");
   });
   it("serializes trunk releases without cancelling an active deployment", () => {
     expect(workflow).toContain("branches: [trunk]");
@@ -216,7 +201,7 @@ describe("Production release workflow policy", () => {
     expect(verification).toBeLessThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeGreaterThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
-    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(3);
+    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(2);
     expect(workflow).not.toContain("alchemy drift --stage production --no-input");
     expect(workflow).toContain("https://fidyapp.com/health-check");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");

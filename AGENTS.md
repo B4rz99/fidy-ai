@@ -10,13 +10,13 @@ Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `
 
 ### Domain docs
 
-**Single-context**: one `CONTEXT.md` at the repo root, with ADRs in `docs/adr/`. See `docs/agents/domain.md`.
+**Single-context**: one `GLOSSARY.md` at the repo root, with ADRs in `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Architecture and conventions
 
 Before writing code, always read:
 
-- **`CONTEXT.md`** — the ubiquitous language. Use these terms; avoid the listed synonyms.
+- **`GLOSSARY.md`** — the ubiquitous language. Use these terms; avoid the listed synonyms.
 - **`ARCHITECTURE.md`** — the system shape and cross-application boundaries.
 - **`CODING_STANDARDS.md`** — code conventions and judgment-based review rules; mechanical checks
   run through `scripts/verify.ts`.

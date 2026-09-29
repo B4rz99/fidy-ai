@@ -4,7 +4,7 @@ import { InvalidTransactionPeriod, TransactionNotYetOccurred } from "./errors";
 /**
  * Decides whether a movement about to be recorded has actually happened.
  *
- * A Transaction is money that moved (CONTEXT.md), so `occurredAt` may be any
+ * A Transaction is money that moved (GLOSSARY.md), so `occurredAt` may be any
  * instant up to and including `now`, and nothing after it. The same instant is
  * accepted: a capture that races the clock to the millisecond is a real
  * movement, not a future-dated one.

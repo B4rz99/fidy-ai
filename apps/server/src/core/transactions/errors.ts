@@ -15,7 +15,7 @@ export class TransactionNotFound extends Data.TaggedError("TransactionNotFound")
 
 /**
  * The movement being recorded is dated after the moment it was recorded, so it
- * has not happened yet and is not a Transaction (CONTEXT.md).
+ * has not happened yet and is not a Transaction (GLOSSARY.md).
  *
  * Carries both instants because only the pair explains the failure: the caller
  * needs to know what it sent and what the product considered "now" to correct

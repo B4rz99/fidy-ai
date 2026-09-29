@@ -118,7 +118,7 @@ import {
   reconcileOnboardingEmail,
 } from "./onboarding/onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
-import { smokePath } from "./runtime/smoke";
+import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
   ReleaseSmokeWorkflowV1,
   type SmokeEnvironment,
@@ -1799,7 +1799,14 @@ const smokeResponse = (request: Request, environment: CoreEnvironment): Effect.E
     try: () =>
       smokeReady(environment)
         ? handleSmoke({ request, environment })
-        : Promise.resolve(unavailable()),
+        : Promise.resolve(
+            smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
+              ? Response.json(
+                  { status: "unavailable" },
+                  { status: 503, headers: { [smokeFailureHeader]: "configuration" } }
+                )
+              : unavailable()
+          ),
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable));
 

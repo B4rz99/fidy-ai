@@ -90,6 +90,7 @@ describe("production smoke ingress", () => {
         for (const response of refusals) {
           expect(response.status).toBe(404);
           expect(response.headers.get("cache-control")).toBe("no-store");
+          expect(response.headers.get("x-fidy-smoke-failure")).toBeNull();
         }
         expect(coreCalls).toBe(0);
         const authorized = yield* Effect.tryPromise(() =>
@@ -111,6 +112,18 @@ describe("production smoke ingress", () => {
           public: candidate,
           core: candidate,
         });
+        const failed = yield* Effect.tryPromise(() =>
+          publicWorker.fetch(
+            new Request("https://api.fidyapp.com/internal/release-smoke", {
+              method: "POST",
+              headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+            }),
+            { ...environment, CORE: { fetch: () => Promise.reject(Error("secret-provider-body")) } }
+          )
+        );
+        expect(failed.status).toBe(503);
+        expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
+        expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
       })
   );
 
@@ -212,6 +225,7 @@ describe("production smoke ingress", () => {
         );
         expect(response.status).toBe(503);
         expect(actions).toEqual(["admission", "read"]);
+        expect(response.headers.get("x-fidy-smoke-failure")).toBe("probe_state");
       })
   );
 });

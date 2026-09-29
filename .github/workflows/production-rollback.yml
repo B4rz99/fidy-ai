@@ -50,22 +50,36 @@ jobs:
         run: |
           [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" \
-            --jq '{name,head_branch,head_sha}' > "$RUNNER_TEMP/source-run.json"
-          jq -e '.name == "Deploy Production" and .head_branch == "trunk" and (.head_sha | test("^[0-9a-f]{40}$"))' \
-            "$RUNNER_TEMP/source-run.json" >/dev/null
+            --jq '{name,head_branch,head_sha,event}' > "$RUNNER_TEMP/source-run.json"
           mkdir -p "$RUNNER_TEMP/recovery"
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name fidy-rollback --dir "$RUNNER_TEMP/recovery"
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/recovery/fidy-release.json" >> "$GITHUB_ENV"
           echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-manual-smoke.json" >> "$GITHUB_ENV"
-          jq -e --arg revision "$(jq -r .head_sha "$RUNNER_TEMP/source-run.json")" \
-            '.release.snapshot.revision == $revision' \
-            "$RUNNER_TEMP/recovery/fidy-release.json.promoted" >/dev/null
+          bun infra/cloudflare/verify-rollback-receipt.ts \
+            "$RUNNER_TEMP/source-run.json" \
+            "$RUNNER_TEMP/recovery/fidy-release.json.promoted"
 
       - name: Restore captured public and Core code only when safe
         working-directory: infra/cloudflare
         run: bun production-release.ts rollback
 
-      - name: Report observed Worker traffic after a failed manual attempt
+      - name: Email operator after a failed manual rollback
         if: ${{ failure() }}
-        run: bun infra/cloudflare/production-release.ts report || true
+        env:
+          OPERATOR_ALERT_EMAIL: ${{ vars.OPERATOR_ALERT_EMAIL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SOURCE_RUN_ID: ${{ inputs.release_run_id }}
+        run: |
+          traffic=$(bun infra/cloudflare/production-release.ts report 2>/dev/null || \
+            printf 'Worker traffic unavailable; inspect Cloudflare directly')
+          jq -n --arg to "$OPERATOR_ALERT_EMAIL" --arg source "$SOURCE_RUN_ID" \
+            --arg traffic "$traffic" \
+            '{from:"Fidy <obarboza@fidyapp.com>",to:[$to],subject:"Fidy: manual Worker rollback failed",text:("Manual rollback for release run " + $source + " failed. Observed Worker traffic: " + $traffic + ". Inspect the private GitHub Actions run.")}' \
+            > "$RUNNER_TEMP/operator-alert.json"
+          curl --fail --silent --show-error --max-time 10 \
+            --request POST 'https://api.resend.com/emails' \
+            --header "Authorization: Bearer $RESEND_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --header "Idempotency-Key: fidy-manual-rollback-${{ github.run_id }}" \
+            --data-binary "@$RUNNER_TEMP/operator-alert.json" >/dev/null

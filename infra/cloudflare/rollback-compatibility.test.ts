@@ -4,9 +4,14 @@ import { rollbackCompatible } from "./rollback-compatibility";
 const worker = (
   migrationTag: string,
   bindings: Readonly<Record<string, unknown>>
-): { migrationTag: string; bindings: Readonly<Record<string, unknown>> } => ({
+): {
+  migrationTag: string;
+  bindings: Readonly<Record<string, unknown>>;
+  exports: Readonly<Record<string, unknown>>;
+} => ({
   migrationTag,
   bindings,
+  exports: { Counter: { type: "durable-object", state: "created" } },
 });
 const base = {
   stable: worker("v1", { DB: { type: "d1" } }),
@@ -33,6 +38,16 @@ describe("rollback compatibility evidence", () => {
       rollbackCompatible({
         ...base,
         candidate: worker("v2", base.candidate.bindings),
+        changedPaths: [],
+      })
+    ).toBe(false);
+    expect(
+      rollbackCompatible({
+        ...base,
+        candidate: {
+          ...base.candidate,
+          exports: { Counter: { type: "durable-object", state: "renamed" } },
+        },
         changedPaths: [],
       })
     ).toBe(false);

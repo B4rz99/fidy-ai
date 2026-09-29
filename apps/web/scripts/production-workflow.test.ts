@@ -169,7 +169,10 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("steps.promote.outcome == 'success'");
     expect(manualRollback).toContain("workflow_dispatch:");
     expect(manualRollback).toContain("group: production-deployment");
-    expect(manualRollback).toContain("bun production-release.ts rollback");
+    const receiptCheck = manualRollback.indexOf("bun infra/cloudflare/verify-rollback-receipt.ts");
+    const manualWrite = manualRollback.indexOf("bun production-release.ts rollback");
+    expect(receiptCheck).toBeGreaterThan(0);
+    expect(receiptCheck).toBeLessThan(manualWrite);
   });
 
   it("verifies the public topology and provider state after deployment", () => {

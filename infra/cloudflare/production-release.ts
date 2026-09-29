@@ -46,7 +46,10 @@ const VersionResponse = Schema.Struct({
     id: VersionId,
     resources: Schema.Struct({
       bindings: Schema.Record(Schema.String, Schema.Unknown),
-      script_runtime: Schema.Struct({ migration_tag: Schema.optional(Schema.String) }),
+      script_runtime: Schema.Struct({
+        migration_tag: Schema.optional(Schema.String),
+        exports: Schema.Record(Schema.String, Schema.Unknown),
+      }),
     }),
   }),
 });
@@ -612,6 +615,7 @@ const versionResources = Effect.fn(function* (
   return {
     bindings: version.result.resources.bindings,
     migrationTag: version.result.resources.script_runtime.migration_tag ?? "",
+    exports: version.result.resources.script_runtime.exports,
   } satisfies WorkerResources;
 });
 const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snapshot.Type) {

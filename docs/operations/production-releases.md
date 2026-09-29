@@ -211,9 +211,9 @@ rollback command, not an unreviewed deploy. No Tail Worker or paid-plan Tail fea
 
 Rollback accepts only the immutable public/Core stable IDs captured **before** candidate upload.
 Both must appear in Cloudflare's `deployable=true` Worker version history (at most the most recent
-100 versions are eligible). The version metadata must show unchanged bindings and Durable Object
-migration tags, and the Git diff from the captured stable revision must show no D1 migration,
-Alchemy topology, or named Queue/Workflow change. An absent Git revision, unknown version metadata,
+100 versions are eligible). The version metadata must show unchanged bindings, Durable Object
+migration tags **and lifecycle exports**; the Git diff from the captured stable revision must
+show no D1 migration, Alchemy topology, or Queue/Workflow definition change. An absent Git revision, unknown version metadata,
 changed secret/binding, Durable Object lifecycle change, or changed deployment **refuses** automatic
 rollback. The Cloudflare deployment API is called without `force=true`; if Cloudflare rejects a
 secret change or deleted resource, stop rather than bypass its safety check. These checks are
@@ -236,8 +236,9 @@ gh workflow run production-rollback.yml --ref trunk -f release_run_id=<release-r
 ```
 
 The protected Production environment downloads that run's captured receipt, validates its trunk
-revision, and runs the **same guarded code-only** rollback. It cannot force an incompatible target
-or overwrite a later deployment. Watch its run and the Production alert; if it refuses, inspect
+Production-push origin and revision, and runs the **same guarded code-only** rollback. It cannot force an incompatible target
+or overwrite a later deployment. Failed manual attempts email the operator with observed traffic;
+watch its run and that alert. If it refuses, inspect
 both observed deployments, resource history, and D1 schema, then fix forward through reviewed trunk.
 The receipt artifact expires after seven days; an older release requires explicit operator planning,
 not a guessed version. No workstation or dashboard deployment is an ordinary fallback.

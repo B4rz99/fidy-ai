@@ -178,6 +178,7 @@ type WorkerReceipt = Readonly<{
   hasRolloutBaseline: boolean;
 }>;
 type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
+const missingWorkerReceiptMessage = "Alchemy Worker state lacks a unique required Worker receipt";
 
 const decodeStateMap = (output: string): typeof StateMap.Type => {
   const objectStarts = [...output.matchAll(/\{/gu)].map((match) => match.index);
@@ -216,9 +217,7 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
         },
       ];
     });
-    if (matches.length !== 1) {
-      throw Error(`Missing or ambiguous Alchemy Worker receipt: ${logicalId}`);
-    }
+    if (matches.length !== 1) throw Error(missingWorkerReceiptMessage);
     return matches[0] ?? { workerName: "", versionId: Option.none(), hasRolloutBaseline: false };
   };
   return { public: select("Ingress"), core: select("Core") };
@@ -244,7 +243,13 @@ const workersFromState = Effect.fn(function* () {
   );
   return yield* Effect.try({
     try: () => decodeWorkerReceipts(rawState),
-    catch: () => new ReleaseFailure({ message: "Alchemy Worker state output is invalid" }),
+    catch: (cause) =>
+      new ReleaseFailure({
+        message:
+          cause instanceof Error && cause.message === missingWorkerReceiptMessage
+            ? missingWorkerReceiptMessage
+            : "Alchemy Worker state JSON could not be decoded",
+      }),
   });
 });
 

@@ -9,8 +9,8 @@ const bunInstallAction = await Bun.file(
 describe("pull-request checks workflow policy", () => {
   it("builds the application without uploading or deploying a PR preview artifact", () => {
     const buildsJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("  builds:"),
-      checksWorkflow.indexOf("  unit:")
+      checksWorkflow.indexOf("\n  builds:\n"),
+      checksWorkflow.indexOf("\n  unit:\n")
     );
 
     expect(buildsJob).toContain("bun run verify -- --group builds");
@@ -30,8 +30,8 @@ describe("pull-request checks workflow policy", () => {
 
   it("reuses browser downloads without restoring stale dependency caches", () => {
     const browserJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("  browser:"),
-      checksWorkflow.indexOf("  security-secrets:")
+      checksWorkflow.indexOf("\n  browser:\n"),
+      checksWorkflow.indexOf("\n  security-secrets:\n")
     );
 
     expect(browserJob).toContain("~/.cache/ms-playwright");
@@ -39,6 +39,28 @@ describe("pull-request checks workflow policy", () => {
       browserJob.indexOf("playwright install --with-deps chromium")
     );
     expect(bunInstallAction).not.toContain("restore-keys:");
+  });
+
+  it("keeps the merge gate unconditional and checks skipped jobs against a successful plan", () => {
+    const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
+    expect(requiredJob).toContain("name: Required Checks");
+    expect(requiredJob).toContain("- changes");
+    expect(requiredJob).toContain("if: ${{ always() }}");
+    expect(requiredJob).toContain("run: bash scripts/check-ci-results.sh");
+    expect(checksWorkflow).toContain("fetch-depth: 0");
+    expect(checksWorkflow).toContain("run: bun scripts/ci-changes.ts");
+  });
+
+  it("runs mutation testing weekly on Sundays without blocking pull requests", () => {
+    expect(checksWorkflow).not.toContain("test:mutation");
+    return Bun.file(`${repositoryRoot}/.github/workflows/mutation.yml`)
+      .text()
+      .then((workflow) => {
+        expect(workflow).toContain('cron: "17 5 * * 0"');
+        expect(workflow).toContain("workflow_dispatch:");
+        expect(workflow).not.toContain("pull_request:");
+        expect(workflow).toContain("run: bun run test:mutation");
+      });
   });
 
   it("pins every external Action to a complete commit SHA", () => {

@@ -1,13 +1,17 @@
 name: React Doctor
 
-# Own workflow, not a ci.yml job: `required-checks` there fails on the `skipped`
-# a path filter produces.
+# Advisory workflow, not a required merge check: workflow-level path filtering
+# must not leave the required aggregate Pending.
 on:
   pull_request:
     branches:
       - trunk
     paths:
       - "apps/web/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig*.json"
       - ".github/workflows/react-doctor.yml"
 
 concurrency:

@@ -1,0 +1,27 @@
+infra/cloudflare/production-release.ts
+  s_f8dbb486b6c236::t_3d77193cae52de 68,288
+  s_f8dbb486b6c236::t_f51f7bda3b0cf7 259-287,289-294,296,307,325-329,350-351
+  s_f8dbb486b6c236::t_0c5fdf5ec38331 71-72,76-84,295,297,308-312,314-315,317-318,331,545
+  s_f8dbb486b6c236::t_d46a11162a2181 330
+docs/operations/production-releases.md
+  s_f8dbb486b6c236::t_513e48f9805a86 66-70
+infra/cloudflare/production-release.test.ts
+  s_f8dbb486b6c236::t_1c7a21e176c88a 82-106,108-131,133-161,163-168
+  s_f8dbb486b6c236::t_7fc92081963bc1 3,107,132,162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e4167a8a6797a49154b8e8cfde75b1d9a9658f5d",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

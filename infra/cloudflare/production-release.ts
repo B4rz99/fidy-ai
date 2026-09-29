@@ -128,10 +128,10 @@ const interruptedPromotion = {
 } as const;
 const interruptedUpload = {
   ...interruptedPromotion,
-  publicDeployment: "480d7221-1fa7-4710-9be6-173ce4d7963b",
-  coreRecoveredDeployment: "47c43874-be03-4919-8cd6-9a449291aafe",
-  publicCandidate: "094dc4f1-372f-4799-bc92-e0deccd35014",
-  coreCandidate: "5d76fb6d-cec5-4abd-a215-dbcd03b9ff31",
+  publicDeployment: "4eae3224-b347-4ccc-8715-17389919e0f6",
+  coreRecoveredDeployment: "8cd6309b-859a-424a-bc05-e206e5c24922",
+  publicCandidate: "7b83226f-3fbe-4d2f-99e8-72d7f818375f",
+  coreCandidate: "89a2da14-0f1b-4c8a-8eba-ed39b19d6b62",
 } as const;
 
 /** The one-time direct bootstrap must never use a later, unverified Production baseline. */
@@ -835,7 +835,7 @@ const resumeCapture = Effect.fn(function* (
     });
   }
   yield* resumeStage("routing", readResumePair(port, workers));
-  // Cleanup committed in run 36628978237; inspection 36629815315 proves this sole-stable pair.
+  // Cleanup committed in run 36631716949; inspection 36632237904 proves this sole-stable pair.
   // Reconcile receipts without another traffic write.
   yield* resumeStage("recapture", capture(port, env, client));
 });

@@ -13,6 +13,21 @@ const bootstrapAction = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
+  it("limits the direct smoke bootstrap to an explicit protected dispatch", () => {
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("environment: production");
+    expect(workflow).toContain(
+      "BOOTSTRAP_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}"
+    );
+    const legacyCapture = workflow.indexOf("bun production-release.ts bootstrap-capture");
+    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
+    const smoke = workflow.indexOf("bun production-release.ts bootstrap-verify");
+    expect(legacyCapture).toBeGreaterThan(0);
+    expect(legacyCapture).toBeLessThan(upload);
+    expect(smoke).toBeGreaterThan(upload);
+    expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}");
+    expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}");
+  });
   it("serializes trunk releases without cancelling an active deployment", () => {
     expect(workflow).toContain("branches: [trunk]");
     expect(workflow).toContain("group: production-deployment");

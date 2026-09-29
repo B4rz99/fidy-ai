@@ -84,7 +84,16 @@ const UpdatingStateEntry = Schema.Struct({
   old: Schema.Struct({ attr: ResourceAttributes }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
-const Commands = Schema.Literals(["capture", "stage", "promote", "rollback", "cleanup", "report"]);
+const Commands = Schema.Literals([
+  "capture",
+  "bootstrap-capture",
+  "bootstrap-verify",
+  "stage",
+  "promote",
+  "rollback",
+  "cleanup",
+  "report",
+]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
   publicVersionId: VersionId,
@@ -101,6 +110,14 @@ const successStatusStart = 200;
 const successStatusEnd = 300;
 const probeEntropyBytes = 16;
 const origin = "https://api.fidyapp.com";
+const preSmokeRevision = "b71c2248e4667ffa042fd00c286a2c2240436475";
+const preSmokeDigest = "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f";
+
+/** The one-time direct bootstrap must never use a later, unverified Production baseline. */
+export const isPreSmokeBaseline = (health: {
+  gitRevision: string;
+  contractDigest: string;
+}): boolean => health.gitRevision === preSmokeRevision && health.contractDigest === preSmokeDigest;
 class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 const Json = Schema.fromJsonString(Schema.Unknown);
 const decodeJson = Schema.decodeUnknownEffect(Json);
@@ -115,6 +132,8 @@ type Config = Readonly<{
   file: string;
   smokeProof: string;
   smokeAttestationFile: string;
+  contractDigest: Option.Option<string>;
+  bootstrapRelease: boolean;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -130,6 +149,8 @@ const config = (): Config => {
       RELEASE_SNAPSHOT_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_ATTESTATION_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+      CONTRACT_DIGEST: Schema.optional(SmokeIdentity.fields.contractDigest),
+      BOOTSTRAP_RELEASE: Schema.optional(Schema.Literals(["true", "false"])),
     })
   )(environment);
   if (Option.isNone(decoded)) {
@@ -144,6 +165,8 @@ const config = (): Config => {
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
+    contractDigest: Option.fromUndefinedOr(decoded.value.CONTRACT_DIGEST),
+    bootstrapRelease: decoded.value.BOOTSTRAP_RELEASE === "true",
   };
 };
 
@@ -537,6 +560,89 @@ const readStablePair = Effect.fn(function* ({
   return { publicStable, coreStable, identity };
 });
 
+const bootstrapCapture = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const workers = yield* workersFromState("capture");
+  const health = yield* Schema.decodeUnknownEffect(healthSchema)(
+    yield* providerJson(HttpClientRequest.get(`${origin}/health`)).pipe(
+      Effect.provideService(HttpClient.HttpClient, client)
+    )
+  );
+  if (!isPreSmokeBaseline(health)) {
+    return yield* new ReleaseFailure({
+      message: "Production is not the approved pre-smoke baseline",
+    });
+  }
+  const publicDeployment = yield* port.current(workers.public.workerName);
+  const coreDeployment = yield* port.current(workers.core.workerName);
+  const publicStable = yield* Effect.try(() => soleStableVersion(publicDeployment));
+  const coreStable = yield* Effect.try(() => soleStableVersion(coreDeployment));
+  const snapshot = yield* releaseController.captureRelease(port, {
+    revision: env.revision,
+    stableRevision: health.gitRevision,
+    stableContractDigest: health.contractDigest,
+    publicName: workers.public.workerName,
+    coreName: workers.core.workerName,
+  });
+  if (
+    snapshot.public.stableVersionId !== publicStable ||
+    snapshot.core.stableVersionId !== coreStable
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Stable Worker deployments changed during bootstrap capture",
+    });
+  }
+  yield* writeFile(env.file, encodeJson(snapshot));
+});
+
+const bootstrapVerify = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  if (
+    !isPreSmokeBaseline({
+      gitRevision: snapshot.stableRevision,
+      contractDigest: snapshot.stableContractDigest,
+    })
+  ) {
+    return yield* new ReleaseFailure({ message: "Bootstrap baseline receipt is invalid" });
+  }
+  const workers = yield* workersFromState();
+  if (
+    workers.public.workerName !== snapshot.public.name ||
+    workers.core.workerName !== snapshot.core.name
+  ) {
+    return yield* new ReleaseFailure({ message: "Bootstrap Worker identity changed" });
+  }
+  const pair = yield* readStablePair({ port, workers, proof: env.smokeProof, client });
+  if (
+    pair.publicStable === snapshot.public.stableVersionId ||
+    pair.coreStable === snapshot.core.stableVersionId ||
+    pair.identity.stableRevision !== env.revision ||
+    pair.identity.stableContractDigest !== Option.getOrElse(env.contractDigest, () => "")
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Bootstrap did not deploy the exact smoke-capable pair",
+    });
+  }
+  yield* writeFile(
+    `${env.file}.bootstrap`,
+    encodeJson({
+      publicName: workers.public.workerName,
+      coreName: workers.core.workerName,
+      publicVersionId: pair.publicStable,
+      coreVersionId: pair.coreStable,
+    })
+  );
+});
+
 const capture = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -807,6 +913,57 @@ const rollback = Effect.fn(function* (
   yield* releaseRollback.restore(guarded, { release, promoted, compatible });
 });
 
+const runBootstrap = Effect.fn(function* ({
+  command,
+  port,
+  env,
+  client,
+}: {
+  command: "bootstrap-capture" | "bootstrap-verify";
+  port: ReleasePort;
+  env: Config;
+  client: HttpClient.HttpClient;
+}) {
+  if (!env.bootstrapRelease) {
+    return yield* new ReleaseFailure({ message: "Direct bootstrap requires protected dispatch" });
+  }
+  if (command === "bootstrap-capture") return yield* bootstrapCapture(port, env, client);
+  return yield* bootstrapVerify(port, env, client);
+});
+
+const runRouting = Effect.fn(function* ({
+  command,
+  port,
+  env,
+  client,
+}: {
+  command: "capture" | "stage" | "promote" | "rollback" | "cleanup" | "report";
+  port: ReleasePort;
+  env: Config;
+  client: HttpClient.HttpClient;
+}) {
+  switch (command) {
+    case "capture":
+      yield* capture(port, env, client);
+      break;
+    case "stage":
+      yield* stage(port, env);
+      break;
+    case "promote":
+      yield* promote(port, env);
+      break;
+    case "rollback":
+      yield* rollback(port, env, client);
+      break;
+    case "cleanup":
+      yield* cleanup(port, env);
+      break;
+    case "report":
+      yield* reportTraffic(port, env);
+      break;
+  }
+});
+
 if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);
@@ -814,25 +971,10 @@ if (import.meta.main) {
     const services = yield* Layer.build(FetchHttpClient.layer);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort(environment, client);
-    switch (command) {
-      case "capture":
-        yield* capture(port, environment, client);
-        break;
-      case "stage":
-        yield* stage(port, environment);
-        break;
-      case "promote":
-        yield* promote(port, environment);
-        break;
-      case "rollback":
-        yield* rollback(port, environment, client);
-        break;
-      case "cleanup":
-        yield* cleanup(port, environment);
-        break;
-      case "report":
-        yield* reportTraffic(port, environment);
-        break;
+    if (command === "bootstrap-capture" || command === "bootstrap-verify") {
+      yield* runBootstrap({ command, port, env: environment, client });
+    } else {
+      yield* runRouting({ command, port, env: environment, client });
     }
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);

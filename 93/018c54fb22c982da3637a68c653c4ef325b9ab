@@ -1,0 +1,26 @@
+infra/cloudflare/verify-rollback-receipt.test.ts
+  s_d81eeca08a60b9::t_9df1e3a52ac6d2 26,35-37
+  s_d81eeca08a60b9::t_9aa92310379742 27-29,33-34
+apps/server/package.json
+  s_d81eeca08a60b9::t_2b68854525e2a1 193
+infra/cloudflare/package.json
+  s_d81eeca08a60b9::t_2b68854525e2a1 20
+bun.lock
+  s_d81eeca08a60b9::t_da193db3b0f0f7 38,103,265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "93018c54fb22c982da3637a68c653c4ef325b9ab",
+  "prompts": {},
+  "sessions": {
+    "s_d81eeca08a60b9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ea67-7ec2-73ea-8c2d-8947557052dd",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

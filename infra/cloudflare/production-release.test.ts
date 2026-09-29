@@ -4,7 +4,33 @@ import {
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
   isPreSmokeBaseline,
+  matchesRecoveryVersion,
 } from "./production-release";
+
+it("permits Core recovery only with an exact sole 100% deployment identity", () => {
+  const version = "22222222-2222-4222-8222-222222222222";
+  const deployment = {
+    id: "11111111-1111-4111-8111-111111111111",
+    versions: [{ id: version, percentage: 100 }],
+  };
+  const input = { deployment, id: deployment.id, version };
+  expect(matchesRecoveryVersion(input)).toBe(true);
+  expect(matchesRecoveryVersion({ ...input, deployment: { ...deployment, id: "different" } })).toBe(
+    false
+  );
+  expect(
+    matchesRecoveryVersion({
+      ...input,
+      deployment: { ...deployment, versions: [{ id: version, percentage: 0 }] },
+    })
+  ).toBe(false);
+  expect(
+    matchesRecoveryVersion({
+      ...input,
+      deployment: { ...deployment, versions: [...deployment.versions, ...deployment.versions] },
+    })
+  ).toBe(false);
+});
 
 it("allows a direct smoke bootstrap only from the exact pre-smoke Production identity", () => {
   const baseline = {

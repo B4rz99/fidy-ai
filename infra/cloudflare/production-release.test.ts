@@ -1,6 +1,20 @@
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { decodeCaptureWorkerReceipts, decodeWorkerReceipts } from "./production-release";
+import {
+  decodeCaptureWorkerReceipts,
+  decodeWorkerReceipts,
+  isPreSmokeBaseline,
+} from "./production-release";
+
+it("allows a direct smoke bootstrap only from the exact pre-smoke Production identity", () => {
+  const baseline = {
+    gitRevision: "b71c2248e4667ffa042fd00c286a2c2240436475",
+    contractDigest: "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f",
+  };
+  expect(isPreSmokeBaseline(baseline)).toBe(true);
+  expect(isPreSmokeBaseline({ ...baseline, gitRevision: "a".repeat(40) })).toBe(false);
+  expect(isPreSmokeBaseline({ ...baseline, contractDigest: "a".repeat(64) })).toBe(false);
+});
 
 describe("Production release Worker receipts", () => {
   it("reports a missing Worker receipt without echoing state values", () => {

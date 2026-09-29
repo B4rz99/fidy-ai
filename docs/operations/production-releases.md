@@ -68,11 +68,28 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    this exception applies to capture only. Candidate staging and cleanup still require completed
    receipts. All other in-progress/incomplete receipts, missing baselines, ambiguous deployments, and
    identity mismatches block candidate upload.
+   **One-time smoke bootstrap:** Production still has the pre-smoke `b71c2248` Worker pair.
+   The normal capture cannot call a smoke path that this pair does not implement. Once the
+   reviewed bootstrap change is on `trunk`, dispatch `Deploy Production` with `bootstrap=true`
+   from `trunk`. This protected run first requires that exact pre-smoke revision and contract
+   digest on `/health`, captures both sole 100% Cloudflare deployments, and rechecks trunk.
+   Only this dispatch omits `version.traffic: 0`: Alchemy deploys the new Core and public
+   Workers directly. It then verifies the exact new stable identities using the protected
+   smoke endpoint, waits for synthetic Queue/Workflow completion, and runs the normal public
+   topology and edge probes. This first cutover cannot prove the old-public/new-Core smoke
+   pairing or guarantee automatic rollback; on partial failure, inspect both deployments and
+   fix forward through reviewed Production authority. Do not rerun the bootstrap after the
+   stable revision changes; subsequent trunk pushes use the normal candidate path. The
+   dispatch command is:
+
+   ```sh
+   gh workflow run production.yml --ref trunk -f bootstrap=true
+   ```
+
 9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
    The capture step first requires existing Alchemy Worker hash state so the pinned provider cannot
    fall back to a direct 100% PUT. Alchemy owns the complete topology and uploads the public/Core
-   immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment. The first release
-   installing #718 used the earlier direct deployment path to establish a smoke-capable stable pair.
+   immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment. The protected one-time bootstrap above establishes the first smoke-capable stable pair through a direct Alchemy deployment.
 10. Read the exact candidate IDs from Alchemy's persisted Worker upload receipts. The checked-in
     routing controller uses Wrangler's 0% deployment primitive to install each candidate alongside
     its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
@@ -176,9 +193,8 @@ probes to expire before retrying a saturated gate. Failed work for a claimed pro
 fresh probe ID. The reserved Durable Object check establishes compatibility with whichever
 version Cloudflare assigned the object; Queue/Workflow completion establishes deployed wiring,
 **not that the candidate's async code ran**. The synthetic D1 row expires after five minutes and
-Core cron removes expired rows. The reserved R2 marker carries no User material. The first
-release installing the smoke protocol must use the existing direct deployment path before a
-stable version can answer the reserved Durable Object probe; later releases can use #719.
+Core cron removes expired rows. The reserved R2 marker carries no User material. The one-time smoke bootstrap uses the direct deployment path before a stable version can answer
+the reserved Durable Object probe; later releases use #719.
 
 ## Failure and recovery
 

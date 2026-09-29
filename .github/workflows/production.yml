@@ -311,7 +311,7 @@ jobs:
             --request POST 'https://api.resend.com/emails' \
             --header "Authorization: Bearer $RESEND_API_KEY" \
             --header 'Content-Type: application/json' \
-            --header "Idempotency-Key: fidy-deploy-${RELEASE_GIT_SHA}" \
+            --header "Idempotency-Key: fidy-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --data-binary "@$RUNNER_TEMP/operator-alert.json" >/dev/null
 
       - name: Record the release

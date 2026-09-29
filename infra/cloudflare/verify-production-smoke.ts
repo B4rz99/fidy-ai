@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Context, Data, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Context, Data, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -238,9 +238,14 @@ if (import.meta.main) {
       })
     );
   }
+  const error = Exit.isFailure(result) ? Cause.findErrorOption(result.cause) : Option.none();
+  const safeReason =
+    Option.isSome(error) && error.value instanceof ReleaseSmokeFailed
+      ? error.value.reason
+      : "unclassified smoke failure (no provider response logged)";
   await Bun.write(
     passed ? Bun.stdout : Bun.stderr,
-    passed ? "Production smoke passed.\n" : "Production smoke failed; inspect Worker traffic.\n"
+    passed ? "Production smoke passed.\n" : `Production smoke failed: ${safeReason}.\n`
   );
   if (!passed) process.exitCode = 1;
 }

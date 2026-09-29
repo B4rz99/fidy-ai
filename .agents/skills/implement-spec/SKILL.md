@@ -1,47 +1,56 @@
 ---
 name: implement-spec
-description: "Implement an approved spec across its ticket graph on one integration branch."
+description: "Implement the result of /to-spec and /to-tickets in code."
 disable-model-invocation: true
 ---
 
-The user has provided an approved spec and its implementation tickets. The goal is the **whole spec on one integration branch**, with each ticket resolved according to this repository's issue-tracker workflow.
+You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
 
-The tickets form a task graph, not a checklist: only tickets whose blockers are complete are ready. Keep the integration branch as the shared line of work and give every implementer an isolated worktree.
+The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
 
-## Preconditions
+The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
 
-- Read `docs/agents/issue-tracker.md` for the tracker's source of truth and blocking-edge operations.
-- Read the spec and every ticket's full body and comments. Confirm the parent-child relationships, acceptance criteria, blocking edges, and current ticket states.
-- Ask about missing or contradictory ticket dependencies and acceptance criteria that prevent correct implementation. Choose routine test seams from existing public interfaces unless the user has reserved that decision.
-- This flow delegates workers that edit files. Check `test "${HERDR_ENV:-}" = 1` before creating branches or dispatching work. If it fails, stop and report that this flow requires Herdr; do not fall back to in-process agents or shared-checkout workers.
-- Check the working tree before branching. Preserve existing user changes; if they would interfere with an integration branch, ask how to proceed.
+The tickets are not a list of steps. They are a **task graph** with blocking relationships between them. This means there is always a **frontier** of tickets which are ready to be grabbed.
+
+Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
+
+**Implementer subagents** should be run in the background where possible for maximum concurrency.
+
+## Agent runtime
+
+Use Herdr-managed interactive Pi agents for every subagent, following
+`.agents/skills/herdr/SKILL.md`.
+
+Every worker inherits the invoking session's current provider, model,
+and reasoning effort. Expand these values when launching each worker:
+
+```bash
+herdr pane run <pane-id> "pi --model ${PI_PROVIDER:?PI_PROVIDER must be set}/${PI_MODEL:?PI_MODEL must be set} --thinking ${PI_REASONING_LEVEL:?PI_REASONING_LEVEL must be set}"
+```
+
+Use Herdr worktrees for workers that create or edit files, including
+implementers and mergers. Submit tasks and collect results through
+Herdr. Communicate through the context pointers described above.
 
 ## Steps
 
-1. **Understand the graph.** Identify the spec's tickets, their blockers, acceptance criteria, and any shared files or module boundaries. Use the tracker instructions to determine the live frontier: open, unblocked tickets that are available to claim. Do not start blocked or already-claimed tickets.
+1. Read the spec and tickets to understand the task graph.
 
-2. **Create the integration branch.** Branch from the latest `trunk`, unless the user supplied another base. Record the base commit for the final review. Keep all integration work on this branch; do not merge it to `trunk` here.
+2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
 
-3. **Dispatch ready tickets.** Start one background implementer per ready ticket, each in its own Herdr worktree and branch based on the current integration branch tip. Use `/herdr` for the installed CLI workflow and returned worktree/pane IDs. Keep concurrent work bounded when tickets touch the same files or shared design seam; serialize overlapping work rather than inviting avoidable conflicts.
+3. Create the integration branch. If the issue tracker closes work through PRs, or the user asks for one, open a draft PR after the first merge in step 5 (a branch with no commits ahead of main can't open one), marked as closing the spec and tickets.
 
-   Each implementer must:
-   - Verify that its clean worktree is based on the integration branch tip before editing. If it is not, bring it up to date without discarding work; stop and report any unexpected existing changes.
-   - Read `.agents/skills/tdd/SKILL.md` and implement the ticket in vertical red-green slices at the spec’s seams or existing public interfaces. Ask only if the seam requires an unresolved contract decision or explicit user approval.
-   - Run the focused tests for changed behavior and the relevant typecheck/build commands. Follow the repository's `CONTEXT.md`, architecture, coding, and security instructions.
-   - Commit the ticket work using this repository's commit convention.
-   - Merge the latest integration branch tip into its own branch before reporting completion. Resolve conflicts against the spec and both tickets' intent; do not choose a side mechanically.
-   - Report the ticket, worktree branch, commit, tests and checks run, and any remaining risks. Do not change tracker state or merge to `trunk`.
+4. Use **implementer subagents** to implement each ticket, each in its own worktree on its own branch. Each implementer subagent:
+   - confirms its worktree is based on the integration branch before starting, and resets onto it if not;
+   - reads `.agents/skills/tdd/SKILL.md` and follows it to build the ticket;
+   - merges the integration branch tip into its own branch before reporting done
 
-4. **Integrate completed work.** Inspect each report and branch diff. Integrate a completed branch into the integration branch with a fast-forward when possible; the implementer should already include the latest integration tip. If it cannot fast-forward or conflicts remain, stop and investigate or delegate conflict resolution in an isolated worktree. Never force-push, hard-reset user work, or silently skip a ticket. After each integration, refresh the tracker frontier and dispatch newly unblocked tickets.
+5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**.
 
-   If the user requested a PR, open a draft only after the first ticket has been integrated (so the branch has commits), using `/opening-a-pr` and the repository's PR conventions. Keep it draft until the final review passes.
+6. If this changes the **frontier** of available tickets, kick off more **implementer subagents** to work on the new tickets. This allows for maximum concurrency.
 
-5. **Review the complete spec.** Once every ticket is integrated, call the Skill tool with `code-review` on the integration branch, using the recorded base commit as the fixed point. This is one review of the whole spec, across Standards, Security, and Spec. Fix the findings in one implementer worktree, integrate the fixes, and repeat review against the same fixed point until all active axes report no findings.
+7. Once all tickets are complete, read `.agents/skills/code-review/SKILL.md` and follow it on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
 
-6. **Resolve tracker work and report.** Resolve child tickets only when their work meets the tracker's closure condition. Use the issue-tracker instructions; do not close the parent spec unless the user asks. If a draft PR exists, mark it ready only after review passes. Otherwise report the integration branch and ticket outcomes. Do not merge to `trunk` as part of this skill.
+8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
 
-7. **Clean up.** Remove only implementer worktrees and panes created by this run, and only after their branches are integrated and their reports read. Preserve any branch with unintegrated work; report it instead of deleting it.
-
-## Completion
-
-The work is complete when every ticket is integrated, the full integration diff passes code review, tracker state matches the issue-tracker workflow, and all created worktrees are either safely cleaned up or explicitly reported as retained. Report the integration branch, the review base, ticket outcomes, checks, PR status if applicable, and any unresolved risks.
+9. Clean up all **implementer subagent** worktrees.
